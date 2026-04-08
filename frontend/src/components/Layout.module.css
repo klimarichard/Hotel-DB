@@ -1,0 +1,94 @@
+.shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: 220px;
+  flex-shrink: 0;
+  background: #1e2a3a;
+  color: #cbd5e1;
+  display: flex;
+  flex-direction: column;
+  padding: 1.5rem 0;
+}
+
+.logo {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #fff;
+  padding: 0 1.5rem 1.5rem;
+  border-bottom: 1px solid #2d3f54;
+}
+
+.nav {
+  list-style: none;
+  flex: 1;
+  margin-top: 1rem;
+}
+
+.navLink {
+  display: block;
+  padding: 0.65rem 1.5rem;
+  color: #94a3b8;
+  transition: background 0.15s, color 0.15s;
+  border-left: 3px solid transparent;
+}
+
+.navLink:hover {
+  background: #2d3f54;
+  color: #e2e8f0;
+}
+
+.active {
+  background: #2d3f54;
+  color: #fff;
+  border-left-color: #3b82f6;
+}
+
+.userBar {
+  padding: 1rem 1.5rem;
+  border-top: 1px solid #2d3f54;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.userEmail {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.userRole {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  color: #64748b;
+  letter-spacing: 0.05em;
+}
+
+.logoutBtn {
+  margin-top: 0.5rem;
+  background: none;
+  border: 1px solid #2d3f54;
+  color: #94a3b8;
+  border-radius: 4px;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: background 0.15s;
+  text-align: left;
+}
+
+.logoutBtn:hover {
+  background: #2d3f54;
+  color: #e2e8f0;
+}
+
+.main {
+  flex: 1;
+  padding: 2rem;
+  overflow-y: auto;
+}

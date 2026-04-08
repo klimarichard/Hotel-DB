@@ -1,0 +1,25 @@
+# Specification document
+HR_App_Specification.docx
+
+# Dependencies
+node_modules/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Build outputs
+dist/
+build/
+
+# Firebase
+.firebase/
+.firebaserc.local
+
+# TypeScript
+*.tsbuildinfo
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,46 @@
+import { Routes, Route, Navigate } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
+import LoginPage from "@/pages/LoginPage";
+import Layout from "@/components/Layout";
+import EmployeesPage from "@/pages/EmployeesPage";
+import EmployeeDetailPage from "@/pages/EmployeeDetailPage";
+import SettingsPage from "@/pages/SettingsPage";
+
+function RequireAuth({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth();
+  if (loading) return <div style={{ padding: "2rem" }}>Načítám...</div>;
+  if (!user) return <Navigate to="/login" replace />;
+  return <>{children}</>;
+}
+
+export default function App() {
+  const { user, loading } = useAuth();
+
+  if (loading) return <div style={{ padding: "2rem" }}>Načítám...</div>;
+
+  return (
+    <Routes>
+      <Route
+        path="/login"
+        element={user ? <Navigate to="/" replace /> : <LoginPage />}
+      />
+      <Route
+        path="/"
+        element={
+          <RequireAuth>
+            <Layout />
+          </RequireAuth>
+        }
+      >
+        <Route index element={<Navigate to="/zamestnanci" replace />} />
+        <Route path="zamestnanci" element={<EmployeesPage />} />
+        <Route path="zamestnanci/:id" element={<EmployeeDetailPage />} />
+        <Route path="smlouvy" element={<div>Smlouvy — brzy</div>} />
+        <Route path="smeny" element={<div>Směny — brzy</div>} />
+        <Route path="mzdy" element={<div>Mzdy — brzy</div>} />
+        <Route path="nastaveni" element={<SettingsPage />} />
+      </Route>
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}

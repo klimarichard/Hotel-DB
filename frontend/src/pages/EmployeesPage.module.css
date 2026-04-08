@@ -1,0 +1,151 @@
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+}
+
+.title {
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+
+.addBtn {
+  background: #1a56db;
+  color: #fff;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+
+.addBtn:hover {
+  background: #1e429f;
+  color: #fff;
+}
+
+.filters {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+  align-items: center;
+}
+
+.search {
+  flex: 1;
+  max-width: 320px;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  outline: none;
+}
+
+.search:focus {
+  border-color: #3b82f6;
+}
+
+.toggle {
+  display: flex;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.toggleBtn,
+.toggleActive {
+  padding: 0.45rem 1rem;
+  border: none;
+  background: #fff;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.toggleActive {
+  background: #1a56db;
+  color: #fff;
+}
+
+.toggleBtn:hover {
+  background: #f1f5f9;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+
+.table th {
+  text-align: left;
+  padding: 0.7rem 1rem;
+  background: #f8fafc;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #6b7280;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.table td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #f1f5f9;
+  font-size: 0.875rem;
+}
+
+.table tr:last-child td {
+  border-bottom: none;
+}
+
+.table tr:hover td {
+  background: #f8fafc;
+}
+
+.nameLink {
+  font-weight: 500;
+  color: #1a56db;
+}
+
+.nameLink:hover {
+  text-decoration: underline;
+}
+
+.badgeActive {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  background: #d1fae5;
+  color: #065f46;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.badgeTerminated {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  background: #fee2e2;
+  color: #991b1b;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.state,
+.empty {
+  text-align: center;
+  color: #6b7280;
+  padding: 2rem;
+}
+
+.errorState {
+  color: #dc2626;
+  padding: 1rem;
+  background: #fef2f2;
+  border-radius: 6px;
+}

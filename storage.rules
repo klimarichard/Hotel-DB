@@ -1,0 +1,11 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // All storage access goes through Cloud Functions (Admin SDK)
+    // Direct client uploads/downloads are blocked
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
