@@ -22,7 +22,7 @@ const BENEFITS_SENSITIVE_FIELDS = ["insuranceNumber", "bankAccount"] as const;
 employeesRouter.get(
   "/",
   requireAuth,
-  requireRole("admin", "hr"),
+  requireRole("admin", "director"),
   async (req: AuthRequest, res) => {
     let query: admin.firestore.Query = db().collection("employees");
 
@@ -51,7 +51,7 @@ employeesRouter.get(
 employeesRouter.get(
   "/:id",
   requireAuth,
-  requireRole("admin", "hr"),
+  requireRole("admin", "director"),
   async (req: AuthRequest, res) => {
     const doc = await db().collection("employees").doc(req.params.id).get();
     if (!doc.exists) {
@@ -73,7 +73,7 @@ employeesRouter.get(
 employeesRouter.post(
   "/",
   requireAuth,
-  requireRole("admin", "hr"),
+  requireRole("admin", "director"),
   async (req: AuthRequest, res) => {
     const body = req.body as Record<string, unknown>;
     const now = admin.firestore.FieldValue.serverTimestamp();
@@ -115,7 +115,7 @@ employeesRouter.post(
 employeesRouter.patch(
   "/:id",
   requireAuth,
-  requireRole("admin", "hr"),
+  requireRole("admin", "director"),
   async (req: AuthRequest, res) => {
     const body = req.body as Record<string, unknown>;
     const updated = encryptFields(
@@ -138,7 +138,7 @@ employeesRouter.patch(
 employeesRouter.post(
   "/:id/reveal",
   requireAuth,
-  requireRole("admin", "hr"),
+  requireRole("admin", "director"),
   async (req: AuthRequest, res) => {
     const { field } = req.body as { field: string };
     const allSensitive = [
@@ -212,7 +212,7 @@ employeesRouter.post(
 employeesRouter.get(
   "/:id/contact",
   requireAuth,
-  requireRole("admin", "hr"),
+  requireRole("admin", "director"),
   async (req: AuthRequest, res) => {
     const snap = await db()
       .collection("employees")
@@ -230,7 +230,7 @@ employeesRouter.get(
 employeesRouter.put(
   "/:id/contact",
   requireAuth,
-  requireRole("admin", "hr"),
+  requireRole("admin", "director"),
   async (req: AuthRequest, res) => {
     const colRef = db().collection("employees").doc(req.params.id).collection("contact");
     const snap = await colRef.limit(1).get();
@@ -254,7 +254,7 @@ employeesRouter.put(
 employeesRouter.get(
   "/:id/employment",
   requireAuth,
-  requireRole("admin", "hr"),
+  requireRole("admin", "director"),
   async (req: AuthRequest, res) => {
     const snap = await db()
       .collection("employees")
@@ -274,7 +274,7 @@ employeesRouter.get(
 employeesRouter.post(
   "/:id/employment",
   requireAuth,
-  requireRole("admin", "hr"),
+  requireRole("admin", "director"),
   async (req: AuthRequest, res) => {
     const body = req.body as Record<string, unknown>;
     const now = admin.firestore.FieldValue.serverTimestamp();
@@ -309,7 +309,7 @@ employeesRouter.post(
 employeesRouter.get(
   "/:id/contracts",
   requireAuth,
-  requireRole("admin", "hr"),
+  requireRole("admin", "director"),
   async (req: AuthRequest, res) => {
     const snap = await db()
       .collection("employees")
