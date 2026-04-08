@@ -1,7 +1,7 @@
 import { Router } from "express";
 import * as admin from "firebase-admin";
 import { requireAuth, requireRole, AuthRequest } from "../middleware/auth";
-import { encryptFields, decryptFields, redactFields, decrypt } from "../services/encryption";
+import { encryptFields, redactFields, decrypt } from "../services/encryption";
 
 export const employeesRouter = Router();
 

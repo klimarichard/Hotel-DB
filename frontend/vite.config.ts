@@ -14,7 +14,7 @@ export default defineConfig({
     proxy: {
       // Proxy API calls to local Firebase emulator during development
       "/api": {
-        target: "http://127.0.0.1:5001/YOUR_FIREBASE_PROJECT_ID/us-central1/api",
+        target: "http://127.0.0.1:5001/hotel-hr-app-75581/us-central1/api",
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ""),
       },

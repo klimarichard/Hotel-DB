@@ -47,7 +47,7 @@ export function decrypt(encoded: string): string {
  */
 export function encryptFields<T extends Record<string, unknown>>(
   obj: T,
-  fields: (keyof T)[]
+  fields: string[]
 ): T {
   const result = { ...obj };
   for (const field of fields) {
@@ -65,7 +65,7 @@ export function encryptFields<T extends Record<string, unknown>>(
  */
 export function decryptFields<T extends Record<string, unknown>>(
   obj: T,
-  fields: (keyof T)[]
+  fields: string[]
 ): T {
   const result = { ...obj };
   for (const field of fields) {
@@ -87,7 +87,7 @@ export function decryptFields<T extends Record<string, unknown>>(
  */
 export function redactFields<T extends Record<string, unknown>>(
   obj: T,
-  fields: (keyof T)[]
+  fields: string[]
 ): T {
   const result = { ...obj };
   for (const field of fields) {
