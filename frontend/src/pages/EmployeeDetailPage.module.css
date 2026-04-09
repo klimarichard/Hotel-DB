@@ -12,11 +12,23 @@
 
 .breadcrumb a {
   color: #1a56db;
+  text-decoration: none;
 }
 
+.breadcrumb a:hover {
+  text-decoration: underline;
+}
+
+/* ── Hero ──────────────────────────────────────────────────────────────────── */
+
 .hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
   margin-bottom: 1.5rem;
 }
+
+.heroLeft {}
 
 .heroName {
   font-size: 1.5rem;
@@ -53,11 +65,57 @@
   font-weight: 500;
 }
 
+.editBtn {
+  padding: 0.45rem 1rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+  color: #374151;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+
+.editBtn:hover {
+  background: #f9fafb;
+}
+
+/* ── Alert banner ──────────────────────────────────────────────────────────── */
+
+.alertBanner {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.alertItemExpired {
+  padding: 0.6rem 1rem;
+  background: #fee2e2;
+  color: #991b1b;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  border-left: 3px solid #ef4444;
+}
+
+.alertItemExpiring {
+  padding: 0.6rem 1rem;
+  background: #fef3c7;
+  color: #92400e;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  border-left: 3px solid #f59e0b;
+}
+
+/* ── Page tabs ─────────────────────────────────────────────────────────────── */
+
 .tabs {
   display: flex;
   gap: 0;
   border-bottom: 2px solid #e5e7eb;
-  margin-bottom: 1.5rem;
+  margin-bottom: 1.25rem;
 }
 
 .tabBtn,
@@ -83,20 +141,67 @@
   color: #374151;
 }
 
-.panel {
+/* ── Collapsible section ───────────────────────────────────────────────────── */
+
+.section {
   background: #fff;
   border-radius: 8px;
-  padding: 1.5rem;
   box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  margin-bottom: 0.75rem;
+  overflow: hidden;
 }
+
+.sectionHeader {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.5rem;
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s;
+}
+
+.sectionHeader:hover {
+  background: #f9fafb;
+}
+
+.sectionTitle {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #1e2a3a;
+}
+
+.sectionBody {
+  padding: 0 1.5rem 1.5rem;
+  border-top: 1px solid #f3f4f6;
+}
+
+.loading {
+  color: #9ca3af;
+  font-size: 0.875rem;
+  padding: 0.5rem 0;
+}
+
+/* ── Fields ────────────────────────────────────────────────────────────────── */
 
 .fields {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0.75rem 2rem;
+  padding-top: 1rem;
 }
 
 .field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.fieldFull {
+  grid-column: 1 / -1;
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
@@ -124,7 +229,10 @@
   cursor: pointer;
   font-size: 0.875rem;
   padding: 0 0.2rem;
-  opacity: 0.6;
+  opacity: 0.5;
+  color: #6b7280;
+  display: flex;
+  align-items: center;
   transition: opacity 0.15s;
 }
 
@@ -132,23 +240,43 @@
   opacity: 1;
 }
 
-.sectionTitle {
-  font-size: 1rem;
-  font-weight: 600;
-  margin-bottom: 1rem;
-  color: #1e2a3a;
+/* ── Document sub-groups ───────────────────────────────────────────────────── */
+
+.docGroup {
+  background: #f9fafb;
+  border: 1px solid #f3f4f6;
+  border-radius: 6px;
+  padding: 0.875rem 1rem;
+  margin-top: 0.75rem;
 }
 
-.empty {
+.docGroup:first-child {
+  margin-top: 0.5rem;
+}
+
+.docGroupLabel {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
   color: #9ca3af;
-  font-size: 0.875rem;
-  padding: 1rem 0;
+  margin-bottom: 0.6rem;
+}
+
+/* ── Employment timeline ───────────────────────────────────────────────────── */
+
+.subLabel {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #9ca3af;
+  margin-bottom: 0.75rem;
 }
 
 .timeline {
   display: flex;
   flex-direction: column;
-  gap: 0;
   position: relative;
   padding-left: 1.5rem;
 }

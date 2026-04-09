@@ -11,6 +11,11 @@ const navItems = [
   { to: "/mzdy", label: "Mzdy" },
 ];
 
+const adminItems = [
+  { to: "/upozorneni", label: "Upozornění" },
+  { to: "/nastaveni", label: "Nastavení" },
+];
+
 export default function Layout() {
   const { user, role } = useAuth();
   const navigate = useNavigate();
@@ -37,18 +42,20 @@ export default function Layout() {
               </NavLink>
             </li>
           ))}
-          {role === "admin" && (
-            <li>
-              <NavLink
-                to="/nastaveni"
-                className={({ isActive }) =>
-                  [styles.navLink, isActive ? styles.active : ""].join(" ")
-                }
-              >
-                Nastavení
-              </NavLink>
-            </li>
-          )}
+          {(role === "admin" || role === "director") &&
+            adminItems.map((item) => (
+              <li key={item.to}>
+                <NavLink
+                  to={item.to}
+                  className={({ isActive }) =>
+                    [styles.navLink, isActive ? styles.active : ""].join(" ")
+                  }
+                >
+                  {item.label}
+                </NavLink>
+              </li>
+            ))
+          }
         </ul>
         <div className={styles.userBar}>
           <span className={styles.userEmail}>{user?.email}</span>

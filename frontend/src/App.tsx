@@ -4,7 +4,9 @@ import LoginPage from "@/pages/LoginPage";
 import Layout from "@/components/Layout";
 import EmployeesPage from "@/pages/EmployeesPage";
 import EmployeeDetailPage from "@/pages/EmployeeDetailPage";
+import EmployeeFormPage from "@/pages/EmployeeFormPage";
 import SettingsPage from "@/pages/SettingsPage";
+import AlertsPage from "@/pages/AlertsPage";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -34,10 +36,13 @@ export default function App() {
       >
         <Route index element={<Navigate to="/zamestnanci" replace />} />
         <Route path="zamestnanci" element={<EmployeesPage />} />
+        <Route path="zamestnanci/novy" element={<EmployeeFormPage />} />
         <Route path="zamestnanci/:id" element={<EmployeeDetailPage />} />
+        <Route path="zamestnanci/:id/upravit" element={<EmployeeFormPage />} />
         <Route path="smlouvy" element={<div>Smlouvy — brzy</div>} />
         <Route path="smeny" element={<div>Směny — brzy</div>} />
         <Route path="mzdy" element={<div>Mzdy — brzy</div>} />
+        <Route path="upozorneni" element={<AlertsPage />} />
         <Route path="nastaveni" element={<SettingsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
