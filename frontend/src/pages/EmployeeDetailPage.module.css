@@ -337,6 +337,27 @@
   margin-top: 0.1rem;
 }
 
+.timelineActions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.editRowBtn {
+  padding: 0.2rem 0.65rem;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  background: #fff;
+  color: #374151;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.editRowBtn:hover {
+  background: #f3f4f6;
+}
+
 /* ── History tab header ────────────────────────────────────────────────────── */
 
 .historyHeader {

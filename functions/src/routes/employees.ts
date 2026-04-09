@@ -510,6 +510,43 @@ employeesRouter.put(
 );
 
 /**
+ * PATCH /api/employees/:id/employment/:rowId
+ * Updates a single employment history record.
+ * If status === "active", re-syncs denormalized fields on the employee root doc.
+ */
+employeesRouter.patch(
+  "/:id/employment/:rowId",
+  requireAuth,
+  requireRole("admin", "director"),
+  async (req: AuthRequest, res) => {
+    const body = req.body as Record<string, unknown>;
+    const now = FieldValue.serverTimestamp();
+    const empRef = db().collection("employees").doc(req.params.id);
+    const rowRef = empRef.collection("employment").doc(req.params.rowId);
+
+    const rowSnap = await rowRef.get();
+    if (!rowSnap.exists) {
+      res.status(404).json({ error: "Employment record not found" });
+      return;
+    }
+
+    await rowRef.update({ ...body, updatedAt: now });
+
+    if (body.status === "active") {
+      await empRef.update({
+        currentCompanyId: body.companyId ?? null,
+        currentDepartment: body.department ?? "",
+        currentContractType: body.contractType ?? "",
+        currentJobTitle: body.jobTitle ?? "",
+        updatedAt: now,
+      });
+    }
+
+    res.json({ success: true });
+  }
+);
+
+/**
  * GET /api/employees/:id/alerts
  * Returns active expiry alerts for a specific employee.
  */

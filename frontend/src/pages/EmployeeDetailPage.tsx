@@ -187,7 +187,26 @@ const emptyForm: EmploymentForm = {
   agreedReward: "",
 };
 
-// ─── Add employment modal ─────────────────────────────────────────────────────
+// ─── Form initialiser (used for edit pre-fill) ───────────────────────────────
+
+function rowToForm(row: EmploymentRow): EmploymentForm {
+  return {
+    changeType: (row.changeType as ChangeType) ?? "nástup",
+    startDate: row.startDate ?? "",
+    jobTitle: row.jobTitle ?? "",
+    contractType: (row.contractType as ContractType) ?? "",
+    workLocation: row.workLocation ?? "Praha",
+    salary: row.salary?.toString() ?? "",
+    probationPeriod: row.probationPeriod ?? "2 měsíce",
+    endDate: row.endDate ?? "",
+    signingDate: row.signingDate ?? TODAY,
+    companyId: row.companyId ?? "HPM",
+    agreedWorkScope: row.agreedWorkScope ?? "max. 300 hodin ročně",
+    agreedReward: row.agreedReward?.toString() ?? "",
+  };
+}
+
+// ─── Add / Edit employment modal ──────────────────────────────────────────────
 
 function AddEntryModal({
   onClose,
@@ -195,14 +214,19 @@ function AddEntryModal({
   employeeId,
   employee,
   employment,
+  initialRow,
 }: {
   onClose: () => void;
   onSaved: (row: EmploymentRow) => void;
   employeeId: string;
   employee: Employee;
   employment: EmploymentRow[];
+  initialRow?: EmploymentRow;
 }) {
-  const [form, setForm] = useState<EmploymentForm>(emptyForm);
+  const isEdit = !!initialRow;
+  const [form, setForm] = useState<EmploymentForm>(() =>
+    initialRow ? rowToForm(initialRow) : emptyForm
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -279,8 +303,13 @@ function AddEntryModal({
           signingDate: form.signingDate || null,
         };
       }
-      const res = await api.post<{ id: string }>(`/employees/${employeeId}/employment`, payload);
-      onSaved({ id: res.id, ...(payload as Omit<EmploymentRow, "id">) } as EmploymentRow);
+      if (isEdit && initialRow) {
+        await api.patch(`/employees/${employeeId}/employment/${initialRow.id}`, payload);
+        onSaved({ ...initialRow, ...(payload as Partial<EmploymentRow>) });
+      } else {
+        const res = await api.post<{ id: string }>(`/employees/${employeeId}/employment`, payload);
+        onSaved({ id: res.id, ...(payload as Omit<EmploymentRow, "id">) } as EmploymentRow);
+      }
     } catch (err: unknown) {
       setError((err as Error).message ?? "Chyba při ukládání.");
     } finally {
@@ -292,7 +321,7 @@ function AddEntryModal({
     <div className={styles.modalOverlay} onClick={onClose}>
       <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
         <div className={styles.modalHeader}>
-          <span className={styles.modalTitle}>Přidat záznam do historie</span>
+          <span className={styles.modalTitle}>{isEdit ? "Upravit záznam" : "Přidat záznam do historie"}</span>
           <button className={styles.modalClose} onClick={onClose}>✕</button>
         </div>
         <form onSubmit={handleSubmit}>
@@ -480,6 +509,7 @@ export default function EmployeeDetailPage() {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState<"detail" | "history">("detail");
   const [showModal, setShowModal] = useState(false);
+  const [editingRow, setEditingRow] = useState<EmploymentRow | null>(null);
 
   // Track which sub-sections have been loaded
   const [loadedSections, setLoadedSections] = useState<Set<string>>(new Set());
@@ -606,9 +636,14 @@ export default function EmployeeDetailPage() {
                         </div>
                         <div className={styles.timelineBottom}>
                           <span className={styles.timelineChange}>{row.changeType}</span>
-                          <button className={styles.generateBtn} disabled title="Dostupné ve fázi 4">
-                            Generovat smlouvu
-                          </button>
+                          <div className={styles.timelineActions}>
+                            <button className={styles.editRowBtn} onClick={() => setEditingRow(row)}>
+                              Upravit
+                            </button>
+                            <button className={styles.generateBtn} disabled title="Dostupné ve fázi 4">
+                              Generovat smlouvu
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -626,6 +661,21 @@ export default function EmployeeDetailPage() {
               onSaved={(row) => {
                 setEmployment((prev) => [row, ...prev]);
                 setShowModal(false);
+              }}
+            />
+          )}
+          {editingRow && (
+            <AddEntryModal
+              employeeId={id!}
+              employee={employee}
+              employment={employment}
+              initialRow={editingRow}
+              onClose={() => setEditingRow(null)}
+              onSaved={(updated) => {
+                setEmployment((prev) =>
+                  prev.map((r) => (r.id === updated.id ? updated : r))
+                );
+                setEditingRow(null);
               }}
             />
           )}
