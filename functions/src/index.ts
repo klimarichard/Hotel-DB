@@ -6,6 +6,7 @@ import cors from "cors";
 import { authRouter } from "./routes/auth";
 import { employeesRouter } from "./routes/employees";
 import { alertsRouter } from "./routes/alerts";
+import { companiesRouter } from "./routes/companies";
 import { contractTemplatesRouter } from "./routes/contractTemplates";
 import { contractsRouter } from "./routes/contracts";
 
@@ -20,6 +21,7 @@ app.use(express.json());
 app.use("/auth", authRouter);
 app.use("/employees", employeesRouter);
 app.use("/alerts", alertsRouter);
+app.use("/companies", companiesRouter);
 app.use("/contractTemplates", contractTemplatesRouter);
 app.use("/", contractsRouter);
 

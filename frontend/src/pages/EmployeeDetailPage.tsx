@@ -7,6 +7,7 @@ import {
   ContractType as SmlouvaContractType,
   CONTRACT_TYPE_LABELS,
   CHANGE_TYPE_TO_CONTRACTS,
+  CompanyData,
 } from "@/lib/contractVariables";
 import styles from "./EmployeeDetailPage.module.css";
 
@@ -700,6 +701,7 @@ export default function EmployeeDetailPage() {
     types: SmlouvaContractType[];
   } | null>(null);
   const [generateDropdownRowId, setGenerateDropdownRowId] = useState<string | null>(null);
+  const [company, setCompany] = useState<CompanyData | null>(null);
 
   // Track which sub-sections have been loaded
   const [loadedSections, setLoadedSections] = useState<Set<string>>(new Set());
@@ -751,7 +753,7 @@ export default function EmployeeDetailPage() {
     }
   }, [expanded, id, loadedSections]);
 
-  // Load contact + documents when smlouvy tab is opened (needed for contract variable resolution)
+  // Load contact, documents, and company when smlouvy tab is opened
   useEffect(() => {
     if (page !== "smlouvy" || !id) return;
     if (!loadedSections.has("contact")) {
@@ -762,7 +764,11 @@ export default function EmployeeDetailPage() {
       setLoadedSections((s) => new Set(s).add("documents"));
       api.get<DocumentsData | null>(`/employees/${id}/documents`).then(setDocuments).catch(() => {});
     }
-  }, [page, id, loadedSections]);
+    if (!loadedSections.has("company") && employee?.currentCompanyId) {
+      setLoadedSections((s) => new Set(s).add("company"));
+      api.get<CompanyData>(`/companies/${employee.currentCompanyId}`).then(setCompany).catch(() => {});
+    }
+  }, [page, id, loadedSections, employee]);
 
   if (loading) return <div className={styles.state}>Načítám…</div>;
   if (!employee) return <div className={styles.state}>Zaměstnanec nenalezen.</div>;
@@ -941,7 +947,7 @@ export default function EmployeeDetailPage() {
             currentCompanyId: employee.currentCompanyId ?? undefined,
             address: contact?.permanentAddress,
           }}
-          companyData={{}}
+          companyData={company ?? {}}
         />
       )}
 
@@ -1079,7 +1085,7 @@ export default function EmployeeDetailPage() {
             startDate: generateModal.row.startDate,
             endDate: generateModal.row.endDate ?? undefined,
           }}
-          companyData={{}}
+          companyData={company ?? {}}
           onClose={() => setGenerateModal(null)}
           onGenerated={() => {
             setGenerateModal(null);
