@@ -1,8 +1,18 @@
 import { useState, useEffect, useCallback } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth, UserRole } from "@/hooks/useAuth";
-import { authApi, UserProfile } from "@/lib/api";
+import { authApi, UserProfile, api } from "@/lib/api";
 import styles from "./SettingsPage.module.css";
+
+interface CompanyRecord {
+  id: string;
+  name: string;
+  address: string;
+  ic: string;
+  dic: string;
+}
+
+const DEFAULT_COMPANY_IDS = ["HPM", "STP"];
 
 const ROLES: UserRole[] = ["admin", "director", "manager", "employee"];
 
@@ -34,6 +44,13 @@ export default function SettingsPage() {
   // Per-row activation toggle state
   const [togglingUid, setTogglingUid] = useState<string | null>(null);
 
+  const [settingsTab, setSettingsTab] = useState<"users" | "companies">("users");
+
+  // Companies
+  const [companyForms, setCompanyForms] = useState<Record<string, CompanyRecord>>({});
+  const [companySaving, setCompanySaving] = useState<Record<string, boolean>>({});
+  const [companySaveMsg, setCompanySaveMsg] = useState<Record<string, string>>({});
+
   const loadUsers = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -48,6 +65,41 @@ export default function SettingsPage() {
   }, []);
 
   useEffect(() => { loadUsers(); }, [loadUsers]);
+
+  useEffect(() => {
+    api.get<CompanyRecord[]>("/companies").then((list) => {
+      const map: Record<string, CompanyRecord> = {};
+      for (const c of list) map[c.id] = c;
+      // Ensure default company IDs are always shown
+      for (const id of DEFAULT_COMPANY_IDS) {
+        if (!map[id]) map[id] = { id, name: "", address: "", ic: "", dic: "" };
+      }
+      setCompanyForms(map);
+    }).catch(() => {
+      const map: Record<string, CompanyRecord> = {};
+      for (const id of DEFAULT_COMPANY_IDS) map[id] = { id, name: "", address: "", ic: "", dic: "" };
+      setCompanyForms(map);
+    });
+  }, []);
+
+  async function handleSaveCompany(id: string) {
+    setCompanySaving((p) => ({ ...p, [id]: true }));
+    setCompanySaveMsg((p) => ({ ...p, [id]: "" }));
+    try {
+      const { name, address, ic, dic } = companyForms[id];
+      await api.put(`/companies/${id}`, { name, address, ic, dic });
+      setCompanySaveMsg((p) => ({ ...p, [id]: "Uloženo" }));
+    } catch {
+      setCompanySaveMsg((p) => ({ ...p, [id]: "Chyba při ukládání" }));
+    } finally {
+      setCompanySaving((p) => ({ ...p, [id]: false }));
+      setTimeout(() => setCompanySaveMsg((p) => ({ ...p, [id]: "" })), 3000);
+    }
+  }
+
+  function setCompanyField(id: string, field: keyof CompanyRecord, value: string) {
+    setCompanyForms((p) => ({ ...p, [id]: { ...p[id], [field]: value } }));
+  }
 
   if (authLoading) return null;
   if (role !== "admin") return <Navigate to="/" replace />;
@@ -107,13 +159,20 @@ export default function SettingsPage() {
   return (
     <div>
       <div className={styles.header}>
-        <h1 className={styles.title}>Správa uživatelů</h1>
-        <button className={styles.addBtn} onClick={() => { setShowCreate(true); setFormError(null); }}>
-          + Přidat uživatele
-        </button>
+        <h1 className={styles.title}>Nastavení</h1>
+        {settingsTab === "users" && (
+          <button className={styles.addBtn} onClick={() => { setShowCreate(true); setFormError(null); }}>
+            + Přidat uživatele
+          </button>
+        )}
       </div>
 
-      {showCreate && (
+      <div className={styles.tabs}>
+        <button className={settingsTab === "users" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("users")}>Uživatelé</button>
+        <button className={settingsTab === "companies" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("companies")}>Společnosti</button>
+      </div>
+
+      {showCreate && settingsTab === "users" && (
         <div className={styles.modal}>
           <div className={styles.modalBox}>
             <h2 className={styles.modalTitle}>Nový uživatel</h2>
@@ -179,64 +238,103 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {loading && <p className={styles.state}>Načítám…</p>}
-      {error && <p className={styles.errorState}>{error}</p>}
+      {settingsTab === "users" && (
+        <>
+          {loading && <p className={styles.state}>Načítám…</p>}
+          {error && <p className={styles.errorState}>{error}</p>}
+          {!loading && !error && (
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th>Jméno</th>
+                  <th>E-mail</th>
+                  <th>Role</th>
+                  <th>Stav</th>
+                  <th>Akce</th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.length === 0 && (
+                  <tr><td colSpan={5} className={styles.empty}>Žádní uživatelé</td></tr>
+                )}
+                {users.map((u) => (
+                  <tr key={u.uid}>
+                    <td className={styles.name}>{u.name}</td>
+                    <td className={styles.email}>{u.email}</td>
+                    <td>
+                      <select
+                        className={styles.roleSelect}
+                        value={pendingRole[u.uid] ?? u.role}
+                        disabled={roleChanging[u.uid]}
+                        onChange={(e) => handleRoleChange(u.uid, e.target.value as UserRole)}
+                      >
+                        {ROLES.map((r) => (
+                          <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+                        ))}
+                      </select>
+                    </td>
+                    <td>
+                      <span className={u.active ? styles.badgeActive : styles.badgeInactive}>
+                        {u.active ? "Aktivní" : "Deaktivován"}
+                      </span>
+                    </td>
+                    <td>
+                      <button
+                        className={u.active ? styles.deactivateBtn : styles.activateBtn}
+                        disabled={togglingUid === u.uid}
+                        onClick={() => handleToggleActive(u)}
+                      >
+                        {togglingUid === u.uid ? "…" : u.active ? "Deaktivovat" : "Aktivovat"}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </>
+      )}
 
-      {!loading && !error && (
-        <table className={styles.table}>
-          <thead>
-            <tr>
-              <th>Jméno</th>
-              <th>E-mail</th>
-              <th>Role</th>
-              <th>Stav</th>
-              <th>Akce</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.length === 0 && (
-              <tr>
-                <td colSpan={5} className={styles.empty}>Žádní uživatelé</td>
-              </tr>
-            )}
-            {users.map((u) => (
-              <tr key={u.uid}>
-                <td className={styles.name}>{u.name}</td>
-                <td className={styles.email}>{u.email}</td>
-                <td>
-                  <select
-                    className={styles.roleSelect}
-                    value={pendingRole[u.uid] ?? u.role}
-                    disabled={roleChanging[u.uid]}
-                    onChange={(e) => handleRoleChange(u.uid, e.target.value as UserRole)}
-                  >
-                    {ROLES.map((r) => (
-                      <option key={r} value={r}>{ROLE_LABELS[r]}</option>
-                    ))}
-                  </select>
-                </td>
-                <td>
-                  <span className={u.active ? styles.badgeActive : styles.badgeInactive}>
-                    {u.active ? "Aktivní" : "Deaktivován"}
+      {settingsTab === "companies" && (
+        <div className={styles.companyList}>
+          {Object.values(companyForms).map((c) => (
+            <div key={c.id} className={styles.companyCard}>
+              <div className={styles.companyId}>{c.id}</div>
+              <div className={styles.companyGrid}>
+                <div className={styles.field}>
+                  <label className={styles.label}>Název</label>
+                  <input className={styles.input} value={c.name} onChange={(e) => setCompanyField(c.id, "name", e.target.value)} />
+                </div>
+                <div className={styles.field}>
+                  <label className={styles.label}>Adresa</label>
+                  <input className={styles.input} value={c.address} onChange={(e) => setCompanyField(c.id, "address", e.target.value)} />
+                </div>
+                <div className={styles.field}>
+                  <label className={styles.label}>IČO</label>
+                  <input className={styles.input} value={c.ic} onChange={(e) => setCompanyField(c.id, "ic", e.target.value)} />
+                </div>
+                <div className={styles.field}>
+                  <label className={styles.label}>DIČ</label>
+                  <input className={styles.input} value={c.dic} onChange={(e) => setCompanyField(c.id, "dic", e.target.value)} />
+                </div>
+              </div>
+              <div className={styles.companyActions}>
+                {companySaveMsg[c.id] && (
+                  <span className={companySaveMsg[c.id] === "Uloženo" ? styles.saveMsgOk : styles.saveMsgErr}>
+                    {companySaveMsg[c.id]}
                   </span>
-                </td>
-                <td>
-                  <button
-                    className={u.active ? styles.deactivateBtn : styles.activateBtn}
-                    disabled={togglingUid === u.uid}
-                    onClick={() => handleToggleActive(u)}
-                  >
-                    {togglingUid === u.uid
-                      ? "…"
-                      : u.active
-                      ? "Deaktivovat"
-                      : "Aktivovat"}
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                )}
+                <button
+                  className={styles.saveBtn}
+                  onClick={() => handleSaveCompany(c.id)}
+                  disabled={companySaving[c.id]}
+                >
+                  {companySaving[c.id] ? "Ukládám…" : "Uložit"}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
