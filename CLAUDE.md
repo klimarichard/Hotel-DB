@@ -74,7 +74,7 @@ Denormalized fields on `employees` root doc for querying: `currentCompanyId`, `c
 ### Build phases (from spec §13)
 1. ✅ Foundation — scaffold, Firebase project, dependencies, encryption service, employee CRUD + frontend shell
 2. ✅ Auth — user management UI, role assignment, create/deactivate/reactivate users, role change UI
-3. Employee module — documents/contact/benefits tabs, add/edit forms, document expiry alerts
+3. ✅ Employee module — collapsible detail page, unified add/edit form, contact/documents/benefits sub-collections, employment history tab (add/edit with context-sensitive modal per change type), document expiry alerts with global overview + unread badge, sensitive field clear, salary masking in history
 4. Contract module — docx-templater generation, PDF export, Firebase Storage, contract log UI
 5. Shift planner — `parseShiftExpression()`, monthly grid UI, availability rules, notifications
 6. Payroll — calculation engine (replicates MZDY.xlsx), summary UI, export
@@ -102,6 +102,12 @@ npm run dev
 - Node.js v24 is installed at `C:\Program Files\nodejs\node.exe` — not always on PATH, use full path if `node` is not found
 - Functions emulator runs on port **5002** (not 5001 — that port is taken on this machine)
 - To seed an admin user into the emulators: `"C:\Program Files\nodejs\node.exe" scripts\seed-admin.js` (from project root, emulators must be running)
+
+### Phase 3 — deferred items (to be done before Phase 4 or alongside it)
+- `jobPositions` lookup table — dropdown for "pracovní pozice" in history modal and salary defaults bound to position
+- `departments` binding — "oddělení" auto-filled from selected position
+- "změna smlouvy" — default contract text per change kind
+- Expiry alert dates displayed as Czech-formatted dates (currently raw ISO strings)
 
 ### Open items from spec (§14)
 - Payroll: confirm whether D/N shifts use 11.5h net or 12h gross after break deduction
