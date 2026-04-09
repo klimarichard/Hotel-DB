@@ -80,6 +80,57 @@ const emptyAdditional: AdditionalForm = {
   insuranceNumber: "", insuranceCompany: "", bankAccount: "",
 };
 
+// ─── SensitiveInput ───────────────────────────────────────────────────────────
+// In edit mode: shows input + "Smazat" button, or a "Bude smazáno" state with undo.
+// In create mode: plain input.
+
+function SensitiveInput({
+  value,
+  onChange,
+  isEdit,
+  isCleared,
+  onClear,
+  onUnclear,
+  placeholder,
+  type = "text",
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  isEdit: boolean;
+  isCleared: boolean;
+  onClear: () => void;
+  onUnclear: () => void;
+  placeholder?: string;
+  type?: string;
+}) {
+  if (isEdit && isCleared) {
+    return (
+      <div className={styles.clearedField}>
+        <span className={styles.clearedText}>Bude smazáno</span>
+        <button type="button" className={styles.unclearBtn} onClick={onUnclear}>
+          Zpět
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className={styles.sensitiveRow}>
+      <input
+        className={styles.input}
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+      />
+      {isEdit && (
+        <button type="button" className={styles.clearBtn} onClick={onClear} title="Smazat uloženou hodnotu">
+          Smazat
+        </button>
+      )}
+    </div>
+  );
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function EmployeeFormPage() {
@@ -96,6 +147,16 @@ export default function EmployeeFormPage() {
   const [contact, setContact] = useState<ContactForm>(emptyContact);
   const [documents, setDocuments] = useState<DocumentsForm>(emptyDocuments);
   const [additional, setAdditional] = useState<AdditionalForm>(emptyAdditional);
+
+  // Tracks which sensitive fields the user has explicitly marked for deletion
+  const [cleared, setCleared] = useState<Set<string>>(new Set());
+
+  function markCleared(field: string) {
+    setCleared((prev) => new Set(prev).add(field));
+  }
+  function unmarkCleared(field: string) {
+    setCleared((prev) => { const s = new Set(prev); s.delete(field); return s; });
+  }
 
   useEffect(() => {
     if (!isEdit || !id) return;
@@ -149,6 +210,8 @@ export default function EmployeeFormPage() {
       // ── Personal + job assignment ──────────────────────────────────────────
       const personalPayload: Record<string, unknown> = { ...personal };
       if (!personalPayload.birthNumber) delete personalPayload.birthNumber;
+      const personalClearFields = ["birthNumber"].filter((f) => cleared.has(f));
+      if (personalClearFields.length) personalPayload.clearFields = personalClearFields;
 
       if (isEdit) {
         await api.patch(`/employees/${empId}`, personalPayload);
@@ -167,11 +230,15 @@ export default function EmployeeFormPage() {
       const docsPayload: Record<string, unknown> = { ...documents };
       if (!docsPayload.idCardNumber) delete docsPayload.idCardNumber;
       if (!docsPayload.idCardExpiry) delete docsPayload.idCardExpiry;
+      const docsClearFields = ["idCardNumber", "idCardExpiry"].filter((f) => cleared.has(f));
+      if (docsClearFields.length) docsPayload.clearFields = docsClearFields;
 
       // ── Additional info ───────────────────────────────────────────────────
       const addPayload: Record<string, unknown> = { ...additional };
       if (!addPayload.insuranceNumber) delete addPayload.insuranceNumber;
       if (!addPayload.bankAccount) delete addPayload.bankAccount;
+      const addClearFields = ["insuranceNumber", "bankAccount"].filter((f) => cleared.has(f));
+      if (addClearFields.length) addPayload.clearFields = addClearFields;
 
       await Promise.all([
         api.put(`/employees/${empId}/contact`, contactPayload),
@@ -235,7 +302,15 @@ export default function EmployeeFormPage() {
               <input className={styles.input} value={personal.birthSurname} onChange={(e) => setP("birthSurname", e.target.value)} />
             </Field>
             <Field label="Rodné číslo">
-              <input className={styles.input} value={personal.birthNumber} onChange={(e) => setP("birthNumber", e.target.value)} placeholder={sensitiveHint || "000000/0000"} />
+              <SensitiveInput
+                value={personal.birthNumber}
+                onChange={(v) => setP("birthNumber", v)}
+                isEdit={isEdit}
+                isCleared={cleared.has("birthNumber")}
+                onClear={() => markCleared("birthNumber")}
+                onUnclear={() => unmarkCleared("birthNumber")}
+                placeholder={sensitiveHint || "000000/0000"}
+              />
             </Field>
             <Field label="Rodinný stav">
               <select className={styles.input} value={personal.maritalStatus} onChange={(e) => setP("maritalStatus", e.target.value)}>
@@ -322,10 +397,26 @@ export default function EmployeeFormPage() {
           <p className={styles.subsectionLabel}>Občanský průkaz</p>
           <div className={styles.grid}>
             <Field label="Číslo OP">
-              <input className={styles.input} value={documents.idCardNumber} onChange={(e) => setD("idCardNumber", e.target.value)} placeholder={sensitiveHint} />
+              <SensitiveInput
+                value={documents.idCardNumber}
+                onChange={(v) => setD("idCardNumber", v)}
+                isEdit={isEdit}
+                isCleared={cleared.has("idCardNumber")}
+                onClear={() => markCleared("idCardNumber")}
+                onUnclear={() => unmarkCleared("idCardNumber")}
+                placeholder={sensitiveHint}
+              />
             </Field>
             <Field label="Platnost OP">
-              <input className={styles.input} type="date" value={documents.idCardExpiry} onChange={(e) => setD("idCardExpiry", e.target.value)} />
+              <SensitiveInput
+                value={documents.idCardExpiry}
+                onChange={(v) => setD("idCardExpiry", v)}
+                isEdit={isEdit}
+                isCleared={cleared.has("idCardExpiry")}
+                onClear={() => markCleared("idCardExpiry")}
+                onUnclear={() => unmarkCleared("idCardExpiry")}
+                type="date"
+              />
             </Field>
           </div>
 
@@ -364,13 +455,29 @@ export default function EmployeeFormPage() {
           <h2 className={styles.sectionTitle}>Doplňující informace</h2>
           <div className={styles.grid}>
             <Field label="Číslo pojištění">
-              <input className={styles.input} value={additional.insuranceNumber} onChange={(e) => setA("insuranceNumber", e.target.value)} placeholder={sensitiveHint} />
+              <SensitiveInput
+                value={additional.insuranceNumber}
+                onChange={(v) => setA("insuranceNumber", v)}
+                isEdit={isEdit}
+                isCleared={cleared.has("insuranceNumber")}
+                onClear={() => markCleared("insuranceNumber")}
+                onUnclear={() => unmarkCleared("insuranceNumber")}
+                placeholder={sensitiveHint}
+              />
             </Field>
             <Field label="Pojišťovna">
               <input className={styles.input} value={additional.insuranceCompany} onChange={(e) => setA("insuranceCompany", e.target.value)} />
             </Field>
             <Field label="Číslo bankovního účtu">
-              <input className={styles.input} value={additional.bankAccount} onChange={(e) => setA("bankAccount", e.target.value)} placeholder={sensitiveHint} />
+              <SensitiveInput
+                value={additional.bankAccount}
+                onChange={(v) => setA("bankAccount", v)}
+                isEdit={isEdit}
+                isCleared={cleared.has("bankAccount")}
+                onClear={() => markCleared("bankAccount")}
+                onUnclear={() => unmarkCleared("bankAccount")}
+                placeholder={sensitiveHint}
+              />
             </Field>
           </div>
         </section>

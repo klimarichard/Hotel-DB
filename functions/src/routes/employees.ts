@@ -112,6 +112,7 @@ employeesRouter.post(
 /**
  * PATCH /api/employees/:id
  * Partial update. Re-encrypts sensitive fields if included.
+ * Pass clearFields: ["birthNumber"] to explicitly delete a sensitive field.
  */
 employeesRouter.patch(
   "/:id",
@@ -119,10 +120,22 @@ employeesRouter.patch(
   requireRole("admin", "director"),
   async (req: AuthRequest, res) => {
     const body = req.body as Record<string, unknown>;
+    const clearFields = Array.isArray(body.clearFields) ? body.clearFields as string[] : [];
+    const payload = { ...body };
+    delete payload.clearFields;
+
     const updated = encryptFields(
-      { ...body, updatedAt: FieldValue.serverTimestamp() },
+      { ...payload, updatedAt: FieldValue.serverTimestamp() },
       [...SENSITIVE_FIELDS]
-    );
+    ) as Record<string, unknown>;
+
+    // Explicitly delete cleared sensitive fields
+    for (const f of SENSITIVE_FIELDS) {
+      if (clearFields.includes(f)) {
+        updated[f] = FieldValue.delete();
+      }
+    }
+
     await db().collection("employees").doc(req.params.id).update(updated);
     res.json({ success: true });
   }
@@ -391,6 +404,12 @@ employeesRouter.put(
   async (req: AuthRequest, res) => {
     const body = req.body as Record<string, unknown>;
 
+    const clearFields = Array.isArray(body.clearFields) ? body.clearFields as string[] : [];
+
+    // Build alert body: cleared expiry fields are treated as removed
+    const alertBody = { ...body } as Record<string, unknown>;
+    for (const f of clearFields) { alertBody[f] = undefined; }
+
     // Check expiry alerts using plaintext body BEFORE encryption
     const empDoc = await db().collection("employees").doc(req.params.id).get();
     if (empDoc.exists) {
@@ -399,17 +418,27 @@ employeesRouter.put(
         req.params.id,
         emp.firstName as string,
         emp.lastName as string,
-        body
+        alertBody
       );
     }
 
     // Strip blank sensitive fields — existing encrypted values will be preserved via update()
     const payload: Record<string, unknown> = { ...body };
+    delete payload.clearFields;
     for (const f of DOCUMENT_SENSITIVE_FIELDS) { if (!payload[f]) delete payload[f]; }
+
     const data = encryptFields(
       { ...payload, updatedAt: FieldValue.serverTimestamp() },
       [...DOCUMENT_SENSITIVE_FIELDS]
-    );
+    ) as Record<string, unknown>;
+
+    // Explicitly delete cleared sensitive fields
+    for (const f of DOCUMENT_SENSITIVE_FIELDS) {
+      if (clearFields.includes(f)) {
+        data[f] = FieldValue.delete();
+      }
+    }
+
     const colRef = db().collection("employees").doc(req.params.id).collection("documents");
     const snap = await colRef.limit(1).get();
     if (snap.empty) {
@@ -452,12 +481,23 @@ employeesRouter.put(
   requireRole("admin", "director"),
   async (req: AuthRequest, res) => {
     const body = req.body as Record<string, unknown>;
+    const clearFields = Array.isArray(body.clearFields) ? body.clearFields as string[] : [];
     const payload: Record<string, unknown> = { ...body };
+    delete payload.clearFields;
     for (const f of BENEFITS_SENSITIVE_FIELDS) { if (!payload[f]) delete payload[f]; }
+
     const data = encryptFields(
       { ...payload, updatedAt: FieldValue.serverTimestamp() },
       [...BENEFITS_SENSITIVE_FIELDS]
-    );
+    ) as Record<string, unknown>;
+
+    // Explicitly delete cleared sensitive fields
+    for (const f of BENEFITS_SENSITIVE_FIELDS) {
+      if (clearFields.includes(f)) {
+        data[f] = FieldValue.delete();
+      }
+    }
+
     const colRef = db().collection("employees").doc(req.params.id).collection("benefits");
     const snap = await colRef.limit(1).get();
     if (snap.empty) {

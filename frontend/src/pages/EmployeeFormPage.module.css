@@ -174,3 +174,65 @@
   opacity: 0.6;
   cursor: not-allowed;
 }
+
+/* ── Sensitive field clear controls ──────────────────────────────────────── */
+
+.sensitiveRow {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.sensitiveRow .input {
+  flex: 1;
+  min-width: 0;
+}
+
+.clearBtn {
+  padding: 0.4rem 0.7rem;
+  border: 1px solid #fca5a5;
+  border-radius: 6px;
+  background: #fff;
+  color: #dc2626;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+.clearBtn:hover {
+  background: #fef2f2;
+}
+
+.clearedField {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.45rem 0.65rem;
+  border: 1px dashed #fca5a5;
+  border-radius: 6px;
+  background: #fef2f2;
+}
+
+.clearedText {
+  font-size: 0.875rem;
+  color: #dc2626;
+  flex: 1;
+}
+
+.unclearBtn {
+  padding: 0.2rem 0.6rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+  color: #374151;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.unclearBtn:hover {
+  background: #f9fafb;
+}
