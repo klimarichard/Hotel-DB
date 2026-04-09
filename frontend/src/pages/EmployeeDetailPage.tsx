@@ -129,6 +129,12 @@ interface Employee {
   currentCompanyId: string | null;
 }
 
+interface ChangeRow {
+  changeKind: string;
+  value: string;
+  contractText: string;
+}
+
 interface EmploymentRow {
   id: string;
   companyId: string;
@@ -144,6 +150,7 @@ interface EmploymentRow {
   agreedWorkScope?: string;
   agreedReward?: number;
   signingDate?: string;
+  changes?: ChangeRow[];
 }
 
 const TODAY = new Date().toISOString().split("T")[0];
@@ -154,6 +161,14 @@ type ChangeType = typeof CHANGE_TYPES[number];
 
 const CONTRACT_TYPES_NASTUP = ["HPP", "PPP", "DPP"] as const;
 type ContractType = typeof CONTRACT_TYPES_NASTUP[number] | "";
+
+const CHANGE_KINDS = ["mzda", "pracovní pozice", "úvazek", "délka smlouvy"] as const;
+const UVAZEK_OPTIONS = [
+  "plný pracovní úvazek, tj. 40 hod./týdně",
+  "poloviční pracovní úvazek, tj. 20 hod./týdně",
+] as const;
+
+const emptyChangeRow: ChangeRow = { changeKind: "", value: "", contractText: "" };
 
 interface EmploymentForm {
   changeType: ChangeType;
@@ -170,6 +185,8 @@ interface EmploymentForm {
   // DPP fields
   agreedWorkScope: string;
   agreedReward: string;
+  // změna smlouvy fields
+  changes: ChangeRow[];
 }
 
 const emptyForm: EmploymentForm = {
@@ -185,6 +202,7 @@ const emptyForm: EmploymentForm = {
   companyId: "HPM",
   agreedWorkScope: "max. 300 hodin ročně",
   agreedReward: "",
+  changes: [{ ...emptyChangeRow }],
 };
 
 // ─── Form initialiser (used for edit pre-fill) ───────────────────────────────
@@ -203,7 +221,90 @@ function rowToForm(row: EmploymentRow): EmploymentForm {
     companyId: row.companyId ?? "HPM",
     agreedWorkScope: row.agreedWorkScope ?? "max. 300 hodin ročně",
     agreedReward: row.agreedReward?.toString() ?? "",
+    changes: row.changes?.length ? row.changes : [{ ...emptyChangeRow }],
   };
+}
+
+// ─── ChangeRowInput ───────────────────────────────────────────────────────────
+
+function ChangeRowInput({
+  row,
+  index,
+  onChange,
+  onRemove,
+  canRemove,
+}: {
+  row: ChangeRow;
+  index: number;
+  onChange: (i: number, field: keyof ChangeRow, value: string) => void;
+  onRemove: (i: number) => void;
+  canRemove: boolean;
+}) {
+  return (
+    <div className={styles.changeEntry}>
+      <div className={styles.changeEntryFields}>
+        <select
+          className={styles.modalInput}
+          value={row.changeKind}
+          onChange={(e) => onChange(index, "changeKind", e.target.value)}
+        >
+          <option value="">— typ změny —</option>
+          {CHANGE_KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
+        </select>
+
+        {row.changeKind === "mzda" && (
+          <input
+            className={styles.modalInput}
+            type="number"
+            placeholder="Nová mzda (Kč)"
+            value={row.value}
+            onChange={(e) => onChange(index, "value", e.target.value)}
+          />
+        )}
+        {row.changeKind === "pracovní pozice" && (
+          <input
+            className={styles.modalInput}
+            placeholder="Nová pozice"
+            value={row.value}
+            onChange={(e) => onChange(index, "value", e.target.value)}
+          />
+        )}
+        {row.changeKind === "úvazek" && (
+          <select
+            className={styles.modalInput}
+            value={row.value}
+            onChange={(e) => onChange(index, "value", e.target.value)}
+          >
+            <option value="">— vyberte —</option>
+            {UVAZEK_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+          </select>
+        )}
+        {row.changeKind === "délka smlouvy" && (
+          <input
+            className={styles.modalInput}
+            type="date"
+            value={row.value}
+            onChange={(e) => onChange(index, "value", e.target.value)}
+          />
+        )}
+        {!row.changeKind && <div style={{ flex: 1 }} />}
+
+        {canRemove && (
+          <button type="button" className={styles.removeChangeBtn} onClick={() => onRemove(index)}>✕</button>
+        )}
+      </div>
+      {row.changeKind === "délka smlouvy" && !row.value && (
+        <p className={styles.tenureNote}>Prázdné datum = změna na dobu neurčitou</p>
+      )}
+      <input
+        className={styles.modalInput}
+        placeholder="Text pro smlouvu"
+        value={row.contractText}
+        onChange={(e) => onChange(index, "contractText", e.target.value)}
+        style={{ marginTop: "0.5rem" }}
+      />
+    </div>
+  );
 }
 
 // ─── Add / Edit employment modal ──────────────────────────────────────────────
@@ -237,6 +338,7 @@ function AddEntryModal({
         next.contractType = "";
         next.startDate = "";
         next.signingDate = TODAY;
+        next.changes = [{ ...emptyChangeRow }];
       }
       if (field === "contractType") {
         next.endDate = value === "DPP" ? END_OF_YEAR : "";
@@ -245,12 +347,25 @@ function AddEntryModal({
     });
   }
 
+  function updateChange(i: number, field: keyof ChangeRow, value: string) {
+    setForm((f) => ({
+      ...f,
+      changes: f.changes.map((c, idx) => idx === i ? { ...c, [field]: value } : c),
+    }));
+  }
+  function addChange() {
+    setForm((f) => ({ ...f, changes: [...f.changes, { ...emptyChangeRow }] }));
+  }
+  function removeChange(i: number) {
+    setForm((f) => ({ ...f, changes: f.changes.filter((_, idx) => idx !== i) }));
+  }
+
   const hasActiveRow = employment.some(
     (r) => r.changeType !== "ukončení" && r.endDate === null
   );
-  const showUkonceniWarning =
-    form.changeType === "ukončení" &&
-    (employee.status !== "active" || !hasActiveRow);
+  const noActiveContract = employee.status !== "active" || !hasActiveRow;
+  const showUkonceniWarning = form.changeType === "ukončení" && noActiveContract;
+  const showZmenaWarning = form.changeType === "změna smlouvy" && noActiveContract;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -301,6 +416,7 @@ function AddEntryModal({
           startDate: form.startDate,
           status: "active",
           signingDate: form.signingDate || null,
+          changes: form.changes.filter((c) => c.changeKind),
         };
       }
       if (isEdit && initialRow) {
@@ -435,15 +551,40 @@ function AddEntryModal({
 
             {/* ── změna smlouvy branch ── */}
             {form.changeType === "změna smlouvy" && (
-              <div className={styles.modalGrid} style={{ marginTop: "0.875rem" }}>
-                <div className={styles.modalField}>
-                  <label className={styles.modalLabel}>Datum podpisu</label>
-                  <input className={styles.modalInput} type="date" value={form.signingDate} onChange={(e) => setField("signingDate", e.target.value)} />
+              <>
+                <div className={styles.modalGrid} style={{ marginTop: "0.875rem" }}>
+                  <div className={styles.modalField}>
+                    <label className={styles.modalLabel}>Datum podpisu</label>
+                    <input className={styles.modalInput} type="date" value={form.signingDate} onChange={(e) => setField("signingDate", e.target.value)} />
+                  </div>
+                  {showZmenaWarning && (
+                    <div className={styles.modalFieldFull}>
+                      <div className={styles.modalWarning}>
+                        Upozornění: zaměstnanec nemá aktivní pracovní poměr.
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <div className={styles.modalFieldFull}>
-                  <p className={styles.modalNote}>Rozsah změn bude upřesněn v další verzi.</p>
+
+                <div style={{ marginTop: "0.875rem" }}>
+                  <label className={styles.modalLabel}>Změny</label>
+                  {form.changes.map((row, i) => (
+                    <ChangeRowInput
+                      key={i}
+                      row={row}
+                      index={i}
+                      onChange={updateChange}
+                      onRemove={removeChange}
+                      canRemove={form.changes.length > 1}
+                    />
+                  ))}
+                  {form.changes.length < 5 && (
+                    <button type="button" className={styles.addChangeBtn} onClick={addChange}>
+                      + Přidat změnu
+                    </button>
+                  )}
                 </div>
-              </div>
+              </>
             )}
 
             {error && <p className={styles.modalError}>{error}</p>}

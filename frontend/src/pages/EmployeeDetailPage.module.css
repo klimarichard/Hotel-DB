@@ -575,3 +575,69 @@
   margin: 0;
   padding: 0.5rem 0;
 }
+
+/* ── Change rows (změna smlouvy) ───────────────────────────────────────────── */
+
+.changeEntry {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.changeEntryFields {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.changeEntryFields .modalInput {
+  flex: 1;
+  min-width: 0;
+}
+
+.removeChangeBtn {
+  flex-shrink: 0;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: 1px solid #fca5a5;
+  border-radius: 4px;
+  background: #fff;
+  color: #dc2626;
+  font-size: 0.75rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+
+.removeChangeBtn:hover {
+  background: #fef2f2;
+}
+
+.tenureNote {
+  font-size: 0.75rem;
+  color: #9ca3af;
+  margin: 0.3rem 0 0;
+}
+
+.addChangeBtn {
+  display: block;
+  width: 100%;
+  margin-top: 0.5rem;
+  padding: 0.4rem;
+  border: 1px dashed #9ca3af;
+  border-radius: 6px;
+  background: #fff;
+  color: #6b7280;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.addChangeBtn:hover {
+  border-color: #1a56db;
+  color: #1a56db;
+}
