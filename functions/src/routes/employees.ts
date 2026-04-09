@@ -1,5 +1,6 @@
 import { Router } from "express";
 import * as admin from "firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
 import { requireAuth, requireRole, AuthRequest } from "../middleware/auth";
 import { encryptFields, redactFields, decrypt } from "../services/encryption";
 
@@ -22,7 +23,7 @@ const BENEFITS_SENSITIVE_FIELDS = ["insuranceNumber", "bankAccount"] as const;
 employeesRouter.get(
   "/",
   requireAuth,
-  requireRole("admin", "hr"),
+  requireRole("admin", "director"),
   async (req: AuthRequest, res) => {
     let query: admin.firestore.Query = db().collection("employees");
 
@@ -51,7 +52,7 @@ employeesRouter.get(
 employeesRouter.get(
   "/:id",
   requireAuth,
-  requireRole("admin", "hr"),
+  requireRole("admin", "director"),
   async (req: AuthRequest, res) => {
     const doc = await db().collection("employees").doc(req.params.id).get();
     if (!doc.exists) {
@@ -73,10 +74,10 @@ employeesRouter.get(
 employeesRouter.post(
   "/",
   requireAuth,
-  requireRole("admin", "hr"),
+  requireRole("admin", "director"),
   async (req: AuthRequest, res) => {
     const body = req.body as Record<string, unknown>;
-    const now = admin.firestore.FieldValue.serverTimestamp();
+    const now = FieldValue.serverTimestamp();
 
     const employeeData = encryptFields(
       {
@@ -115,11 +116,11 @@ employeesRouter.post(
 employeesRouter.patch(
   "/:id",
   requireAuth,
-  requireRole("admin", "hr"),
+  requireRole("admin", "director"),
   async (req: AuthRequest, res) => {
     const body = req.body as Record<string, unknown>;
     const updated = encryptFields(
-      { ...body, updatedAt: admin.firestore.FieldValue.serverTimestamp() },
+      { ...body, updatedAt: FieldValue.serverTimestamp() },
       [...SENSITIVE_FIELDS]
     );
     await db().collection("employees").doc(req.params.id).update(updated);
@@ -138,7 +139,7 @@ employeesRouter.patch(
 employeesRouter.post(
   "/:id/reveal",
   requireAuth,
-  requireRole("admin", "hr"),
+  requireRole("admin", "director"),
   async (req: AuthRequest, res) => {
     const { field } = req.body as { field: string };
     const allSensitive = [
@@ -197,7 +198,7 @@ employeesRouter.post(
       employeeId: req.params.id,
       fieldName: field,
       action: "reveal",
-      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      timestamp: FieldValue.serverTimestamp(),
     });
 
     res.json({ value: plaintext });
@@ -212,7 +213,7 @@ employeesRouter.post(
 employeesRouter.get(
   "/:id/contact",
   requireAuth,
-  requireRole("admin", "hr"),
+  requireRole("admin", "director"),
   async (req: AuthRequest, res) => {
     const snap = await db()
       .collection("employees")
@@ -230,13 +231,13 @@ employeesRouter.get(
 employeesRouter.put(
   "/:id/contact",
   requireAuth,
-  requireRole("admin", "hr"),
+  requireRole("admin", "director"),
   async (req: AuthRequest, res) => {
     const colRef = db().collection("employees").doc(req.params.id).collection("contact");
     const snap = await colRef.limit(1).get();
     const data = {
       ...req.body,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     };
     if (snap.empty) {
       await colRef.add(data);
@@ -254,7 +255,7 @@ employeesRouter.put(
 employeesRouter.get(
   "/:id/employment",
   requireAuth,
-  requireRole("admin", "hr"),
+  requireRole("admin", "director"),
   async (req: AuthRequest, res) => {
     const snap = await db()
       .collection("employees")
@@ -274,10 +275,10 @@ employeesRouter.get(
 employeesRouter.post(
   "/:id/employment",
   requireAuth,
-  requireRole("admin", "hr"),
+  requireRole("admin", "director"),
   async (req: AuthRequest, res) => {
     const body = req.body as Record<string, unknown>;
-    const now = admin.firestore.FieldValue.serverTimestamp();
+    const now = FieldValue.serverTimestamp();
     const empRef = db().collection("employees").doc(req.params.id);
 
     const employmentData = {
@@ -309,7 +310,7 @@ employeesRouter.post(
 employeesRouter.get(
   "/:id/contracts",
   requireAuth,
-  requireRole("admin", "hr"),
+  requireRole("admin", "director"),
   async (req: AuthRequest, res) => {
     const snap = await db()
       .collection("employees")

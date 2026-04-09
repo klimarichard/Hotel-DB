@@ -1,5 +1,6 @@
 import { Router } from "express";
 import * as admin from "firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
 import { requireAuth, requireRole, AuthRequest, UserRole } from "../middleware/auth";
 
 export const authRouter = Router();
@@ -15,7 +16,7 @@ authRouter.post(
   requireRole("admin"),
   async (req: AuthRequest, res) => {
     const { uid, role } = req.body as { uid: string; role: UserRole };
-    const validRoles: UserRole[] = ["admin", "hr", "manager", "receptionist"];
+    const validRoles: UserRole[] = ["admin", "director", "manager", "employee"];
 
     if (!uid || !validRoles.includes(role)) {
       res.status(400).json({ error: "uid and a valid role are required" });
@@ -26,7 +27,7 @@ authRouter.post(
 
     // Also update the users/ collection
     await admin.firestore().collection("users").doc(uid).set(
-      { role, updatedAt: admin.firestore.FieldValue.serverTimestamp() },
+      { role, updatedAt: FieldValue.serverTimestamp() },
       { merge: true }
     );
 
@@ -52,7 +53,7 @@ authRouter.post(
       employeeId?: string;
     };
 
-    const validRoles: UserRole[] = ["admin", "hr", "manager", "receptionist"];
+    const validRoles: UserRole[] = ["admin", "director", "manager", "employee"];
     if (!email || !password || !name || !validRoles.includes(role)) {
       res.status(400).json({ error: "email, password, name, and valid role are required" });
       return;
@@ -67,7 +68,7 @@ authRouter.post(
       role,
       employeeId: employeeId ?? null,
       active: true,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
       lastLogin: null,
     });
 
@@ -88,7 +89,36 @@ authRouter.patch(
     await admin.auth().updateUser(uid, { disabled: true });
     await admin.firestore().collection("users").doc(uid).update({
       active: false,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    res.json({ success: true });
+  }
+);
+
+/**
+ * GET /api/auth/users
+ * Admin-only: list all user profiles from users/ collection.
+ */
+authRouter.get("/users", requireAuth, requireRole("admin"), async (_req, res) => {
+  const snapshot = await admin.firestore().collection("users").orderBy("name").get();
+  const users = snapshot.docs.map((doc) => ({ uid: doc.id, ...doc.data() }));
+  res.json(users);
+});
+
+/**
+ * PATCH /api/auth/reactivate-user/:uid
+ * Admin-only: re-enable a previously disabled user account.
+ */
+authRouter.patch(
+  "/reactivate-user/:uid",
+  requireAuth,
+  requireRole("admin"),
+  async (req: AuthRequest, res) => {
+    const { uid } = req.params;
+    await admin.auth().updateUser(uid, { disabled: false });
+    await admin.firestore().collection("users").doc(uid).update({
+      active: true,
+      updatedAt: FieldValue.serverTimestamp(),
     });
     res.json({ success: true });
   }

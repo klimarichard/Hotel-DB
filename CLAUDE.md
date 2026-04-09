@@ -49,7 +49,7 @@ The complete technical spec lives in `HR_App_Specification.docx` (excluded from 
 - Web App ID: `1:261269048570:web:9bb9e3b02efac0c31d8d43`
 
 ### Roles
-`admin` → `hr` → `manager` → `receptionist` (least privileged)
+`admin` → `director` → `manager` → `employee` (least privileged)
 Custom claims set via Firebase Admin SDK on the `users/` Firestore collection.
 
 ### Sensitive encrypted fields
@@ -73,7 +73,7 @@ Denormalized fields on `employees` root doc for querying: `currentCompanyId`, `c
 
 ### Build phases (from spec §13)
 1. ✅ Foundation — scaffold, Firebase project, dependencies, encryption service, employee CRUD + frontend shell
-2. Auth — user management UI, role assignment (Firebase Auth + custom claims already wired)
+2. ✅ Auth — user management UI, role assignment, create/deactivate/reactivate users, role change UI
 3. Employee module — documents/contact/benefits tabs, add/edit forms, document expiry alerts
 4. Contract module — docx-templater generation, PDF export, Firebase Storage, contract log UI
 5. Shift planner — `parseShiftExpression()`, monthly grid UI, availability rules, notifications
@@ -98,8 +98,10 @@ npm run dev
 
 ### Known issues / quirks
 - Firebase CLI must be run via full path until PATH is refreshed in a new terminal session: `node "C:\Users\...\firebase-tools\lib\bin\firebase.js"`
-- PowerShell execution policy blocks `firebase.ps1` — use `cmd` or `firebase.cmd` directly
-- Node.js v24 is installed (winget installed latest, not v20) — `functions/package.json` uses `"node": ">=20"` to accommodate this
+- PowerShell execution policy blocks `firebase.ps1` and `npm.ps1` — use `cmd`, or prefix with `&` in PowerShell, or use `npm.cmd` explicitly
+- Node.js v24 is installed at `C:\Program Files\nodejs\node.exe` — not always on PATH, use full path if `node` is not found
+- Functions emulator runs on port **5002** (not 5001 — that port is taken on this machine)
+- To seed an admin user into the emulators: `"C:\Program Files\nodejs\node.exe" scripts\seed-admin.js` (from project root, emulators must be running)
 
 ### Open items from spec (§14)
 - Payroll: confirm whether D/N shifts use 11.5h net or 12h gross after break deduction

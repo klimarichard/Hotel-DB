@@ -37,3 +37,31 @@ export const api = {
   patch: <T>(path: string, body: unknown) => request<T>("PATCH", path, body),
   delete: <T>(path: string) => request<T>("DELETE", path),
 };
+
+// ---- Auth helpers --------------------------------------------------------
+
+import type { UserRole } from "@/hooks/useAuth";
+
+export interface UserProfile {
+  uid: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  active: boolean;
+  employeeId: string | null;
+  createdAt: unknown;
+  lastLogin: unknown;
+}
+
+export const authApi = {
+  listUsers: () => api.get<UserProfile[]>("/auth/users"),
+  createUser: (body: { email: string; password: string; name: string; role: UserRole; employeeId?: string }) =>
+    api.post<{ uid: string }>("/auth/create-user", body),
+  setRole: (uid: string, role: UserRole) =>
+    api.post<{ success: boolean }>("/auth/set-role", { uid, role }),
+  deactivateUser: (uid: string) =>
+    api.patch<{ success: boolean }>(`/auth/deactivate-user/${uid}`, {}),
+  reactivateUser: (uid: string) =>
+    api.patch<{ success: boolean }>(`/auth/reactivate-user/${uid}`, {}),
+  me: () => api.get<UserProfile>("/auth/me"),
+};

@@ -1,7 +1,7 @@
 import * as admin from "firebase-admin";
 import { Request, Response, NextFunction } from "express";
 
-export type UserRole = "admin" | "hr" | "manager" | "receptionist";
+export type UserRole = "admin" | "director" | "manager" | "employee";
 
 export interface AuthRequest extends Request {
   uid?: string;
