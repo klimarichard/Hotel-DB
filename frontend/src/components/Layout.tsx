@@ -2,6 +2,7 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useAuth } from "@/hooks/useAuth";
+import { useAlertsContext } from "@/context/AlertsContext";
 import styles from "./Layout.module.css";
 
 const navItems = [
@@ -18,6 +19,7 @@ const adminItems = [
 
 export default function Layout() {
   const { user, role } = useAuth();
+  const { unreadCount } = useAlertsContext();
   const navigate = useNavigate();
 
   async function handleLogout() {
@@ -51,7 +53,12 @@ export default function Layout() {
                     [styles.navLink, isActive ? styles.active : ""].join(" ")
                   }
                 >
-                  {item.label}
+                  <span className={styles.navLinkInner}>
+                    {item.label}
+                    {item.to === "/upozorneni" && unreadCount > 0 && (
+                      <span className={styles.badge}>{unreadCount}</span>
+                    )}
+                  </span>
                 </NavLink>
               </li>
             ))

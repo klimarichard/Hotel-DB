@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { api } from "@/lib/api";
+import { useAlertsContext } from "@/context/AlertsContext";
 import styles from "./AlertsPage.module.css";
 
 interface Alert {
@@ -32,11 +33,17 @@ function DaysBadge({ days }: { days: number }) {
 export default function AlertsPage() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
+  const { markAllRead } = useAlertsContext();
 
   useEffect(() => {
     api.get<Alert[]>("/alerts")
-      .then(setAlerts)
+      .then((data) => {
+        setAlerts(data);
+        markAllRead(data.map((a) => a.id));
+      })
       .finally(() => setLoading(false));
+  // markAllRead is stable (context function), intentionally omitted from deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (loading) return <div className={styles.state}>Načítám…</div>;

@@ -7,6 +7,7 @@ import EmployeeDetailPage from "@/pages/EmployeeDetailPage";
 import EmployeeFormPage from "@/pages/EmployeeFormPage";
 import SettingsPage from "@/pages/SettingsPage";
 import AlertsPage from "@/pages/AlertsPage";
+import { AlertsProvider } from "@/context/AlertsContext";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -30,7 +31,9 @@ export default function App() {
         path="/"
         element={
           <RequireAuth>
-            <Layout />
+            <AlertsProvider>
+              <Layout />
+            </AlertsProvider>
           </RequireAuth>
         }
       >
