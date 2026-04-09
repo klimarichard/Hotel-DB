@@ -41,7 +41,7 @@ The complete technical spec lives in `HR_App_Specification.docx` (excluded from 
 | Database | Firestore (NoSQL) |
 | Auth | Firebase Auth with custom role claims |
 | File storage | Firebase Storage |
-| Contract generation | docx-templater + Puppeteer (Phase 4) |
+| Contract generation | TipTap WYSIWYG editor (templates) + html2pdf.js client-side (PDF) |
 | Encryption | AES-256-GCM in Cloud Functions |
 
 ### Firebase project
@@ -75,7 +75,7 @@ Denormalized fields on `employees` root doc for querying: `currentCompanyId`, `c
 1. ✅ Foundation — scaffold, Firebase project, dependencies, encryption service, employee CRUD + frontend shell
 2. ✅ Auth — user management UI, role assignment, create/deactivate/reactivate users, role change UI
 3. ✅ Employee module — collapsible detail page, unified add/edit form, contact/documents/benefits sub-collections, employment history tab (add/edit with context-sensitive modal per change type), document expiry alerts with global overview + unread badge, sensitive field clear, salary masking in history
-4. Contract module — docx-templater generation, PDF export, Firebase Storage, contract log UI
+4. ✅ Contract module — TipTap template editor with variable picker, html2pdf.js PDF export, Firebase Storage, contract log UI (ContractsTab), generate from history rows, companies API + Settings tab
 5. Shift planner — `parseShiftExpression()`, monthly grid UI, availability rules, notifications
 6. Payroll — calculation engine (replicates MZDY.xlsx), summary UI, export
 7. Polish — stats dashboard, audit log UI, daily expiry alert scheduled function
@@ -103,7 +103,15 @@ npm run dev
 - Functions emulator runs on port **5002** (not 5001 — that port is taken on this machine)
 - To seed an admin user into the emulators: `"C:\Program Files\nodejs\node.exe" scripts\seed-admin.js` (from project root, emulators must be running)
 
-### Phase 3 — deferred items (to be done before Phase 4 or alongside it)
+### Phase 4 — key implementation notes
+- Contract templates stored as HTML in `contractTemplates/{type}` (doc ID = contract type string)
+- PDFs generated client-side via `html2pdf.js` — Puppeteer was too large for Gen 1 functions
+- Company data in `companies/{companyId}` (e.g. `companies/HPM`, `companies/STP`) — managed in Settings → Společnosti tab
+- Settings page uses a **tab-based layout** — every new settings section must be a new tab, never appended below
+- 9 contract types: 7 history-tied + 2 standalone (hmotná odpovědnost, multisport)
+- TipTap extensions installed: StarterKit, Underline, TextStyle, FontFamily, TextAlign, Color, Image
+
+### Phase 3 — deferred items (still pending, do before Phase 5)
 - `jobPositions` lookup table — dropdown for "pracovní pozice" in history modal and salary defaults bound to position
 - `departments` binding — "oddělení" auto-filled from selected position
 - "změna smlouvy" — default contract text per change kind
@@ -115,4 +123,4 @@ npm run dev
 - Payroll: confirm holiday premium rate formula
 - Auth: confirm password reset flow (email-based or admin-reset only?)
 - Shift planner: confirm whether portýři follow same availability rules as receptionists
-- Contract templates: confirm who holds master .docx files and how template updates are managed
+- Contract templates: managed via TipTap editor in app (admin/director); no external .docx files needed
