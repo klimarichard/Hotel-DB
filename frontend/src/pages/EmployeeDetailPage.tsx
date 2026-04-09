@@ -138,6 +138,139 @@ interface EmploymentRow {
   startDate: string;
   endDate: string | null;
   changeType: string;
+  salary?: number;
+}
+
+const CHANGE_TYPES = ["nástup", "přeřazení", "změna smlouvy", "ukončení"] as const;
+const CONTRACT_TYPES = ["HPP", "DPP", "DPČ"] as const;
+
+interface EmploymentForm {
+  changeType: string;
+  jobTitle: string;
+  department: string;
+  contractType: string;
+  companyId: string;
+  startDate: string;
+  endDate: string;
+  salary: string;
+}
+
+const emptyForm: EmploymentForm = {
+  changeType: "nástup",
+  jobTitle: "",
+  department: "",
+  contractType: "",
+  companyId: "",
+  startDate: "",
+  endDate: "",
+  salary: "",
+};
+
+// ─── Add employment modal ─────────────────────────────────────────────────────
+
+function AddEntryModal({
+  onClose,
+  onSaved,
+  employeeId,
+}: {
+  onClose: () => void;
+  onSaved: (row: EmploymentRow) => void;
+  employeeId: string;
+}) {
+  const [form, setForm] = useState<EmploymentForm>(emptyForm);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function set(field: keyof EmploymentForm, value: string) {
+    setForm((f) => ({ ...f, [field]: value }));
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!form.startDate) { setError("Datum nástupu je povinné."); return; }
+    setSaving(true);
+    setError(null);
+    try {
+      const payload: Record<string, unknown> = {
+        changeType: form.changeType,
+        jobTitle: form.jobTitle,
+        department: form.department,
+        contractType: form.contractType,
+        companyId: form.companyId,
+        startDate: form.startDate,
+        endDate: form.endDate || null,
+        salary: form.salary ? Number(form.salary) : null,
+        status: form.changeType === "ukončení" ? "inactive" : "active",
+      };
+      const res = await api.post<{ id: string }>(`/employees/${employeeId}/employment`, payload);
+      onSaved({ id: res.id, ...(payload as Omit<EmploymentRow, "id">) } as EmploymentRow);
+    } catch (err: unknown) {
+      setError((err as Error).message ?? "Chyba při ukládání.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className={styles.modalOverlay} onClick={onClose}>
+      <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+        <div className={styles.modalHeader}>
+          <span className={styles.modalTitle}>Přidat záznam do historie</span>
+          <button className={styles.modalClose} onClick={onClose}>✕</button>
+        </div>
+        <form onSubmit={handleSubmit}>
+          <div className={styles.modalBody}>
+            <div className={styles.modalGrid}>
+              <div className={styles.modalField}>
+                <label className={styles.modalLabel}>Typ změny *</label>
+                <select className={styles.modalInput} value={form.changeType} onChange={(e) => set("changeType", e.target.value)}>
+                  {CHANGE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <div className={styles.modalField}>
+                <label className={styles.modalLabel}>Datum *</label>
+                <input className={styles.modalInput} type="date" value={form.startDate} onChange={(e) => set("startDate", e.target.value)} required />
+              </div>
+              <div className={styles.modalField}>
+                <label className={styles.modalLabel}>Pracovní pozice</label>
+                <input className={styles.modalInput} value={form.jobTitle} onChange={(e) => set("jobTitle", e.target.value)} />
+              </div>
+              <div className={styles.modalField}>
+                <label className={styles.modalLabel}>Oddělení</label>
+                <input className={styles.modalInput} value={form.department} onChange={(e) => set("department", e.target.value)} />
+              </div>
+              <div className={styles.modalField}>
+                <label className={styles.modalLabel}>Typ smlouvy</label>
+                <select className={styles.modalInput} value={form.contractType} onChange={(e) => set("contractType", e.target.value)}>
+                  <option value="">— vyberte —</option>
+                  {CONTRACT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <div className={styles.modalField}>
+                <label className={styles.modalLabel}>Společnost (ID)</label>
+                <input className={styles.modalInput} value={form.companyId} onChange={(e) => set("companyId", e.target.value)} placeholder="stp / hpm" />
+              </div>
+              <div className={styles.modalField}>
+                <label className={styles.modalLabel}>Datum ukončení</label>
+                <input className={styles.modalInput} type="date" value={form.endDate} onChange={(e) => set("endDate", e.target.value)} />
+              </div>
+              <div className={styles.modalField}>
+                <label className={styles.modalLabel}>Mzda (Kč)</label>
+                <input className={styles.modalInput} type="number" value={form.salary} onChange={(e) => set("salary", e.target.value)} placeholder="0" />
+              </div>
+            </div>
+            {error && <p className={styles.modalError}>{error}</p>}
+          </div>
+          <div className={styles.modalActions}>
+            <button type="button" className={styles.modalCancelBtn} onClick={onClose}>Zrušit</button>
+            <button type="submit" className={styles.modalSaveBtn} disabled={saving}>
+              {saving ? "Ukládám…" : "Uložit"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
 }
 
 interface ContactData {
@@ -188,6 +321,7 @@ export default function EmployeeDetailPage() {
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState<"detail" | "history">("detail");
+  const [showModal, setShowModal] = useState(false);
 
   // Track which sub-sections have been loaded
   const [loadedSections, setLoadedSections] = useState<Set<string>>(new Set());
@@ -289,26 +423,53 @@ export default function EmployeeDetailPage() {
       </div>
 
       {page === "history" && (
-        <div className={styles.section}>
-          <div className={styles.sectionBody}>
-            {employment.length === 0 ? (
-              <p className={styles.loading} style={{ padding: "1rem 0" }}>Žádné záznamy.</p>
-            ) : (
-              <div className={styles.timeline} style={{ paddingTop: "1rem" }}>
-                {employment.map((row) => (
-                  <div key={row.id} className={styles.timelineRow}>
-                    <div className={styles.timelineDot} />
-                    <div className={styles.timelineContent}>
-                      <div className={styles.timelineTitle}>{row.jobTitle} · {row.contractType}</div>
-                      <div className={styles.timelineMeta}>{row.startDate} — {row.endDate ?? "dosud"} · {row.department}</div>
-                      <div className={styles.timelineChange}>{row.changeType}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+        <>
+          <div className={styles.historyHeader}>
+            <span className={styles.historyTitle}>Historie pracovního poměru</span>
+            <button className={styles.addBtn} onClick={() => setShowModal(true)}>+ Přidat záznam</button>
           </div>
-        </div>
+          <div className={styles.section}>
+            <div className={styles.sectionBody}>
+              {employment.length === 0 ? (
+                <p className={styles.loading} style={{ padding: "1rem 0" }}>Žádné záznamy.</p>
+              ) : (
+                <div className={styles.timeline} style={{ paddingTop: "1rem" }}>
+                  {employment.map((row) => (
+                    <div key={row.id} className={styles.timelineRow}>
+                      <div className={styles.timelineDot} />
+                      <div className={styles.timelineContent}>
+                        <div className={styles.timelineTitle}>
+                          {row.jobTitle || "—"}{row.contractType ? ` · ${row.contractType}` : ""}
+                        </div>
+                        <div className={styles.timelineMeta}>
+                          {row.startDate} — {row.endDate ?? "dosud"}
+                          {row.department ? ` · ${row.department}` : ""}
+                          {row.salary ? ` · ${row.salary.toLocaleString("cs-CZ")} Kč` : ""}
+                        </div>
+                        <div className={styles.timelineBottom}>
+                          <span className={styles.timelineChange}>{row.changeType}</span>
+                          <button className={styles.generateBtn} disabled title="Dostupné ve fázi 4">
+                            Generovat smlouvu
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          {showModal && (
+            <AddEntryModal
+              employeeId={id!}
+              onClose={() => setShowModal(false)}
+              onSaved={(row) => {
+                setEmployment((prev) => [row, ...prev]);
+                setShowModal(false);
+              }}
+            />
+          )}
+        </>
       )}
 
       {page === "detail" && (
