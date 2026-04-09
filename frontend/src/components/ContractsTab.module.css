@@ -1,0 +1,159 @@
+.tab {
+  padding: 20px 0;
+}
+
+.loading {
+  font-size: 0.875rem;
+  color: #6b7280;
+}
+
+.tabHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.tabTitle {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #111827;
+  margin: 0;
+}
+
+.standaloneWrapper {
+  position: relative;
+}
+
+.generateBtn {
+  padding: 7px 14px;
+  background: #1d4ed8;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.generateBtn:hover {
+  background: #1e40af;
+}
+
+.dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  z-index: 50;
+  min-width: 200px;
+  overflow: hidden;
+}
+
+.dropdownItem {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 9px 14px;
+  font-size: 0.875rem;
+  color: #111827;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.dropdownItem:hover {
+  background: #f3f4f6;
+}
+
+.empty {
+  font-size: 0.875rem;
+  color: #9ca3af;
+  padding: 20px 0;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.table th {
+  text-align: left;
+  padding: 8px 10px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.table td {
+  padding: 10px 10px;
+  border-bottom: 1px solid #f3f4f6;
+  vertical-align: middle;
+  color: #111827;
+}
+
+.status {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.statusUnsigned {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.statusSigned {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.statusArchived {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.actionBtn {
+  padding: 4px 10px;
+  font-size: 0.8125rem;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  background: #f9fafb;
+  color: #374151;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.actionBtn:hover {
+  background: #f3f4f6;
+  border-color: #9ca3af;
+}
+
+.uploadBtn {
+  cursor: pointer;
+}
+
+.deleteBtn {
+  color: #dc2626;
+  border-color: #fca5a5;
+  background: #fef2f2;
+}
+
+.deleteBtn:hover {
+  background: #fee2e2;
+}

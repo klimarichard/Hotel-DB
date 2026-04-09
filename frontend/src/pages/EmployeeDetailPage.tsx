@@ -1,6 +1,13 @@
 import { useState, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { api } from "@/lib/api";
+import ContractsTab from "@/components/ContractsTab";
+import GenerateContractModal from "@/components/GenerateContractModal";
+import {
+  ContractType as SmlouvaContractType,
+  CONTRACT_TYPE_LABELS,
+  CHANGE_TYPE_TO_CONTRACTS,
+} from "@/lib/contractVariables";
 import styles from "./EmployeeDetailPage.module.css";
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
@@ -654,6 +661,20 @@ interface AlertItem {
   status: "expiring" | "expired";
 }
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function getContractTypesForRow(row: EmploymentRow): SmlouvaContractType[] {
+  if (row.changeType === "nástup") {
+    const map: Record<string, SmlouvaContractType> = {
+      HPP: "nastup_hpp",
+      PPP: "nastup_ppp",
+      DPP: "nastup_dpp",
+    };
+    return row.contractType && map[row.contractType] ? [map[row.contractType]] : [];
+  }
+  return (CHANGE_TYPE_TO_CONTRACTS[row.changeType] ?? []) as SmlouvaContractType[];
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function EmployeeDetailPage() {
@@ -667,9 +688,18 @@ export default function EmployeeDetailPage() {
   const [additional, setAdditional] = useState<AdditionalData | null>(null);
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState<"detail" | "history">("detail");
+  const [page, setPage] = useState<"detail" | "history" | "smlouvy">("detail");
   const [showModal, setShowModal] = useState(false);
   const [editingRow, setEditingRow] = useState<EmploymentRow | null>(null);
+  const [generateModal, setGenerateModal] = useState<{
+    row: EmploymentRow;
+    contractType: SmlouvaContractType;
+  } | null>(null);
+  const [postSaveBanner, setPostSaveBanner] = useState<{
+    row: EmploymentRow;
+    types: SmlouvaContractType[];
+  } | null>(null);
+  const [generateDropdownRowId, setGenerateDropdownRowId] = useState<string | null>(null);
 
   // Track which sub-sections have been loaded
   const [loadedSections, setLoadedSections] = useState<Set<string>>(new Set());
@@ -721,6 +751,19 @@ export default function EmployeeDetailPage() {
     }
   }, [expanded, id, loadedSections]);
 
+  // Load contact + documents when smlouvy tab is opened (needed for contract variable resolution)
+  useEffect(() => {
+    if (page !== "smlouvy" || !id) return;
+    if (!loadedSections.has("contact")) {
+      setLoadedSections((s) => new Set(s).add("contact"));
+      api.get<ContactData | null>(`/employees/${id}/contact`).then(setContact).catch(() => {});
+    }
+    if (!loadedSections.has("documents")) {
+      setLoadedSections((s) => new Set(s).add("documents"));
+      api.get<DocumentsData | null>(`/employees/${id}/documents`).then(setDocuments).catch(() => {});
+    }
+  }, [page, id, loadedSections]);
+
   if (loading) return <div className={styles.state}>Načítám…</div>;
   if (!employee) return <div className={styles.state}>Zaměstnanec nenalezen.</div>;
 
@@ -768,6 +811,7 @@ export default function EmployeeDetailPage() {
       <div className={styles.tabs}>
         <button className={page === "detail" ? styles.tabActive : styles.tabBtn} onClick={() => setPage("detail")}>Detail</button>
         <button className={page === "history" ? styles.tabActive : styles.tabBtn} onClick={() => setPage("history")}>Historie pracovního poměru</button>
+        <button className={page === "smlouvy" ? styles.tabActive : styles.tabBtn} onClick={() => setPage("smlouvy")}>Smlouvy</button>
       </div>
 
       {page === "history" && (
@@ -802,9 +846,48 @@ export default function EmployeeDetailPage() {
                             <button className={styles.editRowBtn} onClick={() => setEditingRow(row)}>
                               Upravit
                             </button>
-                            <button className={styles.generateBtn} disabled title="Dostupné ve fázi 4">
-                              Generovat smlouvu
-                            </button>
+                            {(() => {
+                              const types = getContractTypesForRow(row);
+                              if (types.length === 0) return null;
+                              if (types.length === 1) {
+                                return (
+                                  <button
+                                    className={styles.generateBtn}
+                                    onClick={() => setGenerateModal({ row, contractType: types[0] })}
+                                  >
+                                    Generovat smlouvu
+                                  </button>
+                                );
+                              }
+                              return (
+                                <div className={styles.generateDropdown}>
+                                  <button
+                                    className={styles.generateBtn}
+                                    onClick={() => setGenerateDropdownRowId(
+                                      generateDropdownRowId === row.id ? null : row.id
+                                    )}
+                                  >
+                                    Generovat smlouvu ▾
+                                  </button>
+                                  {generateDropdownRowId === row.id && (
+                                    <div className={styles.generateDropdownMenu}>
+                                      {types.map((t) => (
+                                        <button
+                                          key={t}
+                                          className={styles.generateDropdownItem}
+                                          onClick={() => {
+                                            setGenerateDropdownRowId(null);
+                                            setGenerateModal({ row, contractType: t });
+                                          }}
+                                        >
+                                          {CONTRACT_TYPE_LABELS[t]}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
                           </div>
                         </div>
                       </div>
@@ -823,6 +906,8 @@ export default function EmployeeDetailPage() {
               onSaved={(row) => {
                 setEmployment((prev) => [row, ...prev]);
                 setShowModal(false);
+                const types = getContractTypesForRow(row);
+                if (types.length > 0) setPostSaveBanner({ row, types });
               }}
             />
           )}
@@ -842,6 +927,22 @@ export default function EmployeeDetailPage() {
             />
           )}
         </>
+      )}
+
+      {page === "smlouvy" && (
+        <ContractsTab
+          employeeId={id!}
+          employeeData={{
+            id: employee.id,
+            firstName: employee.firstName,
+            lastName: employee.lastName,
+            currentJobTitle: employee.currentJobTitle,
+            currentDepartment: employee.currentDepartment,
+            currentCompanyId: employee.currentCompanyId ?? undefined,
+            address: contact?.permanentAddress,
+          }}
+          companyData={{}}
+        />
       )}
 
       {page === "detail" && (
@@ -937,6 +1038,54 @@ export default function EmployeeDetailPage() {
         )}
       </Section>
       </>
+      )}
+
+      {postSaveBanner && (
+        <div className={styles.postSaveBanner}>
+          <span>Záznam byl uložen. Chcete vygenerovat smlouvu?</span>
+          <div className={styles.postSaveBannerActions}>
+            {postSaveBanner.types.map((t) => (
+              <button
+                key={t}
+                className={styles.postSaveBannerBtn}
+                onClick={() => {
+                  setGenerateModal({ row: postSaveBanner.row, contractType: t });
+                  setPostSaveBanner(null);
+                }}
+              >
+                {CONTRACT_TYPE_LABELS[t]}
+              </button>
+            ))}
+            <button className={styles.postSaveBannerDismiss} onClick={() => setPostSaveBanner(null)}>✕</button>
+          </div>
+        </div>
+      )}
+
+      {generateModal && (
+        <GenerateContractModal
+          employeeId={id!}
+          contractType={generateModal.contractType}
+          employmentRowId={generateModal.row.id}
+          employeeData={{
+            id: employee.id,
+            firstName: employee.firstName,
+            lastName: employee.lastName,
+            currentJobTitle: generateModal.row.jobTitle || employee.currentJobTitle,
+            currentDepartment: employee.currentDepartment,
+            currentCompanyId: employee.currentCompanyId ?? undefined,
+            address: contact?.permanentAddress,
+            contractType: generateModal.row.contractType,
+            salary: generateModal.row.salary,
+            startDate: generateModal.row.startDate,
+            endDate: generateModal.row.endDate ?? undefined,
+          }}
+          companyData={{}}
+          onClose={() => setGenerateModal(null)}
+          onGenerated={() => {
+            setGenerateModal(null);
+            setPage("smlouvy");
+          }}
+        />
       )}
     </div>
   );

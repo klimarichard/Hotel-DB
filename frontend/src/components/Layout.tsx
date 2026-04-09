@@ -7,13 +7,13 @@ import styles from "./Layout.module.css";
 
 const navItems = [
   { to: "/zamestnanci", label: "Zaměstnanci" },
-  { to: "/smlouvy", label: "Smlouvy" },
   { to: "/smeny", label: "Směny" },
   { to: "/mzdy", label: "Mzdy" },
 ];
 
 const adminItems = [
   { to: "/upozorneni", label: "Upozornění" },
+  { to: "/smlouvy", label: "Šablony smluv" },
   { to: "/nastaveni", label: "Nastavení" },
 ];
 

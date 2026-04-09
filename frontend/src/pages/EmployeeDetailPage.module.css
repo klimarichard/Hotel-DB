@@ -400,10 +400,100 @@
   padding: 0.2rem 0.65rem;
   border: 1px solid #d1d5db;
   border-radius: 5px;
-  background: #f9fafb;
-  color: #9ca3af;
+  background: #fff;
+  color: #374151;
   font-size: 0.75rem;
-  cursor: not-allowed;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.generateBtn:hover {
+  background: #f3f4f6;
+}
+
+.generateDropdown {
+  position: relative;
+}
+
+.generateDropdownMenu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  min-width: 180px;
+  z-index: 50;
+  overflow: hidden;
+}
+
+.generateDropdownItem {
+  display: block;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  background: none;
+  border: none;
+  font-size: 0.8rem;
+  color: #374151;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.generateDropdownItem:hover {
+  background: #f3f4f6;
+}
+
+/* ── Post-save banner ─────────────────────────────────────────────────────── */
+
+.postSaveBanner {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1e3a5f;
+  color: #fff;
+  border-radius: 8px;
+  padding: 0.75rem 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+  z-index: 200;
+  font-size: 0.875rem;
+  white-space: nowrap;
+}
+
+.postSaveBannerActions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.postSaveBannerBtn {
+  padding: 0.3rem 0.75rem;
+  border-radius: 5px;
+  border: none;
+  background: #3b82f6;
+  color: #fff;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.postSaveBannerBtn:hover {
+  background: #2563eb;
+}
+
+.postSaveBannerDismiss {
+  background: none;
+  border: none;
+  color: #93c5fd;
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 0.1rem 0.25rem;
+  line-height: 1;
 }
 
 /* ── Modal ─────────────────────────────────────────────────────────────────── */

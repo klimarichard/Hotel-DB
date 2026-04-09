@@ -6,6 +6,8 @@ import cors from "cors";
 import { authRouter } from "./routes/auth";
 import { employeesRouter } from "./routes/employees";
 import { alertsRouter } from "./routes/alerts";
+import { contractTemplatesRouter } from "./routes/contractTemplates";
+import { contractsRouter } from "./routes/contracts";
 
 admin.initializeApp();
 
@@ -18,6 +20,8 @@ app.use(express.json());
 app.use("/auth", authRouter);
 app.use("/employees", employeesRouter);
 app.use("/alerts", alertsRouter);
+app.use("/contractTemplates", contractTemplatesRouter);
+app.use("/", contractsRouter);
 
 // Health check
 app.get("/health", (_req, res) => {
