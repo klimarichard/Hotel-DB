@@ -5,6 +5,7 @@ import cors from "cors";
 
 import { authRouter } from "./routes/auth";
 import { employeesRouter } from "./routes/employees";
+import { alertsRouter } from "./routes/alerts";
 
 admin.initializeApp();
 
@@ -16,6 +17,7 @@ app.use(express.json());
 // Routes
 app.use("/auth", authRouter);
 app.use("/employees", employeesRouter);
+app.use("/alerts", alertsRouter);
 
 // Health check
 app.get("/health", (_req, res) => {

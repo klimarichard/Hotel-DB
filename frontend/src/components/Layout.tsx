@@ -2,6 +2,7 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useAuth } from "@/hooks/useAuth";
+import { useAlertsContext } from "@/context/AlertsContext";
 import styles from "./Layout.module.css";
 
 const navItems = [
@@ -11,8 +12,14 @@ const navItems = [
   { to: "/mzdy", label: "Mzdy" },
 ];
 
+const adminItems = [
+  { to: "/upozorneni", label: "Upozornění" },
+  { to: "/nastaveni", label: "Nastavení" },
+];
+
 export default function Layout() {
   const { user, role } = useAuth();
+  const { unreadCount } = useAlertsContext();
   const navigate = useNavigate();
 
   async function handleLogout() {
@@ -37,18 +44,25 @@ export default function Layout() {
               </NavLink>
             </li>
           ))}
-          {role === "admin" && (
-            <li>
-              <NavLink
-                to="/nastaveni"
-                className={({ isActive }) =>
-                  [styles.navLink, isActive ? styles.active : ""].join(" ")
-                }
-              >
-                Nastavení
-              </NavLink>
-            </li>
-          )}
+          {(role === "admin" || role === "director") &&
+            adminItems.map((item) => (
+              <li key={item.to}>
+                <NavLink
+                  to={item.to}
+                  className={({ isActive }) =>
+                    [styles.navLink, isActive ? styles.active : ""].join(" ")
+                  }
+                >
+                  <span className={styles.navLinkInner}>
+                    {item.label}
+                    {item.to === "/upozorneni" && unreadCount > 0 && (
+                      <span className={styles.badge}>{unreadCount}</span>
+                    )}
+                  </span>
+                </NavLink>
+              </li>
+            ))
+          }
         </ul>
         <div className={styles.userBar}>
           <span className={styles.userEmail}>{user?.email}</span>

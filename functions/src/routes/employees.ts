@@ -112,6 +112,7 @@ employeesRouter.post(
 /**
  * PATCH /api/employees/:id
  * Partial update. Re-encrypts sensitive fields if included.
+ * Pass clearFields: ["birthNumber"] to explicitly delete a sensitive field.
  */
 employeesRouter.patch(
   "/:id",
@@ -119,10 +120,22 @@ employeesRouter.patch(
   requireRole("admin", "director"),
   async (req: AuthRequest, res) => {
     const body = req.body as Record<string, unknown>;
+    const clearFields = Array.isArray(body.clearFields) ? body.clearFields as string[] : [];
+    const payload = { ...body };
+    delete payload.clearFields;
+
     const updated = encryptFields(
-      { ...body, updatedAt: FieldValue.serverTimestamp() },
+      { ...payload, updatedAt: FieldValue.serverTimestamp() },
       [...SENSITIVE_FIELDS]
-    );
+    ) as Record<string, unknown>;
+
+    // Explicitly delete cleared sensitive fields
+    for (const f of SENSITIVE_FIELDS) {
+      if (clearFields.includes(f)) {
+        updated[f] = FieldValue.delete();
+      }
+    }
+
     await db().collection("employees").doc(req.params.id).update(updated);
     res.json({ success: true });
   }
@@ -301,6 +314,252 @@ employeesRouter.post(
     }
 
     res.status(201).json({ id: newRow.id });
+  }
+);
+
+/**
+ * GET /api/employees/:id/documents
+ */
+employeesRouter.get(
+  "/:id/documents",
+  requireAuth,
+  requireRole("admin", "director"),
+  async (req: AuthRequest, res) => {
+    const snap = await db()
+      .collection("employees")
+      .doc(req.params.id)
+      .collection("documents")
+      .limit(1)
+      .get();
+    if (snap.empty) { res.json(null); return; }
+    const data = snap.docs[0].data() as Record<string, unknown>;
+    res.json({ id: snap.docs[0].id, ...redactFields(data, [...DOCUMENT_SENSITIVE_FIELDS]) });
+  }
+);
+
+// ─── ALERT HELPER ────────────────────────────────────────────────────────────
+
+const EXPIRY_ALERT_DAYS = 30;
+
+const EXPIRY_FIELDS: { field: string; label: string }[] = [
+  { field: "idCardExpiry", label: "Platnost OP" },
+  { field: "passportExpiry", label: "Platnost pasu" },
+  { field: "visaExpiry", label: "Platnost povolení k pobytu" },
+];
+
+async function updateDocumentAlerts(
+  employeeId: string,
+  firstName: string,
+  lastName: string,
+  body: Record<string, unknown>
+): Promise<void> {
+  const alertsCol = db().collection("alerts");
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  for (const { field, label } of EXPIRY_FIELDS) {
+    const docId = `${employeeId}_${field}`;
+    const value = body[field] as string | undefined;
+
+    if (!value) {
+      // Field cleared — remove any existing alert
+      await alertsCol.doc(docId).delete();
+      continue;
+    }
+
+    const expiry = new Date(value);
+    const daysUntilExpiry = Math.ceil(
+      (expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+    );
+
+    if (daysUntilExpiry > EXPIRY_ALERT_DAYS) {
+      // Not expiring soon — remove any existing alert
+      await alertsCol.doc(docId).delete();
+    } else {
+      // Expiring soon or already expired — upsert alert
+      await alertsCol.doc(docId).set({
+        employeeId,
+        employeeFirstName: firstName,
+        employeeLastName: lastName,
+        field,
+        fieldLabel: label,
+        expiryDate: value,
+        daysUntilExpiry,
+        status: daysUntilExpiry < 0 ? "expired" : "expiring",
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    }
+  }
+}
+
+/**
+ * PUT /api/employees/:id/documents
+ * Encrypts idCardNumber and idCardExpiry before writing.
+ * Blank sensitive fields are omitted so existing encrypted values are preserved.
+ */
+employeesRouter.put(
+  "/:id/documents",
+  requireAuth,
+  requireRole("admin", "director"),
+  async (req: AuthRequest, res) => {
+    const body = req.body as Record<string, unknown>;
+
+    const clearFields = Array.isArray(body.clearFields) ? body.clearFields as string[] : [];
+
+    // Build alert body: cleared expiry fields are treated as removed
+    const alertBody = { ...body } as Record<string, unknown>;
+    for (const f of clearFields) { alertBody[f] = undefined; }
+
+    // Check expiry alerts using plaintext body BEFORE encryption
+    const empDoc = await db().collection("employees").doc(req.params.id).get();
+    if (empDoc.exists) {
+      const emp = empDoc.data() as Record<string, unknown>;
+      await updateDocumentAlerts(
+        req.params.id,
+        emp.firstName as string,
+        emp.lastName as string,
+        alertBody
+      );
+    }
+
+    // Strip blank sensitive fields — existing encrypted values will be preserved via update()
+    const payload: Record<string, unknown> = { ...body };
+    delete payload.clearFields;
+    for (const f of DOCUMENT_SENSITIVE_FIELDS) { if (!payload[f]) delete payload[f]; }
+
+    const data = encryptFields(
+      { ...payload, updatedAt: FieldValue.serverTimestamp() },
+      [...DOCUMENT_SENSITIVE_FIELDS]
+    ) as Record<string, unknown>;
+
+    // Explicitly delete cleared sensitive fields
+    for (const f of DOCUMENT_SENSITIVE_FIELDS) {
+      if (clearFields.includes(f)) {
+        data[f] = FieldValue.delete();
+      }
+    }
+
+    const colRef = db().collection("employees").doc(req.params.id).collection("documents");
+    const snap = await colRef.limit(1).get();
+    if (snap.empty) {
+      await colRef.add(data);
+    } else {
+      await snap.docs[0].ref.update(data); // update preserves unmentioned fields
+    }
+    res.json({ success: true });
+  }
+);
+
+/**
+ * GET /api/employees/:id/benefits
+ */
+employeesRouter.get(
+  "/:id/benefits",
+  requireAuth,
+  requireRole("admin", "director"),
+  async (req: AuthRequest, res) => {
+    const snap = await db()
+      .collection("employees")
+      .doc(req.params.id)
+      .collection("benefits")
+      .limit(1)
+      .get();
+    if (snap.empty) { res.json(null); return; }
+    const data = snap.docs[0].data() as Record<string, unknown>;
+    res.json({ id: snap.docs[0].id, ...redactFields(data, [...BENEFITS_SENSITIVE_FIELDS]) });
+  }
+);
+
+/**
+ * PUT /api/employees/:id/benefits
+ * Encrypts insuranceNumber and bankAccount before writing.
+ * Blank sensitive fields are omitted so existing encrypted values are preserved.
+ */
+employeesRouter.put(
+  "/:id/benefits",
+  requireAuth,
+  requireRole("admin", "director"),
+  async (req: AuthRequest, res) => {
+    const body = req.body as Record<string, unknown>;
+    const clearFields = Array.isArray(body.clearFields) ? body.clearFields as string[] : [];
+    const payload: Record<string, unknown> = { ...body };
+    delete payload.clearFields;
+    for (const f of BENEFITS_SENSITIVE_FIELDS) { if (!payload[f]) delete payload[f]; }
+
+    const data = encryptFields(
+      { ...payload, updatedAt: FieldValue.serverTimestamp() },
+      [...BENEFITS_SENSITIVE_FIELDS]
+    ) as Record<string, unknown>;
+
+    // Explicitly delete cleared sensitive fields
+    for (const f of BENEFITS_SENSITIVE_FIELDS) {
+      if (clearFields.includes(f)) {
+        data[f] = FieldValue.delete();
+      }
+    }
+
+    const colRef = db().collection("employees").doc(req.params.id).collection("benefits");
+    const snap = await colRef.limit(1).get();
+    if (snap.empty) {
+      await colRef.add(data);
+    } else {
+      await snap.docs[0].ref.update(data);
+    }
+    res.json({ success: true });
+  }
+);
+
+/**
+ * PATCH /api/employees/:id/employment/:rowId
+ * Updates a single employment history record.
+ * If status === "active", re-syncs denormalized fields on the employee root doc.
+ */
+employeesRouter.patch(
+  "/:id/employment/:rowId",
+  requireAuth,
+  requireRole("admin", "director"),
+  async (req: AuthRequest, res) => {
+    const body = req.body as Record<string, unknown>;
+    const now = FieldValue.serverTimestamp();
+    const empRef = db().collection("employees").doc(req.params.id);
+    const rowRef = empRef.collection("employment").doc(req.params.rowId);
+
+    const rowSnap = await rowRef.get();
+    if (!rowSnap.exists) {
+      res.status(404).json({ error: "Employment record not found" });
+      return;
+    }
+
+    await rowRef.update({ ...body, updatedAt: now });
+
+    if (body.status === "active") {
+      await empRef.update({
+        currentCompanyId: body.companyId ?? null,
+        currentDepartment: body.department ?? "",
+        currentContractType: body.contractType ?? "",
+        currentJobTitle: body.jobTitle ?? "",
+        updatedAt: now,
+      });
+    }
+
+    res.json({ success: true });
+  }
+);
+
+/**
+ * GET /api/employees/:id/alerts
+ * Returns active expiry alerts for a specific employee.
+ */
+employeesRouter.get(
+  "/:id/alerts",
+  requireAuth,
+  requireRole("admin", "director"),
+  async (req: AuthRequest, res) => {
+    const snap = await db()
+      .collection("alerts")
+      .where("employeeId", "==", req.params.id)
+      .get();
+    res.json(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
   }
 );
 
