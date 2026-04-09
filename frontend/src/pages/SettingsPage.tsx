@@ -16,7 +16,7 @@ const ROLE_LABELS: Record<UserRole, string> = {
 const emptyForm = { name: "", email: "", password: "", role: "employee" as UserRole };
 
 export default function SettingsPage() {
-  const { role } = useAuth();
+  const { role, loading: authLoading } = useAuth();
 
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -34,8 +34,6 @@ export default function SettingsPage() {
   // Per-row activation toggle state
   const [togglingUid, setTogglingUid] = useState<string | null>(null);
 
-  if (role !== "admin") return <Navigate to="/" replace />;
-
   const loadUsers = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -50,6 +48,9 @@ export default function SettingsPage() {
   }, []);
 
   useEffect(() => { loadUsers(); }, [loadUsers]);
+
+  if (authLoading) return null;
+  if (role !== "admin") return <Navigate to="/" replace />;
 
   async function handleCreateUser(e: React.FormEvent) {
     e.preventDefault();

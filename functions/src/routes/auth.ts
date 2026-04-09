@@ -1,5 +1,6 @@
 import { Router } from "express";
 import * as admin from "firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
 import { requireAuth, requireRole, AuthRequest, UserRole } from "../middleware/auth";
 
 export const authRouter = Router();
@@ -26,7 +27,7 @@ authRouter.post(
 
     // Also update the users/ collection
     await admin.firestore().collection("users").doc(uid).set(
-      { role, updatedAt: admin.firestore.FieldValue.serverTimestamp() },
+      { role, updatedAt: FieldValue.serverTimestamp() },
       { merge: true }
     );
 
@@ -67,7 +68,7 @@ authRouter.post(
       role,
       employeeId: employeeId ?? null,
       active: true,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
       lastLogin: null,
     });
 
@@ -88,7 +89,7 @@ authRouter.patch(
     await admin.auth().updateUser(uid, { disabled: true });
     await admin.firestore().collection("users").doc(uid).update({
       active: false,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     });
     res.json({ success: true });
   }
@@ -117,7 +118,7 @@ authRouter.patch(
     await admin.auth().updateUser(uid, { disabled: false });
     await admin.firestore().collection("users").doc(uid).update({
       active: true,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     });
     res.json({ success: true });
   }

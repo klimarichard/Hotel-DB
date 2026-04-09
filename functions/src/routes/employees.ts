@@ -1,5 +1,6 @@
 import { Router } from "express";
 import * as admin from "firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
 import { requireAuth, requireRole, AuthRequest } from "../middleware/auth";
 import { encryptFields, redactFields, decrypt } from "../services/encryption";
 
@@ -76,7 +77,7 @@ employeesRouter.post(
   requireRole("admin", "director"),
   async (req: AuthRequest, res) => {
     const body = req.body as Record<string, unknown>;
-    const now = admin.firestore.FieldValue.serverTimestamp();
+    const now = FieldValue.serverTimestamp();
 
     const employeeData = encryptFields(
       {
@@ -119,7 +120,7 @@ employeesRouter.patch(
   async (req: AuthRequest, res) => {
     const body = req.body as Record<string, unknown>;
     const updated = encryptFields(
-      { ...body, updatedAt: admin.firestore.FieldValue.serverTimestamp() },
+      { ...body, updatedAt: FieldValue.serverTimestamp() },
       [...SENSITIVE_FIELDS]
     );
     await db().collection("employees").doc(req.params.id).update(updated);
@@ -197,7 +198,7 @@ employeesRouter.post(
       employeeId: req.params.id,
       fieldName: field,
       action: "reveal",
-      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      timestamp: FieldValue.serverTimestamp(),
     });
 
     res.json({ value: plaintext });
@@ -236,7 +237,7 @@ employeesRouter.put(
     const snap = await colRef.limit(1).get();
     const data = {
       ...req.body,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     };
     if (snap.empty) {
       await colRef.add(data);
@@ -277,7 +278,7 @@ employeesRouter.post(
   requireRole("admin", "director"),
   async (req: AuthRequest, res) => {
     const body = req.body as Record<string, unknown>;
-    const now = admin.firestore.FieldValue.serverTimestamp();
+    const now = FieldValue.serverTimestamp();
     const empRef = db().collection("employees").doc(req.params.id);
 
     const employmentData = {
