@@ -343,6 +343,13 @@
   gap: 0.5rem;
 }
 
+.salaryField {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  vertical-align: middle;
+}
+
 .editRowBtn {
   padding: 0.2rem 0.65rem;
   border: 1px solid #d1d5db;

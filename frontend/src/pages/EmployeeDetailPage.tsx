@@ -460,6 +460,25 @@ function AddEntryModal({
   );
 }
 
+// ─── SalaryDisplay ───────────────────────────────────────────────────────────
+
+function SalaryDisplay({ value }: { value: number }) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <span className={styles.salaryField}>
+      {" · "}
+      {visible ? `${value.toLocaleString("cs-CZ")} Kč` : "•••••"}
+      <button
+        className={styles.revealBtn}
+        onClick={() => setVisible((v) => !v)}
+        title={visible ? "Skrýt mzdu" : "Zobrazit mzdu"}
+      >
+        {visible ? <EyeOffIcon /> : <EyeIcon />}
+      </button>
+    </span>
+  );
+}
+
 interface ContactData {
   phone?: string;
   email?: string;
@@ -632,7 +651,9 @@ export default function EmployeeDetailPage() {
                         <div className={styles.timelineMeta}>
                           {row.startDate} — {row.endDate ?? "dosud"}
                           {row.department ? ` · ${row.department}` : ""}
-                          {(row.salary ?? row.agreedReward) ? ` · ${(row.salary ?? row.agreedReward)!.toLocaleString("cs-CZ")} Kč` : ""}
+                          {(row.salary ?? row.agreedReward) != null && (
+                            <SalaryDisplay value={(row.salary ?? row.agreedReward)!} />
+                          )}
                         </div>
                         <div className={styles.timelineBottom}>
                           <span className={styles.timelineChange}>{row.changeType}</span>
