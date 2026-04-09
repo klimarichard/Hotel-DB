@@ -139,31 +139,52 @@ interface EmploymentRow {
   endDate: string | null;
   changeType: string;
   salary?: number;
+  workLocation?: string;
+  probationPeriod?: string;
+  agreedWorkScope?: string;
+  agreedReward?: number;
+  signingDate?: string;
 }
 
-const CHANGE_TYPES = ["nástup", "přeřazení", "změna smlouvy", "ukončení"] as const;
-const CONTRACT_TYPES = ["HPP", "DPP", "DPČ"] as const;
+const TODAY = new Date().toISOString().split("T")[0];
+const END_OF_YEAR = `${new Date().getFullYear()}-12-31`;
+
+const CHANGE_TYPES = ["nástup", "ukončení", "změna smlouvy"] as const;
+type ChangeType = typeof CHANGE_TYPES[number];
+
+const CONTRACT_TYPES_NASTUP = ["HPP", "PPP", "DPP"] as const;
+type ContractType = typeof CONTRACT_TYPES_NASTUP[number] | "";
 
 interface EmploymentForm {
-  changeType: string;
-  jobTitle: string;
-  department: string;
-  contractType: string;
-  companyId: string;
+  changeType: ChangeType;
   startDate: string;
-  endDate: string;
+  jobTitle: string;
+  contractType: ContractType;
+  // HPP / PPP fields
+  workLocation: string;
   salary: string;
+  probationPeriod: string;
+  endDate: string;
+  signingDate: string;
+  companyId: string;
+  // DPP fields
+  agreedWorkScope: string;
+  agreedReward: string;
 }
 
 const emptyForm: EmploymentForm = {
   changeType: "nástup",
-  jobTitle: "",
-  department: "",
-  contractType: "",
-  companyId: "",
   startDate: "",
-  endDate: "",
+  jobTitle: "",
+  contractType: "",
+  workLocation: "Praha",
   salary: "",
+  probationPeriod: "2 měsíce",
+  endDate: "",
+  signingDate: TODAY,
+  companyId: "HPM",
+  agreedWorkScope: "max. 300 hodin ročně",
+  agreedReward: "",
 };
 
 // ─── Add employment modal ─────────────────────────────────────────────────────
@@ -172,36 +193,92 @@ function AddEntryModal({
   onClose,
   onSaved,
   employeeId,
+  employee,
+  employment,
 }: {
   onClose: () => void;
   onSaved: (row: EmploymentRow) => void;
   employeeId: string;
+  employee: Employee;
+  employment: EmploymentRow[];
 }) {
   const [form, setForm] = useState<EmploymentForm>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  function set(field: keyof EmploymentForm, value: string) {
-    setForm((f) => ({ ...f, [field]: value }));
+  function setField<K extends keyof EmploymentForm>(field: K, value: EmploymentForm[K]) {
+    setForm((f) => {
+      const next = { ...f, [field]: value };
+      if (field === "changeType") {
+        next.contractType = "";
+        next.startDate = "";
+        next.signingDate = TODAY;
+      }
+      if (field === "contractType") {
+        next.endDate = value === "DPP" ? END_OF_YEAR : "";
+      }
+      return next;
+    });
   }
+
+  const hasActiveRow = employment.some(
+    (r) => r.changeType !== "ukončení" && r.endDate === null
+  );
+  const showUkonceniWarning =
+    form.changeType === "ukončení" &&
+    (employee.status !== "active" || !hasActiveRow);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.startDate) { setError("Datum nástupu je povinné."); return; }
+    if (!form.startDate) { setError("Datum je povinné."); return; }
+    if (form.changeType === "nástup" && !form.contractType) {
+      setError("Vyberte typ smlouvy."); return;
+    }
     setSaving(true);
     setError(null);
     try {
-      const payload: Record<string, unknown> = {
-        changeType: form.changeType,
-        jobTitle: form.jobTitle,
-        department: form.department,
-        contractType: form.contractType,
-        companyId: form.companyId,
-        startDate: form.startDate,
-        endDate: form.endDate || null,
-        salary: form.salary ? Number(form.salary) : null,
-        status: form.changeType === "ukončení" ? "inactive" : "active",
-      };
+      let payload: Record<string, unknown>;
+      if (form.changeType === "nástup") {
+        const base = {
+          changeType: "nástup",
+          startDate: form.startDate,
+          status: "active",
+          jobTitle: form.jobTitle,
+          contractType: form.contractType,
+          companyId: form.companyId,
+          department: "",
+          endDate: form.endDate || null,
+          signingDate: form.signingDate || null,
+        };
+        if (form.contractType === "DPP") {
+          payload = {
+            ...base,
+            agreedWorkScope: form.agreedWorkScope,
+            agreedReward: form.agreedReward ? Number(form.agreedReward) : null,
+          };
+        } else {
+          payload = {
+            ...base,
+            workLocation: form.workLocation,
+            salary: form.salary ? Number(form.salary) : null,
+            probationPeriod: form.probationPeriod,
+          };
+        }
+      } else if (form.changeType === "ukončení") {
+        payload = {
+          changeType: "ukončení",
+          startDate: form.startDate,
+          status: "inactive",
+          signingDate: form.signingDate || null,
+        };
+      } else {
+        payload = {
+          changeType: "změna smlouvy",
+          startDate: form.startDate,
+          status: "active",
+          signingDate: form.signingDate || null,
+        };
+      }
       const res = await api.post<{ id: string }>(`/employees/${employeeId}/employment`, payload);
       onSaved({ id: res.id, ...(payload as Omit<EmploymentRow, "id">) } as EmploymentRow);
     } catch (err: unknown) {
@@ -220,45 +297,126 @@ function AddEntryModal({
         </div>
         <form onSubmit={handleSubmit}>
           <div className={styles.modalBody}>
+
+            {/* ── Always visible: typ změny + datum ── */}
             <div className={styles.modalGrid}>
               <div className={styles.modalField}>
                 <label className={styles.modalLabel}>Typ změny *</label>
-                <select className={styles.modalInput} value={form.changeType} onChange={(e) => set("changeType", e.target.value)}>
+                <select className={styles.modalInput} value={form.changeType} onChange={(e) => setField("changeType", e.target.value as ChangeType)}>
                   {CHANGE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
                 </select>
               </div>
               <div className={styles.modalField}>
                 <label className={styles.modalLabel}>Datum *</label>
-                <input className={styles.modalInput} type="date" value={form.startDate} onChange={(e) => set("startDate", e.target.value)} required />
-              </div>
-              <div className={styles.modalField}>
-                <label className={styles.modalLabel}>Pracovní pozice</label>
-                <input className={styles.modalInput} value={form.jobTitle} onChange={(e) => set("jobTitle", e.target.value)} />
-              </div>
-              <div className={styles.modalField}>
-                <label className={styles.modalLabel}>Oddělení</label>
-                <input className={styles.modalInput} value={form.department} onChange={(e) => set("department", e.target.value)} />
-              </div>
-              <div className={styles.modalField}>
-                <label className={styles.modalLabel}>Typ smlouvy</label>
-                <select className={styles.modalInput} value={form.contractType} onChange={(e) => set("contractType", e.target.value)}>
-                  <option value="">— vyberte —</option>
-                  {CONTRACT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-                </select>
-              </div>
-              <div className={styles.modalField}>
-                <label className={styles.modalLabel}>Společnost (ID)</label>
-                <input className={styles.modalInput} value={form.companyId} onChange={(e) => set("companyId", e.target.value)} placeholder="stp / hpm" />
-              </div>
-              <div className={styles.modalField}>
-                <label className={styles.modalLabel}>Datum ukončení</label>
-                <input className={styles.modalInput} type="date" value={form.endDate} onChange={(e) => set("endDate", e.target.value)} />
-              </div>
-              <div className={styles.modalField}>
-                <label className={styles.modalLabel}>Mzda (Kč)</label>
-                <input className={styles.modalInput} type="number" value={form.salary} onChange={(e) => set("salary", e.target.value)} placeholder="0" />
+                <input className={styles.modalInput} type="date" value={form.startDate} onChange={(e) => setField("startDate", e.target.value)} required />
               </div>
             </div>
+
+            {/* ── nástup branch ── */}
+            {form.changeType === "nástup" && (
+              <>
+                <div className={styles.modalGrid} style={{ marginTop: "0.875rem" }}>
+                  <div className={styles.modalField}>
+                    <label className={styles.modalLabel}>Pracovní pozice</label>
+                    <input className={styles.modalInput} value={form.jobTitle} onChange={(e) => setField("jobTitle", e.target.value)} />
+                  </div>
+                  <div className={styles.modalField}>
+                    <label className={styles.modalLabel}>Typ smlouvy *</label>
+                    <select className={styles.modalInput} value={form.contractType} onChange={(e) => setField("contractType", e.target.value as ContractType)}>
+                      <option value="">— vyberte —</option>
+                      {CONTRACT_TYPES_NASTUP.map((t) => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                {/* HPP / PPP sub-branch */}
+                {(form.contractType === "HPP" || form.contractType === "PPP") && (
+                  <div className={styles.modalGrid} style={{ marginTop: "0.875rem" }}>
+                    <div className={styles.modalField}>
+                      <label className={styles.modalLabel}>Místo výkonu</label>
+                      <input className={styles.modalInput} value={form.workLocation} onChange={(e) => setField("workLocation", e.target.value)} />
+                    </div>
+                    <div className={styles.modalField}>
+                      <label className={styles.modalLabel}>Mzda (Kč)</label>
+                      <input className={styles.modalInput} type="number" value={form.salary} onChange={(e) => setField("salary", e.target.value)} placeholder="0" />
+                    </div>
+                    <div className={styles.modalField}>
+                      <label className={styles.modalLabel}>Zkušební doba</label>
+                      <input className={styles.modalInput} value={form.probationPeriod} onChange={(e) => setField("probationPeriod", e.target.value)} />
+                    </div>
+                    <div className={styles.modalField}>
+                      <label className={styles.modalLabel}>Konec smlouvy</label>
+                      <input className={styles.modalInput} type="date" value={form.endDate} onChange={(e) => setField("endDate", e.target.value)} />
+                    </div>
+                    <div className={styles.modalField}>
+                      <label className={styles.modalLabel}>Datum podpisu</label>
+                      <input className={styles.modalInput} type="date" value={form.signingDate} onChange={(e) => setField("signingDate", e.target.value)} />
+                    </div>
+                    <div className={styles.modalField}>
+                      <label className={styles.modalLabel}>Firma</label>
+                      <input className={styles.modalInput} value={form.companyId} onChange={(e) => setField("companyId", e.target.value)} />
+                    </div>
+                  </div>
+                )}
+
+                {/* DPP sub-branch */}
+                {form.contractType === "DPP" && (
+                  <div className={styles.modalGrid} style={{ marginTop: "0.875rem" }}>
+                    <div className={styles.modalFieldFull}>
+                      <label className={styles.modalLabel}>Sjednaný rozsah práce</label>
+                      <input className={styles.modalInput} value={form.agreedWorkScope} onChange={(e) => setField("agreedWorkScope", e.target.value)} />
+                    </div>
+                    <div className={styles.modalField}>
+                      <label className={styles.modalLabel}>Konec smlouvy</label>
+                      <input className={styles.modalInput} type="date" value={form.endDate} onChange={(e) => setField("endDate", e.target.value)} />
+                    </div>
+                    <div className={styles.modalField}>
+                      <label className={styles.modalLabel}>Sjednaná odměna (Kč)</label>
+                      <input className={styles.modalInput} type="number" value={form.agreedReward} onChange={(e) => setField("agreedReward", e.target.value)} placeholder="0" />
+                    </div>
+                    <div className={styles.modalField}>
+                      <label className={styles.modalLabel}>Datum podpisu</label>
+                      <input className={styles.modalInput} type="date" value={form.signingDate} onChange={(e) => setField("signingDate", e.target.value)} />
+                    </div>
+                    <div className={styles.modalField}>
+                      <label className={styles.modalLabel}>Firma</label>
+                      <input className={styles.modalInput} value={form.companyId} onChange={(e) => setField("companyId", e.target.value)} />
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* ── ukončení branch ── */}
+            {form.changeType === "ukončení" && (
+              <div className={styles.modalGrid} style={{ marginTop: "0.875rem" }}>
+                <div className={styles.modalField}>
+                  <label className={styles.modalLabel}>Datum podpisu</label>
+                  <input className={styles.modalInput} type="date" value={form.signingDate} onChange={(e) => setField("signingDate", e.target.value)} />
+                </div>
+                {showUkonceniWarning && (
+                  <div className={styles.modalFieldFull}>
+                    <div className={styles.modalWarning}>
+                      Upozornění: zaměstnanec nemá aktivní pracovní poměr, nebo již byl poměr ukončen.
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── změna smlouvy branch ── */}
+            {form.changeType === "změna smlouvy" && (
+              <div className={styles.modalGrid} style={{ marginTop: "0.875rem" }}>
+                <div className={styles.modalField}>
+                  <label className={styles.modalLabel}>Datum podpisu</label>
+                  <input className={styles.modalInput} type="date" value={form.signingDate} onChange={(e) => setField("signingDate", e.target.value)} />
+                </div>
+                <div className={styles.modalFieldFull}>
+                  <p className={styles.modalNote}>Rozsah změn bude upřesněn v další verzi.</p>
+                </div>
+              </div>
+            )}
+
             {error && <p className={styles.modalError}>{error}</p>}
           </div>
           <div className={styles.modalActions}>
@@ -444,7 +602,7 @@ export default function EmployeeDetailPage() {
                         <div className={styles.timelineMeta}>
                           {row.startDate} — {row.endDate ?? "dosud"}
                           {row.department ? ` · ${row.department}` : ""}
-                          {row.salary ? ` · ${row.salary.toLocaleString("cs-CZ")} Kč` : ""}
+                          {(row.salary ?? row.agreedReward) ? ` · ${(row.salary ?? row.agreedReward)!.toLocaleString("cs-CZ")} Kč` : ""}
                         </div>
                         <div className={styles.timelineBottom}>
                           <span className={styles.timelineChange}>{row.changeType}</span>
@@ -462,6 +620,8 @@ export default function EmployeeDetailPage() {
           {showModal && (
             <AddEntryModal
               employeeId={id!}
+              employee={employee}
+              employment={employment}
               onClose={() => setShowModal(false)}
               onSaved={(row) => {
                 setEmployment((prev) => [row, ...prev]);
