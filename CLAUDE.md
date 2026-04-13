@@ -102,6 +102,15 @@ npm run dev
 - Node.js v24 is installed at `C:\Program Files\nodejs\node.exe` — not always on PATH, use full path if `node` is not found
 - Functions emulator runs on port **5002** (not 5001 — that port is taken on this machine)
 - To seed an admin user into the emulators: `"C:\Program Files\nodejs\node.exe" scripts\seed-admin.js` (from project root, emulators must be running)
+- To seed employees from DTB.xlsx: `"C:\Program Files\nodejs\node.exe" scripts\seed-employees.js` (from project root, emulators must be running, DTB.xlsx must be at project root)
+
+### Phase 5 — key implementation notes
+- Shift parser (`parseShiftExpression`) is duplicated verbatim in `functions/src/services/shiftParser.ts` AND `frontend/src/lib/shiftConstants.ts` — they cannot share code across packages
+- Shift cell composite doc ID: `${employeeId}_${date}` — used as both Firestore doc ID and shiftMap key on frontend
+- `ShiftGrid.module.css` wrapper must use `overflow-x: auto` (NOT `overflow: hidden`) — required for sticky employee name column
+- Plan status transitions are one-way: draft → open → published. Enforced server-side.
+- One plan per (month, year) — enforced in `POST /shifts/plans` with a Firestore query
+- Employee `status` field must be `"active"` or `"terminated"` (string) — the employees list page filters by `?status=active`
 
 ### Phase 4 — key implementation notes
 - Contract templates stored as HTML in `contractTemplates/{type}` (doc ID = contract type string)
