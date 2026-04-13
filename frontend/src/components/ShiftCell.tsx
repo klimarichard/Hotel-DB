@@ -112,8 +112,13 @@ export default function ShiftCell({
     } else if (e.key === "Tab") {
       e.preventDefault();
       commitAndNavigate(e.shiftKey ? "left" : "right");
+    } else if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      commitAndNavigate("left");
+    } else if (e.key === "ArrowRight") {
+      e.preventDefault();
+      commitAndNavigate("right");
     }
-    // ArrowLeft/ArrowRight → default behavior (cursor movement in input)
   }
 
   function handleDisplayKeyDown(e: React.KeyboardEvent) {
@@ -137,6 +142,13 @@ export default function ShiftCell({
     } else if (e.key === "Tab") {
       e.preventDefault();
       onNavigate(e.shiftKey ? "left" : "right");
+    } else if ((e.key === "Delete" || e.key === "Backspace") && !readOnly && rawInput) {
+      e.preventDefault();
+      setSaving(true);
+      setSaveError(null);
+      onSave("").catch((err) => {
+        setSaveError(err instanceof Error ? err.message : "Chyba při mazání");
+      }).finally(() => setSaving(false));
     } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !readOnly) {
       // Start typing directly
       setDraft(e.key);

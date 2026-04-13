@@ -74,6 +74,8 @@ export default function ModCell({ code, readOnly, onSave, focused, onNavigate, o
     else if (e.key === "Escape") cancelEdit();
     else if (e.key === "ArrowUp") { e.preventDefault(); commitAndNavigate(draft, "up"); }
     else if (e.key === "ArrowDown") { e.preventDefault(); commitAndNavigate(draft, "down"); }
+    else if (e.key === "ArrowLeft") { e.preventDefault(); commitAndNavigate(draft, "left"); }
+    else if (e.key === "ArrowRight") { e.preventDefault(); commitAndNavigate(draft, "right"); }
     else if (e.key === "Tab") { e.preventDefault(); commitAndNavigate(draft, e.shiftKey ? "left" : "right"); }
   }
 
@@ -84,7 +86,14 @@ export default function ModCell({ code, readOnly, onSave, focused, onNavigate, o
       const m: Record<string, "up"|"down"|"left"|"right"> = { ArrowUp:"up", ArrowDown:"down", ArrowLeft:"left", ArrowRight:"right" };
       onNavigate(m[e.key]);
     } else if (e.key === "Tab") { e.preventDefault(); onNavigate(e.shiftKey ? "left" : "right"); }
-    else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !readOnly) {
+    else if ((e.key === "Delete" || e.key === "Backspace") && !readOnly && code) {
+      e.preventDefault();
+      setSaving(true);
+      setSaveError(null);
+      onSave("").catch((err) => {
+        setSaveError(err instanceof Error ? err.message : "Chyba při mazání");
+      }).finally(() => setSaving(false));
+    } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !readOnly) {
       setDraft(e.key.toUpperCase());
       setEditing(true);
     }
