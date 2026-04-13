@@ -133,10 +133,28 @@ shiftsRouter.get(
       .filter((d) => currentEmployeeIds.has(d.data().employeeId as string))
       .map((d) => ({ id: d.id, ...d.data() }));
 
+    // Enrich planEmployees with contractType from global employee docs
+    const rawEmployees = employeesSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Record<string, unknown> & { id: string; employeeId: string }));
+    const employeeIds = rawEmployees.map((e) => e.employeeId as string);
+    const empDocs = await Promise.all(
+      employeeIds.map((id) => db().collection("employees").doc(id).get())
+    );
+    const contractTypeMap = new Map<string, string>();
+    empDocs.forEach((d) => {
+      if (d.exists) {
+        const data = d.data() as Record<string, unknown>;
+        contractTypeMap.set(d.id, (data.currentContractType as string) ?? "");
+      }
+    });
+    const employees = rawEmployees.map((e) => ({
+      ...e,
+      contractType: contractTypeMap.get(e.employeeId) ?? null,
+    }));
+
     const response: Record<string, unknown> = {
       id: planDoc.id,
       ...planData,
-      employees: employeesSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
+      employees,
       shifts,
       modShifts: modSnap.docs.map((d) => ({ id: d.id, date: d.id, ...d.data() })),
     };
@@ -671,6 +689,145 @@ shiftsRouter.patch(
         reviewedAt: FieldValue.serverTimestamp(),
         rejectionReason: status === "rejected" ? ((body.rejectionReason as string) ?? null) : null,
       });
+    res.json({ ok: true });
+  }
+);
+
+// ─── Shift Override Requests ─────────────────────────────────────────────────
+
+// GET /shifts/plans/:planId/shiftOverrides — list all requests
+shiftsRouter.get(
+  "/plans/:planId/shiftOverrides",
+  requireAuth,
+  requireRole("admin", "director", "manager"),
+  async (req, res) => {
+    const { planId } = req.params;
+    const snap = await db()
+      .collection("shiftPlans")
+      .doc(planId)
+      .collection("shiftOverrideRequests")
+      .orderBy("requestedAt", "desc")
+      .get();
+    res.json(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+  }
+);
+
+// POST /shifts/plans/:planId/shiftOverrides — submit override request
+shiftsRouter.post(
+  "/plans/:planId/shiftOverrides",
+  requireAuth,
+  requireRole("admin", "director", "manager"),
+  async (req: AuthRequest, res) => {
+    const { planId } = req.params;
+    const body = req.body as Record<string, unknown>;
+
+    const employeeId = body.employeeId as string;
+    const date = body.date as string;
+    const requestedInput = (body.requestedInput as string) ?? "";
+    const reason = (body.reason as string) ?? "";
+    const violationTypes = Array.isArray(body.violationTypes) ? body.violationTypes as string[] : [];
+
+    if (!employeeId || !date) {
+      res.status(400).json({ error: "employeeId a date jsou povinné" });
+      return;
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      res.status(400).json({ error: "Neplatný formát data" });
+      return;
+    }
+    if (!reason.trim()) {
+      res.status(400).json({ error: "Důvod je povinný" });
+      return;
+    }
+
+    const ref = await db()
+      .collection("shiftPlans")
+      .doc(planId)
+      .collection("shiftOverrideRequests")
+      .add({
+        employeeId,
+        date,
+        requestedInput,
+        reason,
+        violationTypes,
+        status: "pending",
+        requestedBy: req.uid ?? null,
+        requestedAt: FieldValue.serverTimestamp(),
+        reviewedBy: null,
+        reviewedAt: null,
+        rejectionReason: null,
+      });
+    res.status(201).json({ id: ref.id });
+  }
+);
+
+// PATCH /shifts/plans/:planId/shiftOverrides/:reqId — approve or reject
+shiftsRouter.patch(
+  "/plans/:planId/shiftOverrides/:reqId",
+  requireAuth,
+  requireRole("admin", "director"),
+  async (req: AuthRequest, res) => {
+    const { planId, reqId } = req.params;
+    const body = req.body as Record<string, unknown>;
+    const status = body.status as string;
+
+    if (!["approved", "rejected"].includes(status)) {
+      res.status(400).json({ error: "Stav musí být approved nebo rejected" });
+      return;
+    }
+
+    const overrideRef = db()
+      .collection("shiftPlans")
+      .doc(planId)
+      .collection("shiftOverrideRequests")
+      .doc(reqId);
+
+    const overrideDoc = await overrideRef.get();
+    if (!overrideDoc.exists) {
+      res.status(404).json({ error: "Žádost nenalezena" });
+      return;
+    }
+
+    const overrideData = overrideDoc.data() as Record<string, unknown>;
+
+    // On approval: save the shift to Firestore
+    if (status === "approved") {
+      const employeeId = overrideData.employeeId as string;
+      const date = overrideData.date as string;
+      const rawInput = overrideData.requestedInput as string;
+
+      const parsed = parseShiftExpression(rawInput);
+      if (!parsed.isValid) {
+        res.status(400).json({ error: "Neplatný výraz směny v žádosti" });
+        return;
+      }
+
+      const shiftStatus = parsed.segments.every((s) => s.code === "X") ? "day_off" : "assigned";
+      const docId = `${employeeId}_${date}`;
+      await db()
+        .collection("shiftPlans")
+        .doc(planId)
+        .collection("shifts")
+        .doc(docId)
+        .set({
+          employeeId,
+          date,
+          rawInput: parsed.rawInput,
+          segments: parsed.segments,
+          hoursComputed: parsed.hoursComputed,
+          isDouble: parsed.isDouble,
+          status: shiftStatus,
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+    }
+
+    await overrideRef.update({
+      status,
+      reviewedBy: req.uid ?? null,
+      reviewedAt: FieldValue.serverTimestamp(),
+      rejectionReason: status === "rejected" ? ((body.rejectionReason as string) ?? null) : null,
+    });
+
     res.json({ ok: true });
   }
 );

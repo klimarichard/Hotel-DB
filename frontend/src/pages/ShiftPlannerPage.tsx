@@ -7,6 +7,8 @@ import AddEmployeeToPlanModal from "../components/AddEmployeeToPlanModal";
 import EditEmployeeInPlanModal from "../components/EditEmployeeInPlanModal";
 import ConfirmModal from "../components/ConfirmModal";
 import UnavailabilityPanel from "../components/UnavailabilityPanel";
+import XOverrideModal from "../components/XOverrideModal";
+import ShiftOverridePanel from "../components/ShiftOverridePanel";
 import styles from "./ShiftPlannerPage.module.css";
 
 // ─── Shared types ─────────────────────────────────────────────────────────────
@@ -23,6 +25,21 @@ export interface PlanEmployee {
   primaryHotel: string | null;
   displayOrder: number;
   active: boolean;
+  contractType: string | null;
+}
+
+export interface ViolationInfo {
+  type: "employee_x_limit" | "day_coverage" | "night_coverage";
+  limit?: number;
+  current?: number;
+  available?: number;
+}
+
+interface PendingXRequest {
+  employeeId: string;
+  date: string;
+  rawInput: string;
+  violations: ViolationInfo[];
 }
 
 export interface ShiftDoc {
@@ -124,6 +141,8 @@ export default function ShiftPlannerPage() {
   const [error, setError] = useState<string | null>(null);
   const [showAddEmployee, setShowAddEmployee] = useState(false);
   const [showUnavailability, setShowUnavailability] = useState(false);
+  const [showOverrideRequests, setShowOverrideRequests] = useState(false);
+  const [pendingX, setPendingX] = useState<PendingXRequest | null>(null);
   const [editingEmployee, setEditingEmployee] = useState<PlanEmployee | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [confirmModal, setConfirmModal] = useState<{
@@ -393,6 +412,47 @@ export default function ShiftPlannerPage() {
     }
   }
 
+  // ── X limit helpers ────────────────────────────────────────────────────────
+
+  function getXLimit(contractType: string | null): number | null {
+    const ct = (contractType ?? "").toUpperCase();
+    if (ct.includes("HPP")) return 8;
+    if (ct.includes("PPP")) return 13;
+    return null; // DPP or unknown = no limit
+  }
+
+  function countXShifts(shifts: ShiftDoc[], employeeId: string): number {
+    return shifts.filter((s) => s.employeeId === employeeId && s.status === "day_off").length;
+  }
+
+  function checkCoverage(
+    currentPlan: PlanDetail,
+    employeeId: string,
+    date: string
+  ): { shiftType: "D" | "N"; available: number } | null {
+    const emp = currentPlan.employees.find((e) => e.employeeId === employeeId);
+    if (
+      !emp ||
+      emp.section !== "recepce" ||
+      (emp.primaryShiftType !== "D" && emp.primaryShiftType !== "N")
+    )
+      return null;
+
+    const st = emp.primaryShiftType as "D" | "N";
+    const eligible = currentPlan.employees.filter(
+      (e) => e.section === "recepce" && e.primaryShiftType === st && e.active
+    );
+    const withXAfter = eligible.filter((e) => {
+      if (e.employeeId === employeeId) return true; // this one is getting X
+      const shift = currentPlan.shifts.find(
+        (s) => s.employeeId === e.employeeId && s.date === date
+      );
+      return shift?.status === "day_off";
+    });
+    const available = eligible.length - withXAfter.length;
+    return available < 5 ? { shiftType: st, available } : null;
+  }
+
   // ── Cell save (upsert / delete) ────────────────────────────────────────────
 
   async function handleCellSave(employeeId: string, date: string, rawInput: string) {
@@ -405,30 +465,62 @@ export default function ShiftPlannerPage() {
         const docId = `${employeeId}_${date}`;
         return { ...prev, shifts: prev.shifts.filter((s) => s.id !== docId) };
       });
-    } else {
-      await api.put(`/shifts/plans/${plan.id}/shifts/${employeeId}/${date}`, { rawInput });
-      const parsed = parseShiftExpression(rawInput);
-      const docId = `${employeeId}_${date}`;
-      const updated: ShiftDoc = {
-        id: docId,
-        employeeId,
-        date,
-        rawInput,
-        hoursComputed: parsed.hoursComputed,
-        isDouble: parsed.isDouble,
-        status:
-          parsed.segments.length === 0
-            ? "unassigned"
-            : parsed.segments.every((s) => s.code === "X")
-            ? "day_off"
-            : "assigned",
-      };
-      setPlan((prev) => {
-        if (!prev) return prev;
-        const others = prev.shifts.filter((s) => s.id !== docId);
-        return { ...prev, shifts: [...others, updated] };
-      });
+      return;
     }
+
+    const parsed = parseShiftExpression(rawInput);
+    const isAllX =
+      parsed.segments.length > 0 && parsed.segments.every((s) => s.code === "X");
+
+    if (isAllX) {
+      const emp = plan.employees.find((e) => e.employeeId === employeeId);
+      const violations: ViolationInfo[] = [];
+
+      // Per-employee X limit check
+      const limit = getXLimit(emp?.contractType ?? null);
+      if (limit !== null) {
+        const current = countXShifts(plan.shifts, employeeId);
+        if (current >= limit) {
+          violations.push({ type: "employee_x_limit", limit, current });
+        }
+      }
+
+      // Per-day coverage check (recepce D/N only)
+      const coverageViolation = checkCoverage(plan, employeeId, date);
+      if (coverageViolation) {
+        violations.push({
+          type: coverageViolation.shiftType === "D" ? "day_coverage" : "night_coverage",
+          available: coverageViolation.available,
+        });
+      }
+
+      if (violations.length > 0) {
+        setPendingX({ employeeId, date, rawInput, violations });
+        return;
+      }
+    }
+
+    await api.put(`/shifts/plans/${plan.id}/shifts/${employeeId}/${date}`, { rawInput });
+    const docId = `${employeeId}_${date}`;
+    const updated: ShiftDoc = {
+      id: docId,
+      employeeId,
+      date,
+      rawInput,
+      hoursComputed: parsed.hoursComputed,
+      isDouble: parsed.isDouble,
+      status:
+        parsed.segments.length === 0
+          ? "unassigned"
+          : parsed.segments.every((s) => s.code === "X")
+          ? "day_off"
+          : "assigned",
+    };
+    setPlan((prev) => {
+      if (!prev) return prev;
+      const others = prev.shifts.filter((s) => s.id !== docId);
+      return { ...prev, shifts: [...others, updated] };
+    });
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -570,6 +662,16 @@ export default function ShiftPlannerPage() {
               </button>
             )}
 
+            {/* Override requests toggle (admin/director only) */}
+            {plan && canPublish && (
+              <button
+                className={styles.secondaryBtn}
+                onClick={() => setShowOverrideRequests((v) => !v)}
+              >
+                Výjimky X
+              </button>
+            )}
+
             {/* Revert plan (admin only) */}
             {plan && role === "admin" && plan.status !== "created" && (
               <button
@@ -652,6 +754,30 @@ export default function ShiftPlannerPage() {
             <UnavailabilityPanel planId={plan.id} />
           )}
 
+          {/* Shift override requests panel */}
+          {plan && showOverrideRequests && (
+            <ShiftOverridePanel
+              planId={plan.id}
+              onShiftApproved={(employeeId, date, rawInput, hoursComputed, isDouble) => {
+                const docId = `${employeeId}_${date}`;
+                const approved: ShiftDoc = {
+                  id: docId,
+                  employeeId,
+                  date,
+                  rawInput,
+                  hoursComputed,
+                  isDouble,
+                  status: "day_off",
+                };
+                setPlan((prev) => {
+                  if (!prev) return prev;
+                  const others = prev.shifts.filter((s) => s.id !== docId);
+                  return { ...prev, shifts: [...others, approved] };
+                });
+              }}
+            />
+          )}
+
           {/* Shift grid */}
           {plan && plan.employees.length === 0 && (
             <div className={styles.emptyPlan}>
@@ -696,6 +822,27 @@ export default function ShiftPlannerPage() {
           danger={confirmModal.danger}
           onConfirm={confirmModal.onConfirm}
           onCancel={() => setConfirmModal(null)}
+        />
+      )}
+      {pendingX && plan && (
+        <XOverrideModal
+          employeeName={(() => {
+            const emp = plan.employees.find((e) => e.employeeId === pendingX.employeeId);
+            return emp ? `${emp.lastName} ${emp.firstName}` : pendingX.employeeId;
+          })()}
+          date={pendingX.date}
+          violations={pendingX.violations}
+          onSubmit={async (reason) => {
+            await api.post(`/shifts/plans/${plan.id}/shiftOverrides`, {
+              employeeId: pendingX.employeeId,
+              date: pendingX.date,
+              requestedInput: pendingX.rawInput,
+              reason,
+              violationTypes: pendingX.violations.map((v) => v.type),
+            });
+            setPendingX(null);
+          }}
+          onCancel={() => setPendingX(null)}
         />
       )}
       {editingEmployee && plan && (

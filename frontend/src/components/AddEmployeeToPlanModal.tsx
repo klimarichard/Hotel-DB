@@ -78,6 +78,7 @@ export default function AddEmployeeToPlanModal({ planId, onClose, onAdded }: Pro
         primaryHotel: (primaryHotel || null) as string | null,
         displayOrder,
         active,
+        contractType: null,
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Chyba při ukládání");
