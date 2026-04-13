@@ -49,12 +49,12 @@ if (allOk) {
   console.log(`\n${'─'.repeat(60)}`);
   console.log('✓  All seeds complete.');
   console.log('─'.repeat(60));
-  console.log('\nTest credentials:');
-  console.log('  admin@hotel.local       admin123');
-  console.log('  director@hotel.local    director123');
-  console.log('  manager@hotel.local     manager123');
-  console.log('  employee1@hotel.local   employee123');
-  console.log('  employee2@hotel.local   employee123');
+  console.log('\nKey credentials (from DTB.csv):');
+  console.log('  admin@hotel.local     admin123   (admin)');
+  console.log('  vondra@hotel.local    vondra1    (director)');
+  console.log('  kalinina@hotel.local  kalinina1  (manager)');
+  console.log('  afanaseva@hotel.local afanaseva1 (employee)');
+  console.log('  — plus 30 more employee/manager accounts from DTB.csv');
 }
 
 process.exit(allOk ? 0 : 1);
