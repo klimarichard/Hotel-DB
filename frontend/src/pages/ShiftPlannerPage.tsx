@@ -182,13 +182,11 @@ export default function ShiftPlannerPage() {
         }
         return api.get<PlanDetail>(`/shifts/plans/${match.id}`).then((detail) => {
           setPlan({ ...detail, modShifts: detail.modShifts ?? [] });
-          // Fetch pending override count for this plan
-          if (canPublish) {
-            api
-              .get<{ id: string; status: string }[]>(`/shifts/plans/${match.id}/shiftOverrides`)
-              .then((overrides) => setPlanOverrideCount(overrides.filter((o) => o.status === "pending").length))
-              .catch(() => {});
-          }
+          // Fetch pending override count for this plan (silently ignored for non-admin/director)
+          api
+            .get<{ id: string; status: string }[]>(`/shifts/plans/${match.id}/shiftOverrides`)
+            .then((overrides) => setPlanOverrideCount(overrides.filter((o) => o.status === "pending").length))
+            .catch(() => {});
         });
       })
       .catch((e) => setError(e.message))
