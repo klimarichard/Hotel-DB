@@ -3,6 +3,12 @@ import { api } from "../lib/api";
 import { useAuth } from "../hooks/useAuth";
 import styles from "./VacationPage.module.css";
 
+interface PendingEdit {
+  startDate: string;
+  endDate: string;
+  reason: string;
+}
+
 interface VacationRequest {
   id: string;
   employeeId: string;
@@ -15,6 +21,7 @@ interface VacationRequest {
   status: "pending" | "approved" | "rejected";
   requestedAt: { seconds: number } | null;
   rejectionReason: string | null;
+  pendingEdit: PendingEdit | null;
 }
 
 function StatusBadge({ status }: { status: VacationRequest["status"] }) {
@@ -49,6 +56,13 @@ export default function VacationPage() {
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectionReason, setRejectionReason] = useState("");
   const [actionSaving, setActionSaving] = useState(false);
+
+  // Inline edit state (used in "Moje žádosti")
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editStart, setEditStart] = useState("");
+  const [editEnd, setEditEnd] = useState("");
+  const [editReason, setEditReason] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
 
   useEffect(() => {
     api
@@ -91,6 +105,7 @@ export default function VacationPage() {
         status: "pending",
         requestedAt: null,
         rejectionReason: null,
+        pendingEdit: null,
       };
       setRequests((prev) => [newRequest, ...prev]);
       setStartDate("");
@@ -139,6 +154,36 @@ export default function VacationPage() {
       setRequests((prev) => prev.filter((r) => r.id !== id));
     } finally {
       setActionSaving(false);
+    }
+  }
+
+  function openEdit(req: VacationRequest) {
+    setEditingId(req.id);
+    setEditStart(req.startDate);
+    setEditEnd(req.endDate);
+    setEditReason(req.reason);
+  }
+
+  async function handleSubmitEdit(id: string) {
+    if (!editStart || !editEnd) return;
+    setEditSaving(true);
+    try {
+      await api.patch(`/vacation/${id}`, { startDate: editStart, endDate: editEnd, reason: editReason });
+      setRequests((prev) =>
+        prev.map((r) => {
+          if (r.id !== id) return r;
+          if (r.status === "pending") {
+            return { ...r, startDate: editStart, endDate: editEnd, reason: editReason };
+          } else {
+            return { ...r, pendingEdit: { startDate: editStart, endDate: editEnd, reason: editReason } };
+          }
+        })
+      );
+      setEditingId(null);
+    } catch (e) {
+      // Silently fail — user can retry
+    } finally {
+      setEditSaving(false);
     }
   }
 
@@ -224,28 +269,87 @@ export default function VacationPage() {
             </thead>
             <tbody>
               {myRequests.map((req) => (
-                <tr key={req.id} className={req.status !== "pending" ? styles.rowDone : ""}>
-                  <td>{formatDate(req.startDate)}</td>
-                  <td>{formatDate(req.endDate)}</td>
-                  <td>{req.reason || "—"}</td>
-                  <td>
-                    <StatusBadge status={req.status} />
-                    {req.status === "rejected" && req.rejectionReason && (
-                      <div className={styles.rejectionNote}>{req.rejectionReason}</div>
-                    )}
-                  </td>
-                  <td>
-                    {req.status === "pending" && (
-                      <button
-                        className={styles.deleteBtn}
-                        onClick={() => handleDelete(req.id)}
-                        disabled={actionSaving}
-                      >
-                        Zrušit
-                      </button>
-                    )}
-                  </td>
-                </tr>
+                <>
+                  <tr key={req.id} className={req.status === "approved" && !req.pendingEdit ? styles.rowDone : ""}>
+                    <td>{formatDate(req.startDate)}</td>
+                    <td>{formatDate(req.endDate)}</td>
+                    <td>{req.reason || "—"}</td>
+                    <td>
+                      <StatusBadge status={req.status} />
+                      {req.pendingEdit && (
+                        <span className={styles.badgePendingEdit}>Čeká na schválení úpravy</span>
+                      )}
+                      {req.status === "rejected" && req.rejectionReason && (
+                        <div className={styles.rejectionNote}>{req.rejectionReason}</div>
+                      )}
+                    </td>
+                    <td>
+                      {!req.pendingEdit && req.status !== "rejected" && (
+                        <div className={styles.actions}>
+                          <button
+                            className={styles.editBtn}
+                            onClick={() => openEdit(req)}
+                            disabled={actionSaving || editingId === req.id}
+                          >
+                            Upravit
+                          </button>
+                          <button
+                            className={styles.deleteBtn}
+                            onClick={() => handleDelete(req.id)}
+                            disabled={actionSaving}
+                          >
+                            Zrušit
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                  {editingId === req.id && (
+                    <tr key={`edit-${req.id}`} className={styles.editRow}>
+                      <td colSpan={5}>
+                        <div className={styles.editRowInner}>
+                          {req.status === "approved" && (
+                            <span className={styles.editNote}>Změna bude odeslána ke schválení</span>
+                          )}
+                          <input
+                            type="date"
+                            className={styles.rejectInput}
+                            value={editStart}
+                            onChange={(e) => setEditStart(e.target.value)}
+                          />
+                          <span className={styles.editSep}>–</span>
+                          <input
+                            type="date"
+                            className={styles.rejectInput}
+                            value={editEnd}
+                            min={editStart || undefined}
+                            onChange={(e) => setEditEnd(e.target.value)}
+                          />
+                          <input
+                            type="text"
+                            className={`${styles.rejectInput} ${styles.editReasonInput}`}
+                            placeholder="Poznámka…"
+                            value={editReason}
+                            onChange={(e) => setEditReason(e.target.value)}
+                          />
+                          <button
+                            className={styles.confirmRejectBtn}
+                            onClick={() => handleSubmitEdit(req.id)}
+                            disabled={editSaving || !editStart || !editEnd}
+                          >
+                            {editSaving ? "Ukládám…" : "Uložit"}
+                          </button>
+                          <button
+                            className={styles.cancelBtn}
+                            onClick={() => setEditingId(null)}
+                          >
+                            Zrušit
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </>
               ))}
             </tbody>
           </table>
@@ -277,7 +381,7 @@ export default function VacationPage() {
                   <>
                     <tr
                       key={req.id}
-                      className={req.status !== "pending" ? styles.rowDone : ""}
+                      className={req.status === "approved" && !req.pendingEdit ? styles.rowDone : ""}
                     >
                       <td>
                         {req.lastName} {req.firstName}
@@ -287,12 +391,15 @@ export default function VacationPage() {
                       <td>{req.reason || "—"}</td>
                       <td>
                         <StatusBadge status={req.status} />
+                        {req.pendingEdit && (
+                          <span className={styles.badgeEdited}>Upraveno</span>
+                        )}
                         {req.status === "rejected" && req.rejectionReason && (
                           <div className={styles.rejectionNote}>{req.rejectionReason}</div>
                         )}
                       </td>
                       <td>
-                        {req.status === "pending" && (
+                        {req.status === "pending" && !req.pendingEdit && (
                           <div className={styles.actions}>
                             <button
                               className={styles.approveBtn}
@@ -315,6 +422,34 @@ export default function VacationPage() {
                         )}
                       </td>
                     </tr>
+                    {req.pendingEdit && (
+                      <tr key={`pendingedit-${req.id}`} className={styles.pendingEditRow}>
+                        <td colSpan={6}>
+                          <span className={styles.pendingEditLabel}>Navrhovaná změna:</span>
+                          <span className={styles.pendingEditDates}>
+                            {formatDate(req.pendingEdit.startDate)}
+                            {" – "}
+                            {formatDate(req.pendingEdit.endDate)}
+                            {req.pendingEdit.reason && <> &middot; {req.pendingEdit.reason}</>}
+                          </span>
+                          <button
+                            className={styles.approveBtn}
+                            onClick={() => handleApprove(req.id)}
+                            disabled={actionSaving}
+                          >
+                            Schválit úpravu
+                          </button>
+                          <button
+                            className={styles.rejectBtn}
+                            style={{ marginLeft: "0.5rem" }}
+                            onClick={() => handleReject(req.id)}
+                            disabled={actionSaving}
+                          >
+                            Zamítnout úpravu
+                          </button>
+                        </td>
+                      </tr>
+                    )}
                     {rejectingId === req.id && (
                       <tr key={`reject-${req.id}`} className={styles.rejectRow}>
                         <td colSpan={6}>

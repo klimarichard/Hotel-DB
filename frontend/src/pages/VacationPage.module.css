@@ -276,3 +276,102 @@
 }
 
 .cancelBtn:hover { background: #e5e7eb; }
+
+/* ── Edit button ──────────────────────────────────────────────────────────── */
+
+.editBtn {
+  padding: 3px 8px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #1d4ed8;
+  cursor: pointer;
+}
+
+.editBtn:hover:not(:disabled) { background: #dbeafe; }
+.editBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Inline edit row ──────────────────────────────────────────────────────── */
+
+.editRow {
+  background: #eff6ff !important;
+}
+
+.editRow td {
+  padding: 0.5rem 1.25rem !important;
+}
+
+.editRowInner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.editNote {
+  font-size: 0.75rem;
+  color: #1d4ed8;
+  font-style: italic;
+  flex-basis: 100%;
+  margin-bottom: 0.25rem;
+}
+
+.editSep {
+  color: #6b7280;
+  font-size: 0.875rem;
+}
+
+.editReasonInput {
+  min-width: 160px;
+}
+
+/* ── Pending edit badge ───────────────────────────────────────────────────── */
+
+.badgePendingEdit {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 9999px;
+  font-size: 0.7rem;
+  font-weight: 500;
+  background: #fef3c7;
+  color: #92400e;
+  vertical-align: middle;
+}
+
+.badgeEdited {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 9999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  background: #fef3c7;
+  color: #92400e;
+  vertical-align: middle;
+}
+
+/* ── Pending edit sub-row (admin) ─────────────────────────────────────────── */
+
+.pendingEditRow {
+  background: #fffbeb !important;
+}
+
+.pendingEditRow td {
+  padding: 0.4rem 1.25rem !important;
+}
+
+.pendingEditLabel {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #92400e;
+  margin-right: 0.5rem;
+}
+
+.pendingEditDates {
+  font-size: 0.8125rem;
+  color: #111827;
+  margin-right: 0.75rem;
+}

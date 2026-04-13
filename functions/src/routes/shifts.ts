@@ -135,6 +135,59 @@ export async function applyVacationXsToPlans(
   }
 }
 
+/**
+ * Deletes vacation X shift docs from all plans for the given employee and date range.
+ * Called when a vacation request is deleted or when an approved edit replaces old dates.
+ */
+export async function removeVacationXsFromPlans(
+  employeeId: string,
+  startDate: string,
+  endDate: string
+): Promise<void> {
+  const startD = new Date(startDate + "T00:00:00");
+  const endD = new Date(endDate + "T00:00:00");
+  const cur = new Date(startD.getFullYear(), startD.getMonth(), 1);
+  const months: { year: number; month: number }[] = [];
+  while (cur <= endD) {
+    months.push({ year: cur.getFullYear(), month: cur.getMonth() + 1 });
+    cur.setMonth(cur.getMonth() + 1);
+  }
+
+  for (const { year, month } of months) {
+    const planSnap = await db()
+      .collection("shiftPlans")
+      .where("year", "==", year)
+      .where("month", "==", month)
+      .limit(1)
+      .get();
+    if (planSnap.empty) continue;
+    const planDoc = planSnap.docs[0];
+
+    const empSnap = await planDoc.ref
+      .collection("planEmployees")
+      .where("employeeId", "==", employeeId)
+      .limit(1)
+      .get();
+    if (empSnap.empty) continue;
+
+    const lastDay = new Date(year, month, 0).getDate();
+    const monthStart = `${year}-${String(month).padStart(2, "0")}-01`;
+    const monthEnd = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+    const clampedStart = startDate < monthStart ? monthStart : startDate;
+    const clampedEnd = endDate > monthEnd ? monthEnd : endDate;
+
+    const batch = db().batch();
+    const curDate = new Date(clampedStart + "T00:00:00");
+    const endDateObj = new Date(clampedEnd + "T00:00:00");
+    while (curDate <= endDateObj) {
+      const dateStr = curDate.toISOString().slice(0, 10);
+      batch.delete(planDoc.ref.collection("shifts").doc(`${employeeId}_${dateStr}`));
+      curDate.setDate(curDate.getDate() + 1);
+    }
+    await batch.commit();
+  }
+}
+
 // ─── Plans ──────────────────────────────────────────────────────────────────
 
 // GET /shifts/plans — list all plans

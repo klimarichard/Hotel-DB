@@ -1,8 +1,8 @@
 import { Router } from "express";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
-import { requireAuth, requireRole, AuthRequest } from "../middleware/auth";
-import { applyVacationXsToPlans } from "./shifts";
+import { requireAuth, AuthRequest } from "../middleware/auth";
+import { applyVacationXsToPlans, removeVacationXsFromPlans } from "./shifts";
 
 export const vacationRouter = Router();
 const db = () => admin.firestore();
@@ -80,30 +80,114 @@ vacationRouter.post("/", requireAuth, async (req: AuthRequest, res) => {
 });
 
 // ─── PATCH /vacation/:id ──────────────────────────────────────────────────────
-// Admin/director only: approve or reject
+// Two modes detected by request body:
+//   { startDate, endDate, reason } → employee edit (own request)
+//   { status }                     → admin/director approve or reject
 
-vacationRouter.patch(
-  "/:id",
-  requireAuth,
-  requireRole("admin", "director"),
-  async (req: AuthRequest, res) => {
-    const { id } = req.params;
-    const body = req.body as Record<string, unknown>;
-    const status = body.status as string;
+vacationRouter.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
+  const { id } = req.params;
+  const body = req.body as Record<string, unknown>;
+  const role = req.role;
+  const isAdminOrDirector = role === "admin" || role === "director";
 
-    if (!["approved", "rejected"].includes(status)) {
-      res.status(400).json({ error: "Stav musí být approved nebo rejected" });
+  const docRef = db().collection("vacationRequests").doc(id);
+  const doc = await docRef.get();
+  if (!doc.exists) {
+    res.status(404).json({ error: "Žádost nenalezena" });
+    return;
+  }
+  const data = doc.data() as Record<string, unknown>;
+
+  // ── Employee edit ──────────────────────────────────────────────────────────
+  if ("startDate" in body) {
+    const isOwn = data.uid === req.uid;
+    if (!isOwn && !isAdminOrDirector) {
+      res.status(403).json({ error: "Nemáte oprávnění upravit tuto žádost" });
+      return;
+    }
+    if (data.status === "rejected") {
+      res.status(400).json({ error: "Zamítnutou žádost nelze upravit" });
+      return;
+    }
+    if (data.pendingEdit) {
+      res.status(400).json({ error: "Úprava již čeká na schválení" });
       return;
     }
 
-    const docRef = db().collection("vacationRequests").doc(id);
-    const doc = await docRef.get();
-    if (!doc.exists) {
-      res.status(404).json({ error: "Žádost nenalezena" });
+    const startDate = (body.startDate as string) ?? "";
+    const endDate = (body.endDate as string) ?? "";
+    const reason = (body.reason as string) ?? "";
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+      res.status(400).json({ error: "Neplatný formát data (YYYY-MM-DD)" });
+      return;
+    }
+    if (startDate > endDate) {
+      res.status(400).json({ error: "Datum začátku musí být před datem konce" });
       return;
     }
 
-    const data = doc.data() as Record<string, unknown>;
+    if (data.status === "pending") {
+      // Pending request — update dates directly, no approval needed
+      await docRef.update({ startDate, endDate, reason });
+    } else {
+      // Approved request — store as pending edit; original dates stay until approved
+      await docRef.update({ pendingEdit: { startDate, endDate, reason } });
+    }
+
+    res.json({ ok: true });
+    return;
+  }
+
+  // ── Admin approve / reject ─────────────────────────────────────────────────
+  if (!isAdminOrDirector) {
+    res.status(403).json({ error: "Nemáte oprávnění" });
+    return;
+  }
+
+  const status = body.status as string;
+  if (!["approved", "rejected"].includes(status)) {
+    res.status(400).json({ error: "Stav musí být approved nebo rejected" });
+    return;
+  }
+
+  const pendingEdit = data.pendingEdit as
+    | { startDate: string; endDate: string; reason: string }
+    | null
+    | undefined;
+
+  if (pendingEdit) {
+    // Acting on a pending edit of an already-approved request
+    if (status === "approved") {
+      const oldStart = data.startDate as string;
+      const oldEnd = data.endDate as string;
+      const { startDate: newStart, endDate: newEnd, reason: newReason } = pendingEdit;
+
+      await docRef.update({
+        startDate: newStart,
+        endDate: newEnd,
+        reason: newReason,
+        pendingEdit: null,
+        reviewedBy: req.uid ?? null,
+        reviewedAt: FieldValue.serverTimestamp(),
+      });
+      // Remove old X shifts, then write new ones
+      await removeVacationXsFromPlans(data.employeeId as string, oldStart, oldEnd);
+      await applyVacationXsToPlans(data.employeeId as string, newStart, newEnd);
+    } else {
+      // Reject the edit — keep current approved dates, clear pendingEdit
+      await docRef.update({
+        pendingEdit: null,
+        reviewedBy: req.uid ?? null,
+        reviewedAt: FieldValue.serverTimestamp(),
+      });
+    }
+  } else {
+    // Normal approve/reject of a pending request
+    if (data.status !== "pending") {
+      res.status(400).json({ error: "Žádost není ve stavu čekání" });
+      return;
+    }
 
     await docRef.update({
       status,
@@ -112,7 +196,6 @@ vacationRouter.patch(
       rejectionReason: status === "rejected" ? ((body.rejectionReason as string) ?? null) : null,
     });
 
-    // On approval: apply X shifts to any existing plans in the date range
     if (status === "approved") {
       await applyVacationXsToPlans(
         data.employeeId as string,
@@ -120,13 +203,13 @@ vacationRouter.patch(
         data.endDate as string
       );
     }
-
-    res.json({ ok: true });
   }
-);
+
+  res.json({ ok: true });
+});
 
 // ─── DELETE /vacation/:id ─────────────────────────────────────────────────────
-// Own pending requests, or admin/director
+// Own pending or approved requests (no pendingEdit on approved), or admin/director
 
 vacationRouter.delete("/:id", requireAuth, async (req: AuthRequest, res) => {
   const { id } = req.params;
@@ -140,7 +223,6 @@ vacationRouter.delete("/:id", requireAuth, async (req: AuthRequest, res) => {
   }
 
   const data = doc.data() as Record<string, unknown>;
-
   const isOwn = data.uid === req.uid;
   const isAdmin = role === "admin" || role === "director";
 
@@ -148,11 +230,18 @@ vacationRouter.delete("/:id", requireAuth, async (req: AuthRequest, res) => {
     res.status(403).json({ error: "Nemáte oprávnění smazat tuto žádost" });
     return;
   }
-  if (data.status !== "pending") {
-    res.status(400).json({ error: "Lze smazat pouze čekající žádost" });
-    return;
-  }
+
+  const wasApproved = data.status === "approved";
 
   await docRef.delete();
+
+  if (wasApproved) {
+    await removeVacationXsFromPlans(
+      data.employeeId as string,
+      data.startDate as string,
+      data.endDate as string
+    );
+  }
+
   res.json({ ok: true });
 });
