@@ -93,7 +93,7 @@ async function run() {
     const password  = rawPw.length >= 6 ? rawPw : rawPw.padEnd(6, '1');
     const role      = s(r[39]) ?? 'employee';
     const email     = s(r[40]);
-    const name      = [firstName, lastName].filter(Boolean).join(' ');
+    const name      = s(r[37]);  // username column
     const employeeId = makeEmployeeId(lastName, firstName, birthDate);
 
     if (!email) continue;
