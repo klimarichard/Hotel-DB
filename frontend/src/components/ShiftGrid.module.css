@@ -1,0 +1,243 @@
+.wrapper {
+  overflow-x: auto;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  background: #fff;
+  margin-bottom: 1.5rem;
+}
+
+.grid {
+  border-collapse: collapse;
+  min-width: 100%;
+  table-layout: fixed;
+}
+
+.nameCol {
+  width: 160px;
+}
+
+.dayCol {
+  width: 44px;
+}
+
+.weekendCol {
+  width: 44px;
+}
+
+.totalCol {
+  width: 64px;
+}
+
+/* ── Headers ──────────────────────────────────────────────────────────── */
+
+.nameHeader {
+  position: sticky;
+  left: 0;
+  background: #f8fafc;
+  z-index: 2;
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #6b7280;
+  border-bottom: 2px solid #e5e7eb;
+  white-space: nowrap;
+}
+
+.dayHeader {
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #374151;
+  padding: 0.3rem 0;
+  border-bottom: 2px solid #e5e7eb;
+  white-space: nowrap;
+  min-width: 44px;
+}
+
+.dayName {
+  font-size: 0.65rem;
+  color: #9ca3af;
+  text-transform: uppercase;
+  font-weight: 400;
+}
+
+.totalHeader {
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #6b7280;
+  padding: 0.3rem 0.5rem;
+  border-bottom: 2px solid #e5e7eb;
+  white-space: nowrap;
+}
+
+/* ── Weekends ─────────────────────────────────────────────────────────── */
+
+.weekend {
+  background: #f0f4ff;
+}
+
+.holiday {
+  background: #f0f0f0;
+}
+
+/* ── Section divider row ──────────────────────────────────────────────── */
+
+.sectionRow td,
+.sectionCell {
+  background: #f1f5f9;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #374151;
+  padding: 0.35rem 0.75rem;
+  border-top: 1px solid #e2e8f0;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+/* ── Employee rows ────────────────────────────────────────────────────── */
+
+.empRow {
+  border-bottom: 1px solid #f1f5f9;
+}
+
+
+.nameCell {
+  position: sticky;
+  left: 0;
+  background: #fff;
+  z-index: 1;
+  padding: 0 0.75rem;
+  font-size: 0.8125rem;
+  white-space: nowrap;
+  border-bottom: 1px solid #f1f5f9;
+  border-right: 1px solid #e5e7eb;
+}
+
+.cell {
+  padding: 1px;
+  border-bottom: 1px solid #f1f5f9;
+  border-right: 1px solid #f1f5f9;
+  vertical-align: middle;
+}
+
+.totalCell {
+  text-align: center;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #374151;
+  padding: 0 0.5rem;
+  border-left: 2px solid #e5e7eb;
+  white-space: nowrap;
+}
+
+/* ── Section footer row ───────────────────────────────────────────────── */
+
+.footerRow {
+  border-top: 2px solid #e5e7eb;
+}
+
+.footerLabel {
+  position: sticky;
+  left: 0;
+  background: #f8fafc;
+  z-index: 1;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #374151;
+  padding: 0.35rem 0.75rem;
+  white-space: nowrap;
+  border-right: 1px solid #e5e7eb;
+}
+
+.footerCell {
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #374151;
+  padding: 0.35rem 0;
+  background: #f8fafc;
+}
+
+/* ── MOD row ──────────────────────────────────────────────────────────── */
+
+.modRow {
+  border-bottom: 2px solid #e5e7eb;
+  border-top: 1px solid #ddd6fe;
+  background: #faf5ff;
+}
+
+.modLabel {
+  position: sticky;
+  left: 0;
+  background: #faf5ff;
+  z-index: 1;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #6d28d9;
+  padding: 0.35rem 0.75rem;
+  white-space: nowrap;
+  border-right: 1px solid #e5e7eb;
+}
+
+/* ── Employee name cell controls ──────────────────────────────────────── */
+
+.empNameText {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.modBadge {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #6b7280;
+  background: #f3f4f6;
+  border-radius: 3px;
+  padding: 0 3px;
+  line-height: 1.4;
+}
+
+.empActions {
+  display: none;
+  gap: 0.15rem;
+  margin-left: 0.25rem;
+}
+
+.nameCell:hover .empActions {
+  display: inline-flex;
+}
+
+.empActionBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 1px 3px;
+  font-size: 0.75rem;
+  color: #9ca3af;
+  border-radius: 3px;
+  line-height: 1;
+}
+
+.empActionBtn:hover {
+  background: #f1f5f9;
+  color: #374151;
+}
+
+.inactiveBadge {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #9ca3af;
+  background: #f3f4f6;
+  border-radius: 3px;
+  padding: 0 4px;
+  line-height: 1.4;
+}

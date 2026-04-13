@@ -1,0 +1,232 @@
+import { useEffect, useRef, useMemo, useState } from "react";
+import { parseShiftExpression, getCellColor } from "../lib/shiftConstants";
+
+interface Props {
+  rawInput: string;
+  hoursComputed: number;
+  readOnly: boolean;
+  onSave: (raw: string) => Promise<void>;
+  focused: boolean;
+  onNavigate: (dir: "up" | "down" | "left" | "right") => void;
+  onFocus: () => void;
+}
+
+export default function ShiftCell({
+  rawInput,
+  hoursComputed,
+  readOnly,
+  onSave,
+  focused,
+  onNavigate,
+  onFocus,
+}: Props) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const cellRef = useRef<HTMLDivElement>(null);
+
+  // Normalise before parsing so "DA2" → "DA²" is treated as valid while typing
+  const draftNormalized = useMemo(() => draft.replace(/([A-Za-z])2/g, '$1\u00B2'), [draft]);
+  const draftParsed = useMemo(() => parseShiftExpression(draftNormalized), [draftNormalized]);
+  const displayParsed = useMemo(() => parseShiftExpression(rawInput), [rawInput]);
+
+  // Focus management: when `focused` prop becomes true, focus the cell or input.
+  // Intentionally excludes `editing` from deps — adding it would cause the input
+  // to be focused synchronously during the keydown→keypress sequence, making the
+  // first typed character appear twice.
+  useEffect(() => {
+    if (!focused) return;
+    if (editing) {
+      inputRef.current?.focus();
+    } else {
+      cellRef.current?.focus();
+    }
+  }, [focused]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // When entering edit mode, focus the input
+  useEffect(() => {
+    if (editing) {
+      const id = setTimeout(() => inputRef.current?.focus(), 10);
+      return () => clearTimeout(id);
+    }
+  }, [editing]);
+
+  function startEdit() {
+    if (readOnly || saving) return;
+    setDraft(rawInput.toUpperCase());
+    setEditing(true);
+  }
+
+  function cancelEdit() {
+    setEditing(false);
+    setDraft("");
+  }
+
+  async function commitEdit() {
+    if (draftNormalized === rawInput) {
+      setEditing(false);
+      return;
+    }
+    if (draftNormalized.trim() !== "" && !draftParsed.isValid) {
+      return;
+    }
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await onSave(draftNormalized);
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "Chyba při ukládání");
+    } finally {
+      setSaving(false);
+      setEditing(false);
+    }
+  }
+
+  async function commitAndNavigate(dir: "up" | "down" | "left" | "right") {
+    if (draftNormalized !== rawInput && (draftNormalized.trim() === "" || draftParsed.isValid)) {
+      setSaving(true);
+      setSaveError(null);
+      try {
+        await onSave(draftNormalized);
+      } catch (e) {
+        setSaveError(e instanceof Error ? e.message : "Chyba při ukládání");
+      } finally {
+        setSaving(false);
+        setEditing(false);
+      }
+    } else {
+      setEditing(false);
+    }
+    onNavigate(dir);
+  }
+
+  function handleEditKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      commitEdit();
+    } else if (e.key === "Escape") {
+      cancelEdit();
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      commitAndNavigate("up");
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      commitAndNavigate("down");
+    } else if (e.key === "Tab") {
+      e.preventDefault();
+      commitAndNavigate(e.shiftKey ? "left" : "right");
+    } else if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      commitAndNavigate("left");
+    } else if (e.key === "ArrowRight") {
+      e.preventDefault();
+      commitAndNavigate("right");
+    }
+  }
+
+  function handleDisplayKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Enter" || e.key === "F2") {
+      e.preventDefault();
+      startEdit();
+    } else if (
+      e.key === "ArrowUp" ||
+      e.key === "ArrowDown" ||
+      e.key === "ArrowLeft" ||
+      e.key === "ArrowRight"
+    ) {
+      e.preventDefault();
+      const dirMap: Record<string, "up" | "down" | "left" | "right"> = {
+        ArrowUp: "up",
+        ArrowDown: "down",
+        ArrowLeft: "left",
+        ArrowRight: "right",
+      };
+      onNavigate(dirMap[e.key]);
+    } else if (e.key === "Tab") {
+      e.preventDefault();
+      onNavigate(e.shiftKey ? "left" : "right");
+    } else if ((e.key === "Delete" || e.key === "Backspace") && !readOnly && rawInput) {
+      e.preventDefault();
+      setSaving(true);
+      setSaveError(null);
+      onSave("").catch((err) => {
+        setSaveError(err instanceof Error ? err.message : "Chyba při mazání");
+      }).finally(() => setSaving(false));
+    } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !readOnly) {
+      // Start typing directly
+      setDraft(e.key.toUpperCase());
+      setEditing(true);
+    }
+  }
+
+  if (editing) {
+    const isInvalid = draftNormalized.trim() !== "" && !draftParsed.isValid;
+    return (
+      <input
+        ref={inputRef}
+        style={{
+          width: "100%",
+          height: "100%",
+          minHeight: "2rem",
+          border: isInvalid ? "2px solid #dc2626" : "1px solid #3b82f6",
+          borderRadius: "3px",
+          padding: "2px 4px",
+          fontSize: "0.8125rem",
+          fontFamily: "monospace",
+          background: isInvalid ? "#fef2f2" : "#fff",
+          outline: "none",
+          boxSizing: "border-box",
+          display: "block",
+        }}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value.toUpperCase())}
+        onKeyDown={handleEditKeyDown}
+        onBlur={commitEdit}
+        title={
+          isInvalid
+            ? (draftParsed.error ?? "Neplatný výraz")
+            : draftParsed.hoursComputed > 0
+            ? `${draftParsed.hoursComputed}h`
+            : undefined
+        }
+        disabled={saving}
+      />
+    );
+  }
+
+  // Display mode
+  const { bg: bgColor, text: textColor } = getCellColor(displayParsed);
+
+  return (
+    <div
+      ref={cellRef}
+      tabIndex={0}
+      style={{
+        width: "100%",
+        minHeight: "2rem",
+        background: saveError ? "#fef2f2" : bgColor,
+        color: saveError ? "#dc2626" : textColor,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: "0.8rem",
+        fontWeight: 500,
+        cursor: readOnly ? "default" : "pointer",
+        borderRadius: "2px",
+        userSelect: "none",
+        padding: "2px",
+        fontFamily: "monospace",
+        outline: saveError ? "2px solid #dc2626" : focused ? "2px solid #3b82f6" : "none",
+        outlineOffset: "-2px",
+      }}
+      title={saveError ?? (rawInput ? `${rawInput} — ${hoursComputed}h` : undefined)}
+      onClick={() => { setSaveError(null); startEdit(); }}
+      onFocus={onFocus}
+      onKeyDown={handleDisplayKeyDown}
+    >
+      {saveError ? "!" : (rawInput || null)}
+    </div>
+  );
+}

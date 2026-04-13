@@ -1,0 +1,180 @@
+.panel {
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.panelTitle {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #111827;
+  margin: 0 0 0.75rem;
+}
+
+.state,
+.empty {
+  text-align: center;
+  color: #6b7280;
+  font-size: 0.875rem;
+  padding: 1rem 0;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.table th {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #6b7280;
+  border-bottom: 2px solid #e5e7eb;
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #f3f4f6;
+  color: #111827;
+  vertical-align: middle;
+}
+
+.rowDone td {
+  opacity: 0.6;
+}
+
+/* ── Status badges ────────────────────────────────────────────────────── */
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.badge_pending {
+  background: #fef9c3;
+  color: #854d0e;
+}
+
+.badge_approved {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.badge_rejected {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.badge_cancelled {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+/* ── Action buttons ───────────────────────────────────────────────────── */
+
+.actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.approveBtn {
+  padding: 4px 10px;
+  background: #dcfce7;
+  border: 1px solid #86efac;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #15803d;
+  cursor: pointer;
+}
+
+.approveBtn:hover:not(:disabled) {
+  background: #bbf7d0;
+}
+
+.approveBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.rejectBtn {
+  padding: 4px 10px;
+  background: #fff;
+  border: 1px solid #fca5a5;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #dc2626;
+  cursor: pointer;
+}
+
+.rejectBtn:hover:not(:disabled) {
+  background: #fef2f2;
+}
+
+.rejectBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Rejection inline row ─────────────────────────────────────────────── */
+
+.rejectRow {
+  background: #fef2f2 !important;
+  padding: 0.5rem 0.75rem;
+}
+
+.rejectInput {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid #fca5a5;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  margin-right: 0.5rem;
+  width: 280px;
+  outline: none;
+}
+
+.rejectInput:focus {
+  border-color: #dc2626;
+}
+
+.confirmRejectBtn {
+  padding: 5px 12px;
+  background: #dc2626;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  margin-right: 0.5rem;
+}
+
+.confirmRejectBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cancelBtn {
+  padding: 5px 12px;
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 0.8125rem;
+  color: #374151;
+  cursor: pointer;
+}
+
+.cancelBtn:hover {
+  background: #e5e7eb;
+}

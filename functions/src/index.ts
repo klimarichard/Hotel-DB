@@ -9,6 +9,7 @@ import { alertsRouter } from "./routes/alerts";
 import { companiesRouter } from "./routes/companies";
 import { contractTemplatesRouter } from "./routes/contractTemplates";
 import { contractsRouter } from "./routes/contracts";
+import { shiftsRouter } from "./routes/shifts";
 
 admin.initializeApp();
 
@@ -24,6 +25,7 @@ app.use("/alerts", alertsRouter);
 app.use("/companies", companiesRouter);
 app.use("/contractTemplates", contractTemplatesRouter);
 app.use("/", contractsRouter);
+app.use("/shifts", shiftsRouter);
 
 // Health check
 app.get("/health", (_req, res) => {
