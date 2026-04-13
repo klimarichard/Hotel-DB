@@ -22,6 +22,7 @@ export default function EditEmployeeInPlanModal({ planId, employee, onClose, onS
   const [primaryShiftType, setPrimaryShiftType] = useState(employee.primaryShiftType ?? "");
   const [primaryHotel, setPrimaryHotel] = useState(employee.primaryHotel ?? "");
   const [displayOrder, setDisplayOrder] = useState(employee.displayOrder);
+  const [active, setActive] = useState(employee.active ?? true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -34,6 +35,7 @@ export default function EditEmployeeInPlanModal({ planId, employee, onClose, onS
         primaryShiftType: primaryShiftType || null,
         primaryHotel: primaryHotel || null,
         displayOrder,
+        active,
       });
       onSaved({
         ...employee,
@@ -41,6 +43,7 @@ export default function EditEmployeeInPlanModal({ planId, employee, onClose, onS
         primaryShiftType: (primaryShiftType || null) as "D" | "N" | "R" | "DP" | "NP" | null,
         primaryHotel: (primaryHotel || null) as string | null,
         displayOrder,
+        active,
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Chyba při ukládání");
@@ -106,6 +109,16 @@ export default function EditEmployeeInPlanModal({ planId, employee, onClose, onS
             onChange={(e) => setDisplayOrder(Number(e.target.value))}
             min={1}
           />
+
+          <label className={styles.label}>Dostupnost</label>
+          <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.875rem", color: "#374151", cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={active}
+              onChange={(e) => setActive(e.target.checked)}
+            />
+            Aktivní zaměstnanec (počítat jako dostupného)
+          </label>
 
           {error && <p className={styles.error}>{error}</p>}
         </div>

@@ -22,6 +22,7 @@ export interface PlanEmployee {
   primaryShiftType: "D" | "N" | "R" | "DP" | "NP" | null;
   primaryHotel: string | null;
   displayOrder: number;
+  active: boolean;
 }
 
 export interface ShiftDoc {
@@ -667,6 +668,7 @@ export default function ShiftPlannerPage() {
               canEditEmployees={
                 role === "admin" || (canEdit && plan.status !== "published")
               }
+              canSeeInactiveFlag={canEdit}
               readOnly={!canEdit}
             />
           )}

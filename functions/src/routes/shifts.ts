@@ -303,6 +303,7 @@ shiftsRouter.post(
     const primaryShiftType = (body.primaryShiftType as string | null) ?? null;
     const primaryHotel = (body.primaryHotel as string | null) ?? null;
     const displayOrder = Number(body.displayOrder ?? 100);
+    const active = body.active !== false; // default true
 
     if (!employeeId || !firstName || !lastName) {
       res.status(400).json({ error: "employeeId, firstName a lastName jsou povinné" });
@@ -346,6 +347,7 @@ shiftsRouter.post(
         primaryShiftType,
         primaryHotel,
         displayOrder,
+        active,
         createdAt: FieldValue.serverTimestamp(),
       });
     res.status(201).json({ id: ref.id });
@@ -365,6 +367,7 @@ shiftsRouter.put(
     const primaryShiftType = (body.primaryShiftType as string | null) ?? null;
     const primaryHotel = (body.primaryHotel as string | null) ?? null;
     const displayOrder = Number(body.displayOrder ?? 100);
+    const active = body.active !== false; // default true
 
     if (!(VALID_SECTIONS as readonly string[]).includes(section)) {
       res.status(400).json({ error: "Neplatná sekce" });
@@ -384,7 +387,7 @@ shiftsRouter.put(
       .doc(planId)
       .collection("planEmployees")
       .doc(docId)
-      .update({ section, primaryShiftType, primaryHotel, displayOrder, updatedAt: FieldValue.serverTimestamp() });
+      .update({ section, primaryShiftType, primaryHotel, displayOrder, active, updatedAt: FieldValue.serverTimestamp() });
     res.json({ ok: true });
   }
 );

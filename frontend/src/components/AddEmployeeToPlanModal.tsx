@@ -33,6 +33,7 @@ export default function AddEmployeeToPlanModal({ planId, onClose, onAdded }: Pro
   const [primaryShiftType, setPrimaryShiftType] = useState<ShiftType | "">("");
   const [primaryHotel, setPrimaryHotel] = useState<HotelCode | "">("");
   const [displayOrder, setDisplayOrder] = useState(100);
+  const [active, setActive] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -65,6 +66,7 @@ export default function AddEmployeeToPlanModal({ planId, onClose, onAdded }: Pro
         primaryShiftType: primaryShiftType || null,
         primaryHotel: primaryHotel || null,
         displayOrder,
+        active,
       });
       onAdded({
         id: result.id,
@@ -75,6 +77,7 @@ export default function AddEmployeeToPlanModal({ planId, onClose, onAdded }: Pro
         primaryShiftType: (primaryShiftType || null) as "D" | "N" | "R" | null,
         primaryHotel: (primaryHotel || null) as string | null,
         displayOrder,
+        active,
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Chyba při ukládání");
@@ -178,6 +181,17 @@ export default function AddEmployeeToPlanModal({ planId, onClose, onAdded }: Pro
             onChange={(e) => setDisplayOrder(Number(e.target.value))}
             min={1}
           />
+
+          {/* Active flag */}
+          <label className={styles.label}>Dostupnost</label>
+          <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.875rem", color: "#374151", cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={active}
+              onChange={(e) => setActive(e.target.checked)}
+            />
+            Aktivní zaměstnanec (počítat jako dostupného)
+          </label>
 
           {error && <p className={styles.error}>{error}</p>}
         </div>

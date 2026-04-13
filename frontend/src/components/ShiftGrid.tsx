@@ -12,6 +12,7 @@ interface Props {
   onEditEmployee: (emp: PlanEmployee) => void;
   onDeleteEmployee: (emp: PlanEmployee) => void;
   canEditEmployees: boolean;
+  canSeeInactiveFlag: boolean;
   readOnly: boolean;
 }
 
@@ -45,6 +46,7 @@ export default function ShiftGrid({
   onEditEmployee,
   onDeleteEmployee,
   canEditEmployees,
+  canSeeInactiveFlag,
   readOnly,
 }: Props) {
   const days = useMemo(() => getDaysInMonth(plan.year, plan.month), [plan.year, plan.month]);
@@ -233,6 +235,9 @@ export default function ShiftGrid({
                       <span className={styles.empNameText}>
                         {emp.lastName} {emp.firstName}
                         {modLetter ? <span className={styles.modBadge}>{modLetter}</span> : null}
+                        {canSeeInactiveFlag && !emp.active && (
+                          <span className={styles.inactiveBadge} title="Neaktivní — nepočítá se jako dostupný">–</span>
+                        )}
                       </span>
                       {canEditEmployees && (
                         <span className={styles.empActions}>
