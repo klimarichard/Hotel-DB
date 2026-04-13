@@ -334,3 +334,32 @@
   background: #fef2f2;
   border-radius: 6px;
 }
+
+/* ── Employee link ────────────────────────────────────────────────────────── */
+
+.employeeLinked {
+  font-size: 0.8125rem;
+  color: #111827;
+  margin-right: 0.5rem;
+}
+
+.employeeUnlinked {
+  font-size: 0.8125rem;
+  color: #9ca3af;
+  margin-right: 0.5rem;
+}
+
+.linkBtn {
+  padding: 2px 8px;
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  color: #374151;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.linkBtn:hover {
+  background: #e5e7eb;
+}

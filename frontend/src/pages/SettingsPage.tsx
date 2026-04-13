@@ -4,6 +4,12 @@ import { useAuth, UserRole } from "@/hooks/useAuth";
 import { authApi, UserProfile, api } from "@/lib/api";
 import styles from "./SettingsPage.module.css";
 
+interface EmployeeSummary {
+  id: string;
+  firstName: string;
+  lastName: string;
+}
+
 interface CompanyRecord {
   id: string;
   name: string;
@@ -44,6 +50,12 @@ export default function SettingsPage() {
   // Per-row activation toggle state
   const [togglingUid, setTogglingUid] = useState<string | null>(null);
 
+  // Employee link state
+  const [employees, setEmployees] = useState<EmployeeSummary[]>([]);
+  const [linkingUid, setLinkingUid] = useState<string | null>(null);
+  const [linkEmployeeId, setLinkEmployeeId] = useState<string>("");
+  const [linkSaving, setLinkSaving] = useState(false);
+
   const [settingsTab, setSettingsTab] = useState<"users" | "companies">("users");
 
   // Companies
@@ -65,6 +77,12 @@ export default function SettingsPage() {
   }, []);
 
   useEffect(() => { loadUsers(); }, [loadUsers]);
+
+  useEffect(() => {
+    api.get<EmployeeSummary[]>("/employees?status=active")
+      .then((list) => setEmployees(list))
+      .catch(() => setEmployees([]));
+  }, []);
 
   useEffect(() => {
     api.get<CompanyRecord[]>("/companies").then((list) => {
@@ -103,6 +121,28 @@ export default function SettingsPage() {
 
   if (authLoading) return null;
   if (role !== "admin") return <Navigate to="/" replace />;
+
+  function openLinkModal(uid: string, currentEmployeeId: string | null) {
+    setLinkingUid(uid);
+    setLinkEmployeeId(currentEmployeeId ?? "");
+  }
+
+  async function handleLinkEmployee() {
+    if (!linkingUid) return;
+    setLinkSaving(true);
+    try {
+      const empId = linkEmployeeId || null;
+      await authApi.linkEmployee(linkingUid, empId);
+      setUsers((prev) =>
+        prev.map((u) => (u.uid === linkingUid ? { ...u, employeeId: empId } : u))
+      );
+      setLinkingUid(null);
+    } catch {
+      // Silently fail
+    } finally {
+      setLinkSaving(false);
+    }
+  }
 
   async function handleCreateUser(e: React.FormEvent) {
     e.preventDefault();
@@ -238,6 +278,46 @@ export default function SettingsPage() {
         </div>
       )}
 
+      {linkingUid && (
+        <div className={styles.modal}>
+          <div className={styles.modalBox}>
+            <h2 className={styles.modalTitle}>Propojit se zaměstnancem</h2>
+            <div className={styles.field}>
+              <label className={styles.label}>Zaměstnanec</label>
+              <select
+                className={styles.input}
+                value={linkEmployeeId}
+                onChange={(e) => setLinkEmployeeId(e.target.value)}
+              >
+                <option value="">— Zrušit propojení —</option>
+                {employees.map((emp) => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.lastName} {emp.firstName}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className={styles.formActions}>
+              <button
+                type="button"
+                className={styles.cancelBtn}
+                onClick={() => setLinkingUid(null)}
+              >
+                Zrušit
+              </button>
+              <button
+                type="button"
+                className={styles.saveBtn}
+                onClick={handleLinkEmployee}
+                disabled={linkSaving}
+              >
+                {linkSaving ? "Ukládám…" : "Uložit"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {settingsTab === "users" && (
         <>
           {loading && <p className={styles.state}>Načítám…</p>}
@@ -249,46 +329,63 @@ export default function SettingsPage() {
                   <th>Jméno</th>
                   <th>E-mail</th>
                   <th>Role</th>
+                  <th>Zaměstnanec</th>
                   <th>Stav</th>
                   <th>Akce</th>
                 </tr>
               </thead>
               <tbody>
                 {users.length === 0 && (
-                  <tr><td colSpan={5} className={styles.empty}>Žádní uživatelé</td></tr>
+                  <tr><td colSpan={6} className={styles.empty}>Žádní uživatelé</td></tr>
                 )}
-                {users.map((u) => (
-                  <tr key={u.uid}>
-                    <td className={styles.name}>{u.name}</td>
-                    <td className={styles.email}>{u.email}</td>
-                    <td>
-                      <select
-                        className={styles.roleSelect}
-                        value={pendingRole[u.uid] ?? u.role}
-                        disabled={roleChanging[u.uid]}
-                        onChange={(e) => handleRoleChange(u.uid, e.target.value as UserRole)}
-                      >
-                        {ROLES.map((r) => (
-                          <option key={r} value={r}>{ROLE_LABELS[r]}</option>
-                        ))}
-                      </select>
-                    </td>
-                    <td>
-                      <span className={u.active ? styles.badgeActive : styles.badgeInactive}>
-                        {u.active ? "Aktivní" : "Deaktivován"}
-                      </span>
-                    </td>
-                    <td>
-                      <button
-                        className={u.active ? styles.deactivateBtn : styles.activateBtn}
-                        disabled={togglingUid === u.uid}
-                        onClick={() => handleToggleActive(u)}
-                      >
-                        {togglingUid === u.uid ? "…" : u.active ? "Deaktivovat" : "Aktivovat"}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {users.map((u) => {
+                  const linkedEmp = u.employeeId
+                    ? employees.find((e) => e.id === u.employeeId)
+                    : null;
+                  return (
+                    <tr key={u.uid}>
+                      <td className={styles.name}>{u.name}</td>
+                      <td className={styles.email}>{u.email}</td>
+                      <td>
+                        <select
+                          className={styles.roleSelect}
+                          value={pendingRole[u.uid] ?? u.role}
+                          disabled={roleChanging[u.uid]}
+                          onChange={(e) => handleRoleChange(u.uid, e.target.value as UserRole)}
+                        >
+                          {ROLES.map((r) => (
+                            <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+                          ))}
+                        </select>
+                      </td>
+                      <td>
+                        <span className={linkedEmp ? styles.employeeLinked : styles.employeeUnlinked}>
+                          {linkedEmp ? `${linkedEmp.lastName} ${linkedEmp.firstName}` : "—"}
+                        </span>
+                        <button
+                          className={styles.linkBtn}
+                          onClick={() => openLinkModal(u.uid, u.employeeId)}
+                        >
+                          Propojit
+                        </button>
+                      </td>
+                      <td>
+                        <span className={u.active ? styles.badgeActive : styles.badgeInactive}>
+                          {u.active ? "Aktivní" : "Deaktivován"}
+                        </span>
+                      </td>
+                      <td>
+                        <button
+                          className={u.active ? styles.deactivateBtn : styles.activateBtn}
+                          disabled={togglingUid === u.uid}
+                          onClick={() => handleToggleActive(u)}
+                        >
+                          {togglingUid === u.uid ? "…" : u.active ? "Deaktivovat" : "Aktivovat"}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}

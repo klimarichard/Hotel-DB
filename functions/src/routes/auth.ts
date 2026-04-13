@@ -125,6 +125,28 @@ authRouter.patch(
 );
 
 /**
+ * PATCH /api/auth/users/:uid/employee
+ * Admin-only: link or unlink an employee record to a user profile.
+ * Body: { employeeId: string | null }
+ */
+authRouter.patch(
+  "/users/:uid/employee",
+  requireAuth,
+  requireRole("admin"),
+  async (req: AuthRequest, res) => {
+    const { uid } = req.params;
+    const { employeeId } = req.body as { employeeId: string | null };
+
+    await admin.firestore().collection("users").doc(uid).update({
+      employeeId: employeeId ?? null,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    res.json({ success: true });
+  }
+);
+
+/**
  * GET /api/auth/me
  * Returns the current user's profile from users/ collection.
  */
