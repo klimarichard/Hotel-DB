@@ -124,7 +124,20 @@ export default function VacationPage() {
     try {
       await api.patch(`/vacation/${id}`, { status: "approved" });
       setRequests((prev) =>
-        prev.map((r) => (r.id === id ? { ...r, status: "approved" as const } : r))
+        prev.map((r) => {
+          if (r.id !== id) return r;
+          if (r.pendingEdit) {
+            // Approving an edit — apply new dates and clear pendingEdit
+            return {
+              ...r,
+              startDate: r.pendingEdit.startDate,
+              endDate: r.pendingEdit.endDate,
+              reason: r.pendingEdit.reason,
+              pendingEdit: null,
+            };
+          }
+          return { ...r, status: "approved" as const };
+        })
       );
     } finally {
       setActionSaving(false);
@@ -136,9 +149,14 @@ export default function VacationPage() {
     try {
       await api.patch(`/vacation/${id}`, { status: "rejected", rejectionReason });
       setRequests((prev) =>
-        prev.map((r) =>
-          r.id === id ? { ...r, status: "rejected" as const, rejectionReason } : r
-        )
+        prev.map((r) => {
+          if (r.id !== id) return r;
+          if (r.pendingEdit) {
+            // Rejecting an edit — just clear pendingEdit, keep approved status
+            return { ...r, pendingEdit: null };
+          }
+          return { ...r, status: "rejected" as const, rejectionReason };
+        })
       );
       setRejectingId(null);
       setRejectionReason("");
