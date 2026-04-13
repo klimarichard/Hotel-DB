@@ -6,6 +6,8 @@ export const SHIFT_HOURS: Record<string, number> = {
   R: 8,
   ZD: 8,
   ZN: 8,
+  DP: 12,
+  NP: 12,
   X: 0,
 };
 
@@ -50,6 +52,94 @@ export const SHIFT_TEXT_COLORS: Record<string, string> = {
   ZN: "#92400e",
   X:  "#9ca3af",
 };
+
+// ─── Per-hotel cell colors ───────────────────────────────────────────────────
+// Key: hotel code for regular shifts, "P"+hotel for portýr shifts, "X" for day off
+
+export const CELL_COLORS: Record<string, { bg: string; text: string }> = {
+  A:  { bg: "#dcfce7", text: "#166534" },   // Ambiance — green
+  S:  { bg: "#fef3c7", text: "#92400e" },   // Superior — gold
+  Q:  { bg: "#fce7f3", text: "#9d174d" },   // Amigo — pink
+  K:  { bg: "#ede9fe", text: "#5b21b6" },   // Ankora — purple
+  P:  { bg: "#e0f2fe", text: "#075985" },   // Perla — light blue
+  M:  { bg: "#f3f4f6", text: "#374151" },   // Metropol — gray
+  PA: { bg: "#dbeafe", text: "#1e40af" },   // Ambiance portýr — blue
+  PQ: { bg: "#4c1d95", text: "#e9d5ff" },   // Amigo portýr — dark purple
+  X:  { bg: "#fee2e2", text: "#dc2626" },   // X — red
+};
+
+const DEFAULT_CELL_COLOR = { bg: "#f0f9ff", text: "#0c4a6e" };
+
+export function getCellColor(parsed: ParseResult): { bg: string; text: string } {
+  const first = parsed.segments[0];
+  if (!first) return { bg: "transparent", text: "#374151" };
+  if (first.code === "X") return CELL_COLORS["X"];
+  const isPortyr = first.code === "DP" || first.code === "NP";
+  const hotel = first.hotel;
+  if (isPortyr && hotel) return CELL_COLORS["P" + hotel] ?? CELL_COLORS[hotel] ?? DEFAULT_CELL_COLOR;
+  if (hotel) return CELL_COLORS[hotel] ?? DEFAULT_CELL_COLOR;
+  return DEFAULT_CELL_COLOR;
+}
+
+// ─── Czech state holidays ────────────────────────────────────────────────────
+
+function computeEasterSunday(year: number): Date {
+  // Anonymous Gregorian algorithm
+  const a = year % 19;
+  const b = Math.floor(year / 100);
+  const c = year % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31);
+  const day = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(year, month - 1, day);
+}
+
+function dateToISO(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+export function getCzechHolidays(year: number): Set<string> {
+  // Fixed Czech public holidays
+  const fixed: [number, number][] = [
+    [1, 1],   // Den obnovy samostatného českého státu / Nový rok
+    [5, 1],   // Svátek práce
+    [5, 8],   // Den vítězství
+    [7, 5],   // Den slovanských věrozvěstů Cyrila a Metoděje
+    [7, 6],   // Den upálení mistra Jana Husa
+    [9, 28],  // Den české státnosti
+    [10, 28], // Den vzniku samostatného československého státu
+    [11, 17], // Den boje za svobodu a demokracii
+    [12, 24], // Štědrý den
+    [12, 25], // 1. svátek vánoční
+    [12, 26], // 2. svátek vánoční
+  ];
+  const holidays = new Set<string>();
+  for (const [m, d] of fixed) {
+    holidays.add(`${year}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`);
+  }
+  // Easter-based movable holidays
+  const easter = computeEasterSunday(year);
+  // Good Friday (Easter - 2 days)
+  const goodFriday = new Date(easter);
+  goodFriday.setDate(goodFriday.getDate() - 2);
+  holidays.add(dateToISO(goodFriday));
+  // Easter Monday (Easter + 1 day)
+  const easterMonday = new Date(easter);
+  easterMonday.setDate(easterMonday.getDate() + 1);
+  holidays.add(dateToISO(easterMonday));
+  return holidays;
+}
 
 // ─── Parser (mirrored from functions/src/services/shiftParser.ts) ─────────────
 // Keep in sync manually — do NOT import across packages.
@@ -99,6 +189,12 @@ function parseSegment(token: string): ShiftSegment | { error: string } {
     remainder = token.slice(2);
   } else if (token.startsWith("ZN")) {
     code = "ZN";
+    remainder = token.slice(2);
+  } else if (token.startsWith("DP")) {
+    code = "DP";
+    remainder = token.slice(2);
+  } else if (token.startsWith("NP")) {
+    code = "NP";
     remainder = token.slice(2);
   } else if (token.length >= 1 && ["D", "N", "R", "X"].includes(token[0])) {
     code = token[0];

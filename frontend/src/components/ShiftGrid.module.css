@@ -80,6 +80,10 @@
   background: #fafafa;
 }
 
+.holiday {
+  background: #f0f0f0;
+}
+
 /* ── Section divider row ──────────────────────────────────────────────── */
 
 .sectionRow td,

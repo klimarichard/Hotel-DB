@@ -1,6 +1,6 @@
-import { useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { PlanDetail, PlanEmployee, ShiftDoc } from "../pages/ShiftPlannerPage";
-import { SECTION_LABELS, SECTIONS, type Section } from "../lib/shiftConstants";
+import { SECTION_LABELS, SECTIONS, type Section, getCzechHolidays } from "../lib/shiftConstants";
 import ShiftCell from "./ShiftCell";
 import styles from "./ShiftGrid.module.css";
 
@@ -32,6 +32,8 @@ function isWeekend(d: Date): boolean {
 
 export default function ShiftGrid({ plan, onCellSave, readOnly }: Props) {
   const days = useMemo(() => getDaysInMonth(plan.year, plan.month), [plan.year, plan.month]);
+
+  const holidays = useMemo(() => getCzechHolidays(plan.year), [plan.year]);
 
   const shiftMap = useMemo(() => {
     const m = new Map<string, ShiftDoc>();
@@ -69,6 +71,48 @@ export default function ShiftGrid({ plan, onCellSave, readOnly }: Props) {
     return map;
   }, [plan.employees]);
 
+  // Flat ordered list of employees for arrow key navigation
+  const flatEmployees = useMemo(() => {
+    const list: PlanEmployee[] = [];
+    for (const sec of SECTIONS) {
+      const emps = grouped.get(sec) ?? [];
+      list.push(...emps);
+    }
+    return list;
+  }, [grouped]);
+
+  const [focusedCell, setFocusedCell] = useState<{ row: number; col: number } | null>(null);
+
+  const handleNavigate = useCallback(
+    (row: number, col: number, dir: "up" | "down" | "left" | "right") => {
+      let newRow = row;
+      let newCol = col;
+      switch (dir) {
+        case "up":    newRow = Math.max(0, row - 1); break;
+        case "down":  newRow = Math.min(flatEmployees.length - 1, row + 1); break;
+        case "left":  newCol = Math.max(0, col - 1); break;
+        case "right": newCol = Math.min(days.length - 1, col + 1); break;
+      }
+      setFocusedCell({ row: newRow, col: newCol });
+    },
+    [flatEmployees.length, days.length]
+  );
+
+  function dayClass(d: Date): string {
+    const dateStr = formatDate(d);
+    const parts: string[] = [];
+    if (isWeekend(d)) parts.push(styles.weekend);
+    else if (holidays.has(dateStr)) parts.push(styles.holiday);
+    return parts.join(" ");
+  }
+
+  // Build a lookup from employeeId to flat row index
+  const empRowIndex = useMemo(() => {
+    const m = new Map<string, number>();
+    flatEmployees.forEach((emp, i) => m.set(emp.employeeId, i));
+    return m;
+  }, [flatEmployees]);
+
   return (
     <div className={styles.wrapper}>
       <table className={styles.grid}>
@@ -88,7 +132,7 @@ export default function ShiftGrid({ plan, onCellSave, readOnly }: Props) {
             {days.map((d) => (
               <th
                 key={d.getDate()}
-                className={`${styles.dayHeader} ${isWeekend(d) ? styles.weekend : ""}`}
+                className={`${styles.dayHeader} ${dayClass(d)}`}
               >
                 <div>{d.getDate()}</div>
                 <div className={styles.dayName}>{DAY_NAMES[d.getDay()]}</div>
@@ -108,33 +152,43 @@ export default function ShiftGrid({ plan, onCellSave, readOnly }: Props) {
                   {SECTION_LABELS[section]}
                 </td>
               </tr>,
-              ...emps.map((emp) => (
-                <tr key={emp.id} className={styles.empRow}>
-                  <td className={styles.nameCell}>
-                    {emp.lastName} {emp.firstName}
-                  </td>
-                  {days.map((d) => {
-                    const dateStr = formatDate(d);
-                    const shiftDoc = shiftMap.get(`${emp.employeeId}_${dateStr}`);
-                    return (
-                      <td
-                        key={dateStr}
-                        className={`${styles.cell} ${isWeekend(d) ? styles.weekend : ""}`}
-                      >
-                        <ShiftCell
-                          rawInput={shiftDoc?.rawInput ?? ""}
-                          hoursComputed={shiftDoc?.hoursComputed ?? 0}
-                          readOnly={readOnly}
-                          onSave={(raw) => onCellSave(emp.employeeId, dateStr, raw)}
-                        />
-                      </td>
-                    );
-                  })}
-                  <td className={styles.totalCell}>
-                    {employeeMonthHours.get(emp.employeeId) ?? 0}
-                  </td>
-                </tr>
-              )),
+              ...emps.map((emp) => {
+                const rowIdx = empRowIndex.get(emp.employeeId) ?? 0;
+                return (
+                  <tr key={emp.id} className={styles.empRow}>
+                    <td className={styles.nameCell}>
+                      {emp.lastName} {emp.firstName}
+                    </td>
+                    {days.map((d, colIdx) => {
+                      const dateStr = formatDate(d);
+                      const shiftDoc = shiftMap.get(`${emp.employeeId}_${dateStr}`);
+                      const isFocused =
+                        focusedCell !== null &&
+                        focusedCell.row === rowIdx &&
+                        focusedCell.col === colIdx;
+                      return (
+                        <td
+                          key={dateStr}
+                          className={`${styles.cell} ${dayClass(d)}`}
+                        >
+                          <ShiftCell
+                            rawInput={shiftDoc?.rawInput ?? ""}
+                            hoursComputed={shiftDoc?.hoursComputed ?? 0}
+                            readOnly={readOnly}
+                            onSave={(raw) => onCellSave(emp.employeeId, dateStr, raw)}
+                            focused={isFocused}
+                            onNavigate={(dir) => handleNavigate(rowIdx, colIdx, dir)}
+                            onFocus={() => setFocusedCell({ row: rowIdx, col: colIdx })}
+                          />
+                        </td>
+                      );
+                    })}
+                    <td className={styles.totalCell}>
+                      {employeeMonthHours.get(emp.employeeId) ?? 0}
+                    </td>
+                  </tr>
+                );
+              }),
               <tr key={`footer-${section}`} className={styles.footerRow}>
                 <td className={styles.footerLabel}>Σ {SECTION_LABELS[section]}</td>
                 {days.map((d) => {
@@ -143,7 +197,7 @@ export default function ShiftGrid({ plan, onCellSave, readOnly }: Props) {
                   return (
                     <td
                       key={dateStr}
-                      className={`${styles.footerCell} ${isWeekend(d) ? styles.weekend : ""}`}
+                      className={`${styles.footerCell} ${dayClass(d)}`}
                     >
                       {hrs > 0 ? hrs : ""}
                     </td>

@@ -1,22 +1,45 @@
 import { useEffect, useRef, useMemo, useState } from "react";
-import { parseShiftExpression, SHIFT_COLORS, SHIFT_TEXT_COLORS } from "../lib/shiftConstants";
+import { parseShiftExpression, getCellColor } from "../lib/shiftConstants";
 
 interface Props {
   rawInput: string;
   hoursComputed: number;
   readOnly: boolean;
   onSave: (raw: string) => Promise<void>;
+  focused: boolean;
+  onNavigate: (dir: "up" | "down" | "left" | "right") => void;
+  onFocus: () => void;
 }
 
-export default function ShiftCell({ rawInput, hoursComputed, readOnly, onSave }: Props) {
+export default function ShiftCell({
+  rawInput,
+  hoursComputed,
+  readOnly,
+  onSave,
+  focused,
+  onNavigate,
+  onFocus,
+}: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const cellRef = useRef<HTMLDivElement>(null);
 
   const draftParsed = useMemo(() => parseShiftExpression(draft), [draft]);
   const displayParsed = useMemo(() => parseShiftExpression(rawInput), [rawInput]);
 
+  // Focus management: when `focused` prop becomes true, focus the cell or input
+  useEffect(() => {
+    if (!focused) return;
+    if (editing) {
+      inputRef.current?.focus();
+    } else {
+      cellRef.current?.focus();
+    }
+  }, [focused, editing]);
+
+  // When entering edit mode, focus the input
   useEffect(() => {
     if (editing) {
       const id = setTimeout(() => inputRef.current?.focus(), 10);
@@ -40,7 +63,6 @@ export default function ShiftCell({ rawInput, hoursComputed, readOnly, onSave }:
       setEditing(false);
       return;
     }
-    // If invalid (and non-empty), stay in edit mode
     if (draft.trim() !== "" && !draftParsed.isValid) {
       return;
     }
@@ -53,12 +75,65 @@ export default function ShiftCell({ rawInput, hoursComputed, readOnly, onSave }:
     }
   }
 
-  function handleKeyDown(e: React.KeyboardEvent) {
+  async function commitAndNavigate(dir: "up" | "down" | "left" | "right") {
+    if (draft !== rawInput && (draft.trim() === "" || draftParsed.isValid)) {
+      setSaving(true);
+      try {
+        await onSave(draft);
+      } finally {
+        setSaving(false);
+        setEditing(false);
+      }
+    } else {
+      setEditing(false);
+    }
+    onNavigate(dir);
+  }
+
+  function handleEditKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Enter") {
       e.preventDefault();
       commitEdit();
     } else if (e.key === "Escape") {
       cancelEdit();
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      commitAndNavigate("up");
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      commitAndNavigate("down");
+    } else if (e.key === "Tab") {
+      e.preventDefault();
+      commitAndNavigate(e.shiftKey ? "left" : "right");
+    }
+    // ArrowLeft/ArrowRight → default behavior (cursor movement in input)
+  }
+
+  function handleDisplayKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Enter" || e.key === "F2") {
+      e.preventDefault();
+      startEdit();
+    } else if (
+      e.key === "ArrowUp" ||
+      e.key === "ArrowDown" ||
+      e.key === "ArrowLeft" ||
+      e.key === "ArrowRight"
+    ) {
+      e.preventDefault();
+      const dirMap: Record<string, "up" | "down" | "left" | "right"> = {
+        ArrowUp: "up",
+        ArrowDown: "down",
+        ArrowLeft: "left",
+        ArrowRight: "right",
+      };
+      onNavigate(dirMap[e.key]);
+    } else if (e.key === "Tab") {
+      e.preventDefault();
+      onNavigate(e.shiftKey ? "left" : "right");
+    } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !readOnly) {
+      // Start typing directly
+      setDraft(e.key);
+      setEditing(true);
     }
   }
 
@@ -83,7 +158,7 @@ export default function ShiftCell({ rawInput, hoursComputed, readOnly, onSave }:
         }}
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
-        onKeyDown={handleKeyDown}
+        onKeyDown={handleEditKeyDown}
         onBlur={commitEdit}
         title={
           isInvalid
@@ -98,12 +173,12 @@ export default function ShiftCell({ rawInput, hoursComputed, readOnly, onSave }:
   }
 
   // Display mode
-  const firstCode = displayParsed.segments[0]?.code ?? "";
-  const bgColor = firstCode ? (SHIFT_COLORS[firstCode] ?? "transparent") : "transparent";
-  const textColor = firstCode ? (SHIFT_TEXT_COLORS[firstCode] ?? "#374151") : "#374151";
+  const { bg: bgColor, text: textColor } = getCellColor(displayParsed);
 
   return (
     <div
+      ref={cellRef}
+      tabIndex={0}
       style={{
         width: "100%",
         minHeight: "2rem",
@@ -119,9 +194,13 @@ export default function ShiftCell({ rawInput, hoursComputed, readOnly, onSave }:
         userSelect: "none",
         padding: "2px",
         fontFamily: "monospace",
+        outline: focused ? "2px solid #3b82f6" : "none",
+        outlineOffset: "-2px",
       }}
       title={rawInput ? `${rawInput} — ${hoursComputed}h` : undefined}
       onClick={startEdit}
+      onFocus={onFocus}
+      onKeyDown={handleDisplayKeyDown}
     >
       {rawInput || null}
     </div>

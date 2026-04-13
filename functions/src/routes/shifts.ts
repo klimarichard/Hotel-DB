@@ -8,7 +8,7 @@ export const shiftsRouter = Router();
 const db = () => admin.firestore();
 
 const VALID_SECTIONS = ["vedoucí", "recepce", "portýři"] as const;
-const VALID_SHIFT_TYPES = ["D", "N", "R"] as const;
+const VALID_SHIFT_TYPES = ["D", "N", "R", "DP", "NP"] as const;
 
 // ─── Helper: batch-delete a sub-collection ─────────────────────────────────
 
@@ -22,6 +22,23 @@ async function deleteCollection(
     snap.docs.forEach((d) => batch.delete(d.ref));
     await batch.commit();
     snap = await colRef.limit(BATCH_SIZE).get();
+  }
+}
+
+// ─── Helper: copy shifts to snapshot sub-collection ─────────────────────────
+
+async function snapshotShifts(planRef: admin.firestore.DocumentReference): Promise<void> {
+  const shiftsSnap = await planRef.collection("shifts").get();
+  if (shiftsSnap.empty) return;
+  // Process in batches of 400
+  const docs = shiftsSnap.docs;
+  for (let i = 0; i < docs.length; i += 400) {
+    const batch = db().batch();
+    const chunk = docs.slice(i, i + 400);
+    for (const doc of chunk) {
+      batch.set(planRef.collection("shiftsSnapshot").doc(doc.id), doc.data());
+    }
+    await batch.commit();
   }
 }
 
@@ -76,8 +93,10 @@ shiftsRouter.post(
     const ref = await db().collection("shiftPlans").add({
       month,
       year,
-      status: "draft",
+      status: "created",
       createdBy: req.uid ?? null,
+      closedAt: null,
+      publishedAt: null,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     });
@@ -90,7 +109,7 @@ shiftsRouter.get(
   "/plans/:planId",
   requireAuth,
   requireRole("admin", "director", "manager"),
-  async (req, res) => {
+  async (req: AuthRequest, res) => {
     const { planId } = req.params;
     const planRef = db().collection("shiftPlans").doc(planId);
 
@@ -105,12 +124,21 @@ shiftsRouter.get(
       return;
     }
 
-    res.json({
+    const planData = planDoc.data()!;
+    const response: Record<string, unknown> = {
       id: planDoc.id,
-      ...planDoc.data(),
+      ...planData,
       employees: employeesSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
       shifts: shiftsSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
-    });
+    };
+
+    // Include snapshot for closed plans (employees see this instead of real shifts)
+    if (planData.status === "closed") {
+      const snapshotSnap = await planRef.collection("shiftsSnapshot").get();
+      response.shiftsSnapshot = snapshotSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    }
+
+    res.json(response);
   }
 );
 
@@ -124,7 +152,8 @@ shiftsRouter.patch(
     const body = req.body as Record<string, unknown>;
     const newStatus = body.status as string;
 
-    const planDoc = await db().collection("shiftPlans").doc(planId).get();
+    const planRef = db().collection("shiftPlans").doc(planId);
+    const planDoc = await planRef.get();
     if (!planDoc.exists) {
       res.status(404).json({ error: "Plán nenalezen" });
       return;
@@ -132,8 +161,9 @@ shiftsRouter.patch(
 
     const currentStatus = planDoc.data()?.status as string;
     const validTransitions: Record<string, string> = {
-      draft: "open",
-      open: "published",
+      created: "opened",
+      opened: "closed",
+      closed: "published",
     };
 
     if (validTransitions[currentStatus] !== newStatus) {
@@ -141,7 +171,17 @@ shiftsRouter.patch(
       return;
     }
 
-    await db().collection("shiftPlans").doc(planId).update({
+    // On close: snapshot current shifts for employee view
+    if (newStatus === "closed") {
+      await snapshotShifts(planRef);
+    }
+
+    // On publish: delete the snapshot (no longer needed)
+    if (newStatus === "published") {
+      await deleteCollection(planRef.collection("shiftsSnapshot"));
+    }
+
+    await planRef.update({
       status: newStatus,
       updatedAt: FieldValue.serverTimestamp(),
     });
@@ -149,7 +189,39 @@ shiftsRouter.patch(
   }
 );
 
-// DELETE /shifts/plans/:planId — delete plan (admin only, draft only)
+// PATCH /shifts/plans/:planId/deadlines — set automatic transition deadlines
+shiftsRouter.patch(
+  "/plans/:planId/deadlines",
+  requireAuth,
+  requireRole("admin", "director", "manager"),
+  async (req, res) => {
+    const { planId } = req.params;
+    const body = req.body as Record<string, unknown>;
+
+    const planRef = db().collection("shiftPlans").doc(planId);
+    const planDoc = await planRef.get();
+    if (!planDoc.exists) {
+      res.status(404).json({ error: "Plán nenalezen" });
+      return;
+    }
+
+    const update: Record<string, unknown> = {
+      updatedAt: FieldValue.serverTimestamp(),
+    };
+
+    if ("closedAt" in body) {
+      update.closedAt = body.closedAt ?? null;
+    }
+    if ("publishedAt" in body) {
+      update.publishedAt = body.publishedAt ?? null;
+    }
+
+    await planRef.update(update);
+    res.json({ ok: true });
+  }
+);
+
+// DELETE /shifts/plans/:planId — delete plan (admin only, created only)
 shiftsRouter.delete(
   "/plans/:planId",
   requireAuth,
@@ -163,12 +235,12 @@ shiftsRouter.delete(
       res.status(404).json({ error: "Plán nenalezen" });
       return;
     }
-    if (planDoc.data()?.status !== "draft") {
-      res.status(400).json({ error: "Smazat lze pouze plán ve stavu Koncept" });
+    if (planDoc.data()?.status !== "created") {
+      res.status(400).json({ error: "Smazat lze pouze plán ve stavu Vytvořený" });
       return;
     }
 
-    const subCols = ["planEmployees", "shifts", "rules", "unavailabilityRequests"];
+    const subCols = ["planEmployees", "shifts", "shiftsSnapshot", "rules", "unavailabilityRequests"];
     for (const col of subCols) {
       await deleteCollection(planRef.collection(col));
     }

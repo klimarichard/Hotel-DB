@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 import { useAuth } from "../hooks/useAuth";
 import { parseShiftExpression } from "../lib/shiftConstants";
@@ -9,13 +9,15 @@ import styles from "./ShiftPlannerPage.module.css";
 
 // ─── Shared types ─────────────────────────────────────────────────────────────
 
+export type PlanStatus = "created" | "opened" | "closed" | "published";
+
 export interface PlanEmployee {
   id: string;
   employeeId: string;
   firstName: string;
   lastName: string;
   section: "vedoucí" | "recepce" | "portýři";
-  primaryShiftType: "D" | "N" | "R" | null;
+  primaryShiftType: "D" | "N" | "R" | "DP" | "NP" | null;
   primaryHotel: string | null;
   displayOrder: number;
 }
@@ -34,8 +36,10 @@ export interface PlanDetail {
   id: string;
   month: number;
   year: number;
-  status: "draft" | "open" | "published";
+  status: PlanStatus;
   createdBy: string;
+  closedAt: string | null;
+  publishedAt: string | null;
   employees: PlanEmployee[];
   shifts: ShiftDoc[];
 }
@@ -44,7 +48,7 @@ interface PlanListItem {
   id: string;
   month: number;
   year: number;
-  status: "draft" | "open" | "published";
+  status: PlanStatus;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -54,13 +58,39 @@ const MONTH_NAMES = [
   "Červenec", "Srpen", "Září", "Říjen", "Listopad", "Prosinec",
 ];
 
+const STATUS_LABELS: Record<PlanStatus, string> = {
+  created: "Vytvořený",
+  opened: "Otevřený",
+  closed: "Uzavřený",
+  published: "Publikovaný",
+};
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function deadlineCountdown(iso: string): string {
+  const diff = new Date(iso).getTime() - Date.now();
+  if (diff <= 0) return "prošel";
+  const hours = Math.floor(diff / 3600000);
+  const days = Math.floor(hours / 24);
+  if (days > 0) return `za ${days}d ${hours % 24}h`;
+  const mins = Math.floor((diff % 3600000) / 60000);
+  return `za ${hours}h ${mins}m`;
+}
+
+function toDatetimeLocal(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  // Format: YYYY-MM-DDTHH:MM
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function StatusBadge({ status }: { status: "draft" | "open" | "published" }) {
-  const map = { draft: "Koncept", open: "Otevřený", published: "Publikovaný" };
+function StatusBadge({ status }: { status: PlanStatus }) {
   return (
     <span className={`${styles.badge} ${styles[`badge_${status}`]}`}>
-      {map[status]}
+      {STATUS_LABELS[status]}
     </span>
   );
 }
@@ -85,7 +115,7 @@ export default function ShiftPlannerPage() {
 
   // ── Load plan for selected month/year ──────────────────────────────────────
 
-  useEffect(() => {
+  const loadPlan = useCallback(() => {
     setLoading(true);
     setError(null);
     setPlan(null);
@@ -107,6 +137,50 @@ export default function ShiftPlannerPage() {
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, [selectedMonth, selectedYear]);
+
+  useEffect(() => {
+    loadPlan();
+  }, [loadPlan]);
+
+  // ── Automatic deadline checker ─────────────────────────────────────────────
+
+  const deadlineTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    async function checkDeadlines() {
+      if (!plan) return;
+
+      // opened → closed
+      if (plan.status === "opened" && plan.closedAt) {
+        if (new Date(plan.closedAt).getTime() <= Date.now()) {
+          try {
+            await api.patch(`/shifts/plans/${plan.id}`, { status: "closed" });
+            loadPlan(); // reload to get snapshot
+          } catch { /* ignore */ }
+          return;
+        }
+      }
+
+      // closed → published
+      if (plan.status === "closed" && plan.publishedAt) {
+        if (new Date(plan.publishedAt).getTime() <= Date.now()) {
+          try {
+            await api.patch(`/shifts/plans/${plan.id}`, { status: "published" });
+            setPlan((prev) => (prev ? { ...prev, status: "published" } : prev));
+          } catch { /* ignore */ }
+          return;
+        }
+      }
+    }
+
+    checkDeadlines();
+
+    // Check every 60 seconds
+    deadlineTimerRef.current = setInterval(checkDeadlines, 60000);
+    return () => {
+      if (deadlineTimerRef.current) clearInterval(deadlineTimerRef.current);
+    };
+  }, [plan?.id, plan?.status, plan?.closedAt, plan?.publishedAt, loadPlan]);
 
   // ── Month navigation ───────────────────────────────────────────────────────
 
@@ -146,12 +220,13 @@ export default function ShiftPlannerPage() {
     }
   }
 
-  async function handleTransitionStatus(newStatus: "open" | "published") {
+  async function handleTransitionStatus(newStatus: PlanStatus) {
     if (!plan) return;
     setActionLoading(true);
     try {
       await api.patch(`/shifts/plans/${plan.id}`, { status: newStatus });
-      setPlan((prev) => (prev ? { ...prev, status: newStatus } : prev));
+      // Reload to get fresh data (e.g., snapshot on close)
+      loadPlan();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Chyba při změně stavu");
     } finally {
@@ -170,6 +245,19 @@ export default function ShiftPlannerPage() {
       setError(e instanceof Error ? e.message : "Chyba při mazání plánu");
     } finally {
       setActionLoading(false);
+    }
+  }
+
+  // ── Deadline management ────────────────────────────────────────────────────
+
+  async function handleDeadlineChange(field: "closedAt" | "publishedAt", value: string) {
+    if (!plan) return;
+    const iso = value ? new Date(value).toISOString() : null;
+    try {
+      await api.patch(`/shifts/plans/${plan.id}/deadlines`, { [field]: iso });
+      setPlan((prev) => (prev ? { ...prev, [field]: iso } : prev));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Chyba při nastavení termínu");
     }
   }
 
@@ -253,18 +341,29 @@ export default function ShiftPlannerPage() {
             )}
 
             {/* Open plan */}
-            {plan?.status === "draft" && canEdit && (
+            {plan?.status === "created" && canEdit && (
               <button
                 className={styles.primaryBtn}
-                onClick={() => handleTransitionStatus("open")}
+                onClick={() => handleTransitionStatus("opened")}
                 disabled={actionLoading}
               >
                 Otevřít plán
               </button>
             )}
 
+            {/* Close plan */}
+            {plan?.status === "opened" && canEdit && (
+              <button
+                className={styles.primaryBtn}
+                onClick={() => handleTransitionStatus("closed")}
+                disabled={actionLoading}
+              >
+                Uzavřít plán
+              </button>
+            )}
+
             {/* Publish plan */}
-            {plan?.status === "open" && canPublish && (
+            {plan?.status === "closed" && canPublish && (
               <button
                 className={styles.primaryBtn}
                 onClick={() => handleTransitionStatus("published")}
@@ -294,8 +393,8 @@ export default function ShiftPlannerPage() {
               </button>
             )}
 
-            {/* Delete plan (admin, draft only) */}
-            {plan?.status === "draft" && role === "admin" && (
+            {/* Delete plan (admin, created only) */}
+            {plan?.status === "created" && role === "admin" && (
               <button
                 className={styles.dangerBtn}
                 onClick={handleDeletePlan}
@@ -305,6 +404,60 @@ export default function ShiftPlannerPage() {
               </button>
             )}
           </div>
+
+          {/* Deadline bar */}
+          {plan && canEdit && (plan.status === "opened" || plan.status === "closed") && (
+            <div className={styles.deadlineBar}>
+              {plan.status === "opened" && (
+                <div className={styles.deadlineItem}>
+                  <label className={styles.deadlineLabel}>Uzavření:</label>
+                  <input
+                    type="datetime-local"
+                    className={styles.deadlineInput}
+                    value={toDatetimeLocal(plan.closedAt)}
+                    onChange={(e) => handleDeadlineChange("closedAt", e.target.value)}
+                  />
+                  {plan.closedAt && (
+                    <>
+                      <span className={styles.deadlineCountdown}>
+                        ({deadlineCountdown(plan.closedAt)})
+                      </span>
+                      <button
+                        className={styles.deadlineClear}
+                        onClick={() => handleDeadlineChange("closedAt", "")}
+                        title="Zrušit termín"
+                      >
+                        ×
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+              <div className={styles.deadlineItem}>
+                <label className={styles.deadlineLabel}>Publikování:</label>
+                <input
+                  type="datetime-local"
+                  className={styles.deadlineInput}
+                  value={toDatetimeLocal(plan.publishedAt)}
+                  onChange={(e) => handleDeadlineChange("publishedAt", e.target.value)}
+                />
+                {plan.publishedAt && (
+                  <>
+                    <span className={styles.deadlineCountdown}>
+                      ({deadlineCountdown(plan.publishedAt)})
+                    </span>
+                    <button
+                      className={styles.deadlineClear}
+                      onClick={() => handleDeadlineChange("publishedAt", "")}
+                      title="Zrušit termín"
+                    >
+                      ×
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Unavailability panel */}
           {plan && showUnavailability && (
@@ -321,7 +474,7 @@ export default function ShiftPlannerPage() {
             <ShiftGrid
               plan={plan}
               onCellSave={handleCellSave}
-              readOnly={plan.status === "published" || !canEdit}
+              readOnly={!canEdit}
             />
           )}
         </>

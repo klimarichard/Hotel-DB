@@ -4,6 +4,8 @@ export const SHIFT_HOURS: Record<string, number> = {
   R: 8,
   ZD: 8,
   ZN: 8,
+  DP: 12,
+  NP: 12,
   X: 0,
 };
 
@@ -56,6 +58,12 @@ function parseSegment(token: string): ShiftSegment | { error: string } {
     remainder = token.slice(2);
   } else if (token.startsWith("ZN")) {
     code = "ZN";
+    remainder = token.slice(2);
+  } else if (token.startsWith("DP")) {
+    code = "DP";
+    remainder = token.slice(2);
+  } else if (token.startsWith("NP")) {
+    code = "NP";
     remainder = token.slice(2);
   } else if (token.length >= 1 && ["D", "N", "R", "X"].includes(token[0])) {
     code = token[0];
