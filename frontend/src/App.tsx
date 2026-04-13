@@ -8,6 +8,7 @@ import EmployeeFormPage from "@/pages/EmployeeFormPage";
 import SettingsPage from "@/pages/SettingsPage";
 import AlertsPage from "@/pages/AlertsPage";
 import ContractTemplatesPage from "@/pages/ContractTemplatesPage";
+import ShiftPlannerPage from "@/pages/ShiftPlannerPage";
 import { AlertsProvider } from "@/context/AlertsContext";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -44,7 +45,7 @@ export default function App() {
         <Route path="zamestnanci/:id" element={<EmployeeDetailPage />} />
         <Route path="zamestnanci/:id/upravit" element={<EmployeeFormPage />} />
         <Route path="smlouvy" element={<ContractTemplatesPage />} />
-        <Route path="smeny" element={<div>Směny — brzy</div>} />
+        <Route path="smeny" element={<ShiftPlannerPage />} />
         <Route path="mzdy" element={<div>Mzdy — brzy</div>} />
         <Route path="upozorneni" element={<AlertsPage />} />
         <Route path="nastaveni" element={<SettingsPage />} />
