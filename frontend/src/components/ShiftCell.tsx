@@ -30,7 +30,10 @@ export default function ShiftCell({
   const draftParsed = useMemo(() => parseShiftExpression(draft), [draft]);
   const displayParsed = useMemo(() => parseShiftExpression(rawInput), [rawInput]);
 
-  // Focus management: when `focused` prop becomes true, focus the cell or input
+  // Focus management: when `focused` prop becomes true, focus the cell or input.
+  // Intentionally excludes `editing` from deps — adding it would cause the input
+  // to be focused synchronously during the keydown→keypress sequence, making the
+  // first typed character appear twice.
   useEffect(() => {
     if (!focused) return;
     if (editing) {
@@ -38,7 +41,7 @@ export default function ShiftCell({
     } else {
       cellRef.current?.focus();
     }
-  }, [focused, editing]);
+  }, [focused]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // When entering edit mode, focus the input
   useEffect(() => {

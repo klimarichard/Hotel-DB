@@ -20,11 +20,12 @@ export default function ModCell({ code, readOnly, onSave, focused, onNavigate, o
   const inputRef = useRef<HTMLInputElement>(null);
   const cellRef = useRef<HTMLDivElement>(null);
 
+  // Intentionally excludes `editing` from deps — see ShiftCell for explanation.
   useEffect(() => {
     if (!focused) return;
     if (editing) inputRef.current?.focus();
     else cellRef.current?.focus();
-  }, [focused, editing]);
+  }, [focused]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (editing) {
