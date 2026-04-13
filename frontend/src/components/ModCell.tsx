@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { MOD_COLORS, MOD_PERSONS } from "../lib/shiftConstants";
+import { MOD_PERSONS } from "../lib/shiftConstants";
 
 const VALID_CODES = Object.keys(MOD_PERSONS);
 
@@ -122,8 +122,6 @@ export default function ModCell({ code, readOnly, onSave, focused, onNavigate, o
     );
   }
 
-  const colors = code ? (MOD_COLORS[code] ?? { bg: "#f3f4f6", text: "#374151" }) : { bg: "transparent", text: "#374151" };
-
   return (
     <div
       ref={cellRef}
@@ -131,8 +129,8 @@ export default function ModCell({ code, readOnly, onSave, focused, onNavigate, o
       style={{
         width: "100%",
         minHeight: "1.75rem",
-        background: saveError ? "#fef2f2" : colors.bg,
-        color: saveError ? "#dc2626" : colors.text,
+        background: saveError ? "#fef2f2" : "transparent",
+        color: saveError ? "#dc2626" : "#111827",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",

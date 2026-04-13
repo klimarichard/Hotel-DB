@@ -90,6 +90,9 @@ export default function ShiftGrid({
     for (const emp of plan.employees) {
       map.get(emp.section as Section)?.push(emp);
     }
+    for (const sec of SECTIONS) {
+      map.get(sec)?.sort((a, b) => a.displayOrder - b.displayOrder);
+    }
     return map;
   }, [plan.employees]);
 

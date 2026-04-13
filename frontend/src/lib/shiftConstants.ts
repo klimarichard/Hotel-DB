@@ -87,7 +87,7 @@ export const MOD_PERSONS: Record<string, string> = {
   V: "Viktor Vondra",
   R: "Richard Klíma",
   N: "Anastázie Kalinina",
-  O: "Oksana Smolyak",
+  O: "Oxana Smolyak",
   K: "Kateřina Zezulková",
   A: "Aruzhan Kassimkulova",
 };

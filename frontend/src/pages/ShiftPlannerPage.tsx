@@ -5,6 +5,7 @@ import { parseShiftExpression } from "../lib/shiftConstants";
 import ShiftGrid from "../components/ShiftGrid";
 import AddEmployeeToPlanModal from "../components/AddEmployeeToPlanModal";
 import EditEmployeeInPlanModal from "../components/EditEmployeeInPlanModal";
+import ConfirmModal from "../components/ConfirmModal";
 import UnavailabilityPanel from "../components/UnavailabilityPanel";
 import styles from "./ShiftPlannerPage.module.css";
 
@@ -73,6 +74,12 @@ const STATUS_LABELS: Record<PlanStatus, string> = {
   published: "Publikovaný",
 };
 
+const PREV_STATUS: Partial<Record<PlanStatus, PlanStatus>> = {
+  opened: "created",
+  closed: "opened",
+  published: "closed",
+};
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function deadlineCountdown(iso: string): string {
@@ -118,6 +125,13 @@ export default function ShiftPlannerPage() {
   const [showUnavailability, setShowUnavailability] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<PlanEmployee | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [confirmModal, setConfirmModal] = useState<{
+    title: string;
+    message: string;
+    confirmLabel: string;
+    danger?: boolean;
+    onConfirm: () => void;
+  } | null>(null);
   const [plansList, setPlansList] = useState<PlanListItem[]>([]);
   const [copyFromId, setCopyFromId] = useState("");
 
@@ -250,18 +264,56 @@ export default function ShiftPlannerPage() {
     }
   }
 
-  async function handleDeletePlan() {
+  function confirmDeletePlan() {
     if (!plan) return;
-    if (!window.confirm("Opravdu smazat tento plán? Tato akce je nevratná.")) return;
-    setActionLoading(true);
-    try {
-      await api.delete(`/shifts/plans/${plan.id}`);
-      setPlan(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Chyba při mazání plánu");
-    } finally {
-      setActionLoading(false);
-    }
+    setConfirmModal({
+      title: "Smazat plán",
+      message: `Opravdu smazat plán ${MONTH_NAMES[plan.month - 1]} ${plan.year}? Tato akce je nevratná — smažou se všechny směny i zaměstnanci v plánu.`,
+      confirmLabel: "Smazat",
+      danger: true,
+      onConfirm: async () => {
+        setConfirmModal(null);
+        setActionLoading(true);
+        try {
+          await api.delete(`/shifts/plans/${plan.id}`);
+          setPlan(null);
+        } catch (e) {
+          setError(e instanceof Error ? e.message : "Chyba při mazání plánu");
+        } finally {
+          setActionLoading(false);
+        }
+      },
+    });
+  }
+
+  function confirmRevertPlan() {
+    if (!plan) return;
+    const prevStatus = PREV_STATUS[plan.status];
+    if (!prevStatus) return;
+    const STATUS_LABELS_CZ: Record<PlanStatus, string> = {
+      created: "Vytvořený",
+      opened: "Otevřený",
+      closed: "Uzavřený",
+      published: "Publikovaný",
+    };
+    setConfirmModal({
+      title: "Vrátit plán",
+      message: `Vrátit plán zpět do stavu „${STATUS_LABELS_CZ[prevStatus]}"?`,
+      confirmLabel: "Vrátit",
+      danger: false,
+      onConfirm: async () => {
+        setConfirmModal(null);
+        setActionLoading(true);
+        try {
+          await api.patch(`/shifts/plans/${plan.id}`, { status: prevStatus });
+          loadPlan();
+        } catch (e) {
+          setError(e instanceof Error ? e.message : "Chyba při vrácení stavu");
+        } finally {
+          setActionLoading(false);
+        }
+      },
+    });
   }
 
   // ── Deadline management ────────────────────────────────────────────────────
@@ -274,6 +326,22 @@ export default function ShiftPlannerPage() {
       setPlan((prev) => (prev ? { ...prev, [field]: iso } : prev));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Chyba při nastavení termínu");
+    }
+  }
+
+  // ── Copy employees into existing created plan ──────────────────────────────
+
+  async function handleCopyEmployees() {
+    if (!plan || !copyFromId) return;
+    setActionLoading(true);
+    try {
+      await api.post(`/shifts/plans/${plan.id}/copy-employees`, { sourcePlanId: copyFromId });
+      await loadPlan();
+      setCopyFromId("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Chyba při kopírování zaměstnanců");
+    } finally {
+      setActionLoading(false);
     }
   }
 
@@ -462,6 +530,35 @@ export default function ShiftPlannerPage() {
               </button>
             )}
 
+            {/* Copy employees into existing created plan */}
+            {plan?.status === "created" && canEdit && plansList.filter(p => p.id !== plan.id).length > 0 && (
+              <>
+                <select
+                  className={styles.copyFromSelect}
+                  value={copyFromId}
+                  onChange={(e) => setCopyFromId(e.target.value)}
+                >
+                  <option value="">Kopírovat zaměstnance z…</option>
+                  {plansList
+                    .filter((p) => p.id !== plan.id)
+                    .map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {MONTH_NAMES[p.month - 1]} {p.year}
+                      </option>
+                    ))}
+                </select>
+                {copyFromId && (
+                  <button
+                    className={styles.secondaryBtn}
+                    onClick={handleCopyEmployees}
+                    disabled={actionLoading}
+                  >
+                    Kopírovat
+                  </button>
+                )}
+              </>
+            )}
+
             {/* Unavailability requests toggle */}
             {plan && canEdit && (
               <button
@@ -472,11 +569,22 @@ export default function ShiftPlannerPage() {
               </button>
             )}
 
-            {/* Delete plan (admin, created only) */}
-            {plan?.status === "created" && role === "admin" && (
+            {/* Revert plan (admin only) */}
+            {plan && role === "admin" && plan.status !== "created" && (
+              <button
+                className={styles.secondaryBtn}
+                onClick={confirmRevertPlan}
+                disabled={actionLoading}
+              >
+                ← Vrátit zpět
+              </button>
+            )}
+
+            {/* Delete plan (admin, any status) */}
+            {plan && role === "admin" && (
               <button
                 className={styles.dangerBtn}
-                onClick={handleDeletePlan}
+                onClick={confirmDeletePlan}
                 disabled={actionLoading}
               >
                 Smazat plán
@@ -576,6 +684,16 @@ export default function ShiftPlannerPage() {
             );
             setShowAddEmployee(false);
           }}
+        />
+      )}
+      {confirmModal && (
+        <ConfirmModal
+          title={confirmModal.title}
+          message={confirmModal.message}
+          confirmLabel={confirmModal.confirmLabel}
+          danger={confirmModal.danger}
+          onConfirm={confirmModal.onConfirm}
+          onCancel={() => setConfirmModal(null)}
         />
       )}
       {editingEmployee && plan && (

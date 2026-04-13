@@ -77,7 +77,7 @@
 /* ── Weekends ─────────────────────────────────────────────────────────── */
 
 .weekend {
-  background: #fafafa;
+  background: #f0f4ff;
 }
 
 .holiday {
@@ -201,8 +201,8 @@
   display: inline-block;
   font-size: 0.65rem;
   font-weight: 700;
-  color: #6d28d9;
-  background: #ede9fe;
+  color: #6b7280;
+  background: #f3f4f6;
   border-radius: 3px;
   padding: 0 3px;
   line-height: 1.4;

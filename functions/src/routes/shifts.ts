@@ -167,8 +167,17 @@ shiftsRouter.patch(
       opened: "closed",
       closed: "published",
     };
+    const reverseTransitions: Record<string, string> = {
+      opened: "created",
+      closed: "opened",
+      published: "closed",
+    };
 
-    if (validTransitions[currentStatus] !== newStatus) {
+    const isForward = validTransitions[currentStatus] === newStatus;
+    const isReverse = reverseTransitions[currentStatus] === newStatus;
+    const userRole = (req as any).user?.role as string;
+
+    if (!isForward && !(isReverse && userRole === "admin")) {
       res.status(400).json({ error: "Neplatný přechod stavu" });
       return;
     }
@@ -180,6 +189,11 @@ shiftsRouter.patch(
 
     // On publish: delete the snapshot (no longer needed)
     if (newStatus === "published") {
+      await deleteCollection(planRef.collection("shiftsSnapshot"));
+    }
+
+    // On revert from closed → opened: delete the snapshot
+    if (currentStatus === "closed" && newStatus === "opened") {
       await deleteCollection(planRef.collection("shiftsSnapshot"));
     }
 
@@ -223,7 +237,7 @@ shiftsRouter.patch(
   }
 );
 
-// DELETE /shifts/plans/:planId — delete plan (admin only, created only)
+// DELETE /shifts/plans/:planId — delete plan (admin only, any status)
 shiftsRouter.delete(
   "/plans/:planId",
   requireAuth,
@@ -235,10 +249,6 @@ shiftsRouter.delete(
 
     if (!planDoc.exists) {
       res.status(404).json({ error: "Plán nenalezen" });
-      return;
-    }
-    if (planDoc.data()?.status !== "created") {
-      res.status(400).json({ error: "Smazat lze pouze plán ve stavu Vytvořený" });
       return;
     }
 
