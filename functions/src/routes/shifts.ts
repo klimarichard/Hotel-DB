@@ -42,6 +42,99 @@ async function snapshotShifts(planRef: admin.firestore.DocumentReference): Promi
   }
 }
 
+// ─── Vacation X helpers ──────────────────────────────────────────────────────
+
+/**
+ * For a given plan and employee, find all approved vacation requests that
+ * overlap with the plan's month and batch-write X shift docs.
+ * Exported so vacation.ts can call applyVacationXsToPlans.
+ */
+export async function applyVacationXs(
+  planRef: admin.firestore.DocumentReference,
+  employeeId: string,
+  year: number,
+  month: number
+): Promise<void> {
+  const monthStart = `${year}-${String(month).padStart(2, "0")}-01`;
+  const lastDay = new Date(year, month, 0).getDate();
+  const monthEnd = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+
+  const snap = await db()
+    .collection("vacationRequests")
+    .where("employeeId", "==", employeeId)
+    .where("status", "==", "approved")
+    .where("endDate", ">=", monthStart)
+    .get();
+
+  const overlapping = snap.docs.filter((d) => (d.data().startDate as string) <= monthEnd);
+  if (overlapping.length === 0) return;
+
+  const batch = db().batch();
+  for (const doc of overlapping) {
+    const { startDate, endDate } = doc.data() as { startDate: string; endDate: string };
+    const clampedStart = startDate < monthStart ? monthStart : startDate;
+    const clampedEnd = endDate > monthEnd ? monthEnd : endDate;
+    const cur = new Date(clampedStart + "T00:00:00");
+    const end = new Date(clampedEnd + "T00:00:00");
+    while (cur <= end) {
+      const dateStr = cur.toISOString().slice(0, 10);
+      const docId = `${employeeId}_${dateStr}`;
+      batch.set(planRef.collection("shifts").doc(docId), {
+        employeeId,
+        date: dateStr,
+        rawInput: "X",
+        segments: [{ code: "X", hotel: null, hours: 0 }],
+        hoursComputed: 0,
+        isDouble: false,
+        status: "day_off",
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+      cur.setDate(cur.getDate() + 1);
+    }
+  }
+  await batch.commit();
+}
+
+/**
+ * Called when a vacation request is approved. Finds all existing plans
+ * whose month overlaps with the date range and applies X shifts if the
+ * employee is in that plan.
+ */
+export async function applyVacationXsToPlans(
+  employeeId: string,
+  startDate: string,
+  endDate: string
+): Promise<void> {
+  const startD = new Date(startDate + "T00:00:00");
+  const endD = new Date(endDate + "T00:00:00");
+  const cur = new Date(startD.getFullYear(), startD.getMonth(), 1);
+  const months: { year: number; month: number }[] = [];
+  while (cur <= endD) {
+    months.push({ year: cur.getFullYear(), month: cur.getMonth() + 1 });
+    cur.setMonth(cur.getMonth() + 1);
+  }
+
+  for (const { year, month } of months) {
+    const planSnap = await db()
+      .collection("shiftPlans")
+      .where("year", "==", year)
+      .where("month", "==", month)
+      .limit(1)
+      .get();
+    if (planSnap.empty) continue;
+    const planDoc = planSnap.docs[0];
+
+    const empSnap = await planDoc.ref
+      .collection("planEmployees")
+      .where("employeeId", "==", employeeId)
+      .limit(1)
+      .get();
+    if (empSnap.empty) continue;
+
+    await applyVacationXs(planDoc.ref, employeeId, year, month);
+  }
+}
+
 // ─── Plans ──────────────────────────────────────────────────────────────────
 
 // GET /shifts/plans — list all plans
@@ -353,21 +446,29 @@ shiftsRouter.post(
       return;
     }
 
-    const ref = await db()
-      .collection("shiftPlans")
-      .doc(planId)
-      .collection("planEmployees")
-      .add({
-        employeeId,
-        firstName,
-        lastName,
-        section,
-        primaryShiftType,
-        primaryHotel,
-        displayOrder,
-        active,
-        createdAt: FieldValue.serverTimestamp(),
-      });
+    const planRef = db().collection("shiftPlans").doc(planId);
+    const planDoc = await planRef.get();
+    if (!planDoc.exists) {
+      res.status(404).json({ error: "Plán nenalezen" });
+      return;
+    }
+    const planData = planDoc.data() as Record<string, unknown>;
+
+    const ref = await planRef.collection("planEmployees").add({
+      employeeId,
+      firstName,
+      lastName,
+      section,
+      primaryShiftType,
+      primaryHotel,
+      displayOrder,
+      active,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+
+    // Auto-fill approved vacation days as X for this employee in this month
+    await applyVacationXs(planRef, employeeId, planData.year as number, planData.month as number);
+
     res.status(201).json({ id: ref.id });
   }
 );
@@ -471,16 +572,25 @@ shiftsRouter.post(
       return;
     }
 
+    // Fetch target plan to get year/month for vacation X auto-fill
+    const targetPlanDoc = await db().collection("shiftPlans").doc(planId).get();
+    const targetPlanData = targetPlanDoc.data() as Record<string, unknown>;
+    const targetYear = targetPlanData.year as number;
+    const targetMonth = targetPlanData.month as number;
+    const targetPlanRef = db().collection("shiftPlans").doc(planId);
+
     const batch = db().batch();
     for (const doc of sourceSnap.docs) {
-      const ref = db()
-        .collection("shiftPlans")
-        .doc(planId)
-        .collection("planEmployees")
-        .doc(doc.id);
+      const ref = targetPlanRef.collection("planEmployees").doc(doc.id);
       batch.set(ref, { ...doc.data(), createdAt: FieldValue.serverTimestamp() });
     }
     await batch.commit();
+
+    // Auto-fill approved vacation days as X for each copied employee
+    for (const doc of sourceSnap.docs) {
+      await applyVacationXs(targetPlanRef, doc.data().employeeId as string, targetYear, targetMonth);
+    }
+
     res.json({ ok: true, copied: sourceSnap.size });
   }
 );

@@ -10,6 +10,7 @@ import { companiesRouter } from "./routes/companies";
 import { contractTemplatesRouter } from "./routes/contractTemplates";
 import { contractsRouter } from "./routes/contracts";
 import { shiftsRouter } from "./routes/shifts";
+import { vacationRouter } from "./routes/vacation";
 
 admin.initializeApp();
 
@@ -26,6 +27,7 @@ app.use("/companies", companiesRouter);
 app.use("/contractTemplates", contractTemplatesRouter);
 app.use("/", contractsRouter);
 app.use("/shifts", shiftsRouter);
+app.use("/vacation", vacationRouter);
 
 // Health check
 app.get("/health", (_req, res) => {
