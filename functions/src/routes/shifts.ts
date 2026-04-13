@@ -175,7 +175,7 @@ shiftsRouter.patch(
 
     const isForward = validTransitions[currentStatus] === newStatus;
     const isReverse = reverseTransitions[currentStatus] === newStatus;
-    const userRole = (req as any).user?.role as string;
+    const userRole = (req as AuthRequest).role;
 
     if (!isForward && !(isReverse && userRole === "admin")) {
       res.status(400).json({ error: "Neplatný přechod stavu" });

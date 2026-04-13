@@ -105,9 +105,6 @@
   border-bottom: 1px solid #f1f5f9;
 }
 
-.empRow:hover .nameCell {
-  background: #f8fafc;
-}
 
 .nameCell {
   position: sticky;
@@ -214,7 +211,7 @@
   margin-left: 0.25rem;
 }
 
-.empRow:hover .empActions {
+.nameCell:hover .empActions {
   display: inline-flex;
 }
 
