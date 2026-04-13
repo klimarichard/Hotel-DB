@@ -29,7 +29,7 @@ const ROLE_LABELS: Record<UserRole, string> = {
   employee: "Zaměstnanec",
 };
 
-const emptyForm = { name: "", email: "", password: "", role: "employee" as UserRole };
+const emptyForm = { name: "", email: "", password: "", role: "employee" as UserRole, employeeId: "" };
 
 export default function SettingsPage() {
   const { role, loading: authLoading } = useAuth();
@@ -149,7 +149,10 @@ export default function SettingsPage() {
     setFormError(null);
     setSaving(true);
     try {
-      await authApi.createUser(form);
+      await authApi.createUser({
+        ...form,
+        employeeId: form.employeeId || undefined,
+      });
       setShowCreate(false);
       setForm(emptyForm);
       await loadUsers();
@@ -257,6 +260,21 @@ export default function SettingsPage() {
                 >
                   {ROLES.map((r) => (
                     <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+                  ))}
+                </select>
+              </div>
+              <div className={styles.field}>
+                <label className={styles.label}>Zaměstnanec (volitelné)</label>
+                <select
+                  className={styles.input}
+                  value={form.employeeId}
+                  onChange={(e) => setForm({ ...form, employeeId: e.target.value })}
+                >
+                  <option value="">— Nepropojovat —</option>
+                  {employees.map((emp) => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.lastName} {emp.firstName}
+                    </option>
                   ))}
                 </select>
               </div>
