@@ -56,7 +56,7 @@ Custom claims set via Firebase Admin SDK on the `users/` Firestore collection.
 ### Sensitive encrypted fields
 These fields are AES-256-GCM encrypted before writing to Firestore. They must **never** be stored in plaintext or returned raw to the frontend:
 - `employees.birthNumber` (rodné číslo)
-- `documents.idCardNumber`, `documents.idCardExpiry`
+- `documents.idCardNumber` (`idCardExpiry` was removed from the UI — field deprecated)
 - `benefits.insuranceNumber`, `benefits.bankAccount`
 
 Every reveal of a sensitive field is logged to the `auditLog/` Firestore collection.
@@ -104,7 +104,7 @@ npm run dev
 - Node.js v24 is installed at `C:\Program Files\nodejs\node.exe` — not always on PATH, use full path if `node` is not found
 - Functions emulator runs on port **5002** (not 5001 — that port is taken on this machine)
 - To seed an admin user into the emulators: `"C:\Program Files\nodejs\node.exe" scripts\seed-admin.js` (from project root, emulators must be running)
-- To seed employees from DTB.xlsx: `"C:\Program Files\nodejs\node.exe" scripts\seed-employees.js` (from project root, emulators must be running, DTB.xlsx must be at project root)
+- To seed employees from DTB.csv: `"C:\Program Files\nodejs\node.exe" scripts\seed-employees.js` (from project root, emulators must be running, DTB.csv must be at project root — UTF-8 with BOM, semicolon-delimited)
 
 ### Phase 6 — key implementation notes
 - `vacationRequests` is a top-level Firestore collection (not a sub-collection)
@@ -131,6 +131,17 @@ npm run dev
 - Settings page uses a **tab-based layout** — every new settings section must be a new tab, never appended below
 - 9 contract types: 7 history-tied + 2 standalone (hmotná odpovědnost, multisport)
 - TipTap extensions installed: StarterKit, Underline, TextStyle, FontFamily, TextAlign, Color, Image
+
+### Phase 3 — additional work done on branch `feature/employee-page-phase3-additions`
+- Added **Benefity** collapsible section to employee detail page (multisport, home office hodin/měsíc, náhrady)
+- Added **Benefity sub-section** to employee add/edit form (checkboxes + number input); benefits fields now include `multisport`, `homeOffice` (numeric), `allowances`
+- Added `passportAuthority` field to both form and detail page
+- Removed `idCardExpiry` from UI (form + detail page) — field deprecated; stays `null` in Firestore
+- Removed **Pracovní zařazení** section from add/edit form — job title, department, contract type, company are set exclusively via employment history modal
+- Expanded EDUCATIONS dropdown to full Czech KKOV classification codes (A–V)
+- Contact address row hidden on detail page when same as permanent address
+- Subsection labels now have border-top separator for visual clarity
+- Seed scripts switched from CP1250/iconv + DTB.xlsx to UTF-8 BOM-stripped DTB.csv; column mapping corrected; `mapMaritalStatus()` added; employment history no longer seeded from CSV (must be added via UI); `seed-admin.js` added to `seed-all.js` run order
 
 ### Phase 3 — deferred items (still pending)
 - `jobPositions` lookup table — dropdown for "pracovní pozice" in history modal and salary defaults bound to position
