@@ -3,6 +3,7 @@ HR_App_Specification.docx
 
 # Employee database export (sensitive data)
 DTB.xlsx
+DTB.csv
 
 # Dependencies
 node_modules/

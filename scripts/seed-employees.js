@@ -1,337 +1,323 @@
 /**
- * Seeds employees from DTB.xlsx into the Firestore emulator.
+ * Seeds employees from DTB.csv into the Firestore emulator.
  *
  * Run with:
  *   "C:\Program Files\nodejs\node.exe" scripts\seed-employees.js
  *
  * Prerequisites:
  *   1. Firebase emulators must be running
- *   2. DTB.xlsx must be present at project root
+ *   2. DTB.csv must be present at project root
  *   3. ENCRYPTION_KEY must be in functions/.env (64-char hex)
  *
- * The script is idempotent — re-running it will overwrite existing docs.
+ * Idempotent — re-running overwrites existing docs with the same IDs.
+ *
+ * Column mapping (0-indexed, semicolon-delimited):
+ *   0  Příjmení         lastName
+ *   1  Jméno            firstName
+ *   2  Datum narození   birthDate         "DD. MM. YYYY"
+ *   3  Pohlaví          gender            f / m
+ *   4  Číslo OP         idCardNumber      SENSITIVE
+ *   5  Číslo pasu       passportNumber    SENSITIVE
+ *   6  Vydání pasu      passportIssued    "DD. MM. YYYY"
+ *   7  (duplicate of 6 — ignored)
+ *   8  Platnost pasu    passportExpiry    "DD. MM. YYYY"
+ *   9  Vydávající úřad  passportAuthority
+ *  10  Povolení č.      (permit reference number — not stored)
+ *  11  Vydání povolení  residencePermitIssued
+ *  12  Platnost povolení residencePermitExpiry
+ *  13  Typ povolení     residencePermitType
+ *  14  Trvalé bydliště  permanentAddress
+ *  15  Kontaktní adresa contactAddress
+ *  16  Rodné příjmení   birthSurname
+ *  17  Státní příslušnost nationality
+ *  18  Místo narození   placeOfBirth
+ *  19  Rodné číslo      birthNumber       SENSITIVE
+ *  20  Rodinný stav     maritalStatus
+ *  21  Vzdělání         education         Czech KKOV code
+ *  22  Telefon          phone
+ *  23  E-mail           personalEmail
+ *  24  Zdrav. pojišťovna healthInsurance
+ *  25  Číslo pojištěnce insuranceNumber   SENSITIVE
+ *  26  Číslo účtu       bankAccount       SENSITIVE
+ *  27  Multisport       multisport        ANO / empty
+ *  28  HO               homeOffice        ANO / empty
+ *  29  Náhrady          allowances        ANO / empty
+ *  30  Firma            company           HPM / STP
+ *  31  Typ smlouvy      contractType      HPP / DPP / PPP / HPP - mat.
+ *  32  Podpis smlouvy   contractSignDate  "DD. MM. YYYY"
+ *  33  Prac. pozice     jobPosition
+ *  34  Prac. zařazení   department        (always empty in CSV)
+ *  35  Mzda (aktuální)  salary            "16 500"
+ *  36  Ve firmě od      employedFrom      "DD. MM. YYYY"
+ *  37  username         (used by seed-users.js)
+ *  38  password         (used by seed-users.js)
+ *  39  role             (used by seed-users.js)
+ *  40  e-mail           (used by seed-users.js)
  */
 
 process.env.FIREBASE_AUTH_EMULATOR_HOST = '127.0.0.1:9099';
 process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8080';
 
-const path = require('path');
-const fs = require('fs');
+const path   = require('path');
+const fs     = require('fs');
 const crypto = require('crypto');
-
-// Load ENCRYPTION_KEY from functions/.env
-const envPath = path.join(__dirname, '../functions/.env');
-const envContent = fs.readFileSync(envPath, 'utf8');
-const envMatch = envContent.match(/ENCRYPTION_KEY\s*=\s*([0-9a-fA-F]+)/);
-if (!envMatch) {
-  console.error('ERROR: ENCRYPTION_KEY not found in functions/.env');
-  process.exit(1);
-}
-process.env.ENCRYPTION_KEY = envMatch[1];
-
-// Load xlsx — must be installed at project root (npm install xlsx --no-save)
-let XLSX;
-try {
-  XLSX = require('./node_modules/xlsx');
-} catch {
-  XLSX = require('../node_modules/xlsx');
-}
-
-const admin = require('../functions/node_modules/firebase-admin');
-admin.initializeApp({ projectId: 'hotel-hr-app-75581' });
+const iconv  = require('../functions/node_modules/iconv-lite');
+const admin  = require('../functions/node_modules/firebase-admin');
+if (!admin.apps.length) admin.initializeApp({ projectId: 'hotel-hr-app-75581' });
 const db = admin.firestore();
 
-// ─── Encryption (mirrors functions/src/services/encryption.ts) ──────────────
+// ─── Encryption (mirrors functions/src/services/encryption.ts) ───────────────
 
-const ALGORITHM = 'aes-256-gcm';
-const IV_LENGTH = 12;
-const TAG_LENGTH = 16;
-
-function getKey() {
-  const key = process.env.ENCRYPTION_KEY;
-  const buf = Buffer.from(key, 'hex');
-  if (buf.length !== 32) throw new Error('ENCRYPTION_KEY must be 32 bytes (64 hex chars)');
-  return buf;
-}
+const envPath    = path.join(__dirname, '../functions/.env');
+const envContent = fs.readFileSync(envPath, 'utf8');
+const envMatch   = envContent.match(/ENCRYPTION_KEY\s*=\s*([0-9a-fA-F]+)/);
+if (!envMatch) { console.error('ERROR: ENCRYPTION_KEY not found in functions/.env'); process.exit(1); }
+process.env.ENCRYPTION_KEY = envMatch[1];
 
 function encrypt(plaintext) {
-  if (!plaintext || plaintext.toString().trim() === '') return null;
-  const key = getKey();
-  const iv = crypto.randomBytes(IV_LENGTH);
-  const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
-  const encrypted = Buffer.concat([cipher.update(String(plaintext), 'utf8'), cipher.final()]);
-  const tag = cipher.getAuthTag();
-  const combined = Buffer.concat([iv, tag, encrypted]);
-  return combined.toString('base64');
+  if (!plaintext || String(plaintext).trim() === '') return null;
+  const key = Buffer.from(process.env.ENCRYPTION_KEY, 'hex');
+  if (key.length !== 32) throw new Error('ENCRYPTION_KEY must be 32 bytes (64 hex chars)');
+  const iv      = crypto.randomBytes(12);
+  const cipher  = crypto.createCipheriv('aes-256-gcm', key, iv);
+  const enc     = Buffer.concat([cipher.update(String(plaintext), 'utf8'), cipher.final()]);
+  const tag     = cipher.getAuthTag();
+  return Buffer.concat([iv, tag, enc]).toString('base64');
 }
 
-// ─── Helper: Excel serial date → ISO date string ─────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function excelDateToISO(serial) {
-  if (!serial || typeof serial !== 'number') return null;
-  // Excel serial: days since 1900-01-01 (with Lotus 1-2-3 leap year bug)
-  const ms = (serial - 25569) * 86400000;
-  const d = new Date(ms);
-  if (isNaN(d.getTime())) return null;
-  return d.toISOString().slice(0, 10);
+/** Safe string: trim or null. */
+function s(v) {
+  if (v === null || v === undefined) return null;
+  const t = String(v).trim();
+  return t === '' ? null : t;
 }
 
-// ─── Helper: safe string from cell value ─────────────────────────────────────
-
-function str(val) {
-  if (val === undefined || val === null) return null;
-  const s = String(val).trim();
-  return s === '' ? null : s;
+/** Parse Czech date "DD. MM. YYYY" → ISO "YYYY-MM-DD", or null. */
+function csvDateToISO(val) {
+  const str = s(val);
+  if (!str) return null;
+  const m = str.match(/^(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{4})$/);
+  if (!m) return null;
+  return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
 }
 
-function num(val) {
-  if (val === undefined || val === null) return null;
-  const n = Number(val);
+/** Parse salary "16 500" or "16500" → number, or null. */
+function parseSalary(val) {
+  const str = s(val);
+  if (!str) return null;
+  const n = Number(str.replace(/\s/g, ''));
   return isNaN(n) ? null : n;
 }
 
-// ─── Company ID mapping ───────────────────────────────────────────────────────
-
-function mapCompany(firmaVal) {
-  const s = str(firmaVal);
-  if (!s) return null;
-  if (s.includes('HPM') || s.toLowerCase().includes('hotel property')) return 'HPM';
-  if (s.includes('STP') || s.toLowerCase().includes('special tours')) return 'STP';
-  return str(firmaVal);
-}
-
-// ─── Contract type mapping ────────────────────────────────────────────────────
-
-function mapContractType(typVal) {
-  const s = str(typVal);
-  if (!s) return null;
-  const map = {
-    'HPP': 'HPP',
-    'DPP': 'DPP',
-    'PPP': 'PPP',
-    'HPP - mat.': 'HPP',   // maternity leave variant — store as HPP
-    'HPP-mat.': 'HPP',
+/**
+ * Map Czech KKOV education code to app enum.
+ * The CSV stores codes like "R - vysokoškolské bakalářské vzdělání".
+ * We extract the leading letter since the rest may contain garbled chars.
+ */
+function mapEducation(val) {
+  const str = s(val);
+  if (!str) return null;
+  const code = str[0].toUpperCase();
+  const MAP = {
+    'C': 'základní',
+    'Z': 'základní',
+    'H': 'středoškolské',
+    'E': 'středoškolské',
+    'K': 'středoškolské s maturitou',
+    'M': 'středoškolské s maturitou',
+    'L': 'středoškolské s maturitou',
+    'G': 'středoškolské s maturitou',
+    'N': 'vyšší odborné',
+    'R': 'vysokoškolské',
+    'T': 'vysokoškolské',
+    'V': 'vysokoškolské',
   };
-  return map[s] ?? s;
+  return MAP[code] ?? str;
 }
 
-// ─── Main seed function ───────────────────────────────────────────────────────
+/** Normalize contract type. */
+function mapContractType(val) {
+  const str = s(val);
+  if (!str) return null;
+  if (str.startsWith('HPP')) return 'HPP';
+  if (str === 'DPP') return 'DPP';
+  if (str === 'PPP') return 'PPP';
+  return str;
+}
 
-async function seed() {
-  const xlsxPath = path.join(__dirname, '../DTB.xlsx');
-  if (!fs.existsSync(xlsxPath)) {
-    console.error('ERROR: DTB.xlsx not found at project root');
+/** ANO / anything → boolean. */
+function yesNo(val) {
+  const str = s(val);
+  return str === 'ANO' || str === '1' || str === 'yes';
+}
+
+/**
+ * Generate a stable, deterministic employee document ID.
+ * Must stay in sync with the same function in seed-users.js.
+ */
+function makeEmployeeId(lastName, firstName, birthDateISO) {
+  const base = `${lastName ?? ''}_${firstName ?? ''}_${birthDateISO ?? ''}`
+    .toLowerCase()
+    .replace(/[^a-z0-9_]/g, '')
+    .slice(0, 40);
+  return `dtb_${base}`;
+}
+
+// ─── CSV parsing ──────────────────────────────────────────────────────────────
+
+function parseCSV(filePath) {
+  const raw  = fs.readFileSync(filePath);
+  const text = iconv.decode(raw, 'cp1250');
+  const lines = text.split(/\r?\n/).filter(l => l.trim() !== '');
+  // Skip header (row 0)
+  return lines.slice(1).map(l => l.split(';'));
+}
+
+// ─── Main ─────────────────────────────────────────────────────────────────────
+
+async function run() {
+  const csvPath = path.join(__dirname, '../DTB.csv');
+  if (!fs.existsSync(csvPath)) {
+    console.error('ERROR: DTB.csv not found at project root');
     process.exit(1);
   }
 
-  const workbook = XLSX.readFile(xlsxPath);
-  const sheet = workbook.Sheets['DTB'];
-  if (!sheet) {
-    console.error('ERROR: Sheet "DTB" not found in DTB.xlsx');
-    process.exit(1);
-  }
+  const rows = parseCSV(csvPath);
+  console.log(`Found ${rows.length} data rows in DTB.csv`);
 
-  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
+  let created = 0, skipped = 0, errors = 0;
 
-  // Row 0 is the header row; data starts at row 1
-  const dataRows = rows.slice(1).filter(row => {
-    // Only include rows that have a last name or first name (cols 2 & 3)
-    const lastName  = row[2];
-    const firstName = row[3];
-    return (lastName && String(lastName).trim() !== '') ||
-           (firstName && String(firstName).trim() !== '');
-  });
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
 
-  console.log(`Found ${dataRows.length} data rows in DTB.xlsx`);
+    const lastName  = s(r[0]);
+    const firstName = s(r[1]);
+    if (!lastName && !firstName) { skipped++; continue; }
 
-  let created = 0;
-  let skipped = 0;
-  let errors = 0;
+    const birthDate        = csvDateToISO(r[2]);
+    const gender           = s(r[3]);
+    const idCardNumber     = s(r[4]);   // SENSITIVE
+    const passportNumber   = s(r[5]);   // SENSITIVE
+    const passportIssued   = csvDateToISO(r[6]);
+    const passportExpiry   = csvDateToISO(r[8]);
+    const passportAuthority = s(r[9]);
+    // r[10] = permit reference number (not stored in schema)
+    const residencePermitIssued   = csvDateToISO(r[11]);
+    const residencePermitExpiry   = csvDateToISO(r[12]);
+    const residencePermitType     = s(r[13]);
+    const permanentAddress  = s(r[14]);
+    const contactAddress    = s(r[15]);
+    const birthSurname      = s(r[16]);
+    const nationality       = s(r[17]);
+    const placeOfBirth      = s(r[18]);
+    const birthNumber       = s(r[19]);  // SENSITIVE
+    const maritalStatus     = s(r[20]);
+    const education         = mapEducation(r[21]);
+    const phone             = s(r[22]);
+    const personalEmail     = s(r[23]);
+    const healthInsurance   = s(r[24]);
+    const insuranceNumber   = s(r[25]);  // SENSITIVE
+    const bankAccount       = s(r[26]);  // SENSITIVE
+    const multisport        = yesNo(r[27]);
+    const homeOffice        = yesNo(r[28]);
+    const allowances        = yesNo(r[29]);
+    const company           = s(r[30]);
+    const contractType      = mapContractType(r[31]);
+    const contractSignDate  = csvDateToISO(r[32]);
+    const jobPosition       = s(r[33]);
+    // r[34] = department — always empty in CSV
+    const salary            = parseSalary(r[35]);
+    const employedFrom      = csvDateToISO(r[36]);
+    // r[37..40] = user credentials — handled by seed-users.js
 
-  for (let i = 0; i < dataRows.length; i++) {
-    const row = dataRows[i];
-
-    const lastName  = str(row[2]);
-    const firstName = str(row[3]);
-
-    if (!lastName && !firstName) {
-      skipped++;
-      continue;
-    }
-
-    // Column mapping (0-indexed per analysis):
-    // 0  = CHYBY (data quality flag)
-    // 2  = Příjmení (last name)
-    // 3  = Jméno (first name)
-    // 5  = Datum narození (Excel serial date)
-    // 7  = Pohlaví
-    // 8  = Číslo OP (ID card number) — SENSITIVE
-    // 9  = Číslo pasu (passport number) — SENSITIVE
-    // 10 = Vydání pasu (passport issue date, Excel serial)
-    // 11 = Platnost pasu (passport expiry date, Excel serial)
-    // 12 = Vydávající úřad (issuing authority)
-    // 13 = Povolení k pobytu (residence permit type)
-    // 14 = Vydání povolení (permit issue date, Excel serial)
-    // 15 = Platnost povolení (permit expiry date, Excel serial)
-    // 16 = Typ povolení
-    // 18 = Trvalé bydliště (permanent address)
-    // 19 = Kontaktní adresa (contact address)
-    // 20 = Rodné příjmení (birth surname)
-    // 21 = Státní příslušnost (nationality)
-    // 22 = Místo narození (place of birth)
-    // 23 = Rodné číslo (birth number) — SENSITIVE
-    // 24 = Rodinný stav (marital status)
-    // 25 = Vzdělání (education level)
-    // 26 = Telefon (phone)
-    // 27 = E-mail
-    // 28 = Zdrav. pojišťovna (health insurance provider)
-    // 29 = Číslo pojištěnce (insurance number) — SENSITIVE
-    // 30 = Číslo účtu (bank account) — SENSITIVE
-    // 31 = Multisport (card)
-    // 32 = HO (home office)
-    // 34 = Firma (company)
-    // 35 = Typ smlouvy (contract type)
-    // 36 = Podpis smlouvy (contract signature date, Excel serial)
-    // 37 = Pracovní pozice (job position)
-    // 38 = Pracovní zařazení (department)
-    // 39 = Mzda (salary)
-    // 40 = Ve firmě od (employment start date, Excel serial)
-    // 41 = Ve firmě do (employment end date — null for active)
-    // 43 = Úřad práce (labor office registration)
-
-    const chyby           = num(row[0]);
-    const birthDate       = excelDateToISO(row[5]);
-    const gender          = str(row[7]);
-    const idCardNumber    = str(row[8]);    // SENSITIVE
-    const passportNumber  = str(row[9]);    // SENSITIVE
-    const passportIssued  = excelDateToISO(row[10]);
-    const passportExpiry  = excelDateToISO(row[11]);
-    const passportAuthority = str(row[12]);
-    const residencePermitType = str(row[13]);
-    const residencePermitIssued = excelDateToISO(row[14]);
-    const residencePermitExpiry = excelDateToISO(row[15]);
-    const residencePermitCategory = str(row[16]);
-    const permanentAddress = str(row[18]);
-    const contactAddress  = str(row[19]);
-    const birthSurname    = str(row[20]);
-    const nationality     = str(row[21]);
-    const placeOfBirth    = str(row[22]);
-    const birthNumber     = str(row[23]);   // SENSITIVE
-    const maritalStatus   = str(row[24]);
-    const education       = str(row[25]);
-    const phone           = str(row[26]);
-    const email           = str(row[27]);
-    const healthInsurance = str(row[28]);
-    const insuranceNumber = str(row[29]);   // SENSITIVE
-    const bankAccount     = str(row[30]);   // SENSITIVE
-    const multisport      = str(row[31]);
-    const homeOffice      = str(row[32]);
-    const company         = mapCompany(row[34]);
-    const contractType    = mapContractType(row[35]);
-    const contractSignDate = excelDateToISO(row[36]);
-    const jobPosition     = str(row[37]);
-    const department      = str(row[38]);
-    const salary          = num(row[39]);
-    const employedFrom    = excelDateToISO(row[40]);
-    const employedTo      = excelDateToISO(row[41]);
-    const laborOffice     = str(row[43]);
-
-    // Generate a deterministic-ish employee ID from name + birth date
-    // (so re-running the script updates the same doc)
-    const idBase = `${lastName}_${firstName}_${birthDate ?? i}`.toLowerCase()
-      .replace(/[^a-z0-9_]/g, '')
-      .slice(0, 40);
-    const employeeId = `dtb_${idBase}`;
+    const employeeId = makeEmployeeId(lastName, firstName, birthDate);
 
     try {
-      // ── Root employee document ─────────────────────────────────────────────
-      const employeeDoc = {
-        firstName:            firstName ?? '',
-        lastName:             lastName ?? '',
-        birthDate:            birthDate,
-        gender:               gender,
-        nationality:          nationality,
-        placeOfBirth:         placeOfBirth,
-        birthSurname:         birthSurname,
-        maritalStatus:        maritalStatus,
-        education:            education,
-        currentCompanyId:     company,
-        currentDepartment:    department,
-        currentJobTitle:      jobPosition,
-        currentContractType:  contractType,
-        status:               employedTo === null ? 'active' : 'terminated',
-        hasDataIssues:        chyby === 1,
-        createdAt:            new Date().toISOString(),
-        updatedAt:            new Date().toISOString(),
-        // Encrypted field stored on root (required for decryption in employees API)
-        birthNumber:          encrypt(birthNumber),
-      };
+      // ── Root employee document ───────────────────────────────────────────────
+      await db.collection('employees').doc(employeeId).set({
+        firstName:           firstName ?? '',
+        lastName:            lastName ?? '',
+        birthDate,
+        gender,
+        nationality,
+        placeOfBirth,
+        birthSurname,
+        maritalStatus,
+        education,
+        currentCompanyId:    company,
+        currentDepartment:   null,           // always empty in CSV
+        currentJobTitle:     jobPosition,
+        currentContractType: contractType,
+        status:              'active',       // no end-date column in CSV
+        birthNumber:         encrypt(birthNumber),
+        createdAt:           new Date().toISOString(),
+        updatedAt:           new Date().toISOString(),
+      }, { merge: true });
 
-      const empRef = db.collection('employees').doc(employeeId);
-      await empRef.set(employeeDoc, { merge: true });
+      // ── documents sub-collection ─────────────────────────────────────────────
+      await db.collection('employees').doc(employeeId)
+        .collection('documents').doc('main').set({
+          idCardNumber:           encrypt(idCardNumber),
+          idCardExpiry:           null,             // not in CSV
+          passportNumber:         encrypt(passportNumber),
+          passportIssued,
+          passportExpiry,
+          passportAuthority,
+          residencePermitType,
+          residencePermitCategory: null,            // not in CSV
+          residencePermitIssued,
+          residencePermitExpiry,
+          visaNumber:             null,
+          visaExpiry:             null,
+          laborOffice:            null,
+          updatedAt:              new Date().toISOString(),
+        }, { merge: true });
 
-      // ── documents sub-collection ───────────────────────────────────────────
-      const docData = {
-        idCardNumber:             encrypt(idCardNumber),
-        idCardExpiry:             null,   // not in DTB (separate expiry column not present)
-        passportNumber:           encrypt(passportNumber),
-        passportIssued:           passportIssued,
-        passportExpiry:           passportExpiry,
-        passportAuthority:        passportAuthority,
-        residencePermitType:      residencePermitType,
-        residencePermitCategory:  residencePermitCategory,
-        residencePermitIssued:    residencePermitIssued,
-        residencePermitExpiry:    residencePermitExpiry,
-        laborOffice:              laborOffice,
-        updatedAt:                new Date().toISOString(),
-      };
-      await empRef.collection('documents').doc('main').set(docData, { merge: true });
+      // ── contact sub-collection ────────────────────────────────────────────────
+      await db.collection('employees').doc(employeeId)
+        .collection('contact').doc('main').set({
+          phone,
+          email:            personalEmail,
+          permanentAddress,
+          contactAddress,
+          updatedAt:        new Date().toISOString(),
+        }, { merge: true });
 
-      // ── contact sub-collection ─────────────────────────────────────────────
-      const contactData = {
-        phone:            phone,
-        email:            email,
-        permanentAddress: permanentAddress,
-        contactAddress:   contactAddress,
-        updatedAt:        new Date().toISOString(),
-      };
-      await empRef.collection('contact').doc('main').set(contactData, { merge: true });
-
-      // ── employment sub-collection (history entry) ──────────────────────────
-      const employmentData = {
-        type:              'new_hire',
-        companyId:         company,
-        contractType:      contractType,
-        jobPosition:       jobPosition,
-        department:        department,
-        salary:            salary,
-        startDate:         employedFrom,
-        endDate:           employedTo,
-        contractSignDate:  contractSignDate,
-        note:              null,
-        createdAt:         new Date().toISOString(),
-      };
-      // Use employedFrom as a stable doc ID so re-seeding doesn't duplicate
+      // ── employment sub-collection (initial hire record) ───────────────────────
       const empHistoryId = employedFrom ? `hire_${employedFrom}` : 'hire_unknown';
-      await empRef.collection('employment').doc(empHistoryId).set(employmentData, { merge: true });
+      await db.collection('employees').doc(employeeId)
+        .collection('employment').doc(empHistoryId).set({
+          type:             'new_hire',
+          companyId:        company,
+          contractType,
+          jobPosition,
+          department:       null,
+          salary,
+          startDate:        employedFrom,
+          endDate:          null,
+          contractSignDate,
+          note:             null,
+          createdAt:        new Date().toISOString(),
+        }, { merge: true });
 
-      // ── benefits sub-collection ────────────────────────────────────────────
-      const benefitsData = {
-        healthInsurance:  healthInsurance,
-        insuranceNumber:  encrypt(insuranceNumber),
-        bankAccount:      encrypt(bankAccount),
-        multisport:       multisport === '1' || multisport === 'yes' || multisport === 'ano' || multisport === 'TRUE' || multisport === '1' ? true : (multisport ? Boolean(multisport) : false),
-        homeOffice:       homeOffice === '1' || homeOffice === 'yes' || homeOffice === 'ano' || homeOffice === 'TRUE' ? true : false,
-        updatedAt:        new Date().toISOString(),
-      };
-      await empRef.collection('benefits').doc('main').set(benefitsData, { merge: true });
+      // ── benefits sub-collection ───────────────────────────────────────────────
+      await db.collection('employees').doc(employeeId)
+        .collection('benefits').doc('main').set({
+          healthInsurance,
+          insuranceNumber:  encrypt(insuranceNumber),
+          bankAccount:      encrypt(bankAccount),
+          multisport,
+          homeOffice,
+          allowances,
+          updatedAt:        new Date().toISOString(),
+        }, { merge: true });
 
       created++;
-      if (created % 10 === 0) {
-        process.stdout.write(`  Seeded ${created} employees...\r`);
-      }
+      if (created % 10 === 0) process.stdout.write(`  Seeded ${created} employees...\r`);
     } catch (e) {
-      console.error(`\nERROR seeding row ${i + 2} (${lastName} ${firstName}):`, e.message);
+      console.error(`\nERROR row ${i + 2} (${lastName} ${firstName}): ${e.message}`);
       errors++;
     }
   }
@@ -340,16 +326,13 @@ async function seed() {
   console.log(`  Created/updated: ${created}`);
   console.log(`  Skipped (empty): ${skipped}`);
   console.log(`  Errors:          ${errors}`);
-
-  if (errors > 0) {
-    console.log('\nSome rows failed — check the errors above.');
-    process.exit(1);
-  }
-
-  process.exit(0);
+  if (errors > 0) process.exit(1);
 }
 
-seed().catch((e) => {
-  console.error('Fatal error:', e.message);
-  process.exit(1);
-});
+if (require.main === module) {
+  run()
+    .then(() => process.exit(0))
+    .catch(e => { console.error('Fatal:', e.message); process.exit(1); });
+}
+
+module.exports = { run };
