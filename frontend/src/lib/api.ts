@@ -63,5 +63,7 @@ export const authApi = {
     api.patch<{ success: boolean }>(`/auth/deactivate-user/${uid}`, {}),
   reactivateUser: (uid: string) =>
     api.patch<{ success: boolean }>(`/auth/reactivate-user/${uid}`, {}),
+  linkEmployee: (uid: string, employeeId: string | null) =>
+    api.patch<{ success: boolean }>(`/auth/users/${uid}/employee`, { employeeId }),
   me: () => api.get<UserProfile>("/auth/me"),
 };

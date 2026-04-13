@@ -9,6 +9,7 @@ import styles from "./Layout.module.css";
 const navItems = [
   { to: "/zamestnanci", label: "Zaměstnanci" },
   { to: "/smeny", label: "Směny" },
+  { to: "/dovolena", label: "Dovolená" },
   { to: "/mzdy", label: "Mzdy" },
 ];
 
