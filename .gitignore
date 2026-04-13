@@ -21,6 +21,9 @@ functions/lib/
 .firebase/
 .firebaserc.local
 
+# Claude Code local settings (machine-specific paths)
+.claude/settings.local.json
+
 # TypeScript
 *.tsbuildinfo
 
