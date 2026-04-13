@@ -5,14 +5,23 @@ import styles from "./EmployeeFormPage.module.css";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const CONTRACT_TYPES = ["HPP", "DPP", "DPČ"];
 const MARITAL_STATUSES = ["svobodný/á", "ženatý/vdaná", "rozvedený/á", "vdovec/vdova"];
 const EDUCATIONS = [
-  "základní",
-  "středoškolské",
-  "středoškolské s maturitou",
-  "vyšší odborné",
-  "vysokoškolské",
+  "A - bez vzdělání",
+  "B - neúplné základní vzdělání",
+  "C - základní vzdělání",
+  "D - nižší střední vzdělání",
+  "E - nižší střední odborné vzdělání",
+  "H - střední odborné vzdělání s výučním listem",
+  "J - střední nebo střední odborné vzdělání bez maturity i výučního listu",
+  "K - úplné střední všeobecné vzdělání",
+  "L - úplné střední odborné vzdělání s vyučením i maturitou",
+  "M - úplně střední odborné vzdělání s maturitou (bez vyučení)",
+  "N - vyšší odborné vzdělání",
+  "P - vyšší odborné vzdělání v konzervatoři",
+  "R - vysokoškolské bakalářské vzdělání",
+  "T - vysokoškolské magisterské vzdělání",
+  "V - vysokoškolské doktorské vzdělání",
 ];
 
 // ─── State shapes ────────────────────────────────────────────────────────────
@@ -28,10 +37,6 @@ interface PersonalForm {
   education: string;
   nationality: string;
   placeOfBirth: string;
-  currentJobTitle: string;
-  currentDepartment: string;
-  currentContractType: string;
-  currentCompanyId: string;
 }
 
 interface ContactForm {
@@ -44,10 +49,10 @@ interface ContactForm {
 
 interface DocumentsForm {
   idCardNumber: string;
-  idCardExpiry: string;
   passportNumber: string;
   passportIssueDate: string;
   passportExpiry: string;
+  passportAuthority: string;
   visaNumber: string;
   visaType: string;
   visaIssueDate: string;
@@ -58,13 +63,15 @@ interface AdditionalForm {
   insuranceNumber: string;
   insuranceCompany: string;
   bankAccount: string;
+  multisport: boolean;
+  homeOffice: string;
+  allowances: boolean;
 }
 
 const emptyPersonal: PersonalForm = {
   firstName: "", lastName: "", dateOfBirth: "", gender: "", birthSurname: "",
   birthNumber: "", maritalStatus: "", education: "", nationality: "",
-  placeOfBirth: "", currentJobTitle: "", currentDepartment: "",
-  currentContractType: "", currentCompanyId: "",
+  placeOfBirth: "",
 };
 
 const emptyContact: ContactForm = {
@@ -72,12 +79,13 @@ const emptyContact: ContactForm = {
 };
 
 const emptyDocuments: DocumentsForm = {
-  idCardNumber: "", idCardExpiry: "", passportNumber: "", passportIssueDate: "",
-  passportExpiry: "", visaNumber: "", visaType: "", visaIssueDate: "", visaExpiry: "",
+  idCardNumber: "", passportNumber: "", passportIssueDate: "",
+  passportExpiry: "", passportAuthority: "", visaNumber: "", visaType: "", visaIssueDate: "", visaExpiry: "",
 };
 
 const emptyAdditional: AdditionalForm = {
   insuranceNumber: "", insuranceCompany: "", bankAccount: "",
+  multisport: false, homeOffice: "", allowances: false,
 };
 
 // ─── SensitiveInput ───────────────────────────────────────────────────────────
@@ -175,13 +183,13 @@ export default function EmployeeFormPage() {
         ...emptyDocuments,
         ...(docs ?? {}),
         idCardNumber: "",
-        idCardExpiry: "",
       } as DocumentsForm);
       setAdditional({
         ...emptyAdditional,
         ...(bens ?? {}),
         insuranceNumber: "",
         bankAccount: "",
+        homeOffice: bens?.homeOffice != null ? String(bens.homeOffice) : "",
       } as AdditionalForm);
     }).finally(() => setLoadingData(false));
   }, [id, isEdit]);
@@ -195,7 +203,7 @@ export default function EmployeeFormPage() {
   function setD(field: keyof DocumentsForm, value: string) {
     setDocuments((f) => ({ ...f, [field]: value }));
   }
-  function setA(field: keyof AdditionalForm, value: string) {
+  function setA(field: keyof AdditionalForm, value: string | boolean) {
     setAdditional((f) => ({ ...f, [field]: value }));
   }
 
@@ -229,14 +237,14 @@ export default function EmployeeFormPage() {
       // ── Documents ─────────────────────────────────────────────────────────
       const docsPayload: Record<string, unknown> = { ...documents };
       if (!docsPayload.idCardNumber) delete docsPayload.idCardNumber;
-      if (!docsPayload.idCardExpiry) delete docsPayload.idCardExpiry;
-      const docsClearFields = ["idCardNumber", "idCardExpiry"].filter((f) => cleared.has(f));
+      const docsClearFields = ["idCardNumber"].filter((f) => cleared.has(f));
       if (docsClearFields.length) docsPayload.clearFields = docsClearFields;
 
       // ── Additional info ───────────────────────────────────────────────────
       const addPayload: Record<string, unknown> = { ...additional };
       if (!addPayload.insuranceNumber) delete addPayload.insuranceNumber;
       if (!addPayload.bankAccount) delete addPayload.bankAccount;
+      addPayload.homeOffice = additional.homeOffice !== "" ? Number(additional.homeOffice) : null;
       const addClearFields = ["insuranceNumber", "bankAccount"].filter((f) => cleared.has(f));
       if (addClearFields.length) addPayload.clearFields = addClearFields;
 
@@ -333,28 +341,6 @@ export default function EmployeeFormPage() {
           </div>
         </section>
 
-        {/* ── Pracovní zařazení ────────────────────────────────────────────── */}
-        <section className={styles.section}>
-          <h2 className={styles.sectionTitle}>Pracovní zařazení</h2>
-          <div className={styles.grid}>
-            <Field label="Pracovní pozice">
-              <input className={styles.input} value={personal.currentJobTitle} onChange={(e) => setP("currentJobTitle", e.target.value)} />
-            </Field>
-            <Field label="Oddělení">
-              <input className={styles.input} value={personal.currentDepartment} onChange={(e) => setP("currentDepartment", e.target.value)} />
-            </Field>
-            <Field label="Typ smlouvy">
-              <select className={styles.input} value={personal.currentContractType} onChange={(e) => setP("currentContractType", e.target.value)}>
-                <option value="">— vyberte —</option>
-                {CONTRACT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-              </select>
-            </Field>
-            <Field label="Společnost (ID)">
-              <input className={styles.input} value={personal.currentCompanyId} onChange={(e) => setP("currentCompanyId", e.target.value)} placeholder="stp / hpm" />
-            </Field>
-          </div>
-        </section>
-
         {/* ── Kontakt ──────────────────────────────────────────────────────── */}
         <section className={styles.section}>
           <h2 className={styles.sectionTitle}>Kontakt</h2>
@@ -407,17 +393,6 @@ export default function EmployeeFormPage() {
                 placeholder={sensitiveHint}
               />
             </Field>
-            <Field label="Platnost OP">
-              <SensitiveInput
-                value={documents.idCardExpiry}
-                onChange={(v) => setD("idCardExpiry", v)}
-                isEdit={isEdit}
-                isCleared={cleared.has("idCardExpiry")}
-                onClear={() => markCleared("idCardExpiry")}
-                onUnclear={() => unmarkCleared("idCardExpiry")}
-                type="date"
-              />
-            </Field>
           </div>
 
           <p className={styles.subsectionLabel}>Cestovní pas</p>
@@ -430,6 +405,9 @@ export default function EmployeeFormPage() {
             </Field>
             <Field label="Platnost pasu">
               <input className={styles.input} type="date" value={documents.passportExpiry} onChange={(e) => setD("passportExpiry", e.target.value)} />
+            </Field>
+            <Field label="Vydal">
+              <input className={styles.input} value={documents.passportAuthority} onChange={(e) => setD("passportAuthority", e.target.value)} />
             </Field>
           </div>
 
@@ -453,6 +431,7 @@ export default function EmployeeFormPage() {
         {/* ── Doplňující informace ─────────────────────────────────────────── */}
         <section className={styles.section}>
           <h2 className={styles.sectionTitle}>Doplňující informace</h2>
+          <p className={styles.subsectionLabel}>Pojištění a bankovní účet</p>
           <div className={styles.grid}>
             <Field label="Číslo pojištění">
               <SensitiveInput
@@ -479,6 +458,32 @@ export default function EmployeeFormPage() {
                 placeholder={sensitiveHint}
               />
             </Field>
+          </div>
+
+          <p className={styles.subsectionLabel}>Benefity</p>
+          <div className={styles.grid}>
+            <Field label="Home office (hodin/měsíc)">
+              <input
+                className={styles.input}
+                type="number"
+                min="0"
+                value={additional.homeOffice}
+                onChange={(e) => setA("homeOffice", e.target.value)}
+                placeholder="0"
+              />
+            </Field>
+          </div>
+          <div className={styles.checkboxRow}>
+            <label className={styles.checkboxLabel}>
+              <input type="checkbox" checked={additional.multisport} onChange={(e) => setA("multisport", e.target.checked)} />
+              Multisport
+            </label>
+          </div>
+          <div className={styles.checkboxRow}>
+            <label className={styles.checkboxLabel}>
+              <input type="checkbox" checked={additional.allowances} onChange={(e) => setA("allowances", e.target.checked)} />
+              Náhrady
+            </label>
           </div>
         </section>
 

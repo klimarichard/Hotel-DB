@@ -638,10 +638,10 @@ interface ContactData {
 
 interface DocumentsData {
   idCardNumber?: string;
-  idCardExpiry?: string;
   passportNumber?: string;
   passportIssueDate?: string;
   passportExpiry?: string;
+  passportAuthority?: string;
   visaNumber?: string;
   visaType?: string;
   visaIssueDate?: string;
@@ -652,6 +652,9 @@ interface AdditionalData {
   insuranceNumber?: string;
   insuranceCompany?: string;
   bankAccount?: string;
+  multisport?: boolean;
+  homeOffice?: number | null;
+  allowances?: boolean;
 }
 
 interface AlertItem {
@@ -708,7 +711,7 @@ export default function EmployeeDetailPage() {
 
   // All sections start expanded
   const [expanded, setExpanded] = useState<Set<string>>(
-    new Set(["personal", "employment", "contact", "documents", "additional"])
+    new Set(["personal", "employment", "contact", "documents", "additional", "benefity"])
   );
 
   function toggle(key: string) {
@@ -747,7 +750,7 @@ export default function EmployeeDetailPage() {
       setLoadedSections((s) => new Set(s).add("documents"));
       api.get<DocumentsData | null>(`/employees/${id}/documents`).then(setDocuments).catch(() => {});
     }
-    if (expanded.has("additional") && !loadedSections.has("additional")) {
+    if ((expanded.has("additional") || expanded.has("benefity")) && !loadedSections.has("additional")) {
       setLoadedSections((s) => new Set(s).add("additional"));
       api.get<AdditionalData | null>(`/employees/${id}/benefits`).then(setAdditional).catch(() => {});
     }
@@ -987,12 +990,12 @@ export default function EmployeeDetailPage() {
             <div className={styles.field}><span className={styles.fieldLabel}>Telefon</span><span className={styles.fieldValue}>{val(contact?.phone)}</span></div>
             <div className={styles.field}><span className={styles.fieldLabel}>E-mail</span><span className={styles.fieldValue}>{val(contact?.email)}</span></div>
             <div className={styles.fieldFull}><span className={styles.fieldLabel}>Trvalá adresa</span><span className={styles.fieldValue}>{val(contact?.permanentAddress)}</span></div>
-            <div className={styles.fieldFull}>
-              <span className={styles.fieldLabel}>Kontaktní adresa</span>
-              <span className={styles.fieldValue}>
-                {contact?.contactAddressSameAsPermanent ? "Stejná jako trvalá adresa" : val(contact?.contactAddress)}
-              </span>
-            </div>
+            {!contact?.contactAddressSameAsPermanent && (
+              <div className={styles.fieldFull}>
+                <span className={styles.fieldLabel}>Kontaktní adresa</span>
+                <span className={styles.fieldValue}>{val(contact?.contactAddress)}</span>
+              </div>
+            )}
           </div>
         )}
       </Section>
@@ -1007,7 +1010,6 @@ export default function EmployeeDetailPage() {
               <p className={styles.docGroupLabel}>Občanský průkaz</p>
               <div className={styles.fields}>
                 <SensitiveField employeeId={id!} field="idCardNumber" label="Číslo OP" apiValue={documents?.idCardNumber} />
-                <SensitiveField employeeId={id!} field="idCardExpiry" label="Platnost OP" apiValue={documents?.idCardExpiry} />
               </div>
             </div>
             <div className={styles.docGroup}>
@@ -1016,6 +1018,7 @@ export default function EmployeeDetailPage() {
                 <div className={styles.field}><span className={styles.fieldLabel}>Číslo pasu</span><span className={styles.fieldValue}>{val(documents?.passportNumber)}</span></div>
                 <div className={styles.field}><span className={styles.fieldLabel}>Datum vydání</span><span className={styles.fieldValue}>{val(documents?.passportIssueDate)}</span></div>
                 <div className={styles.field}><span className={styles.fieldLabel}>Platnost pasu</span><span className={styles.fieldValue}>{val(documents?.passportExpiry)}</span></div>
+                <div className={styles.field}><span className={styles.fieldLabel}>Vydal</span><span className={styles.fieldValue}>{val(documents?.passportAuthority)}</span></div>
               </div>
             </div>
             <div className={styles.docGroup}>
@@ -1040,6 +1043,19 @@ export default function EmployeeDetailPage() {
             <SensitiveField employeeId={id!} field="insuranceNumber" label="Číslo pojištění" apiValue={additional?.insuranceNumber} />
             <div className={styles.field}><span className={styles.fieldLabel}>Pojišťovna</span><span className={styles.fieldValue}>{val(additional?.insuranceCompany)}</span></div>
             <SensitiveField employeeId={id!} field="bankAccount" label="Číslo bankovního účtu" apiValue={additional?.bankAccount} />
+          </div>
+        )}
+      </Section>
+
+      {/* ── Benefity ─────────────────────────────────────────────────────────── */}
+      <Section title="Benefity" sectionKey="benefity" expanded={expanded.has("benefity")} onToggle={toggle}>
+        {!loadedSections.has("additional") ? (
+          <div className={styles.loading}>Načítám…</div>
+        ) : (
+          <div className={styles.fields}>
+            <div className={styles.field}><span className={styles.fieldLabel}>Multisport</span><span className={styles.fieldValue}>{additional?.multisport === true ? "Ano" : additional?.multisport === false ? "Ne" : "—"}</span></div>
+            <div className={styles.field}><span className={styles.fieldLabel}>Home office</span><span className={styles.fieldValue}>{additional?.homeOffice != null ? String(additional.homeOffice) : "—"}</span></div>
+            <div className={styles.field}><span className={styles.fieldLabel}>Náhrady</span><span className={styles.fieldValue}>{additional?.allowances === true ? "Ano" : additional?.allowances === false ? "Ne" : "—"}</span></div>
           </div>
         )}
       </Section>

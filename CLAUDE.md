@@ -7,6 +7,7 @@
 - You may commit and push to the feature branch freely.
 - **Only the user decides when to merge.** Never merge branches yourself.
 - Use clear, descriptive commit messages explaining *why*, not just *what*.
+- **Before any `git push`, always update CLAUDE.md** (build phases, key implementation notes) **and project memory** (`~/.claude/projects/.../memory/`) to reflect completed work. Do this as the last commit on the branch before pushing.
 
 ## Data Safety — TOP PRIORITY
 

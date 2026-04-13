@@ -15,7 +15,6 @@ process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8080';
 
 const path  = require('path');
 const fs    = require('fs');
-const iconv = require('../functions/node_modules/iconv-lite');
 const admin = require('../functions/node_modules/firebase-admin');
 if (!admin.apps.length) admin.initializeApp({ projectId: 'hotel-hr-app-75581' });
 const db   = admin.firestore();
@@ -49,11 +48,11 @@ function makeEmployeeId(lastName, firstName, birthDateISO) {
 // ─── CSV parsing ──────────────────────────────────────────────────────────────
 
 function parseCSV(filePath) {
-  const raw  = fs.readFileSync(filePath);
-  const text = iconv.decode(raw, 'cp1250');
+  let text = fs.readFileSync(filePath, 'utf8');
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1); // strip UTF-8 BOM
   return text.split(/\r?\n/)
     .filter(l => l.trim() !== '')
-    .slice(1)                       // skip header
+    .slice(1)              // skip header row
     .map(l => l.split(';'));
 }
 
@@ -79,7 +78,7 @@ async function run() {
   const rows = parseCSV(csvPath);
 
   // Collect only rows that have user credentials
-  const userRows = rows.filter(r => s(r[37]) && s(r[40]));
+  const userRows = rows.filter(r => s(r[36]) && s(r[39]));
   console.log(`Found ${userRows.length} user rows in DTB.csv`);
 
   let created = 0, errors = 0;
@@ -89,11 +88,11 @@ async function run() {
     const firstName = s(r[1]);
     const birthDate = csvDateToISO(r[2]);
     // Firebase Auth requires passwords ≥ 6 chars; pad short ones
-    const rawPw     = s(r[38]) ?? 'changeme';
+    const rawPw     = s(r[37]) ?? 'changeme';
     const password  = rawPw.length >= 6 ? rawPw : rawPw.padEnd(6, '1');
-    const role      = s(r[39]) ?? 'employee';
-    const email     = s(r[40]);
-    const name      = s(r[37]);  // username column
+    const role      = s(r[38]) ?? 'employee';
+    const email     = s(r[39]);
+    const name      = s(r[36]);  // username column
     const employeeId = makeEmployeeId(lastName, firstName, birthDate);
 
     if (!email) continue;

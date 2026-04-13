@@ -18,6 +18,7 @@ const { spawnSync } = require('child_process');
 const path = require('path');
 
 const SCRIPTS = [
+  'seed-admin.js',
   'seed-companies.js',
   'seed-employees.js',
   'seed-users.js',

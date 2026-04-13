@@ -53,11 +53,15 @@
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: #6b7280;
-  margin: 1.25rem 0 0.75rem;
+  margin: 1.75rem 0 0.75rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid #e5e7eb;
 }
 
 .subsectionLabel:first-of-type {
   margin-top: 0;
+  padding-top: 0;
+  border-top: none;
 }
 
 .grid {
