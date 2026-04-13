@@ -61,11 +61,11 @@ These fields are AES-256-GCM encrypted before writing to Firestore. They must **
 Every reveal of a sensitive field is logged to the `auditLog/` Firestore collection.
 
 ### Firestore data model
-Top-level collections: `employees`, `users`, `companies`, `jobPositions`, `alerts`, `notifications`, `shiftPlans`, `payrollPeriods`, `auditLog`
+Top-level collections: `employees`, `users`, `companies`, `jobPositions`, `alerts`, `notifications`, `shiftPlans`, `vacationRequests`, `payrollPeriods`, `auditLog`
 
 Sub-collections under `employees/{id}`: `documents`, `contact`, `employment`, `benefits`, `contracts`
 
-Sub-collections under `shiftPlans/{id}`: `planEmployees`, `shifts`, `rules`, `unavailabilityRequests`
+Sub-collections under `shiftPlans/{id}`: `planEmployees`, `shifts`, `rules`, `unavailabilityRequests`, `shiftOverrideRequests`, `shiftsSnapshot`
 
 Sub-collections under `payrollPeriods/{id}`: `entries`
 
@@ -76,9 +76,10 @@ Denormalized fields on `employees` root doc for querying: `currentCompanyId`, `c
 2. ✅ Auth — user management UI, role assignment, create/deactivate/reactivate users, role change UI
 3. ✅ Employee module — collapsible detail page, unified add/edit form, contact/documents/benefits sub-collections, employment history tab (add/edit with context-sensitive modal per change type), document expiry alerts with global overview + unread badge, sensitive field clear, salary masking in history
 4. ✅ Contract module — TipTap template editor with variable picker, html2pdf.js PDF export, Firebase Storage, contract log UI (ContractsTab), generate from history rows, companies API + Settings tab
-5. Shift planner — `parseShiftExpression()`, monthly grid UI, availability rules, notifications
-6. Payroll — calculation engine (replicates MZDY.xlsx), summary UI, export
-7. Polish — stats dashboard, audit log UI, daily expiry alert scheduled function
+5. ✅ Shift planner — `parseShiftExpression()`, monthly grid UI, availability rules, X-limit overrides, unavailability requests (notifications skipped by design)
+6. ✅ Vacation (Dovolená) — vacation request workflow, pendingEdit pattern for approved edits, auto-X in shift plans, user↔employee linking in Settings
+7. Payroll — calculation engine (replicates MZDY.xlsx), summary UI, export
+8. Polish — stats dashboard, audit log UI, daily expiry alert scheduled function
 
 ### Running locally
 ```
@@ -104,6 +105,14 @@ npm run dev
 - To seed an admin user into the emulators: `"C:\Program Files\nodejs\node.exe" scripts\seed-admin.js` (from project root, emulators must be running)
 - To seed employees from DTB.xlsx: `"C:\Program Files\nodejs\node.exe" scripts\seed-employees.js` (from project root, emulators must be running, DTB.xlsx must be at project root)
 
+### Phase 6 — key implementation notes
+- `vacationRequests` is a top-level Firestore collection (not a sub-collection)
+- **pendingEdit pattern**: when an employee edits an *approved* vacation, the new dates are stored as `pendingEdit: { startDate, endDate, reason }` on the doc; original dates stay in the shift plan until admin approves. On approval, old X shifts are removed and new ones applied. On rejection, `pendingEdit` is cleared and the original approved dates remain.
+- `PATCH /vacation/:id` detects mode by body shape: `{ startDate }` → employee edit; `{ status }` → admin approve/reject
+- Shift cleanup helper: `removeVacationXsFromPlans(employeeId, startDate, endDate)` in `functions/src/routes/shifts.ts` — called on vacation deletion and on approved-edit transitions
+- User↔employee link: `employeeId` field on `users/{uid}` doc. Set via `PATCH /auth/users/:uid/employee` (admin only). Shown + editable in Settings → Uživatelé tab ("Propojit" button per row). Also selectable at user creation time.
+- Notifications on plan publish were **intentionally skipped** (user decision).
+
 ### Phase 5 — key implementation notes
 - Shift parser (`parseShiftExpression`) is duplicated verbatim in `functions/src/services/shiftParser.ts` AND `frontend/src/lib/shiftConstants.ts` — they cannot share code across packages
 - Shift cell composite doc ID: `${employeeId}_${date}` — used as both Firestore doc ID and shiftMap key on frontend
@@ -111,6 +120,8 @@ npm run dev
 - Plan status transitions are one-way: draft → open → published. Enforced server-side.
 - One plan per (month, year) — enforced in `POST /shifts/plans` with a Firestore query
 - Employee `status` field must be `"active"` or `"terminated"` (string) — the employees list page filters by `?status=active`
+- X limits: HPP = 8/month, PPP = 13/month, DPP = unlimited. Day/night recepce coverage minimum = 5 active employees. Violations require override request with mandatory reason; approved by admin/director/manager via ShiftOverridePanel.
+- `ShiftOverridesContext` provides global pending override count for the "Směny" nav badge (admin/director only)
 
 ### Phase 4 — key implementation notes
 - Contract templates stored as HTML in `contractTemplates/{type}` (doc ID = contract type string)
@@ -120,7 +131,7 @@ npm run dev
 - 9 contract types: 7 history-tied + 2 standalone (hmotná odpovědnost, multisport)
 - TipTap extensions installed: StarterKit, Underline, TextStyle, FontFamily, TextAlign, Color, Image
 
-### Phase 3 — deferred items (still pending, do before Phase 5)
+### Phase 3 — deferred items (still pending)
 - `jobPositions` lookup table — dropdown for "pracovní pozice" in history modal and salary defaults bound to position
 - `departments` binding — "oddělení" auto-filled from selected position
 - "změna smlouvy" — default contract text per change kind
