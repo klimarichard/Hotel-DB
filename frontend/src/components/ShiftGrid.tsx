@@ -64,12 +64,15 @@ export default function ShiftGrid({
   }, [plan.modShifts]);
 
   const employeeMonthHours = useMemo(() => {
+    const currentIds = new Set(plan.employees.map((e) => e.employeeId));
     const m = new Map<string, number>();
     for (const s of plan.shifts) {
-      m.set(s.employeeId, (m.get(s.employeeId) ?? 0) + s.hoursComputed);
+      if (currentIds.has(s.employeeId)) {
+        m.set(s.employeeId, (m.get(s.employeeId) ?? 0) + s.hoursComputed);
+      }
     }
     return m;
-  }, [plan.shifts]);
+  }, [plan.shifts, plan.employees]);
 
   const sectionDayHours = useMemo(() => {
     const m = new Map<string, number>();

@@ -126,11 +126,18 @@ shiftsRouter.get(
     }
 
     const planData = planDoc.data()!;
+
+    // Only return shifts for employees currently in the plan (filter orphans)
+    const currentEmployeeIds = new Set(employeesSnap.docs.map((d) => d.data().employeeId as string));
+    const shifts = shiftsSnap.docs
+      .filter((d) => currentEmployeeIds.has(d.data().employeeId as string))
+      .map((d) => ({ id: d.id, ...d.data() }));
+
     const response: Record<string, unknown> = {
       id: planDoc.id,
       ...planData,
       employees: employeesSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
-      shifts: shiftsSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
+      shifts,
       modShifts: modSnap.docs.map((d) => ({ id: d.id, date: d.id, ...d.data() })),
     };
 
@@ -389,12 +396,30 @@ shiftsRouter.delete(
   requireRole("admin", "director", "manager"),
   async (req, res) => {
     const { planId, docId } = req.params;
-    await db()
-      .collection("shiftPlans")
-      .doc(planId)
-      .collection("planEmployees")
-      .doc(docId)
-      .delete();
+    const planRef = db().collection("shiftPlans").doc(planId);
+
+    // Resolve the employeeId before deleting the planEmployee doc
+    const empDoc = await planRef.collection("planEmployees").doc(docId).get();
+    if (!empDoc.exists) {
+      res.status(404).json({ error: "Zaměstnanec v plánu nenalezen" });
+      return;
+    }
+    const employeeId = empDoc.data()!.employeeId as string;
+
+    // Delete the planEmployee doc
+    await empDoc.ref.delete();
+
+    // Cascade: delete all shift docs for this employee in this plan
+    const shiftsSnap = await planRef
+      .collection("shifts")
+      .where("employeeId", "==", employeeId)
+      .get();
+    if (!shiftsSnap.empty) {
+      const batch = db().batch();
+      shiftsSnap.docs.forEach((d) => batch.delete(d.ref));
+      await batch.commit();
+    }
+
     res.json({ ok: true });
   }
 );
