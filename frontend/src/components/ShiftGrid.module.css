@@ -165,3 +165,71 @@
   padding: 0.35rem 0;
   background: #f8fafc;
 }
+
+/* ── MOD row ──────────────────────────────────────────────────────────── */
+
+.modRow {
+  border-bottom: 2px solid #e5e7eb;
+  border-top: 1px solid #ddd6fe;
+  background: #faf5ff;
+}
+
+.modLabel {
+  position: sticky;
+  left: 0;
+  background: #faf5ff;
+  z-index: 1;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #6d28d9;
+  padding: 0.35rem 0.75rem;
+  white-space: nowrap;
+  border-right: 1px solid #e5e7eb;
+}
+
+/* ── Employee name cell controls ──────────────────────────────────────── */
+
+.empNameText {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.modBadge {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #6d28d9;
+  background: #ede9fe;
+  border-radius: 3px;
+  padding: 0 3px;
+  line-height: 1.4;
+}
+
+.empActions {
+  display: none;
+  gap: 0.15rem;
+  margin-left: 0.25rem;
+}
+
+.empRow:hover .empActions {
+  display: inline-flex;
+}
+
+.empActionBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 1px 3px;
+  font-size: 0.75rem;
+  color: #9ca3af;
+  border-radius: 3px;
+  line-height: 1;
+}
+
+.empActionBtn:hover {
+  background: #f1f5f9;
+  color: #374151;
+}

@@ -59,7 +59,7 @@ export const SHIFT_TEXT_COLORS: Record<string, string> = {
 export const CELL_COLORS: Record<string, { bg: string; text: string }> = {
   A:  { bg: "#dcfce7", text: "#166534" },   // Ambiance — green
   S:  { bg: "#fef3c7", text: "#92400e" },   // Superior — gold
-  Q:  { bg: "#fce7f3", text: "#9d174d" },   // Amigo — pink
+  Q:  { bg: "#fdf4ff", text: "#c026d3" },   // Amigo — fuchsia
   K:  { bg: "#ede9fe", text: "#5b21b6" },   // Ankora — purple
   P:  { bg: "#e0f2fe", text: "#075985" },   // Perla — light blue
   M:  { bg: "#f3f4f6", text: "#374151" },   // Metropol — gray
@@ -80,6 +80,26 @@ export function getCellColor(parsed: ParseResult): { bg: string; text: string } 
   if (hotel) return CELL_COLORS[hotel] ?? DEFAULT_CELL_COLOR;
   return DEFAULT_CELL_COLOR;
 }
+
+// ─── MOD (Manager on Duty) ──────────────────────────────────────────────────
+
+export const MOD_PERSONS: Record<string, string> = {
+  V: "Viktor Vondra",
+  R: "Richard Klíma",
+  N: "Anastázie Kalinina",
+  O: "Oksana Smolyak",
+  K: "Kateřina Zezulková",
+  A: "Aruzhan Kassimkulova",
+};
+
+export const MOD_COLORS: Record<string, { bg: string; text: string }> = {
+  V: { bg: "#fef3c7", text: "#78350f" },
+  R: { bg: "#dbeafe", text: "#1e40af" },
+  N: { bg: "#fdf4ff", text: "#7e22ce" },
+  O: { bg: "#dcfce7", text: "#166534" },
+  K: { bg: "#ede9fe", text: "#5b21b6" },
+  A: { bg: "#ffedd5", text: "#9a3412" },
+};
 
 // ─── Czech state holidays ────────────────────────────────────────────────────
 

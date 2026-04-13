@@ -1,12 +1,17 @@
 import { useCallback, useMemo, useState } from "react";
-import type { PlanDetail, PlanEmployee, ShiftDoc } from "../pages/ShiftPlannerPage";
-import { SECTION_LABELS, SECTIONS, type Section, getCzechHolidays } from "../lib/shiftConstants";
+import type { PlanDetail, PlanEmployee, ShiftDoc, ModShiftDoc } from "../pages/ShiftPlannerPage";
+import { SECTION_LABELS, SECTIONS, type Section, getCzechHolidays, MOD_PERSONS } from "../lib/shiftConstants";
 import ShiftCell from "./ShiftCell";
+import ModCell from "./ModCell";
 import styles from "./ShiftGrid.module.css";
 
 interface Props {
   plan: PlanDetail;
   onCellSave: (employeeId: string, date: string, rawInput: string) => Promise<void>;
+  onModSave: (date: string, code: string) => Promise<void>;
+  onEditEmployee: (emp: PlanEmployee) => void;
+  onDeleteEmployee: (emp: PlanEmployee) => void;
+  canEditEmployees: boolean;
   readOnly: boolean;
 }
 
@@ -23,14 +28,25 @@ function getDaysInMonth(year: number, month: number): Date[] {
 }
 
 function formatDate(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function isWeekend(d: Date): boolean {
   return d.getDay() === 0 || d.getDay() === 6;
 }
 
-export default function ShiftGrid({ plan, onCellSave, readOnly }: Props) {
+export default function ShiftGrid({
+  plan,
+  onCellSave,
+  onModSave,
+  onEditEmployee,
+  onDeleteEmployee,
+  canEditEmployees,
+  readOnly,
+}: Props) {
   const days = useMemo(() => getDaysInMonth(plan.year, plan.month), [plan.year, plan.month]);
 
   const holidays = useMemo(() => getCzechHolidays(plan.year), [plan.year]);
@@ -40,6 +56,12 @@ export default function ShiftGrid({ plan, onCellSave, readOnly }: Props) {
     for (const s of plan.shifts) m.set(s.id, s);
     return m;
   }, [plan.shifts]);
+
+  const modShiftMap = useMemo(() => {
+    const m = new Map<string, ModShiftDoc>();
+    for (const s of plan.modShifts) m.set(s.date, s);
+    return m;
+  }, [plan.modShifts]);
 
   const employeeMonthHours = useMemo(() => {
     const m = new Map<string, number>();
@@ -82,6 +104,7 @@ export default function ShiftGrid({ plan, onCellSave, readOnly }: Props) {
   }, [grouped]);
 
   const [focusedCell, setFocusedCell] = useState<{ row: number; col: number } | null>(null);
+  const [focusedModCol, setFocusedModCol] = useState<number | null>(null);
 
   const handleNavigate = useCallback(
     (row: number, col: number, dir: "up" | "down" | "left" | "right") => {
@@ -94,8 +117,42 @@ export default function ShiftGrid({ plan, onCellSave, readOnly }: Props) {
         case "right": newCol = Math.min(days.length - 1, col + 1); break;
       }
       setFocusedCell({ row: newRow, col: newCol });
+      setFocusedModCol(null);
     },
     [flatEmployees.length, days.length]
+  );
+
+  const handleModNavigate = useCallback(
+    (col: number, dir: "up" | "down" | "left" | "right") => {
+      if (dir === "left") {
+        setFocusedModCol(Math.max(0, col - 1));
+      } else if (dir === "right") {
+        setFocusedModCol(Math.min(days.length - 1, col + 1));
+      } else if (dir === "up") {
+        // Move to last employee in vedoucí section
+        const vedouci = grouped.get("vedoucí") ?? [];
+        if (vedouci.length > 0) {
+          const lastEmp = vedouci[vedouci.length - 1];
+          const idx = flatEmployees.findIndex((e) => e.id === lastEmp.id);
+          if (idx >= 0) {
+            setFocusedCell({ row: idx, col });
+            setFocusedModCol(null);
+          }
+        }
+      } else if (dir === "down") {
+        // Move to first employee in recepce section
+        const recepce = grouped.get("recepce") ?? [];
+        if (recepce.length > 0) {
+          const firstEmp = recepce[0];
+          const idx = flatEmployees.findIndex((e) => e.id === firstEmp.id);
+          if (idx >= 0) {
+            setFocusedCell({ row: idx, col });
+            setFocusedModCol(null);
+          }
+        }
+      }
+    },
+    [days.length, grouped, flatEmployees]
   );
 
   function dayClass(d: Date): string {
@@ -112,6 +169,15 @@ export default function ShiftGrid({ plan, onCellSave, readOnly }: Props) {
     flatEmployees.forEach((emp, i) => m.set(emp.employeeId, i));
     return m;
   }, [flatEmployees]);
+
+  // Build a lookup from full name to MOD letter
+  const modPersonByName = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const [letter, fullName] of Object.entries(MOD_PERSONS)) {
+      m.set(fullName, letter);
+    }
+    return m;
+  }, []);
 
   return (
     <div className={styles.wrapper}>
@@ -154,10 +220,32 @@ export default function ShiftGrid({ plan, onCellSave, readOnly }: Props) {
               </tr>,
               ...emps.map((emp) => {
                 const rowIdx = empRowIndex.get(emp.employeeId) ?? 0;
+                const modLetter = modPersonByName.get(`${emp.firstName} ${emp.lastName}`);
                 return (
                   <tr key={emp.id} className={styles.empRow}>
                     <td className={styles.nameCell}>
-                      {emp.lastName} {emp.firstName}
+                      <span className={styles.empNameText}>
+                        {emp.lastName} {emp.firstName}
+                        {modLetter ? <span className={styles.modBadge}>{modLetter}</span> : null}
+                      </span>
+                      {canEditEmployees && (
+                        <span className={styles.empActions}>
+                          <button
+                            className={styles.empActionBtn}
+                            onClick={() => onEditEmployee(emp)}
+                            title="Upravit"
+                          >
+                            ✎
+                          </button>
+                          <button
+                            className={styles.empActionBtn}
+                            onClick={() => onDeleteEmployee(emp)}
+                            title="Odebrat"
+                          >
+                            ✕
+                          </button>
+                        </span>
+                      )}
                     </td>
                     {days.map((d, colIdx) => {
                       const dateStr = formatDate(d);
@@ -178,7 +266,10 @@ export default function ShiftGrid({ plan, onCellSave, readOnly }: Props) {
                             onSave={(raw) => onCellSave(emp.employeeId, dateStr, raw)}
                             focused={isFocused}
                             onNavigate={(dir) => handleNavigate(rowIdx, colIdx, dir)}
-                            onFocus={() => setFocusedCell({ row: rowIdx, col: colIdx })}
+                            onFocus={() => {
+                              setFocusedCell({ row: rowIdx, col: colIdx });
+                              setFocusedModCol(null);
+                            }}
                           />
                         </td>
                       );
@@ -206,6 +297,39 @@ export default function ShiftGrid({ plan, onCellSave, readOnly }: Props) {
                 <td className={styles.footerCell}></td>
               </tr>,
             ];
+
+            // Insert MOD row after the vedoucí section
+            if (section === "vedoucí") {
+              rows.push(
+                <tr key="mod-row" className={styles.modRow}>
+                  <td className={styles.modLabel}>MOD</td>
+                  {days.map((d, colIdx) => {
+                    const dateStr = formatDate(d);
+                    const modDoc = modShiftMap.get(dateStr);
+                    return (
+                      <td
+                        key={dateStr}
+                        className={`${styles.cell} ${dayClass(d)}`}
+                      >
+                        <ModCell
+                          code={modDoc?.code ?? ""}
+                          readOnly={readOnly}
+                          onSave={(code) => onModSave(dateStr, code)}
+                          focused={focusedModCol === colIdx}
+                          onNavigate={(dir) => handleModNavigate(colIdx, dir)}
+                          onFocus={() => {
+                            setFocusedModCol(colIdx);
+                            setFocusedCell(null);
+                          }}
+                        />
+                      </td>
+                    );
+                  })}
+                  <td className={styles.totalCell} />
+                </tr>
+              );
+            }
+
             return rows;
           })}
         </tbody>

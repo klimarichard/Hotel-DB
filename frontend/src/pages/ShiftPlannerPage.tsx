@@ -4,6 +4,7 @@ import { useAuth } from "../hooks/useAuth";
 import { parseShiftExpression } from "../lib/shiftConstants";
 import ShiftGrid from "../components/ShiftGrid";
 import AddEmployeeToPlanModal from "../components/AddEmployeeToPlanModal";
+import EditEmployeeInPlanModal from "../components/EditEmployeeInPlanModal";
 import UnavailabilityPanel from "../components/UnavailabilityPanel";
 import styles from "./ShiftPlannerPage.module.css";
 
@@ -32,6 +33,12 @@ export interface ShiftDoc {
   status: "assigned" | "day_off" | "unassigned";
 }
 
+export interface ModShiftDoc {
+  id: string;
+  date: string;
+  code: string;
+}
+
 export interface PlanDetail {
   id: string;
   month: number;
@@ -42,6 +49,7 @@ export interface PlanDetail {
   publishedAt: string | null;
   employees: PlanEmployee[];
   shifts: ShiftDoc[];
+  modShifts: ModShiftDoc[];
 }
 
 interface PlanListItem {
@@ -108,7 +116,10 @@ export default function ShiftPlannerPage() {
   const [error, setError] = useState<string | null>(null);
   const [showAddEmployee, setShowAddEmployee] = useState(false);
   const [showUnavailability, setShowUnavailability] = useState(false);
+  const [editingEmployee, setEditingEmployee] = useState<PlanEmployee | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [plansList, setPlansList] = useState<PlanListItem[]>([]);
+  const [copyFromId, setCopyFromId] = useState("");
 
   const canEdit = role === "admin" || role === "director" || role === "manager";
   const canPublish = role === "admin" || role === "director";
@@ -123,6 +134,7 @@ export default function ShiftPlannerPage() {
     api
       .get<PlanListItem[]>("/shifts/plans")
       .then((plans) => {
+        setPlansList(plans);
         const match = plans.find(
           (p) => p.month === selectedMonth && p.year === selectedYear
         );
@@ -131,7 +143,7 @@ export default function ShiftPlannerPage() {
           return;
         }
         return api.get<PlanDetail>(`/shifts/plans/${match.id}`).then((detail) => {
-          setPlan(detail);
+          setPlan({ ...detail, modShifts: detail.modShifts ?? [] });
         });
       })
       .catch((e) => setError(e.message))
@@ -211,8 +223,12 @@ export default function ShiftPlannerPage() {
         month: selectedMonth,
         year: selectedYear,
       });
+      if (copyFromId) {
+        await api.post(`/shifts/plans/${id}/copy-employees`, { sourcePlanId: copyFromId });
+      }
       const detail = await api.get<PlanDetail>(`/shifts/plans/${id}`);
-      setPlan(detail);
+      setPlan({ ...detail, modShifts: detail.modShifts ?? [] });
+      setCopyFromId("");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Chyba při vytváření plánu");
     } finally {
@@ -258,6 +274,53 @@ export default function ShiftPlannerPage() {
       setPlan((prev) => (prev ? { ...prev, [field]: iso } : prev));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Chyba při nastavení termínu");
+    }
+  }
+
+  // ── Employee edit / delete ─────────────────────────────────────────────────
+
+  async function handleDeleteEmployee(emp: PlanEmployee) {
+    if (!plan) return;
+    if (!window.confirm(`Odebrat ${emp.lastName} ${emp.firstName} z plánu?`)) return;
+    try {
+      await api.delete(`/shifts/plans/${plan.id}/employees/${emp.id}`);
+      setPlan((prev) =>
+        prev ? { ...prev, employees: prev.employees.filter((e) => e.id !== emp.id) } : prev
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Chyba při odebírání zaměstnance");
+    }
+  }
+
+  // ── MOD save ───────────────────────────────────────────────────────────────
+
+  async function handleModSave(date: string, code: string) {
+    if (!plan) return;
+    if (code.trim() === "") {
+      await api.delete(`/shifts/plans/${plan.id}/mod/${date}`);
+      setPlan((prev) =>
+        prev
+          ? { ...prev, modShifts: prev.modShifts.filter((m) => m.date !== date) }
+          : prev
+      );
+    } else {
+      await api.put(`/shifts/plans/${plan.id}/mod/${date}`, { code });
+      setPlan((prev) => {
+        if (!prev) return prev;
+        const existing = prev.modShifts.find((m) => m.date === date);
+        if (existing) {
+          return {
+            ...prev,
+            modShifts: prev.modShifts.map((m) =>
+              m.date === date ? { ...m, code } : m
+            ),
+          };
+        }
+        return {
+          ...prev,
+          modShifts: [...prev.modShifts, { id: date, date, code }],
+        };
+      });
     }
   }
 
@@ -331,13 +394,29 @@ export default function ShiftPlannerPage() {
 
             {/* Create plan */}
             {!plan && canEdit && (
-              <button
-                className={styles.primaryBtn}
-                onClick={handleCreatePlan}
-                disabled={actionLoading}
-              >
-                Vytvořit plán
-              </button>
+              <>
+                {plansList.length > 0 && (
+                  <select
+                    className={styles.copyFromSelect}
+                    value={copyFromId}
+                    onChange={(e) => setCopyFromId(e.target.value)}
+                  >
+                    <option value="">Kopírovat zaměstnance z…</option>
+                    {plansList.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {MONTH_NAMES[p.month - 1]} {p.year}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <button
+                  className={styles.primaryBtn}
+                  onClick={handleCreatePlan}
+                  disabled={actionLoading}
+                >
+                  Vytvořit plán
+                </button>
+              </>
             )}
 
             {/* Open plan */}
@@ -374,7 +453,7 @@ export default function ShiftPlannerPage() {
             )}
 
             {/* Add employee */}
-            {plan && plan.status !== "published" && canEdit && (
+            {plan && (plan.status !== "published" || role === "admin") && canEdit && (
               <button
                 className={styles.secondaryBtn}
                 onClick={() => setShowAddEmployee(true)}
@@ -474,6 +553,12 @@ export default function ShiftPlannerPage() {
             <ShiftGrid
               plan={plan}
               onCellSave={handleCellSave}
+              onModSave={handleModSave}
+              onEditEmployee={(emp) => setEditingEmployee(emp)}
+              onDeleteEmployee={handleDeleteEmployee}
+              canEditEmployees={
+                role === "admin" || (canEdit && plan.status !== "published")
+              }
               readOnly={!canEdit}
             />
           )}
@@ -490,6 +575,26 @@ export default function ShiftPlannerPage() {
               prev ? { ...prev, employees: [...prev.employees, emp] } : prev
             );
             setShowAddEmployee(false);
+          }}
+        />
+      )}
+      {editingEmployee && plan && (
+        <EditEmployeeInPlanModal
+          planId={plan.id}
+          employee={editingEmployee}
+          onClose={() => setEditingEmployee(null)}
+          onSaved={(updated) => {
+            setPlan((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    employees: prev.employees.map((e) =>
+                      e.id === updated.id ? updated : e
+                    ),
+                  }
+                : prev
+            );
+            setEditingEmployee(null);
           }}
         />
       )}

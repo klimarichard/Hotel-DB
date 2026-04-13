@@ -113,10 +113,11 @@ shiftsRouter.get(
     const { planId } = req.params;
     const planRef = db().collection("shiftPlans").doc(planId);
 
-    const [planDoc, employeesSnap, shiftsSnap] = await Promise.all([
+    const [planDoc, employeesSnap, shiftsSnap, modSnap] = await Promise.all([
       planRef.get(),
       planRef.collection("planEmployees").orderBy("displayOrder", "asc").get(),
       planRef.collection("shifts").get(),
+      planRef.collection("modRow").get(),
     ]);
 
     if (!planDoc.exists) {
@@ -130,6 +131,7 @@ shiftsRouter.get(
       ...planData,
       employees: employeesSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
       shifts: shiftsSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
+      modShifts: modSnap.docs.map((d) => ({ id: d.id, date: d.id, ...d.data() })),
     };
 
     // Include snapshot for closed plans (employees see this instead of real shifts)
@@ -240,7 +242,7 @@ shiftsRouter.delete(
       return;
     }
 
-    const subCols = ["planEmployees", "shifts", "shiftsSnapshot", "rules", "unavailabilityRequests"];
+    const subCols = ["planEmployees", "shifts", "shiftsSnapshot", "modRow", "rules", "unavailabilityRequests"];
     for (const col of subCols) {
       await deleteCollection(planRef.collection(col));
     }
@@ -333,6 +335,43 @@ shiftsRouter.post(
   }
 );
 
+// PUT /shifts/plans/:planId/employees/:docId — update a plan employee
+shiftsRouter.put(
+  "/plans/:planId/employees/:docId",
+  requireAuth,
+  requireRole("admin", "director", "manager"),
+  async (req, res) => {
+    const { planId, docId } = req.params;
+    const body = req.body as Record<string, unknown>;
+
+    const section = body.section as string;
+    const primaryShiftType = (body.primaryShiftType as string | null) ?? null;
+    const primaryHotel = (body.primaryHotel as string | null) ?? null;
+    const displayOrder = Number(body.displayOrder ?? 100);
+
+    if (!(VALID_SECTIONS as readonly string[]).includes(section)) {
+      res.status(400).json({ error: "Neplatná sekce" });
+      return;
+    }
+    if (primaryShiftType !== null && !(VALID_SHIFT_TYPES as readonly string[]).includes(primaryShiftType)) {
+      res.status(400).json({ error: "Neplatný typ směny" });
+      return;
+    }
+    if (primaryHotel !== null && !(HOTEL_CODES as readonly string[]).includes(primaryHotel)) {
+      res.status(400).json({ error: "Neplatný hotel" });
+      return;
+    }
+
+    await db()
+      .collection("shiftPlans")
+      .doc(planId)
+      .collection("planEmployees")
+      .doc(docId)
+      .update({ section, primaryShiftType, primaryHotel, displayOrder, updatedAt: FieldValue.serverTimestamp() });
+    res.json({ ok: true });
+  }
+);
+
 // DELETE /shifts/plans/:planId/employees/:docId
 shiftsRouter.delete(
   "/plans/:planId/employees/:docId",
@@ -347,6 +386,46 @@ shiftsRouter.delete(
       .doc(docId)
       .delete();
     res.json({ ok: true });
+  }
+);
+
+// POST /shifts/plans/:planId/copy-employees — copy planEmployees from another plan
+shiftsRouter.post(
+  "/plans/:planId/copy-employees",
+  requireAuth,
+  requireRole("admin", "director", "manager"),
+  async (req, res) => {
+    const { planId } = req.params;
+    const body = req.body as Record<string, unknown>;
+    const sourcePlanId = body.sourcePlanId as string;
+
+    if (!sourcePlanId) {
+      res.status(400).json({ error: "sourcePlanId je povinné" });
+      return;
+    }
+
+    const sourceSnap = await db()
+      .collection("shiftPlans")
+      .doc(sourcePlanId)
+      .collection("planEmployees")
+      .get();
+
+    if (sourceSnap.empty) {
+      res.json({ ok: true, copied: 0 });
+      return;
+    }
+
+    const batch = db().batch();
+    for (const doc of sourceSnap.docs) {
+      const ref = db()
+        .collection("shiftPlans")
+        .doc(planId)
+        .collection("planEmployees")
+        .doc(doc.id);
+      batch.set(ref, { ...doc.data(), createdAt: FieldValue.serverTimestamp() });
+    }
+    await batch.commit();
+    res.json({ ok: true, copied: sourceSnap.size });
   }
 );
 
@@ -554,6 +633,57 @@ shiftsRouter.patch(
         reviewedAt: FieldValue.serverTimestamp(),
         rejectionReason: status === "rejected" ? ((body.rejectionReason as string) ?? null) : null,
       });
+    res.json({ ok: true });
+  }
+);
+
+// ─── MOD Row (Manager on Duty) ───────────────────────────────────────────────
+
+const VALID_MOD_CODES = ["V", "R", "N", "O", "K", "A"] as const;
+
+// PUT /shifts/plans/:planId/mod/:date — upsert a MOD cell
+shiftsRouter.put(
+  "/plans/:planId/mod/:date",
+  requireAuth,
+  requireRole("admin", "director", "manager"),
+  async (req, res) => {
+    const { planId, date } = req.params;
+    const body = req.body as Record<string, unknown>;
+    const code = ((body.code as string) ?? "").toUpperCase().trim();
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      res.status(400).json({ error: "Neplatný formát data" });
+      return;
+    }
+    if (!(VALID_MOD_CODES as readonly string[]).includes(code)) {
+      res.status(400).json({ error: `Neplatný MOD kód: ${code}` });
+      return;
+    }
+
+    await db()
+      .collection("shiftPlans")
+      .doc(planId)
+      .collection("modRow")
+      .doc(date)
+      .set({ code, updatedAt: FieldValue.serverTimestamp() });
+
+    res.json({ ok: true });
+  }
+);
+
+// DELETE /shifts/plans/:planId/mod/:date — delete a MOD cell
+shiftsRouter.delete(
+  "/plans/:planId/mod/:date",
+  requireAuth,
+  requireRole("admin", "director", "manager"),
+  async (req, res) => {
+    const { planId, date } = req.params;
+    await db()
+      .collection("shiftPlans")
+      .doc(planId)
+      .collection("modRow")
+      .doc(date)
+      .delete();
     res.json({ ok: true });
   }
 );

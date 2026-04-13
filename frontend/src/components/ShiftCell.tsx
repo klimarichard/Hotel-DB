@@ -23,6 +23,7 @@ export default function ShiftCell({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const cellRef = useRef<HTMLDivElement>(null);
 
@@ -67,8 +68,11 @@ export default function ShiftCell({
       return;
     }
     setSaving(true);
+    setSaveError(null);
     try {
       await onSave(draft);
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "Chyba při ukládání");
     } finally {
       setSaving(false);
       setEditing(false);
@@ -78,8 +82,11 @@ export default function ShiftCell({
   async function commitAndNavigate(dir: "up" | "down" | "left" | "right") {
     if (draft !== rawInput && (draft.trim() === "" || draftParsed.isValid)) {
       setSaving(true);
+      setSaveError(null);
       try {
         await onSave(draft);
+      } catch (e) {
+        setSaveError(e instanceof Error ? e.message : "Chyba při ukládání");
       } finally {
         setSaving(false);
         setEditing(false);
@@ -182,8 +189,8 @@ export default function ShiftCell({
       style={{
         width: "100%",
         minHeight: "2rem",
-        background: bgColor,
-        color: textColor,
+        background: saveError ? "#fef2f2" : bgColor,
+        color: saveError ? "#dc2626" : textColor,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -194,15 +201,15 @@ export default function ShiftCell({
         userSelect: "none",
         padding: "2px",
         fontFamily: "monospace",
-        outline: focused ? "2px solid #3b82f6" : "none",
+        outline: saveError ? "2px solid #dc2626" : focused ? "2px solid #3b82f6" : "none",
         outlineOffset: "-2px",
       }}
-      title={rawInput ? `${rawInput} — ${hoursComputed}h` : undefined}
-      onClick={startEdit}
+      title={saveError ?? (rawInput ? `${rawInput} — ${hoursComputed}h` : undefined)}
+      onClick={() => { setSaveError(null); startEdit(); }}
       onFocus={onFocus}
       onKeyDown={handleDisplayKeyDown}
     >
-      {rawInput || null}
+      {saveError ? "!" : (rawInput || null)}
     </div>
   );
 }
