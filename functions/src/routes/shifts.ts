@@ -693,6 +693,22 @@ shiftsRouter.patch(
   }
 );
 
+// ─── Shift Override Count (global — across all plans) ────────────────────────
+
+// GET /shifts/overrides/pending-count — total pending overrides for nav badge
+shiftsRouter.get(
+  "/overrides/pending-count",
+  requireAuth,
+  requireRole("admin", "director"),
+  async (_req, res) => {
+    const snap = await db()
+      .collectionGroup("shiftOverrideRequests")
+      .where("status", "==", "pending")
+      .get();
+    res.json({ count: snap.size });
+  }
+);
+
 // ─── Shift Override Requests ─────────────────────────────────────────────────
 
 // GET /shifts/plans/:planId/shiftOverrides — list all requests

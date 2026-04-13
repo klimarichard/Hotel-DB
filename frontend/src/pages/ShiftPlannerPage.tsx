@@ -9,6 +9,7 @@ import ConfirmModal from "../components/ConfirmModal";
 import UnavailabilityPanel from "../components/UnavailabilityPanel";
 import XOverrideModal from "../components/XOverrideModal";
 import ShiftOverridePanel from "../components/ShiftOverridePanel";
+import { useShiftOverridesContext } from "../context/ShiftOverridesContext";
 import styles from "./ShiftPlannerPage.module.css";
 
 // ─── Shared types ─────────────────────────────────────────────────────────────
@@ -158,6 +159,9 @@ export default function ShiftPlannerPage() {
   const canEdit = role === "admin" || role === "director" || role === "manager";
   const canPublish = role === "admin" || role === "director";
 
+  const { refresh: refreshOverrideCount } = useShiftOverridesContext();
+  const [planOverrideCount, setPlanOverrideCount] = useState(0);
+
   // ── Load plan for selected month/year ──────────────────────────────────────
 
   const loadPlan = useCallback(() => {
@@ -178,6 +182,13 @@ export default function ShiftPlannerPage() {
         }
         return api.get<PlanDetail>(`/shifts/plans/${match.id}`).then((detail) => {
           setPlan({ ...detail, modShifts: detail.modShifts ?? [] });
+          // Fetch pending override count for this plan
+          if (canPublish) {
+            api
+              .get<{ id: string; status: string }[]>(`/shifts/plans/${match.id}/shiftOverrides`)
+              .then((overrides) => setPlanOverrideCount(overrides.filter((o) => o.status === "pending").length))
+              .catch(() => {});
+          }
         });
       })
       .catch((e) => setError(e.message))
@@ -667,8 +678,30 @@ export default function ShiftPlannerPage() {
               <button
                 className={styles.secondaryBtn}
                 onClick={() => setShowOverrideRequests((v) => !v)}
+                style={{ position: "relative" }}
               >
-                Výjimky X
+                Výjimky
+                {planOverrideCount > 0 && (
+                  <span style={{
+                    position: "absolute",
+                    top: "-6px",
+                    right: "-8px",
+                    background: "#ef4444",
+                    color: "#fff",
+                    borderRadius: "9999px",
+                    fontSize: "0.65rem",
+                    fontWeight: 700,
+                    minWidth: "1.1rem",
+                    height: "1.1rem",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    padding: "0 3px",
+                    lineHeight: 1,
+                  }}>
+                    {planOverrideCount}
+                  </span>
+                )}
               </button>
             )}
 
@@ -758,6 +791,10 @@ export default function ShiftPlannerPage() {
           {plan && showOverrideRequests && (
             <ShiftOverridePanel
               planId={plan.id}
+              onOverrideResolved={() => {
+                setPlanOverrideCount((c) => Math.max(0, c - 1));
+                refreshOverrideCount();
+              }}
               onShiftApproved={(employeeId, date, rawInput, hoursComputed, isDouble) => {
                 const docId = `${employeeId}_${date}`;
                 const approved: ShiftDoc = {
@@ -841,6 +878,8 @@ export default function ShiftPlannerPage() {
               violationTypes: pendingX.violations.map((v) => v.type),
             });
             setPendingX(null);
+            setPlanOverrideCount((c) => c + 1);
+            refreshOverrideCount();
           }}
           onCancel={() => setPendingX(null)}
         />

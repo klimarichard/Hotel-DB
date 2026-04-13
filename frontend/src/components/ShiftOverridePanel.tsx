@@ -17,6 +17,7 @@ interface OverrideRequest {
 
 interface Props {
   planId: string;
+  onOverrideResolved: () => void;
   onShiftApproved: (
     employeeId: string,
     date: string,
@@ -41,7 +42,7 @@ function StatusBadge({ status }: { status: OverrideRequest["status"] }) {
   );
 }
 
-export default function ShiftOverridePanel({ planId, onShiftApproved }: Props) {
+export default function ShiftOverridePanel({ planId, onOverrideResolved, onShiftApproved }: Props) {
   const [requests, setRequests] = useState<OverrideRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
@@ -68,6 +69,7 @@ export default function ShiftOverridePanel({ planId, onShiftApproved }: Props) {
       // Update the grid immediately
       const parsed = parseShiftExpression(req.requestedInput);
       onShiftApproved(req.employeeId, req.date, req.requestedInput, parsed.hoursComputed, parsed.isDouble);
+      onOverrideResolved();
     } finally {
       setSaving(false);
     }
@@ -87,6 +89,7 @@ export default function ShiftOverridePanel({ planId, onShiftApproved }: Props) {
       );
       setRejectingId(null);
       setRejectionReason("");
+      onOverrideResolved();
     } finally {
       setSaving(false);
     }

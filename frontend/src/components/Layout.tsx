@@ -3,6 +3,7 @@ import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useAuth } from "@/hooks/useAuth";
 import { useAlertsContext } from "@/context/AlertsContext";
+import { useShiftOverridesContext } from "@/context/ShiftOverridesContext";
 import styles from "./Layout.module.css";
 
 const navItems = [
@@ -20,6 +21,7 @@ const adminItems = [
 export default function Layout() {
   const { user, role } = useAuth();
   const { unreadCount } = useAlertsContext();
+  const { pendingCount: pendingOverrideCount } = useShiftOverridesContext();
   const navigate = useNavigate();
 
   async function handleLogout() {
@@ -40,7 +42,14 @@ export default function Layout() {
                   [styles.navLink, isActive ? styles.active : ""].join(" ")
                 }
               >
-                {item.label}
+                {item.to === "/smeny" && pendingOverrideCount > 0 ? (
+                  <span className={styles.navLinkInner}>
+                    {item.label}
+                    <span className={styles.badge}>{pendingOverrideCount}</span>
+                  </span>
+                ) : (
+                  item.label
+                )}
               </NavLink>
             </li>
           ))}

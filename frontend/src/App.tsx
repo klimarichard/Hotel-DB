@@ -10,6 +10,7 @@ import AlertsPage from "@/pages/AlertsPage";
 import ContractTemplatesPage from "@/pages/ContractTemplatesPage";
 import ShiftPlannerPage from "@/pages/ShiftPlannerPage";
 import { AlertsProvider } from "@/context/AlertsContext";
+import { ShiftOverridesProvider } from "@/context/ShiftOverridesContext";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -34,7 +35,9 @@ export default function App() {
         element={
           <RequireAuth>
             <AlertsProvider>
-              <Layout />
+              <ShiftOverridesProvider>
+                <Layout />
+              </ShiftOverridesProvider>
             </AlertsProvider>
           </RequireAuth>
         }
