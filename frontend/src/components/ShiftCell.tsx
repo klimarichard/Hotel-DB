@@ -53,7 +53,7 @@ export default function ShiftCell({
 
   function startEdit() {
     if (readOnly || saving) return;
-    setDraft(rawInput);
+    setDraft(rawInput.toUpperCase());
     setEditing(true);
   }
 
@@ -154,7 +154,7 @@ export default function ShiftCell({
       }).finally(() => setSaving(false));
     } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !readOnly) {
       // Start typing directly
-      setDraft(e.key);
+      setDraft(e.key.toUpperCase());
       setEditing(true);
     }
   }
@@ -179,7 +179,7 @@ export default function ShiftCell({
           display: "block",
         }}
         value={draft}
-        onChange={(e) => setDraft(e.target.value)}
+        onChange={(e) => setDraft(e.target.value.toUpperCase())}
         onKeyDown={handleEditKeyDown}
         onBlur={commitEdit}
         title={
