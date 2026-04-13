@@ -27,7 +27,9 @@ export default function ShiftCell({
   const inputRef = useRef<HTMLInputElement>(null);
   const cellRef = useRef<HTMLDivElement>(null);
 
-  const draftParsed = useMemo(() => parseShiftExpression(draft), [draft]);
+  // Normalise before parsing so "DA2" → "DA²" is treated as valid while typing
+  const draftNormalized = useMemo(() => draft.replace(/([A-Za-z])2/g, '$1\u00B2'), [draft]);
+  const draftParsed = useMemo(() => parseShiftExpression(draftNormalized), [draftNormalized]);
   const displayParsed = useMemo(() => parseShiftExpression(rawInput), [rawInput]);
 
   // Focus management: when `focused` prop becomes true, focus the cell or input.
@@ -63,17 +65,17 @@ export default function ShiftCell({
   }
 
   async function commitEdit() {
-    if (draft === rawInput) {
+    if (draftNormalized === rawInput) {
       setEditing(false);
       return;
     }
-    if (draft.trim() !== "" && !draftParsed.isValid) {
+    if (draftNormalized.trim() !== "" && !draftParsed.isValid) {
       return;
     }
     setSaving(true);
     setSaveError(null);
     try {
-      await onSave(draft);
+      await onSave(draftNormalized);
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : "Chyba při ukládání");
     } finally {
@@ -83,11 +85,11 @@ export default function ShiftCell({
   }
 
   async function commitAndNavigate(dir: "up" | "down" | "left" | "right") {
-    if (draft !== rawInput && (draft.trim() === "" || draftParsed.isValid)) {
+    if (draftNormalized !== rawInput && (draftNormalized.trim() === "" || draftParsed.isValid)) {
       setSaving(true);
       setSaveError(null);
       try {
-        await onSave(draft);
+        await onSave(draftNormalized);
       } catch (e) {
         setSaveError(e instanceof Error ? e.message : "Chyba při ukládání");
       } finally {
@@ -160,7 +162,7 @@ export default function ShiftCell({
   }
 
   if (editing) {
-    const isInvalid = draft.trim() !== "" && !draftParsed.isValid;
+    const isInvalid = draftNormalized.trim() !== "" && !draftParsed.isValid;
     return (
       <input
         ref={inputRef}
