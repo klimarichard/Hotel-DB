@@ -83,6 +83,9 @@ Denormalized fields on `employees` root doc for querying: `currentCompanyId`, `c
 8. Polish — stats dashboard, audit log UI, daily expiry alert scheduled function
 
 ### Running locally
+
+The user starts emulators and the frontend manually each session.
+
 ```
 # Terminal 1 — Firebase emulators
 cd Hotel-DB
@@ -148,6 +151,16 @@ npm run dev
 - `departments` binding — "oddělení" auto-filled from selected position
 - "změna smlouvy" — default contract text per change kind
 - Expiry alert dates displayed as Czech-formatted dates (currently raw ISO strings)
+
+### Post-phase 6 fixes (session 2026-04-14)
+- **Admin/director X bypass**: `admin` and `director` skip X-limit and coverage checks entirely in `ShiftPlannerPage.tsx` — no override modal shown. Managers and employees still go through the override flow.
+- **Parser validation**: bare `D` and `N` are now invalid — a hotel code is required (e.g. `DA`, `NS`). Only `R` and `X` are valid standalone. Fix applied to both `frontend/src/lib/shiftConstants.ts` and `functions/src/services/shiftParser.ts` (kept in sync manually).
+- **Cell colour changes** in `frontend/src/lib/shiftConstants.ts`:
+  - `DPQ`/`NPQ` (Amigo portýr): changed from dark purple to light brown (`bg #fdf6ee`, `text #431407`)
+  - `DP`/`NP` (Perla) and `DM`/`NM` (Metropol): changed to mid-grey (`bg #d1d5db`, `text #1f2937`)
+  - `getCellColor`: portýr shifts (`DP`/`NP`) with no hotel now fall to grey instead of the blue default
+- **Shift counter table** (closed plan, admin only): 12 counter rows (DA, DS, DQ, DK, NA, NS, NQ, NK, DPQ, NPQ, DPA, NPA) appended inside `ShiftGrid`'s own `<tbody>` so they share the same column widths and scroll container. `DA²` counts as `DA` (segments are parsed). Colours: 0 → red, 1 → green, 2+ → blue.
+- **Seed script rewrite**: `scripts/seed-shift-plan.js` now replays a captured snapshot (`scripts/_shift_plan_snapshot.json`) of the manually configured April 2026 plan (34 employees, 679 shifts) instead of generating shifts algorithmically.
 
 ### Open items from spec (§14)
 - Payroll: confirm whether D/N shifts use 11.5h net or 12h gross after break deduction
