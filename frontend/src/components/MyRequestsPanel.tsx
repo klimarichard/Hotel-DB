@@ -14,7 +14,7 @@ interface OverrideRequest {
   reason: string;
   violationTypes: string[];
   status: "pending" | "approved" | "rejected";
-  requestedAt: { seconds: number } | null;
+  requestedAt: { seconds?: number; _seconds?: number } | null;
   rejectionReason: string | null;
 }
 
@@ -24,7 +24,7 @@ interface ChangeRequest {
   currentRawInput: string;
   reason: string;
   status: "pending" | "approved" | "rejected";
-  requestedAt: { seconds: number } | null;
+  requestedAt: { seconds?: number; _seconds?: number } | null;
   rejectionReason: string | null;
 }
 
@@ -41,9 +41,11 @@ function StatusBadge({ status }: { status: "pending" | "approved" | "rejected" }
   );
 }
 
-function formatDatetime(ts: { seconds: number } | null): string {
+function formatDatetime(ts: { seconds?: number; _seconds?: number } | null): string {
   if (!ts) return "—";
-  const d = new Date(ts.seconds * 1000);
+  const secs = ts.seconds ?? ts._seconds;
+  if (secs === undefined) return "—";
+  const d = new Date(secs * 1000);
   const pad = (n: number) => String(n).padStart(2, "0");
   return (
     `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} ` +
