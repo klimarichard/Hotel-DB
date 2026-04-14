@@ -894,7 +894,7 @@ shiftsRouter.get(
 shiftsRouter.post(
   "/plans/:planId/shiftOverrides",
   requireAuth,
-  requireRole("admin", "director", "manager"),
+  requireRole("admin", "director", "manager", "employee"),
   async (req: AuthRequest, res) => {
     const { planId } = req.params;
     const body = req.body as Record<string, unknown>;
