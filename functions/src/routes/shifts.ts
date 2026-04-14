@@ -983,6 +983,136 @@ shiftsRouter.patch(
   }
 );
 
+// ─── Shift Change Requests (published plans) ────────────────────────────────
+
+// GET /shifts/changeRequests/pending-count — total pending change requests for nav badge
+shiftsRouter.get(
+  "/changeRequests/pending-count",
+  requireAuth,
+  requireRole("admin", "director"),
+  async (_req, res) => {
+    const snap = await db()
+      .collectionGroup("shiftChangeRequests")
+      .where("status", "==", "pending")
+      .get();
+    res.json({ count: snap.size });
+  }
+);
+
+// GET /shifts/plans/:planId/shiftChangeRequests — list all change requests for a plan
+shiftsRouter.get(
+  "/plans/:planId/shiftChangeRequests",
+  requireAuth,
+  requireRole("admin", "director", "manager"),
+  async (req, res) => {
+    const { planId } = req.params;
+    const snap = await db()
+      .collection("shiftPlans")
+      .doc(planId)
+      .collection("shiftChangeRequests")
+      .orderBy("requestedAt", "desc")
+      .get();
+    res.json(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+  }
+);
+
+// POST /shifts/plans/:planId/shiftChangeRequests — submit a change request
+shiftsRouter.post(
+  "/plans/:planId/shiftChangeRequests",
+  requireAuth,
+  requireRole("admin", "director", "manager", "employee"),
+  async (req: AuthRequest, res) => {
+    const { planId } = req.params;
+    const body = req.body as Record<string, unknown>;
+
+    const employeeId = body.employeeId as string;
+    const date = body.date as string;
+    const currentRawInput = (body.currentRawInput as string) ?? "";
+    const reason = (body.reason as string) ?? "";
+
+    if (!employeeId || !date) {
+      res.status(400).json({ error: "employeeId a date jsou povinné" });
+      return;
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      res.status(400).json({ error: "Neplatný formát data" });
+      return;
+    }
+    if (!reason.trim()) {
+      res.status(400).json({ error: "Důvod je povinný" });
+      return;
+    }
+
+    // Plan must exist and be published
+    const planDoc = await db().collection("shiftPlans").doc(planId).get();
+    if (!planDoc.exists) {
+      res.status(404).json({ error: "Plán nenalezen" });
+      return;
+    }
+    const planData = planDoc.data() as Record<string, unknown>;
+    if (planData.status !== "published") {
+      res.status(400).json({ error: "Žádosti o změnu lze podávat pouze k publikovaným plánům" });
+      return;
+    }
+
+    const ref = await db()
+      .collection("shiftPlans")
+      .doc(planId)
+      .collection("shiftChangeRequests")
+      .add({
+        employeeId,
+        date,
+        currentRawInput,
+        reason,
+        status: "pending",
+        requestedBy: req.uid ?? null,
+        requestedAt: FieldValue.serverTimestamp(),
+        reviewedBy: null,
+        reviewedAt: null,
+        rejectionReason: null,
+      });
+    res.status(201).json({ id: ref.id });
+  }
+);
+
+// PATCH /shifts/plans/:planId/shiftChangeRequests/:reqId — approve or reject
+shiftsRouter.patch(
+  "/plans/:planId/shiftChangeRequests/:reqId",
+  requireAuth,
+  requireRole("admin", "director"),
+  async (req: AuthRequest, res) => {
+    const { planId, reqId } = req.params;
+    const body = req.body as Record<string, unknown>;
+    const status = body.status as string;
+
+    if (!["approved", "rejected"].includes(status)) {
+      res.status(400).json({ error: "Stav musí být approved nebo rejected" });
+      return;
+    }
+
+    const changeReqRef = db()
+      .collection("shiftPlans")
+      .doc(planId)
+      .collection("shiftChangeRequests")
+      .doc(reqId);
+
+    const changeReqDoc = await changeReqRef.get();
+    if (!changeReqDoc.exists) {
+      res.status(404).json({ error: "Žádost nenalezena" });
+      return;
+    }
+
+    await changeReqRef.update({
+      status,
+      reviewedBy: req.uid ?? null,
+      reviewedAt: FieldValue.serverTimestamp(),
+      rejectionReason: status === "rejected" ? ((body.rejectionReason as string) ?? null) : null,
+    });
+
+    res.json({ ok: true });
+  }
+);
+
 // ─── MOD Row (Manager on Duty) ───────────────────────────────────────────────
 
 const VALID_MOD_CODES = ["V", "R", "N", "O", "K", "A"] as const;

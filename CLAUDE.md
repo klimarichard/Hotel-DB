@@ -162,6 +162,16 @@ npm run dev
 - **Shift counter table** (closed plan, admin only): 12 counter rows (DA, DS, DQ, DK, NA, NS, NQ, NK, DPQ, NPQ, DPA, NPA) appended inside `ShiftGrid`'s own `<tbody>` so they share the same column widths and scroll container. `DA²` counts as `DA` (segments are parsed). Colours: 0 → red, 1 → green, 2+ → blue.
 - **Seed script rewrite**: `scripts/seed-shift-plan.js` now replays a captured snapshot (`scripts/_shift_plan_snapshot.json`) of the manually configured April 2026 plan (34 employees, 679 shifts, 30 MOD row entries) instead of generating shifts algorithmically.
 
+### Feature branch `feature/shift-change-requests` — key implementation notes
+- **Shift change requests** (`shiftChangeRequests` sub-collection under `shiftPlans/{id}`): employees click a published cell to open `ShiftChangeRequestModal`; admins/directors review via `ShiftChangeRequestPanel` (reuses `ShiftOverridePanel.module.css`).
+- Approving a change request does **not** automatically update the shift — admin handles that manually. This mirrors the spec intent (informational approval only).
+- New context `ShiftChangeRequestsContext` mirrors `ShiftOverridesContext` exactly; fetches `GET /shifts/changeRequests/pending-count` (collectionGroup query).
+- Smart periodic reload: instead of a full `loadPlan()` every 60 s, fetches the plan list and compares `updatedAt` + `status` via `useRef`. Full reload only when something changed.
+- `ShiftCell` gained optional `onRequestChange` prop; when `readOnly && onRequestChange && rawInput`, click triggers the callback instead of starting edit. Cursor is `pointer` in this case.
+- `ShiftGrid` gained optional `onCellRequestChange` prop; passed to `ShiftCell` only for cells with a non-empty `rawInput`.
+- New button "Žádosti o změny" in plan bar (admin/director only), with red badge from `changeRequestCount`.
+- `ShiftChangeRequestsProvider` added to `App.tsx` provider stack inside `ShiftOverridesProvider`.
+
 ### Open items from spec (§14)
 - Payroll: confirm whether D/N shifts use 11.5h net or 12h gross after break deduction
 - Payroll: confirm night premium rate formula (% or fixed per hour)

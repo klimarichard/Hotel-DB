@@ -30,6 +30,7 @@ interface Props {
   canSeeInactiveFlag: boolean;
   readOnly: boolean;
   showCounterTable?: boolean;
+  onCellRequestChange?: (employeeId: string, date: string, currentRawInput: string) => void;
 }
 
 const DAY_NAMES = ["Ne", "Po", "Út", "St", "Čt", "Pá", "So"];
@@ -65,6 +66,7 @@ export default function ShiftGrid({
   canSeeInactiveFlag,
   readOnly,
   showCounterTable = false,
+  onCellRequestChange,
 }: Props) {
   const days = useMemo(() => getDaysInMonth(plan.year, plan.month), [plan.year, plan.month]);
 
@@ -314,6 +316,11 @@ export default function ShiftGrid({
                               setFocusedCell({ row: rowIdx, col: colIdx });
                               setFocusedModCol(null);
                             }}
+                            onRequestChange={
+                              onCellRequestChange && shiftDoc?.rawInput
+                                ? () => onCellRequestChange(emp.employeeId, dateStr, shiftDoc.rawInput)
+                                : undefined
+                            }
                           />
                         </td>
                       );

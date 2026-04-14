@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 import { useAuth } from "../hooks/useAuth";
 import { parseShiftExpression } from "../lib/shiftConstants";
@@ -9,7 +9,10 @@ import ConfirmModal from "../components/ConfirmModal";
 import UnavailabilityPanel from "../components/UnavailabilityPanel";
 import XOverrideModal from "../components/XOverrideModal";
 import ShiftOverridePanel from "../components/ShiftOverridePanel";
+import ShiftChangeRequestPanel from "../components/ShiftChangeRequestPanel";
+import ShiftChangeRequestModal from "../components/ShiftChangeRequestModal";
 import { useShiftOverridesContext } from "../context/ShiftOverridesContext";
+import { useShiftChangeRequestsContext } from "../context/ShiftChangeRequestsContext";
 import styles from "./ShiftPlannerPage.module.css";
 
 // ─── Shared types ─────────────────────────────────────────────────────────────
@@ -143,6 +146,10 @@ export default function ShiftPlannerPage() {
   const [showAddEmployee, setShowAddEmployee] = useState(false);
   const [showUnavailability, setShowUnavailability] = useState(false);
   const [showOverrideRequests, setShowOverrideRequests] = useState(false);
+  const [showChangeRequests, setShowChangeRequests] = useState(false);
+  const [pendingChangeRequest, setPendingChangeRequest] = useState<{
+    employeeId: string; date: string; currentRawInput: string;
+  } | null>(null);
   const [pendingX, setPendingX] = useState<PendingXRequest | null>(null);
   const [editingEmployee, setEditingEmployee] = useState<PlanEmployee | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
@@ -173,6 +180,7 @@ export default function ShiftPlannerPage() {
   }, [plan?.id, plan?.status]);
 
   const { refresh: refreshOverrideCount } = useShiftOverridesContext();
+  const { pendingCount: changeRequestCount, refresh: refreshChangeRequestCount } = useShiftChangeRequestsContext();
   const [planOverrideCount, setPlanOverrideCount] = useState(0);
 
   // ── Load plan for selected month/year ──────────────────────────────────────
@@ -211,14 +219,44 @@ export default function ShiftPlannerPage() {
   }, [loadPlan]);
 
   // ── Periodic plan reload ───────────────────────────────────────────────────
-  // Reloads the plan every 60 s so status changes triggered by the app-wide
-  // deadline checker in Layout are reflected without a manual page refresh.
+  // Every 60 s, do a lightweight check: fetch only the plan list, compare
+  // updatedAt and status. Only do a full reload when something actually changed.
+
+  const lastKnownRef = useRef<{ updatedAt: string | undefined; status: string | undefined }>({
+    updatedAt: undefined,
+    status: undefined,
+  });
+
+  // Keep the ref in sync whenever the plan changes (from a full load).
+  useEffect(() => {
+    if (plan) {
+      lastKnownRef.current = {
+        updatedAt: (plan as unknown as Record<string, unknown>).updatedAt as string | undefined,
+        status: plan.status,
+      };
+    }
+  }, [plan]);
 
   useEffect(() => {
     if (!plan) return;
-    const timer = setInterval(loadPlan, 60_000);
+    const timer = setInterval(async () => {
+      try {
+        const plans = await api.get<(PlanListItem & { updatedAt?: string })[]>("/shifts/plans");
+        const match = plans.find(
+          (p) => p.month === selectedMonth && p.year === selectedYear
+        );
+        if (!match) return;
+        const { updatedAt, status } = match;
+        const last = lastKnownRef.current;
+        if (updatedAt !== last.updatedAt || status !== last.status) {
+          loadPlan();
+        }
+      } catch {
+        // silently ignore — full reload will catch it on next manual navigation
+      }
+    }, 60_000);
     return () => clearInterval(timer);
-  }, [plan?.id, loadPlan]);
+  }, [plan?.id, selectedMonth, selectedYear, loadPlan]);
 
   // ── Month navigation ───────────────────────────────────────────────────────
 
@@ -694,6 +732,38 @@ export default function ShiftPlannerPage() {
               </button>
             )}
 
+            {/* Change requests toggle (admin/director only, for published plans) */}
+            {plan && canPublish && (
+              <button
+                className={styles.secondaryBtn}
+                onClick={() => setShowChangeRequests((v) => !v)}
+                style={{ position: "relative" }}
+              >
+                Žádosti o změny
+                {changeRequestCount > 0 && (
+                  <span style={{
+                    position: "absolute",
+                    top: "-6px",
+                    right: "-8px",
+                    background: "#ef4444",
+                    color: "#fff",
+                    borderRadius: "9999px",
+                    fontSize: "0.65rem",
+                    fontWeight: 700,
+                    minWidth: "1.1rem",
+                    height: "1.1rem",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    padding: "0 3px",
+                    lineHeight: 1,
+                  }}>
+                    {changeRequestCount}
+                  </span>
+                )}
+              </button>
+            )}
+
             {/* Revert plan (admin only) */}
             {plan && role === "admin" && plan.status !== "created" && (
               <button
@@ -842,6 +912,15 @@ export default function ShiftPlannerPage() {
             />
           )}
 
+          {/* Shift change requests panel */}
+          {plan && showChangeRequests && canPublish && (
+            <ShiftChangeRequestPanel
+              planId={plan.id}
+              employees={plan.employees}
+              onResolved={() => { refreshChangeRequestCount(); }}
+            />
+          )}
+
           {/* Shift grid */}
           {plan && plan.employees.length === 0 && (
             <div className={styles.emptyPlan}>
@@ -861,6 +940,13 @@ export default function ShiftPlannerPage() {
               canSeeInactiveFlag={canEdit}
               readOnly={!canEdit}
               showCounterTable={plan.status === "closed" && role === "admin"}
+              onCellRequestChange={
+                role === "employee" && plan.status === "published"
+                  ? (employeeId, date, currentRawInput) => {
+                      setPendingChangeRequest({ employeeId, date, currentRawInput });
+                    }
+                  : undefined
+              }
             />
           )}
 
@@ -911,6 +997,26 @@ export default function ShiftPlannerPage() {
             refreshOverrideCount();
           }}
           onCancel={() => setPendingX(null)}
+        />
+      )}
+      {pendingChangeRequest && plan && (
+        <ShiftChangeRequestModal
+          employeeName={(() => {
+            const emp = plan.employees.find((e) => e.employeeId === pendingChangeRequest.employeeId);
+            return emp ? `${emp.lastName} ${emp.firstName}` : pendingChangeRequest.employeeId;
+          })()}
+          date={pendingChangeRequest.date}
+          currentShift={pendingChangeRequest.currentRawInput}
+          onSubmit={async (reason) => {
+            await api.post(`/shifts/plans/${plan.id}/shiftChangeRequests`, {
+              employeeId: pendingChangeRequest.employeeId,
+              date: pendingChangeRequest.date,
+              currentRawInput: pendingChangeRequest.currentRawInput,
+              reason,
+            });
+            setPendingChangeRequest(null);
+          }}
+          onClose={() => setPendingChangeRequest(null)}
         />
       )}
       {editingEmployee && plan && (

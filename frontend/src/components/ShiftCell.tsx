@@ -9,6 +9,7 @@ interface Props {
   focused: boolean;
   onNavigate: (dir: "up" | "down" | "left" | "right") => void;
   onFocus: () => void;
+  onRequestChange?: () => void;
 }
 
 export default function ShiftCell({
@@ -19,6 +20,7 @@ export default function ShiftCell({
   focused,
   onNavigate,
   onFocus,
+  onRequestChange,
 }: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
@@ -213,7 +215,7 @@ export default function ShiftCell({
         justifyContent: "center",
         fontSize: "0.8rem",
         fontWeight: 500,
-        cursor: readOnly ? "default" : "pointer",
+        cursor: readOnly ? (onRequestChange && rawInput ? "pointer" : "default") : "pointer",
         borderRadius: "2px",
         userSelect: "none",
         padding: "2px",
@@ -222,7 +224,14 @@ export default function ShiftCell({
         outlineOffset: "-2px",
       }}
       title={saveError ?? (rawInput ? `${rawInput} — ${hoursComputed}h` : undefined)}
-      onClick={() => { setSaveError(null); startEdit(); }}
+      onClick={() => {
+        if (readOnly && onRequestChange && rawInput) {
+          onRequestChange();
+          return;
+        }
+        setSaveError(null);
+        startEdit();
+      }}
       onFocus={onFocus}
       onKeyDown={handleDisplayKeyDown}
     >
