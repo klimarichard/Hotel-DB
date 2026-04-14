@@ -9,6 +9,7 @@ import {
   EmployeeData,
   CompanyData,
 } from "@/lib/contractVariables";
+import { formatTimestampCZ } from "@/lib/dateFormat";
 import styles from "./ContractsTab.module.css";
 
 interface ContractRecord {
@@ -27,13 +28,6 @@ interface Props {
   employeeId: string;
   employeeData: EmployeeData;
   companyData: CompanyData;
-}
-
-function formatTs(ts: { seconds?: number; _seconds?: number } | undefined): string {
-  if (!ts) return "–";
-  const secs = ts.seconds ?? ts._seconds;
-  if (secs == null) return "–";
-  return new Date(secs * 1000).toLocaleDateString("cs-CZ");
 }
 
 const STATUS_LABEL: Record<ContractRecord["status"], string> = {
@@ -210,7 +204,7 @@ export default function ContractsTab({ employeeId, employeeData, companyData }: 
             {contracts.map((c) => (
               <tr key={c.id}>
                 <td>{CONTRACT_TYPE_LABELS[c.type]}</td>
-                <td>{formatTs(c.generatedAt)}</td>
+                <td>{formatTimestampCZ(c.generatedAt)}</td>
                 <td>
                   <span className={`${styles.status} ${STATUS_CLASS[c.status]}`}>
                     {STATUS_LABEL[c.status]}

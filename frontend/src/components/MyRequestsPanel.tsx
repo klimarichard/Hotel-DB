@@ -5,6 +5,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
+import { formatDateCZ, formatDatetimeCZ } from "../lib/dateFormat";
 import styles from "./ShiftOverridePanel.module.css";
 
 interface OverrideRequest {
@@ -39,23 +40,6 @@ function StatusBadge({ status }: { status: "pending" | "approved" | "rejected" }
       {labels[status]}
     </span>
   );
-}
-
-function formatDatetime(ts: { seconds?: number; _seconds?: number } | null): string {
-  if (!ts) return "—";
-  const secs = ts.seconds ?? ts._seconds;
-  if (secs === undefined) return "—";
-  const d = new Date(secs * 1000);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return (
-    `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} ` +
-    `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-  );
-}
-
-function formatDate(iso: string): string {
-  const [y, m, d] = iso.split("-");
-  return `${d}.${m}.${y}`;
 }
 
 export default function MyRequestsPanel({ planId }: Props) {
@@ -109,11 +93,11 @@ export default function MyRequestsPanel({ planId }: Props) {
                 <tbody>
                   {overrides.map((req) => (
                     <tr key={req.id} className={req.status !== "pending" ? styles.rowDone : ""}>
-                      <td>{formatDate(req.date)}</td>
+                      <td>{formatDateCZ(req.date)}</td>
                       <td>{req.requestedInput || "—"}</td>
                       <td>{(req.violationTypes ?? []).map((v) => VIOLATION_LABELS[v] ?? v).join(", ") || "—"}</td>
                       <td>{req.reason || "—"}</td>
-                      <td>{formatDatetime(req.requestedAt)}</td>
+                      <td>{formatDatetimeCZ(req.requestedAt)}</td>
                       <td>
                         <StatusBadge status={req.status} />
                         {req.status === "rejected" && req.rejectionReason && (
@@ -148,10 +132,10 @@ export default function MyRequestsPanel({ planId }: Props) {
                 <tbody>
                   {changes.map((req) => (
                     <tr key={req.id} className={req.status !== "pending" ? styles.rowDone : ""}>
-                      <td>{formatDate(req.date)}</td>
+                      <td>{formatDateCZ(req.date)}</td>
                       <td>{req.currentRawInput || "—"}</td>
                       <td>{req.reason || "—"}</td>
-                      <td>{formatDatetime(req.requestedAt)}</td>
+                      <td>{formatDatetimeCZ(req.requestedAt)}</td>
                       <td>
                         <StatusBadge status={req.status} />
                         {req.status === "rejected" && req.rejectionReason && (

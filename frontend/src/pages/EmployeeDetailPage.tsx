@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import { api } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import ConfirmModal from "@/components/ConfirmModal";
+import { formatDateCZ } from "@/lib/dateFormat";
 import ContractsTab from "@/components/ContractsTab";
 import GenerateContractModal from "@/components/GenerateContractModal";
 import {
@@ -875,10 +876,10 @@ export default function EmployeeDetailPage() {
               <strong>{a.fieldLabel}</strong>
               {" — "}
               {a.daysUntilExpiry < 0
-                ? `Prošlé o ${Math.abs(a.daysUntilExpiry)} dní (${a.expiryDate})`
+                ? `Prošlé o ${Math.abs(a.daysUntilExpiry)} dní (${formatDateCZ(a.expiryDate)})`
                 : a.daysUntilExpiry === 0
-                ? `Vyprší dnes (${a.expiryDate})`
-                : `Vyprší za ${a.daysUntilExpiry} dní (${a.expiryDate})`}
+                ? `Vyprší dnes (${formatDateCZ(a.expiryDate)})`
+                : `Vyprší za ${a.daysUntilExpiry} dní (${formatDateCZ(a.expiryDate)})`}
             </div>
           ))}
         </div>
@@ -910,7 +911,7 @@ export default function EmployeeDetailPage() {
                           {row.jobTitle || "—"}{row.contractType ? ` · ${row.contractType}` : ""}
                         </div>
                         <div className={styles.timelineMeta}>
-                          {row.startDate} — {row.endDate ?? "dosud"}
+                          {formatDateCZ(row.startDate)} — {row.endDate ? formatDateCZ(row.endDate) : "dosud"}
                           {row.department ? ` · ${row.department}` : ""}
                           {(row.salary ?? row.agreedReward) != null && (
                             <SalaryDisplay value={(row.salary ?? row.agreedReward)!} />
@@ -1027,7 +1028,7 @@ export default function EmployeeDetailPage() {
       <Section title="Osobní údaje" sectionKey="personal" expanded={expanded.has("personal")} onToggle={toggle}>
         <div className={styles.fields}>
           <div className={styles.field}><span className={styles.fieldLabel}>Jméno</span><span className={styles.fieldValue}>{employee.firstName} {employee.lastName}</span></div>
-          <div className={styles.field}><span className={styles.fieldLabel}>Datum narození</span><span className={styles.fieldValue}>{val(employee.dateOfBirth)}</span></div>
+          <div className={styles.field}><span className={styles.fieldLabel}>Datum narození</span><span className={styles.fieldValue}>{val(formatDateCZ(employee.dateOfBirth))}</span></div>
           <div className={styles.field}><span className={styles.fieldLabel}>Pohlaví</span><span className={styles.fieldValue}>{employee.gender === "m" ? "Muž" : employee.gender === "f" ? "Žena" : "—"}</span></div>
           <div className={styles.field}><span className={styles.fieldLabel}>Rodné příjmení</span><span className={styles.fieldValue}>{val(employee.birthSurname)}</span></div>
           <SensitiveField employeeId={id!} field="birthNumber" label="Rodné číslo" apiValue={employee.birthNumber} />
@@ -1083,8 +1084,8 @@ export default function EmployeeDetailPage() {
               <p className={styles.docGroupLabel}>Cestovní pas</p>
               <div className={styles.fields}>
                 <div className={styles.field}><span className={styles.fieldLabel}>Číslo pasu</span><span className={styles.fieldValue}>{val(documents?.passportNumber)}</span></div>
-                <div className={styles.field}><span className={styles.fieldLabel}>Datum vydání</span><span className={styles.fieldValue}>{val(documents?.passportIssueDate)}</span></div>
-                <div className={styles.field}><span className={styles.fieldLabel}>Platnost pasu</span><span className={styles.fieldValue}>{val(documents?.passportExpiry)}</span></div>
+                <div className={styles.field}><span className={styles.fieldLabel}>Datum vydání</span><span className={styles.fieldValue}>{val(formatDateCZ(documents?.passportIssueDate))}</span></div>
+                <div className={styles.field}><span className={styles.fieldLabel}>Platnost pasu</span><span className={styles.fieldValue}>{val(formatDateCZ(documents?.passportExpiry))}</span></div>
                 <div className={styles.field}><span className={styles.fieldLabel}>Vydal</span><span className={styles.fieldValue}>{val(documents?.passportAuthority)}</span></div>
               </div>
             </div>
@@ -1093,8 +1094,8 @@ export default function EmployeeDetailPage() {
               <div className={styles.fields}>
                 <div className={styles.field}><span className={styles.fieldLabel}>Číslo povolení</span><span className={styles.fieldValue}>{val(documents?.visaNumber)}</span></div>
                 <div className={styles.field}><span className={styles.fieldLabel}>Typ povolení</span><span className={styles.fieldValue}>{val(documents?.visaType)}</span></div>
-                <div className={styles.field}><span className={styles.fieldLabel}>Datum vydání</span><span className={styles.fieldValue}>{val(documents?.visaIssueDate)}</span></div>
-                <div className={styles.field}><span className={styles.fieldLabel}>Platnost povolení</span><span className={styles.fieldValue}>{val(documents?.visaExpiry)}</span></div>
+                <div className={styles.field}><span className={styles.fieldLabel}>Datum vydání</span><span className={styles.fieldValue}>{val(formatDateCZ(documents?.visaIssueDate))}</span></div>
+                <div className={styles.field}><span className={styles.fieldLabel}>Platnost povolení</span><span className={styles.fieldValue}>{val(formatDateCZ(documents?.visaExpiry))}</span></div>
               </div>
             </div>
           </>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
 import type { PlanEmployee } from "../pages/ShiftPlannerPage";
+import { formatDateCZ, formatDatetimeCZ } from "../lib/dateFormat";
 import styles from "./ShiftOverridePanel.module.css";
 
 interface ChangeRequest {
@@ -28,23 +29,6 @@ function StatusBadge({ status }: { status: ChangeRequest["status"] }) {
       {labels[status]}
     </span>
   );
-}
-
-function formatDatetime(ts: { seconds?: number; _seconds?: number } | null): string {
-  if (!ts) return "—";
-  const secs = ts.seconds ?? ts._seconds;
-  if (secs === undefined) return "—";
-  const d = new Date(secs * 1000);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return (
-    `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} ` +
-    `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-  );
-}
-
-function formatDate(iso: string): string {
-  const [y, m, d] = iso.split("-");
-  return `${d}.${m}.${y}`;
 }
 
 export default function ShiftChangeRequestPanel({ planId, employees, onResolved, canReview = true }: Props) {
@@ -130,10 +114,10 @@ export default function ShiftChangeRequestPanel({ planId, employees, onResolved,
               <>
                 <tr key={req.id} className={req.status !== "pending" ? styles.rowDone : ""}>
                   <td>{resolveEmployeeName(req.employeeId)}</td>
-                  <td>{formatDate(req.date)}</td>
+                  <td>{formatDateCZ(req.date)}</td>
                   <td>{req.currentRawInput || "—"}</td>
                   <td>{req.reason || "—"}</td>
-                  <td>{formatDatetime(req.requestedAt)}</td>
+                  <td>{formatDatetimeCZ(req.requestedAt)}</td>
                   <td>
                     <StatusBadge status={req.status} />
                     {req.status === "rejected" && req.rejectionReason && (

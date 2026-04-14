@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
 import { useAuth } from "../hooks/useAuth";
+import { formatDateCZ } from "../lib/dateFormat";
 import styles from "./VacationPage.module.css";
 
 interface PendingEdit {
@@ -31,12 +32,6 @@ function StatusBadge({ status }: { status: VacationRequest["status"] }) {
       {labels[status]}
     </span>
   );
-}
-
-function formatDate(iso: string): string {
-  if (!iso) return "";
-  const [y, m, d] = iso.split("-");
-  return `${d}.${m}.${y}`;
 }
 
 export default function VacationPage() {
@@ -289,8 +284,8 @@ export default function VacationPage() {
               {myRequests.map((req) => (
                 <>
                   <tr key={req.id} className={req.status === "approved" && !req.pendingEdit ? styles.rowDone : ""}>
-                    <td>{formatDate(req.startDate)}</td>
-                    <td>{formatDate(req.endDate)}</td>
+                    <td>{formatDateCZ(req.startDate)}</td>
+                    <td>{formatDateCZ(req.endDate)}</td>
                     <td>{req.reason || "—"}</td>
                     <td>
                       <StatusBadge status={req.status} />
@@ -404,8 +399,8 @@ export default function VacationPage() {
                       <td>
                         {req.lastName} {req.firstName}
                       </td>
-                      <td>{formatDate(req.startDate)}</td>
-                      <td>{formatDate(req.endDate)}</td>
+                      <td>{formatDateCZ(req.startDate)}</td>
+                      <td>{formatDateCZ(req.endDate)}</td>
                       <td>{req.reason || "—"}</td>
                       <td>
                         <StatusBadge status={req.status} />
@@ -445,9 +440,9 @@ export default function VacationPage() {
                         <td colSpan={6}>
                           <span className={styles.pendingEditLabel}>Navrhovaná změna:</span>
                           <span className={styles.pendingEditDates}>
-                            {formatDate(req.pendingEdit.startDate)}
+                            {formatDateCZ(req.pendingEdit.startDate)}
                             {" – "}
-                            {formatDate(req.pendingEdit.endDate)}
+                            {formatDateCZ(req.pendingEdit.endDate)}
                             {req.pendingEdit.reason && <> &middot; {req.pendingEdit.reason}</>}
                           </span>
                           <button

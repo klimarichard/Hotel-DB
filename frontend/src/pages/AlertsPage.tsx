@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { api } from "@/lib/api";
 import { useAlertsContext } from "@/context/AlertsContext";
+import { formatDateCZ } from "@/lib/dateFormat";
 import styles from "./AlertsPage.module.css";
 
 interface Alert {
@@ -13,11 +14,6 @@ interface Alert {
   expiryDate: string;
   daysUntilExpiry: number;
   status: "expiring" | "expired";
-}
-
-function formatDate(iso: string) {
-  const d = new Date(iso);
-  return d.toLocaleDateString("cs-CZ");
 }
 
 function DaysBadge({ days }: { days: number }) {
@@ -64,7 +60,7 @@ function AlertTable({ alerts, showAction, onMarkRead, muted }: AlertTableProps) 
                 </Link>
               </td>
               <td>{alert.fieldLabel}</td>
-              <td>{formatDate(alert.expiryDate)}</td>
+              <td>{formatDateCZ(alert.expiryDate)}</td>
               <td><DaysBadge days={alert.daysUntilExpiry} /></td>
               {showAction && (
                 <td>

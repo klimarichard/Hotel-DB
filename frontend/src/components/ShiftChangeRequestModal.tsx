@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { formatDateCZ } from "../lib/dateFormat";
 import styles from "./AddEmployeeToPlanModal.module.css";
 
 interface Props {
@@ -7,11 +8,6 @@ interface Props {
   currentShift: string;  // current rawInput shown for context
   onSubmit: (reason: string) => Promise<void>;
   onClose: () => void;
-}
-
-function formatDate(iso: string): string {
-  const [y, m, d] = iso.split("-");
-  return `${d}.${m}.${y}`;
 }
 
 export default function ShiftChangeRequestModal({
@@ -50,7 +46,7 @@ export default function ShiftChangeRequestModal({
         </div>
         <div className={styles.body}>
           <p style={{ fontSize: "0.875rem", color: "#374151", margin: "0 0 1rem" }}>
-            <strong>{employeeName}</strong> — {formatDate(date)} — aktuálně:{" "}
+            <strong>{employeeName}</strong> — {formatDateCZ(date)} — aktuálně:{" "}
             <strong>{currentShift || "—"}</strong>
           </p>
 

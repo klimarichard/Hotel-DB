@@ -13,6 +13,7 @@ import {
   CONTRACT_TYPE_LABELS,
   VARIABLE_GROUPS,
 } from "@/lib/contractVariables";
+import { formatTimestampCZ } from "@/lib/dateFormat";
 import styles from "./ContractTemplatesPage.module.css";
 
 const ALL_TYPES = Object.keys(CONTRACT_TYPE_LABELS) as ContractType[];
@@ -27,13 +28,6 @@ interface TemplateMeta {
 
 interface TemplateDoc extends TemplateMeta {
   htmlContent: string;
-}
-
-function formatTs(ts: { seconds?: number; _seconds?: number } | null | undefined): string {
-  if (!ts) return "–";
-  const secs = ts.seconds ?? ts._seconds;
-  if (secs == null) return "–";
-  return new Date(secs * 1000).toLocaleDateString("cs-CZ");
 }
 
 export default function ContractTemplatesPage() {
@@ -188,7 +182,7 @@ export default function ContractTemplatesPage() {
                     <span className={styles.templateName}>{CONTRACT_TYPE_LABELS[type]}</span>
                     {meta ? (
                       <span className={styles.templateDate}>
-                        {formatTs(meta.updatedAt)}
+                        {formatTimestampCZ(meta.updatedAt)}
                       </span>
                     ) : (
                       <span className={styles.templateEmpty}>Prázdná</span>
