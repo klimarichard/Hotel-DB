@@ -297,21 +297,24 @@ shiftsRouter.get(
       contractType: contractTypeMap.get(e.employeeId) ?? null,
     }));
 
-    const response: Record<string, unknown> = {
+    // Employees viewing a closed plan see the snapshot taken at close time,
+    // not the live shifts — admin changes after closing are invisible until publish.
+    let visibleShifts = shifts;
+    const userRole = (req as AuthRequest).role;
+    if (planData.status === "closed" && userRole === "employee") {
+      const snapshotSnap = await planRef.collection("shiftsSnapshot").get();
+      visibleShifts = snapshotSnap.docs
+        .filter((d) => currentEmployeeIds.has(d.data().employeeId as string))
+        .map((d) => ({ id: d.id, ...d.data() }));
+    }
+
+    res.json({
       id: planDoc.id,
       ...planData,
       employees,
-      shifts,
+      shifts: visibleShifts,
       modShifts: modSnap.docs.map((d) => ({ id: d.id, date: d.id, ...d.data() })),
-    };
-
-    // Include snapshot for closed plans (employees see this instead of real shifts)
-    if (planData.status === "closed") {
-      const snapshotSnap = await planRef.collection("shiftsSnapshot").get();
-      response.shiftsSnapshot = snapshotSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    }
-
-    res.json(response);
+    });
   }
 );
 
