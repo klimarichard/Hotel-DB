@@ -203,6 +203,21 @@
   white-space: nowrap;
 }
 
+.deadlineSave {
+  padding: 3px 10px;
+  background: #fff;
+  color: #374151;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.deadlineSave:hover {
+  background: #f3f4f6;
+}
+
 .deadlineClear {
   background: none;
   border: none;

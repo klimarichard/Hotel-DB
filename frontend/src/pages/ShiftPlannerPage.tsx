@@ -159,6 +159,19 @@ export default function ShiftPlannerPage() {
   const canEdit = role === "admin" || role === "director" || role === "manager";
   const canPublish = role === "admin" || role === "director";
 
+  // Local draft for deadline inputs — avoids live-saving on every keystroke
+  const [deadlineDraft, setDeadlineDraft] = useState({ closedAt: "", publishedAt: "" });
+
+  // Sync draft whenever the plan loads, changes month, or status changes
+  useEffect(() => {
+    if (plan) {
+      setDeadlineDraft({
+        closedAt: toDatetimeLocal(plan.closedAt),
+        publishedAt: toDatetimeLocal(plan.publishedAt),
+      });
+    }
+  }, [plan?.id, plan?.status]);
+
   const { refresh: refreshOverrideCount } = useShiftOverridesContext();
   const [planOverrideCount, setPlanOverrideCount] = useState(0);
 
@@ -334,6 +347,14 @@ export default function ShiftPlannerPage() {
         setConfirmModal(null);
         setActionLoading(true);
         try {
+          // Clear the deadline that guarded the status we're leaving,
+          // so the auto-trigger doesn't immediately re-apply it.
+          const deadlineToClear =
+            plan.status === "closed" ? "closedAt" :
+            plan.status === "published" ? "publishedAt" : null;
+          if (deadlineToClear) {
+            await api.patch(`/shifts/plans/${plan.id}/deadlines`, { [deadlineToClear]: null });
+          }
           await api.patch(`/shifts/plans/${plan.id}`, { status: prevStatus });
           loadPlan();
         } catch (e) {
@@ -726,7 +747,7 @@ export default function ShiftPlannerPage() {
             )}
           </div>
 
-          {/* Deadline bar */}
+          {/* Deadline bar — Uzavření shown only when opened, Publikování only when closed */}
           {plan && canEdit && (plan.status === "opened" || plan.status === "closed") && (
             <div className={styles.deadlineBar}>
               {plan.status === "opened" && (
@@ -735,9 +756,16 @@ export default function ShiftPlannerPage() {
                   <input
                     type="datetime-local"
                     className={styles.deadlineInput}
-                    value={toDatetimeLocal(plan.closedAt)}
-                    onChange={(e) => handleDeadlineChange("closedAt", e.target.value)}
+                    value={deadlineDraft.closedAt}
+                    onChange={(e) => setDeadlineDraft((d) => ({ ...d, closedAt: e.target.value }))}
                   />
+                  <button
+                    className={styles.deadlineSave}
+                    onClick={() => handleDeadlineChange("closedAt", deadlineDraft.closedAt)}
+                    title="Uložit termín"
+                  >
+                    Uložit
+                  </button>
                   {plan.closedAt && (
                     <>
                       <span className={styles.deadlineCountdown}>
@@ -745,7 +773,10 @@ export default function ShiftPlannerPage() {
                       </span>
                       <button
                         className={styles.deadlineClear}
-                        onClick={() => handleDeadlineChange("closedAt", "")}
+                        onClick={() => {
+                          setDeadlineDraft((d) => ({ ...d, closedAt: "" }));
+                          handleDeadlineChange("closedAt", "");
+                        }}
                         title="Zrušit termín"
                       >
                         ×
@@ -754,29 +785,41 @@ export default function ShiftPlannerPage() {
                   )}
                 </div>
               )}
-              <div className={styles.deadlineItem}>
-                <label className={styles.deadlineLabel}>Publikování:</label>
-                <input
-                  type="datetime-local"
-                  className={styles.deadlineInput}
-                  value={toDatetimeLocal(plan.publishedAt)}
-                  onChange={(e) => handleDeadlineChange("publishedAt", e.target.value)}
-                />
-                {plan.publishedAt && (
-                  <>
-                    <span className={styles.deadlineCountdown}>
-                      ({deadlineCountdown(plan.publishedAt)})
-                    </span>
-                    <button
-                      className={styles.deadlineClear}
-                      onClick={() => handleDeadlineChange("publishedAt", "")}
-                      title="Zrušit termín"
-                    >
-                      ×
-                    </button>
-                  </>
-                )}
-              </div>
+              {plan.status === "closed" && (
+                <div className={styles.deadlineItem}>
+                  <label className={styles.deadlineLabel}>Publikování:</label>
+                  <input
+                    type="datetime-local"
+                    className={styles.deadlineInput}
+                    value={deadlineDraft.publishedAt}
+                    onChange={(e) => setDeadlineDraft((d) => ({ ...d, publishedAt: e.target.value }))}
+                  />
+                  <button
+                    className={styles.deadlineSave}
+                    onClick={() => handleDeadlineChange("publishedAt", deadlineDraft.publishedAt)}
+                    title="Uložit termín"
+                  >
+                    Uložit
+                  </button>
+                  {plan.publishedAt && (
+                    <>
+                      <span className={styles.deadlineCountdown}>
+                        ({deadlineCountdown(plan.publishedAt)})
+                      </span>
+                      <button
+                        className={styles.deadlineClear}
+                        onClick={() => {
+                          setDeadlineDraft((d) => ({ ...d, publishedAt: "" }));
+                          handleDeadlineChange("publishedAt", "");
+                        }}
+                        title="Zrušit termín"
+                      >
+                        ×
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
