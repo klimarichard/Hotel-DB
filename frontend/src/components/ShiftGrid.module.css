@@ -106,12 +106,14 @@
 }
 
 .currentEmpRow {
-  background: #eef2ff;
+  background: #e0e7ff;
+  border-top: 1.5px solid #a5b4fc;
+  border-bottom: 1.5px solid #a5b4fc;
 }
 
 .currentNameCell {
-  background: #eef2ff !important;
-  border-left: 3px solid #6366f1;
+  background: #c7d2fe !important;
+  border-left: 4px solid #4f46e5;
   font-weight: 700;
 }
 
