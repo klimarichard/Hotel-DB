@@ -747,75 +747,89 @@ export default function ShiftPlannerPage() {
             )}
           </div>
 
-          {/* Deadline bar — Uzavření shown only when opened, Publikování only when closed */}
-          {plan && canEdit && (plan.status === "opened" || plan.status === "closed") && (
+          {/* Deadline bar — visible to all when there is a saved deadline or user can edit.
+              Uzavření shown only when opened; Publikování only when closed. */}
+          {plan && (plan.status === "opened" || plan.status === "closed") &&
+            (canEdit || plan.closedAt || plan.publishedAt) && (
             <div className={styles.deadlineBar}>
-              {plan.status === "opened" && (
+              {plan.status === "opened" && (canEdit || plan.closedAt) && (
                 <div className={styles.deadlineItem}>
                   <label className={styles.deadlineLabel}>Uzavření:</label>
-                  <input
-                    type="datetime-local"
-                    className={styles.deadlineInput}
-                    value={deadlineDraft.closedAt}
-                    onChange={(e) => setDeadlineDraft((d) => ({ ...d, closedAt: e.target.value }))}
-                  />
-                  <button
-                    className={styles.deadlineSave}
-                    onClick={() => handleDeadlineChange("closedAt", deadlineDraft.closedAt)}
-                    title="Uložit termín"
-                  >
-                    Uložit
-                  </button>
+                  {canEdit && (
+                    <>
+                      <input
+                        type="datetime-local"
+                        className={styles.deadlineInput}
+                        value={deadlineDraft.closedAt}
+                        onChange={(e) => setDeadlineDraft((d) => ({ ...d, closedAt: e.target.value }))}
+                      />
+                      <button
+                        className={styles.deadlineSave}
+                        onClick={() => handleDeadlineChange("closedAt", deadlineDraft.closedAt)}
+                        title="Uložit termín"
+                      >
+                        Uložit
+                      </button>
+                    </>
+                  )}
                   {plan.closedAt && (
                     <>
                       <span className={styles.deadlineCountdown}>
                         ({deadlineCountdown(plan.closedAt)})
                       </span>
-                      <button
-                        className={styles.deadlineClear}
-                        onClick={() => {
-                          setDeadlineDraft((d) => ({ ...d, closedAt: "" }));
-                          handleDeadlineChange("closedAt", "");
-                        }}
-                        title="Zrušit termín"
-                      >
-                        ×
-                      </button>
+                      {canEdit && (
+                        <button
+                          className={styles.deadlineClear}
+                          onClick={() => {
+                            setDeadlineDraft((d) => ({ ...d, closedAt: "" }));
+                            handleDeadlineChange("closedAt", "");
+                          }}
+                          title="Zrušit termín"
+                        >
+                          ×
+                        </button>
+                      )}
                     </>
                   )}
                 </div>
               )}
-              {plan.status === "closed" && (
+              {plan.status === "closed" && (canEdit || plan.publishedAt) && (
                 <div className={styles.deadlineItem}>
                   <label className={styles.deadlineLabel}>Publikování:</label>
-                  <input
-                    type="datetime-local"
-                    className={styles.deadlineInput}
-                    value={deadlineDraft.publishedAt}
-                    onChange={(e) => setDeadlineDraft((d) => ({ ...d, publishedAt: e.target.value }))}
-                  />
-                  <button
-                    className={styles.deadlineSave}
-                    onClick={() => handleDeadlineChange("publishedAt", deadlineDraft.publishedAt)}
-                    title="Uložit termín"
-                  >
-                    Uložit
-                  </button>
+                  {canEdit && (
+                    <>
+                      <input
+                        type="datetime-local"
+                        className={styles.deadlineInput}
+                        value={deadlineDraft.publishedAt}
+                        onChange={(e) => setDeadlineDraft((d) => ({ ...d, publishedAt: e.target.value }))}
+                      />
+                      <button
+                        className={styles.deadlineSave}
+                        onClick={() => handleDeadlineChange("publishedAt", deadlineDraft.publishedAt)}
+                        title="Uložit termín"
+                      >
+                        Uložit
+                      </button>
+                    </>
+                  )}
                   {plan.publishedAt && (
                     <>
                       <span className={styles.deadlineCountdown}>
                         ({deadlineCountdown(plan.publishedAt)})
                       </span>
-                      <button
-                        className={styles.deadlineClear}
-                        onClick={() => {
-                          setDeadlineDraft((d) => ({ ...d, publishedAt: "" }));
-                          handleDeadlineChange("publishedAt", "");
-                        }}
-                        title="Zrušit termín"
-                      >
-                        ×
-                      </button>
+                      {canEdit && (
+                        <button
+                          className={styles.deadlineClear}
+                          onClick={() => {
+                            setDeadlineDraft((d) => ({ ...d, publishedAt: "" }));
+                            handleDeadlineChange("publishedAt", "");
+                          }}
+                          title="Zrušit termín"
+                        >
+                          ×
+                        </button>
+                      )}
                     </>
                   )}
                 </div>

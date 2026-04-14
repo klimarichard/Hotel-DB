@@ -194,7 +194,7 @@ export async function removeVacationXsFromPlans(
 shiftsRouter.get(
   "/plans",
   requireAuth,
-  requireRole("admin", "director", "manager"),
+  requireRole("admin", "director", "manager", "employee"),
   async (_req, res) => {
     const snap = await db()
       .collection("shiftPlans")
@@ -254,7 +254,7 @@ shiftsRouter.post(
 shiftsRouter.get(
   "/plans/:planId",
   requireAuth,
-  requireRole("admin", "director", "manager"),
+  requireRole("admin", "director", "manager", "employee"),
   async (req: AuthRequest, res) => {
     const { planId } = req.params;
     const planRef = db().collection("shiftPlans").doc(planId);

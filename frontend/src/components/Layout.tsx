@@ -7,9 +7,12 @@ import { useShiftOverridesContext } from "@/context/ShiftOverridesContext";
 import styles from "./Layout.module.css";
 
 const navItems = [
-  { to: "/zamestnanci", label: "Zaměstnanci" },
   { to: "/smeny", label: "Směny" },
   { to: "/dovolena", label: "Dovolená" },
+];
+
+const staffItems = [
+  { to: "/zamestnanci", label: "Zaměstnanci" },
   { to: "/mzdy", label: "Mzdy" },
 ];
 
@@ -54,6 +57,20 @@ export default function Layout() {
               </NavLink>
             </li>
           ))}
+          {role !== "employee" &&
+            staffItems.map((item) => (
+              <li key={item.to}>
+                <NavLink
+                  to={item.to}
+                  className={({ isActive }) =>
+                    [styles.navLink, isActive ? styles.active : ""].join(" ")
+                  }
+                >
+                  {item.label}
+                </NavLink>
+              </li>
+            ))
+          }
           {(role === "admin" || role === "director") &&
             adminItems.map((item) => (
               <li key={item.to}>
