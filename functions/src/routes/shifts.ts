@@ -3,44 +3,13 @@ import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireAuth, requireRole, AuthRequest } from "../middleware/auth";
 import { parseShiftExpression, HOTEL_CODES } from "../services/shiftParser";
+import { snapshotShifts, deleteCollection } from "../services/planTransitions";
 
 export const shiftsRouter = Router();
 const db = () => admin.firestore();
 
 const VALID_SECTIONS = ["vedoucí", "recepce", "portýři"] as const;
 const VALID_SHIFT_TYPES = ["D", "N", "R", "DP", "NP"] as const;
-
-// ─── Helper: batch-delete a sub-collection ─────────────────────────────────
-
-async function deleteCollection(
-  colRef: admin.firestore.CollectionReference
-): Promise<void> {
-  const BATCH_SIZE = 400;
-  let snap = await colRef.limit(BATCH_SIZE).get();
-  while (!snap.empty) {
-    const batch = db().batch();
-    snap.docs.forEach((d) => batch.delete(d.ref));
-    await batch.commit();
-    snap = await colRef.limit(BATCH_SIZE).get();
-  }
-}
-
-// ─── Helper: copy shifts to snapshot sub-collection ─────────────────────────
-
-async function snapshotShifts(planRef: admin.firestore.DocumentReference): Promise<void> {
-  const shiftsSnap = await planRef.collection("shifts").get();
-  if (shiftsSnap.empty) return;
-  // Process in batches of 400
-  const docs = shiftsSnap.docs;
-  for (let i = 0; i < docs.length; i += 400) {
-    const batch = db().batch();
-    const chunk = docs.slice(i, i + 400);
-    for (const doc of chunk) {
-      batch.set(planRef.collection("shiftsSnapshot").doc(doc.id), doc.data());
-    }
-    await batch.commit();
-  }
-}
 
 // ─── Vacation X helpers ──────────────────────────────────────────────────────
 

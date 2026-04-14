@@ -1,19 +1,10 @@
-import { useEffect } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useAuth } from "@/hooks/useAuth";
 import { useAlertsContext } from "@/context/AlertsContext";
 import { useShiftOverridesContext } from "@/context/ShiftOverridesContext";
-import { api } from "@/lib/api";
 import styles from "./Layout.module.css";
-
-interface PlanListItem {
-  id: string;
-  status: string;
-  closedAt: string | null;
-  publishedAt: string | null;
-}
 
 const navItems = [
   { to: "/smeny", label: "Směny" },
@@ -36,34 +27,6 @@ export default function Layout() {
   const { unreadCount } = useAlertsContext();
   const { pendingCount: pendingOverrideCount } = useShiftOverridesContext();
   const navigate = useNavigate();
-
-  // App-wide deadline checker — runs every 60 s regardless of which page is open.
-  // Admin/director only: they are the only roles allowed to PATCH plan status.
-  useEffect(() => {
-    if (role !== "admin" && role !== "director") return;
-
-    async function checkDeadlines() {
-      try {
-        const plans = await api.get<PlanListItem[]>("/shifts/plans");
-        for (const plan of plans) {
-          if (plan.status === "opened" && plan.closedAt) {
-            if (new Date(plan.closedAt).getTime() <= Date.now()) {
-              await api.patch(`/shifts/plans/${plan.id}`, { status: "closed" }).catch(() => {});
-            }
-          }
-          if (plan.status === "closed" && plan.publishedAt) {
-            if (new Date(plan.publishedAt).getTime() <= Date.now()) {
-              await api.patch(`/shifts/plans/${plan.id}`, { status: "published" }).catch(() => {});
-            }
-          }
-        }
-      } catch { /* ignore */ }
-    }
-
-    checkDeadlines();
-    const timer = setInterval(checkDeadlines, 60_000);
-    return () => clearInterval(timer);
-  }, [role]);
 
   async function handleLogout() {
     await signOut(auth);
