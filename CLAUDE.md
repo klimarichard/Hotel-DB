@@ -146,11 +146,11 @@ npm run dev
 - Subsection labels now have border-top separator for visual clarity
 - Seed scripts switched from CP1250/iconv + DTB.xlsx to UTF-8 BOM-stripped DTB.csv; column mapping corrected; `mapMaritalStatus()` added; employment history no longer seeded from CSV (must be added via UI); `seed-admin.js` added to `seed-all.js` run order
 
-### Phase 3 — deferred items (still pending)
-- `jobPositions` lookup table — dropdown for "pracovní pozice" in history modal and salary defaults bound to position
-- `departments` binding — "oddělení" auto-filled from selected position
-- "změna smlouvy" — default contract text per change kind
-- Expiry alert dates displayed as Czech-formatted dates (currently raw ISO strings)
+### Phase 3 — deferred items
+- ✅ `jobPositions` lookup table — editable from Settings → Pracovní pozice, dropdown in employment history modal, auto-fills salary
+- ✅ `departments` binding — editable from Settings → Oddělení, drives the Pracovní pozice dropdown filter in the employment modal
+- "změna smlouvy" — default contract text per change kind (still pending)
+- ✅ Czech date formatting across the app — `frontend/src/lib/dateFormat.ts` (`formatDateCZ`, `formatTimestampCZ`, `formatDatetimeCZ`)
 
 ### Post-phase 6 fixes (session 2026-04-14)
 - **Admin/director X bypass**: `admin` and `director` skip X-limit and coverage checks entirely in `ShiftPlannerPage.tsx` — no override modal shown. Managers and employees still go through the override flow.
@@ -181,6 +181,16 @@ npm run dev
 - **Document expiry proactive check**: new daily scheduled Cloud Function `refreshDocumentAlerts` re-scans every employee's stored documents and refreshes expiry alerts. HTTP trigger `POST /employees/trigger-alert-refresh` for manual/emulator use. `updateDocumentAlerts` and `EXPIRY_FIELDS` exported from `employees.ts`.
 - **Alerts badge stale fix**: `AlertsContext` now exposes `refresh()`, `markRead(ids[])` (additive), `markAllRead()` (parameterless), and `readIds: Set<string>`. Storage key bumped to `v2` to clear old auto-marked state.
 - **Alerts page redesign**: split into Nepřečtené / Přečtené sections. Alerts are never auto-marked on page visit — user must click "Přečteno" per row or "Označit vše jako přečtené". Nav badge counts only unread.
+
+### Post-phase 6 fixes — czech-date + departments-positions branch
+- **Czech date formatting**: central helper `frontend/src/lib/dateFormat.ts` with `formatDateCZ(iso)`, `formatTimestampCZ(ts)`, `formatDatetimeCZ(ts)`. All seven duplicate local formatters consolidated. `EmployeeDetailPage` raw ISO displays (dateOfBirth, passport/visa dates, employment history rows, expiry alert banner) now render as `DD.MM.YYYY`. `<input type="date">` fields intentionally left as ISO.
+- **Gendered marital status display**: `frontend/src/lib/genderDisplay.ts` exports `displayGendered(value, gender)`. Database still stores combined forms (`svobodný/á`, `ženatý/vdaná`, etc.) but the detail page shows only the gender-correct variant. Split rule: if the `/` suffix is ≤2 chars, it replaces the last chars of the male form; otherwise it is used as a full word.
+- **Departments + Job Positions** (Phase 3 deferred #1 & #2):
+  - Two new Firestore collections. `departments/{id}`: `{ name, displayOrder }`. `jobPositions/{id}`: `{ name, departmentId, defaultSalary, displayOrder }`. Managed via `/departments` and `/jobPositions` backend routes (admin/director only).
+  - Seed scripts `scripts/seed-departments.js` (reads `oddeleni.csv`) and `scripts/seed-job-positions.js` (reads `pozice.csv`, looks up department by lowercase name). Both added to `seed-all.js` after `seed-companies`.
+  - `oddeleni.csv`, `pozice.csv`, `vzdelani.csv` added to `.gitignore`.
+  - Two new inline tabs in `SettingsPage.tsx`: **Oddělení** and **Pracovní pozice**. Deleting a department that still has positions returns a friendly error.
+  - Employment history modal in `EmployeeDetailPage` replaced the free-text Pracovní pozice input with two linked dropdowns (Oddělení → Pracovní pozice filtered by chosen department). Selecting a position auto-fills `salary` from `defaultSalary` (still editable). The saved payload now sets `department` to the department name (previously hardcoded `""`).
 
 ### Open items from spec (§14)
 - Payroll: confirm whether D/N shifts use 11.5h net or 12h gross after break deduction
