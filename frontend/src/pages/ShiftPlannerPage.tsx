@@ -496,6 +496,14 @@ export default function ShiftPlannerPage() {
   async function handleCellSave(employeeId: string, date: string, rawInput: string) {
     if (!plan) return;
 
+    // Employees may only enter X or clear a cell — no other values accepted
+    if (role === "employee" && rawInput.trim() !== "") {
+      const parsed = parseShiftExpression(rawInput);
+      if (!parsed.isValid || !parsed.segments.every((s) => s.code === "X")) {
+        throw new Error("Jako zaměstnanec můžete zadávat pouze X.");
+      }
+    }
+
     if (rawInput.trim() === "") {
       await api.delete(`/shifts/plans/${plan.id}/shifts/${employeeId}/${date}`);
       setPlan((prev) => {
@@ -938,7 +946,8 @@ export default function ShiftPlannerPage() {
                 role === "admin" || (canEdit && plan.status !== "published")
               }
               canSeeInactiveFlag={canEdit}
-              readOnly={!canEdit}
+              readOnly={role === "employee" ? plan.status !== "opened" : !canEdit}
+              alwaysReadOnlySections={role === "employee" ? ["vedoucí"] : []}
               showCounterTable={plan.status === "closed" && role === "admin"}
               onCellRequestChange={
                 role === "employee" && plan.status === "published"

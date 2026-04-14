@@ -31,6 +31,7 @@ interface Props {
   readOnly: boolean;
   showCounterTable?: boolean;
   onCellRequestChange?: (employeeId: string, date: string, currentRawInput: string) => void;
+  alwaysReadOnlySections?: string[];
 }
 
 const DAY_NAMES = ["Ne", "Po", "Út", "St", "Čt", "Pá", "So"];
@@ -67,6 +68,7 @@ export default function ShiftGrid({
   readOnly,
   showCounterTable = false,
   onCellRequestChange,
+  alwaysReadOnlySections = [],
 }: Props) {
   const days = useMemo(() => getDaysInMonth(plan.year, plan.month), [plan.year, plan.month]);
 
@@ -308,7 +310,7 @@ export default function ShiftGrid({
                           <ShiftCell
                             rawInput={shiftDoc?.rawInput ?? ""}
                             hoursComputed={shiftDoc?.hoursComputed ?? 0}
-                            readOnly={readOnly}
+                            readOnly={readOnly || alwaysReadOnlySections.includes(emp.section)}
                             onSave={(raw) => onCellSave(emp.employeeId, dateStr, raw)}
                             focused={isFocused}
                             onNavigate={(dir) => handleNavigate(rowIdx, colIdx, dir)}
@@ -317,8 +319,8 @@ export default function ShiftGrid({
                               setFocusedModCol(null);
                             }}
                             onRequestChange={
-                              onCellRequestChange && shiftDoc?.rawInput
-                                ? () => onCellRequestChange(emp.employeeId, dateStr, shiftDoc.rawInput)
+                              onCellRequestChange && !alwaysReadOnlySections.includes(emp.section)
+                                ? () => onCellRequestChange(emp.employeeId, dateStr, shiftDoc?.rawInput ?? "")
                                 : undefined
                             }
                           />

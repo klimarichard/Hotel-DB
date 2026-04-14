@@ -626,15 +626,38 @@ shiftsRouter.post(
 shiftsRouter.put(
   "/plans/:planId/shifts/:employeeId/:date",
   requireAuth,
-  requireRole("admin", "director", "manager"),
-  async (req, res) => {
+  requireRole("admin", "director", "manager", "employee"),
+  async (req: AuthRequest, res) => {
     const { planId, employeeId, date } = req.params;
     const body = req.body as Record<string, unknown>;
     const rawInput = (body.rawInput as string) ?? "";
+    const userRole = req.role;
 
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       res.status(400).json({ error: "Neplatný formát data" });
       return;
+    }
+
+    // Employee-specific guards: own shift only, X only, opened plan only
+    if (userRole === "employee") {
+      const userDoc = await db().collection("users").doc(req.uid!).get();
+      const linkedEmployeeId = userDoc.data()?.employeeId as string | undefined;
+      if (!linkedEmployeeId || linkedEmployeeId !== employeeId) {
+        res.status(403).json({ error: "Můžete upravovat pouze vlastní směny." });
+        return;
+      }
+
+      const planDoc = await db().collection("shiftPlans").doc(planId).get();
+      if (planDoc.data()?.status !== "opened") {
+        res.status(403).json({ error: "Zaměstnanci mohou upravovat směny pouze v otevřeném plánu." });
+        return;
+      }
+
+      const parsed = parseShiftExpression(rawInput);
+      if (rawInput.trim() !== "" && (!parsed.isValid || !parsed.segments.every((s) => s.code === "X"))) {
+        res.status(403).json({ error: "Zaměstnanci mohou zadávat pouze X." });
+        return;
+      }
     }
 
     const parsed = parseShiftExpression(rawInput);
@@ -677,9 +700,27 @@ shiftsRouter.put(
 shiftsRouter.delete(
   "/plans/:planId/shifts/:employeeId/:date",
   requireAuth,
-  requireRole("admin", "director", "manager"),
-  async (req, res) => {
+  requireRole("admin", "director", "manager", "employee"),
+  async (req: AuthRequest, res) => {
     const { planId, employeeId, date } = req.params;
+    const userRole = req.role;
+
+    // Employee-specific guards: own shift only, opened plan only
+    if (userRole === "employee") {
+      const userDoc = await db().collection("users").doc(req.uid!).get();
+      const linkedEmployeeId = userDoc.data()?.employeeId as string | undefined;
+      if (!linkedEmployeeId || linkedEmployeeId !== employeeId) {
+        res.status(403).json({ error: "Můžete mazat pouze vlastní směny." });
+        return;
+      }
+
+      const planDoc = await db().collection("shiftPlans").doc(planId).get();
+      if (planDoc.data()?.status !== "opened") {
+        res.status(403).json({ error: "Zaměstnanci mohou mazat směny pouze v otevřeném plánu." });
+        return;
+      }
+    }
+
     const docId = `${employeeId}_${date}`;
     await db()
       .collection("shiftPlans")

@@ -215,7 +215,7 @@ export default function ShiftCell({
         justifyContent: "center",
         fontSize: "0.8rem",
         fontWeight: 500,
-        cursor: readOnly ? (onRequestChange && rawInput ? "pointer" : "default") : "pointer",
+        cursor: readOnly ? (onRequestChange ? "pointer" : "default") : "pointer",
         borderRadius: "2px",
         userSelect: "none",
         padding: "2px",
@@ -225,12 +225,14 @@ export default function ShiftCell({
       }}
       title={saveError ?? (rawInput ? `${rawInput} — ${hoursComputed}h` : undefined)}
       onClick={() => {
-        if (readOnly && onRequestChange && rawInput) {
-          onRequestChange();
-          return;
-        }
+        if (readOnly) return;
         setSaveError(null);
         startEdit();
+      }}
+      onDoubleClick={() => {
+        if (readOnly && onRequestChange) {
+          onRequestChange();
+        }
       }}
       onFocus={onFocus}
       onKeyDown={handleDisplayKeyDown}
