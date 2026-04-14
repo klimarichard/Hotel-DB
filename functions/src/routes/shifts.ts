@@ -873,19 +873,27 @@ shiftsRouter.get(
 
 // ─── Shift Override Requests ─────────────────────────────────────────────────
 
-// GET /shifts/plans/:planId/shiftOverrides — list all requests
+// GET /shifts/plans/:planId/shiftOverrides — list override requests
+// Admin/director/manager: all requests. Employee: own requests only.
 shiftsRouter.get(
   "/plans/:planId/shiftOverrides",
   requireAuth,
-  requireRole("admin", "director", "manager"),
-  async (req, res) => {
+  requireRole("admin", "director", "manager", "employee"),
+  async (req: AuthRequest, res) => {
     const { planId } = req.params;
-    const snap = await db()
+    const isPrivileged = req.role === "admin" || req.role === "director" || req.role === "manager";
+
+    let query: admin.firestore.Query = db()
       .collection("shiftPlans")
       .doc(planId)
       .collection("shiftOverrideRequests")
-      .orderBy("requestedAt", "desc")
-      .get();
+      .orderBy("requestedAt", "desc");
+
+    if (!isPrivileged) {
+      query = query.where("requestedBy", "==", req.uid!);
+    }
+
+    const snap = await query.get();
     res.json(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
   }
 );

@@ -9,6 +9,7 @@ import ConfirmModal from "../components/ConfirmModal";
 import XOverrideModal from "../components/XOverrideModal";
 import ShiftOverridePanel from "../components/ShiftOverridePanel";
 import ShiftChangeRequestPanel from "../components/ShiftChangeRequestPanel";
+import MyRequestsPanel from "../components/MyRequestsPanel";
 import ShiftChangeRequestModal from "../components/ShiftChangeRequestModal";
 import { useShiftOverridesContext } from "../context/ShiftOverridesContext";
 import { useShiftChangeRequestsContext } from "../context/ShiftChangeRequestsContext";
@@ -145,6 +146,7 @@ export default function ShiftPlannerPage() {
   const [showAddEmployee, setShowAddEmployee] = useState(false);
   const [showOverrideRequests, setShowOverrideRequests] = useState(false);
   const [showChangeRequests, setShowChangeRequests] = useState(false);
+  const [showMyRequests, setShowMyRequests] = useState(false);
   const [pendingChangeRequest, setPendingChangeRequest] = useState<{
     employeeId: string; date: string; currentRawInput: string;
   } | null>(null);
@@ -760,15 +762,15 @@ export default function ShiftPlannerPage() {
               </button>
             )}
 
-            {/* Change requests toggle — all users see their own; admin/director see all */}
-            {plan && (
+            {/* Admin/director: separate Žádosti o změny button with badge */}
+            {plan && canPublish && (
               <button
                 className={styles.secondaryBtn}
                 onClick={() => setShowChangeRequests((v) => !v)}
                 style={{ position: "relative" }}
               >
                 Žádosti o změny
-                {canPublish && changeRequestCount > 0 && (
+                {changeRequestCount > 0 && (
                   <span style={{
                     position: "absolute",
                     top: "-6px",
@@ -789,6 +791,16 @@ export default function ShiftPlannerPage() {
                     {changeRequestCount}
                   </span>
                 )}
+              </button>
+            )}
+
+            {/* Employee/manager: combined Moje žádosti button */}
+            {plan && !canPublish && (
+              <button
+                className={styles.secondaryBtn}
+                onClick={() => setShowMyRequests((v) => !v)}
+              >
+                Moje žádosti
               </button>
             )}
 
@@ -935,14 +947,19 @@ export default function ShiftPlannerPage() {
             />
           )}
 
-          {/* Shift change requests panel — all users see their own; admin/director can review */}
-          {plan && showChangeRequests && (
+          {/* Shift change requests panel — admin/director only (full review mode) */}
+          {plan && showChangeRequests && canPublish && (
             <ShiftChangeRequestPanel
               planId={plan.id}
               employees={plan.employees}
-              canReview={canPublish}
+              canReview={true}
               onResolved={() => { refreshChangeRequestCount(); }}
             />
+          )}
+
+          {/* My requests panel — employee/manager (read-only, own requests only) */}
+          {plan && showMyRequests && !canPublish && (
+            <MyRequestsPanel planId={plan.id} />
           )}
 
           {/* Shift grid */}
