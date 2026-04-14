@@ -33,16 +33,18 @@ function DaysBadge({ days }: { days: number }) {
 export default function AlertsPage() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
-  const { markAllRead } = useAlertsContext();
+  const { markAllRead, refresh } = useAlertsContext();
 
   useEffect(() => {
     api.get<Alert[]>("/alerts")
       .then((data) => {
         setAlerts(data);
+        // Sync the context with the fresh list so the badge reflects reality
+        refresh();
         markAllRead(data.map((a) => a.id));
       })
       .finally(() => setLoading(false));
-  // markAllRead is stable (context function), intentionally omitted from deps
+  // Context functions are stable, intentionally omitted from deps
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

@@ -9,11 +9,13 @@ interface Alert {
 interface AlertsContextValue {
   unreadCount: number;
   markAllRead: (ids?: string[]) => void;
+  refresh: () => void;
 }
 
 const AlertsContext = createContext<AlertsContextValue>({
   unreadCount: 0,
   markAllRead: (_ids?: string[]) => {},
+  refresh: () => {},
 });
 
 const STORAGE_KEY = "hotel_hr_seen_alert_ids";
@@ -29,9 +31,14 @@ export function AlertsProvider({ children }: { children: ReactNode }) {
     }
   });
 
-  useEffect(() => {
+  function refresh() {
     if (role !== "admin" && role !== "director") return;
     api.get<Alert[]>("/alerts").then(setAlerts).catch(() => {});
+  }
+
+  useEffect(() => {
+    refresh();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [role]);
 
   const unreadCount = alerts.filter((a) => !seenIds.has(a.id)).length;
@@ -44,7 +51,7 @@ export function AlertsProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AlertsContext.Provider value={{ unreadCount, markAllRead }}>
+    <AlertsContext.Provider value={{ unreadCount, markAllRead, refresh }}>
       {children}
     </AlertsContext.Provider>
   );
