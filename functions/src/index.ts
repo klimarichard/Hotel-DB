@@ -13,6 +13,7 @@ import { contractsRouter } from "./routes/contracts";
 import { shiftsRouter } from "./routes/shifts";
 import { vacationRouter } from "./routes/vacation";
 import { transitionPlanDeadlines } from "./services/planTransitions";
+import { updateDocumentAlerts, EXPIRY_FIELDS } from "./routes/employees";
 
 admin.initializeApp();
 
@@ -50,4 +51,35 @@ export const api = functions.https.onRequest(app);
 
 export const checkPlanDeadlines = onSchedule("every 5 minutes", async () => {
   await transitionPlanDeadlines();
+});
+
+// ─── Daily: refresh document expiry alerts for all employees ─────────────────
+// Proactively re-checks passport / visa expiry for every employee so that
+// alerts appear automatically when a deadline enters the 30-day window,
+// without requiring the admin to re-save the employee form.
+
+export const refreshDocumentAlerts = onSchedule("every 24 hours", async () => {
+  const db = admin.firestore();
+  const employeesSnap = await db.collection("employees").get();
+
+  for (const empDoc of employeesSnap.docs) {
+    const emp = empDoc.data() as Record<string, unknown>;
+    const docsSnap = await empDoc.ref.collection("documents").limit(1).get();
+    if (docsSnap.empty) continue;
+
+    const docData = docsSnap.docs[0].data() as Record<string, unknown>;
+
+    // Build a body-like object containing only the expiry fields
+    const alertBody: Record<string, unknown> = {};
+    for (const { field } of EXPIRY_FIELDS) {
+      alertBody[field] = docData[field] ?? null;
+    }
+
+    await updateDocumentAlerts(
+      empDoc.id,
+      emp.firstName as string ?? "",
+      emp.lastName as string ?? "",
+      alertBody
+    );
+  }
 });

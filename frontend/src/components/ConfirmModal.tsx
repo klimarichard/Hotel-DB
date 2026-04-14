@@ -2,6 +2,7 @@ interface Props {
   title: string;
   message: string;
   confirmLabel?: string;
+  cancelLabel?: string;
   danger?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
@@ -11,6 +12,7 @@ export default function ConfirmModal({
   title,
   message,
   confirmLabel = "Potvrdit",
+  cancelLabel = "Zrušit",
   danger = false,
   onConfirm,
   onCancel,
@@ -80,7 +82,7 @@ export default function ConfirmModal({
             }}
             onClick={onCancel}
           >
-            Zrušit
+            {cancelLabel}
           </button>
           <button
             style={{

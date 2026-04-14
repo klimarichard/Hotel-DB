@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { api } from "@/lib/api";
+import { useAuth } from "@/hooks/useAuth";
+import ConfirmModal from "@/components/ConfirmModal";
 import ContractsTab from "@/components/ContractsTab";
 import GenerateContractModal from "@/components/GenerateContractModal";
 import {
@@ -684,6 +686,8 @@ function getContractTypesForRow(row: EmploymentRow): SmlouvaContractType[] {
 export default function EmployeeDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { role } = useAuth();
+  const canDelete = role === "admin" || role === "director";
 
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [employment, setEmployment] = useState<EmploymentRow[]>([]);
@@ -705,6 +709,16 @@ export default function EmployeeDetailPage() {
   } | null>(null);
   const [generateDropdownRowId, setGenerateDropdownRowId] = useState<string | null>(null);
   const [company, setCompany] = useState<CompanyData | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{
+    title: string;
+    message: string;
+    confirmLabel: string;
+    cancelLabel?: string;
+    danger?: boolean;
+    onConfirm: () => void;
+    onCancel?: () => void;
+  } | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   // Track which sub-sections have been loaded
   const [loadedSections, setLoadedSections] = useState<Set<string>>(new Set());
@@ -773,6 +787,48 @@ export default function EmployeeDetailPage() {
     }
   }, [page, id, loadedSections, employee]);
 
+  async function handleDeleteEmployee() {
+    if (!employee || !id) return;
+    setDeleteLoading(true);
+    type LinkedUser = { uid: string; email: string; name: string };
+    let linkedUser: LinkedUser | null = null;
+    try {
+      linkedUser = await api.get<LinkedUser | null>(`/employees/${id}/linked-user`);
+    } catch { /* ignore */ }
+    setDeleteLoading(false);
+
+    const executeDelete = (deleteUser: boolean) => {
+      api.delete(`/employees/${id}?deleteUser=${deleteUser}`)
+        .then(() => navigate("/zamestnanci"))
+        .catch((e: Error) => alert(e.message));
+    };
+
+    // Step 1: confirm employee deletion
+    setConfirmModal({
+      title: "Smazat zaměstnance",
+      message: `Opravdu chcete smazat ${employee.lastName} ${employee.firstName}? Tato akce je nevratná.`,
+      confirmLabel: "Smazat zaměstnance",
+      danger: true,
+      onConfirm: () => {
+        setConfirmModal(null);
+        if (linkedUser) {
+          // Step 2: ask about linked user account
+          setConfirmModal({
+            title: "Propojený uživatelský účet",
+            message: `Zaměstnanec je propojen s účtem ${linkedUser.email}. Smazat i tento uživatelský účet? Kliknutím na „Ponechat" účet zachováte a pouze ho odpojíte.`,
+            confirmLabel: "Smazat i účet",
+            cancelLabel: "Ponechat účet",
+            danger: true,
+            onConfirm: () => { setConfirmModal(null); executeDelete(true); },
+            onCancel:  () => { setConfirmModal(null); executeDelete(false); },
+          });
+        } else {
+          executeDelete(false);
+        }
+      },
+    });
+  }
+
   if (loading) return <div className={styles.state}>Načítám…</div>;
   if (!employee) return <div className={styles.state}>Zaměstnanec nenalezen.</div>;
 
@@ -796,9 +852,20 @@ export default function EmployeeDetailPage() {
             </span>
           </div>
         </div>
-        <button className={styles.editBtn} onClick={() => navigate(`/zamestnanci/${id}/upravit`)}>
-          Upravit
-        </button>
+        <div style={{ display: "flex", gap: "0.5rem" }}>
+          <button className={styles.editBtn} onClick={() => navigate(`/zamestnanci/${id}/upravit`)}>
+            Upravit
+          </button>
+          {canDelete && (
+            <button
+              className={styles.deleteBtn}
+              onClick={handleDeleteEmployee}
+              disabled={deleteLoading}
+            >
+              {deleteLoading ? "…" : "Smazat"}
+            </button>
+          )}
+        </div>
       </div>
 
       {alerts.length > 0 && (
@@ -1107,6 +1174,18 @@ export default function EmployeeDetailPage() {
             setGenerateModal(null);
             setPage("smlouvy");
           }}
+        />
+      )}
+
+      {confirmModal && (
+        <ConfirmModal
+          title={confirmModal.title}
+          message={confirmModal.message}
+          confirmLabel={confirmModal.confirmLabel}
+          cancelLabel={confirmModal.cancelLabel}
+          danger={confirmModal.danger}
+          onConfirm={confirmModal.onConfirm}
+          onCancel={confirmModal.onCancel ?? (() => setConfirmModal(null))}
         />
       )}
     </div>

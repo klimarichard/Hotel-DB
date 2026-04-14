@@ -341,13 +341,13 @@ employeesRouter.get(
 
 const EXPIRY_ALERT_DAYS = 30;
 
-const EXPIRY_FIELDS: { field: string; label: string }[] = [
+export const EXPIRY_FIELDS: { field: string; label: string }[] = [
   { field: "idCardExpiry", label: "Platnost OP" },
   { field: "passportExpiry", label: "Platnost pasu" },
   { field: "visaExpiry", label: "Platnost povolení k pobytu" },
 ];
 
-async function updateDocumentAlerts(
+export async function updateDocumentAlerts(
   employeeId: string,
   firstName: string,
   lastName: string,
@@ -560,6 +560,97 @@ employeesRouter.get(
       .where("employeeId", "==", req.params.id)
       .get();
     res.json(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+  }
+);
+
+/**
+ * GET /api/employees/:id/linked-user
+ * Returns the user account linked to this employee, or null.
+ */
+employeesRouter.get(
+  "/:id/linked-user",
+  requireAuth,
+  requireRole("admin", "director"),
+  async (req, res) => {
+    const snap = await db()
+      .collection("users")
+      .where("employeeId", "==", req.params.id)
+      .limit(1)
+      .get();
+    if (snap.empty) {
+      res.json(null);
+      return;
+    }
+    const data = snap.docs[0].data() as Record<string, unknown>;
+    res.json({ uid: snap.docs[0].id, email: data.email, name: data.name });
+  }
+);
+
+/**
+ * DELETE /api/employees/:id
+ * Deletes an employee and all their sub-collections.
+ * Query param: deleteUser=true → also delete the linked Firebase Auth user.
+ *              deleteUser=false (default) → unlink but keep the user account.
+ */
+employeesRouter.delete(
+  "/:id",
+  requireAuth,
+  requireRole("admin", "director"),
+  async (req, res) => {
+    const { id } = req.params;
+    const deleteUser = req.query.deleteUser === "true";
+
+    // Handle linked user account
+    const usersSnap = await db()
+      .collection("users")
+      .where("employeeId", "==", id)
+      .limit(1)
+      .get();
+
+    if (!usersSnap.empty) {
+      const userDoc = usersSnap.docs[0];
+      if (deleteUser) {
+        try { await admin.auth().deleteUser(userDoc.id); } catch { /* already deleted */ }
+        await userDoc.ref.delete();
+      } else {
+        await userDoc.ref.update({
+          employeeId: null,
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+      }
+    }
+
+    const empRef = db().collection("employees").doc(id);
+
+    // Delete sub-collections
+    for (const col of ["contact", "employment", "documents", "benefits", "contracts"]) {
+      const snap = await empRef.collection(col).get();
+      if (!snap.empty) {
+        const batch = db().batch();
+        snap.docs.forEach((d) => batch.delete(d.ref));
+        await batch.commit();
+      }
+    }
+
+    // Delete related top-level documents
+    const alertsSnap = await db().collection("alerts").where("employeeId", "==", id).get();
+    if (!alertsSnap.empty) {
+      const batch = db().batch();
+      alertsSnap.docs.forEach((d) => batch.delete(d.ref));
+      await batch.commit();
+    }
+
+    const vacSnap = await db().collection("vacationRequests").where("employeeId", "==", id).get();
+    if (!vacSnap.empty) {
+      const batch = db().batch();
+      vacSnap.docs.forEach((d) => batch.delete(d.ref));
+      await batch.commit();
+    }
+
+    // Delete the employee document
+    await empRef.delete();
+
+    res.json({ ok: true });
   }
 );
 

@@ -35,9 +35,9 @@ export default function EmployeesPage() {
     const q = search.toLowerCase();
     return (
       !q ||
-      e.firstName.toLowerCase().includes(q) ||
-      e.lastName.toLowerCase().includes(q) ||
-      e.currentJobTitle.toLowerCase().includes(q)
+      (e.firstName ?? "").toLowerCase().includes(q) ||
+      (e.lastName ?? "").toLowerCase().includes(q) ||
+      (e.currentJobTitle ?? "").toLowerCase().includes(q)
     );
   });
 
