@@ -5,6 +5,11 @@ HR_App_Specification.docx
 DTB.xlsx
 DTB.csv
 
+# Lookup data imports (internal, may contain adjusted salaries)
+oddeleni.csv
+pozice.csv
+vzdelani.csv
+
 # Dependencies
 node_modules/
 

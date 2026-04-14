@@ -18,6 +18,20 @@ interface CompanyRecord {
   dic: string;
 }
 
+interface DepartmentRecord {
+  id: string;
+  name: string;
+  displayOrder: number;
+}
+
+interface JobPositionRecord {
+  id: string;
+  name: string;
+  departmentId: string;
+  defaultSalary: number;
+  displayOrder: number;
+}
+
 const DEFAULT_COMPANY_IDS = ["HPM", "STP"];
 
 const ROLES: UserRole[] = ["admin", "director", "manager", "employee"];
@@ -56,7 +70,20 @@ export default function SettingsPage() {
   const [linkEmployeeId, setLinkEmployeeId] = useState<string>("");
   const [linkSaving, setLinkSaving] = useState(false);
 
-  const [settingsTab, setSettingsTab] = useState<"users" | "companies">("users");
+  const [settingsTab, setSettingsTab] = useState<"users" | "companies" | "departments" | "jobPositions">("users");
+
+  // Departments
+  const [departments, setDepartments] = useState<DepartmentRecord[]>([]);
+  const [depEditId, setDepEditId] = useState<string | null>(null);
+  const [depEditName, setDepEditName] = useState("");
+  const [depNewName, setDepNewName] = useState("");
+  const [depError, setDepError] = useState<string | null>(null);
+
+  // Job positions
+  const [positions, setPositions] = useState<JobPositionRecord[]>([]);
+  const [posEditId, setPosEditId] = useState<string | null>(null);
+  const [posForm, setPosForm] = useState<{ name: string; departmentId: string; defaultSalary: string }>({ name: "", departmentId: "", defaultSalary: "" });
+  const [showPosCreate, setShowPosCreate] = useState(false);
 
   // Companies
   const [companyForms, setCompanyForms] = useState<Record<string, CompanyRecord>>({});
@@ -99,6 +126,107 @@ export default function SettingsPage() {
       setCompanyForms(map);
     });
   }, []);
+
+  const loadDepartments = useCallback(async () => {
+    try {
+      const list = await api.get<DepartmentRecord[]>("/departments");
+      setDepartments(list);
+    } catch {
+      setDepartments([]);
+    }
+  }, []);
+
+  const loadPositions = useCallback(async () => {
+    try {
+      const list = await api.get<JobPositionRecord[]>("/jobPositions");
+      setPositions(list);
+    } catch {
+      setPositions([]);
+    }
+  }, []);
+
+  useEffect(() => { loadDepartments(); loadPositions(); }, [loadDepartments, loadPositions]);
+
+  async function handleCreateDepartment() {
+    const name = depNewName.trim();
+    if (!name) return;
+    setDepError(null);
+    try {
+      await api.post("/departments", { name, displayOrder: departments.length });
+      setDepNewName("");
+      await loadDepartments();
+    } catch (e: unknown) {
+      setDepError((e as Error).message ?? "Chyba při vytváření.");
+    }
+  }
+
+  async function handleSaveDepartment(id: string) {
+    const name = depEditName.trim();
+    if (!name) return;
+    setDepError(null);
+    try {
+      await api.patch(`/departments/${id}`, { name });
+      setDepEditId(null);
+      setDepEditName("");
+      await loadDepartments();
+    } catch (e: unknown) {
+      setDepError((e as Error).message ?? "Chyba při ukládání.");
+    }
+  }
+
+  async function handleDeleteDepartment(id: string) {
+    if (!confirm("Opravdu smazat toto oddělení?")) return;
+    setDepError(null);
+    try {
+      await api.delete(`/departments/${id}`);
+      await loadDepartments();
+    } catch (e: unknown) {
+      setDepError((e as Error).message ?? "Nelze smazat oddělení.");
+    }
+  }
+
+  function openCreatePosition() {
+    setPosEditId(null);
+    setPosForm({ name: "", departmentId: departments[0]?.id ?? "", defaultSalary: "" });
+    setShowPosCreate(true);
+  }
+
+  function openEditPosition(p: JobPositionRecord) {
+    setPosEditId(p.id);
+    setPosForm({ name: p.name, departmentId: p.departmentId, defaultSalary: String(p.defaultSalary ?? "") });
+    setShowPosCreate(true);
+  }
+
+  async function handleSavePosition() {
+    if (!posForm.name.trim() || !posForm.departmentId) return;
+    const payload = {
+      name: posForm.name.trim(),
+      departmentId: posForm.departmentId,
+      defaultSalary: Number(posForm.defaultSalary) || 0,
+    };
+    try {
+      if (posEditId) {
+        await api.patch(`/jobPositions/${posEditId}`, payload);
+      } else {
+        await api.post("/jobPositions", { ...payload, displayOrder: positions.length });
+      }
+      setShowPosCreate(false);
+      setPosEditId(null);
+      await loadPositions();
+    } catch {
+      // silent
+    }
+  }
+
+  async function handleDeletePosition(id: string) {
+    if (!confirm("Opravdu smazat tuto pozici?")) return;
+    try {
+      await api.delete(`/jobPositions/${id}`);
+      await loadPositions();
+    } catch {
+      // silent
+    }
+  }
 
   async function handleSaveCompany(id: string) {
     setCompanySaving((p) => ({ ...p, [id]: true }));
@@ -208,11 +336,18 @@ export default function SettingsPage() {
             + Přidat uživatele
           </button>
         )}
+        {settingsTab === "jobPositions" && (
+          <button className={styles.addBtn} onClick={openCreatePosition} disabled={departments.length === 0}>
+            + Přidat pozici
+          </button>
+        )}
       </div>
 
       <div className={styles.tabs}>
         <button className={settingsTab === "users" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("users")}>Uživatelé</button>
         <button className={settingsTab === "companies" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("companies")}>Společnosti</button>
+        <button className={settingsTab === "departments" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("departments")}>Oddělení</button>
+        <button className={settingsTab === "jobPositions" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("jobPositions")}>Pracovní pozice</button>
       </div>
 
       {showCreate && settingsTab === "users" && (
@@ -450,6 +585,142 @@ export default function SettingsPage() {
             </div>
           ))}
         </div>
+      )}
+
+      {settingsTab === "departments" && (
+        <>
+          {depError && <p className={styles.errorState}>{depError}</p>}
+          <table className={styles.table}>
+            <thead>
+              <tr>
+                <th>Název</th>
+                <th>Akce</th>
+              </tr>
+            </thead>
+            <tbody>
+              {departments.length === 0 && (
+                <tr><td colSpan={2} className={styles.empty}>Žádná oddělení</td></tr>
+              )}
+              {departments.map((d) => (
+                <tr key={d.id}>
+                  <td>
+                    {depEditId === d.id ? (
+                      <input
+                        className={styles.input}
+                        value={depEditName}
+                        onChange={(e) => setDepEditName(e.target.value)}
+                      />
+                    ) : (
+                      d.name
+                    )}
+                  </td>
+                  <td>
+                    {depEditId === d.id ? (
+                      <>
+                        <button className={styles.saveBtn} onClick={() => handleSaveDepartment(d.id)}>Uložit</button>
+                        <button className={styles.cancelBtn} onClick={() => { setDepEditId(null); setDepEditName(""); }}>Zrušit</button>
+                      </>
+                    ) : (
+                      <>
+                        <button className={styles.linkBtn} onClick={() => { setDepEditId(d.id); setDepEditName(d.name); }}>Upravit</button>
+                        <button className={styles.deactivateBtn} onClick={() => handleDeleteDepartment(d.id)}>Smazat</button>
+                      </>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              <tr>
+                <td>
+                  <input
+                    className={styles.input}
+                    placeholder="Nové oddělení…"
+                    value={depNewName}
+                    onChange={(e) => setDepNewName(e.target.value)}
+                  />
+                </td>
+                <td>
+                  <button className={styles.saveBtn} onClick={handleCreateDepartment}>+ Přidat</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </>
+      )}
+
+      {settingsTab === "jobPositions" && (
+        <>
+          {showPosCreate && (
+            <div className={styles.modal}>
+              <div className={styles.modalBox}>
+                <h2 className={styles.modalTitle}>{posEditId ? "Upravit pozici" : "Nová pozice"}</h2>
+                <div className={styles.field}>
+                  <label className={styles.label}>Název</label>
+                  <input
+                    className={styles.input}
+                    value={posForm.name}
+                    onChange={(e) => setPosForm({ ...posForm, name: e.target.value })}
+                    autoFocus
+                  />
+                </div>
+                <div className={styles.field}>
+                  <label className={styles.label}>Oddělení</label>
+                  <select
+                    className={styles.input}
+                    value={posForm.departmentId}
+                    onChange={(e) => setPosForm({ ...posForm, departmentId: e.target.value })}
+                  >
+                    <option value="">— vyberte —</option>
+                    {departments.map((d) => (
+                      <option key={d.id} value={d.id}>{d.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className={styles.field}>
+                  <label className={styles.label}>Výchozí mzda (Kč)</label>
+                  <input
+                    className={styles.input}
+                    type="number"
+                    value={posForm.defaultSalary}
+                    onChange={(e) => setPosForm({ ...posForm, defaultSalary: e.target.value })}
+                  />
+                </div>
+                <div className={styles.formActions}>
+                  <button type="button" className={styles.cancelBtn} onClick={() => { setShowPosCreate(false); setPosEditId(null); }}>Zrušit</button>
+                  <button type="button" className={styles.saveBtn} onClick={handleSavePosition}>Uložit</button>
+                </div>
+              </div>
+            </div>
+          )}
+          <table className={styles.table}>
+            <thead>
+              <tr>
+                <th>Název</th>
+                <th>Oddělení</th>
+                <th>Výchozí mzda</th>
+                <th>Akce</th>
+              </tr>
+            </thead>
+            <tbody>
+              {positions.length === 0 && (
+                <tr><td colSpan={4} className={styles.empty}>Žádné pozice</td></tr>
+              )}
+              {positions.map((p) => {
+                const dep = departments.find((d) => d.id === p.departmentId);
+                return (
+                  <tr key={p.id}>
+                    <td>{p.name}</td>
+                    <td>{dep?.name ?? "—"}</td>
+                    <td>{p.defaultSalary?.toLocaleString("cs-CZ") ?? "—"} Kč</td>
+                    <td>
+                      <button className={styles.linkBtn} onClick={() => openEditPosition(p)}>Upravit</button>
+                      <button className={styles.deactivateBtn} onClick={() => handleDeletePosition(p.id)}>Smazat</button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </>
       )}
     </div>
   );

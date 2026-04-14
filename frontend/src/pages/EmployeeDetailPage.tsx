@@ -182,10 +182,23 @@ const UVAZEK_OPTIONS = [
 
 const emptyChangeRow: ChangeRow = { changeKind: "", value: "", contractText: "" };
 
+interface DepartmentRec {
+  id: string;
+  name: string;
+}
+
+interface JobPositionRec {
+  id: string;
+  name: string;
+  departmentId: string;
+  defaultSalary: number;
+}
+
 interface EmploymentForm {
   changeType: ChangeType;
   startDate: string;
   jobTitle: string;
+  departmentId: string;
   contractType: ContractType;
   // HPP / PPP fields
   workLocation: string;
@@ -205,6 +218,7 @@ const emptyForm: EmploymentForm = {
   changeType: "nástup",
   startDate: "",
   jobTitle: "",
+  departmentId: "",
   contractType: "",
   workLocation: "Praha",
   salary: "",
@@ -224,6 +238,7 @@ function rowToForm(row: EmploymentRow): EmploymentForm {
     changeType: (row.changeType as ChangeType) ?? "nástup",
     startDate: row.startDate ?? "",
     jobTitle: row.jobTitle ?? "",
+    departmentId: "",
     contractType: (row.contractType as ContractType) ?? "",
     workLocation: row.workLocation ?? "Praha",
     salary: row.salary?.toString() ?? "",
@@ -342,6 +357,33 @@ function AddEntryModal({
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [departments, setDepartments] = useState<DepartmentRec[]>([]);
+  const [positions, setPositions] = useState<JobPositionRec[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      api.get<DepartmentRec[]>("/departments").catch(() => [] as DepartmentRec[]),
+      api.get<JobPositionRec[]>("/jobPositions").catch(() => [] as JobPositionRec[]),
+    ]).then(([deps, poss]) => {
+      if (cancelled) return;
+      setDepartments(deps);
+      setPositions(poss);
+      // Pre-select dropdowns from existing row on edit
+      if (initialRow) {
+        const depByName = deps.find(
+          (d) => d.name.toLowerCase() === (initialRow.department ?? "").toLowerCase()
+        );
+        let depId = depByName?.id ?? "";
+        const posMatch = poss.find(
+          (p) => p.name.toLowerCase() === (initialRow.jobTitle ?? "").toLowerCase()
+        );
+        if (!depId && posMatch) depId = posMatch.departmentId;
+        if (depId) setForm((f) => ({ ...f, departmentId: depId }));
+      }
+    });
+    return () => { cancelled = true; };
+  }, [initialRow]);
 
   function setField<K extends keyof EmploymentForm>(field: K, value: EmploymentForm[K]) {
     setForm((f) => {
@@ -397,7 +439,7 @@ function AddEntryModal({
           jobTitle: form.jobTitle,
           contractType: form.contractType,
           companyId: form.companyId,
-          department: "",
+          department: departments.find((d) => d.id === form.departmentId)?.name ?? "",
           endDate: form.endDate || null,
           signingDate: form.signingDate || null,
         };
@@ -474,8 +516,44 @@ function AddEntryModal({
               <>
                 <div className={styles.modalGrid} style={{ marginTop: "0.875rem" }}>
                   <div className={styles.modalField}>
+                    <label className={styles.modalLabel}>Oddělení</label>
+                    <select
+                      className={styles.modalInput}
+                      value={form.departmentId}
+                      onChange={(e) => {
+                        const newDepId = e.target.value;
+                        setForm((f) => ({ ...f, departmentId: newDepId, jobTitle: "" }));
+                      }}
+                    >
+                      <option value="">— vyberte —</option>
+                      {departments.map((d) => (
+                        <option key={d.id} value={d.id}>{d.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className={styles.modalField}>
                     <label className={styles.modalLabel}>Pracovní pozice</label>
-                    <input className={styles.modalInput} value={form.jobTitle} onChange={(e) => setField("jobTitle", e.target.value)} />
+                    <select
+                      className={styles.modalInput}
+                      value={form.jobTitle}
+                      disabled={!form.departmentId}
+                      onChange={(e) => {
+                        const posName = e.target.value;
+                        const pos = positions.find((p) => p.name === posName && p.departmentId === form.departmentId);
+                        setForm((f) => ({
+                          ...f,
+                          jobTitle: posName,
+                          salary: pos && pos.defaultSalary ? String(pos.defaultSalary) : f.salary,
+                        }));
+                      }}
+                    >
+                      <option value="">— vyberte —</option>
+                      {positions
+                        .filter((p) => p.departmentId === form.departmentId)
+                        .map((p) => (
+                          <option key={p.id} value={p.name}>{p.name}</option>
+                        ))}
+                    </select>
                   </div>
                   <div className={styles.modalField}>
                     <label className={styles.modalLabel}>Typ smlouvy *</label>

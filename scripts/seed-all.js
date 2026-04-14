@@ -20,6 +20,8 @@ const path = require('path');
 const SCRIPTS = [
   'seed-admin.js',
   'seed-companies.js',
+  'seed-departments.js',
+  'seed-job-positions.js',
   'seed-employees.js',
   'seed-users.js',
   'seed-templates.js',
