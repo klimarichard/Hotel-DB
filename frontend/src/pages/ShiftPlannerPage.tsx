@@ -749,8 +749,10 @@ export default function ShiftPlannerPage() {
 
           {/* Deadline bar — visible to all when there is a saved deadline or user can edit.
               Uzavření shown only when opened; Publikování only when closed. */}
-          {plan && (plan.status === "opened" || plan.status === "closed") &&
-            (canEdit || plan.closedAt || plan.publishedAt) && (
+          {plan && (
+            (plan.status === "opened" && (canEdit || plan.closedAt)) ||
+            (plan.status === "closed" && (canEdit || plan.publishedAt))
+          ) && (
             <div className={styles.deadlineBar}>
               {plan.status === "opened" && (canEdit || plan.closedAt) && (
                 <div className={styles.deadlineItem}>
