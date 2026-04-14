@@ -76,6 +76,19 @@ async function run() {
     if (written % 50 === 0) process.stdout.write(`  Shifts written: ${written}/${shiftEntries.length}...\r`);
   }
   console.log(`  ✓ Shifts written: ${written} entries`);
+
+  // 5. Write MOD row (doc ID = date string)
+  const modRow = snapshot.modRow ?? {};
+  const modEntries = Object.entries(modRow);
+  for (const [date, modData] of modEntries) {
+    await planRef.collection('modRow').doc(date).set({
+      ...modData,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  }
+  if (modEntries.length > 0) {
+    console.log(`  ✓ MOD row written: ${modEntries.length} entries`);
+  }
 }
 
 if (require.main === module) {

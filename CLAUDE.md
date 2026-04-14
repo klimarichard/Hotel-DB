@@ -160,7 +160,7 @@ npm run dev
   - `DP`/`NP` (Perla) and `DM`/`NM` (Metropol): changed to mid-grey (`bg #d1d5db`, `text #1f2937`)
   - `getCellColor`: portýr shifts (`DP`/`NP`) with no hotel now fall to grey instead of the blue default
 - **Shift counter table** (closed plan, admin only): 12 counter rows (DA, DS, DQ, DK, NA, NS, NQ, NK, DPQ, NPQ, DPA, NPA) appended inside `ShiftGrid`'s own `<tbody>` so they share the same column widths and scroll container. `DA²` counts as `DA` (segments are parsed). Colours: 0 → red, 1 → green, 2+ → blue.
-- **Seed script rewrite**: `scripts/seed-shift-plan.js` now replays a captured snapshot (`scripts/_shift_plan_snapshot.json`) of the manually configured April 2026 plan (34 employees, 679 shifts) instead of generating shifts algorithmically.
+- **Seed script rewrite**: `scripts/seed-shift-plan.js` now replays a captured snapshot (`scripts/_shift_plan_snapshot.json`) of the manually configured April 2026 plan (34 employees, 679 shifts, 30 MOD row entries) instead of generating shifts algorithmically.
 
 ### Open items from spec (§14)
 - Payroll: confirm whether D/N shifts use 11.5h net or 12h gross after break deduction
