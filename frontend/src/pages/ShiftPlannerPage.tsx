@@ -6,7 +6,6 @@ import ShiftGrid from "../components/ShiftGrid";
 import AddEmployeeToPlanModal from "../components/AddEmployeeToPlanModal";
 import EditEmployeeInPlanModal from "../components/EditEmployeeInPlanModal";
 import ConfirmModal from "../components/ConfirmModal";
-import UnavailabilityPanel from "../components/UnavailabilityPanel";
 import XOverrideModal from "../components/XOverrideModal";
 import ShiftOverridePanel from "../components/ShiftOverridePanel";
 import ShiftChangeRequestPanel from "../components/ShiftChangeRequestPanel";
@@ -144,7 +143,6 @@ export default function ShiftPlannerPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showAddEmployee, setShowAddEmployee] = useState(false);
-  const [showUnavailability, setShowUnavailability] = useState(false);
   const [showOverrideRequests, setShowOverrideRequests] = useState(false);
   const [showChangeRequests, setShowChangeRequests] = useState(false);
   const [pendingChangeRequest, setPendingChangeRequest] = useState<{
@@ -700,15 +698,6 @@ export default function ShiftPlannerPage() {
             )}
 
             {/* Unavailability requests toggle */}
-            {plan && canEdit && (
-              <button
-                className={styles.secondaryBtn}
-                onClick={() => setShowUnavailability((v) => !v)}
-              >
-                Žádosti o volno
-              </button>
-            )}
-
             {/* Override requests toggle (admin/director only) */}
             {plan && canPublish && (
               <button
@@ -886,11 +875,6 @@ export default function ShiftPlannerPage() {
                 </div>
               )}
             </div>
-          )}
-
-          {/* Unavailability panel */}
-          {plan && showUnavailability && (
-            <UnavailabilityPanel planId={plan.id} />
           )}
 
           {/* Shift override requests panel */}
