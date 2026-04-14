@@ -32,6 +32,7 @@ interface Props {
   showCounterTable?: boolean;
   onCellRequestChange?: (employeeId: string, date: string, currentRawInput: string) => void;
   alwaysReadOnlySections?: string[];
+  currentEmployeeId?: string | null;
 }
 
 const DAY_NAMES = ["Ne", "Po", "Út", "St", "Čt", "Pá", "So"];
@@ -69,6 +70,7 @@ export default function ShiftGrid({
   showCounterTable = false,
   onCellRequestChange,
   alwaysReadOnlySections = [],
+  currentEmployeeId,
 }: Props) {
   const days = useMemo(() => getDaysInMonth(plan.year, plan.month), [plan.year, plan.month]);
 
@@ -267,8 +269,8 @@ export default function ShiftGrid({
                 const rowIdx = empRowIndex.get(emp.employeeId) ?? 0;
                 const modLetter = modPersonByName.get(`${emp.firstName} ${emp.lastName}`);
                 return (
-                  <tr key={emp.id} className={styles.empRow}>
-                    <td className={styles.nameCell}>
+                  <tr key={emp.id} className={`${styles.empRow}${emp.employeeId === currentEmployeeId ? ` ${styles.currentEmpRow}` : ""}`}>
+                    <td className={`${styles.nameCell}${emp.employeeId === currentEmployeeId ? ` ${styles.currentNameCell}` : ""}`}>
                       <span className={styles.empNameText}>
                         {emp.lastName} {emp.firstName}
                         {modLetter ? <span className={styles.modBadge}>{modLetter}</span> : null}

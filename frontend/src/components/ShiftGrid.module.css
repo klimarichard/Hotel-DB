@@ -105,6 +105,16 @@
   border-bottom: 1px solid #f1f5f9;
 }
 
+.currentEmpRow {
+  background: #eef2ff;
+}
+
+.currentNameCell {
+  background: #eef2ff !important;
+  border-left: 3px solid #6366f1;
+  font-weight: 700;
+}
+
 
 .nameCell {
   position: sticky;

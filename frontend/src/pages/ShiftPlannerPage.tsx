@@ -135,7 +135,7 @@ function StatusBadge({ status }: { status: PlanStatus }) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ShiftPlannerPage() {
-  const { role } = useAuth();
+  const { role, employeeId: currentEmployeeId } = useAuth();
   const now = new Date();
 
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
@@ -573,9 +573,9 @@ export default function ShiftPlannerPage() {
 
   return (
     <div>
-      {/* Header */}
+      {/* Header — month nav centred as the page's primary control */}
       <div className={styles.header}>
-        <h1 className={styles.title}>Směny</h1>
+        <div />
         <div className={styles.monthNav}>
           <button className={styles.navBtn} onClick={prevMonth}>‹</button>
           <span className={styles.monthLabel}>
@@ -583,6 +583,7 @@ export default function ShiftPlannerPage() {
           </span>
           <button className={styles.navBtn} onClick={nextMonth}>›</button>
         </div>
+        <div />
       </div>
 
       {/* Loading / error */}
@@ -948,6 +949,7 @@ export default function ShiftPlannerPage() {
               canSeeInactiveFlag={canEdit}
               readOnly={role === "employee" ? plan.status !== "opened" : !canEdit}
               alwaysReadOnlySections={role === "employee" ? ["vedoucí"] : []}
+              currentEmployeeId={currentEmployeeId}
               showCounterTable={plan.status === "closed" && role === "admin"}
               onCellRequestChange={
                 role === "employee" && plan.status === "published"
