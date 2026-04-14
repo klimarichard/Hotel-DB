@@ -1,9 +1,24 @@
 import { useCallback, useMemo, useState } from "react";
 import type { PlanDetail, PlanEmployee, ShiftDoc, ModShiftDoc } from "../pages/ShiftPlannerPage";
-import { SECTION_LABELS, SECTIONS, type Section, getCzechHolidays, MOD_PERSONS } from "../lib/shiftConstants";
+import { SECTION_LABELS, SECTIONS, type Section, getCzechHolidays, MOD_PERSONS, parseShiftExpression } from "../lib/shiftConstants";
 import ShiftCell from "./ShiftCell";
 import ModCell from "./ModCell";
 import styles from "./ShiftGrid.module.css";
+
+const COUNTER_ROWS: { label: string; code: string; hotel: string }[] = [
+  { label: "DA",  code: "D",  hotel: "A" },
+  { label: "DS",  code: "D",  hotel: "S" },
+  { label: "DQ",  code: "D",  hotel: "Q" },
+  { label: "DK",  code: "D",  hotel: "K" },
+  { label: "NA",  code: "N",  hotel: "A" },
+  { label: "NS",  code: "N",  hotel: "S" },
+  { label: "NQ",  code: "N",  hotel: "Q" },
+  { label: "NK",  code: "N",  hotel: "K" },
+  { label: "DPQ", code: "DP", hotel: "Q" },
+  { label: "NPQ", code: "NP", hotel: "Q" },
+  { label: "DPA", code: "DP", hotel: "A" },
+  { label: "NPA", code: "NP", hotel: "A" },
+];
 
 interface Props {
   plan: PlanDetail;
@@ -14,6 +29,7 @@ interface Props {
   canEditEmployees: boolean;
   canSeeInactiveFlag: boolean;
   readOnly: boolean;
+  showCounterTable?: boolean;
 }
 
 const DAY_NAMES = ["Ne", "Po", "Út", "St", "Čt", "Pá", "So"];
@@ -48,6 +64,7 @@ export default function ShiftGrid({
   canEditEmployees,
   canSeeInactiveFlag,
   readOnly,
+  showCounterTable = false,
 }: Props) {
   const days = useMemo(() => getDaysInMonth(plan.year, plan.month), [plan.year, plan.month]);
 
@@ -110,6 +127,22 @@ export default function ShiftGrid({
     }
     return list;
   }, [grouped]);
+
+  const shiftCounts = useMemo(() => {
+    if (!showCounterTable) return null;
+    const counts: Record<string, Record<string, number>> = {};
+    for (const shift of plan.shifts) {
+      const parsed = parseShiftExpression(shift.rawInput);
+      if (!parsed.isValid) continue;
+      for (const seg of parsed.segments) {
+        if (!seg.hotel) continue;
+        const key = `${seg.code}_${seg.hotel}`;
+        if (!counts[shift.date]) counts[shift.date] = {};
+        counts[shift.date][key] = (counts[shift.date][key] ?? 0) + 1;
+      }
+    }
+    return counts;
+  }, [showCounterTable, plan.shifts]);
 
   const [focusedCell, setFocusedCell] = useState<{ row: number; col: number } | null>(null);
   const [focusedModCol, setFocusedModCol] = useState<number | null>(null);
@@ -343,6 +376,34 @@ export default function ShiftGrid({
 
             return rows;
           })}
+          {shiftCounts && (
+            <>
+              <tr className={styles.counterSeparatorRow}>
+                <td colSpan={days.length + 2} className={styles.counterSeparatorCell}>
+                  Přehled obsazení
+                </td>
+              </tr>
+              {COUNTER_ROWS.map((row) => (
+                <tr key={row.label} className={styles.counterRow}>
+                  <td className={styles.counterLabelCell}>{row.label}</td>
+                  {days.map((d) => {
+                    const dateStr = formatDate(d);
+                    const count = shiftCounts[dateStr]?.[`${row.code}_${row.hotel}`] ?? 0;
+                    const cls =
+                      count === 0 ? styles.counterCell0 :
+                      count === 1 ? styles.counterCell1 :
+                                   styles.counterCell2;
+                    return (
+                      <td key={dateStr} className={`${cls} ${dayClass(d)}`}>
+                        {count > 0 ? count : ""}
+                      </td>
+                    );
+                  })}
+                  <td className={styles.counterCell0} />
+                </tr>
+              ))}
+            </>
+          )}
         </tbody>
       </table>
     </div>

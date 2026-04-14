@@ -186,6 +186,68 @@
   border-right: 1px solid #e5e7eb;
 }
 
+/* ── Shift counter rows ───────────────────────────────────────────────────── */
+
+.counterSeparatorRow {
+  border-top: 2px solid #e5e7eb;
+}
+
+.counterSeparatorCell {
+  background: #f1f5f9;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #374151;
+  padding: 0.35rem 0.75rem;
+  border-top: 1px solid #e2e8f0;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.counterRow {
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.counterLabelCell {
+  position: sticky;
+  left: 0;
+  background: #f8fafc;
+  z-index: 1;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #374151;
+  padding: 3px 0.75rem;
+  white-space: nowrap;
+  border-right: 1px solid #e5e7eb;
+}
+
+.counterCell0 {
+  background: #fee2e2;
+  color: #dc2626;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-align: center;
+  padding: 3px 0;
+}
+
+.counterCell1 {
+  background: #dcfce7;
+  color: #15803d;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-align: center;
+  padding: 3px 0;
+}
+
+.counterCell2 {
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-align: center;
+  padding: 3px 0;
+}
+
 /* ── Employee name cell controls ──────────────────────────────────────── */
 
 .empNameText {

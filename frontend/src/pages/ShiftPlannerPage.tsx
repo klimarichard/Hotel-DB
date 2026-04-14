@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 import { useAuth } from "../hooks/useAuth";
 import { parseShiftExpression } from "../lib/shiftConstants";
@@ -129,23 +129,6 @@ function StatusBadge({ status }: { status: PlanStatus }) {
   );
 }
 
-// ─── Shift counter table (closed plan, admin only) ────────────────────────────
-
-const COUNTER_ROWS: { label: string; code: string; hotel: string }[] = [
-  { label: "DA",  code: "D",  hotel: "A" },
-  { label: "DS",  code: "D",  hotel: "S" },
-  { label: "DQ",  code: "D",  hotel: "Q" },
-  { label: "DK",  code: "D",  hotel: "K" },
-  { label: "NA",  code: "N",  hotel: "A" },
-  { label: "NS",  code: "N",  hotel: "S" },
-  { label: "NQ",  code: "N",  hotel: "Q" },
-  { label: "NK",  code: "N",  hotel: "K" },
-  { label: "DPQ", code: "DP", hotel: "Q" },
-  { label: "NPQ", code: "NP", hotel: "Q" },
-  { label: "DPA", code: "DP", hotel: "A" },
-  { label: "NPA", code: "NP", hotel: "A" },
-];
-
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ShiftPlannerPage() {
@@ -175,24 +158,6 @@ export default function ShiftPlannerPage() {
 
   const canEdit = role === "admin" || role === "director" || role === "manager";
   const canPublish = role === "admin" || role === "director";
-
-  // Build per-day counts for the counter table (closed plan, admin only)
-  const shiftCounts = useMemo(() => {
-    if (!plan || plan.status !== "closed" || role !== "admin") return null;
-    // counts[dateStr][`${code}_${hotel}`] = number of segments of that type on that day
-    const counts: Record<string, Record<string, number>> = {};
-    for (const shift of plan.shifts) {
-      const parsed = parseShiftExpression(shift.rawInput);
-      if (!parsed.isValid) continue;
-      for (const seg of parsed.segments) {
-        if (!seg.hotel) continue;
-        const key = `${seg.code}_${seg.hotel}`;
-        if (!counts[shift.date]) counts[shift.date] = {};
-        counts[shift.date][key] = (counts[shift.date][key] ?? 0) + 1;
-      }
-    }
-    return counts;
-  }, [plan, role]);
 
   const { refresh: refreshOverrideCount } = useShiftOverridesContext();
   const [planOverrideCount, setPlanOverrideCount] = useState(0);
@@ -866,53 +831,10 @@ export default function ShiftPlannerPage() {
               }
               canSeeInactiveFlag={canEdit}
               readOnly={!canEdit}
+              showCounterTable={plan.status === "closed" && role === "admin"}
             />
           )}
 
-          {/* Shift counter table — closed plan, admin only */}
-          {shiftCounts && plan && (() => {
-            const daysInMonth = new Date(plan.year, plan.month, 0).getDate();
-            const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
-            return (
-              <div className={styles.counterWrapper}>
-                <div className={styles.counterTitle}>Přehled obsazení</div>
-                <div className={styles.counterScroll}>
-                  <table className={styles.counterTable}>
-                    <thead>
-                      <tr>
-                        <th className={styles.counterLabelCell}></th>
-                        {days.map((d) => (
-                          <th key={d} className={styles.counterDayHeader}>
-                            {d}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {COUNTER_ROWS.map((row) => (
-                        <tr key={row.label}>
-                          <td className={styles.counterLabelCell}>{row.label}</td>
-                          {days.map((d) => {
-                            const dateStr = `${plan.year}-${String(plan.month).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-                            const count = shiftCounts[dateStr]?.[`${row.code}_${row.hotel}`] ?? 0;
-                            const cls =
-                              count === 0 ? styles.counterCell0 :
-                              count === 1 ? styles.counterCell1 :
-                                           styles.counterCell2;
-                            return (
-                              <td key={d} className={cls}>
-                                {count > 0 ? count : ""}
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            );
-          })()}
         </>
       )}
 
