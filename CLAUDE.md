@@ -175,6 +175,13 @@ npm run dev
 - New button "Žádosti o změny" in plan bar (admin/director only), with red badge from `changeRequestCount`.
 - `ShiftChangeRequestsProvider` added to `App.tsx` provider stack.
 
+### Post-phase 6 fixes — employee-fixes branch (2026-04-14)
+- **Delete employee** (admin/director): `DELETE /employees/:id?deleteUser=true|false` deletes all sub-collections, alerts, vacation requests, and optionally the linked Firebase Auth user. Two-step confirmation in `EmployeeDetailPage`: first confirm deletion, then if a linked user exists, ask whether to delete or just unlink. `ConfirmModal` gained `cancelLabel` prop for the "Ponechat účet" option. Also `GET /employees/:id/linked-user` endpoint.
+- **Search crash fix**: null-coalescing (`?? ""`) on `firstName`, `lastName`, `currentJobTitle` in `EmployeesPage` filter — was crashing if any field was null.
+- **Document expiry proactive check**: new daily scheduled Cloud Function `refreshDocumentAlerts` re-scans every employee's stored documents and refreshes expiry alerts. HTTP trigger `POST /employees/trigger-alert-refresh` for manual/emulator use. `updateDocumentAlerts` and `EXPIRY_FIELDS` exported from `employees.ts`.
+- **Alerts badge stale fix**: `AlertsContext` now exposes `refresh()`, `markRead(ids[])` (additive), `markAllRead()` (parameterless), and `readIds: Set<string>`. Storage key bumped to `v2` to clear old auto-marked state.
+- **Alerts page redesign**: split into Nepřečtené / Přečtené sections. Alerts are never auto-marked on page visit — user must click "Přečteno" per row or "Označit vše jako přečtené". Nav badge counts only unread.
+
 ### Open items from spec (§14)
 - Payroll: confirm whether D/N shifts use 11.5h net or 12h gross after break deduction
 - Payroll: confirm night premium rate formula (% or fixed per hour)
