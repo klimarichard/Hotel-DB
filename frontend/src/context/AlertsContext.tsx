@@ -22,7 +22,7 @@ const AlertsContext = createContext<AlertsContextValue>({
   refresh: () => {},
 });
 
-const STORAGE_KEY = "hotel_hr_seen_alert_ids";
+const STORAGE_KEY = "hotel_hr_read_alert_ids_v2"; // v2: user-triggered only, not auto-marked
 
 export function AlertsProvider({ children }: { children: ReactNode }) {
   const { role } = useAuth();

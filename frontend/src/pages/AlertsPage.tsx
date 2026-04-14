@@ -87,16 +87,12 @@ function AlertTable({ alerts, showAction, onMarkRead, muted }: AlertTableProps) 
 export default function AlertsPage() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
-  const { readIds, markRead, markAllRead, refresh } = useAlertsContext();
+  const { readIds, markRead, markAllRead } = useAlertsContext();
 
   useEffect(() => {
     api.get<Alert[]>("/alerts")
-      .then((data) => {
-        setAlerts(data);
-        refresh();
-      })
+      .then(setAlerts)
       .finally(() => setLoading(false));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (loading) return <div className={styles.state}>Načítám…</div>;
