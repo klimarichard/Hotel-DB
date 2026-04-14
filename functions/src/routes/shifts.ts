@@ -1026,19 +1026,28 @@ shiftsRouter.get(
   }
 );
 
-// GET /shifts/plans/:planId/shiftChangeRequests — list all change requests for a plan
+// GET /shifts/plans/:planId/shiftChangeRequests — list change requests for a plan
+// Admin/director: all requests. Everyone else: own requests only (filtered by requestedBy).
 shiftsRouter.get(
   "/plans/:planId/shiftChangeRequests",
   requireAuth,
-  requireRole("admin", "director", "manager"),
-  async (req, res) => {
+  requireRole("admin", "director", "manager", "employee"),
+  async (req: AuthRequest, res) => {
     const { planId } = req.params;
-    const snap = await db()
+    const userRole = req.role;
+    const isPrivileged = userRole === "admin" || userRole === "director";
+
+    let query: admin.firestore.Query = db()
       .collection("shiftPlans")
       .doc(planId)
       .collection("shiftChangeRequests")
-      .orderBy("requestedAt", "desc")
-      .get();
+      .orderBy("requestedAt", "desc");
+
+    if (!isPrivileged) {
+      query = query.where("requestedBy", "==", req.uid!);
+    }
+
+    const snap = await query.get();
     res.json(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
   }
 );

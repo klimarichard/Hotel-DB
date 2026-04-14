@@ -503,6 +503,36 @@ export default function ShiftPlannerPage() {
     }
 
     if (rawInput.trim() === "") {
+      // Check if an approved vacation covers this date — warn before deleting
+      const { hasVacation } = await api.get<{ hasVacation: boolean }>(
+        `/vacation/check?employeeId=${encodeURIComponent(employeeId)}&date=${date}`
+      );
+      if (hasVacation) {
+        // Show warning modal; the actual delete runs from onConfirm
+        setConfirmModal({
+          title: "Smazání X — schválená dovolená",
+          message:
+            "Tento den je součástí schválené dovolené. Opravdu chcete X smazat? " +
+            "Dovolená zůstane schválená, ale X v plánu zmizí.",
+          confirmLabel: "Smazat X",
+          danger: true,
+          onConfirm: () => {
+            setConfirmModal(null);
+            api.delete(`/shifts/plans/${plan.id}/shifts/${employeeId}/${date}`)
+              .then(() => {
+                setPlan((prev) => {
+                  if (!prev) return prev;
+                  const docId = `${employeeId}_${date}`;
+                  return { ...prev, shifts: prev.shifts.filter((s) => s.id !== docId) };
+                });
+              })
+              .catch((e) => setError(e instanceof Error ? e.message : "Chyba při mazání"));
+          },
+        });
+        // Return without deleting — let the modal handle it.
+        // ShiftCell will re-display the original value since setPlan wasn't called.
+        return;
+      }
       await api.delete(`/shifts/plans/${plan.id}/shifts/${employeeId}/${date}`);
       setPlan((prev) => {
         if (!prev) return prev;
@@ -730,15 +760,15 @@ export default function ShiftPlannerPage() {
               </button>
             )}
 
-            {/* Change requests toggle (admin/director only, for published plans) */}
-            {plan && canPublish && (
+            {/* Change requests toggle — all users see their own; admin/director see all */}
+            {plan && (
               <button
                 className={styles.secondaryBtn}
                 onClick={() => setShowChangeRequests((v) => !v)}
                 style={{ position: "relative" }}
               >
                 Žádosti o změny
-                {changeRequestCount > 0 && (
+                {canPublish && changeRequestCount > 0 && (
                   <span style={{
                     position: "absolute",
                     top: "-6px",
@@ -905,11 +935,12 @@ export default function ShiftPlannerPage() {
             />
           )}
 
-          {/* Shift change requests panel */}
-          {plan && showChangeRequests && canPublish && (
+          {/* Shift change requests panel — all users see their own; admin/director can review */}
+          {plan && showChangeRequests && (
             <ShiftChangeRequestPanel
               planId={plan.id}
               employees={plan.employees}
+              canReview={canPublish}
               onResolved={() => { refreshChangeRequestCount(); }}
             />
           )}

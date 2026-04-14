@@ -18,6 +18,7 @@ interface Props {
   planId: string;
   employees: PlanEmployee[];
   onResolved: () => void;
+  canReview?: boolean;  // show approve/deny controls (admin/director only)
 }
 
 function StatusBadge({ status }: { status: ChangeRequest["status"] }) {
@@ -44,7 +45,7 @@ function formatDate(iso: string): string {
   return `${d}.${m}.${y}`;
 }
 
-export default function ShiftChangeRequestPanel({ planId, employees, onResolved }: Props) {
+export default function ShiftChangeRequestPanel({ planId, employees, onResolved, canReview = true }: Props) {
   const [requests, setRequests] = useState<ChangeRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
@@ -138,7 +139,7 @@ export default function ShiftChangeRequestPanel({ planId, employees, onResolved 
                     )}
                   </td>
                   <td>
-                    {req.status === "pending" && (
+                    {canReview && req.status === "pending" && (
                       <div className={styles.actions}>
                         <button
                           className={styles.approveBtn}
@@ -161,7 +162,7 @@ export default function ShiftChangeRequestPanel({ planId, employees, onResolved 
                     )}
                   </td>
                 </tr>
-                {rejectingId === req.id && (
+                {canReview && rejectingId === req.id && (
                   <tr key={`reject-${req.id}`}>
                     <td colSpan={7} className={styles.rejectRow}>
                       <input

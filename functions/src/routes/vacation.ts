@@ -7,6 +7,29 @@ import { applyVacationXsToPlans, removeVacationXsFromPlans } from "./shifts";
 export const vacationRouter = Router();
 const db = () => admin.firestore();
 
+// ─── GET /vacation/check — does an approved vacation cover a specific date? ────
+// Used before deleting an X shift to warn the user.
+
+vacationRouter.get("/check", requireAuth, async (req: AuthRequest, res) => {
+  const { employeeId, date } = req.query as { employeeId?: string; date?: string };
+  if (!employeeId || !date) {
+    res.status(400).json({ error: "employeeId and date are required" });
+    return;
+  }
+  const snap = await db()
+    .collection("vacationRequests")
+    .where("employeeId", "==", employeeId)
+    .where("status", "==", "approved")
+    .get();
+
+  const hasVacation = snap.docs.some((d) => {
+    const data = d.data() as Record<string, string>;
+    return data.startDate <= date && data.endDate >= date;
+  });
+
+  res.json({ hasVacation });
+});
+
 // ─── GET /vacation ────────────────────────────────────────────────────────────
 // Admin/director: all requests; others: own requests only
 
