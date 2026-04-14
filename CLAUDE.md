@@ -170,6 +170,8 @@ npm run dev
 - `ShiftCell`: `onRequestChange` fires on **double-click** (not single-click); works on empty cells too; cursor is `pointer` when `onRequestChange` is provided.
 - `ShiftGrid`: `alwaysReadOnlySections` prop locks specified sections for all interactions (edit + request change). Employees get `["vedoucí"]` — managers' rows are always locked.
 - Employee shift rules (opened plan only): employees can set/delete **X only** on any non-vedoucí cell. Enforced on both frontend and backend (PUT/DELETE now accept `employee` role with plan-status + X-only guards).
+- **Moje žádosti** (employee/manager): combined read-only panel showing their own X exception requests + shift change requests. Both endpoints filter by `requestedBy == uid` for non-privileged users. Admin/director keep separate "Výjimky" and "Žádosti o změny" buttons.
+- **Vacation X delete warning**: deleting an X that overlaps an approved vacation shows a danger confirm modal for all roles. `GET /vacation/check?employeeId&date` endpoint checks approved vacation overlap.
 - New button "Žádosti o změny" in plan bar (admin/director only), with red badge from `changeRequestCount`.
 - `ShiftChangeRequestsProvider` added to `App.tsx` provider stack.
 
