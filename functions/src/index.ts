@@ -43,6 +43,24 @@ app.post("/shifts/trigger-deadlines", async (_req, res) => {
   res.json(result);
 });
 
+// HTTP trigger for manual/emulator testing of document alert refresh
+app.post("/employees/trigger-alert-refresh", async (_req, res) => {
+  const db = admin.firestore();
+  const employeesSnap = await db.collection("employees").get();
+  let refreshed = 0;
+  for (const empDoc of employeesSnap.docs) {
+    const emp = empDoc.data() as Record<string, unknown>;
+    const docsSnap = await empDoc.ref.collection("documents").limit(1).get();
+    if (docsSnap.empty) continue;
+    const docData = docsSnap.docs[0].data() as Record<string, unknown>;
+    const alertBody: Record<string, unknown> = {};
+    for (const { field } of EXPIRY_FIELDS) alertBody[field] = docData[field] ?? null;
+    await updateDocumentAlerts(empDoc.id, (emp.firstName as string) ?? "", (emp.lastName as string) ?? "", alertBody);
+    refreshed++;
+  }
+  res.json({ refreshed });
+});
+
 export const api = functions.https.onRequest(app);
 
 // ─── Scheduled function: auto-transition plans at their deadlines ─────────────
