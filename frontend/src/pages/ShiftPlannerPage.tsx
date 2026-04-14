@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "../lib/api";
 import { useAuth } from "../hooks/useAuth";
 import { parseShiftExpression } from "../lib/shiftConstants";
@@ -210,45 +210,15 @@ export default function ShiftPlannerPage() {
     loadPlan();
   }, [loadPlan]);
 
-  // ── Automatic deadline checker ─────────────────────────────────────────────
-
-  const deadlineTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // ── Periodic plan reload ───────────────────────────────────────────────────
+  // Reloads the plan every 60 s so status changes triggered by the app-wide
+  // deadline checker in Layout are reflected without a manual page refresh.
 
   useEffect(() => {
-    async function checkDeadlines() {
-      if (!plan) return;
-
-      // opened → closed
-      if (plan.status === "opened" && plan.closedAt) {
-        if (new Date(plan.closedAt).getTime() <= Date.now()) {
-          try {
-            await api.patch(`/shifts/plans/${plan.id}`, { status: "closed" });
-            loadPlan(); // reload to get snapshot
-          } catch { /* ignore */ }
-          return;
-        }
-      }
-
-      // closed → published
-      if (plan.status === "closed" && plan.publishedAt) {
-        if (new Date(plan.publishedAt).getTime() <= Date.now()) {
-          try {
-            await api.patch(`/shifts/plans/${plan.id}`, { status: "published" });
-            setPlan((prev) => (prev ? { ...prev, status: "published" } : prev));
-          } catch { /* ignore */ }
-          return;
-        }
-      }
-    }
-
-    checkDeadlines();
-
-    // Check every 60 seconds
-    deadlineTimerRef.current = setInterval(checkDeadlines, 60000);
-    return () => {
-      if (deadlineTimerRef.current) clearInterval(deadlineTimerRef.current);
-    };
-  }, [plan?.id, plan?.status, plan?.closedAt, plan?.publishedAt, loadPlan]);
+    if (!plan) return;
+    const timer = setInterval(loadPlan, 60_000);
+    return () => clearInterval(timer);
+  }, [plan?.id, loadPlan]);
 
   // ── Month navigation ───────────────────────────────────────────────────────
 
