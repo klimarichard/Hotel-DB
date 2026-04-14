@@ -395,11 +395,11 @@ export default function ShiftGrid({
                                    styles.counterCell2;
                     return (
                       <td key={dateStr} className={`${cls} ${dayClass(d)}`}>
-                        {count > 0 ? count : ""}
+                        {count}
                       </td>
                     );
                   })}
-                  <td className={styles.counterCell0} />
+                  <td className={styles.footerCell} />
                 </tr>
               ))}
             </>
