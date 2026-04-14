@@ -481,7 +481,7 @@ export default function ShiftPlannerPage() {
     const isAllX =
       parsed.segments.length > 0 && parsed.segments.every((s) => s.code === "X");
 
-    if (isAllX) {
+    if (isAllX && role !== "admin" && role !== "director") {
       const emp = plan.employees.find((e) => e.employeeId === employeeId);
       const violations: ViolationInfo[] = [];
 

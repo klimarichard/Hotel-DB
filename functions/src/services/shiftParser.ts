@@ -76,6 +76,11 @@ function parseSegment(token: string): ShiftSegment | { error: string } {
     return { error: "Neznámý kód: " + code };
   }
 
+  // D and N require a hotel code (e.g. DA, NS); only R and X are valid standalone
+  if ((code === "D" || code === "N") && remainder === "") {
+    return { error: "Kód " + code + " vyžaduje hotel (např. " + code + "A)" };
+  }
+
   // Remainder must be a valid hotel code or empty
   if (remainder !== "" && !(HOTEL_CODES as readonly string[]).includes(remainder)) {
     return { error: "Neznámý hotel: " + remainder };

@@ -61,10 +61,10 @@ export const CELL_COLORS: Record<string, { bg: string; text: string }> = {
   S:  { bg: "#fef3c7", text: "#92400e" },   // Superior — gold
   Q:  { bg: "#fdf4ff", text: "#c026d3" },   // Amigo — fuchsia
   K:  { bg: "#ede9fe", text: "#5b21b6" },   // Ankora — purple
-  P:  { bg: "#e0f2fe", text: "#075985" },   // Perla — light blue
-  M:  { bg: "#f3f4f6", text: "#374151" },   // Metropol — gray
+  P:  { bg: "#d1d5db", text: "#1f2937" },   // Perla — gray
+  M:  { bg: "#d1d5db", text: "#1f2937" },   // Metropol — gray
   PA: { bg: "#dbeafe", text: "#1e40af" },   // Ambiance portýr — blue
-  PQ: { bg: "#4c1d95", text: "#e9d5ff" },   // Amigo portýr — dark purple
+  PQ: { bg: "#fdf6ee", text: "#431407" },   // Amigo portýr — brown
   X:  { bg: "#fee2e2", text: "#dc2626" },   // X — red
 };
 
@@ -77,6 +77,7 @@ export function getCellColor(parsed: ParseResult): { bg: string; text: string } 
   const isPortyr = first.code === "DP" || first.code === "NP";
   const hotel = first.hotel;
   if (isPortyr && hotel) return CELL_COLORS["P" + hotel] ?? CELL_COLORS[hotel] ?? DEFAULT_CELL_COLOR;
+  if (isPortyr) return CELL_COLORS["P"] ?? DEFAULT_CELL_COLOR;
   if (hotel) return CELL_COLORS[hotel] ?? DEFAULT_CELL_COLOR;
   return DEFAULT_CELL_COLOR;
 }
@@ -225,6 +226,11 @@ function parseSegment(token: string): ShiftSegment | { error: string } {
 
   if (!(code in SHIFT_HOURS)) {
     return { error: "Neznámý kód: " + code };
+  }
+
+  // D and N require a hotel code (e.g. DA, NS); only R and X are valid standalone
+  if ((code === "D" || code === "N") && remainder === "") {
+    return { error: "Kód " + code + " vyžaduje hotel (např. " + code + "A)" };
   }
 
   if (remainder !== "" && !(HOTEL_CODES as readonly string[]).includes(remainder)) {
