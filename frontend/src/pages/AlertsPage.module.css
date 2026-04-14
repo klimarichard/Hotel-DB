@@ -4,11 +4,66 @@
   text-align: center;
 }
 
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+  gap: 1rem;
+}
+
 .title {
   font-size: 1.4rem;
   font-weight: 700;
   color: #1e2a3a;
-  margin-bottom: 1.5rem;
+  margin: 0;
+}
+
+.markAllBtn {
+  padding: 0.45rem 1rem;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  color: #374151;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.markAllBtn:hover {
+  background: #f3f4f6;
+}
+
+/* ── Sections ─────────────────────────────────────────────────────────────── */
+
+.section {
+  margin-bottom: 1.75rem;
+}
+
+.sectionLabel {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #6b7280;
+  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.countBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  padding: 0 0.3rem;
+  background: #ef4444;
+  color: #fff;
+  border-radius: 9999px;
+  font-size: 0.7rem;
+  font-weight: 700;
 }
 
 .empty {
@@ -91,4 +146,29 @@
   border-radius: 9999px;
   font-size: 0.75rem;
   font-weight: 500;
+}
+
+.rowRead td {
+  background: #f9fafb;
+  color: #9ca3af;
+}
+
+.rowRead .empLink {
+  color: #9ca3af;
+}
+
+.markReadBtn {
+  padding: 0.25rem 0.75rem;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  color: #6b7280;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.markReadBtn:hover {
+  background: #f3f4f6;
+  color: #374151;
 }

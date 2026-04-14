@@ -21,68 +21,129 @@ function formatDate(iso: string) {
 }
 
 function DaysBadge({ days }: { days: number }) {
-  if (days < 0) {
-    return <span className={styles.badgeExpired}>Prošlé o {Math.abs(days)} dní</span>;
-  }
-  if (days === 0) {
-    return <span className={styles.badgeExpired}>Vyprší dnes</span>;
-  }
+  if (days < 0) return <span className={styles.badgeExpired}>Prošlé o {Math.abs(days)} dní</span>;
+  if (days === 0) return <span className={styles.badgeExpired}>Vyprší dnes</span>;
   return <span className={styles.badgeExpiring}>Za {days} dní</span>;
+}
+
+interface AlertTableProps {
+  alerts: Alert[];
+  showAction?: boolean;
+  onMarkRead?: (id: string) => void;
+  muted?: boolean;
+}
+
+function AlertTable({ alerts, showAction, onMarkRead, muted }: AlertTableProps) {
+  return (
+    <div className={styles.tableWrapper}>
+      <table className={styles.table}>
+        <thead>
+          <tr>
+            <th>Zaměstnanec</th>
+            <th>Doklad</th>
+            <th>Datum expirace</th>
+            <th>Zbývá</th>
+            {showAction && <th></th>}
+          </tr>
+        </thead>
+        <tbody>
+          {alerts.map((alert) => (
+            <tr
+              key={alert.id}
+              className={
+                muted
+                  ? styles.rowRead
+                  : alert.status === "expired"
+                  ? styles.rowExpired
+                  : styles.rowExpiring
+              }
+            >
+              <td>
+                <Link to={`/zamestnanci/${alert.employeeId}`} className={styles.empLink}>
+                  {alert.employeeLastName} {alert.employeeFirstName}
+                </Link>
+              </td>
+              <td>{alert.fieldLabel}</td>
+              <td>{formatDate(alert.expiryDate)}</td>
+              <td><DaysBadge days={alert.daysUntilExpiry} /></td>
+              {showAction && (
+                <td>
+                  <button
+                    className={styles.markReadBtn}
+                    onClick={() => onMarkRead?.(alert.id)}
+                  >
+                    Přečteno
+                  </button>
+                </td>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 export default function AlertsPage() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
-  const { markAllRead, refresh } = useAlertsContext();
+  const { readIds, markRead, markAllRead, refresh } = useAlertsContext();
 
   useEffect(() => {
     api.get<Alert[]>("/alerts")
       .then((data) => {
         setAlerts(data);
-        // Sync the context with the fresh list so the badge reflects reality
         refresh();
-        markAllRead(data.map((a) => a.id));
       })
       .finally(() => setLoading(false));
-  // Context functions are stable, intentionally omitted from deps
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (loading) return <div className={styles.state}>Načítám…</div>;
 
+  const unread = alerts.filter((a) => !readIds.has(a.id));
+  const read   = alerts.filter((a) =>  readIds.has(a.id));
+
   return (
     <div>
-      <h1 className={styles.title}>Upozornění na expiraci dokladů</h1>
+      <div className={styles.header}>
+        <h1 className={styles.title}>Upozornění na expiraci dokladů</h1>
+        {unread.length > 0 && (
+          <button className={styles.markAllBtn} onClick={markAllRead}>
+            Označit vše jako přečtené
+          </button>
+        )}
+      </div>
 
-      {alerts.length === 0 ? (
-        <div className={styles.empty}>Žádná upozornění. Všechny doklady jsou platné.</div>
-      ) : (
-        <div className={styles.tableWrapper}>
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <th>Zaměstnanec</th>
-                <th>Doklad</th>
-                <th>Datum expirace</th>
-                <th>Zbývá</th>
-              </tr>
-            </thead>
-            <tbody>
-              {alerts.map((alert) => (
-                <tr key={alert.id} className={alert.status === "expired" ? styles.rowExpired : styles.rowExpiring}>
-                  <td>
-                    <Link to={`/zamestnanci/${alert.employeeId}`} className={styles.empLink}>
-                      {alert.employeeLastName} {alert.employeeFirstName}
-                    </Link>
-                  </td>
-                  <td>{alert.fieldLabel}</td>
-                  <td>{formatDate(alert.expiryDate)}</td>
-                  <td><DaysBadge days={alert.daysUntilExpiry} /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {/* Unread section */}
+      <div className={styles.section}>
+        <div className={styles.sectionLabel}>
+          Nepřečtené
+          {unread.length > 0 && (
+            <span className={styles.countBadge}>{unread.length}</span>
+          )}
         </div>
+        {unread.length === 0 ? (
+          <div className={styles.empty}>Žádná nepřečtená upozornění.</div>
+        ) : (
+          <AlertTable
+            alerts={unread}
+            showAction
+            onMarkRead={(id) => markRead([id])}
+          />
+        )}
+      </div>
+
+      {/* Read section — only shown when there are read alerts */}
+      {read.length > 0 && (
+        <div className={styles.section}>
+          <div className={styles.sectionLabel}>Přečtené</div>
+          <AlertTable alerts={read} muted />
+        </div>
+      )}
+
+      {alerts.length === 0 && (
+        <div className={styles.empty}>Žádná upozornění. Všechny doklady jsou platné.</div>
       )}
     </div>
   );

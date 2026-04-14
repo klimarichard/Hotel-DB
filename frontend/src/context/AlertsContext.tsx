@@ -8,13 +8,17 @@ interface Alert {
 
 interface AlertsContextValue {
   unreadCount: number;
-  markAllRead: (ids?: string[]) => void;
+  readIds: Set<string>;
+  markRead: (ids: string[]) => void;
+  markAllRead: () => void;
   refresh: () => void;
 }
 
 const AlertsContext = createContext<AlertsContextValue>({
   unreadCount: 0,
-  markAllRead: (_ids?: string[]) => {},
+  readIds: new Set(),
+  markRead: () => {},
+  markAllRead: () => {},
   refresh: () => {},
 });
 
@@ -23,7 +27,7 @@ const STORAGE_KEY = "hotel_hr_seen_alert_ids";
 export function AlertsProvider({ children }: { children: ReactNode }) {
   const { role } = useAuth();
   const [alerts, setAlerts] = useState<Alert[]>([]);
-  const [seenIds, setSeenIds] = useState<Set<string>>(() => {
+  const [readIds, setReadIds] = useState<Set<string>>(() => {
     try {
       return new Set(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "[]") as string[]);
     } catch {
@@ -31,27 +35,38 @@ export function AlertsProvider({ children }: { children: ReactNode }) {
     }
   });
 
-  function refresh() {
+  function fetchAlerts() {
     if (role !== "admin" && role !== "director") return;
     api.get<Alert[]>("/alerts").then(setAlerts).catch(() => {});
   }
 
   useEffect(() => {
-    refresh();
+    fetchAlerts();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [role]);
 
-  const unreadCount = alerts.filter((a) => !seenIds.has(a.id)).length;
+  const unreadCount = alerts.filter((a) => !readIds.has(a.id)).length;
 
-  // ids can be passed explicitly (from AlertsPage's own fetch) to avoid timing issues
-  function markAllRead(ids?: string[]) {
-    const allIds = ids ?? alerts.map((a) => a.id);
-    setSeenIds(new Set(allIds));
+  function markRead(ids: string[]) {
+    setReadIds((prev) => {
+      const next = new Set([...prev, ...ids]);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify([...next]));
+      return next;
+    });
+  }
+
+  function markAllRead() {
+    const allIds = alerts.map((a) => a.id);
+    setReadIds(new Set(allIds));
     localStorage.setItem(STORAGE_KEY, JSON.stringify(allIds));
   }
 
+  function refresh() {
+    fetchAlerts();
+  }
+
   return (
-    <AlertsContext.Provider value={{ unreadCount, markAllRead, refresh }}>
+    <AlertsContext.Provider value={{ unreadCount, readIds, markRead, markAllRead, refresh }}>
       {children}
     </AlertsContext.Provider>
   );
