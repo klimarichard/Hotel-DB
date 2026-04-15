@@ -212,6 +212,18 @@ npm run dev
   - Current-user yellow row forces `color: #1c1917` on name cell and total cell (visible on yellow in both themes).
 - **Shift cell color tweaks**: DS/NS (Superior) changed from pale `#fef3c7` to saturated gold `#fde68a`/`#78350f`. DPQ/NPQ (Amigo portýr) changed from pale cream to dark brown `#431407`/`#fed7aa` (dark mode: `#1c0a00`).
 
+### Post-phase 6 fixes — session 2026-04-15 (this session)
+- **ShiftOverridePanel employee name + date fix**: was displaying raw Firestore `employeeId` and ISO date string. Added `employees: PlanEmployee[]` prop (matching `ShiftChangeRequestPanel`) + `resolveEmployeeName()` + `formatDateCZ()`.
+- **Dark mode — Směny page fixes**: weekend/holiday highlights use CSS vars (`--color-weekend-bg`, `--color-holiday-bg`); grid cell borders upgraded from `border-subtle` → `border`; MOD row uses CSS vars; counter table swaps bg/text in dark mode; current-user yellow row forces `color: #1c1917`; `CELL_COLORS_DARK` + `getCellColor(parsed, dark?)` makes shift cells theme-aware; DPA/NPA dark mode upgraded from navy `#1e3a5f` (same as R default) to vivid `#1d4ed8`/`#bfdbfe`.
+- **HO shift type** (Home Office): 6 hours, standalone (no hotel suffix), valid for admin/director/manager only. Employee X-only backend guard already blocks it. Indigo color (`#e0e7ff`/`#3730a3` light, `#1e1b4b`/`#a5b4fc` dark). Added to both parsers + `getCellColor`.
+- **ZD/ZN require hotel code** (e.g. `ZDA`, `ZNQ`) — bare `ZD`/`ZN` now invalid, same rule as `D`/`N`. Applied to both parsers.
+- **ZD/ZN hour dotation changed** from 8 → 12 hours (both parsers).
+- **Shift cell color tweaks (this session)**: DS/NS → saturated gold `#fde68a`; DPQ/NPQ → dark brown `#431407`; DPA/NPA dark mode → vivid blue `#1d4ed8`.
+- **March 2026 shift plan added to seed**: `scripts/_capture_shift_plan.js` utility captures any plan from the emulator (run with year + month args); `seed-shift-plan.js` now auto-discovers all `_shift_plan_snapshot_YYYY_MM.json` files and seeds chronologically.
+- **scripts/ added to .gitignore**: all seed scripts and plan snapshots contain sensitive data (employee IDs, credentials, local paths) — removed from git, kept locally.
+- **Functions build requirement**: after any change to `functions/src/`, run `cd functions && npm run build` before restarting emulators. The emulator runs compiled JS from `functions/lib/` (gitignored), NOT TypeScript source directly.
+- **Auth after emulator restart**: restarting the Firebase Auth emulator invalidates all existing sessions. Users must log out and log back in to get a fresh token — otherwise API writes fail with `auth/invalid-refresh-token`.
+
 ### Open items from spec (§14)
 - Payroll: confirm whether D/N shifts use 11.5h net or 12h gross after break deduction
 - Payroll: confirm night premium rate formula (% or fixed per hour)
