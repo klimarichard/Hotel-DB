@@ -325,11 +325,13 @@
   opacity: 0.65;
 }
 
-/* Two-line NAVÍC display (extraPay > 5000) */
-.navicLine {
-  display: block;
+/* Two-line NAVÍC display — column wrapper keeps numbers stacked
+   even when the parent cell uses inline-flex */
+.navicStack {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
   line-height: 1.3;
-  text-align: center;
 }
 
 .editInput {

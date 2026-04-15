@@ -190,12 +190,12 @@ function formatNavic(extraPay: number): React.ReactNode {
   if (extraPay === 5000) {
     return (6000).toLocaleString("cs-CZ");
   }
-  // extraPay > 5000: two stacked lines
+  // extraPay > 5000: two stacked lines in a column wrapper
   return (
-    <>
-      <span className={styles.navicLine}>{(6000).toLocaleString("cs-CZ")}</span>
-      <span className={styles.navicLine}>{(extraPay - 5000).toLocaleString("cs-CZ")}</span>
-    </>
+    <span className={styles.navicStack}>
+      <span>{(6000).toLocaleString("cs-CZ")}</span>
+      <span>{(extraPay - 5000).toLocaleString("cs-CZ")}</span>
+    </span>
   );
 }
 
