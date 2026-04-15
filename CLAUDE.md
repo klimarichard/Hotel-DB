@@ -115,6 +115,7 @@ npm run dev
 - Functions emulator runs on port **5002** (not 5001 — that port is taken on this machine)
 - To seed an admin user into the emulators: `"C:\Program Files\nodejs\node.exe" scripts\seed-admin.js` (from project root, emulators must be running)
 - To seed employees from `scripts/seeds/employees.csv`: `"C:\Program Files\nodejs\node.exe" scripts\seed-employees.js` (from project root, emulators must be running; all seed CSVs live under `scripts/seeds/`, UTF-8 with BOM, semicolon-delimited)
+- **Date arithmetic in the browser**: never use `new Date("YYYY-MM-DD").toISOString()` for date math — in UTC+ timezones (Prague = UTC+2) the ISO string parsing treats the date as UTC midnight, so `toISOString()` returns the previous day. Always use `new Date(y, m-1, d)` (numeric args = local time) and format with `getFullYear/Month/Date`.
 
 ### Phase 6 — key implementation notes
 - `vacationRequests` is a top-level Firestore collection (not a sub-collection)
@@ -184,7 +185,7 @@ npm run dev
 - `ShiftChangeRequestsProvider` added to `App.tsx` provider stack.
 
 ### Post-phase 6 fixes — employee-fixes branch (2026-04-14)
-- **Delete employee** (admin/director): `DELETE /employees/:id?deleteUser=true|false` deletes all sub-collections, alerts, vacation requests, and optionally the linked Firebase Auth user. Two-step confirmation in `EmployeeDetailPage`: first confirm deletion, then if a linked user exists, ask whether to delete or just unlink. `ConfirmModal` gained `cancelLabel` prop for the "Ponechat účet" option. Also `GET /employees/:id/linked-user` endpoint.
+- **Delete employee** (admin/director): `DELETE /employees/:id?deleteUser=true|false` deletes all sub-collections, alerts, vacation requests, and optionally the linked Firebase Auth user. Two-step confirmation in `EmployeeDetailPage`: first confirm deletion, then if a linked user exists, ask whether to delete or just unlink. `ConfirmModal` gained `cancelLabel` prop for the "Ponechat účet" option and `showCancel` prop (default `true`) to hide the cancel button entirely for info-only modals. Also `GET /employees/:id/linked-user` endpoint.
 - **Search crash fix**: null-coalescing (`?? ""`) on `firstName`, `lastName`, `currentJobTitle` in `EmployeesPage` filter — was crashing if any field was null.
 - **Document expiry proactive check**: new daily scheduled Cloud Function `refreshDocumentAlerts` re-scans every employee's stored documents and refreshes expiry alerts. HTTP trigger `POST /employees/trigger-alert-refresh` for manual/emulator use. `updateDocumentAlerts` and `EXPIRY_FIELDS` exported from `employees.ts`.
 - **Alerts badge stale fix**: `AlertsContext` now exposes `refresh()`, `markRead(ids[])` (additive), `markAllRead()` (parameterless), and `readIds: Set<string>`. Storage key bumped to `v2` to clear old auto-marked state.
