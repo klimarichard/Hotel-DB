@@ -4,6 +4,39 @@ import { useAuth, UserRole } from "@/hooks/useAuth";
 import { authApi, UserProfile, api } from "@/lib/api";
 import styles from "./SettingsPage.module.css";
 
+const EyeIcon = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+    <circle cx="12" cy="12" r="3"/>
+  </svg>
+);
+
+const EyeOffIcon = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+    <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+    <line x1="1" y1="1" x2="23" y2="23"/>
+  </svg>
+);
+
+function SalaryCell({ value }: { value: number | null | undefined }) {
+  const [visible, setVisible] = useState(false);
+  if (value == null) return <>—</>;
+  return (
+    <span className={styles.salaryCell}>
+      {visible ? `${value.toLocaleString("cs-CZ")} Kč` : "•••••"}
+      <button
+        type="button"
+        className={styles.revealBtn}
+        onClick={() => setVisible((v) => !v)}
+        title={visible ? "Skrýt mzdu" : "Zobrazit mzdu"}
+      >
+        {visible ? <EyeOffIcon /> : <EyeIcon />}
+      </button>
+    </span>
+  );
+}
+
 interface EmployeeSummary {
   id: string;
   firstName: string;
@@ -710,7 +743,7 @@ export default function SettingsPage() {
                   <tr key={p.id}>
                     <td>{p.name}</td>
                     <td>{dep?.name ?? "—"}</td>
-                    <td>{p.defaultSalary?.toLocaleString("cs-CZ") ?? "—"} Kč</td>
+                    <td><SalaryCell value={p.defaultSalary} /></td>
                     <td>
                       <button className={styles.linkBtn} onClick={() => openEditPosition(p)}>Upravit</button>
                       <button className={styles.deactivateBtn} onClick={() => handleDeletePosition(p.id)}>Smazat</button>

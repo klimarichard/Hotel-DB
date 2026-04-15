@@ -328,6 +328,28 @@
   padding: 2rem;
 }
 
+.salaryCell {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.revealBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0 0.2rem;
+  opacity: 0.5;
+  color: #6b7280;
+  display: inline-flex;
+  align-items: center;
+  transition: opacity 0.15s;
+}
+
+.revealBtn:hover {
+  opacity: 1;
+}
+
 .errorState {
   color: #dc2626;
   padding: 1rem;
