@@ -923,6 +923,7 @@ export default function ShiftPlannerPage() {
           {plan && showOverrideRequests && (
             <ShiftOverridePanel
               planId={plan.id}
+              employees={plan.employees}
               onOverrideResolved={() => {
                 setPlanOverrideCount((c) => Math.max(0, c - 1));
                 refreshOverrideCount();
