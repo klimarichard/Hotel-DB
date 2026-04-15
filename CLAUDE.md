@@ -82,6 +82,13 @@ Denormalized fields on `employees` root doc for querying: `currentCompanyId`, `c
 7. Payroll — calculation engine (replicates MZDY.xlsx), summary UI, export
 8. Polish — stats dashboard, audit log UI, daily expiry alert scheduled function
 
+### Important: backend changes require a build step
+The Functions emulator runs compiled JavaScript from `functions/lib/`, **not** the TypeScript source directly. After any change to files under `functions/src/`, run:
+```
+cd functions && npm run build
+```
+Then restart the emulators. Forgetting this means the old compiled code keeps running silently — the TypeScript change has no effect until rebuilt.
+
 ### Running locally
 
 The user starts emulators and the frontend manually each session.
