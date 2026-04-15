@@ -294,3 +294,13 @@ Two flows, both using Firebase Auth built-in email:
 - Calls `sendPasswordResetEmail(auth, user.email)` from the frontend using the loaded user's email.
 - Inline feedback: "Odkaz odeslán" (green) or "Chyba při odesílání" (red), clears after 4 s.
 - No backend changes required — Firebase handles email delivery.
+
+### Směny — current-user row highlight fix
+- Weekend and holiday `<td>` backgrounds were overriding the `<tr>` yellow, making the highlight invisible on those columns.
+- Fixed with higher-specificity CSS rules: `.currentEmpRow .weekend` and `.currentEmpRow .holiday` both forced to the same `#fef9c3` yellow as the row background — uniform across all day types.
+- Border thickened and darkened: `3px solid #ca8a04` (was `2px solid #eab308`) for better visibility in light mode.
+- Dark mode equivalents added.
+
+### Payroll — decimal comma input
+- Override cells and the sick-leave modal now accept both `.` and `,` as decimal separator (e.g. `9,5` = `9.5`).
+- Inputs switched from `type="number"` to `type="text" inputMode="decimal"`; comma normalised to dot before `Number()` parsing in both `commit()` and `handleSave()`.
