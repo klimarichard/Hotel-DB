@@ -3,6 +3,7 @@ interface Props {
   message: string;
   confirmLabel?: string;
   cancelLabel?: string;
+  showCancel?: boolean;
   danger?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
@@ -13,6 +14,7 @@ export default function ConfirmModal({
   message,
   confirmLabel = "Potvrdit",
   cancelLabel = "Zrušit",
+  showCancel = true,
   danger = false,
   onConfirm,
   onCancel,
@@ -70,20 +72,22 @@ export default function ConfirmModal({
             borderTop: "1px solid #e5e7eb",
           }}
         >
-          <button
-            style={{
-              padding: "8px 16px",
-              background: "#f3f4f6",
-              border: "1px solid #d1d5db",
-              borderRadius: "6px",
-              fontSize: "0.875rem",
-              color: "#374151",
-              cursor: "pointer",
-            }}
-            onClick={onCancel}
-          >
-            {cancelLabel}
-          </button>
+          {showCancel && (
+            <button
+              style={{
+                padding: "8px 16px",
+                background: "#f3f4f6",
+                border: "1px solid #d1d5db",
+                borderRadius: "6px",
+                fontSize: "0.875rem",
+                color: "#374151",
+                cursor: "pointer",
+              }}
+              onClick={onCancel}
+            >
+              {cancelLabel}
+            </button>
+          )}
           <button
             style={{
               padding: "8px 18px",

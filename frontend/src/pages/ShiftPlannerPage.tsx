@@ -158,6 +158,7 @@ export default function ShiftPlannerPage() {
     message: string;
     confirmLabel: string;
     cancelLabel?: string;
+    showCancel?: boolean;
     danger?: boolean;
     onConfirm: () => void;
   } | null>(null);
@@ -584,7 +585,7 @@ export default function ShiftPlannerPage() {
             "Nelze zadat více než 6 X po sobě jdoucích dnů. " +
             "Pokud potřebujete volno na delší dobu, požádejte o dovolenou.",
           confirmLabel: "Rozumím",
-          cancelLabel: "Rozumím",
+          showCancel: false,
           onConfirm: () => setConfirmModal(null),
         });
         return;
@@ -1057,6 +1058,7 @@ export default function ShiftPlannerPage() {
           message={confirmModal.message}
           confirmLabel={confirmModal.confirmLabel}
           cancelLabel={confirmModal.cancelLabel}
+          showCancel={confirmModal.showCancel}
           danger={confirmModal.danger}
           onConfirm={confirmModal.onConfirm}
           onCancel={() => setConfirmModal(null)}
