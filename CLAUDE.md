@@ -79,8 +79,8 @@ Denormalized fields on `employees` root doc for querying: `currentCompanyId`, `c
 4. ✅ Contract module — TipTap template editor with variable picker, html2pdf.js PDF export, Firebase Storage, contract log UI (ContractsTab), generate from history rows, companies API + Settings tab
 5. ✅ Shift planner — `parseShiftExpression()`, monthly grid UI, availability rules, X-limit overrides, unavailability requests (notifications skipped by design)
 6. ✅ Vacation (Dovolená) — vacation request workflow, pendingEdit pattern for approved edits, auto-X in shift plans, user↔employee linking in Settings
-7. Payroll — calculation engine (replicates MZDY.xlsx), summary UI, export
-8. Polish — stats dashboard, audit log UI, daily expiry alert scheduled function
+7. ✅ Payroll — calculation engine (replicates MZDY.xlsx), summary UI with editable overrides, per-contract-type row tints, sick leave tracking, configurable food voucher rate (export deferred to Phase 8)
+8. Polish — stats dashboard, audit log UI, daily expiry alert scheduled function, payroll export
 
 ### Important: backend changes require a build step
 The Functions emulator runs compiled JavaScript from `functions/lib/`, **not** the TypeScript source directly. After any change to files under `functions/src/`, run:
@@ -211,6 +211,56 @@ npm run dev
   - Counter table rows in closed plan: `[data-theme="dark"]` overrides in `ShiftGrid.module.css` swap bg/text (pastel→saturated bg, saturated→light text).
   - Current-user yellow row forces `color: #1c1917` on name cell and total cell (visible on yellow in both themes).
 - **Shift cell color tweaks**: DS/NS (Superior) changed from pale `#fef3c7` to saturated gold `#fde68a`/`#78350f`. DPQ/NPQ (Amigo portýr) changed from pale cream to dark brown `#431407`/`#fed7aa` (dark mode: `#1c0a00`).
+
+### Phase 7 — key implementation notes (session 2026-04-15/16)
+
+**Core files:**
+- `functions/src/services/payrollCalculator.ts` — calculation engine. Exports `getCzechHolidays`, `getBaseHours`, `calculateEntry`, `createOrUpdatePayrollPeriod`. `FieldValue` imported from `firebase-admin/firestore` (NOT `admin.firestore.FieldValue` — that's undefined in modern firebase-admin and was a runtime crash bug).
+- `functions/src/routes/payroll.ts` — API. Endpoints: `GET/PATCH /payroll/settings`, `GET /payroll/periods`, `GET /payroll/periods/:id`, `GET /payroll/periods/by-month/:year/:month`, `PATCH /payroll/periods/:id/entries/:employeeId` (accepts `sickLeaveHours` OR `overrides` or both), `POST /payroll/trigger` (manual recalc for emulator).
+- `functions/src/index.ts` — scheduled `refreshPayroll` runs daily, iterates published plans and calls `createOrUpdatePayrollPeriod`.
+- `functions/src/routes/shifts.ts` — on plan status transition to `"published"`, fires `createOrUpdatePayrollPeriod` async (fire-and-forget, errors logged).
+- `frontend/src/pages/PayrollPage.tsx` + `.module.css` — single-month view, sectioned table (vedoucí/recepce/portýři from shift plan).
+- `frontend/src/pages/SettingsPage.tsx` — new "Mzdy" tab (food voucher rate with confirmation modal) + `hourlyRate` field on job positions form (masked with eye icon in table).
+
+**Calculation rules (from MZDY.xlsx):**
+- Base hours = `(count of Mon–Fri days in month) × 8` — state holidays on workdays are **included** (they count toward base and are paid; holiday hours tracked separately in SVÁTEK).
+- Max night hours = `FLOOR(baseHours/12) × 8` (e.g. 176h → 112h).
+- Max holiday hours = `12 × (count of Czech public holidays in that month)`.
+- Night hours per shift = `8` for each night segment (N, NP, ZN). Matches Excel `(nightShiftHours / 3) × 2` — i.e. 2/3 of a 12h shift.
+- HODINY = sum of `hoursComputed` for all shifts with status `"assigned"`.
+- VÝKAZ (reportHours) = `MIN(baseHours, totalHours)`.
+- DOVOLENÁ (HPP) = `MAX(0, baseHours − reportHours)`.
+- DOVOLENÁ (PPP) = `MAX(0, baseHours/2 − reportHours)` (no floor, matches Excel `FR$2/2`).
+- DOVOLENÁ (DPP) = null.
+- NAVÍC = `CEIL((hourlyRate × extraHours) / 100) × 100` — only if `employment.hourlyRate` is set on the active employment row. `extraHours = MAX(0, totalHours − baseHours)`.
+- STRAVENKY = `workingDays × foodVoucherRate`. A working day = any shift with `hoursComputed > 6` (HO at 6h does NOT count; R at 8h does).
+- DPP/FAKT (`dppAmount`) = `totalHours × hourlyRate` rounded to nearest integer (CZK). Displayed unmasked.
+
+**Firestore schema:**
+- `payrollPeriods/{id}` — `{ year, month, shiftPlanId, baseHours, maxNightHours, maxHolidayHours, foodVoucherRate, createdAt, updatedAt }`.
+- `payrollPeriods/{id}/entries/{employeeId}` — full calculated entry (HODINY, VÝKAZ, DOVOLENÁ, NOČNÍ, SVÁTEK, SO+NE, NAVÍC, STRAVENKY, DPP/FAKT) + `sickLeaveHours` (manual) + `overrides: Record<OverrideField, number>` (manual per-field overrides). Recalculation preserves `sickLeaveHours` and `overrides` from the previous write.
+- `settings/payroll` — `{ foodVoucherRate, updatedAt, updatedBy }`. Default 129.5 CZK/day.
+
+**Override mechanism:** Each numeric cell in the payroll table is double-click editable for admin/director. When edited:
+1. Override is stored in `entry.overrides[fieldName]`.
+2. Recalculation replaces the computed field but keeps the overrides map intact.
+3. Setting the override to the same value as the computed clears the override (reverts to auto).
+4. Overridden cells highlighted in warning-yellow with a `*` suffix; tooltip shows the original computed value.
+
+**Job position hourly rate:** `jobPositions.hourlyRate` is optional. Employment history modal copies both `defaultSalary` → `salary` and `hourlyRate` → `hourlyRate` when a position is selected. Stored on the employment sub-collection row and read by the payroll calculator.
+
+**Seed side effects:** `scripts/seed-employees.js` (local only) now creates an active `"nástup"` employment row for an allow-list of positions (recepční, noční recepční, portýr, noční portýr, Front Office Manager, Senior Front Office Manager, Director Of Front Office, General Manager) — enough to exercise all three contract types and test payroll. All seed CSVs moved to `scripts/seeds/`; `DTB.csv` renamed to `employees.csv`; `pozice.csv` gained a 4th column `Hodinová mzda`.
+
+**UX notes:**
+- Row tints by contract type: HPP default, PPP light blue (`#eff6ff` / dark `#1a2a4a`), DPP light amber (`#fffbeb` / dark `#2a1f0a`). Contract badges tinted to match.
+- NAVÍC has a global eye-icon reveal in its column header (unmasks all rows at once). DPP/FAKT is unmasked by default.
+- Sick leave (NEMOC) entered via a small pencil (✎) inline inside the DOVOLENÁ cell — stored in `sickLeaveHours`, displayed below the vacation number as a NEMOC badge.
+- Header meta row: Základ · Max. nočních hodin · Max. svátků · Stravenky (CZK/den).
+- DPP employees: only HODINY and DPP/FAKT render; all premium columns show `—`.
+
+**Known open questions:**
+- Premium rates (night, holiday, weekend) — still unknown. The payroll shows HOURS only; accounting applies premium rates externally. If the app needs to compute CZK totals, the rates must be confirmed (spec §14).
+- Payroll export to Excel/CSV deferred to Phase 8.
 
 ### Post-phase 6 fixes — session 2026-04-15 (this session)
 - **ShiftOverridePanel employee name + date fix**: was displaying raw Firestore `employeeId` and ISO date string. Added `employees: PlanEmployee[]` prop (matching `ShiftChangeRequestPanel`) + `resolveEmployeeName()` + `formatDateCZ()`.
