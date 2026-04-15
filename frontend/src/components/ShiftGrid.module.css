@@ -77,11 +77,15 @@
 /* ── Weekends ─────────────────────────────────────────────────────────── */
 
 .today {
-  background: #dcfce7;
+  background: #bbf7d0;
+  border-left: 2px solid #16a34a !important;
+  border-right: 2px solid #16a34a !important;
 }
 
 [data-theme="dark"] .today {
-  background: #052e16;
+  background: #14532d;
+  border-left: 2px solid #22c55e !important;
+  border-right: 2px solid #22c55e !important;
 }
 
 .weekend {
@@ -125,11 +129,17 @@
   color: #1c1917;
 }
 
-/* Yellow wins over weekend/holiday/today tints — uniform colour throughout all days */
+/* Yellow wins over weekend/holiday tints — uniform colour throughout all days */
 .currentEmpRow .weekend,
-.currentEmpRow .holiday,
+.currentEmpRow .holiday {
+  background: #fef9c3;
+}
+
+/* Today column: keep green borders, blend background between yellow and green */
 .currentEmpRow .today {
   background: #fef9c3;
+  border-left: 2px solid #16a34a !important;
+  border-right: 2px solid #16a34a !important;
 }
 
 .currentNameCell {
@@ -141,9 +151,14 @@
 
 /* Dark mode: same uniform yellow, darker border */
 [data-theme="dark"] .currentEmpRow .weekend,
-[data-theme="dark"] .currentEmpRow .holiday,
+[data-theme="dark"] .currentEmpRow .holiday {
+  background: #fef9c3;
+}
+
 [data-theme="dark"] .currentEmpRow .today {
   background: #fef9c3;
+  border-left: 2px solid #22c55e !important;
+  border-right: 2px solid #22c55e !important;
 }
 
 .nameCell {
