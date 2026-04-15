@@ -591,7 +591,7 @@ export default function SettingsPage() {
                           className={styles.linkBtn}
                           onClick={() => openLinkModal(u.uid, u.employeeId)}
                         >
-                          Propojit
+                          {linkedEmp ? "Zrušit propojení" : "Propojit"}
                         </button>
                       </td>
                       <td>
