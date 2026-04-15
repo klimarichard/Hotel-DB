@@ -64,7 +64,7 @@ export const CELL_COLORS: Record<string, { bg: string; text: string }> = {
   P:  { bg: "#d1d5db", text: "#1f2937" },   // Perla — gray
   M:  { bg: "#d1d5db", text: "#1f2937" },   // Metropol — gray
   PA: { bg: "#dbeafe", text: "#1e40af" },   // Ambiance portýr — blue
-  PQ: { bg: "#78350f", text: "#fed7aa" },   // Amigo portýr — dark brown
+  PQ: { bg: "#431407", text: "#fed7aa" },   // Amigo portýr — dark brown
   X:  { bg: "#fee2e2", text: "#dc2626" },   // X — red
 };
 
@@ -79,7 +79,7 @@ const CELL_COLORS_DARK: Record<string, { bg: string; text: string }> = {
   P:  { bg: "#374151", text: "#d1d5db" },   // Perla — dark grey
   M:  { bg: "#374151", text: "#d1d5db" },   // Metropol — dark grey
   PA: { bg: "#1e3a5f", text: "#93c5fd" },   // Ambiance portýr — dark blue
-  PQ: { bg: "#3c1a00", text: "#fed7aa" },   // Amigo portýr — very dark brown
+  PQ: { bg: "#1c0a00", text: "#fed7aa" },   // Amigo portýr — very dark brown
   X:  { bg: "#450a0a", text: "#fca5a5" },   // X — dark red
 };
 
