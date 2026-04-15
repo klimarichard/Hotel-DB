@@ -1,3 +1,6 @@
+# Seed scripts and snapshots (contain sensitive data — employee IDs, credentials, local paths)
+scripts/
+
 # Specification document
 HR_App_Specification.docx
 
