@@ -62,6 +62,7 @@ interface JobPositionRecord {
   name: string;
   departmentId: string;
   defaultSalary: number;
+  hourlyRate?: number | null;
   displayOrder: number;
 }
 
@@ -103,7 +104,7 @@ export default function SettingsPage() {
   const [linkEmployeeId, setLinkEmployeeId] = useState<string>("");
   const [linkSaving, setLinkSaving] = useState(false);
 
-  const [settingsTab, setSettingsTab] = useState<"users" | "companies" | "departments" | "jobPositions">("users");
+  const [settingsTab, setSettingsTab] = useState<"users" | "companies" | "departments" | "jobPositions" | "payroll">("users");
 
   // Departments
   const [departments, setDepartments] = useState<DepartmentRecord[]>([]);
@@ -115,7 +116,13 @@ export default function SettingsPage() {
   // Job positions
   const [positions, setPositions] = useState<JobPositionRecord[]>([]);
   const [posEditId, setPosEditId] = useState<string | null>(null);
-  const [posForm, setPosForm] = useState<{ name: string; departmentId: string; defaultSalary: string }>({ name: "", departmentId: "", defaultSalary: "" });
+  const [posForm, setPosForm] = useState<{ name: string; departmentId: string; defaultSalary: string; hourlyRate: string }>({ name: "", departmentId: "", defaultSalary: "", hourlyRate: "" });
+
+  // Payroll settings
+  const [foodVoucherRate, setFoodVoucherRate] = useState<number>(129.5);
+  const [foodVoucherRateDraft, setFoodVoucherRateDraft] = useState<string>("");
+  const [showVoucherConfirm, setShowVoucherConfirm] = useState(false);
+  const [voucherSaving, setVoucherSaving] = useState(false);
   const [showPosCreate, setShowPosCreate] = useState(false);
 
   // Companies
@@ -180,6 +187,15 @@ export default function SettingsPage() {
 
   useEffect(() => { loadDepartments(); loadPositions(); }, [loadDepartments, loadPositions]);
 
+  useEffect(() => {
+    api.get<{ foodVoucherRate: number }>("/payroll/settings")
+      .then((s) => {
+        setFoodVoucherRate(s.foodVoucherRate);
+        setFoodVoucherRateDraft(String(s.foodVoucherRate));
+      })
+      .catch(() => {});
+  }, []);
+
   async function handleCreateDepartment() {
     const name = depNewName.trim();
     if (!name) return;
@@ -220,13 +236,13 @@ export default function SettingsPage() {
 
   function openCreatePosition() {
     setPosEditId(null);
-    setPosForm({ name: "", departmentId: departments[0]?.id ?? "", defaultSalary: "" });
+    setPosForm({ name: "", departmentId: departments[0]?.id ?? "", defaultSalary: "", hourlyRate: "" });
     setShowPosCreate(true);
   }
 
   function openEditPosition(p: JobPositionRecord) {
     setPosEditId(p.id);
-    setPosForm({ name: p.name, departmentId: p.departmentId, defaultSalary: String(p.defaultSalary ?? "") });
+    setPosForm({ name: p.name, departmentId: p.departmentId, defaultSalary: String(p.defaultSalary ?? ""), hourlyRate: String(p.hourlyRate ?? "") });
     setShowPosCreate(true);
   }
 
@@ -236,6 +252,7 @@ export default function SettingsPage() {
       name: posForm.name.trim(),
       departmentId: posForm.departmentId,
       defaultSalary: Number(posForm.defaultSalary) || 0,
+      hourlyRate: posForm.hourlyRate.trim() ? Number(posForm.hourlyRate) : null,
     };
     try {
       if (posEditId) {
@@ -381,6 +398,7 @@ export default function SettingsPage() {
         <button className={settingsTab === "companies" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("companies")}>Společnosti</button>
         <button className={settingsTab === "departments" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("departments")}>Oddělení</button>
         <button className={settingsTab === "jobPositions" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("jobPositions")}>Pracovní pozice</button>
+        <button className={settingsTab === "payroll" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("payroll")}>Mzdy</button>
       </div>
 
       {showCreate && settingsTab === "users" && (
@@ -717,6 +735,16 @@ export default function SettingsPage() {
                     onChange={(e) => setPosForm({ ...posForm, defaultSalary: e.target.value })}
                   />
                 </div>
+                <div className={styles.field}>
+                  <label className={styles.label}>Hodinová sazba pro NAVÍC (Kč/hod, nepovinné)</label>
+                  <input
+                    className={styles.input}
+                    type="number"
+                    value={posForm.hourlyRate}
+                    onChange={(e) => setPosForm({ ...posForm, hourlyRate: e.target.value })}
+                    placeholder="—"
+                  />
+                </div>
                 <div className={styles.formActions}>
                   <button type="button" className={styles.cancelBtn} onClick={() => { setShowPosCreate(false); setPosEditId(null); }}>Zrušit</button>
                   <button type="button" className={styles.saveBtn} onClick={handleSavePosition}>Uložit</button>
@@ -730,12 +758,13 @@ export default function SettingsPage() {
                 <th>Název</th>
                 <th>Oddělení</th>
                 <th>Výchozí mzda</th>
+                <th>Hodinová sazba</th>
                 <th>Akce</th>
               </tr>
             </thead>
             <tbody>
               {positions.length === 0 && (
-                <tr><td colSpan={4} className={styles.empty}>Žádné pozice</td></tr>
+                <tr><td colSpan={5} className={styles.empty}>Žádné pozice</td></tr>
               )}
               {positions.map((p) => {
                 const dep = departments.find((d) => d.id === p.departmentId);
@@ -744,6 +773,7 @@ export default function SettingsPage() {
                     <td>{p.name}</td>
                     <td>{dep?.name ?? "—"}</td>
                     <td><SalaryCell value={p.defaultSalary} /></td>
+                    <td><SalaryCell value={p.hourlyRate ?? null} /></td>
                     <td>
                       <button className={styles.linkBtn} onClick={() => openEditPosition(p)}>Upravit</button>
                       <button className={styles.deactivateBtn} onClick={() => handleDeletePosition(p.id)}>Smazat</button>
@@ -754,6 +784,71 @@ export default function SettingsPage() {
             </tbody>
           </table>
         </>
+      )}
+
+      {settingsTab === "payroll" && (
+        <div style={{ maxWidth: 480 }}>
+          <h2 style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--color-text-heading)", marginBottom: "1rem" }}>
+            Sazba stravenek
+          </h2>
+          <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "0.5rem" }}>
+            <span style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--color-text)" }}>
+              {foodVoucherRate.toLocaleString("cs-CZ", { minimumFractionDigits: 1 })} Kč / pracovní den
+            </span>
+            <button className={styles.linkBtn} onClick={() => { setFoodVoucherRateDraft(String(foodVoucherRate)); setShowVoucherConfirm(true); }}>
+              Upravit
+            </button>
+          </div>
+          <p style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
+            Tato hodnota se násobí počtem odpracovaných dnů v měsíci. Výchozí hodnota: 129,5 Kč/den.
+          </p>
+
+          {showVoucherConfirm && (
+            <div className={styles.modal}>
+              <div className={styles.modalBox} style={{ maxWidth: 400 }}>
+                <h2 className={styles.modalTitle}>Změnit sazbu stravenek</h2>
+                <div className={styles.field}>
+                  <label className={styles.label}>Nová sazba (Kč/den)</label>
+                  <input
+                    className={styles.input}
+                    type="number"
+                    step="0.1"
+                    value={foodVoucherRateDraft}
+                    onChange={(e) => setFoodVoucherRateDraft(e.target.value)}
+                    autoFocus
+                  />
+                </div>
+                <p style={{ fontSize: "0.8125rem", color: "var(--color-warning-text)", background: "var(--color-warning-bg)", padding: "0.5rem 0.75rem", borderRadius: 4, marginBottom: "0.75rem" }}>
+                  Upozornění: Tato změna ovlivní výpočty všech mzdových období.
+                </p>
+                <div className={styles.formActions}>
+                  <button type="button" className={styles.cancelBtn} onClick={() => setShowVoucherConfirm(false)} disabled={voucherSaving}>
+                    Zrušit
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.saveBtn}
+                    disabled={voucherSaving || !foodVoucherRateDraft || Number(foodVoucherRateDraft) <= 0}
+                    onClick={async () => {
+                      setVoucherSaving(true);
+                      try {
+                        await api.patch("/payroll/settings", { foodVoucherRate: Number(foodVoucherRateDraft) });
+                        setFoodVoucherRate(Number(foodVoucherRateDraft));
+                        setShowVoucherConfirm(false);
+                      } catch {
+                        // silent
+                      } finally {
+                        setVoucherSaving(false);
+                      }
+                    }}
+                  >
+                    {voucherSaving ? "Ukládám…" : "Uložit"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

@@ -6,6 +6,7 @@ import EmployeesPage from "@/pages/EmployeesPage";
 import EmployeeDetailPage from "@/pages/EmployeeDetailPage";
 import EmployeeFormPage from "@/pages/EmployeeFormPage";
 import SettingsPage from "@/pages/SettingsPage";
+import PayrollPage from "@/pages/PayrollPage";
 import AlertsPage from "@/pages/AlertsPage";
 import ContractTemplatesPage from "@/pages/ContractTemplatesPage";
 import ShiftPlannerPage from "@/pages/ShiftPlannerPage";
@@ -56,7 +57,7 @@ export default function App() {
         <Route path="smlouvy" element={<ContractTemplatesPage />} />
         <Route path="smeny" element={<ShiftPlannerPage />} />
         <Route path="dovolena" element={<VacationPage />} />
-        <Route path="mzdy" element={<div>Mzdy — brzy</div>} />
+        <Route path="mzdy" element={<PayrollPage />} />
         <Route path="upozorneni" element={<AlertsPage />} />
         <Route path="nastaveni" element={<SettingsPage />} />
       </Route>

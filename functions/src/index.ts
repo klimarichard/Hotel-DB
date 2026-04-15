@@ -14,7 +14,9 @@ import { contractTemplatesRouter } from "./routes/contractTemplates";
 import { contractsRouter } from "./routes/contracts";
 import { shiftsRouter } from "./routes/shifts";
 import { vacationRouter } from "./routes/vacation";
+import { payrollRouter } from "./routes/payroll";
 import { transitionPlanDeadlines } from "./services/planTransitions";
+import { createOrUpdatePayrollPeriod } from "./services/payrollCalculator";
 import { updateDocumentAlerts, EXPIRY_FIELDS } from "./routes/employees";
 
 admin.initializeApp();
@@ -35,6 +37,7 @@ app.use("/contractTemplates", contractTemplatesRouter);
 app.use("/", contractsRouter);
 app.use("/shifts", shiftsRouter);
 app.use("/vacation", vacationRouter);
+app.use("/payroll", payrollRouter);
 
 // Health check
 app.get("/health", (_req, res) => {
@@ -79,6 +82,21 @@ export const checkPlanDeadlines = onSchedule("every 5 minutes", async () => {
 // Proactively re-checks passport / visa expiry for every employee so that
 // alerts appear automatically when a deadline enters the 30-day window,
 // without requiring the admin to re-save the employee form.
+
+// ─── Daily: refresh payroll for all published shift plans ─────────────────────
+// Picks up any shift edits made after publishing. In the emulator, trigger via:
+//   curl -X POST http://127.0.0.1:5002/.../api/payroll/trigger
+
+export const refreshPayroll = onSchedule("every 24 hours", async () => {
+  const db = admin.firestore();
+  const snap = await db.collection("shiftPlans").where("status", "==", "published").get();
+  for (const doc of snap.docs) {
+    const data = doc.data() as { year: number; month: number };
+    await createOrUpdatePayrollPeriod(doc.id, data.year, data.month);
+  }
+});
+
+// ─── Daily: refresh document expiry alerts for all employees ─────────────────
 
 export const refreshDocumentAlerts = onSchedule("every 24 hours", async () => {
   const db = admin.firestore();

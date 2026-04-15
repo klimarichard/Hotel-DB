@@ -37,10 +37,11 @@ jobPositionsRouter.post(
   requireAuth,
   requireRole("admin", "director"),
   async (req: AuthRequest, res: Response) => {
-    const { name, departmentId, defaultSalary, displayOrder } = req.body as {
+    const { name, departmentId, defaultSalary, hourlyRate, displayOrder } = req.body as {
       name: string;
       departmentId: string;
       defaultSalary: number;
+      hourlyRate?: number | null;
       displayOrder?: number;
     };
     if (!name || !departmentId) {
@@ -51,6 +52,7 @@ jobPositionsRouter.post(
       name,
       departmentId,
       defaultSalary: Number(defaultSalary) || 0,
+      hourlyRate: hourlyRate != null ? Number(hourlyRate) : null,
       displayOrder: typeof displayOrder === "number" ? displayOrder : 0,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
@@ -68,16 +70,18 @@ jobPositionsRouter.patch(
   requireAuth,
   requireRole("admin", "director"),
   async (req: AuthRequest, res: Response) => {
-    const { name, departmentId, defaultSalary, displayOrder } = req.body as {
+    const { name, departmentId, defaultSalary, hourlyRate, displayOrder } = req.body as {
       name?: string;
       departmentId?: string;
       defaultSalary?: number;
+      hourlyRate?: number | null;
       displayOrder?: number;
     };
     const update: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp() };
     if (typeof name === "string") update.name = name;
     if (typeof departmentId === "string") update.departmentId = departmentId;
     if (defaultSalary !== undefined) update.defaultSalary = Number(defaultSalary) || 0;
+    if (hourlyRate !== undefined) update.hourlyRate = hourlyRate != null ? Number(hourlyRate) : null;
     if (typeof displayOrder === "number") update.displayOrder = displayOrder;
     await db().collection("jobPositions").doc(req.params.id).update(update);
     res.json({ ok: true });

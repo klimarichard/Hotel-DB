@@ -157,6 +157,7 @@ interface EmploymentRow {
   endDate: string | null;
   changeType: string;
   salary?: number;
+  hourlyRate?: number | null;
   workLocation?: string;
   probationPeriod?: string;
   agreedWorkScope?: string;
@@ -192,6 +193,7 @@ interface JobPositionRec {
   name: string;
   departmentId: string;
   defaultSalary: number;
+  hourlyRate?: number | null;
 }
 
 interface EmploymentForm {
@@ -203,6 +205,7 @@ interface EmploymentForm {
   // HPP / PPP fields
   workLocation: string;
   salary: string;
+  hourlyRate: string;
   probationPeriod: string;
   endDate: string;
   signingDate: string;
@@ -222,6 +225,7 @@ const emptyForm: EmploymentForm = {
   contractType: "",
   workLocation: "Praha",
   salary: "",
+  hourlyRate: "",
   probationPeriod: "2 měsíce",
   endDate: "",
   signingDate: TODAY,
@@ -242,6 +246,7 @@ function rowToForm(row: EmploymentRow): EmploymentForm {
     contractType: (row.contractType as ContractType) ?? "",
     workLocation: row.workLocation ?? "Praha",
     salary: row.salary?.toString() ?? "",
+    hourlyRate: row.hourlyRate != null ? String(row.hourlyRate) : "",
     probationPeriod: row.probationPeriod ?? "2 měsíce",
     endDate: row.endDate ?? "",
     signingDate: row.signingDate ?? TODAY,
@@ -454,6 +459,7 @@ function AddEntryModal({
             ...base,
             workLocation: form.workLocation,
             salary: form.salary ? Number(form.salary) : null,
+            hourlyRate: form.hourlyRate ? Number(form.hourlyRate) : null,
             probationPeriod: form.probationPeriod,
           };
         }
@@ -544,6 +550,7 @@ function AddEntryModal({
                           ...f,
                           jobTitle: posName,
                           salary: pos && pos.defaultSalary ? String(pos.defaultSalary) : f.salary,
+                          hourlyRate: pos?.hourlyRate != null ? String(pos.hourlyRate) : f.hourlyRate,
                         }));
                       }}
                     >

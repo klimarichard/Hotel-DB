@@ -4,6 +4,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { requireAuth, requireRole, AuthRequest } from "../middleware/auth";
 import { parseShiftExpression, HOTEL_CODES } from "../services/shiftParser";
 import { snapshotShifts, deleteCollection } from "../services/planTransitions";
+import { createOrUpdatePayrollPeriod } from "../services/payrollCalculator";
 
 export const shiftsRouter = Router();
 const db = () => admin.firestore();
@@ -330,9 +331,14 @@ shiftsRouter.patch(
       await snapshotShifts(planRef);
     }
 
-    // On publish: delete the snapshot (no longer needed)
+    // On publish: delete the snapshot (no longer needed) + create payroll
     if (newStatus === "published") {
       await deleteCollection(planRef.collection("shiftsSnapshot"));
+      const planData = planDoc.data() as { year: number; month: number };
+      // Fire-and-forget: don't block the response on payroll calculation
+      createOrUpdatePayrollPeriod(planId, planData.year, planData.month).catch((e) =>
+        console.error("Payroll creation failed after publish:", e)
+      );
     }
 
     // On revert from closed → opened: delete the snapshot
