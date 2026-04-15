@@ -157,6 +157,8 @@ export default function ShiftPlannerPage() {
     title: string;
     message: string;
     confirmLabel: string;
+    cancelLabel?: string;
+    showCancel?: boolean;
     danger?: boolean;
     onConfirm: () => void;
   } | null>(null);
@@ -463,6 +465,32 @@ export default function ShiftPlannerPage() {
     return shifts.filter((s) => s.employeeId === employeeId && s.status === "day_off").length;
   }
 
+  /** Returns the length of the consecutive X run that would include newDate. */
+  function consecutiveXRun(shifts: ShiftDoc[], employeeId: string, newDate: string): number {
+    const xDates = new Set(
+      shifts
+        .filter((s) => s.employeeId === employeeId && s.status === "day_off")
+        .map((s) => s.date)
+    );
+    xDates.add(newDate);
+
+    function addDays(dateStr: string, n: number): string {
+      const [y, m, d] = dateStr.split("-").map(Number);
+      const dt = new Date(y, m - 1, d + n); // local-time only, no UTC conversion
+      return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+    }
+
+    let before = 0;
+    let d = addDays(newDate, -1);
+    while (xDates.has(d)) { before++; d = addDays(d, -1); }
+
+    let after = 0;
+    d = addDays(newDate, 1);
+    while (xDates.has(d)) { after++; d = addDays(d, 1); }
+
+    return before + 1 + after;
+  }
+
   function checkCoverage(
     currentPlan: PlanDetail,
     employeeId: string,
@@ -549,6 +577,20 @@ export default function ShiftPlannerPage() {
       parsed.segments.length > 0 && parsed.segments.every((s) => s.code === "X");
 
     if (isAllX && role !== "admin" && role !== "director") {
+      // Hard block: no more than 6 consecutive Xs — no override allowed
+      if (consecutiveXRun(plan.shifts, employeeId, date) > 6) {
+        setConfirmModal({
+          title: "Příliš mnoho X za sebou",
+          message:
+            "Nelze zadat více než 6 X po sobě jdoucích dnů. " +
+            "Pokud potřebujete volno na delší dobu, požádejte o dovolenou.",
+          confirmLabel: "Rozumím",
+          showCancel: false,
+          onConfirm: () => setConfirmModal(null),
+        });
+        return;
+      }
+
       const emp = plan.employees.find((e) => e.employeeId === employeeId);
       const violations: ViolationInfo[] = [];
 
@@ -1015,6 +1057,8 @@ export default function ShiftPlannerPage() {
           title={confirmModal.title}
           message={confirmModal.message}
           confirmLabel={confirmModal.confirmLabel}
+          cancelLabel={confirmModal.cancelLabel}
+          showCancel={confirmModal.showCancel}
           danger={confirmModal.danger}
           onConfirm={confirmModal.onConfirm}
           onCancel={() => setConfirmModal(null)}
