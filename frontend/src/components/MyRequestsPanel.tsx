@@ -1,6 +1,7 @@
 /**
- * Combined read-only panel for employee/manager users showing their own
+ * Combined panel for employee/manager users showing their own
  * X exception requests and shift change requests for the current plan.
+ * Pending requests can be cancelled by the requester.
  */
 
 import { useEffect, useState } from "react";
@@ -46,6 +47,7 @@ export default function MyRequestsPanel({ planId }: Props) {
   const [overrides, setOverrides] = useState<OverrideRequest[]>([]);
   const [changes, setChanges] = useState<ChangeRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -56,6 +58,26 @@ export default function MyRequestsPanel({ planId }: Props) {
       setChanges(ch);
     }).finally(() => setLoading(false));
   }, [planId]);
+
+  async function cancelOverride(reqId: string) {
+    setCancellingId(reqId);
+    try {
+      await api.delete(`/shifts/plans/${planId}/shiftOverrides/${reqId}`);
+      setOverrides((prev) => prev.filter((r) => r.id !== reqId));
+    } finally {
+      setCancellingId(null);
+    }
+  }
+
+  async function cancelChange(reqId: string) {
+    setCancellingId(reqId);
+    try {
+      await api.delete(`/shifts/plans/${planId}/shiftChangeRequests/${reqId}`);
+      setChanges((prev) => prev.filter((r) => r.id !== reqId));
+    } finally {
+      setCancellingId(null);
+    }
+  }
 
   const VIOLATION_LABELS: Record<string, string> = {
     employee_x_limit: "Limit X zaměstnance",
@@ -88,6 +110,7 @@ export default function MyRequestsPanel({ planId }: Props) {
                     <th>Důvod žádosti</th>
                     <th>Odesláno</th>
                     <th>Stav</th>
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -102,6 +125,17 @@ export default function MyRequestsPanel({ planId }: Props) {
                         <StatusBadge status={req.status} />
                         {req.status === "rejected" && req.rejectionReason && (
                           <div className={styles.rejectionNote}>{req.rejectionReason}</div>
+                        )}
+                      </td>
+                      <td>
+                        {req.status === "pending" && (
+                          <button
+                            className={styles.cancelBtn}
+                            disabled={cancellingId === req.id}
+                            onClick={() => cancelOverride(req.id)}
+                          >
+                            {cancellingId === req.id ? "…" : "Zrušit"}
+                          </button>
                         )}
                       </td>
                     </tr>
@@ -127,6 +161,7 @@ export default function MyRequestsPanel({ planId }: Props) {
                     <th>Důvod žádosti</th>
                     <th>Odesláno</th>
                     <th>Stav</th>
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -140,6 +175,17 @@ export default function MyRequestsPanel({ planId }: Props) {
                         <StatusBadge status={req.status} />
                         {req.status === "rejected" && req.rejectionReason && (
                           <div className={styles.rejectionNote}>{req.rejectionReason}</div>
+                        )}
+                      </td>
+                      <td>
+                        {req.status === "pending" && (
+                          <button
+                            className={styles.cancelBtn}
+                            disabled={cancellingId === req.id}
+                            onClick={() => cancelChange(req.id)}
+                          >
+                            {cancellingId === req.id ? "…" : "Zrušit"}
+                          </button>
                         )}
                       </td>
                     </tr>

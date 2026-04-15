@@ -128,6 +128,26 @@
   cursor: not-allowed;
 }
 
+.cancelBtn {
+  padding: 4px 10px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.cancelBtn:hover:not(:disabled) {
+  background: var(--color-surface-3);
+}
+
+.cancelBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* ── Rejection inline row ─────────────────────────────────────────────── */
 
 .rejectRow {

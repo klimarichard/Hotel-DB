@@ -174,6 +174,7 @@ npm run dev
 ### Post-phase 6 fixes — shift-change-requests branch
 - **Shift change requests** (`shiftChangeRequests` sub-collection under `shiftPlans/{id}`): employees **double-click** any cell (including empty ones) on a published plan to open `ShiftChangeRequestModal` with mandatory reason; admins/directors review via `ShiftChangeRequestPanel` (reuses `ShiftOverridePanel.module.css`). Timestamps shown with seconds so concurrent requests are orderable.
 - Approving a change request does **not** automatically update the shift — admin handles that manually.
+- Requesters can cancel their own **pending** requests via `DELETE /shifts/plans/:planId/shiftOverrides/:reqId` and `DELETE /shifts/plans/:planId/shiftChangeRequests/:reqId`. Backend verifies `requestedBy === uid` and `status === "pending"`. "Zrušit" button shown in Moje žádosti panel for pending rows only.
 - New context `ShiftChangeRequestsContext` mirrors `ShiftOverridesContext` exactly; fetches `GET /shifts/changeRequests/pending-count` (collectionGroup query).
 - Smart periodic reload: fetches plan list every 60 s, compares `updatedAt` + `status` via `useRef`, full reload only when something changed.
 - `ShiftCell`: `onRequestChange` fires on **double-click** (not single-click); works on empty cells too; cursor is `pointer` when `onRequestChange` is provided.

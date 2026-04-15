@@ -1024,6 +1024,38 @@ shiftsRouter.patch(
   }
 );
 
+// DELETE /shifts/plans/:planId/shiftOverrides/:reqId — requester cancels own pending request
+shiftsRouter.delete(
+  "/plans/:planId/shiftOverrides/:reqId",
+  requireAuth,
+  requireRole("admin", "director", "manager", "employee"),
+  async (req: AuthRequest, res) => {
+    const { planId, reqId } = req.params;
+    const ref = db()
+      .collection("shiftPlans")
+      .doc(planId)
+      .collection("shiftOverrideRequests")
+      .doc(reqId);
+
+    const snap = await ref.get();
+    if (!snap.exists) {
+      res.status(404).json({ error: "Žádost nenalezena" });
+      return;
+    }
+    const data = snap.data() as Record<string, unknown>;
+    if (data.requestedBy !== req.uid) {
+      res.status(403).json({ error: "Nemáte oprávnění tuto žádost zrušit" });
+      return;
+    }
+    if (data.status !== "pending") {
+      res.status(400).json({ error: "Lze zrušit pouze čekající žádost" });
+      return;
+    }
+    await ref.delete();
+    res.json({ ok: true });
+  }
+);
+
 // ─── Shift Change Requests (published plans) ────────────────────────────────
 
 // GET /shifts/changeRequests/pending-count — total pending change requests for nav badge
@@ -1159,6 +1191,38 @@ shiftsRouter.patch(
       rejectionReason: status === "rejected" ? ((body.rejectionReason as string) ?? null) : null,
     });
 
+    res.json({ ok: true });
+  }
+);
+
+// DELETE /shifts/plans/:planId/shiftChangeRequests/:reqId — requester cancels own pending request
+shiftsRouter.delete(
+  "/plans/:planId/shiftChangeRequests/:reqId",
+  requireAuth,
+  requireRole("admin", "director", "manager", "employee"),
+  async (req: AuthRequest, res) => {
+    const { planId, reqId } = req.params;
+    const ref = db()
+      .collection("shiftPlans")
+      .doc(planId)
+      .collection("shiftChangeRequests")
+      .doc(reqId);
+
+    const snap = await ref.get();
+    if (!snap.exists) {
+      res.status(404).json({ error: "Žádost nenalezena" });
+      return;
+    }
+    const data = snap.data() as Record<string, unknown>;
+    if (data.requestedBy !== req.uid) {
+      res.status(403).json({ error: "Nemáte oprávnění tuto žádost zrušit" });
+      return;
+    }
+    if (data.status !== "pending") {
+      res.status(400).json({ error: "Lze zrušit pouze čekající žádost" });
+      return;
+    }
+    await ref.delete();
     res.json({ ok: true });
   }
 );
