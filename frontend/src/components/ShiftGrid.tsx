@@ -99,6 +99,17 @@ export default function ShiftGrid({
     return m;
   }, [plan.shifts, plan.employees]);
 
+  const employeeMonthShifts = useMemo(() => {
+    const currentIds = new Set(plan.employees.map((e) => e.employeeId));
+    const m = new Map<string, number>();
+    for (const s of plan.shifts) {
+      if (currentIds.has(s.employeeId) && s.hoursComputed > 6) {
+        m.set(s.employeeId, (m.get(s.employeeId) ?? 0) + 1);
+      }
+    }
+    return m;
+  }, [plan.shifts, plan.employees]);
+
   const sectionDayHours = useMemo(() => {
     const m = new Map<string, number>();
     for (const emp of plan.employees) {
@@ -331,6 +342,9 @@ export default function ShiftGrid({
                     })}
                     <td className={styles.totalCell}>
                       {employeeMonthHours.get(emp.employeeId) ?? 0}
+                      <span className={styles.shiftCount}>
+                        {employeeMonthShifts.get(emp.employeeId) ?? 0}
+                      </span>
                     </td>
                   </tr>
                 );
