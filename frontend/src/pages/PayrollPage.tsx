@@ -112,7 +112,7 @@ function EditableCell({
   }, [editing]);
 
   async function commit() {
-    const trimmed = draft.trim();
+    const trimmed = draft.trim().replace(",", ".");
     if (trimmed === "") {
       // Empty → clear override
       if (isOverridden) await onSave(null);
@@ -142,8 +142,8 @@ function EditableCell({
       <input
         ref={inputRef}
         className={styles.editInput}
-        type="number"
-        min="0"
+        type="text"
+        inputMode="decimal"
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
@@ -221,7 +221,7 @@ function SickLeaveModal({
   const [error, setError] = useState<string | null>(null);
 
   async function handleSave() {
-    const h = Number(hours);
+    const h = Number(hours.trim().replace(",", "."));
     if (isNaN(h) || h < 0) { setError("Neplatný počet hodin."); return; }
     setSaving(true);
     setError(null);
@@ -247,9 +247,8 @@ function SickLeaveModal({
           <label className={styles.modalLabel}>Hodiny nemoci (NEMOC)</label>
           <input
             className={styles.modalInput}
-            type="number"
-            min="0"
-            step="1"
+            type="text"
+            inputMode="decimal"
             value={hours}
             onChange={(e) => setHours(e.target.value)}
             autoFocus
