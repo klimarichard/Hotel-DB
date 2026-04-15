@@ -250,8 +250,8 @@ function parseSegment(token: string): ShiftSegment | { error: string } {
     return { error: "Neznámý kód: " + code };
   }
 
-  // D and N require a hotel code (e.g. DA, NS); HO, R and X are valid standalone only
-  if ((code === "D" || code === "N") && remainder === "") {
+  // D, N, ZD, ZN require a hotel code (e.g. DA, NS, ZDA, ZNQ); HO, R and X are valid standalone only
+  if ((code === "D" || code === "N" || code === "ZD" || code === "ZN") && remainder === "") {
     return { error: "Kód " + code + " vyžaduje hotel (např. " + code + "A)" };
   }
 
