@@ -301,6 +301,28 @@ Two flows, both using Firebase Auth built-in email:
 - Border thickened and darkened: `3px solid #ca8a04` (was `2px solid #eab308`) for better visibility in light mode.
 - Dark mode equivalents added.
 
+### Payroll — cascade rules, manager credit, NAVÍC tiers (feature/payroll-cascades)
+
+**autoOverrides field**: New field on every `payrollPeriods/{id}/entries/{employeeId}` document. Always freshly computed on recalc (not preserved like `overrides`). Frontend saves it via PATCH after user actions for immediate visual feedback. Shown with blue ↺ indicator vs amber * for user-manual overrides.
+
+**Cascade rules (backend `calculateEntry` + frontend `computeCascades` — kept in sync):**
+- Req 1: Manual Výkaz override → auto-recalculate Dovolená; if Hodiny > Výkaz → auto-generate NAVÍC
+- Req 2: Nemoc → deduct from Dovolená; if excess → deduct from Výkaz → generate NAVÍC (2a)
+- Req 3: NAVÍC > 0 + unworked holiday hours available → transfer hours from NAVÍC into SVÁTEK (both show ↺)
+- Resolution order: user `overrides` > `autoOverrides` > computed
+
+**Manager holiday credit (Req 4):** For `section === "vedoucí"`, `reportHours = totalHours + countMonFriHolidays × 8`. HODINY unchanged. April 2026 (2 Mon–Fri holidays): manager works 160h → VÝKAZ = 176; works 1 holiday (168h) → VÝKAZ = 184.
+
+**NAVÍC tiered display (Req 5):** HPP/PPP display-only, stored `extraPay` unchanged:
+- extraPay < 5000: `ceil(extraPay / 0.85 / 100) × 100`
+- extraPay = 5000: 6 000
+- extraPay > 5000: two stacked lines — 6 000 / (extraPay − 5000)
+
+**Key implementation files:**
+- Backend cascade: `calculateEntry()` in `functions/src/services/payrollCalculator.ts`
+- Frontend cascade: `computeCascades()` in `frontend/src/pages/PayrollPage.tsx`
+- Both mirror the same algorithm — comment "MIRROR: keep in sync" marks the sections
+
 ### Payroll — CEIL on totalHours and weekendHours
 - `totalHours` (HODINY) and `weekendHours` (SO+NE) are both `Math.ceil()`'d immediately after accumulation, before any downstream calculation.
 - This means vacationHours, reportHours, extraHours etc. all use the rounded-up value. e.g. 167.5h → 168h HODINY → 8h DOVOLENÁ (not 8.5).
