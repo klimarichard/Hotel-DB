@@ -182,7 +182,7 @@ export function calculateEntry(
     if (employee.contractType === "HPP") {
       vacationHours = Math.max(0, baseHours - reportHours);
     } else if (employee.contractType === "PPP") {
-      vacationHours = Math.max(0, Math.floor(baseHours / 2) - reportHours);
+      vacationHours = Math.max(0, baseHours / 2 - reportHours);
     }
   }
 
