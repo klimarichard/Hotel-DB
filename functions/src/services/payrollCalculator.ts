@@ -14,6 +14,7 @@
  */
 
 import * as admin from "firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
 
 const db = () => admin.firestore();
 
@@ -119,7 +120,9 @@ export interface EmployeeEntry {
   workingDays: number;
   foodVouchers: number;
   dppHours: number | null;
-  updatedAt: admin.firestore.FieldValue;
+  // manual overrides: fieldName -> overridden value (preserves computed value separately)
+  overrides: Record<string, number>;
+  updatedAt: FieldValue;
 }
 
 // ─── Core calculation ─────────────────────────────────────────────────────────
@@ -135,6 +138,7 @@ export function calculateEntry(
     jobTitle: string;
     section: string;
     sickLeaveHours?: number;
+    overrides?: Record<string, number>;
   },
   shifts: ShiftDoc[],
   holidays: Set<string>,
@@ -156,7 +160,8 @@ export function calculateEntry(
 
     if (shift.status === "assigned" && h > 0) {
       totalHours += h;
-      workingDays++;
+      // Food vouchers: only days worked more than 6 hours (HO at 6h does NOT count)
+      if (h > 6) workingDays++;
       if (isWeekend(shift.date)) weekendHours += h;
       if (holidays.has(shift.date)) holidayHours += h;
       // Night hours: 8h per night segment (each 12h night shift → 8 night hours)
@@ -211,7 +216,8 @@ export function calculateEntry(
     workingDays,
     foodVouchers,
     dppHours: isDpp ? totalHours : null,
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    overrides: employee.overrides ?? {},
+    updatedAt: FieldValue.serverTimestamp(),
   };
 }
 
@@ -264,6 +270,15 @@ export async function createOrUpdatePayrollPeriod(
   const baseHours = getBaseHours(year, month);
   const foodVoucherRate = await getFoodVoucherRate();
 
+  // Count Czech holidays that fall within this month
+  const monthPrefix = `${year}-${String(month).padStart(2, "0")}-`;
+  let holidaysInMonth = 0;
+  for (const h of holidays) {
+    if (h.startsWith(monthPrefix)) holidaysInMonth++;
+  }
+  const maxHolidayHours = holidaysInMonth * 12;
+  const maxNightHours = Math.floor(baseHours / 12) * 8;
+
   // Find or create the payrollPeriod document
   const periodsRef = db().collection("payrollPeriods");
   const existing = await periodsRef
@@ -278,15 +293,17 @@ export async function createOrUpdatePayrollPeriod(
     month,
     shiftPlanId: planId,
     baseHours,
+    maxNightHours,
+    maxHolidayHours,
     foodVoucherRate,
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
   };
 
   if (existing.empty) {
     periodRef = periodsRef.doc();
     await periodRef.set({
       ...periodData,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
     });
   } else {
     periodRef = existing.docs[0].ref;
@@ -313,11 +330,16 @@ export async function createOrUpdatePayrollPeriod(
     };
   });
 
-  // Read existing entries to preserve sickLeaveHours
+  // Read existing entries to preserve sickLeaveHours + overrides
   const existingEntriesSnap = await periodRef.collection("entries").get();
   const sickLeaveMap = new Map<string, number>();
+  const overridesMap = new Map<string, Record<string, number>>();
   for (const d of existingEntriesSnap.docs) {
-    sickLeaveMap.set(d.id, (d.data().sickLeaveHours as number) ?? 0);
+    const data = d.data();
+    sickLeaveMap.set(d.id, (data.sickLeaveHours as number) ?? 0);
+    if (data.overrides && typeof data.overrides === "object") {
+      overridesMap.set(d.id, data.overrides as Record<string, number>);
+    }
   }
 
   // Calculate and write each employee's entry
@@ -338,6 +360,7 @@ export async function createOrUpdatePayrollPeriod(
       jobTitle: employment?.jobTitle ?? planEmp.jobTitle as string ?? "",
       section: planEmp.section as string ?? "",
       sickLeaveHours: sickLeaveMap.get(employeeId) ?? 0,
+      overrides: overridesMap.get(employeeId) ?? {},
     };
 
     const entry = calculateEntry(employee, allShifts, holidays, baseHours, foodVoucherRate);

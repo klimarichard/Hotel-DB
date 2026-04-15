@@ -1,10 +1,21 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { Navigate } from "react-router-dom";
 import styles from "./PayrollPage.module.css";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+type OverrideField =
+  | "totalHours"
+  | "reportHours"
+  | "vacationHours"
+  | "nightHours"
+  | "holidayHours"
+  | "weekendHours"
+  | "extraPay"
+  | "foodVouchers"
+  | "dppHours";
 
 interface PayrollEntry {
   id: string; // employeeId
@@ -27,6 +38,7 @@ interface PayrollEntry {
   workingDays: number;
   foodVouchers: number;
   dppHours: number | null;
+  overrides?: Partial<Record<OverrideField, number>>;
 }
 
 interface PayrollPeriod {
@@ -34,6 +46,8 @@ interface PayrollPeriod {
   year: number;
   month: number;
   baseHours: number;
+  maxNightHours: number;
+  maxHolidayHours: number;
   foodVoucherRate: number;
   entries: PayrollEntry[];
 }
@@ -67,25 +81,124 @@ const EyeOffIcon = () => (
   </svg>
 );
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
+// ─── Editable cell ────────────────────────────────────────────────────────────
 
-function MaskedCZK({ value }: { value: number }) {
+function EditableCell({
+  computed,
+  override,
+  editable,
+  onSave,
+  masked = false,
+}: {
+  computed: number;
+  override: number | undefined;
+  editable: boolean;
+  onSave: (value: number | null) => Promise<void>;
+  masked?: boolean;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
   const [visible, setVisible] = useState(false);
-  if (value === 0) return <span className={styles.zero}>—</span>;
-  return (
-    <span className={styles.maskedCell}>
-      {visible ? value.toLocaleString("cs-CZ") + " Kč" : "•••••"}
-      <button
-        type="button"
-        className={styles.revealBtn}
-        onClick={() => setVisible((v) => !v)}
-        title={visible ? "Skrýt" : "Zobrazit"}
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const isOverridden = override !== undefined;
+  const displayValue = isOverridden ? override! : computed;
+
+  useEffect(() => {
+    if (editing) inputRef.current?.focus();
+  }, [editing]);
+
+  async function commit() {
+    const trimmed = draft.trim();
+    if (trimmed === "") {
+      // Empty → clear override
+      if (isOverridden) await onSave(null);
+      setEditing(false);
+      return;
+    }
+    const num = Number(trimmed);
+    if (isNaN(num) || num < 0) {
+      setEditing(false);
+      return;
+    }
+    if (num === computed) {
+      // Set back to computed → clear override
+      if (isOverridden) await onSave(null);
+    } else if (num !== displayValue) {
+      await onSave(num);
+    }
+    setEditing(false);
+  }
+
+  function cancel() {
+    setEditing(false);
+  }
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        className={styles.editInput}
+        type="number"
+        min="0"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") { e.preventDefault(); commit(); }
+          if (e.key === "Escape") { e.preventDefault(); cancel(); }
+        }}
+      />
+    );
+  }
+
+  const classes = [styles.cellValue];
+  if (isOverridden) classes.push(styles.overridden);
+  if (editable) classes.push(styles.editable);
+
+  const title = isOverridden
+    ? `Upraveno (automaticky: ${computed})${editable ? " · dvojklik pro úpravu" : ""}`
+    : editable ? "Dvojklik pro úpravu" : "";
+
+  if (masked) {
+    return (
+      <span
+        className={classes.join(" ") + " " + styles.maskedCell}
+        onDoubleClick={() => {
+          if (!editable) return;
+          setDraft(String(displayValue));
+          setEditing(true);
+        }}
+        title={title}
       >
-        {visible ? <EyeOffIcon /> : <EyeIcon />}
-      </button>
+        {visible ? displayValue.toLocaleString("cs-CZ") : "•••••"}
+        <button
+          type="button"
+          className={styles.revealBtn}
+          onClick={(e) => { e.stopPropagation(); setVisible((v) => !v); }}
+        >
+          {visible ? <EyeOffIcon /> : <EyeIcon />}
+        </button>
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className={classes.join(" ")}
+      onDoubleClick={() => {
+        if (!editable) return;
+        setDraft(String(displayValue));
+        setEditing(true);
+      }}
+      title={title}
+    >
+      {displayValue === 0 ? "—" : displayValue.toLocaleString("cs-CZ")}
     </span>
   );
 }
+
+// ─── Sick leave modal ────────────────────────────────────────────────────────
 
 function SickLeaveModal({
   entry,
@@ -185,6 +298,8 @@ export default function PayrollPage() {
   if (authLoading) return <div className={styles.state}>Načítám…</div>;
   if (role !== "admin" && role !== "director") return <Navigate to="/" replace />;
 
+  const canEdit = role === "admin" || role === "director";
+
   function prevMonth() {
     if (selectedMonth === 1) { setSelectedYear((y) => y - 1); setSelectedMonth(12); }
     else setSelectedMonth((m) => m - 1);
@@ -194,50 +309,161 @@ export default function PayrollPage() {
     else setSelectedMonth((m) => m + 1);
   }
 
+  async function saveOverride(entryId: string, field: OverrideField, value: number | null) {
+    if (!period) return;
+    const entry = period.entries.find((e) => e.id === entryId);
+    if (!entry) return;
+    const newOverrides = { ...(entry.overrides ?? {}) };
+    if (value === null) delete newOverrides[field];
+    else newOverrides[field] = value;
+    await api.patch(`/payroll/periods/${period.id}/entries/${entryId}`, {
+      overrides: newOverrides,
+    });
+    setPeriod((prev) => prev ? {
+      ...prev,
+      entries: prev.entries.map((e) =>
+        e.id === entryId ? { ...e, overrides: newOverrides } : e
+      ),
+    } : prev);
+  }
+
   // Group entries by section (matching shift plan order)
   const entriesBySection = (section: string) =>
     period?.entries.filter((e) => e.section === section) ?? [];
-
-  function renderVacationCell(entry: PayrollEntry) {
-    if (entry.contractType === "DPP") return <span className={styles.dash}>—</span>;
-    const vacation = entry.vacationHours;
-    const sick = entry.sickLeaveHours ?? 0;
-    if (sick > 0) {
-      return (
-        <span>
-          {vacation > sick ? <>{vacation - sick}h<br /></> : null}
-          <span className={styles.nemocBadge}>{sick}h NEMOC</span>
-        </span>
-      );
-    }
-    return <span>{vacation > 0 ? `${vacation}h` : "0h"}</span>;
-  }
 
   function renderSection(section: string) {
     const entries = entriesBySection(section);
     if (entries.length === 0) return null;
     return (
       <>
-        <tr className={styles.sectionRow}>
+        <tr key={`section-${section}`} className={styles.sectionRow}>
           <td colSpan={11}>{SECTION_LABELS[section] ?? section}</td>
         </tr>
         {entries.map((entry) => {
           const isDpp = entry.contractType === "DPP";
+          const ov = entry.overrides ?? {};
+          const vacationDisplay = ov.vacationHours !== undefined ? ov.vacationHours : entry.vacationHours;
+          const sick = entry.sickLeaveHours ?? 0;
+          const vacationIsOverridden = ov.vacationHours !== undefined;
           return (
             <tr key={entry.id} className={isDpp ? styles.dppRow : ""}>
               <td className={styles.nameCell}>
                 {entry.lastName} {entry.firstName}
-                <span className={styles.contractBadge}>{entry.contractType}</span>
+                {entry.contractType && (
+                  <span className={styles.contractBadge}>{entry.contractType}</span>
+                )}
               </td>
-              <td className={styles.numCell}>{entry.totalHours}h</td>
-              <td className={styles.numCell}>{isDpp ? <span className={styles.dash}>—</span> : `${entry.reportHours}h`}</td>
-              <td className={styles.numCell}>{renderVacationCell(entry)}</td>
-              <td className={styles.numCell}>{isDpp ? <span className={styles.dash}>—</span> : (entry.nightHours > 0 ? `${entry.nightHours}h` : "0h")}</td>
-              <td className={styles.numCell}>{isDpp ? <span className={styles.dash}>—</span> : (entry.holidayHours > 0 ? `${entry.holidayHours}h` : "0h")}</td>
-              <td className={styles.numCell}>{isDpp ? <span className={styles.dash}>—</span> : (entry.weekendHours > 0 ? `${entry.weekendHours}h` : "0h")}</td>
-              <td className={styles.numCell}>{isDpp ? `${entry.dppHours ?? 0}h` : <span className={styles.dash}>—</span>}</td>
-              <td className={styles.numCell}>{isDpp ? <span className={styles.dash}>—</span> : <MaskedCZK value={entry.extraPay} />}</td>
-              <td className={styles.numCell}>{isDpp ? <span className={styles.dash}>—</span> : <MaskedCZK value={entry.foodVouchers} />}</td>
+              <td className={styles.numCell}>
+                <EditableCell
+                  computed={entry.totalHours}
+                  override={ov.totalHours}
+                  editable={canEdit}
+                  onSave={(v) => saveOverride(entry.id, "totalHours", v)}
+                />
+              </td>
+              <td className={styles.numCell}>
+                {isDpp ? <span className={styles.dash}>—</span> : (
+                  <EditableCell
+                    computed={entry.reportHours}
+                    override={ov.reportHours}
+                    editable={canEdit}
+                    onSave={(v) => saveOverride(entry.id, "reportHours", v)}
+                  />
+                )}
+              </td>
+              <td className={styles.numCell}>
+                {isDpp ? <span className={styles.dash}>—</span> : (
+                  <span className={vacationIsOverridden ? styles.vacationWrap : ""}>
+                    <span
+                      className={[styles.cellValue, styles.editable, vacationIsOverridden ? styles.overridden : ""].join(" ")}
+                      onDoubleClick={() => {
+                        if (!canEdit) return;
+                        const draft = prompt("Hodiny dovolené (prázdné = auto):", String(vacationDisplay));
+                        if (draft === null) return;
+                        const trimmed = draft.trim();
+                        if (trimmed === "") {
+                          saveOverride(entry.id, "vacationHours", null);
+                        } else {
+                          const num = Number(trimmed);
+                          if (!isNaN(num) && num >= 0) {
+                            saveOverride(entry.id, "vacationHours", num === entry.vacationHours ? null : num);
+                          }
+                        }
+                      }}
+                      title={vacationIsOverridden ? `Upraveno (automaticky: ${entry.vacationHours})` : "Dvojklik pro úpravu"}
+                    >
+                      {vacationDisplay === 0 && sick === 0 ? "—" : (vacationDisplay > 0 ? vacationDisplay.toLocaleString("cs-CZ") : "")}
+                    </span>
+                    {sick > 0 && (
+                      <>
+                        {vacationDisplay > 0 && <br />}
+                        <span className={styles.nemocBadge}>{sick} NEMOC</span>
+                      </>
+                    )}
+                  </span>
+                )}
+              </td>
+              <td className={styles.numCell}>
+                {isDpp ? <span className={styles.dash}>—</span> : (
+                  <EditableCell
+                    computed={entry.nightHours}
+                    override={ov.nightHours}
+                    editable={canEdit}
+                    onSave={(v) => saveOverride(entry.id, "nightHours", v)}
+                  />
+                )}
+              </td>
+              <td className={styles.numCell}>
+                {isDpp ? <span className={styles.dash}>—</span> : (
+                  <EditableCell
+                    computed={entry.holidayHours}
+                    override={ov.holidayHours}
+                    editable={canEdit}
+                    onSave={(v) => saveOverride(entry.id, "holidayHours", v)}
+                  />
+                )}
+              </td>
+              <td className={styles.numCell}>
+                {isDpp ? <span className={styles.dash}>—</span> : (
+                  <EditableCell
+                    computed={entry.weekendHours}
+                    override={ov.weekendHours}
+                    editable={canEdit}
+                    onSave={(v) => saveOverride(entry.id, "weekendHours", v)}
+                  />
+                )}
+              </td>
+              <td className={styles.numCell}>
+                {isDpp ? (
+                  <EditableCell
+                    computed={entry.dppHours ?? 0}
+                    override={ov.dppHours}
+                    editable={canEdit}
+                    onSave={(v) => saveOverride(entry.id, "dppHours", v)}
+                  />
+                ) : <span className={styles.dash}>—</span>}
+              </td>
+              <td className={styles.numCell}>
+                {isDpp ? <span className={styles.dash}>—</span> : (
+                  <EditableCell
+                    computed={entry.extraPay}
+                    override={ov.extraPay}
+                    editable={canEdit}
+                    onSave={(v) => saveOverride(entry.id, "extraPay", v)}
+                    masked={true}
+                  />
+                )}
+              </td>
+              <td className={styles.numCell}>
+                {isDpp ? <span className={styles.dash}>—</span> : (
+                  <EditableCell
+                    computed={entry.foodVouchers}
+                    override={ov.foodVouchers}
+                    editable={canEdit}
+                    onSave={(v) => saveOverride(entry.id, "foodVouchers", v)}
+                  />
+                )}
+              </td>
               <td className={styles.actionCell}>
                 {!isDpp && (
                   <button
@@ -283,8 +509,22 @@ export default function PayrollPage() {
       {!loading && !error && period && (
         <>
           <div className={styles.meta}>
-            Základ: <strong>{period.baseHours}h</strong>
-            &ensp;·&ensp;Stravenky: <strong>{period.foodVoucherRate.toLocaleString("cs-CZ")} Kč/den</strong>
+            <span className={styles.metaItem}>
+              <span className={styles.metaLabel}>Základ:</span>{" "}
+              <strong>{period.baseHours}</strong>
+            </span>
+            <span className={styles.metaItem}>
+              <span className={styles.metaLabel}>Max. nočních hodin:</span>{" "}
+              <strong>{period.maxNightHours}</strong>
+            </span>
+            <span className={styles.metaItem}>
+              <span className={styles.metaLabel}>Max. svátků:</span>{" "}
+              <strong>{period.maxHolidayHours}</strong>
+            </span>
+            <span className={styles.metaItem}>
+              <span className={styles.metaLabel}>Stravenky:</span>{" "}
+              <strong>{period.foodVoucherRate.toLocaleString("cs-CZ")} Kč/den</strong>
+            </span>
           </div>
           <div className={styles.tableWrapper}>
             <table className={styles.table}>

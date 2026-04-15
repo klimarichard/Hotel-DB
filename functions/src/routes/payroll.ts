@@ -112,9 +112,19 @@ payrollRouter.patch(
   requireAuth,
   requireRole("admin", "director"),
   async (req: AuthRequest, res: Response) => {
-    const { sickLeaveHours } = req.body as { sickLeaveHours: number };
-    if (typeof sickLeaveHours !== "number" || sickLeaveHours < 0) {
-      res.status(400).json({ error: "Neplatný počet hodin nemoci." });
+    const { sickLeaveHours, overrides } = req.body as {
+      sickLeaveHours?: number;
+      overrides?: Record<string, number>;
+    };
+    const update: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp() };
+    if (typeof sickLeaveHours === "number" && sickLeaveHours >= 0) {
+      update.sickLeaveHours = sickLeaveHours;
+    }
+    if (overrides !== undefined && overrides !== null && typeof overrides === "object") {
+      update.overrides = overrides;
+    }
+    if (Object.keys(update).length === 1) {
+      res.status(400).json({ error: "Nic k uložení." });
       return;
     }
     const entryRef = db()
@@ -122,10 +132,7 @@ payrollRouter.patch(
       .doc(req.params.id)
       .collection("entries")
       .doc(req.params.employeeId);
-    await entryRef.update({
-      sickLeaveHours,
-      updatedAt: FieldValue.serverTimestamp(),
-    });
+    await entryRef.update(update);
     res.json({ ok: true });
   }
 );
