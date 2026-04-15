@@ -275,9 +275,22 @@ npm run dev
 - **Auth after emulator restart**: restarting the Firebase Auth emulator invalidates all existing sessions. Users must log out and log back in to get a fresh token — otherwise API writes fail with `auth/invalid-refresh-token`.
 
 ### Open items from spec (§14)
-- Payroll: confirm whether D/N shifts use 11.5h net or 12h gross after break deduction
-- Payroll: confirm night premium rate formula (% or fixed per hour)
-- Payroll: confirm holiday premium rate formula
-- Auth: confirm password reset flow (email-based or admin-reset only?)
-- Shift planner: confirm whether portýři follow same availability rules as receptionists
-- Contract templates: managed via TipTap editor in app (admin/director); no external .docx files needed
+- ✅ Payroll: D/N shifts use **12h gross** — confirmed. Already implemented.
+- ✅ Payroll: night + holiday premium rates — **not needed**, app computes hours only; accounting applies rates externally.
+- ✅ Auth: password reset — **both flows implemented** (see below).
+- ✅ Shift planner: portýři — **no availability rules** for portýři. Coverage check already scoped to `section === "recepce"` only.
+- ✅ Contract templates: managed via TipTap editor in app (admin/director); no external .docx files needed.
+
+### Auth — Password reset implementation
+Two flows, both using Firebase Auth built-in email:
+
+**Self-service (login page)**:
+- "Zapomenuté heslo?" link on the login form opens a forgot-password view.
+- User enters their email → `sendPasswordResetEmail(auth, email)` → Firebase sends reset link.
+- Success message shown; "Zpět na přihlášení" returns to login form.
+
+**Admin-initiated (Settings → Uživatelé)**:
+- "Resetovat heslo" button per user row (blue, info style).
+- Calls `sendPasswordResetEmail(auth, user.email)` from the frontend using the loaded user's email.
+- Inline feedback: "Odkaz odeslán" (green) or "Chyba při odesílání" (red), clears after 4 s.
+- No backend changes required — Firebase handles email delivery.

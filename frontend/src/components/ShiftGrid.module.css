@@ -108,8 +108,8 @@
 /* Current user highlight — yellow row with forced dark text for legibility */
 .currentEmpRow {
   background: #fef9c3;
-  border-top: 2px solid #eab308;
-  border-bottom: 2px solid #eab308;
+  border-top: 3px solid #ca8a04;
+  border-bottom: 3px solid #ca8a04;
   color: #1c1917;
 }
 
@@ -117,11 +117,23 @@
   color: #1c1917;
 }
 
+/* Yellow wins over weekend/holiday tints — uniform colour throughout all days */
+.currentEmpRow .weekend,
+.currentEmpRow .holiday {
+  background: #fef9c3;
+}
+
 .currentNameCell {
   background: #fef08a !important;
   border-left: 4px solid #ca8a04;
   font-weight: 700;
   color: #1c1917 !important;
+}
+
+/* Dark mode: same uniform yellow, darker border */
+[data-theme="dark"] .currentEmpRow .weekend,
+[data-theme="dark"] .currentEmpRow .holiday {
+  background: #fef9c3;
 }
 
 .nameCell {
