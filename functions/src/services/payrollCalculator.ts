@@ -119,7 +119,7 @@ export interface EmployeeEntry {
   extraPay: number;
   workingDays: number;
   foodVouchers: number;
-  dppHours: number | null;
+  dppAmount: number | null;   // CZK: totalHours × hourlyRate (DPP only)
   // manual overrides: fieldName -> overridden value (preserves computed value separately)
   overrides: Record<string, number>;
   updatedAt: FieldValue;
@@ -215,7 +215,9 @@ export function calculateEntry(
     extraPay: isDpp ? 0 : extraPay,
     workingDays,
     foodVouchers,
-    dppHours: isDpp ? totalHours : null,
+    dppAmount: isDpp
+      ? Math.round(totalHours * (employee.hourlyRate ?? 0))
+      : null,
     overrides: employee.overrides ?? {},
     updatedAt: FieldValue.serverTimestamp(),
   };

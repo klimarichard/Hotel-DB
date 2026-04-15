@@ -15,7 +15,7 @@ type OverrideField =
   | "weekendHours"
   | "extraPay"
   | "foodVouchers"
-  | "dppHours";
+  | "dppAmount";
 
 interface PayrollEntry {
   id: string; // employeeId
@@ -37,7 +37,7 @@ interface PayrollEntry {
   extraPay: number;
   workingDays: number;
   foodVouchers: number;
-  dppHours: number | null;
+  dppAmount: number | null;
   overrides?: Partial<Record<OverrideField, number>>;
 }
 
@@ -438,10 +438,12 @@ export default function PayrollPage() {
               <td className={styles.numCell}>
                 {isDpp ? (
                   <EditableCell
-                    computed={entry.dppHours ?? 0}
-                    override={ov.dppHours}
+                    computed={entry.dppAmount ?? 0}
+                    override={ov.dppAmount}
                     editable={canEdit}
-                    onSave={(v) => saveOverride(entry.id, "dppHours", v)}
+                    onSave={(v) => saveOverride(entry.id, "dppAmount", v)}
+                    masked={true}
+                    forceVisible={showAllNavic}
                   />
                 ) : <span className={styles.dash}>—</span>}
               </td>
