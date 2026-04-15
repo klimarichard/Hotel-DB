@@ -100,6 +100,8 @@ function computeCascades(
   let effReport = userOv.reportHours ?? entry.autoOverrides?.reportHours ?? entry.reportHours;
   let effVacation = userOv.vacationHours ?? entry.autoOverrides?.vacationHours ?? entry.vacationHours;
   let effExtraPay = userOv.extraPay ?? entry.autoOverrides?.extraPay ?? entry.extraPay;
+  // Track extra hours directly to avoid rounding errors in NAVÍC→SVÁTEK transfer
+  let effExtraHours = Math.max(0, entry.totalHours - baseHours);
 
   if (trigger === "reportHours" && !isDpp) {
     effReport = newValue;
@@ -114,11 +116,13 @@ function computeCascades(
     // Cascade Výkaz → NAVÍC (when Hodiny > new Výkaz)
     if (entry.totalHours > effReport && entry.hourlyRate && entry.hourlyRate > 0
       && userOv.extraPay === undefined) {
-      const cp = Math.ceil(entry.hourlyRate * (entry.totalHours - effReport) / 100) * 100;
+      effExtraHours = entry.totalHours - effReport;
+      const cp = Math.ceil(entry.hourlyRate * effExtraHours / 100) * 100;
       newAutoOv.extraPay = cp;
       effExtraPay = cp;
     } else if (userOv.extraPay === undefined) {
       // Výkaz raised above Hodiny — clear any cascaded NAVÍC
+      effExtraHours = 0;
       delete newAutoOv.extraPay;
       effExtraPay = entry.extraPay;
     }
@@ -138,6 +142,7 @@ function computeCascades(
       newAutoOv.reportHours = Math.max(0, effReport - rem);
       effReport = newAutoOv.reportHours;
       if (entry.hourlyRate && entry.hourlyRate > 0 && userOv.extraPay === undefined) {
+        effExtraHours += rem;
         newAutoOv.extraPay = ((newAutoOv.extraPay as number | undefined) ?? effExtraPay)
           + Math.ceil(entry.hourlyRate * rem / 100) * 100;
         effExtraPay = newAutoOv.extraPay as number;
@@ -149,21 +154,22 @@ function computeCascades(
   }
 
   // NAVÍC → SVÁTEK transfer (runs after both triggers)
+  // Use effExtraHours (exact) not effExtraPay/hourlyRate (rounded) to avoid over-transfer.
   if (
-    effExtraPay > 0 &&
+    effExtraHours > 0 &&
     entry.holidayHours < maxHolidayHours &&
     entry.hourlyRate && entry.hourlyRate > 0 &&
     userOv.holidayHours === undefined
   ) {
     const availableHolHours = maxHolidayHours - entry.holidayHours;
-    const transferH = Math.min(
-      Math.ceil(effExtraPay / entry.hourlyRate),
-      availableHolHours
-    );
+    const transferH = Math.min(effExtraHours, availableHolHours);
     if (transferH > 0) {
       newAutoOv.holidayHours = entry.holidayHours + transferH;
       if (userOv.extraPay === undefined) {
-        newAutoOv.extraPay = Math.max(0, effExtraPay - transferH * entry.hourlyRate);
+        const remainingExtraHours = effExtraHours - transferH;
+        newAutoOv.extraPay = remainingExtraHours > 0
+          ? Math.ceil(entry.hourlyRate * remainingExtraHours / 100) * 100
+          : 0;
       }
     }
   } else if (userOv.holidayHours === undefined) {

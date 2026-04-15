@@ -231,6 +231,8 @@ export function calculateEntry(
   let effReport = userOv.reportHours !== undefined ? userOv.reportHours : reportHours;
   let effVacation = userOv.vacationHours !== undefined ? userOv.vacationHours : vacationHours;
   let effExtraPay = userOv.extraPay !== undefined ? userOv.extraPay : extraPay;
+  // Track extra hours directly to avoid rounding errors in NAVÍC→SVÁTEK transfer
+  let effExtraHours = extraHours;
 
   // Req 1: Výkaz user override cascades Dovolená + NAVÍC
   if (userOv.reportHours !== undefined && !isDpp) {
@@ -243,9 +245,12 @@ export function calculateEntry(
     }
     if (totalHours > effReport && employee.hourlyRate != null && employee.hourlyRate > 0
       && userOv.extraPay === undefined) {
-      const cp = Math.ceil(employee.hourlyRate * (totalHours - effReport) / 100) * 100;
+      effExtraHours = totalHours - effReport;
+      const cp = Math.ceil(employee.hourlyRate * effExtraHours / 100) * 100;
       newAutoOv.extraPay = cp;
       effExtraPay = cp;
+    } else if (userOv.extraPay === undefined) {
+      effExtraHours = 0;
     }
   }
 
@@ -262,6 +267,7 @@ export function calculateEntry(
       newAutoOv.reportHours = Math.max(0, effReport - rem);
       effReport = newAutoOv.reportHours;
       if (employee.hourlyRate != null && employee.hourlyRate > 0 && userOv.extraPay === undefined) {
+        effExtraHours += rem;
         newAutoOv.extraPay = (newAutoOv.extraPay ?? effExtraPay) + Math.ceil(employee.hourlyRate * rem / 100) * 100;
         effExtraPay = newAutoOv.extraPay;
       }
@@ -269,22 +275,26 @@ export function calculateEntry(
   }
 
   // Req 3: NAVÍC → SVÁTEK transfer
+  // Use effExtraHours (exact) not effExtraPay/hourlyRate (rounded) to avoid over-transfer.
   const allHolsInMonth = [...holidays].filter(
     (h) => h.startsWith(`${year}-${String(month).padStart(2, "0")}-`)
   ).length;
   const maxHolHours = allHolsInMonth * 12;
   if (
-    effExtraPay > 0 &&
+    effExtraHours > 0 &&
     holidayHours < maxHolHours &&
     employee.hourlyRate != null && employee.hourlyRate > 0 &&
     userOv.holidayHours === undefined
   ) {
     const availableHolHours = maxHolHours - holidayHours;
-    const transferH = Math.min(Math.ceil(effExtraPay / employee.hourlyRate), availableHolHours);
+    const transferH = Math.min(effExtraHours, availableHolHours);
     if (transferH > 0) {
       newAutoOv.holidayHours = holidayHours + transferH;
       if (userOv.extraPay === undefined) {
-        newAutoOv.extraPay = Math.max(0, effExtraPay - transferH * employee.hourlyRate);
+        const remainingExtraHours = effExtraHours - transferH;
+        newAutoOv.extraPay = remainingExtraHours > 0
+          ? Math.ceil(employee.hourlyRate * remainingExtraHours / 100) * 100
+          : 0;
       }
     }
   }
