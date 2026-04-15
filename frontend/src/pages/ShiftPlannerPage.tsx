@@ -157,6 +157,7 @@ export default function ShiftPlannerPage() {
     title: string;
     message: string;
     confirmLabel: string;
+    cancelLabel?: string;
     danger?: boolean;
     onConfirm: () => void;
   } | null>(null);
@@ -473,9 +474,9 @@ export default function ShiftPlannerPage() {
     xDates.add(newDate);
 
     function addDays(dateStr: string, n: number): string {
-      const d = new Date(dateStr + "T00:00:00");
-      d.setDate(d.getDate() + n);
-      return d.toISOString().slice(0, 10);
+      const [y, m, d] = dateStr.split("-").map(Number);
+      const dt = new Date(y, m - 1, d + n); // local-time only, no UTC conversion
+      return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
     }
 
     let before = 0;
@@ -1055,6 +1056,7 @@ export default function ShiftPlannerPage() {
           title={confirmModal.title}
           message={confirmModal.message}
           confirmLabel={confirmModal.confirmLabel}
+          cancelLabel={confirmModal.cancelLabel}
           danger={confirmModal.danger}
           onConfirm={confirmModal.onConfirm}
           onCancel={() => setConfirmModal(null)}
