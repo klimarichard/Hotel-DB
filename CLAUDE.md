@@ -192,6 +192,19 @@ npm run dev
   - Two new inline tabs in `SettingsPage.tsx`: **Oddělení** and **Pracovní pozice**. Deleting a department that still has positions returns a friendly error.
   - Employment history modal in `EmployeeDetailPage` replaced the free-text Pracovní pozice input with two linked dropdowns (Oddělení → Pracovní pozice filtered by chosen department). Selecting a position auto-fills `salary` from `defaultSalary` (still editable). The saved payload now sets `department` to the department name (previously hardcoded `""`).
 
+### Post-phase 6 fixes — redact-position-salary + dark-mode branch
+- **Salary redaction in Settings → Pracovní pozice**: `defaultSalary` column masked as `•••••` with eye-icon toggle. `SalaryCell` component + `.revealBtn`/`.salaryCell` styles added to `SettingsPage`. Matches the reveal pattern used in employment history.
+- **Dark mode** (user preference, persisted between sessions):
+  - `frontend/src/context/ThemeContext.tsx` — `ThemeProvider` + `useTheme()`. Saves to `localStorage` keyed by `hotel_hr_theme_{uid}` so each user has their own preference. Applies `data-theme="dark"` to `<html>`.
+  - `ThemeProvider` wraps `<Routes>` in `App.tsx`. Sun/moon toggle button added to sidebar `userBar` in `Layout.tsx`.
+  - `frontend/src/index.css` extended with full CSS variable set: surfaces, borders, text, status (active/danger/warning/info), inputs, shadows, plus shift-specific vars (`--color-weekend-bg`, `--color-holiday-bg`, `--color-mod-bg/border/text`). `[data-theme="dark"]` block overrides all of them.
+  - All 16 CSS module files converted from hardcoded hex colors to CSS variables. Sidebar stays permanently dark (intentional design).
+  - `ShiftCell.tsx` and `ModCell.tsx` call `useTheme()` and pass `dark` flag to `getCellColor()`. `CELL_COLORS_DARK` map in `shiftConstants.ts` provides inverted palettes (dark bg + vibrant light text) per hotel/type.
+  - `getCellColor(parsed, dark?)` — second argument selects light vs dark palette.
+  - Counter table rows in closed plan: `[data-theme="dark"]` overrides in `ShiftGrid.module.css` swap bg/text (pastel→saturated bg, saturated→light text).
+  - Current-user yellow row forces `color: #1c1917` on name cell and total cell (visible on yellow in both themes).
+- **Shift cell color tweaks**: DS/NS (Superior) changed from pale `#fef3c7` to saturated gold `#fde68a`/`#78350f`. DPQ/NPQ (Amigo portýr) changed from pale cream to dark brown `#431407`/`#fed7aa` (dark mode: `#1c0a00`).
+
 ### Open items from spec (§14)
 - Payroll: confirm whether D/N shifts use 11.5h net or 12h gross after break deduction
 - Payroll: confirm night premium rate formula (% or fixed per hour)
