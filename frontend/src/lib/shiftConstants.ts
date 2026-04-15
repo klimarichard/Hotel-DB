@@ -58,13 +58,13 @@ export const SHIFT_TEXT_COLORS: Record<string, string> = {
 
 export const CELL_COLORS: Record<string, { bg: string; text: string }> = {
   A:  { bg: "#dcfce7", text: "#166534" },   // Ambiance — green
-  S:  { bg: "#fef3c7", text: "#92400e" },   // Superior — gold
+  S:  { bg: "#fde68a", text: "#78350f" },   // Superior — gold
   Q:  { bg: "#fdf4ff", text: "#c026d3" },   // Amigo — fuchsia
   K:  { bg: "#ede9fe", text: "#5b21b6" },   // Ankora — purple
   P:  { bg: "#d1d5db", text: "#1f2937" },   // Perla — gray
   M:  { bg: "#d1d5db", text: "#1f2937" },   // Metropol — gray
   PA: { bg: "#dbeafe", text: "#1e40af" },   // Ambiance portýr — blue
-  PQ: { bg: "#fdf6ee", text: "#431407" },   // Amigo portýr — brown
+  PQ: { bg: "#78350f", text: "#fed7aa" },   // Amigo portýr — dark brown
   X:  { bg: "#fee2e2", text: "#dc2626" },   // X — red
 };
 
@@ -73,13 +73,13 @@ const DEFAULT_CELL_COLOR_DARK = { bg: "#1e3a5f", text: "#93c5fd" };
 
 const CELL_COLORS_DARK: Record<string, { bg: string; text: string }> = {
   A:  { bg: "#064e3b", text: "#6ee7b7" },   // Ambiance — dark green
-  S:  { bg: "#451a03", text: "#fcd34d" },   // Superior — dark amber
+  S:  { bg: "#713f12", text: "#fde68a" },   // Superior — dark gold
   Q:  { bg: "#4a044e", text: "#e879f9" },   // Amigo — dark fuchsia
   K:  { bg: "#2e1065", text: "#a78bfa" },   // Ankora — dark purple
   P:  { bg: "#374151", text: "#d1d5db" },   // Perla — dark grey
   M:  { bg: "#374151", text: "#d1d5db" },   // Metropol — dark grey
   PA: { bg: "#1e3a5f", text: "#93c5fd" },   // Ambiance portýr — dark blue
-  PQ: { bg: "#431407", text: "#fb923c" },   // Amigo portýr — dark brown
+  PQ: { bg: "#3c1a00", text: "#fed7aa" },   // Amigo portýr — very dark brown
   X:  { bg: "#450a0a", text: "#fca5a5" },   // X — dark red
 };
 
