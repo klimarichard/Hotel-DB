@@ -76,6 +76,14 @@
 
 /* ── Weekends ─────────────────────────────────────────────────────────── */
 
+.today {
+  background: #dcfce7;
+}
+
+[data-theme="dark"] .today {
+  background: #052e16;
+}
+
 .weekend {
   background: var(--color-weekend-bg);
 }
@@ -117,9 +125,10 @@
   color: #1c1917;
 }
 
-/* Yellow wins over weekend/holiday tints — uniform colour throughout all days */
+/* Yellow wins over weekend/holiday/today tints — uniform colour throughout all days */
 .currentEmpRow .weekend,
-.currentEmpRow .holiday {
+.currentEmpRow .holiday,
+.currentEmpRow .today {
   background: #fef9c3;
 }
 
@@ -132,7 +141,8 @@
 
 /* Dark mode: same uniform yellow, darker border */
 [data-theme="dark"] .currentEmpRow .weekend,
-[data-theme="dark"] .currentEmpRow .holiday {
+[data-theme="dark"] .currentEmpRow .holiday,
+[data-theme="dark"] .currentEmpRow .today {
   background: #fef9c3;
 }
 

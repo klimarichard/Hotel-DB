@@ -58,6 +58,13 @@ function isWeekend(d: Date): boolean {
   return d.getDay() === 0 || d.getDay() === 6;
 }
 
+/** The "active shift date" — today if it's 07:00 or later, yesterday if before 07:00. */
+function currentShiftDate(): string {
+  const now = new Date();
+  const d = now.getHours() < 7 ? new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1) : now;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 export default function ShiftGrid({
   plan,
   onCellSave,
@@ -75,6 +82,8 @@ export default function ShiftGrid({
   const days = useMemo(() => getDaysInMonth(plan.year, plan.month), [plan.year, plan.month]);
 
   const holidays = useMemo(() => getCzechHolidays(plan.year), [plan.year]);
+
+  const todayShiftDate = currentShiftDate();
 
   const shiftMap = useMemo(() => {
     const m = new Map<string, ShiftDoc>();
@@ -205,7 +214,8 @@ export default function ShiftGrid({
   function dayClass(d: Date): string {
     const dateStr = formatDate(d);
     const parts: string[] = [];
-    if (isWeekend(d)) parts.push(styles.weekend);
+    if (dateStr === todayShiftDate) parts.push(styles.today);
+    else if (isWeekend(d)) parts.push(styles.weekend);
     else if (holidays.has(dateStr)) parts.push(styles.holiday);
     return parts.join(" ");
   }
