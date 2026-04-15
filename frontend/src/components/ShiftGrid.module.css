@@ -240,7 +240,7 @@
   border-right: 1px solid var(--color-border);
 }
 
-/* Counter cells keep semantic colors regardless of theme */
+/* Counter cells: light mode = pastel bg + saturated text */
 .counterCell0 {
   background: #fee2e2;
   color: #dc2626;
@@ -267,6 +267,11 @@
   text-align: center;
   padding: 3px 0;
 }
+
+/* Dark mode: swap — saturated bg + light text */
+[data-theme="dark"] .counterCell0 { background: #dc2626; color: #fee2e2; }
+[data-theme="dark"] .counterCell1 { background: #15803d; color: #dcfce7; }
+[data-theme="dark"] .counterCell2 { background: #1d4ed8; color: #dbeafe; }
 
 /* ── Employee name cell controls ──────────────────────────────────────── */
 
