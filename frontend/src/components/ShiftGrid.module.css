@@ -76,6 +76,18 @@
 
 /* ── Weekends ─────────────────────────────────────────────────────────── */
 
+.today {
+  background: #bbf7d0 !important;
+  border-left: 3px solid #16a34a !important;
+  border-right: 3px solid #16a34a !important;
+}
+
+[data-theme="dark"] .today {
+  background: #14532d !important;
+  border-left: 3px solid #22c55e !important;
+  border-right: 3px solid #22c55e !important;
+}
+
 .weekend {
   background: var(--color-weekend-bg);
 }
@@ -123,6 +135,13 @@
   background: #fef9c3;
 }
 
+/* Today column + current user: yellow bg, green borders */
+.currentEmpRow .today {
+  background: #fef9c3 !important;
+  border-left: 3px solid #16a34a !important;
+  border-right: 3px solid #16a34a !important;
+}
+
 .currentNameCell {
   background: #fef08a !important;
   border-left: 4px solid #ca8a04;
@@ -134,6 +153,12 @@
 [data-theme="dark"] .currentEmpRow .weekend,
 [data-theme="dark"] .currentEmpRow .holiday {
   background: #fef9c3;
+}
+
+[data-theme="dark"] .currentEmpRow .today {
+  background: #fef9c3 !important;
+  border-left: 3px solid #22c55e !important;
+  border-right: 3px solid #22c55e !important;
 }
 
 .nameCell {

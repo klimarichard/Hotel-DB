@@ -266,6 +266,12 @@ npm run dev
 - Premium rates (night, holiday, weekend) — still unknown. The payroll shows HOURS only; accounting applies premium rates externally. If the app needs to compute CZK totals, the rates must be confirmed (spec §14).
 - Payroll export to Excel/CSV deferred to Phase 8.
 
+### Post-phase 6 fixes — miscellaneous UI/UX polish
+- **Dark mode `--color-primary`**: was missing from dark overrides, leaving links/names as dark blue `#1a56db` on a dark background. Now `#60a5fa` (sky-400, same as `--color-input-focus`) in dark mode.
+- **Settings → Uživatelé — employee link button**: shows "Zrušit propojení" when an employee is already linked (immediate unlink, no modal) and "Propojit" when unlinked (opens modal). Calls `authApi.linkEmployee(uid, null)` directly.
+- **Settings → Společnosti — read-only view**: companies now display as text with an "Upravit" button. Only one card can be in edit mode at a time (`companyEditId` state). Saving closes edit mode; errors remain in edit mode.
+- **Směny — current shift-day column highlight**: `currentShiftDate()` returns today if `>= 07:00`, yesterday if `< 07:00`. That column gets `.today` class: green bg (`#bbf7d0` light / `#14532d` dark) + `border-left/right: 3px solid green` with `!important` to win the `border-collapse` race against adjacent 1px borders. Current-user yellow row keeps yellow bg but inherits green borders on the today intersection.
+
 ### Post-phase 6 fixes — session 2026-04-15 (this session)
 - **ShiftOverridePanel employee name + date fix**: was displaying raw Firestore `employeeId` and ISO date string. Added `employees: PlanEmployee[]` prop (matching `ShiftChangeRequestPanel`) + `resolveEmployeeName()` + `formatDateCZ()`.
 - **Dark mode — Směny page fixes**: weekend/holiday highlights use CSS vars (`--color-weekend-bg`, `--color-holiday-bg`); grid cell borders upgraded from `border-subtle` → `border`; MOD row uses CSS vars; counter table swaps bg/text in dark mode; current-user yellow row forces `color: #1c1917`; `CELL_COLORS_DARK` + `getCellColor(parsed, dark?)` makes shift cells theme-aware; DPA/NPA dark mode upgraded from navy `#1e3a5f` (same as R default) to vivid `#1d4ed8`/`#bfdbfe`.

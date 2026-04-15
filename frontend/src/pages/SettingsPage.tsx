@@ -133,6 +133,7 @@ export default function SettingsPage() {
 
   // Companies
   const [companyForms, setCompanyForms] = useState<Record<string, CompanyRecord>>({});
+  const [companyEditId, setCompanyEditId] = useState<string | null>(null);
   const [companySaving, setCompanySaving] = useState<Record<string, boolean>>({});
   const [companySaveMsg, setCompanySaveMsg] = useState<Record<string, string>>({});
 
@@ -290,12 +291,12 @@ export default function SettingsPage() {
     try {
       const { name, address, ic, dic } = companyForms[id];
       await api.put(`/companies/${id}`, { name, address, ic, dic });
-      setCompanySaveMsg((p) => ({ ...p, [id]: "Uloženo" }));
+      setCompanyEditId(null);
     } catch {
       setCompanySaveMsg((p) => ({ ...p, [id]: "Chyba při ukládání" }));
+      setTimeout(() => setCompanySaveMsg((p) => ({ ...p, [id]: "" })), 3000);
     } finally {
       setCompanySaving((p) => ({ ...p, [id]: false }));
-      setTimeout(() => setCompanySaveMsg((p) => ({ ...p, [id]: "" })), 3000);
     }
   }
 
@@ -309,6 +310,15 @@ export default function SettingsPage() {
   function openLinkModal(uid: string, currentEmployeeId: string | null) {
     setLinkingUid(uid);
     setLinkEmployeeId(currentEmployeeId ?? "");
+  }
+
+  async function handleUnlinkEmployee(uid: string) {
+    try {
+      await authApi.linkEmployee(uid, null);
+      setUsers((prev) => prev.map((u) => (u.uid === uid ? { ...u, employeeId: null } : u)));
+    } catch {
+      // Silently fail
+    }
   }
 
   async function handleLinkEmployee() {
@@ -587,12 +597,21 @@ export default function SettingsPage() {
                         <span className={linkedEmp ? styles.employeeLinked : styles.employeeUnlinked}>
                           {linkedEmp ? `${linkedEmp.lastName} ${linkedEmp.firstName}` : "—"}
                         </span>
-                        <button
-                          className={styles.linkBtn}
-                          onClick={() => openLinkModal(u.uid, u.employeeId)}
-                        >
-                          Propojit
-                        </button>
+                        {linkedEmp ? (
+                          <button
+                            className={styles.linkBtn}
+                            onClick={() => handleUnlinkEmployee(u.uid)}
+                          >
+                            Zrušit propojení
+                          </button>
+                        ) : (
+                          <button
+                            className={styles.linkBtn}
+                            onClick={() => openLinkModal(u.uid, u.employeeId ?? null)}
+                          >
+                            Propojit
+                          </button>
+                        )}
                       </td>
                       <td>
                         <span className={u.active ? styles.badgeActive : styles.badgeInactive}>
@@ -633,43 +652,59 @@ export default function SettingsPage() {
 
       {settingsTab === "companies" && (
         <div className={styles.companyList}>
-          {Object.values(companyForms).map((c) => (
-            <div key={c.id} className={styles.companyCard}>
-              <div className={styles.companyId}>{c.id}</div>
-              <div className={styles.companyGrid}>
-                <div className={styles.field}>
-                  <label className={styles.label}>Název</label>
-                  <input className={styles.input} value={c.name} onChange={(e) => setCompanyField(c.id, "name", e.target.value)} />
+          {Object.values(companyForms).map((c) => {
+            const isEditing = companyEditId === c.id;
+            return (
+              <div key={c.id} className={styles.companyCard}>
+                <div className={styles.companyId}>{c.id}</div>
+                <div className={styles.companyGrid}>
+                  <div className={styles.field}>
+                    <label className={styles.label}>Název</label>
+                    {isEditing
+                      ? <input className={styles.input} value={c.name} onChange={(e) => setCompanyField(c.id, "name", e.target.value)} />
+                      : <span className={styles.companyValue}>{c.name || "—"}</span>}
+                  </div>
+                  <div className={styles.field}>
+                    <label className={styles.label}>Adresa</label>
+                    {isEditing
+                      ? <input className={styles.input} value={c.address} onChange={(e) => setCompanyField(c.id, "address", e.target.value)} />
+                      : <span className={styles.companyValue}>{c.address || "—"}</span>}
+                  </div>
+                  <div className={styles.field}>
+                    <label className={styles.label}>IČO</label>
+                    {isEditing
+                      ? <input className={styles.input} value={c.ic} onChange={(e) => setCompanyField(c.id, "ic", e.target.value)} />
+                      : <span className={styles.companyValue}>{c.ic || "—"}</span>}
+                  </div>
+                  <div className={styles.field}>
+                    <label className={styles.label}>DIČ</label>
+                    {isEditing
+                      ? <input className={styles.input} value={c.dic} onChange={(e) => setCompanyField(c.id, "dic", e.target.value)} />
+                      : <span className={styles.companyValue}>{c.dic || "—"}</span>}
+                  </div>
                 </div>
-                <div className={styles.field}>
-                  <label className={styles.label}>Adresa</label>
-                  <input className={styles.input} value={c.address} onChange={(e) => setCompanyField(c.id, "address", e.target.value)} />
-                </div>
-                <div className={styles.field}>
-                  <label className={styles.label}>IČO</label>
-                  <input className={styles.input} value={c.ic} onChange={(e) => setCompanyField(c.id, "ic", e.target.value)} />
-                </div>
-                <div className={styles.field}>
-                  <label className={styles.label}>DIČ</label>
-                  <input className={styles.input} value={c.dic} onChange={(e) => setCompanyField(c.id, "dic", e.target.value)} />
+                <div className={styles.companyActions}>
+                  {companySaveMsg[c.id] && (
+                    <span className={styles.saveMsgErr}>{companySaveMsg[c.id]}</span>
+                  )}
+                  {isEditing ? (
+                    <>
+                      <button className={styles.cancelBtn} onClick={() => setCompanyEditId(null)} disabled={companySaving[c.id]}>
+                        Zrušit
+                      </button>
+                      <button className={styles.saveBtn} onClick={() => handleSaveCompany(c.id)} disabled={companySaving[c.id]}>
+                        {companySaving[c.id] ? "Ukládám…" : "Uložit"}
+                      </button>
+                    </>
+                  ) : (
+                    <button className={styles.editBtn} onClick={() => setCompanyEditId(c.id)}>
+                      Upravit
+                    </button>
+                  )}
                 </div>
               </div>
-              <div className={styles.companyActions}>
-                {companySaveMsg[c.id] && (
-                  <span className={companySaveMsg[c.id] === "Uloženo" ? styles.saveMsgOk : styles.saveMsgErr}>
-                    {companySaveMsg[c.id]}
-                  </span>
-                )}
-                <button
-                  className={styles.saveBtn}
-                  onClick={() => handleSaveCompany(c.id)}
-                  disabled={companySaving[c.id]}
-                >
-                  {companySaving[c.id] ? "Ukládám…" : "Uložit"}
-                </button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
