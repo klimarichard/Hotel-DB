@@ -228,13 +228,40 @@
   letter-spacing: 0.03em;
 }
 
-.dppRow .contractBadge {
-  background: var(--color-info-bg);
-  color: var(--color-info-text);
+/* Row tints per contract type — distinguishable in both light and dark modes */
+.pppRow {
+  background: #eff6ff;
 }
 
 .dppRow {
-  background: var(--color-bg);
+  background: #fffbeb;
+}
+
+[data-theme="dark"] .pppRow {
+  background: #1a2a4a;
+}
+
+[data-theme="dark"] .dppRow {
+  background: #2a1f0a;
+}
+
+.pppRow .nameCell,
+.pppRow .numCell,
+.dppRow .nameCell,
+.dppRow .numCell {
+  background: inherit;
+}
+
+.pppRow .contractBadge {
+  background: var(--color-info-bg);
+  color: var(--color-info-text);
+  border-color: var(--color-info-border);
+}
+
+.dppRow .contractBadge {
+  background: var(--color-warning-bg);
+  color: var(--color-warning-text);
+  border-color: var(--color-warning-border);
 }
 
 .dash {

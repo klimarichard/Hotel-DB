@@ -347,10 +347,12 @@ export default function PayrollPage() {
         </tr>
         {entries.map((entry) => {
           const isDpp = entry.contractType === "DPP";
+          const isPpp = entry.contractType === "PPP";
           const ov = entry.overrides ?? {};
           const sick = entry.sickLeaveHours ?? 0;
+          const rowClass = isDpp ? styles.dppRow : isPpp ? styles.pppRow : "";
           return (
-            <tr key={entry.id} className={isDpp ? styles.dppRow : ""}>
+            <tr key={entry.id} className={rowClass}>
               <td className={styles.nameCell}>
                 {entry.lastName} {entry.firstName}
                 {entry.contractType && (
@@ -442,8 +444,6 @@ export default function PayrollPage() {
                     override={ov.dppAmount}
                     editable={canEdit}
                     onSave={(v) => saveOverride(entry.id, "dppAmount", v)}
-                    masked={true}
-                    forceVisible={showAllNavic}
                   />
                 ) : <span className={styles.dash}>—</span>}
               </td>
