@@ -1,5 +1,6 @@
 import { useEffect, useRef, useMemo, useState } from "react";
 import { parseShiftExpression, getCellColor } from "../lib/shiftConstants";
+import { useTheme } from "../context/ThemeContext";
 
 interface Props {
   rawInput: string;
@@ -22,6 +23,8 @@ export default function ShiftCell({
   onFocus,
   onRequestChange,
 }: Props) {
+  const { theme } = useTheme();
+  const dark = theme === "dark";
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
@@ -177,7 +180,8 @@ export default function ShiftCell({
           padding: "2px 4px",
           fontSize: "0.8125rem",
           fontFamily: "monospace",
-          background: isInvalid ? "#fef2f2" : "#fff",
+          background: isInvalid ? (dark ? "#450a0a" : "#fef2f2") : (dark ? "#0f172a" : "#fff"),
+          color: dark ? "#f1f5f9" : "#111827",
           outline: "none",
           boxSizing: "border-box",
           display: "block",
@@ -199,7 +203,7 @@ export default function ShiftCell({
   }
 
   // Display mode
-  const { bg: bgColor, text: textColor } = getCellColor(displayParsed);
+  const { bg: bgColor, text: textColor } = getCellColor(displayParsed, dark);
 
   return (
     <div

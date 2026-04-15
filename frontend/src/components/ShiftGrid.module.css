@@ -77,11 +77,11 @@
 /* ── Weekends ─────────────────────────────────────────────────────────── */
 
 .weekend {
-  background: #f0f4ff;
+  background: var(--color-weekend-bg);
 }
 
 .holiday {
-  background: #f0f0f0;
+  background: var(--color-holiday-bg);
 }
 
 /* ── Section divider row ──────────────────────────────────────────────── */
@@ -102,20 +102,26 @@
 /* ── Employee rows ────────────────────────────────────────────────────── */
 
 .empRow {
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
 }
 
-/* Current user highlight — keep the yellow intentionally for visibility */
+/* Current user highlight — yellow row with forced dark text for legibility */
 .currentEmpRow {
   background: #fef9c3;
   border-top: 2px solid #eab308;
   border-bottom: 2px solid #eab308;
+  color: #1c1917;
+}
+
+.currentEmpRow .totalCell {
+  color: #1c1917;
 }
 
 .currentNameCell {
   background: #fef08a !important;
   border-left: 4px solid #ca8a04;
   font-weight: 700;
+  color: #1c1917 !important;
 }
 
 .nameCell {
@@ -126,15 +132,15 @@
   padding: 0 0.75rem;
   font-size: 0.8125rem;
   white-space: nowrap;
-  border-bottom: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
   border-right: 1px solid var(--color-border);
   color: var(--color-text);
 }
 
 .cell {
   padding: 1px;
-  border-bottom: 1px solid var(--color-border-subtle);
-  border-right: 1px solid var(--color-border-subtle);
+  border-bottom: 1px solid var(--color-border);
+  border-right: 1px solid var(--color-border);
   vertical-align: middle;
 }
 
@@ -180,20 +186,20 @@
 
 .modRow {
   border-bottom: 2px solid var(--color-border);
-  border-top: 1px solid #ddd6fe;
-  background: #faf5ff;
+  border-top: 1px solid var(--color-mod-border);
+  background: var(--color-mod-bg);
 }
 
 .modLabel {
   position: sticky;
   left: 0;
-  background: #faf5ff;
+  background: var(--color-mod-bg);
   z-index: 1;
   font-size: 0.7rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #6d28d9;
+  color: var(--color-mod-text);
   padding: 0.35rem 0.75rem;
   white-space: nowrap;
   border-right: 1px solid var(--color-border);

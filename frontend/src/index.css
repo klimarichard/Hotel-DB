@@ -59,6 +59,13 @@
   --color-input-border: #d1d5db;
   --color-input-focus: #3b82f6;
 
+  /* Shift grid */
+  --color-weekend-bg: #f0f4ff;
+  --color-holiday-bg: #f0f0f0;
+  --color-mod-bg: #faf5ff;
+  --color-mod-border: #ddd6fe;
+  --color-mod-text: #6d28d9;
+
   /* Overlays & shadows */
   --overlay-bg: rgba(0, 0, 0, 0.4);
   --shadow-sm: rgba(0, 0, 0, 0.06);
@@ -116,6 +123,12 @@
   --shadow-sm: rgba(0, 0, 0, 0.3);
   --shadow-md: rgba(0, 0, 0, 0.5);
   --shadow-lg: rgba(0, 0, 0, 0.4);
+
+  --color-weekend-bg: #1a2d4a;
+  --color-holiday-bg: #2a3244;
+  --color-mod-bg: #1a0533;
+  --color-mod-border: #4c1d95;
+  --color-mod-text: #c084fc;
 }
 
 a {

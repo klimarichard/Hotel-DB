@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { MOD_PERSONS } from "../lib/shiftConstants";
+import { useTheme } from "../context/ThemeContext";
 
 const VALID_CODES = Object.keys(MOD_PERSONS);
 
@@ -100,6 +101,8 @@ export default function ModCell({ code, readOnly, onSave, focused, onNavigate, o
     }
   }
 
+  const { theme } = useTheme();
+  const dark = theme === "dark";
   const isInvalid = draft.trim() !== "" && !isValidDraft(draft);
 
   if (editing) {
@@ -115,7 +118,8 @@ export default function ModCell({ code, readOnly, onSave, focused, onNavigate, o
           padding: "2px 4px",
           fontSize: "0.8125rem",
           fontFamily: "monospace",
-          background: isInvalid ? "#fef2f2" : "#fff",
+          background: isInvalid ? (dark ? "#450a0a" : "#fef2f2") : (dark ? "#0f172a" : "#fff"),
+          color: dark ? "#f1f5f9" : "#111827",
           outline: "none",
           boxSizing: "border-box",
           display: "block",
@@ -139,8 +143,8 @@ export default function ModCell({ code, readOnly, onSave, focused, onNavigate, o
       style={{
         width: "100%",
         minHeight: "1.75rem",
-        background: saveError ? "#fef2f2" : "transparent",
-        color: saveError ? "#dc2626" : "#111827",
+        background: saveError ? (dark ? "#450a0a" : "#fef2f2") : "transparent",
+        color: saveError ? (dark ? "#fca5a5" : "#dc2626") : (dark ? "#c084fc" : "#111827"),
         display: "flex",
         alignItems: "center",
         justifyContent: "center",

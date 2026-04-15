@@ -69,17 +69,32 @@ export const CELL_COLORS: Record<string, { bg: string; text: string }> = {
 };
 
 const DEFAULT_CELL_COLOR = { bg: "#f0f9ff", text: "#0c4a6e" };
+const DEFAULT_CELL_COLOR_DARK = { bg: "#1e3a5f", text: "#93c5fd" };
 
-export function getCellColor(parsed: ParseResult): { bg: string; text: string } {
+const CELL_COLORS_DARK: Record<string, { bg: string; text: string }> = {
+  A:  { bg: "#064e3b", text: "#6ee7b7" },   // Ambiance — dark green
+  S:  { bg: "#451a03", text: "#fcd34d" },   // Superior — dark amber
+  Q:  { bg: "#4a044e", text: "#e879f9" },   // Amigo — dark fuchsia
+  K:  { bg: "#2e1065", text: "#a78bfa" },   // Ankora — dark purple
+  P:  { bg: "#374151", text: "#d1d5db" },   // Perla — dark grey
+  M:  { bg: "#374151", text: "#d1d5db" },   // Metropol — dark grey
+  PA: { bg: "#1e3a5f", text: "#93c5fd" },   // Ambiance portýr — dark blue
+  PQ: { bg: "#431407", text: "#fb923c" },   // Amigo portýr — dark brown
+  X:  { bg: "#450a0a", text: "#fca5a5" },   // X — dark red
+};
+
+export function getCellColor(parsed: ParseResult, dark = false): { bg: string; text: string } {
+  const colors = dark ? CELL_COLORS_DARK : CELL_COLORS;
+  const defaultColor = dark ? DEFAULT_CELL_COLOR_DARK : DEFAULT_CELL_COLOR;
   const first = parsed.segments[0];
-  if (!first) return { bg: "transparent", text: "#374151" };
-  if (first.code === "X") return CELL_COLORS["X"];
+  if (!first) return { bg: "transparent", text: dark ? "#94a3b8" : "#374151" };
+  if (first.code === "X") return colors["X"];
   const isPortyr = first.code === "DP" || first.code === "NP";
   const hotel = first.hotel;
-  if (isPortyr && hotel) return CELL_COLORS["P" + hotel] ?? CELL_COLORS[hotel] ?? DEFAULT_CELL_COLOR;
-  if (isPortyr) return CELL_COLORS["P"] ?? DEFAULT_CELL_COLOR;
-  if (hotel) return CELL_COLORS[hotel] ?? DEFAULT_CELL_COLOR;
-  return DEFAULT_CELL_COLOR;
+  if (isPortyr && hotel) return colors["P" + hotel] ?? colors[hotel] ?? defaultColor;
+  if (isPortyr) return colors["P"] ?? defaultColor;
+  if (hotel) return colors[hotel] ?? defaultColor;
+  return defaultColor;
 }
 
 // ─── MOD (Manager on Duty) ──────────────────────────────────────────────────
