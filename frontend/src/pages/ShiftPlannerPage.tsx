@@ -223,6 +223,7 @@ export default function ShiftPlannerPage() {
   // ── Periodic plan reload ───────────────────────────────────────────────────
   // Every 60 s, do a lightweight check: fetch only the plan list, compare
   // updatedAt and status. Only do a full reload when something actually changed.
+  // Skipped for published plans — those only need a reload when a change is made.
 
   const lastKnownRef = useRef<{ updatedAt: string | undefined; status: string | undefined }>({
     updatedAt: undefined,
@@ -240,7 +241,7 @@ export default function ShiftPlannerPage() {
   }, [plan]);
 
   useEffect(() => {
-    if (!plan) return;
+    if (!plan || plan.status === "published") return;
     const timer = setInterval(async () => {
       try {
         const plans = await api.get<(PlanListItem & { updatedAt?: string })[]>("/shifts/plans");
@@ -258,7 +259,7 @@ export default function ShiftPlannerPage() {
       }
     }, 60_000);
     return () => clearInterval(timer);
-  }, [plan?.id, selectedMonth, selectedYear, loadPlan]);
+  }, [plan?.id, plan?.status, selectedMonth, selectedYear, loadPlan]);
 
   // ── Month navigation ───────────────────────────────────────────────────────
 
