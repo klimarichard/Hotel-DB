@@ -352,6 +352,42 @@
   gap: 0.75rem;
 }
 
+.companyValue {
+  font-size: 0.9rem;
+  color: var(--color-text);
+  padding: 0.3rem 0;
+  display: block;
+}
+
+.editBtn {
+  padding: 0.35rem 0.9rem;
+  background: var(--color-surface-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 5px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.editBtn:hover {
+  filter: brightness(0.95);
+}
+
+.cancelBtn {
+  padding: 0.35rem 0.9rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 5px;
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.cancelBtn:hover {
+  background: var(--color-surface-3);
+}
+
 .saveMsgOk {
   font-size: 0.8rem;
   color: var(--color-active-text);
