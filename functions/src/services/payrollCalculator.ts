@@ -3,6 +3,7 @@
  *
  * Key rules (derived from MZDY.xlsx formulas):
  *  - Base hours = (Mon–Fri days in month) × 8  (state holidays on workdays are INCLUDED)
+ *  - totalHours and weekendHours are CEIL'd before any downstream calculation
  *  - Night hours per night segment = 8 (= 12h × 2/3, matching Excel formula (hours/3)*2)
  *  - Max night hours = FLOOR(baseHours/12) × 8
  *  - Vacation (HPP) = baseHours − reportHours
@@ -171,6 +172,10 @@ export function calculateEntry(
     }
     // X (day_off) shifts: hours = 0, don't count toward anything
   }
+
+  // Round up fractional hours before all downstream calculations
+  totalHours = Math.ceil(totalHours);
+  weekendHours = Math.ceil(weekendHours);
 
   const reportHours = Math.min(baseHours, totalHours);
   const extraHours = Math.max(0, totalHours - baseHours);

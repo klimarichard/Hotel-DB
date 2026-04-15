@@ -301,6 +301,11 @@ Two flows, both using Firebase Auth built-in email:
 - Border thickened and darkened: `3px solid #ca8a04` (was `2px solid #eab308`) for better visibility in light mode.
 - Dark mode equivalents added.
 
+### Payroll — CEIL on totalHours and weekendHours
+- `totalHours` (HODINY) and `weekendHours` (SO+NE) are both `Math.ceil()`'d immediately after accumulation, before any downstream calculation.
+- This means vacationHours, reportHours, extraHours etc. all use the rounded-up value. e.g. 167.5h → 168h HODINY → 8h DOVOLENÁ (not 8.5).
+- Applied in `calculateEntry()` in `functions/src/services/payrollCalculator.ts`.
+
 ### Payroll — decimal comma input
 - Override cells and the sick-leave modal now accept both `.` and `,` as decimal separator (e.g. `9,5` = `9.5`).
 - Inputs switched from `type="number"` to `type="text" inputMode="decimal"`; comma normalised to dot before `Number()` parsing in both `commit()` and `handleSave()`.
