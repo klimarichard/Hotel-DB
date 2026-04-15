@@ -88,17 +88,6 @@ export default function ShiftGrid({
     return m;
   }, [plan.modShifts]);
 
-  const employeeMonthHours = useMemo(() => {
-    const currentIds = new Set(plan.employees.map((e) => e.employeeId));
-    const m = new Map<string, number>();
-    for (const s of plan.shifts) {
-      if (currentIds.has(s.employeeId)) {
-        m.set(s.employeeId, (m.get(s.employeeId) ?? 0) + s.hoursComputed);
-      }
-    }
-    return m;
-  }, [plan.shifts, plan.employees]);
-
   const employeeMonthShifts = useMemo(() => {
     const currentIds = new Set(plan.employees.map((e) => e.employeeId));
     const m = new Map<string, number>();
@@ -262,7 +251,7 @@ export default function ShiftGrid({
                 <div className={styles.dayName}>{DAY_NAMES[d.getDay()]}</div>
               </th>
             ))}
-            <th className={styles.totalHeader}>Σ hod</th>
+            <th className={styles.totalHeader}>Směny</th>
           </tr>
         </thead>
         <tbody>
@@ -341,10 +330,7 @@ export default function ShiftGrid({
                       );
                     })}
                     <td className={styles.totalCell}>
-                      {employeeMonthHours.get(emp.employeeId) ?? 0}
-                      <span className={styles.shiftCount}>
-                        {employeeMonthShifts.get(emp.employeeId) ?? 0}
-                      </span>
+                      <strong>{employeeMonthShifts.get(emp.employeeId) ?? 0}</strong>
                     </td>
                   </tr>
                 );

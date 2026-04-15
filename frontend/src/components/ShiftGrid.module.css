@@ -164,14 +164,6 @@
   padding: 0 0.5rem;
   border-left: 2px solid var(--color-border);
   white-space: nowrap;
-  line-height: 1.2;
-}
-
-.shiftCount {
-  display: block;
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: var(--color-text);
 }
 
 /* ── Section footer row ───────────────────────────────────────────────── */
