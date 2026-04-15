@@ -39,6 +39,7 @@ interface PayrollEntry {
   foodVouchers: number;
   dppAmount: number | null;
   overrides?: Partial<Record<OverrideField, number>>;
+  autoOverrides?: Partial<Record<OverrideField, number>>;
 }
 
 interface PayrollPeriod {
@@ -81,30 +82,152 @@ const EyeOffIcon = () => (
   </svg>
 );
 
+// ─── Cascade computation ──────────────────────────────────────────────────────
+// MIRROR: keep in sync with cascade block in functions/src/services/payrollCalculator.ts
+
+function computeCascades(
+  entry: PayrollEntry,
+  baseHours: number,
+  maxHolidayHours: number,
+  trigger: "reportHours" | "sickLeaveHours",
+  newValue: number
+): Partial<Record<OverrideField, number>> {
+  const userOv = entry.overrides ?? {};
+  const newAutoOv: Partial<Record<OverrideField, number>> = { ...(entry.autoOverrides ?? {}) };
+  const isDpp = entry.contractType === "DPP";
+
+  // Resolve effective values before this change
+  let effReport = userOv.reportHours ?? entry.autoOverrides?.reportHours ?? entry.reportHours;
+  let effVacation = userOv.vacationHours ?? entry.autoOverrides?.vacationHours ?? entry.vacationHours;
+  let effExtraPay = userOv.extraPay ?? entry.autoOverrides?.extraPay ?? entry.extraPay;
+  // Track extra hours directly to avoid rounding errors in NAVÍC→SVÁTEK transfer
+  let effExtraHours = Math.max(0, entry.totalHours - baseHours);
+
+  if (trigger === "reportHours" && !isDpp) {
+    effReport = newValue;
+    // Cascade Výkaz → Dovolená
+    if (userOv.vacationHours === undefined) {
+      const cv = entry.contractType === "HPP"
+        ? Math.max(0, baseHours - effReport)
+        : Math.max(0, baseHours / 2 - effReport);
+      newAutoOv.vacationHours = cv;
+      effVacation = cv;
+    }
+    // Cascade Výkaz → NAVÍC (when Hodiny > new Výkaz)
+    if (entry.totalHours > effReport && entry.hourlyRate && entry.hourlyRate > 0
+      && userOv.extraPay === undefined) {
+      effExtraHours = entry.totalHours - effReport;
+      const cp = Math.ceil(entry.hourlyRate * effExtraHours / 100) * 100;
+      newAutoOv.extraPay = cp;
+      effExtraPay = cp;
+    } else if (userOv.extraPay === undefined) {
+      // Výkaz raised above Hodiny — clear any cascaded NAVÍC
+      effExtraHours = 0;
+      delete newAutoOv.extraPay;
+      effExtraPay = entry.extraPay;
+    }
+  }
+
+  if (trigger === "sickLeaveHours" && !isDpp) {
+    const nemoc = newValue;
+    const ded = Math.min(nemoc, effVacation);
+    // Cascade Nemoc → Dovolená
+    if (userOv.vacationHours === undefined) {
+      newAutoOv.vacationHours = effVacation - ded;
+      effVacation -= ded;
+    }
+    const rem = nemoc - ded;
+    // Cascade excess Nemoc → Výkaz → NAVÍC
+    if (rem > 0 && userOv.reportHours === undefined) {
+      newAutoOv.reportHours = Math.max(0, effReport - rem);
+      effReport = newAutoOv.reportHours;
+      if (entry.hourlyRate && entry.hourlyRate > 0 && userOv.extraPay === undefined) {
+        effExtraHours += rem;
+        newAutoOv.extraPay = ((newAutoOv.extraPay as number | undefined) ?? effExtraPay)
+          + Math.ceil(entry.hourlyRate * rem / 100) * 100;
+        effExtraPay = newAutoOv.extraPay as number;
+      }
+    } else if (userOv.reportHours === undefined) {
+      // Nemoc fully covered by Dovolená — clear any cascaded Výkaz deduction
+      delete newAutoOv.reportHours;
+    }
+  }
+
+  // NAVÍC → SVÁTEK transfer (runs after both triggers)
+  // Use effExtraHours (exact) not effExtraPay/hourlyRate (rounded) to avoid over-transfer.
+  if (
+    effExtraHours > 0 &&
+    entry.holidayHours < maxHolidayHours &&
+    entry.hourlyRate && entry.hourlyRate > 0 &&
+    userOv.holidayHours === undefined
+  ) {
+    const availableHolHours = maxHolidayHours - entry.holidayHours;
+    const transferH = Math.min(effExtraHours, availableHolHours);
+    if (transferH > 0) {
+      newAutoOv.holidayHours = entry.holidayHours + transferH;
+      if (userOv.extraPay === undefined) {
+        const remainingExtraHours = effExtraHours - transferH;
+        newAutoOv.extraPay = remainingExtraHours > 0
+          ? Math.ceil(entry.hourlyRate * remainingExtraHours / 100) * 100
+          : 0;
+      }
+    }
+  } else if (userOv.holidayHours === undefined) {
+    delete newAutoOv.holidayHours;
+  }
+
+  return newAutoOv;
+}
+
+// ─── NAVÍC tiered display ─────────────────────────────────────────────────────
+
+function formatNavic(extraPay: number): React.ReactNode {
+  if (!extraPay || extraPay <= 0) return "—";
+  if (extraPay < 5000) {
+    const displayed = Math.ceil(extraPay / 0.85 / 100) * 100;
+    return displayed.toLocaleString("cs-CZ");
+  }
+  if (extraPay === 5000) {
+    return (6000).toLocaleString("cs-CZ");
+  }
+  // extraPay > 5000: two stacked lines in a column wrapper
+  return (
+    <span className={styles.navicStack}>
+      <span>{(6000).toLocaleString("cs-CZ")}</span>
+      <span>{(extraPay - 5000).toLocaleString("cs-CZ")}</span>
+    </span>
+  );
+}
+
 // ─── Editable cell ────────────────────────────────────────────────────────────
 
 function EditableCell({
   computed,
   override,
+  autoOverride,
   editable,
   onSave,
   masked = false,
   forceVisible = false,
+  renderValue,
 }: {
   computed: number;
   override: number | undefined;
+  autoOverride?: number;
   editable: boolean;
   onSave: (value: number | null) => Promise<void>;
   masked?: boolean;
   forceVisible?: boolean;
+  renderValue?: (value: number) => React.ReactNode;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const [visible, setVisible] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const isOverridden = override !== undefined;
-  const displayValue = isOverridden ? override! : computed;
+  const isUserOverridden = override !== undefined;
+  const isAutoOverridden = !isUserOverridden && autoOverride !== undefined;
+  const displayValue = override ?? autoOverride ?? computed;
   const effectivelyVisible = visible || forceVisible;
 
   useEffect(() => {
@@ -114,8 +237,7 @@ function EditableCell({
   async function commit() {
     const trimmed = draft.trim().replace(",", ".");
     if (trimmed === "") {
-      // Empty → clear override
-      if (isOverridden) await onSave(null);
+      if (isUserOverridden) await onSave(null);
       setEditing(false);
       return;
     }
@@ -125,8 +247,7 @@ function EditableCell({
       return;
     }
     if (num === computed) {
-      // Set back to computed → clear override
-      if (isOverridden) await onSave(null);
+      if (isUserOverridden) await onSave(null);
     } else if (num !== displayValue) {
       await onSave(num);
     }
@@ -156,12 +277,19 @@ function EditableCell({
   }
 
   const classes = [styles.cellValue];
-  if (isOverridden) classes.push(styles.overridden);
+  if (isUserOverridden) classes.push(styles.overridden);
+  else if (isAutoOverridden) classes.push(styles.autoOverridden);
   if (editable) classes.push(styles.editable);
 
-  const title = isOverridden
-    ? `Upraveno (automaticky: ${computed})${editable ? " · dvojklik pro úpravu" : ""}`
-    : editable ? "Dvojklik pro úpravu" : "";
+  const title = isUserOverridden
+    ? `Ručně upraveno (vypočteno: ${computed})${editable ? " · dvojklik pro úpravu" : ""}`
+    : isAutoOverridden
+      ? `Automaticky dopočítáno (vypočteno: ${computed})${editable ? " · dvojklik pro úpravu" : ""}`
+      : editable ? "Dvojklik pro úpravu" : "";
+
+  const renderedValue = renderValue
+    ? renderValue(displayValue)
+    : (displayValue === 0 ? "—" : displayValue.toLocaleString("cs-CZ"));
 
   if (masked) {
     return (
@@ -174,7 +302,7 @@ function EditableCell({
         }}
         title={title}
       >
-        {effectivelyVisible ? (displayValue === 0 ? "—" : displayValue.toLocaleString("cs-CZ")) : "•••••"}
+        {effectivelyVisible ? renderedValue : "•••••"}
         {!forceVisible && (
           <button
             type="button"
@@ -198,7 +326,7 @@ function EditableCell({
       }}
       title={title}
     >
-      {displayValue === 0 ? "—" : displayValue.toLocaleString("cs-CZ")}
+      {renderedValue}
     </span>
   );
 }
@@ -207,14 +335,12 @@ function EditableCell({
 
 function SickLeaveModal({
   entry,
-  periodId,
   onClose,
-  onSaved,
+  onSave,
 }: {
   entry: PayrollEntry;
-  periodId: string;
   onClose: () => void;
-  onSaved: (employeeId: string, hours: number) => void;
+  onSave: (hours: number) => Promise<void>;
 }) {
   const [hours, setHours] = useState(String(entry.sickLeaveHours ?? 0));
   const [saving, setSaving] = useState(false);
@@ -226,8 +352,7 @@ function SickLeaveModal({
     setSaving(true);
     setError(null);
     try {
-      await api.patch(`/payroll/periods/${periodId}/entries/${entry.id}`, { sickLeaveHours: h });
-      onSaved(entry.id, h);
+      await onSave(h);
       onClose();
     } catch (e) {
       setError((e as Error).message ?? "Chyba při ukládání.");
@@ -318,16 +443,45 @@ export default function PayrollPage() {
     if (!period) return;
     const entry = period.entries.find((e) => e.id === entryId);
     if (!entry) return;
+
     const newOverrides = { ...(entry.overrides ?? {}) };
     if (value === null) delete newOverrides[field];
     else newOverrides[field] = value;
+
+    // Compute cascades when Výkaz is changed
+    let newAutoOverrides: Partial<Record<OverrideField, number>> = entry.autoOverrides ?? {};
+    if (field === "reportHours") {
+      if (value !== null) {
+        newAutoOverrides = computeCascades(entry, period.baseHours, period.maxHolidayHours, "reportHours", value);
+      } else {
+        // User cleared the Výkaz override — clear all cascade autoOverrides
+        newAutoOverrides = {};
+      }
+    }
+
     await api.patch(`/payroll/periods/${period.id}/entries/${entryId}`, {
       overrides: newOverrides,
+      autoOverrides: newAutoOverrides,
     });
     setPeriod((prev) => prev ? {
       ...prev,
       entries: prev.entries.map((e) =>
-        e.id === entryId ? { ...e, overrides: newOverrides } : e
+        e.id === entryId ? { ...e, overrides: newOverrides, autoOverrides: newAutoOverrides } : e
+      ),
+    } : prev);
+  }
+
+  async function saveSickLeave(entry: PayrollEntry, hours: number) {
+    if (!period) return;
+    const newAutoOverrides = computeCascades(entry, period.baseHours, period.maxHolidayHours, "sickLeaveHours", hours);
+    await api.patch(`/payroll/periods/${period.id}/entries/${entry.id}`, {
+      sickLeaveHours: hours,
+      autoOverrides: newAutoOverrides,
+    });
+    setPeriod((prev) => prev ? {
+      ...prev,
+      entries: prev.entries.map((e) =>
+        e.id === entry.id ? { ...e, sickLeaveHours: hours, autoOverrides: newAutoOverrides } : e
       ),
     } : prev);
   }
@@ -348,6 +502,7 @@ export default function PayrollPage() {
           const isDpp = entry.contractType === "DPP";
           const isPpp = entry.contractType === "PPP";
           const ov = entry.overrides ?? {};
+          const ao = entry.autoOverrides ?? {};
           const sick = entry.sickLeaveHours ?? 0;
           const rowClass = isDpp ? styles.dppRow : isPpp ? styles.pppRow : "";
           return (
@@ -371,6 +526,7 @@ export default function PayrollPage() {
                   <EditableCell
                     computed={entry.reportHours}
                     override={ov.reportHours}
+                    autoOverride={ao.reportHours}
                     editable={canEdit}
                     onSave={(v) => saveOverride(entry.id, "reportHours", v)}
                   />
@@ -383,6 +539,7 @@ export default function PayrollPage() {
                       <EditableCell
                         computed={entry.vacationHours}
                         override={ov.vacationHours}
+                        autoOverride={ao.vacationHours}
                         editable={canEdit}
                         onSave={(v) => saveOverride(entry.id, "vacationHours", v)}
                       />
@@ -421,6 +578,7 @@ export default function PayrollPage() {
                   <EditableCell
                     computed={entry.holidayHours}
                     override={ov.holidayHours}
+                    autoOverride={ao.holidayHours}
                     editable={canEdit}
                     onSave={(v) => saveOverride(entry.id, "holidayHours", v)}
                   />
@@ -451,10 +609,12 @@ export default function PayrollPage() {
                   <EditableCell
                     computed={entry.extraPay}
                     override={ov.extraPay}
+                    autoOverride={ao.extraPay}
                     editable={canEdit}
                     onSave={(v) => saveOverride(entry.id, "extraPay", v)}
                     masked={true}
                     forceVisible={showAllNavic}
+                    renderValue={formatNavic}
                   />
                 )}
               </td>
@@ -558,16 +718,8 @@ export default function PayrollPage() {
       {sickModal && period && (
         <SickLeaveModal
           entry={sickModal}
-          periodId={period.id}
           onClose={() => setSickModal(null)}
-          onSaved={(empId, hours) => {
-            setPeriod((prev) => prev ? {
-              ...prev,
-              entries: prev.entries.map((e) =>
-                e.id === empId ? { ...e, sickLeaveHours: hours } : e
-              ),
-            } : prev);
-          }}
+          onSave={(h) => saveSickLeave(sickModal, h)}
         />
       )}
     </div>

@@ -3,6 +3,7 @@
  *
  * Key rules (derived from MZDY.xlsx formulas):
  *  - Base hours = (Mon–Fri days in month) × 8  (state holidays on workdays are INCLUDED)
+ *  - totalHours and weekendHours are CEIL'd before any downstream calculation
  *  - Night hours per night segment = 8 (= 12h × 2/3, matching Excel formula (hours/3)*2)
  *  - Max night hours = FLOOR(baseHours/12) × 8
  *  - Vacation (HPP) = baseHours − reportHours
@@ -11,6 +12,8 @@
  *  - NAVÍC = CEIL(hourlyRate × extraHours / 100) × 100  (or 0 if no hourlyRate)
  *  - Food vouchers = workingDays × foodVoucherRate
  *  - DPP: only totalHours (= dppHours) — all other columns null
+ *  - Vedoucí (managers): reportHours += countMonFriHolidays × 8 (holiday credit)
+ *  - Cascades: Výkaz override → Dovolená; Nemoc → Dovolená → Výkaz → NAVÍC; NAVÍC → SVÁTEK
  */
 
 import * as admin from "firebase-admin";
@@ -73,6 +76,18 @@ export function getBaseHours(year: number, month: number): number {
   return workdays * 8;
 }
 
+/** Count holidays in the given month that fall on Mon–Fri (used for manager holiday credit). */
+function countMonFriHolidays(year: number, month: number, holidays: Set<string>): number {
+  const prefix = `${year}-${String(month).padStart(2, "0")}-`;
+  let count = 0;
+  for (const h of holidays) {
+    if (!h.startsWith(prefix)) continue;
+    const dow = new Date(h + "T00:00:00").getDay();
+    if (dow >= 1 && dow <= 5) count++;
+  }
+  return count;
+}
+
 // ─── Shift classification ─────────────────────────────────────────────────────
 
 /** Night segment codes: each contributes 8 night hours (12h × 2/3). */
@@ -122,6 +137,8 @@ export interface EmployeeEntry {
   dppAmount: number | null;   // CZK: totalHours × hourlyRate (DPP only)
   // manual overrides: fieldName -> overridden value (preserves computed value separately)
   overrides: Record<string, number>;
+  // system-cascade overrides: always recomputed, never manually set
+  autoOverrides: Record<string, number>;
   updatedAt: FieldValue;
 }
 
@@ -143,7 +160,9 @@ export function calculateEntry(
   shifts: ShiftDoc[],
   holidays: Set<string>,
   baseHours: number,
-  foodVoucherRate: number
+  foodVoucherRate: number,
+  year: number,
+  month: number
 ): EmployeeEntry {
   const myShifts = shifts.filter((s) => s.employeeId === employee.employeeId);
   const isDpp = employee.contractType === "DPP";
@@ -172,7 +191,16 @@ export function calculateEntry(
     // X (day_off) shifts: hours = 0, don't count toward anything
   }
 
-  const reportHours = Math.min(baseHours, totalHours);
+  // Round up fractional hours before all downstream calculations
+  totalHours = Math.ceil(totalHours);
+  weekendHours = Math.ceil(weekendHours);
+
+  // ── Manager holiday credit (vedoucí section) ──────────────────────────────
+  // Managers get Mon–Fri holidays counted toward VÝKAZ regardless of whether worked.
+  const isVeduci = employee.section === "vedoucí";
+  const managerBonus = isVeduci ? countMonFriHolidays(year, month, holidays) * 8 : 0;
+  const reportHours = isVeduci ? totalHours + managerBonus : Math.min(baseHours, totalHours);
+
   const extraHours = Math.max(0, totalHours - baseHours);
   const maxNightHours = Math.floor(baseHours / 12) * 8;
   const nightCapped = Math.min(maxNightHours, nightHours);
@@ -194,6 +222,82 @@ export function calculateEntry(
   }
 
   const foodVouchers = isDpp ? 0 : workingDays * foodVoucherRate;
+
+  // ── Cascade computation ───────────────────────────────────────────────────
+  // MIRROR: keep in sync with computeCascades() in frontend/src/pages/PayrollPage.tsx
+  const userOv = employee.overrides ?? {};
+  const newAutoOv: Record<string, number> = {};
+
+  let effReport = userOv.reportHours !== undefined ? userOv.reportHours : reportHours;
+  let effVacation = userOv.vacationHours !== undefined ? userOv.vacationHours : vacationHours;
+  let effExtraPay = userOv.extraPay !== undefined ? userOv.extraPay : extraPay;
+  // Track extra hours directly to avoid rounding errors in NAVÍC→SVÁTEK transfer
+  let effExtraHours = extraHours;
+
+  // Req 1: Výkaz user override cascades Dovolená + NAVÍC
+  if (userOv.reportHours !== undefined && !isDpp) {
+    if (userOv.vacationHours === undefined) {
+      const cv = employee.contractType === "HPP"
+        ? Math.max(0, baseHours - effReport)
+        : Math.max(0, baseHours / 2 - effReport);
+      newAutoOv.vacationHours = cv;
+      effVacation = cv;
+    }
+    if (totalHours > effReport && employee.hourlyRate != null && employee.hourlyRate > 0
+      && userOv.extraPay === undefined) {
+      effExtraHours = totalHours - effReport;
+      const cp = Math.ceil(employee.hourlyRate * effExtraHours / 100) * 100;
+      newAutoOv.extraPay = cp;
+      effExtraPay = cp;
+    } else if (userOv.extraPay === undefined) {
+      effExtraHours = 0;
+    }
+  }
+
+  // Req 2: Nemoc cascades Dovolená → Výkaz → NAVÍC
+  const nemoc = employee.sickLeaveHours ?? 0;
+  if (nemoc > 0 && !isDpp) {
+    const ded = Math.min(nemoc, effVacation);
+    if (userOv.vacationHours === undefined) {
+      newAutoOv.vacationHours = effVacation - ded;
+      effVacation -= ded;
+    }
+    const rem = nemoc - ded;
+    if (rem > 0 && userOv.reportHours === undefined) {
+      newAutoOv.reportHours = Math.max(0, effReport - rem);
+      effReport = newAutoOv.reportHours;
+      if (employee.hourlyRate != null && employee.hourlyRate > 0 && userOv.extraPay === undefined) {
+        effExtraHours += rem;
+        newAutoOv.extraPay = (newAutoOv.extraPay ?? effExtraPay) + Math.ceil(employee.hourlyRate * rem / 100) * 100;
+        effExtraPay = newAutoOv.extraPay;
+      }
+    }
+  }
+
+  // Req 3: NAVÍC → SVÁTEK transfer
+  // Use effExtraHours (exact) not effExtraPay/hourlyRate (rounded) to avoid over-transfer.
+  const allHolsInMonth = [...holidays].filter(
+    (h) => h.startsWith(`${year}-${String(month).padStart(2, "0")}-`)
+  ).length;
+  const maxHolHours = allHolsInMonth * 12;
+  if (
+    effExtraHours > 0 &&
+    holidayHours < maxHolHours &&
+    employee.hourlyRate != null && employee.hourlyRate > 0 &&
+    userOv.holidayHours === undefined
+  ) {
+    const availableHolHours = maxHolHours - holidayHours;
+    const transferH = Math.min(effExtraHours, availableHolHours);
+    if (transferH > 0) {
+      newAutoOv.holidayHours = holidayHours + transferH;
+      if (userOv.extraPay === undefined) {
+        const remainingExtraHours = effExtraHours - transferH;
+        newAutoOv.extraPay = remainingExtraHours > 0
+          ? Math.ceil(employee.hourlyRate * remainingExtraHours / 100) * 100
+          : 0;
+      }
+    }
+  }
 
   return {
     employeeId: employee.employeeId,
@@ -219,6 +323,7 @@ export function calculateEntry(
       ? Math.round(totalHours * (employee.hourlyRate ?? 0))
       : null,
     overrides: employee.overrides ?? {},
+    autoOverrides: newAutoOv,
     updatedAt: FieldValue.serverTimestamp(),
   };
 }
@@ -261,7 +366,8 @@ async function getActiveEmployment(employeeId: string): Promise<{
 
 /**
  * Create or update a payrollPeriod for a given published shift plan.
- * Preserves manually entered sickLeaveHours on existing entries.
+ * Preserves manually entered sickLeaveHours and overrides on existing entries.
+ * autoOverrides are always recomputed — never preserved.
  */
 export async function createOrUpdatePayrollPeriod(
   planId: string,
@@ -332,7 +438,7 @@ export async function createOrUpdatePayrollPeriod(
     };
   });
 
-  // Read existing entries to preserve sickLeaveHours + overrides
+  // Read existing entries to preserve sickLeaveHours + overrides (NOT autoOverrides)
   const existingEntriesSnap = await periodRef.collection("entries").get();
   const sickLeaveMap = new Map<string, number>();
   const overridesMap = new Map<string, Record<string, number>>();
@@ -365,7 +471,7 @@ export async function createOrUpdatePayrollPeriod(
       overrides: overridesMap.get(employeeId) ?? {},
     };
 
-    const entry = calculateEntry(employee, allShifts, holidays, baseHours, foodVoucherRate);
+    const entry = calculateEntry(employee, allShifts, holidays, baseHours, foodVoucherRate, year, month);
     const entryRef = periodRef.collection("entries").doc(employeeId);
     batch.set(entryRef, entry);
   }

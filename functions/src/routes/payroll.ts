@@ -112,9 +112,10 @@ payrollRouter.patch(
   requireAuth,
   requireRole("admin", "director"),
   async (req: AuthRequest, res: Response) => {
-    const { sickLeaveHours, overrides } = req.body as {
+    const { sickLeaveHours, overrides, autoOverrides } = req.body as {
       sickLeaveHours?: number;
       overrides?: Record<string, number>;
+      autoOverrides?: Record<string, number>;
     };
     const update: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp() };
     if (typeof sickLeaveHours === "number" && sickLeaveHours >= 0) {
@@ -122,6 +123,9 @@ payrollRouter.patch(
     }
     if (overrides !== undefined && overrides !== null && typeof overrides === "object") {
       update.overrides = overrides;
+    }
+    if (autoOverrides !== undefined && autoOverrides !== null && typeof autoOverrides === "object") {
+      update.autoOverrides = autoOverrides;
     }
     if (Object.keys(update).length === 1) {
       res.status(400).json({ error: "Nic k uložení." });
