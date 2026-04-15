@@ -108,8 +108,8 @@
 /* Current user highlight — yellow row with forced dark text for legibility */
 .currentEmpRow {
   background: #fef9c3;
-  border-top: 2px solid #eab308;
-  border-bottom: 2px solid #eab308;
+  border-top: 3px solid #ca8a04;
+  border-bottom: 3px solid #ca8a04;
   color: #1c1917;
 }
 
@@ -117,13 +117,10 @@
   color: #1c1917;
 }
 
-/* Yellow wins over weekend/holiday tints — slightly deeper shades show day type */
-.currentEmpRow .weekend {
-  background: #fde68a;
-}
-
+/* Yellow wins over weekend/holiday tints — uniform colour throughout all days */
+.currentEmpRow .weekend,
 .currentEmpRow .holiday {
-  background: #fcd34d;
+  background: #fef9c3;
 }
 
 .currentNameCell {
@@ -133,13 +130,10 @@
   color: #1c1917 !important;
 }
 
-/* Dark mode: deepen weekend/holiday tints within the current row */
-[data-theme="dark"] .currentEmpRow .weekend {
-  background: #92400e;
-}
-
+/* Dark mode: same uniform yellow, darker border */
+[data-theme="dark"] .currentEmpRow .weekend,
 [data-theme="dark"] .currentEmpRow .holiday {
-  background: #78350f;
+  background: #fef9c3;
 }
 
 .nameCell {
