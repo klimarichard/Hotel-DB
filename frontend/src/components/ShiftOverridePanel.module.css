@@ -129,18 +129,17 @@
 }
 
 .cancelBtn {
-  padding: 4px 10px;
-  background: var(--color-surface);
+  padding: 4px 12px;
+  background: var(--color-surface-4);
   border: 1px solid var(--color-border-strong);
   border-radius: 4px;
-  font-size: 0.75rem;
-  font-weight: 500;
+  font-size: 0.8125rem;
   color: var(--color-text-secondary);
   cursor: pointer;
 }
 
 .cancelBtn:hover:not(:disabled) {
-  background: var(--color-surface-3);
+  background: var(--color-border);
 }
 
 .cancelBtn:disabled {
