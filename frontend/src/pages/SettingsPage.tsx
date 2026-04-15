@@ -311,6 +311,15 @@ export default function SettingsPage() {
     setLinkEmployeeId(currentEmployeeId ?? "");
   }
 
+  async function handleUnlinkEmployee(uid: string) {
+    try {
+      await authApi.linkEmployee(uid, null);
+      setUsers((prev) => prev.map((u) => (u.uid === uid ? { ...u, employeeId: null } : u)));
+    } catch {
+      // Silently fail
+    }
+  }
+
   async function handleLinkEmployee() {
     if (!linkingUid) return;
     setLinkSaving(true);
@@ -587,12 +596,21 @@ export default function SettingsPage() {
                         <span className={linkedEmp ? styles.employeeLinked : styles.employeeUnlinked}>
                           {linkedEmp ? `${linkedEmp.lastName} ${linkedEmp.firstName}` : "—"}
                         </span>
-                        <button
-                          className={styles.linkBtn}
-                          onClick={() => openLinkModal(u.uid, u.employeeId)}
-                        >
-                          {linkedEmp ? "Zrušit propojení" : "Propojit"}
-                        </button>
+                        {linkedEmp ? (
+                          <button
+                            className={styles.linkBtn}
+                            onClick={() => handleUnlinkEmployee(u.uid)}
+                          >
+                            Zrušit propojení
+                          </button>
+                        ) : (
+                          <button
+                            className={styles.linkBtn}
+                            onClick={() => openLinkModal(u.uid, u.employeeId ?? null)}
+                          >
+                            Propojit
+                          </button>
+                        )}
                       </td>
                       <td>
                         <span className={u.active ? styles.badgeActive : styles.badgeInactive}>
