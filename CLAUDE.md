@@ -132,6 +132,7 @@ npm run dev
 - One plan per (month, year) — enforced in `POST /shifts/plans` with a Firestore query
 - Employee `status` field must be `"active"` or `"terminated"` (string) — the employees list page filters by `?status=active`
 - X limits: HPP = 8/month, PPP = 13/month, DPP = unlimited. Day/night recepce coverage minimum = 5 active employees. Violations require override request with mandatory reason; approved by admin/director/manager via ShiftOverridePanel.
+- **Consecutive X limit**: max 6 X in a row for employees and managers (hard block, no override). Checked via `consecutiveXRun()` in `ShiftPlannerPage.tsx` before the override check. Admins/directors are exempt.
 - `ShiftOverridesContext` provides global pending override count for the "Směny" nav badge (admin/director only)
 
 ### Phase 4 — key implementation notes
