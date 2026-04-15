@@ -6,6 +6,7 @@ export const SHIFT_HOURS: Record<string, number> = {
   ZN: 8,
   DP: 12,
   NP: 12,
+  HO: 6,
   X: 0,
 };
 
@@ -65,6 +66,9 @@ function parseSegment(token: string): ShiftSegment | { error: string } {
   } else if (token.startsWith("NP")) {
     code = "NP";
     remainder = token.slice(2);
+  } else if (token.startsWith("HO")) {
+    code = "HO";
+    remainder = token.slice(2);
   } else if (token.length >= 1 && ["D", "N", "R", "X"].includes(token[0])) {
     code = token[0];
     remainder = token.slice(1);
@@ -76,9 +80,13 @@ function parseSegment(token: string): ShiftSegment | { error: string } {
     return { error: "Neznámý kód: " + code };
   }
 
-  // D and N require a hotel code (e.g. DA, NS); only R and X are valid standalone
+  // D and N require a hotel code (e.g. DA, NS); HO, R and X are valid standalone only
   if ((code === "D" || code === "N") && remainder === "") {
     return { error: "Kód " + code + " vyžaduje hotel (např. " + code + "A)" };
+  }
+
+  if (code === "HO" && remainder !== "") {
+    return { error: "Kód HO nepřijímá hotel" };
   }
 
   // Remainder must be a valid hotel code or empty

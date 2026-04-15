@@ -8,6 +8,7 @@ export const SHIFT_HOURS: Record<string, number> = {
   ZN: 8,
   DP: 12,
   NP: 12,
+  HO: 6,
   X: 0,
 };
 
@@ -65,6 +66,7 @@ export const CELL_COLORS: Record<string, { bg: string; text: string }> = {
   M:  { bg: "#d1d5db", text: "#1f2937" },   // Metropol — gray
   PA: { bg: "#dbeafe", text: "#1e40af" },   // Ambiance portýr — blue
   PQ: { bg: "#431407", text: "#fed7aa" },   // Amigo portýr — dark brown
+  HO: { bg: "#e0e7ff", text: "#3730a3" },   // Home Office — indigo
   X:  { bg: "#fee2e2", text: "#dc2626" },   // X — red
 };
 
@@ -80,6 +82,7 @@ const CELL_COLORS_DARK: Record<string, { bg: string; text: string }> = {
   M:  { bg: "#374151", text: "#d1d5db" },   // Metropol — dark grey
   PA: { bg: "#1e3a5f", text: "#93c5fd" },   // Ambiance portýr — dark blue
   PQ: { bg: "#1c0a00", text: "#fed7aa" },   // Amigo portýr — very dark brown
+  HO: { bg: "#1e1b4b", text: "#a5b4fc" },   // Home Office — dark indigo
   X:  { bg: "#450a0a", text: "#fca5a5" },   // X — dark red
 };
 
@@ -89,6 +92,7 @@ export function getCellColor(parsed: ParseResult, dark = false): { bg: string; t
   const first = parsed.segments[0];
   if (!first) return { bg: "transparent", text: dark ? "#94a3b8" : "#374151" };
   if (first.code === "X") return colors["X"];
+  if (first.code === "HO") return colors["HO"] ?? defaultColor;
   const isPortyr = first.code === "DP" || first.code === "NP";
   const hotel = first.hotel;
   if (isPortyr && hotel) return colors["P" + hotel] ?? colors[hotel] ?? defaultColor;
@@ -232,6 +236,9 @@ function parseSegment(token: string): ShiftSegment | { error: string } {
   } else if (token.startsWith("NP")) {
     code = "NP";
     remainder = token.slice(2);
+  } else if (token.startsWith("HO")) {
+    code = "HO";
+    remainder = token.slice(2);
   } else if (token.length >= 1 && ["D", "N", "R", "X"].includes(token[0])) {
     code = token[0];
     remainder = token.slice(1);
@@ -243,9 +250,13 @@ function parseSegment(token: string): ShiftSegment | { error: string } {
     return { error: "Neznámý kód: " + code };
   }
 
-  // D and N require a hotel code (e.g. DA, NS); only R and X are valid standalone
+  // D and N require a hotel code (e.g. DA, NS); HO, R and X are valid standalone only
   if ((code === "D" || code === "N") && remainder === "") {
     return { error: "Kód " + code + " vyžaduje hotel (např. " + code + "A)" };
+  }
+
+  if (code === "HO" && remainder !== "") {
+    return { error: "Kód HO nepřijímá hotel" };
   }
 
   if (remainder !== "" && !(HOTEL_CODES as readonly string[]).includes(remainder)) {
