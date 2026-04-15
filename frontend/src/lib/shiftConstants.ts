@@ -80,7 +80,7 @@ const CELL_COLORS_DARK: Record<string, { bg: string; text: string }> = {
   K:  { bg: "#2e1065", text: "#a78bfa" },   // Ankora — dark purple
   P:  { bg: "#374151", text: "#d1d5db" },   // Perla — dark grey
   M:  { bg: "#374151", text: "#d1d5db" },   // Metropol — dark grey
-  PA: { bg: "#1e3a5f", text: "#93c5fd" },   // Ambiance portýr — dark blue
+  PA: { bg: "#1d4ed8", text: "#bfdbfe" },   // Ambiance portýr — vivid blue
   PQ: { bg: "#1c0a00", text: "#fed7aa" },   // Amigo portýr — very dark brown
   HO: { bg: "#1e1b4b", text: "#a5b4fc" },   // Home Office — dark indigo
   X:  { bg: "#450a0a", text: "#fca5a5" },   // X — dark red
