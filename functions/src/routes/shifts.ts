@@ -538,6 +538,7 @@ shiftsRouter.put(
       .collection("planEmployees")
       .doc(docId)
       .update({ section, primaryShiftType, primaryHotel, displayOrder, active, updatedAt: FieldValue.serverTimestamp() });
+    await db().collection("shiftPlans").doc(planId).update({ updatedAt: FieldValue.serverTimestamp() });
     res.json({ ok: true });
   }
 );
@@ -572,7 +573,7 @@ shiftsRouter.delete(
       shiftsSnap.docs.forEach((d) => batch.delete(d.ref));
       await batch.commit();
     }
-
+    await planRef.update({ updatedAt: FieldValue.serverTimestamp() });
     res.json({ ok: true });
   }
 );
@@ -690,7 +691,7 @@ shiftsRouter.put(
         status,
         updatedAt: FieldValue.serverTimestamp(),
       });
-
+    await db().collection("shiftPlans").doc(planId).update({ updatedAt: FieldValue.serverTimestamp() });
     res.json({ ok: true, hoursComputed: parsed.hoursComputed });
   }
 );
@@ -720,6 +721,7 @@ shiftsRouter.delete(
       .collection("shifts")
       .doc(docId)
       .delete();
+    await db().collection("shiftPlans").doc(planId).update({ updatedAt: FieldValue.serverTimestamp() });
     res.json({ ok: true });
   }
 );
@@ -949,6 +951,7 @@ shiftsRouter.post(
         reviewedAt: null,
         rejectionReason: null,
       });
+    await db().collection("shiftPlans").doc(planId).update({ updatedAt: FieldValue.serverTimestamp() });
     res.status(201).json({ id: ref.id });
   }
 );
@@ -1019,7 +1022,7 @@ shiftsRouter.patch(
       reviewedAt: FieldValue.serverTimestamp(),
       rejectionReason: status === "rejected" ? ((body.rejectionReason as string) ?? null) : null,
     });
-
+    await db().collection("shiftPlans").doc(planId).update({ updatedAt: FieldValue.serverTimestamp() });
     res.json({ ok: true });
   }
 );
@@ -1052,6 +1055,7 @@ shiftsRouter.delete(
       return;
     }
     await ref.delete();
+    await db().collection("shiftPlans").doc(planId).update({ updatedAt: FieldValue.serverTimestamp() });
     res.json({ ok: true });
   }
 );
@@ -1153,6 +1157,7 @@ shiftsRouter.post(
         reviewedAt: null,
         rejectionReason: null,
       });
+    await db().collection("shiftPlans").doc(planId).update({ updatedAt: FieldValue.serverTimestamp() });
     res.status(201).json({ id: ref.id });
   }
 );
@@ -1190,7 +1195,7 @@ shiftsRouter.patch(
       reviewedAt: FieldValue.serverTimestamp(),
       rejectionReason: status === "rejected" ? ((body.rejectionReason as string) ?? null) : null,
     });
-
+    await db().collection("shiftPlans").doc(planId).update({ updatedAt: FieldValue.serverTimestamp() });
     res.json({ ok: true });
   }
 );
@@ -1223,6 +1228,7 @@ shiftsRouter.delete(
       return;
     }
     await ref.delete();
+    await db().collection("shiftPlans").doc(planId).update({ updatedAt: FieldValue.serverTimestamp() });
     res.json({ ok: true });
   }
 );
@@ -1256,7 +1262,7 @@ shiftsRouter.put(
       .collection("modRow")
       .doc(date)
       .set({ code, updatedAt: FieldValue.serverTimestamp() });
-
+    await db().collection("shiftPlans").doc(planId).update({ updatedAt: FieldValue.serverTimestamp() });
     res.json({ ok: true });
   }
 );
@@ -1274,6 +1280,7 @@ shiftsRouter.delete(
       .collection("modRow")
       .doc(date)
       .delete();
+    await db().collection("shiftPlans").doc(planId).update({ updatedAt: FieldValue.serverTimestamp() });
     res.json({ ok: true });
   }
 );

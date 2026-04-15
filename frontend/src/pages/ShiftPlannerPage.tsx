@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { doc, onSnapshot } from "firebase/firestore";
+import { db } from "../lib/firebase";
 import { api } from "../lib/api";
 import { useAuth } from "../hooks/useAuth";
 import { parseShiftExpression } from "../lib/shiftConstants";
@@ -220,46 +222,28 @@ export default function ShiftPlannerPage() {
     loadPlan();
   }, [loadPlan]);
 
-  // ── Periodic plan reload ───────────────────────────────────────────────────
-  // Every 60 s, do a lightweight check: fetch only the plan list, compare
-  // updatedAt and status. Only do a full reload when something actually changed.
-  // Skipped for published plans — those only need a reload when a change is made.
+  // ── Real-time plan reload via Firestore onSnapshot ────────────────────────
+  // Listens to the plan document. Every mutation in shifts.ts bumps the plan's
+  // updatedAt, so any change by any user triggers a full reload here.
 
-  const lastKnownRef = useRef<{ updatedAt: string | undefined; status: string | undefined }>({
-    updatedAt: undefined,
-    status: undefined,
-  });
-
-  // Keep the ref in sync whenever the plan changes (from a full load).
-  useEffect(() => {
-    if (plan) {
-      lastKnownRef.current = {
-        updatedAt: (plan as unknown as Record<string, unknown>).updatedAt as string | undefined,
-        status: plan.status,
-      };
-    }
-  }, [plan]);
+  const lastUpdatedAtRef = useRef<string | undefined>(undefined);
 
   useEffect(() => {
-    if (!plan || plan.status === "published") return;
-    const timer = setInterval(async () => {
-      try {
-        const plans = await api.get<(PlanListItem & { updatedAt?: string })[]>("/shifts/plans");
-        const match = plans.find(
-          (p) => p.month === selectedMonth && p.year === selectedYear
-        );
-        if (!match) return;
-        const { updatedAt, status } = match;
-        const last = lastKnownRef.current;
-        if (updatedAt !== last.updatedAt || status !== last.status) {
-          loadPlan();
-        }
-      } catch {
-        // silently ignore — full reload will catch it on next manual navigation
+    if (!plan?.id) return;
+    const unsub = onSnapshot(doc(db, "shiftPlans", plan.id), (snap) => {
+      const updatedAt = snap.data()?.updatedAt?.toMillis?.()?.toString() ?? snap.data()?.updatedAt;
+      if (lastUpdatedAtRef.current === undefined) {
+        // First fire — just record the baseline, don't reload
+        lastUpdatedAtRef.current = updatedAt;
+        return;
       }
-    }, 60_000);
-    return () => clearInterval(timer);
-  }, [plan?.id, plan?.status, selectedMonth, selectedYear, loadPlan]);
+      if (updatedAt !== lastUpdatedAtRef.current) {
+        lastUpdatedAtRef.current = updatedAt;
+        loadPlan();
+      }
+    });
+    return () => { unsub(); lastUpdatedAtRef.current = undefined; };
+  }, [plan?.id, loadPlan]);
 
   // ── Month navigation ───────────────────────────────────────────────────────
 
