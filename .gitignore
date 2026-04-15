@@ -4,14 +4,7 @@ scripts/
 # Specification document
 HR_App_Specification.docx
 
-# Employee database export (sensitive data)
-DTB.xlsx
-DTB.csv
-
-# Lookup data imports (internal, may contain adjusted salaries)
-oddeleni.csv
-pozice.csv
-vzdelani.csv
+# Legacy — seed CSVs are now under scripts/seeds/ (already excluded by scripts/)
 
 # Dependencies
 node_modules/

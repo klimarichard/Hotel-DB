@@ -114,7 +114,7 @@ npm run dev
 - Node.js v24 is installed at `C:\Program Files\nodejs\node.exe` — not always on PATH, use full path if `node` is not found
 - Functions emulator runs on port **5002** (not 5001 — that port is taken on this machine)
 - To seed an admin user into the emulators: `"C:\Program Files\nodejs\node.exe" scripts\seed-admin.js` (from project root, emulators must be running)
-- To seed employees from DTB.csv: `"C:\Program Files\nodejs\node.exe" scripts\seed-employees.js` (from project root, emulators must be running, DTB.csv must be at project root — UTF-8 with BOM, semicolon-delimited)
+- To seed employees from `scripts/seeds/employees.csv`: `"C:\Program Files\nodejs\node.exe" scripts\seed-employees.js` (from project root, emulators must be running; all seed CSVs live under `scripts/seeds/`, UTF-8 with BOM, semicolon-delimited)
 
 ### Phase 6 — key implementation notes
 - `vacationRequests` is a top-level Firestore collection (not a sub-collection)
@@ -151,7 +151,7 @@ npm run dev
 - Expanded EDUCATIONS dropdown to full Czech KKOV classification codes (A–V)
 - Contact address row hidden on detail page when same as permanent address
 - Subsection labels now have border-top separator for visual clarity
-- Seed scripts switched from CP1250/iconv + DTB.xlsx to UTF-8 BOM-stripped DTB.csv; column mapping corrected; `mapMaritalStatus()` added; employment history no longer seeded from CSV (must be added via UI); `seed-admin.js` added to `seed-all.js` run order
+- Seed scripts switched from CP1250/iconv + xlsx to UTF-8 BOM-stripped `scripts/seeds/employees.csv`; column mapping corrected; `mapMaritalStatus()` added; `seed-admin.js` added to `seed-all.js` run order. All seed CSVs (`employees.csv`, `oddeleni.csv`, `pozice.csv`, `vzdelani.csv`) now live under `scripts/seeds/` (the whole `scripts/` dir is gitignored).
 
 ### Phase 3 — deferred items
 - ✅ `jobPositions` lookup table — editable from Settings → Pracovní pozice, dropdown in employment history modal, auto-fills salary
@@ -194,8 +194,8 @@ npm run dev
 - **Gendered marital status display**: `frontend/src/lib/genderDisplay.ts` exports `displayGendered(value, gender)`. Database still stores combined forms (`svobodný/á`, `ženatý/vdaná`, etc.) but the detail page shows only the gender-correct variant. Split rule: if the `/` suffix is ≤2 chars, it replaces the last chars of the male form; otherwise it is used as a full word.
 - **Departments + Job Positions** (Phase 3 deferred #1 & #2):
   - Two new Firestore collections. `departments/{id}`: `{ name, displayOrder }`. `jobPositions/{id}`: `{ name, departmentId, defaultSalary, displayOrder }`. Managed via `/departments` and `/jobPositions` backend routes (admin/director only).
-  - Seed scripts `scripts/seed-departments.js` (reads `oddeleni.csv`) and `scripts/seed-job-positions.js` (reads `pozice.csv`, looks up department by lowercase name). Both added to `seed-all.js` after `seed-companies`.
-  - `oddeleni.csv`, `pozice.csv`, `vzdelani.csv` added to `.gitignore`.
+  - Seed scripts `scripts/seed-departments.js` (reads `scripts/seeds/oddeleni.csv`) and `scripts/seed-job-positions.js` (reads `scripts/seeds/pozice.csv`, looks up department by lowercase name). Both added to `seed-all.js` after `seed-companies`.
+  - All seed CSVs live under `scripts/seeds/` — the entire `scripts/` dir is gitignored.
   - Two new inline tabs in `SettingsPage.tsx`: **Oddělení** and **Pracovní pozice**. Deleting a department that still has positions returns a friendly error.
   - Employment history modal in `EmployeeDetailPage` replaced the free-text Pracovní pozice input with two linked dropdowns (Oddělení → Pracovní pozice filtered by chosen department). Selecting a position auto-fills `salary` from `defaultSalary` (still editable). The saved payload now sets `department` to the department name (previously hardcoded `""`).
 
