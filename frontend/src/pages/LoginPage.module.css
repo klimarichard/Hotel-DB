@@ -87,3 +87,28 @@
   opacity: 0.6;
   cursor: not-allowed;
 }
+
+.linkBtn {
+  background: none;
+  border: none;
+  color: var(--color-primary);
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 0;
+  text-align: center;
+  text-decoration: underline;
+}
+
+.linkBtn:hover {
+  color: var(--color-primary-dark);
+}
+
+.success {
+  background: var(--color-active-bg);
+  border: 1px solid var(--color-active-border);
+  color: var(--color-active-text);
+  padding: 0.6rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}

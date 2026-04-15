@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Navigate } from "react-router-dom";
+import { sendPasswordResetEmail } from "firebase/auth";
+import { auth } from "@/lib/firebase";
 import { useAuth, UserRole } from "@/hooks/useAuth";
 import { authApi, UserProfile, api } from "@/lib/api";
 import styles from "./SettingsPage.module.css";
@@ -97,6 +99,10 @@ export default function SettingsPage() {
 
   // Per-row activation toggle state
   const [togglingUid, setTogglingUid] = useState<string | null>(null);
+
+  // Per-row password reset state
+  const [resetingUid, setResetingUid] = useState<string | null>(null);
+  const [resetMsg, setResetMsg] = useState<{ uid: string; msg: string; isError: boolean } | null>(null);
 
   // Employee link state
   const [employees, setEmployees] = useState<EmployeeSummary[]>([]);
@@ -377,6 +383,21 @@ export default function SettingsPage() {
     }
   }
 
+  async function handleResetPassword(user: UserProfile) {
+    if (!user.email) return;
+    setResetingUid(user.uid);
+    setResetMsg(null);
+    try {
+      await sendPasswordResetEmail(auth, user.email);
+      setResetMsg({ uid: user.uid, msg: "Odkaz odeslán", isError: false });
+    } catch {
+      setResetMsg({ uid: user.uid, msg: "Chyba při odesílání", isError: true });
+    } finally {
+      setResetingUid(null);
+      setTimeout(() => setResetMsg(null), 4000);
+    }
+  }
+
   return (
     <div>
       <div className={styles.header}>
@@ -586,6 +607,20 @@ export default function SettingsPage() {
                         >
                           {togglingUid === u.uid ? "…" : u.active ? "Deaktivovat" : "Aktivovat"}
                         </button>
+                        {" "}
+                        <button
+                          className={styles.resetBtn}
+                          disabled={resetingUid === u.uid || !u.email}
+                          onClick={() => handleResetPassword(u)}
+                          title="Odeslat uživateli odkaz pro obnovu hesla"
+                        >
+                          {resetingUid === u.uid ? "…" : "Resetovat heslo"}
+                        </button>
+                        {resetMsg?.uid === u.uid && (
+                          <span className={resetMsg.isError ? styles.resetError : styles.resetOk}>
+                            {resetMsg.msg}
+                          </span>
+                        )}
                       </td>
                     </tr>
                   );
