@@ -524,11 +524,11 @@ export default function ShiftPlannerPage() {
   async function handleCellSave(employeeId: string, date: string, rawInput: string) {
     if (!plan) return;
 
-    // Employees may only enter X or clear a cell — no other values accepted
+    // Employees may only enter X or clear a cell — silently discard anything else
     if (role === "employee" && rawInput.trim() !== "") {
       const parsed = parseShiftExpression(rawInput);
       if (!parsed.isValid || !parsed.segments.every((s) => s.code === "X")) {
-        throw new Error("Jako zaměstnanec můžete zadávat pouze X.");
+        return; // resolve without error so ShiftCell reverts to original value
       }
     }
 
