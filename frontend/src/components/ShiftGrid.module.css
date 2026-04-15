@@ -77,13 +77,15 @@
 /* ── Weekends ─────────────────────────────────────────────────────────── */
 
 .today {
-  background: #bbf7d0;
-  box-shadow: inset 2px 0 0 #16a34a, inset -2px 0 0 #16a34a;
+  background: #bbf7d0 !important;
+  border-left: 3px solid #16a34a !important;
+  border-right: 3px solid #16a34a !important;
 }
 
 [data-theme="dark"] .today {
-  background: #14532d;
-  box-shadow: inset 2px 0 0 #22c55e, inset -2px 0 0 #22c55e;
+  background: #14532d !important;
+  border-left: 3px solid #22c55e !important;
+  border-right: 3px solid #22c55e !important;
 }
 
 .weekend {
@@ -133,10 +135,11 @@
   background: #fef9c3;
 }
 
-/* Today column + current user: yellow bg, green inset shadow for column borders */
+/* Today column + current user: yellow bg, green borders */
 .currentEmpRow .today {
-  background: #fef9c3;
-  box-shadow: inset 2px 0 0 #16a34a, inset -2px 0 0 #16a34a;
+  background: #fef9c3 !important;
+  border-left: 3px solid #16a34a !important;
+  border-right: 3px solid #16a34a !important;
 }
 
 .currentNameCell {
@@ -153,8 +156,9 @@
 }
 
 [data-theme="dark"] .currentEmpRow .today {
-  background: #fef9c3;
-  box-shadow: inset 2px 0 0 #22c55e, inset -2px 0 0 #22c55e;
+  background: #fef9c3 !important;
+  border-left: 3px solid #22c55e !important;
+  border-right: 3px solid #22c55e !important;
 }
 
 .nameCell {
