@@ -273,6 +273,10 @@
 [data-theme="dark"] .counterCell1 { background: #15803d; color: #dcfce7; }
 [data-theme="dark"] .counterCell2 { background: #1d4ed8; color: #dbeafe; }
 
+/* Keep MOD row uniform in dark mode — weekend/holiday tints don't apply */
+[data-theme="dark"] .modRow .weekend,
+[data-theme="dark"] .modRow .holiday { background: var(--color-mod-bg); }
+
 /* ── Employee name cell controls ──────────────────────────────────────── */
 
 .empNameText {
