@@ -165,11 +165,53 @@
   white-space: nowrap;
 }
 
-.actionCell {
-  padding: 0.6rem 0.5rem;
-  border-bottom: 1px solid var(--color-border-subtle);
-  text-align: center;
-  width: 40px;
+.navicHeaderInner {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  justify-content: center;
+}
+
+.navicRevealBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.1rem;
+  color: var(--color-text-muted);
+  display: inline-flex;
+  align-items: center;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+
+.navicRevealBtn:hover {
+  opacity: 1;
+  color: var(--color-text);
+}
+
+.vacationInline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.nemocBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.05rem 0.25rem;
+  font-size: 0.8rem;
+  color: var(--color-text-subtle);
+  border-radius: 3px;
+  line-height: 1;
+  opacity: 0.55;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.nemocBtn:hover {
+  opacity: 1;
+  background: var(--color-surface-3);
+  color: var(--color-text);
 }
 
 .contractBadge {

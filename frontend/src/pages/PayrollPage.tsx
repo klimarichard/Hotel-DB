@@ -89,12 +89,14 @@ function EditableCell({
   editable,
   onSave,
   masked = false,
+  forceVisible = false,
 }: {
   computed: number;
   override: number | undefined;
   editable: boolean;
   onSave: (value: number | null) => Promise<void>;
   masked?: boolean;
+  forceVisible?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
@@ -103,6 +105,7 @@ function EditableCell({
 
   const isOverridden = override !== undefined;
   const displayValue = isOverridden ? override! : computed;
+  const effectivelyVisible = visible || forceVisible;
 
   useEffect(() => {
     if (editing) inputRef.current?.focus();
@@ -171,14 +174,16 @@ function EditableCell({
         }}
         title={title}
       >
-        {visible ? displayValue.toLocaleString("cs-CZ") : "•••••"}
-        <button
-          type="button"
-          className={styles.revealBtn}
-          onClick={(e) => { e.stopPropagation(); setVisible((v) => !v); }}
-        >
-          {visible ? <EyeOffIcon /> : <EyeIcon />}
-        </button>
+        {effectivelyVisible ? (displayValue === 0 ? "—" : displayValue.toLocaleString("cs-CZ")) : "•••••"}
+        {!forceVisible && (
+          <button
+            type="button"
+            className={styles.revealBtn}
+            onClick={(e) => { e.stopPropagation(); setVisible((v) => !v); }}
+          >
+            {visible ? <EyeOffIcon /> : <EyeIcon />}
+          </button>
+        )}
       </span>
     );
   }
@@ -276,6 +281,7 @@ export default function PayrollPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [sickModal, setSickModal] = useState<PayrollEntry | null>(null);
+  const [showAllNavic, setShowAllNavic] = useState(false);
 
   const loadPeriod = useCallback(async () => {
     setLoading(true);
@@ -337,14 +343,12 @@ export default function PayrollPage() {
     return (
       <>
         <tr key={`section-${section}`} className={styles.sectionRow}>
-          <td colSpan={11}>{SECTION_LABELS[section] ?? section}</td>
+          <td colSpan={10}>{SECTION_LABELS[section] ?? section}</td>
         </tr>
         {entries.map((entry) => {
           const isDpp = entry.contractType === "DPP";
           const ov = entry.overrides ?? {};
-          const vacationDisplay = ov.vacationHours !== undefined ? ov.vacationHours : entry.vacationHours;
           const sick = entry.sickLeaveHours ?? 0;
-          const vacationIsOverridden = ov.vacationHours !== undefined;
           return (
             <tr key={entry.id} className={isDpp ? styles.dppRow : ""}>
               <td className={styles.nameCell}>
@@ -373,30 +377,28 @@ export default function PayrollPage() {
               </td>
               <td className={styles.numCell}>
                 {isDpp ? <span className={styles.dash}>—</span> : (
-                  <span className={vacationIsOverridden ? styles.vacationWrap : ""}>
-                    <span
-                      className={[styles.cellValue, styles.editable, vacationIsOverridden ? styles.overridden : ""].join(" ")}
-                      onDoubleClick={() => {
-                        if (!canEdit) return;
-                        const draft = prompt("Hodiny dovolené (prázdné = auto):", String(vacationDisplay));
-                        if (draft === null) return;
-                        const trimmed = draft.trim();
-                        if (trimmed === "") {
-                          saveOverride(entry.id, "vacationHours", null);
-                        } else {
-                          const num = Number(trimmed);
-                          if (!isNaN(num) && num >= 0) {
-                            saveOverride(entry.id, "vacationHours", num === entry.vacationHours ? null : num);
-                          }
-                        }
-                      }}
-                      title={vacationIsOverridden ? `Upraveno (automaticky: ${entry.vacationHours})` : "Dvojklik pro úpravu"}
-                    >
-                      {vacationDisplay === 0 && sick === 0 ? "—" : (vacationDisplay > 0 ? vacationDisplay.toLocaleString("cs-CZ") : "")}
+                  <span className={styles.vacationWrap}>
+                    <span className={styles.vacationInline}>
+                      <EditableCell
+                        computed={entry.vacationHours}
+                        override={ov.vacationHours}
+                        editable={canEdit}
+                        onSave={(v) => saveOverride(entry.id, "vacationHours", v)}
+                      />
+                      {canEdit && (
+                        <button
+                          type="button"
+                          className={styles.nemocBtn}
+                          onClick={() => setSickModal(entry)}
+                          title="Upravit hodiny nemoci"
+                        >
+                          ✎
+                        </button>
+                      )}
                     </span>
                     {sick > 0 && (
                       <>
-                        {vacationDisplay > 0 && <br />}
+                        <br />
                         <span className={styles.nemocBadge}>{sick} NEMOC</span>
                       </>
                     )}
@@ -451,6 +453,7 @@ export default function PayrollPage() {
                     editable={canEdit}
                     onSave={(v) => saveOverride(entry.id, "extraPay", v)}
                     masked={true}
+                    forceVisible={showAllNavic}
                   />
                 )}
               </td>
@@ -462,17 +465,6 @@ export default function PayrollPage() {
                     editable={canEdit}
                     onSave={(v) => saveOverride(entry.id, "foodVouchers", v)}
                   />
-                )}
-              </td>
-              <td className={styles.actionCell}>
-                {!isDpp && (
-                  <button
-                    className={styles.editBtn}
-                    onClick={() => setSickModal(entry)}
-                    title="Upravit hodiny nemoci"
-                  >
-                    ✎
-                  </button>
                 )}
               </td>
             </tr>
@@ -538,9 +530,20 @@ export default function PayrollPage() {
                   <th className={styles.numHeader}>SVÁTEK</th>
                   <th className={styles.numHeader}>SO+NE</th>
                   <th className={styles.numHeader}>DPP/FAKT.</th>
-                  <th className={styles.numHeader}>NAVÍC</th>
+                  <th className={styles.numHeader}>
+                    <span className={styles.navicHeaderInner}>
+                      NAVÍC
+                      <button
+                        type="button"
+                        className={styles.navicRevealBtn}
+                        onClick={() => setShowAllNavic((v) => !v)}
+                        title={showAllNavic ? "Skrýt všechny" : "Zobrazit všechny"}
+                      >
+                        {showAllNavic ? <EyeOffIcon /> : <EyeIcon />}
+                      </button>
+                    </span>
+                  </th>
                   <th className={styles.numHeader}>STRAVENKY</th>
-                  <th />
                 </tr>
               </thead>
               <tbody>
