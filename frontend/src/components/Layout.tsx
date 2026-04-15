@@ -4,7 +4,28 @@ import { auth } from "@/lib/firebase";
 import { useAuth } from "@/hooks/useAuth";
 import { useAlertsContext } from "@/context/AlertsContext";
 import { useShiftOverridesContext } from "@/context/ShiftOverridesContext";
+import { useTheme } from "@/context/ThemeContext";
 import styles from "./Layout.module.css";
+
+const SunIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="5"/>
+    <line x1="12" y1="1" x2="12" y2="3"/>
+    <line x1="12" y1="21" x2="12" y2="23"/>
+    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+    <line x1="1" y1="12" x2="3" y2="12"/>
+    <line x1="21" y1="12" x2="23" y2="12"/>
+    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+  </svg>
+);
+
+const MoonIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+  </svg>
+);
 
 const navItems = [
   { to: "/smeny", label: "Směny" },
@@ -26,6 +47,7 @@ export default function Layout() {
   const { user, role } = useAuth();
   const { unreadCount } = useAlertsContext();
   const { pendingCount: pendingOverrideCount } = useShiftOverridesContext();
+  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
 
   async function handleLogout() {
@@ -96,6 +118,14 @@ export default function Layout() {
           <span className={styles.userRole}>{role}</span>
           <button className={styles.logoutBtn} onClick={handleLogout}>
             Odhlásit
+          </button>
+          <button
+            className={styles.themeToggle}
+            onClick={toggleTheme}
+            title={theme === "dark" ? "Světlý režim" : "Tmavý režim"}
+          >
+            {theme === "dark" ? <SunIcon /> : <MoonIcon />}
+            {theme === "dark" ? "Světlý" : "Tmavý"}
           </button>
         </div>
       </nav>

@@ -1,8 +1,8 @@
 .wrapper {
   overflow-x: auto;
   border-radius: 8px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
-  background: #fff;
+  box-shadow: 0 1px 4px var(--shadow-sm);
+  background: var(--color-surface);
   margin-bottom: 1.5rem;
 }
 
@@ -33,7 +33,7 @@
 .nameHeader {
   position: sticky;
   left: 0;
-  background: #f8fafc;
+  background: var(--color-surface-2);
   z-index: 2;
   text-align: left;
   padding: 0.5rem 0.75rem;
@@ -41,8 +41,8 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: #6b7280;
-  border-bottom: 2px solid #e5e7eb;
+  color: var(--color-text-muted);
+  border-bottom: 2px solid var(--color-border);
   white-space: nowrap;
 }
 
@@ -50,16 +50,16 @@
   text-align: center;
   font-size: 0.75rem;
   font-weight: 600;
-  color: #374151;
+  color: var(--color-text-secondary);
   padding: 0.3rem 0;
-  border-bottom: 2px solid #e5e7eb;
+  border-bottom: 2px solid var(--color-border);
   white-space: nowrap;
   min-width: 44px;
 }
 
 .dayName {
   font-size: 0.65rem;
-  color: #9ca3af;
+  color: var(--color-text-subtle);
   text-transform: uppercase;
   font-weight: 400;
 }
@@ -68,9 +68,9 @@
   text-align: center;
   font-size: 0.75rem;
   font-weight: 600;
-  color: #6b7280;
+  color: var(--color-text-muted);
   padding: 0.3rem 0.5rem;
-  border-bottom: 2px solid #e5e7eb;
+  border-bottom: 2px solid var(--color-border);
   white-space: nowrap;
 }
 
@@ -88,23 +88,24 @@
 
 .sectionRow td,
 .sectionCell {
-  background: #f1f5f9;
+  background: var(--color-surface-3);
   font-size: 0.7rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: #374151;
+  color: var(--color-text-secondary);
   padding: 0.35rem 0.75rem;
-  border-top: 1px solid #e2e8f0;
-  border-bottom: 1px solid #e2e8f0;
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
 }
 
 /* ── Employee rows ────────────────────────────────────────────────────── */
 
 .empRow {
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid var(--color-border-subtle);
 }
 
+/* Current user highlight — keep the yellow intentionally for visibility */
 .currentEmpRow {
   background: #fef9c3;
   border-top: 2px solid #eab308;
@@ -117,23 +118,23 @@
   font-weight: 700;
 }
 
-
 .nameCell {
   position: sticky;
   left: 0;
-  background: #fff;
+  background: var(--color-surface);
   z-index: 1;
   padding: 0 0.75rem;
   font-size: 0.8125rem;
   white-space: nowrap;
-  border-bottom: 1px solid #f1f5f9;
-  border-right: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--color-border-subtle);
+  border-right: 1px solid var(--color-border);
+  color: var(--color-text);
 }
 
 .cell {
   padding: 1px;
-  border-bottom: 1px solid #f1f5f9;
-  border-right: 1px solid #f1f5f9;
+  border-bottom: 1px solid var(--color-border-subtle);
+  border-right: 1px solid var(--color-border-subtle);
   vertical-align: middle;
 }
 
@@ -141,44 +142,44 @@
   text-align: center;
   font-size: 0.8125rem;
   font-weight: 600;
-  color: #374151;
+  color: var(--color-text-secondary);
   padding: 0 0.5rem;
-  border-left: 2px solid #e5e7eb;
+  border-left: 2px solid var(--color-border);
   white-space: nowrap;
 }
 
 /* ── Section footer row ───────────────────────────────────────────────── */
 
 .footerRow {
-  border-top: 2px solid #e5e7eb;
+  border-top: 2px solid var(--color-border);
 }
 
 .footerLabel {
   position: sticky;
   left: 0;
-  background: #f8fafc;
+  background: var(--color-surface-2);
   z-index: 1;
   font-size: 0.75rem;
   font-weight: 600;
-  color: #374151;
+  color: var(--color-text-secondary);
   padding: 0.35rem 0.75rem;
   white-space: nowrap;
-  border-right: 1px solid #e5e7eb;
+  border-right: 1px solid var(--color-border);
 }
 
 .footerCell {
   text-align: center;
   font-size: 0.75rem;
   font-weight: 600;
-  color: #374151;
+  color: var(--color-text-secondary);
   padding: 0.35rem 0;
-  background: #f8fafc;
+  background: var(--color-surface-2);
 }
 
 /* ── MOD row ──────────────────────────────────────────────────────────── */
 
 .modRow {
-  border-bottom: 2px solid #e5e7eb;
+  border-bottom: 2px solid var(--color-border);
   border-top: 1px solid #ddd6fe;
   background: #faf5ff;
 }
@@ -195,44 +196,45 @@
   color: #6d28d9;
   padding: 0.35rem 0.75rem;
   white-space: nowrap;
-  border-right: 1px solid #e5e7eb;
+  border-right: 1px solid var(--color-border);
 }
 
 /* ── Shift counter rows ───────────────────────────────────────────────────── */
 
 .counterSeparatorRow {
-  border-top: 2px solid #e5e7eb;
+  border-top: 2px solid var(--color-border);
 }
 
 .counterSeparatorCell {
-  background: #f1f5f9;
+  background: var(--color-surface-3);
   font-size: 0.7rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: #374151;
+  color: var(--color-text-secondary);
   padding: 0.35rem 0.75rem;
-  border-top: 1px solid #e2e8f0;
-  border-bottom: 1px solid #e2e8f0;
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .counterRow {
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid var(--color-border-subtle);
 }
 
 .counterLabelCell {
   position: sticky;
   left: 0;
-  background: #f8fafc;
+  background: var(--color-surface-2);
   z-index: 1;
   font-size: 0.75rem;
   font-weight: 700;
-  color: #374151;
+  color: var(--color-text-secondary);
   padding: 3px 0.75rem;
   white-space: nowrap;
-  border-right: 1px solid #e5e7eb;
+  border-right: 1px solid var(--color-border);
 }
 
+/* Counter cells keep semantic colors regardless of theme */
 .counterCell0 {
   background: #fee2e2;
   color: #dc2626;
@@ -272,8 +274,8 @@
   display: inline-block;
   font-size: 0.65rem;
   font-weight: 700;
-  color: #6b7280;
-  background: #f3f4f6;
+  color: var(--color-text-muted);
+  background: var(--color-surface-4);
   border-radius: 3px;
   padding: 0 3px;
   line-height: 1.4;
@@ -295,22 +297,22 @@
   cursor: pointer;
   padding: 1px 3px;
   font-size: 0.75rem;
-  color: #9ca3af;
+  color: var(--color-text-subtle);
   border-radius: 3px;
   line-height: 1;
 }
 
 .empActionBtn:hover {
-  background: #f1f5f9;
-  color: #374151;
+  background: var(--color-surface-3);
+  color: var(--color-text-secondary);
 }
 
 .inactiveBadge {
   display: inline-block;
   font-size: 0.65rem;
   font-weight: 700;
-  color: #9ca3af;
-  background: #f3f4f6;
+  color: var(--color-text-subtle);
+  background: var(--color-surface-4);
   border-radius: 3px;
   padding: 0 4px;
   line-height: 1.4;

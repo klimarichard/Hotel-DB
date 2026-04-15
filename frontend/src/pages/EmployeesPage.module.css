@@ -8,10 +8,11 @@
 .title {
   font-size: 1.4rem;
   font-weight: 700;
+  color: var(--color-text-heading);
 }
 
 .addBtn {
-  background: #1a56db;
+  background: var(--color-primary);
   color: #fff;
   padding: 0.5rem 1rem;
   border-radius: 6px;
@@ -21,7 +22,7 @@
 }
 
 .addBtn:hover {
-  background: #1e429f;
+  background: var(--color-primary-dark);
   color: #fff;
 }
 
@@ -36,19 +37,21 @@
   flex: 1;
   max-width: 320px;
   padding: 0.5rem 0.75rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--color-border-strong);
   border-radius: 6px;
   font-size: 0.875rem;
   outline: none;
+  background: var(--color-input-bg);
+  color: var(--color-text);
 }
 
 .search:focus {
-  border-color: #3b82f6;
+  border-color: var(--color-input-focus);
 }
 
 .toggle {
   display: flex;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--color-border-strong);
   border-radius: 6px;
   overflow: hidden;
 }
@@ -57,46 +60,48 @@
 .toggleActive {
   padding: 0.45rem 1rem;
   border: none;
-  background: #fff;
+  background: var(--color-surface);
+  color: var(--color-text);
   font-size: 0.875rem;
   cursor: pointer;
   transition: background 0.15s;
 }
 
 .toggleActive {
-  background: #1a56db;
+  background: var(--color-primary);
   color: #fff;
 }
 
 .toggleBtn:hover {
-  background: #f1f5f9;
+  background: var(--color-surface-3);
 }
 
 .table {
   width: 100%;
   border-collapse: collapse;
-  background: #fff;
+  background: var(--color-surface);
   border-radius: 8px;
   overflow: hidden;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  box-shadow: 0 1px 4px var(--shadow-sm);
 }
 
 .table th {
   text-align: left;
   padding: 0.7rem 1rem;
-  background: #f8fafc;
+  background: var(--color-surface-2);
   font-size: 0.75rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: #6b7280;
-  border-bottom: 1px solid #e5e7eb;
+  color: var(--color-text-muted);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .table td {
   padding: 0.75rem 1rem;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid var(--color-border-subtle);
   font-size: 0.875rem;
+  color: var(--color-text);
 }
 
 .table tr:last-child td {
@@ -104,12 +109,12 @@
 }
 
 .table tr:hover td {
-  background: #f8fafc;
+  background: var(--color-surface-2);
 }
 
 .nameLink {
   font-weight: 500;
-  color: #1a56db;
+  color: var(--color-primary);
 }
 
 .nameLink:hover {
@@ -119,8 +124,8 @@
 .badgeActive {
   display: inline-block;
   padding: 0.2rem 0.6rem;
-  background: #d1fae5;
-  color: #065f46;
+  background: var(--color-active-bg);
+  color: var(--color-active-text);
   border-radius: 9999px;
   font-size: 0.75rem;
   font-weight: 500;
@@ -129,8 +134,8 @@
 .badgeTerminated {
   display: inline-block;
   padding: 0.2rem 0.6rem;
-  background: #fee2e2;
-  color: #991b1b;
+  background: var(--color-danger-bg);
+  color: var(--color-danger-text);
   border-radius: 9999px;
   font-size: 0.75rem;
   font-weight: 500;
@@ -139,13 +144,13 @@
 .state,
 .empty {
   text-align: center;
-  color: #6b7280;
+  color: var(--color-text-muted);
   padding: 2rem;
 }
 
 .errorState {
-  color: #dc2626;
+  color: var(--color-danger-text-strong);
   padding: 1rem;
-  background: #fef2f2;
+  background: var(--color-danger-bg);
   border-radius: 6px;
 }

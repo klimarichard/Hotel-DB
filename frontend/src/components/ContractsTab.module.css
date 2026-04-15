@@ -4,7 +4,7 @@
 
 .loading {
   font-size: 0.875rem;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 .tabHeader {
@@ -17,7 +17,7 @@
 .tabTitle {
   font-size: 1rem;
   font-weight: 600;
-  color: #111827;
+  color: var(--color-text);
   margin: 0;
 }
 
@@ -27,7 +27,7 @@
 
 .generateBtn {
   padding: 7px 14px;
-  background: #1d4ed8;
+  background: var(--color-primary);
   color: #fff;
   border: none;
   border-radius: 6px;
@@ -37,17 +37,17 @@
 }
 
 .generateBtn:hover {
-  background: #1e40af;
+  background: var(--color-primary-dark);
 }
 
 .dropdown {
   position: absolute;
   right: 0;
   top: calc(100% + 4px);
-  background: #fff;
-  border: 1px solid #e5e7eb;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
   border-radius: 6px;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  box-shadow: 0 4px 16px var(--shadow-sm);
   z-index: 50;
   min-width: 200px;
   overflow: hidden;
@@ -59,19 +59,19 @@
   text-align: left;
   padding: 9px 14px;
   font-size: 0.875rem;
-  color: #111827;
+  color: var(--color-text);
   background: transparent;
   border: none;
   cursor: pointer;
 }
 
 .dropdownItem:hover {
-  background: #f3f4f6;
+  background: var(--color-surface-4);
 }
 
 .empty {
   font-size: 0.875rem;
-  color: #9ca3af;
+  color: var(--color-text-subtle);
   padding: 20px 0;
 }
 
@@ -86,17 +86,17 @@
   padding: 8px 10px;
   font-size: 0.75rem;
   font-weight: 600;
-  color: #6b7280;
+  color: var(--color-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .table td {
   padding: 10px 10px;
-  border-bottom: 1px solid #f3f4f6;
+  border-bottom: 1px solid var(--color-border-subtle);
   vertical-align: middle;
-  color: #111827;
+  color: var(--color-text);
 }
 
 .status {
@@ -108,18 +108,18 @@
 }
 
 .statusUnsigned {
-  background: #fef3c7;
-  color: #92400e;
+  background: var(--color-warning-bg);
+  color: var(--color-warning-text);
 }
 
 .statusSigned {
-  background: #d1fae5;
-  color: #065f46;
+  background: var(--color-active-bg);
+  color: var(--color-active-text);
 }
 
 .statusArchived {
-  background: #f3f4f6;
-  color: #6b7280;
+  background: var(--color-surface-4);
+  color: var(--color-text-muted);
 }
 
 .actions {
@@ -131,17 +131,17 @@
 .actionBtn {
   padding: 4px 10px;
   font-size: 0.8125rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--color-border-strong);
   border-radius: 5px;
-  background: #f9fafb;
-  color: #374151;
+  background: var(--color-bg);
+  color: var(--color-text-secondary);
   cursor: pointer;
   white-space: nowrap;
 }
 
 .actionBtn:hover {
-  background: #f3f4f6;
-  border-color: #9ca3af;
+  background: var(--color-surface-4);
+  border-color: var(--color-text-subtle);
 }
 
 .uploadBtn {
@@ -149,11 +149,11 @@
 }
 
 .deleteBtn {
-  color: #dc2626;
-  border-color: #fca5a5;
-  background: #fef2f2;
+  color: var(--color-danger-text-strong);
+  border-color: var(--color-danger-border);
+  background: var(--color-danger-bg);
 }
 
 .deleteBtn:hover {
-  background: #fee2e2;
+  filter: brightness(0.95);
 }

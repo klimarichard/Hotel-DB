@@ -1,6 +1,6 @@
 .state {
   padding: 2rem;
-  color: #6b7280;
+  color: var(--color-text-muted);
   text-align: center;
 }
 
@@ -15,23 +15,23 @@
 .title {
   font-size: 1.4rem;
   font-weight: 700;
-  color: #1e2a3a;
+  color: var(--color-text-heading);
   margin: 0;
 }
 
 .markAllBtn {
   padding: 0.45rem 1rem;
-  background: #fff;
-  border: 1px solid #d1d5db;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
   border-radius: 6px;
   font-size: 0.875rem;
-  color: #374151;
+  color: var(--color-text-secondary);
   cursor: pointer;
   white-space: nowrap;
 }
 
 .markAllBtn:hover {
-  background: #f3f4f6;
+  background: var(--color-surface-4);
 }
 
 /* ── Sections ─────────────────────────────────────────────────────────────── */
@@ -45,7 +45,7 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: #6b7280;
+  color: var(--color-text-muted);
   margin-bottom: 0.5rem;
   display: flex;
   align-items: center;
@@ -69,16 +69,16 @@
 .empty {
   padding: 2rem;
   text-align: center;
-  color: #6b7280;
-  background: #fff;
+  color: var(--color-text-muted);
+  background: var(--color-surface);
   border-radius: 8px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  box-shadow: 0 1px 4px var(--shadow-sm);
 }
 
 .tableWrapper {
-  background: #fff;
+  background: var(--color-surface);
   border-radius: 8px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  box-shadow: 0 1px 4px var(--shadow-sm);
   overflow: hidden;
 }
 
@@ -95,15 +95,15 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: #6b7280;
-  background: #f9fafb;
-  border-bottom: 1px solid #e5e7eb;
+  color: var(--color-text-muted);
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .table td {
   padding: 0.85rem 1.25rem;
-  color: #1e2a3a;
-  border-bottom: 1px solid #f3f4f6;
+  color: var(--color-text-heading);
+  border-bottom: 1px solid var(--color-border-subtle);
 }
 
 .table tbody tr:last-child td {
@@ -111,15 +111,15 @@
 }
 
 .rowExpired td {
-  background: #fff7f7;
+  background: var(--color-danger-bg);
 }
 
 .rowExpiring td {
-  background: #fffbeb;
+  background: var(--color-warning-bg);
 }
 
 .empLink {
-  color: #1a56db;
+  color: var(--color-primary);
   text-decoration: none;
   font-weight: 500;
 }
@@ -131,8 +131,8 @@
 .badgeExpired {
   display: inline-block;
   padding: 0.2rem 0.6rem;
-  background: #fee2e2;
-  color: #991b1b;
+  background: var(--color-danger-bg);
+  color: var(--color-danger-text);
   border-radius: 9999px;
   font-size: 0.75rem;
   font-weight: 500;
@@ -141,34 +141,34 @@
 .badgeExpiring {
   display: inline-block;
   padding: 0.2rem 0.6rem;
-  background: #fef3c7;
-  color: #92400e;
+  background: var(--color-warning-bg);
+  color: var(--color-warning-text);
   border-radius: 9999px;
   font-size: 0.75rem;
   font-weight: 500;
 }
 
 .rowRead td {
-  background: #f9fafb;
-  color: #9ca3af;
+  background: var(--color-bg);
+  color: var(--color-text-subtle);
 }
 
 .rowRead .empLink {
-  color: #9ca3af;
+  color: var(--color-text-subtle);
 }
 
 .markReadBtn {
   padding: 0.25rem 0.75rem;
-  background: #fff;
-  border: 1px solid #d1d5db;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
   border-radius: 4px;
   font-size: 0.75rem;
-  color: #6b7280;
+  color: var(--color-text-muted);
   cursor: pointer;
   white-space: nowrap;
 }
 
 .markReadBtn:hover {
-  background: #f3f4f6;
-  color: #374151;
+  background: var(--color-surface-4);
+  color: var(--color-text-secondary);
 }

@@ -1,7 +1,7 @@
 .panel {
-  background: #fff;
+  background: var(--color-surface);
   border-radius: 8px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 1px 4px var(--shadow-sm);
   padding: 1rem 1.25rem;
   margin-bottom: 1.5rem;
 }
@@ -9,14 +9,14 @@
 .panelTitle {
   font-size: 0.9375rem;
   font-weight: 600;
-  color: #111827;
+  color: var(--color-text);
   margin: 0 0 0.75rem;
 }
 
 .state,
 .empty {
   text-align: center;
-  color: #6b7280;
+  color: var(--color-text-muted);
   font-size: 0.875rem;
   padding: 1rem 0;
 }
@@ -34,15 +34,15 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: #6b7280;
-  border-bottom: 2px solid #e5e7eb;
+  color: var(--color-text-muted);
+  border-bottom: 2px solid var(--color-border);
   white-space: nowrap;
 }
 
 .table td {
   padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid #f3f4f6;
-  color: #111827;
+  border-bottom: 1px solid var(--color-border-subtle);
+  color: var(--color-text);
   vertical-align: middle;
 }
 
@@ -61,23 +61,23 @@
 }
 
 .badge_pending {
-  background: #fef9c3;
-  color: #854d0e;
+  background: var(--color-warning-bg);
+  color: var(--color-warning-text);
 }
 
 .badge_approved {
-  background: #dcfce7;
-  color: #15803d;
+  background: var(--color-active-bg);
+  color: var(--color-active-text);
 }
 
 .badge_rejected {
-  background: #fee2e2;
-  color: #b91c1c;
+  background: var(--color-danger-bg);
+  color: var(--color-danger-text);
 }
 
 .badge_cancelled {
-  background: #f3f4f6;
-  color: #6b7280;
+  background: var(--color-surface-4);
+  color: var(--color-text-muted);
 }
 
 /* ── Action buttons ───────────────────────────────────────────────────── */
@@ -89,17 +89,17 @@
 
 .approveBtn {
   padding: 4px 10px;
-  background: #dcfce7;
-  border: 1px solid #86efac;
+  background: var(--color-active-bg);
+  border: 1px solid var(--color-active-border);
   border-radius: 4px;
   font-size: 0.75rem;
   font-weight: 500;
-  color: #15803d;
+  color: var(--color-active-text);
   cursor: pointer;
 }
 
 .approveBtn:hover:not(:disabled) {
-  background: #bbf7d0;
+  filter: brightness(0.95);
 }
 
 .approveBtn:disabled {
@@ -109,17 +109,17 @@
 
 .rejectBtn {
   padding: 4px 10px;
-  background: #fff;
-  border: 1px solid #fca5a5;
+  background: var(--color-surface);
+  border: 1px solid var(--color-danger-border);
   border-radius: 4px;
   font-size: 0.75rem;
   font-weight: 500;
-  color: #dc2626;
+  color: var(--color-danger-text-strong);
   cursor: pointer;
 }
 
 .rejectBtn:hover:not(:disabled) {
-  background: #fef2f2;
+  background: var(--color-danger-bg);
 }
 
 .rejectBtn:disabled {
@@ -130,27 +130,29 @@
 /* ── Rejection inline row ─────────────────────────────────────────────── */
 
 .rejectRow {
-  background: #fef2f2 !important;
+  background: var(--color-danger-bg) !important;
   padding: 0.5rem 0.75rem;
 }
 
 .rejectInput {
   padding: 0.4rem 0.6rem;
-  border: 1px solid #fca5a5;
+  border: 1px solid var(--color-danger-border);
   border-radius: 4px;
   font-size: 0.875rem;
   margin-right: 0.5rem;
   width: 280px;
   outline: none;
+  background: var(--color-input-bg);
+  color: var(--color-text);
 }
 
 .rejectInput:focus {
-  border-color: #dc2626;
+  border-color: var(--color-danger-text-strong);
 }
 
 .confirmRejectBtn {
   padding: 5px 12px;
-  background: #dc2626;
+  background: var(--color-danger-text-strong);
   color: #fff;
   border: none;
   border-radius: 4px;
@@ -167,14 +169,14 @@
 
 .cancelBtn {
   padding: 5px 12px;
-  background: #f3f4f6;
-  border: 1px solid #d1d5db;
+  background: var(--color-surface-4);
+  border: 1px solid var(--color-border-strong);
   border-radius: 4px;
   font-size: 0.8125rem;
-  color: #374151;
+  color: var(--color-text-secondary);
   cursor: pointer;
 }
 
 .cancelBtn:hover {
-  background: #e5e7eb;
+  background: var(--color-border);
 }

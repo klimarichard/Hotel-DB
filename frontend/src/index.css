@@ -5,21 +5,117 @@
 }
 
 :root {
+  /* Brand */
   --color-primary: #1a56db;
   --color-primary-dark: #1e429f;
   --color-danger: #e02424;
   --color-warning: #c27803;
   --color-success: #057a55;
+
+  /* Surfaces */
   --color-bg: #f9fafb;
   --color-surface: #ffffff;
+  --color-surface-2: #f8fafc;
+  --color-surface-3: #f1f5f9;
+  --color-surface-4: #f3f4f6;
+
+  /* Borders */
   --color-border: #e5e7eb;
+  --color-border-subtle: #f3f4f6;
+  --color-border-strong: #d1d5db;
+
+  /* Text */
   --color-text: #111827;
+  --color-text-heading: #1e2a3a;
+  --color-text-secondary: #374151;
+  --color-text-tertiary: #4b5563;
   --color-text-muted: #6b7280;
+  --color-text-subtle: #9ca3af;
+
+  /* Status: active/success */
+  --color-active-bg: #d1fae5;
+  --color-active-text: #065f46;
+  --color-active-border: #6ee7b7;
+
+  /* Status: danger/error */
+  --color-danger-bg: #fef2f2;
+  --color-danger-text: #991b1b;
+  --color-danger-text-strong: #dc2626;
+  --color-danger-border: #fca5a5;
+
+  /* Status: warning */
+  --color-warning-bg: #fef3c7;
+  --color-warning-text: #92400e;
+  --color-warning-border: #f59e0b;
+
+  /* Info (blue highlight) */
+  --color-info-bg: #eff6ff;
+  --color-info-bg-strong: #dbeafe;
+  --color-info-text: #1d4ed8;
+  --color-info-border: #93c5fd;
+
+  /* Inputs */
+  --color-input-bg: #ffffff;
+  --color-input-border: #d1d5db;
+  --color-input-focus: #3b82f6;
+
+  /* Overlays & shadows */
+  --overlay-bg: rgba(0, 0, 0, 0.4);
+  --shadow-sm: rgba(0, 0, 0, 0.06);
+  --shadow-md: rgba(0, 0, 0, 0.15);
+  --shadow-lg: rgba(0, 0, 0, 0.2);
+
   font-family: system-ui, -apple-system, sans-serif;
   font-size: 14px;
   line-height: 1.5;
   color: var(--color-text);
   background: var(--color-bg);
+}
+
+[data-theme="dark"] {
+  --color-bg: #0f172a;
+  --color-surface: #1e293b;
+  --color-surface-2: #243447;
+  --color-surface-3: #334155;
+  --color-surface-4: #334155;
+
+  --color-border: #334155;
+  --color-border-subtle: #1e293b;
+  --color-border-strong: #475569;
+
+  --color-text: #f1f5f9;
+  --color-text-heading: #f1f5f9;
+  --color-text-secondary: #e2e8f0;
+  --color-text-tertiary: #cbd5e1;
+  --color-text-muted: #94a3b8;
+  --color-text-subtle: #64748b;
+
+  --color-active-bg: #064e3b;
+  --color-active-text: #6ee7b7;
+  --color-active-border: #065f46;
+
+  --color-danger-bg: #450a0a;
+  --color-danger-text: #fca5a5;
+  --color-danger-text-strong: #f87171;
+  --color-danger-border: #991b1b;
+
+  --color-warning-bg: #451a03;
+  --color-warning-text: #fcd34d;
+  --color-warning-border: #92400e;
+
+  --color-info-bg: #1e3a5f;
+  --color-info-bg-strong: #1e3a5f;
+  --color-info-text: #93c5fd;
+  --color-info-border: #1d4ed8;
+
+  --color-input-bg: #0f172a;
+  --color-input-border: #475569;
+  --color-input-focus: #60a5fa;
+
+  --overlay-bg: rgba(0, 0, 0, 0.7);
+  --shadow-sm: rgba(0, 0, 0, 0.3);
+  --shadow-md: rgba(0, 0, 0, 0.5);
+  --shadow-lg: rgba(0, 0, 0, 0.4);
 }
 
 a {
@@ -29,4 +125,11 @@ a {
 
 button {
   cursor: pointer;
+}
+
+/* Global input/select/textarea base so dark mode works even in unconverted modules */
+input, select, textarea {
+  background-color: var(--color-input-bg);
+  color: var(--color-text);
+  border-color: var(--color-input-border);
 }

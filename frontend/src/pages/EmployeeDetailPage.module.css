@@ -1,17 +1,17 @@
 .state {
   padding: 2rem;
-  color: #6b7280;
+  color: var(--color-text-muted);
   text-align: center;
 }
 
 .breadcrumb {
   font-size: 0.875rem;
-  color: #6b7280;
+  color: var(--color-text-muted);
   margin-bottom: 1.25rem;
 }
 
 .breadcrumb a {
-  color: #1a56db;
+  color: var(--color-primary);
   text-decoration: none;
 }
 
@@ -33,12 +33,12 @@
 .heroName {
   font-size: 1.5rem;
   font-weight: 700;
-  color: #1e2a3a;
+  color: var(--color-text-heading);
 }
 
 .heroMeta {
   margin-top: 0.25rem;
-  color: #6b7280;
+  color: var(--color-text-muted);
   font-size: 0.875rem;
   display: flex;
   align-items: center;
@@ -48,8 +48,8 @@
 .badgeActive {
   display: inline-block;
   padding: 0.15rem 0.5rem;
-  background: #d1fae5;
-  color: #065f46;
+  background: var(--color-active-bg);
+  color: var(--color-active-text);
   border-radius: 9999px;
   font-size: 0.75rem;
   font-weight: 500;
@@ -58,8 +58,8 @@
 .badgeTerminated {
   display: inline-block;
   padding: 0.15rem 0.5rem;
-  background: #fee2e2;
-  color: #991b1b;
+  background: var(--color-danger-bg);
+  color: var(--color-danger-text);
   border-radius: 9999px;
   font-size: 0.75rem;
   font-weight: 500;
@@ -67,10 +67,10 @@
 
 .editBtn {
   padding: 0.45rem 1rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--color-border-strong);
   border-radius: 6px;
-  background: #fff;
-  color: #374151;
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
   font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
@@ -79,15 +79,15 @@
 }
 
 .editBtn:hover {
-  background: #f9fafb;
+  background: var(--color-bg);
 }
 
 .deleteBtn {
   padding: 0.45rem 1rem;
-  border: 1px solid #fca5a5;
+  border: 1px solid var(--color-danger-border);
   border-radius: 6px;
-  background: #fef2f2;
-  color: #dc2626;
+  background: var(--color-danger-bg);
+  color: var(--color-danger-text-strong);
   font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
@@ -96,7 +96,8 @@
 }
 
 .deleteBtn:hover:not(:disabled) {
-  background: #fee2e2;
+  background: var(--color-danger-bg);
+  filter: brightness(0.95);
 }
 
 .deleteBtn:disabled {
@@ -115,20 +116,20 @@
 
 .alertItemExpired {
   padding: 0.6rem 1rem;
-  background: #fee2e2;
-  color: #991b1b;
+  background: var(--color-danger-bg);
+  color: var(--color-danger-text);
   border-radius: 6px;
   font-size: 0.875rem;
-  border-left: 3px solid #ef4444;
+  border-left: 3px solid var(--color-danger-text-strong);
 }
 
 .alertItemExpiring {
   padding: 0.6rem 1rem;
-  background: #fef3c7;
-  color: #92400e;
+  background: var(--color-warning-bg);
+  color: var(--color-warning-text);
   border-radius: 6px;
   font-size: 0.875rem;
-  border-left: 3px solid #f59e0b;
+  border-left: 3px solid var(--color-warning-border);
 }
 
 /* ── Page tabs ─────────────────────────────────────────────────────────────── */
@@ -136,7 +137,7 @@
 .tabs {
   display: flex;
   gap: 0;
-  border-bottom: 2px solid #e5e7eb;
+  border-bottom: 2px solid var(--color-border);
   margin-bottom: 1.25rem;
 }
 
@@ -147,28 +148,28 @@
   background: none;
   font-size: 0.875rem;
   cursor: pointer;
-  color: #6b7280;
+  color: var(--color-text-muted);
   border-bottom: 2px solid transparent;
   margin-bottom: -2px;
   transition: color 0.15s;
 }
 
 .tabActive {
-  color: #1a56db;
-  border-bottom-color: #1a56db;
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
   font-weight: 600;
 }
 
 .tabBtn:hover {
-  color: #374151;
+  color: var(--color-text-secondary);
 }
 
 /* ── Collapsible section ───────────────────────────────────────────────────── */
 
 .section {
-  background: #fff;
+  background: var(--color-surface);
   border-radius: 8px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  box-shadow: 0 1px 4px var(--shadow-sm);
   margin-bottom: 0.75rem;
   overflow: hidden;
 }
@@ -187,22 +188,22 @@
 }
 
 .sectionHeader:hover {
-  background: #f9fafb;
+  background: var(--color-bg);
 }
 
 .sectionTitle {
   font-size: 0.95rem;
   font-weight: 600;
-  color: #1e2a3a;
+  color: var(--color-text-heading);
 }
 
 .sectionBody {
   padding: 0 1.5rem 1.5rem;
-  border-top: 1px solid #f3f4f6;
+  border-top: 1px solid var(--color-border-subtle);
 }
 
 .loading {
-  color: #9ca3af;
+  color: var(--color-text-subtle);
   font-size: 0.875rem;
   padding: 0.5rem 0;
 }
@@ -234,12 +235,12 @@
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: #9ca3af;
+  color: var(--color-text-subtle);
 }
 
 .fieldValue {
   font-size: 0.9rem;
-  color: #1e2a3a;
+  color: var(--color-text-heading);
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -252,7 +253,7 @@
   font-size: 0.875rem;
   padding: 0 0.2rem;
   opacity: 0.5;
-  color: #6b7280;
+  color: var(--color-text-muted);
   display: flex;
   align-items: center;
   transition: opacity 0.15s;
@@ -265,8 +266,8 @@
 /* ── Document sub-groups ───────────────────────────────────────────────────── */
 
 .docGroup {
-  background: #f9fafb;
-  border: 1px solid #f3f4f6;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border-subtle);
   border-radius: 6px;
   padding: 0.875rem 1rem;
   margin-top: 0.75rem;
@@ -281,7 +282,7 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: #9ca3af;
+  color: var(--color-text-subtle);
   margin-bottom: 0.6rem;
 }
 
@@ -292,7 +293,7 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: #9ca3af;
+  color: var(--color-text-subtle);
   margin-bottom: 0.75rem;
 }
 
@@ -310,7 +311,7 @@
   top: 0;
   bottom: 0;
   width: 2px;
-  background: #e5e7eb;
+  background: var(--color-border);
 }
 
 .timelineRow {
@@ -326,7 +327,7 @@
   height: 14px;
   border-radius: 50%;
   background: #3b82f6;
-  border: 2px solid #fff;
+  border: 2px solid var(--color-surface);
   box-shadow: 0 0 0 2px #3b82f6;
 }
 
@@ -339,16 +340,17 @@
 .timelineTitle {
   font-weight: 600;
   font-size: 0.875rem;
+  color: var(--color-text);
 }
 
 .timelineMeta {
   font-size: 0.8rem;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 .timelineChange {
   font-size: 0.75rem;
-  color: #9ca3af;
+  color: var(--color-text-subtle);
   text-transform: capitalize;
 }
 
@@ -374,17 +376,17 @@
 
 .editRowBtn {
   padding: 0.2rem 0.65rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--color-border-strong);
   border-radius: 5px;
-  background: #fff;
-  color: #374151;
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
   font-size: 0.75rem;
   cursor: pointer;
   transition: background 0.15s;
 }
 
 .editRowBtn:hover {
-  background: #f3f4f6;
+  background: var(--color-surface-4);
 }
 
 /* ── History tab header ────────────────────────────────────────────────────── */
@@ -399,14 +401,14 @@
 .historyTitle {
   font-size: 0.95rem;
   font-weight: 600;
-  color: #1e2a3a;
+  color: var(--color-text-heading);
 }
 
 .addBtn {
   padding: 0.45rem 1rem;
   border: none;
   border-radius: 6px;
-  background: #1a56db;
+  background: var(--color-primary);
   color: #fff;
   font-size: 0.875rem;
   font-weight: 500;
@@ -415,22 +417,22 @@
 }
 
 .addBtn:hover {
-  background: #1e429f;
+  background: var(--color-primary-dark);
 }
 
 .generateBtn {
   padding: 0.2rem 0.65rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--color-border-strong);
   border-radius: 5px;
-  background: #fff;
-  color: #374151;
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
   font-size: 0.75rem;
   cursor: pointer;
   transition: background 0.15s;
 }
 
 .generateBtn:hover {
-  background: #f3f4f6;
+  background: var(--color-surface-4);
 }
 
 .generateDropdown {
@@ -441,10 +443,10 @@
   position: absolute;
   right: 0;
   top: calc(100% + 4px);
-  background: #fff;
-  border: 1px solid #e5e7eb;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
   border-radius: 6px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  box-shadow: 0 4px 12px var(--shadow-sm);
   min-width: 180px;
   z-index: 50;
   overflow: hidden;
@@ -458,13 +460,13 @@
   background: none;
   border: none;
   font-size: 0.8rem;
-  color: #374151;
+  color: var(--color-text-secondary);
   cursor: pointer;
   transition: background 0.15s;
 }
 
 .generateDropdownItem:hover {
-  background: #f3f4f6;
+  background: var(--color-surface-4);
 }
 
 /* ── Post-save banner ─────────────────────────────────────────────────────── */
@@ -523,7 +525,7 @@
 .modalOverlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--overlay-bg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -531,11 +533,11 @@
 }
 
 .modal {
-  background: #fff;
+  background: var(--color-surface);
   border-radius: 10px;
   width: 100%;
   max-width: 560px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 8px 32px var(--shadow-md);
   display: flex;
   flex-direction: column;
   max-height: 90vh;
@@ -547,27 +549,27 @@
   align-items: center;
   justify-content: space-between;
   padding: 1.1rem 1.5rem;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .modalTitle {
   font-size: 1rem;
   font-weight: 600;
-  color: #1e2a3a;
+  color: var(--color-text-heading);
 }
 
 .modalClose {
   background: none;
   border: none;
   font-size: 1rem;
-  color: #6b7280;
+  color: var(--color-text-muted);
   cursor: pointer;
   padding: 0.2rem;
   line-height: 1;
 }
 
 .modalClose:hover {
-  color: #1e2a3a;
+  color: var(--color-text-heading);
 }
 
 .modalBody {
@@ -592,16 +594,16 @@
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: #6b7280;
+  color: var(--color-text-muted);
 }
 
 .modalInput {
   padding: 0.45rem 0.65rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--color-input-border);
   border-radius: 6px;
   font-size: 0.875rem;
-  color: #1e2a3a;
-  background: #fff;
+  color: var(--color-text);
+  background: var(--color-input-bg);
   width: 100%;
   box-sizing: border-box;
   transition: border-color 0.15s;
@@ -609,12 +611,12 @@
 
 .modalInput:focus {
   outline: none;
-  border-color: #1a56db;
+  border-color: var(--color-primary);
   box-shadow: 0 0 0 3px rgba(26, 86, 219, 0.1);
 }
 
 .modalError {
-  color: #dc2626;
+  color: var(--color-danger-text-strong);
   font-size: 0.875rem;
   margin-top: 0.75rem;
 }
@@ -624,15 +626,15 @@
   justify-content: flex-end;
   gap: 0.75rem;
   padding: 1rem 1.5rem;
-  border-top: 1px solid #e5e7eb;
+  border-top: 1px solid var(--color-border);
 }
 
 .modalCancelBtn {
   padding: 0.45rem 1.1rem;
   border-radius: 6px;
-  border: 1px solid #d1d5db;
-  background: #fff;
-  color: #374151;
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
   font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
@@ -640,14 +642,14 @@
 }
 
 .modalCancelBtn:hover {
-  background: #f9fafb;
+  background: var(--color-bg);
 }
 
 .modalSaveBtn {
   padding: 0.45rem 1.1rem;
   border-radius: 6px;
   border: none;
-  background: #1a56db;
+  background: var(--color-primary);
   color: #fff;
   font-size: 0.875rem;
   font-weight: 600;
@@ -656,7 +658,7 @@
 }
 
 .modalSaveBtn:hover:not(:disabled) {
-  background: #1e429f;
+  background: var(--color-primary-dark);
 }
 
 .modalSaveBtn:disabled {
@@ -673,16 +675,16 @@
 
 .modalWarning {
   padding: 0.6rem 0.875rem;
-  background: #fef3c7;
-  color: #92400e;
+  background: var(--color-warning-bg);
+  color: var(--color-warning-text);
   border-radius: 6px;
   font-size: 0.8125rem;
-  border-left: 3px solid #f59e0b;
+  border-left: 3px solid var(--color-warning-border);
 }
 
 .modalNote {
   font-size: 0.8125rem;
-  color: #9ca3af;
+  color: var(--color-text-subtle);
   font-style: italic;
   margin: 0;
   padding: 0.5rem 0;
@@ -691,8 +693,8 @@
 /* ── Change rows (změna smlouvy) ───────────────────────────────────────────── */
 
 .changeEntry {
-  background: #f9fafb;
-  border: 1px solid #e5e7eb;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
   border-radius: 6px;
   padding: 0.75rem;
   margin-top: 0.5rem;
@@ -713,10 +715,10 @@
   flex-shrink: 0;
   width: 1.75rem;
   height: 1.75rem;
-  border: 1px solid #fca5a5;
+  border: 1px solid var(--color-danger-border);
   border-radius: 4px;
-  background: #fff;
-  color: #dc2626;
+  background: var(--color-surface);
+  color: var(--color-danger-text-strong);
   font-size: 0.75rem;
   cursor: pointer;
   display: flex;
@@ -726,12 +728,12 @@
 }
 
 .removeChangeBtn:hover {
-  background: #fef2f2;
+  background: var(--color-danger-bg);
 }
 
 .tenureNote {
   font-size: 0.75rem;
-  color: #9ca3af;
+  color: var(--color-text-subtle);
   margin: 0.3rem 0 0;
 }
 
@@ -740,16 +742,16 @@
   width: 100%;
   margin-top: 0.5rem;
   padding: 0.4rem;
-  border: 1px dashed #9ca3af;
+  border: 1px dashed var(--color-text-subtle);
   border-radius: 6px;
-  background: #fff;
-  color: #6b7280;
+  background: var(--color-surface);
+  color: var(--color-text-muted);
   font-size: 0.8rem;
   cursor: pointer;
   transition: border-color 0.15s, color 0.15s;
 }
 
 .addChangeBtn:hover {
-  border-color: #1a56db;
-  color: #1a56db;
+  border-color: var(--color-primary);
+  color: var(--color-primary);
 }

@@ -3,6 +3,8 @@
   min-height: 100vh;
 }
 
+/* ── Sidebar (always dark regardless of theme) ────────────────────────────── */
+
 .sidebar {
   width: 220px;
   flex-shrink: 0;
@@ -92,10 +94,34 @@
   color: #e2e8f0;
 }
 
+.themeToggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: none;
+  border: 1px solid #2d3f54;
+  color: #94a3b8;
+  border-radius: 4px;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  margin-top: 0.25rem;
+}
+
+.themeToggle:hover {
+  background: #2d3f54;
+  color: #e2e8f0;
+}
+
+/* ── Main content (responds to theme) ────────────────────────────────────── */
+
 .main {
   flex: 1;
   padding: 2rem;
   overflow-y: auto;
+  background: var(--color-bg);
+  color: var(--color-text);
 }
 
 .navLinkInner {

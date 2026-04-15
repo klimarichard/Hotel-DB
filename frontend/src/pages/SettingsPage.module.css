@@ -8,10 +8,11 @@
 .title {
   font-size: 1.4rem;
   font-weight: 700;
+  color: var(--color-text-heading);
 }
 
 .addBtn {
-  background: #1a56db;
+  background: var(--color-primary);
   color: #fff;
   padding: 0.5rem 1rem;
   border-radius: 6px;
@@ -21,14 +22,14 @@
 }
 
 .addBtn:hover {
-  background: #1e429f;
+  background: var(--color-primary-dark);
 }
 
 /* Modal overlay */
 .modal {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--overlay-bg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -36,16 +37,17 @@
 }
 
 .modalBox {
-  background: #fff;
+  background: var(--color-surface);
   border-radius: 10px;
   padding: 2rem;
   width: 420px;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 24px var(--shadow-md);
 }
 
 .modalTitle {
   font-size: 1.15rem;
   font-weight: 700;
+  color: var(--color-text-heading);
   margin-bottom: 1.25rem;
 }
 
@@ -65,25 +67,27 @@
 .label {
   font-size: 0.8rem;
   font-weight: 600;
-  color: #374151;
+  color: var(--color-text-secondary);
 }
 
 .input {
   padding: 0.5rem 0.75rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--color-input-border);
   border-radius: 6px;
   font-size: 0.875rem;
+  background: var(--color-input-bg);
+  color: var(--color-text);
   outline: none;
 }
 
 .input:focus {
-  border-color: #3b82f6;
+  border-color: var(--color-input-focus);
 }
 
 .formError {
   font-size: 0.875rem;
-  color: #dc2626;
-  background: #fef2f2;
+  color: var(--color-danger-text-strong);
+  background: var(--color-danger-bg);
   padding: 0.5rem 0.75rem;
   border-radius: 6px;
 }
@@ -97,21 +101,23 @@
 
 .cancelBtn {
   padding: 0.5rem 1rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--color-border-strong);
   border-radius: 6px;
   font-size: 0.875rem;
-  background: #fff;
+  background: var(--color-surface);
+  color: var(--color-text);
   cursor: pointer;
 }
 
 .cancelBtn:hover {
-  background: #f1f5f9;
+  background: var(--color-surface-3);
 }
 
 .saveBtn {
   padding: 0.5rem 1.25rem;
-  background: #1a56db;
+  background: var(--color-primary);
   color: #fff;
+  border: none;
   border-radius: 6px;
   font-size: 0.875rem;
   font-weight: 600;
@@ -119,7 +125,7 @@
 }
 
 .saveBtn:hover:not(:disabled) {
-  background: #1e429f;
+  background: var(--color-primary-dark);
 }
 
 .saveBtn:disabled {
@@ -131,28 +137,29 @@
 .table {
   width: 100%;
   border-collapse: collapse;
-  background: #fff;
+  background: var(--color-surface);
   border-radius: 8px;
   overflow: hidden;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 1px 4px var(--shadow-sm);
 }
 
 .table th {
   text-align: left;
   padding: 0.7rem 1rem;
-  background: #f8fafc;
+  background: var(--color-surface-2);
   font-size: 0.75rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: #6b7280;
-  border-bottom: 1px solid #e5e7eb;
+  color: var(--color-text-muted);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .table td {
   padding: 0.75rem 1rem;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid var(--color-border-subtle);
   font-size: 0.875rem;
+  color: var(--color-text);
 }
 
 .table tr:last-child td {
@@ -160,23 +167,25 @@
 }
 
 .table tr:hover td {
-  background: #f8fafc;
+  background: var(--color-surface-2);
 }
 
 .name {
   font-weight: 500;
+  color: var(--color-text);
 }
 
 .email {
-  color: #4b5563;
+  color: var(--color-text-tertiary);
 }
 
 .roleSelect {
   padding: 0.3rem 0.5rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--color-border-strong);
   border-radius: 5px;
   font-size: 0.8rem;
-  background: #fff;
+  background: var(--color-input-bg);
+  color: var(--color-text);
   cursor: pointer;
 }
 
@@ -187,8 +196,8 @@
 .badgeActive {
   display: inline-block;
   padding: 0.2rem 0.6rem;
-  background: #d1fae5;
-  color: #065f46;
+  background: var(--color-active-bg);
+  color: var(--color-active-text);
   border-radius: 9999px;
   font-size: 0.75rem;
   font-weight: 500;
@@ -197,8 +206,8 @@
 .badgeInactive {
   display: inline-block;
   padding: 0.2rem 0.6rem;
-  background: #fee2e2;
-  color: #991b1b;
+  background: var(--color-danger-bg);
+  color: var(--color-danger-text);
   border-radius: 9999px;
   font-size: 0.75rem;
   font-weight: 500;
@@ -214,23 +223,23 @@
 }
 
 .deactivateBtn {
-  background: #fee2e2;
-  color: #991b1b;
-  border: 1px solid #fca5a5;
+  background: var(--color-danger-bg);
+  color: var(--color-danger-text);
+  border: 1px solid var(--color-danger-border);
 }
 
 .deactivateBtn:hover:not(:disabled) {
-  background: #fecaca;
+  filter: brightness(0.95);
 }
 
 .activateBtn {
-  background: #d1fae5;
-  color: #065f46;
-  border: 1px solid #6ee7b7;
+  background: var(--color-active-bg);
+  color: var(--color-active-text);
+  border: 1px solid var(--color-active-border);
 }
 
 .activateBtn:hover:not(:disabled) {
-  background: #a7f3d0;
+  filter: brightness(0.95);
 }
 
 .deactivateBtn:disabled,
@@ -244,7 +253,7 @@
 .tabs {
   display: flex;
   gap: 0.25rem;
-  border-bottom: 2px solid #e5e7eb;
+  border-bottom: 2px solid var(--color-border);
   margin-bottom: 1.5rem;
 }
 
@@ -255,7 +264,7 @@
   background: none;
   font-size: 0.875rem;
   font-weight: 500;
-  color: #6b7280;
+  color: var(--color-text-muted);
   cursor: pointer;
   border-bottom: 2px solid transparent;
   margin-bottom: -2px;
@@ -263,13 +272,13 @@
 }
 
 .tabActive {
-  color: #1a56db;
-  border-bottom-color: #1a56db;
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
   font-weight: 600;
 }
 
 .tabBtn:hover {
-  color: #374151;
+  color: var(--color-text-secondary);
 }
 
 /* ── Companies section ────────────────────────────────────────────────────── */
@@ -281,11 +290,11 @@
 }
 
 .companyCard {
-  background: #fff;
-  border: 1px solid #e5e7eb;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 1.25rem;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+  box-shadow: 0 1px 4px var(--shadow-sm);
 }
 
 .companyId {
@@ -293,7 +302,7 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #6b7280;
+  color: var(--color-text-muted);
   margin-bottom: 0.875rem;
 }
 
@@ -313,18 +322,18 @@
 
 .saveMsgOk {
   font-size: 0.8rem;
-  color: #065f46;
+  color: var(--color-active-text);
 }
 
 .saveMsgErr {
   font-size: 0.8rem;
-  color: #dc2626;
+  color: var(--color-danger-text-strong);
 }
 
 .state,
 .empty {
   text-align: center;
-  color: #6b7280;
+  color: var(--color-text-muted);
   padding: 2rem;
 }
 
@@ -340,7 +349,7 @@
   cursor: pointer;
   padding: 0 0.2rem;
   opacity: 0.5;
-  color: #6b7280;
+  color: var(--color-text-muted);
   display: inline-flex;
   align-items: center;
   transition: opacity 0.15s;
@@ -351,9 +360,9 @@
 }
 
 .errorState {
-  color: #dc2626;
+  color: var(--color-danger-text-strong);
   padding: 1rem;
-  background: #fef2f2;
+  background: var(--color-danger-bg);
   border-radius: 6px;
 }
 
@@ -361,27 +370,27 @@
 
 .employeeLinked {
   font-size: 0.8125rem;
-  color: #111827;
+  color: var(--color-text);
   margin-right: 0.5rem;
 }
 
 .employeeUnlinked {
   font-size: 0.8125rem;
-  color: #9ca3af;
+  color: var(--color-text-subtle);
   margin-right: 0.5rem;
 }
 
 .linkBtn {
   padding: 2px 8px;
-  background: #f3f4f6;
-  border: 1px solid #d1d5db;
+  background: var(--color-surface-4);
+  border: 1px solid var(--color-border-strong);
   border-radius: 4px;
   font-size: 0.75rem;
-  color: #374151;
+  color: var(--color-text-secondary);
   cursor: pointer;
   white-space: nowrap;
 }
 
 .linkBtn:hover {
-  background: #e5e7eb;
+  background: var(--color-border);
 }

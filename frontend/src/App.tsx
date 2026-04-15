@@ -13,6 +13,7 @@ import VacationPage from "@/pages/VacationPage";
 import { AlertsProvider } from "@/context/AlertsContext";
 import { ShiftOverridesProvider } from "@/context/ShiftOverridesContext";
 import { ShiftChangeRequestsProvider } from "@/context/ShiftChangeRequestsContext";
+import { ThemeProvider } from "@/context/ThemeContext";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -27,6 +28,7 @@ export default function App() {
   if (loading) return <div style={{ padding: "2rem" }}>Načítám...</div>;
 
   return (
+    <ThemeProvider>
     <Routes>
       <Route
         path="/login"
@@ -60,5 +62,6 @@ export default function App() {
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </ThemeProvider>
   );
 }
