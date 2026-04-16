@@ -13,7 +13,7 @@ import Image from "@tiptap/extension-image";
 const TAB_STOP = 1.27; // cm
 
 /**
- * Adds padding-left indentation to list items on Tab/Shift-Tab.
+ * Adds margin-left indentation to list items on Tab/Shift-Tab.
  * Uses addGlobalAttributes to register the style attribute on listItem,
  * and addKeyboardShortcuts (with high priority) to handle Tab/Shift-Tab
  * using this.editor so TipTap's command system applies the change correctly.
@@ -47,12 +47,12 @@ const ListItemIndent = Extension.create({
       const node = $from.node(depth);
       const pos = $from.before(depth);
       const currentStyle: string = node.attrs.style ?? "";
-      const match = currentStyle.match(/padding-left:\s*([\d.]+)cm/);
+      const match = currentStyle.match(/margin-left:\s*([\d.]+)cm/);
       const current = match ? parseFloat(match[1]) : 0;
       const next = Math.max(0, +(current + dir * TAB_STOP).toFixed(4));
-      const stripped = currentStyle.replace(/padding-left:[^;]*;?\s*/g, "").trim();
+      const stripped = currentStyle.replace(/margin-left:[^;]*;?\s*/g, "").trim();
       const newStyle = next > 0
-        ? `padding-left:${next}cm${stripped ? "; " + stripped : ""}`
+        ? `margin-left:${next}cm${stripped ? "; " + stripped : ""}`
         : stripped || null;
 
       view.dispatch(state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, style: newStyle }));
