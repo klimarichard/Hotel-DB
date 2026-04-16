@@ -23,8 +23,10 @@ const ListItemIndent = Extension.create({
   name: "listItemIndent",
   priority: 200,
   addGlobalAttributes() {
+    // Register style attribute on both list types AND listItem so the
+    // stored HTML carries the margin-left on the <ul>/<ol> element.
     return [{
-      types: ["listItem"],
+      types: ["bulletList", "orderedList"],
       attributes: {
         style: {
           default: null,
@@ -38,14 +40,19 @@ const ListItemIndent = Extension.create({
     const adjustIndent = (dir: 1 | -1) => (): boolean => {
       const { state, view } = this.editor;
       const { $from } = state.selection;
-      let depth = -1;
-      for (let d = $from.depth; d > 0; d--) {
-        if ($from.node(d).type.name === "listItem") { depth = d; break; }
-      }
-      if (depth < 0) return false; // not in a list; let other handlers deal with it
 
-      const node = $from.node(depth);
-      const pos = $from.before(depth);
+      // Find the nearest bulletList or orderedList ancestor.
+      // Indenting the <ul>/<ol> moves the entire list (bullets + text)
+      // because both live inside that element.
+      let listDepth = -1;
+      for (let d = $from.depth; d > 0; d--) {
+        const name = $from.node(d).type.name;
+        if (name === "bulletList" || name === "orderedList") { listDepth = d; break; }
+      }
+      if (listDepth < 0) return false;
+
+      const node = $from.node(listDepth);
+      const pos = $from.before(listDepth);
       const currentStyle: string = node.attrs.style ?? "";
       const match = currentStyle.match(/margin-left:\s*([\d.]+)cm/);
       const current = match ? parseFloat(match[1]) : 0;
