@@ -10,15 +10,18 @@ import TextAlign from "@tiptap/extension-text-align";
 import Color from "@tiptap/extension-color";
 import Image from "@tiptap/extension-image";
 
-const TAB_STOP = 1.27; // cm — matches TabParagraph's tab-size
+const TAB_STOP = 1.27; // cm
 
 /**
- * Adds a style attribute to the existing listItem node type so that
- * padding-left indentation can be stored in the HTML without replacing
- * StarterKit's ListItem extension. Same pattern as the FontSize extension.
+ * Adds padding-left indentation to list items on Tab/Shift-Tab.
+ * Uses addGlobalAttributes to register the style attribute on listItem,
+ * and addKeyboardShortcuts (with high priority) to handle Tab/Shift-Tab
+ * using this.editor so TipTap's command system applies the change correctly.
+ * handleKeyDown in editorProps returns false for list items so this runs.
  */
 const ListItemIndent = Extension.create({
   name: "listItemIndent",
+  priority: 200,
   addGlobalAttributes() {
     return [{
       types: ["listItem"],
@@ -30,6 +33,35 @@ const ListItemIndent = Extension.create({
         },
       },
     }];
+  },
+  addKeyboardShortcuts() {
+    const adjustIndent = (dir: 1 | -1) => (): boolean => {
+      const { state, view } = this.editor;
+      const { $from } = state.selection;
+      let depth = -1;
+      for (let d = $from.depth; d > 0; d--) {
+        if ($from.node(d).type.name === "listItem") { depth = d; break; }
+      }
+      if (depth < 0) return false; // not in a list; let other handlers deal with it
+
+      const node = $from.node(depth);
+      const pos = $from.before(depth);
+      const currentStyle: string = node.attrs.style ?? "";
+      const match = currentStyle.match(/padding-left:\s*([\d.]+)cm/);
+      const current = match ? parseFloat(match[1]) : 0;
+      const next = Math.max(0, +(current + dir * TAB_STOP).toFixed(4));
+      const stripped = currentStyle.replace(/padding-left:[^;]*;?\s*/g, "").trim();
+      const newStyle = next > 0
+        ? `padding-left:${next}cm${stripped ? "; " + stripped : ""}`
+        : stripped || null;
+
+      view.dispatch(state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, style: newStyle }));
+      return true;
+    };
+    return {
+      Tab: adjustIndent(1),
+      "Shift-Tab": adjustIndent(-1),
+    };
   },
 });
 
@@ -126,40 +158,14 @@ export default function ContractTemplatesPage() {
       attributes: { class: styles.editorContent },
       handleKeyDown(view, event) {
         if (event.key === "Tab") {
-          const { state, dispatch } = view;
-          const { $from } = state.selection;
-
-          // Find the nearest listItem ancestor
-          let listItemDepth = -1;
+          // Inside a list item: let ListItemIndent's keyboard shortcut handle it.
+          const { $from } = view.state.selection;
           for (let d = $from.depth; d > 0; d--) {
-            if ($from.node(d).type.name === "listItem") {
-              listItemDepth = d;
-              break;
-            }
+            if ($from.node(d).type.name === "listItem") return false;
           }
-
-          if (listItemDepth >= 0) {
-            // Inside a list item: adjust padding-left (bullet moves with text).
-            event.preventDefault();
-            const node = $from.node(listItemDepth);
-            const pos = $from.before(listItemDepth);
-            const currentStyle: string = node.attrs.style ?? "";
-            const match = currentStyle.match(/padding-left:\s*([\d.]+)cm/);
-            const current = match ? parseFloat(match[1]) : 0;
-            const next = event.shiftKey
-              ? Math.max(0, parseFloat((current - TAB_STOP).toFixed(4)))
-              : parseFloat((current + TAB_STOP).toFixed(4));
-            const stripped = currentStyle.replace(/padding-left:[^;]*;?\s*/g, "").trim();
-            const newStyle = next > 0
-              ? `padding-left:${next}cm;${stripped ? " " + stripped : ""}`
-              : stripped || null;
-            dispatch(state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, style: newStyle }));
-            return true;
-          }
-
-          // Outside a list: insert a real \t (lands on next CSS tab stop).
+          // Outside a list: insert \t (lands on the next CSS tab stop).
           event.preventDefault();
-          dispatch(state.tr.insertText("\t"));
+          view.dispatch(view.state.tr.insertText("\t"));
           return true;
         }
         return false;
