@@ -281,6 +281,7 @@ shiftsRouter.get(
     res.json({
       id: planDoc.id,
       ...planData,
+      modPersons: (planData.modPersons as Record<string, string>) ?? {},
       employees,
       shifts: visibleShifts,
       modShifts: modSnap.docs.map((d) => ({ id: d.id, date: d.id, ...d.data() })),
@@ -1235,7 +1236,72 @@ shiftsRouter.delete(
 
 // ─── MOD Row (Manager on Duty) ───────────────────────────────────────────────
 
-const VALID_MOD_CODES = ["V", "R", "N", "O", "K", "A"] as const;
+const VALID_MOD_CODE = /^[A-Z]$/;
+
+// PATCH /shifts/plans/:planId/mod-persons — reassign a MOD letter to an employee
+// Also renames (or deletes) all existing modRow entries for the old letter.
+shiftsRouter.patch(
+  "/plans/:planId/mod-persons",
+  requireAuth,
+  requireRole("admin", "director"),
+  async (req: AuthRequest, res) => {
+    const { planId } = req.params;
+    const { employeeId, oldLetter, newLetter } = req.body as {
+      employeeId: string;
+      oldLetter: string | null;
+      newLetter: string | null;
+    };
+
+    if (!employeeId) {
+      res.status(400).json({ error: "employeeId je povinné" });
+      return;
+    }
+    if (newLetter !== null && !VALID_MOD_CODE.test(newLetter)) {
+      res.status(400).json({ error: `Neplatný MOD kód: ${newLetter}` });
+      return;
+    }
+
+    const planRef = db().collection("shiftPlans").doc(planId);
+    const planDoc = await planRef.get();
+    if (!planDoc.exists) {
+      res.status(404).json({ error: "Plán nenalezen" });
+      return;
+    }
+
+    const currentModPersons = (planDoc.data()!.modPersons as Record<string, string>) ?? {};
+
+    // Build updated modPersons: remove any entry for this employee, then add new one
+    const updated: Record<string, string> = {};
+    for (const [letter, empId] of Object.entries(currentModPersons)) {
+      if (letter !== oldLetter && empId !== employeeId) updated[letter] = empId;
+    }
+    if (newLetter) updated[newLetter] = employeeId;
+
+    const batch = db().batch();
+
+    if (oldLetter && newLetter && oldLetter !== newLetter) {
+      // Rename all modRow entries with the old letter to the new letter
+      const modSnap = await planRef.collection("modRow").where("code", "==", oldLetter).get();
+      for (const d of modSnap.docs) {
+        batch.update(d.ref, { code: newLetter, updatedAt: FieldValue.serverTimestamp() });
+      }
+    } else if (oldLetter && !newLetter) {
+      // Unassign: delete all modRow entries for the old letter
+      const modSnap = await planRef.collection("modRow").where("code", "==", oldLetter).get();
+      for (const d of modSnap.docs) {
+        batch.delete(d.ref);
+      }
+    }
+
+    batch.update(planRef, {
+      modPersons: updated,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    await batch.commit();
+    res.json({ ok: true, modPersons: updated });
+  }
+);
 
 // PUT /shifts/plans/:planId/mod/:date — upsert a MOD cell
 shiftsRouter.put(
@@ -1251,7 +1317,7 @@ shiftsRouter.put(
       res.status(400).json({ error: "Neplatný formát data" });
       return;
     }
-    if (!(VALID_MOD_CODES as readonly string[]).includes(code)) {
+    if (!VALID_MOD_CODE.test(code)) {
       res.status(400).json({ error: `Neplatný MOD kód: ${code}` });
       return;
     }

@@ -341,3 +341,20 @@ Two flows, both using Firebase Auth built-in email:
 ### Payroll — decimal comma input
 - Override cells and the sick-leave modal now accept both `.` and `,` as decimal separator (e.g. `9,5` = `9.5`).
 - Inputs switched from `type="number"` to `type="text" inputMode="decimal"`; comma normalised to dot before `Number()` parsing in both `commit()` and `handleSave()`.
+
+### Směny — MOD badge + shift counts (feature/mod-shift-counts + fix/mod-badge-ux)
+
+**MOD shift counts (admin/director only):**
+- Below each vedoucí manager's name, shows `MOD: 6 (4 PD, 2 V+S)` when `showModCounts` prop is true.
+- PD = Mon–Fri that is NOT a public holiday. V+S = weekend OR public holiday (counted once if both).
+- Computed in `modCountsByLetter` useMemo in `ShiftGrid.tsx` — iterates `plan.modShifts`, classifies by date.
+
+**Editable MOD letter badge (admin/director only):**
+- Each vedoucí row shows a large pill badge with the manager's MOD letter. Only vedoucí section — recepce and portýři never show it.
+- Badge is per-plan: stored in `shiftPlans/{id}.modPersons` (`Record<letter, employeeId>`). Overrides the static `MOD_PERSONS` fallback for any letter present in the map.
+- Clicking the badge (admin/director) shows an inline text input (`maxLength=1`, `onFocus` selects all so typing replaces the existing letter). Enter saves, Escape cancels. Any single A–Z letter is valid; letters already taken by another manager in the same plan are blocked.
+- On save: `PATCH /shifts/plans/:planId/mod-persons` — updates `modPersons` on the plan doc and batch-renames (or deletes) all `modRow` docs with the old letter in one Firestore batch write.
+- `VALID_MOD_CODE = /^[A-Z]$/` — any uppercase letter accepted (backend `shifts.ts`). Previously was a fixed 6-letter list.
+- `effectiveLetterByEmployeeId` in `ShiftGrid`: seeds from static name match, applies per-plan overrides for any overridden letter.
+- `handleModPersonChange` in `ShiftPlannerPage` updates local `modShifts` + `modPersons` state immediately after PATCH — no full reload needed.
+- Name cell restructured to a horizontal flex row: `[nameLines (name + MOD count)] [badge] [edit/delete actions]`. Actions appear on hover to the right of the badge.
