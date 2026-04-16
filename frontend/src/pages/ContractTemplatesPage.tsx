@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import { Extension, mergeAttributes } from "@tiptap/core";
 import Paragraph from "@tiptap/extension-paragraph";
-import ListItem from "@tiptap/extension-list-item";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
 import { TextStyle } from "@tiptap/extension-text-style";
@@ -11,23 +10,26 @@ import TextAlign from "@tiptap/extension-text-align";
 import Color from "@tiptap/extension-color";
 import Image from "@tiptap/extension-image";
 
-/**
- * ListItem extended to carry a style attribute so padding-left can be stored
- * in the HTML. Tab/Shift+Tab inside any list item adjusts padding-left by one
- * tab-stop (1.27 cm) — works for the first item and every item after it.
- */
 const TAB_STOP = 1.27; // cm — matches TabParagraph's tab-size
 
-const IndentableListItem = ListItem.extend({
-  addAttributes() {
-    return {
-      ...this.parent?.(),
-      style: {
-        default: null,
-        parseHTML: (el) => el.getAttribute("style") || null,
-        renderHTML: (attrs) => (attrs.style ? { style: attrs.style } : {}),
+/**
+ * Adds a style attribute to the existing listItem node type so that
+ * padding-left indentation can be stored in the HTML without replacing
+ * StarterKit's ListItem extension. Same pattern as the FontSize extension.
+ */
+const ListItemIndent = Extension.create({
+  name: "listItemIndent",
+  addGlobalAttributes() {
+    return [{
+      types: ["listItem"],
+      attributes: {
+        style: {
+          default: null,
+          parseHTML: (el) => el.getAttribute("style") || null,
+          renderHTML: (attrs) => (attrs.style ? { style: attrs.style } : {}),
+        },
       },
-    };
+    }];
   },
 });
 
@@ -108,9 +110,9 @@ export default function ContractTemplatesPage() {
 
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({ paragraph: false, listItem: false }),
+      StarterKit.configure({ paragraph: false }),
       TabParagraph,
-      IndentableListItem,
+      ListItemIndent,
       Underline,
       TextStyle,
       FontFamily,
