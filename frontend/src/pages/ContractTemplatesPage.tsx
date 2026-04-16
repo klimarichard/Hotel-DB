@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
+import { Extension } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
 import { TextStyle } from "@tiptap/extension-text-style";
@@ -7,6 +8,33 @@ import FontFamily from "@tiptap/extension-font-family";
 import TextAlign from "@tiptap/extension-text-align";
 import Color from "@tiptap/extension-color";
 import Image from "@tiptap/extension-image";
+
+/** Custom FontSize extension — adds fontSize attribute to TextStyle marks. */
+const FontSize = Extension.create({
+  name: "fontSize",
+  addGlobalAttributes() {
+    return [{
+      types: ["textStyle"],
+      attributes: {
+        fontSize: {
+          default: null,
+          parseHTML: (el) => el.style.fontSize || null,
+          renderHTML: (attrs) => attrs.fontSize ? { style: `font-size: ${attrs.fontSize}` } : {},
+        },
+      },
+    }];
+  },
+  addCommands() {
+    return {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      setFontSize: (size: string) => ({ chain }: any) =>
+        chain().setMark("textStyle", { fontSize: size }).run(),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      unsetFontSize: () => ({ chain }: any) =>
+        chain().setMark("textStyle", { fontSize: null }).run(),
+    };
+  },
+});
 import { useAuth } from "@/hooks/useAuth";
 import {
   ContractType,
@@ -47,14 +75,22 @@ export default function ContractTemplatesPage() {
       Underline,
       TextStyle,
       FontFamily,
+      FontSize,
       Color,
       TextAlign.configure({ types: ["heading", "paragraph"] }),
       Image.configure({ inline: false, allowBase64: true }),
     ],
     content: "",
     editorProps: {
-      attributes: {
-        class: styles.editorContent,
+      attributes: { class: styles.editorContent },
+      handleKeyDown(view, event) {
+        if (event.key === "Tab") {
+          event.preventDefault();
+          const { state, dispatch } = view;
+          dispatch(state.tr.insertText("\u00a0\u00a0\u00a0\u00a0"));
+          return true;
+        }
+        return false;
       },
     },
   });
@@ -211,6 +247,27 @@ export default function ContractTemplatesPage() {
               <option value="Times New Roman">Times New Roman</option>
               <option value="Calibri">Calibri</option>
               <option value="Courier New">Courier New</option>
+            </select>
+
+            {/* Font size */}
+            <select
+              className={styles.toolSelect}
+              value={editor?.getAttributes("textStyle").fontSize ?? ""}
+              onChange={(e) => {
+                e.preventDefault();
+                const size = e.target.value;
+                if (size) {
+                  (editor?.chain().focus() as unknown as Record<string, (s: string) => { run(): void }>).setFontSize(size).run();
+                } else {
+                  (editor?.chain().focus() as unknown as Record<string, () => { run(): void }>).unsetFontSize().run();
+                }
+              }}
+              title="Velikost písma"
+            >
+              <option value="">Výchozí</option>
+              {[8,9,10,11,12,14,16,18,20,22,24,28,32,36,48,72].map(s => (
+                <option key={s} value={`${s}pt`}>{s}</option>
+              ))}
             </select>
 
             <span className={styles.toolSep} />
