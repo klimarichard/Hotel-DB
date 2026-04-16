@@ -102,9 +102,15 @@ export default function ContractTemplatesPage() {
       attributes: { class: styles.editorContent },
       handleKeyDown(view, event) {
         if (event.key === "Tab") {
+          // If inside a list item, let TipTap's ListItem extension handle it
+          // (sinkListItem / liftListItem for indent/dedent with bullet).
+          const { $from } = view.state.selection;
+          for (let d = $from.depth; d > 0; d--) {
+            if ($from.node(d).type.name === "listItem") return false;
+          }
+          // Outside a list: insert a real tab character (CSS tab stop).
           event.preventDefault();
-          const { state, dispatch } = view;
-          dispatch(state.tr.insertText("\t"));
+          view.dispatch(view.state.tr.insertText("\t"));
           return true;
         }
         return false;
