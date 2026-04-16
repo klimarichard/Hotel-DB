@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
-import { Extension } from "@tiptap/core";
+import { Extension, Node, mergeAttributes } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
 import { TextStyle } from "@tiptap/extension-text-style";
@@ -44,6 +44,36 @@ import {
 import { formatTimestampCZ } from "@/lib/dateFormat";
 import styles from "./ContractTemplatesPage.module.css";
 
+/**
+ * Tab stop node — a fixed-width inline atom (1.27 cm, matching Word's default).
+ * Every tab inserted by the user is exactly this width, so content after tabs
+ * aligns perfectly across lines regardless of the text before them.
+ */
+const TAB_WIDTH = "1.27cm";
+const TabStop = Node.create({
+  name: "tabStop",
+  group: "inline",
+  inline: true,
+  atom: true,
+  parseHTML() {
+    return [{ tag: "span[data-tab]" }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ["span", mergeAttributes(HTMLAttributes, {
+      "data-tab": "",
+      style: `display:inline-block;width:${TAB_WIDTH};`,
+    })];
+  },
+  addKeyboardShortcuts() {
+    return {
+      Tab: () => {
+        this.editor.commands.insertContent({ type: "tabStop" });
+        return true;
+      },
+    };
+  },
+});
+
 const ALL_TYPES = Object.keys(CONTRACT_TYPE_LABELS) as ContractType[];
 
 interface TemplateMeta {
@@ -76,6 +106,7 @@ export default function ContractTemplatesPage() {
       TextStyle,
       FontFamily,
       FontSize,
+      TabStop,
       Color,
       TextAlign.configure({ types: ["heading", "paragraph"] }),
       Image.configure({ inline: false, allowBase64: true }),
@@ -83,15 +114,6 @@ export default function ContractTemplatesPage() {
     content: "",
     editorProps: {
       attributes: { class: styles.editorContent },
-      handleKeyDown(view, event) {
-        if (event.key === "Tab") {
-          event.preventDefault();
-          const { state, dispatch } = view;
-          dispatch(state.tr.insertText("\u00a0\u00a0\u00a0\u00a0"));
-          return true;
-        }
-        return false;
-      },
     },
   });
 
