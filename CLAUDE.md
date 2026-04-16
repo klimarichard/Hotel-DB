@@ -358,3 +358,21 @@ Two flows, both using Firebase Auth built-in email:
 - `effectiveLetterByEmployeeId` in `ShiftGrid`: seeds from static name match, applies per-plan overrides for any overridden letter.
 - `handleModPersonChange` in `ShiftPlannerPage` updates local `modShifts` + `modPersons` state immediately after PATCH — no full reload needed.
 - Name cell restructured to a horizontal flex row: `[nameLines (name + MOD count)] [badge] [edit/delete actions]`. Actions appear on hover to the right of the badge.
+
+### Contract templates — new variables + editor improvements (feature/contract-hpp-update + feature/contract-editor-improvements)
+
+**New template variables:**
+- `{{birthDate}}` — employee date of birth, formatted as Czech date (DD. MM. YYYY). Source: `employee.dateOfBirth` formatted via `formatDateCZ`.
+- `{{passportNumber}}` — from `documents` sub-collection (already loaded when smlouvy tab opens).
+- `{{visaNumber}}` — same source.
+- `{{companyFileNo}}` — Spisová značka, from `company.fileNo` (new field on companies collection).
+- All four added to `VARIABLE_GROUPS` in `contractVariables.ts`, `EmployeeData`/`CompanyData` interfaces, and `resolveVariables()`.
+- Companies PUT endpoint now accepts and persists `fileNo`. Settings → Společnosti shows an editable "Spisová značka" field.
+- `seed-companies.js` includes `fileNo` for HPM and STP (values set locally, gitignored).
+
+**nastup_hpp template rewritten** to match `doc_templates/hpp.docx`: flowing paragraph style (no section headers), employer + employee party blocks, verbatim clause text from the docx, uses new variables.
+
+**TipTap editor improvements (ContractTemplatesPage):**
+- **Font size**: custom `FontSize` extension using `addGlobalAttributes` on `textStyle`; dropdown (8–72 pt) in toolbar between font family and paragraph style selectors.
+- **Tab key (outside lists)**: inserts a real `\t` character. `TabParagraph` (custom Paragraph extension) bakes `white-space:pre-wrap; tab-size:1.27cm` as inline style on every `<p>` — tabs land on fixed 1.27 cm stops regardless of preceding text. Styles are inline so they survive Firestore storage and html2pdf.
+- **Tab key (inside lists)**: `ListItemIndent` extension (priority 200) handles Tab/Shift-Tab via `addKeyboardShortcuts`. Applies `margin-left` to the parent `<ul>/<ol>` element (not `<li>`) so bullets AND text move together. `handleKeyDown` returns `false` for list items to let the extension shortcut run.
