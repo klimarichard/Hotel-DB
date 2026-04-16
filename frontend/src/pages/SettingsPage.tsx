@@ -51,6 +51,7 @@ interface CompanyRecord {
   address: string;
   ic: string;
   dic: string;
+  fileNo: string;
 }
 
 interface DepartmentRecord {
@@ -164,12 +165,12 @@ export default function SettingsPage() {
       for (const c of list) map[c.id] = c;
       // Ensure default company IDs are always shown
       for (const id of DEFAULT_COMPANY_IDS) {
-        if (!map[id]) map[id] = { id, name: "", address: "", ic: "", dic: "" };
+        if (!map[id]) map[id] = { id, name: "", address: "", ic: "", dic: "", fileNo: "" };
       }
       setCompanyForms(map);
     }).catch(() => {
       const map: Record<string, CompanyRecord> = {};
-      for (const id of DEFAULT_COMPANY_IDS) map[id] = { id, name: "", address: "", ic: "", dic: "" };
+      for (const id of DEFAULT_COMPANY_IDS) map[id] = { id, name: "", address: "", ic: "", dic: "", fileNo: "" };
       setCompanyForms(map);
     });
   }, []);
@@ -289,8 +290,8 @@ export default function SettingsPage() {
     setCompanySaving((p) => ({ ...p, [id]: true }));
     setCompanySaveMsg((p) => ({ ...p, [id]: "" }));
     try {
-      const { name, address, ic, dic } = companyForms[id];
-      await api.put(`/companies/${id}`, { name, address, ic, dic });
+      const { name, address, ic, dic, fileNo } = companyForms[id];
+      await api.put(`/companies/${id}`, { name, address, ic, dic, fileNo });
       setCompanyEditId(null);
     } catch {
       setCompanySaveMsg((p) => ({ ...p, [id]: "Chyba při ukládání" }));
@@ -681,6 +682,12 @@ export default function SettingsPage() {
                     {isEditing
                       ? <input className={styles.input} value={c.dic} onChange={(e) => setCompanyField(c.id, "dic", e.target.value)} />
                       : <span className={styles.companyValue}>{c.dic || "—"}</span>}
+                  </div>
+                  <div className={styles.field}>
+                    <label className={styles.label}>Spisová značka</label>
+                    {isEditing
+                      ? <input className={styles.input} value={c.fileNo} onChange={(e) => setCompanyField(c.id, "fileNo", e.target.value)} placeholder="např. C 12345 vedená u MS v Praze" />
+                      : <span className={styles.companyValue}>{c.fileNo || "—"}</span>}
                   </div>
                 </div>
                 <div className={styles.companyActions}>
