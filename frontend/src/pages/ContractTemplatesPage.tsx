@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import { Extension, mergeAttributes } from "@tiptap/core";
 import Paragraph from "@tiptap/extension-paragraph";
+import ListItem from "@tiptap/extension-list-item";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
 import { TextStyle } from "@tiptap/extension-text-style";
@@ -9,6 +10,26 @@ import FontFamily from "@tiptap/extension-font-family";
 import TextAlign from "@tiptap/extension-text-align";
 import Color from "@tiptap/extension-color";
 import Image from "@tiptap/extension-image";
+
+/**
+ * ListItem extended to carry a style attribute so padding-left can be stored
+ * in the HTML. Tab/Shift+Tab inside any list item adjusts padding-left by one
+ * tab-stop (1.27 cm) — works for the first item and every item after it.
+ */
+const TAB_STOP = 1.27; // cm — matches TabParagraph's tab-size
+
+const IndentableListItem = ListItem.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      style: {
+        default: null,
+        parseHTML: (el) => el.getAttribute("style") || null,
+        renderHTML: (attrs) => (attrs.style ? { style: attrs.style } : {}),
+      },
+    };
+  },
+});
 
 /** Custom FontSize extension — adds fontSize attribute to TextStyle marks. */
 const FontSize = Extension.create({
@@ -87,8 +108,9 @@ export default function ContractTemplatesPage() {
 
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({ paragraph: false }),
+      StarterKit.configure({ paragraph: false, listItem: false }),
       TabParagraph,
+      IndentableListItem,
       Underline,
       TextStyle,
       FontFamily,
@@ -102,15 +124,40 @@ export default function ContractTemplatesPage() {
       attributes: { class: styles.editorContent },
       handleKeyDown(view, event) {
         if (event.key === "Tab") {
-          // If inside a list item, let TipTap's ListItem extension handle it
-          // (sinkListItem / liftListItem for indent/dedent with bullet).
-          const { $from } = view.state.selection;
+          const { state, dispatch } = view;
+          const { $from } = state.selection;
+
+          // Find the nearest listItem ancestor
+          let listItemDepth = -1;
           for (let d = $from.depth; d > 0; d--) {
-            if ($from.node(d).type.name === "listItem") return false;
+            if ($from.node(d).type.name === "listItem") {
+              listItemDepth = d;
+              break;
+            }
           }
-          // Outside a list: insert a real tab character (CSS tab stop).
+
+          if (listItemDepth >= 0) {
+            // Inside a list item: adjust padding-left (bullet moves with text).
+            event.preventDefault();
+            const node = $from.node(listItemDepth);
+            const pos = $from.before(listItemDepth);
+            const currentStyle: string = node.attrs.style ?? "";
+            const match = currentStyle.match(/padding-left:\s*([\d.]+)cm/);
+            const current = match ? parseFloat(match[1]) : 0;
+            const next = event.shiftKey
+              ? Math.max(0, parseFloat((current - TAB_STOP).toFixed(4)))
+              : parseFloat((current + TAB_STOP).toFixed(4));
+            const stripped = currentStyle.replace(/padding-left:[^;]*;?\s*/g, "").trim();
+            const newStyle = next > 0
+              ? `padding-left:${next}cm;${stripped ? " " + stripped : ""}`
+              : stripped || null;
+            dispatch(state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, style: newStyle }));
+            return true;
+          }
+
+          // Outside a list: insert a real \t (lands on next CSS tab stop).
           event.preventDefault();
-          view.dispatch(view.state.tr.insertText("\t"));
+          dispatch(state.tr.insertText("\t"));
           return true;
         }
         return false;
