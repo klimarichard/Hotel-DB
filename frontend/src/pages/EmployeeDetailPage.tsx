@@ -1103,6 +1103,9 @@ export default function EmployeeDetailPage() {
             currentDepartment: employee.currentDepartment,
             currentCompanyId: employee.currentCompanyId ?? undefined,
             address: contact?.permanentAddress,
+            birthDate: employee.dateOfBirth ? formatDateCZ(employee.dateOfBirth) : undefined,
+            passportNumber: documents?.passportNumber,
+            visaNumber: documents?.visaNumber,
           }}
           companyData={company ?? {}}
         />
@@ -1250,6 +1253,9 @@ export default function EmployeeDetailPage() {
             currentDepartment: employee.currentDepartment,
             currentCompanyId: employee.currentCompanyId ?? undefined,
             address: contact?.permanentAddress,
+            birthDate: employee.dateOfBirth ? formatDateCZ(employee.dateOfBirth) : undefined,
+            passportNumber: documents?.passportNumber,
+            visaNumber: documents?.visaNumber,
             contractType: generateModal.row.contractType,
             salary: generateModal.row.salary,
             startDate: generateModal.row.startDate,

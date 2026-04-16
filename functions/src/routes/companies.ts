@@ -42,18 +42,19 @@ companiesRouter.get(
 /**
  * PUT /api/companies/:id
  * Upsert a company. Admin + director only.
- * Body: { name, address, ic, dic }
+ * Body: { name, address, ic, dic, fileNo }
  */
 companiesRouter.put(
   "/:id",
   requireAuth,
   requireRole("admin", "director"),
   async (req: AuthRequest, res: Response) => {
-    const { name, address, ic, dic } = req.body as {
+    const { name, address, ic, dic, fileNo } = req.body as {
       name: string;
       address: string;
       ic: string;
       dic: string;
+      fileNo?: string;
     };
 
     await db()
@@ -65,6 +66,7 @@ companiesRouter.put(
           address: address ?? "",
           ic: ic ?? "",
           dic: dic ?? "",
+          fileNo: fileNo ?? "",
           updatedAt: FieldValue.serverTimestamp(),
           updatedBy: req.uid,
         },
