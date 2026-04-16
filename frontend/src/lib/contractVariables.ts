@@ -53,8 +53,11 @@ export const VARIABLE_GROUPS: { group: string; vars: { key: string; label: strin
       { key: "firstName", label: "Jméno" },
       { key: "lastName", label: "Příjmení" },
       { key: "fullName", label: "Celé jméno" },
+      { key: "birthDate", label: "Datum narození" },
       { key: "birthNumber", label: "Rodné číslo" },
       { key: "idCardNumber", label: "Číslo OP" },
+      { key: "passportNumber", label: "Číslo pasu" },
+      { key: "visaNumber", label: "Číslo povolení k pobytu" },
       { key: "currentJobTitle", label: "Pracovní pozice" },
       { key: "currentDepartment", label: "Oddělení" },
     ],
@@ -83,6 +86,7 @@ export const VARIABLE_GROUPS: { group: string; vars: { key: string; label: strin
       { key: "companyAddress", label: "Adresa firmy" },
       { key: "ic", label: "IČO" },
       { key: "dic", label: "DIČ" },
+      { key: "companyFileNo", label: "Spisová značka" },
     ],
   },
   {
@@ -120,9 +124,13 @@ export interface EmployeeData {
   address?: string;
   city?: string;
   zip?: string;
+  // personal fields
+  birthDate?: string; // pre-formatted Czech date (DD. MM. YYYY)
   // document sub-doc fields (decrypted, merged in by caller)
   birthNumber?: string;
   idCardNumber?: string;
+  passportNumber?: string;
+  visaNumber?: string;
   // employment row (merged in by caller)
   contractType?: string;
   salary?: string | number;
@@ -135,6 +143,7 @@ export interface CompanyData {
   address?: string;
   ic?: string;
   dic?: string;
+  fileNo?: string;
 }
 
 export interface SignatoryData {
@@ -158,8 +167,11 @@ export function resolveVariables(
     firstName: str(employee.firstName),
     lastName: str(employee.lastName),
     fullName: [employee.firstName, employee.lastName].filter(Boolean).join(" "),
+    birthDate: str(employee.birthDate),
     birthNumber: str(employee.birthNumber),
     idCardNumber: str(employee.idCardNumber),
+    passportNumber: str(employee.passportNumber),
+    visaNumber: str(employee.visaNumber),
     currentJobTitle: str(employee.currentJobTitle),
     currentDepartment: str(employee.currentDepartment),
     address: str(employee.address),
@@ -173,6 +185,7 @@ export function resolveVariables(
     companyAddress: str(company.address),
     ic: str(company.ic),
     dic: str(company.dic),
+    companyFileNo: str(company.fileNo),
     signatoryName: str(signatory.displayName),
     signatoryTitle: str(signatory.title),
     today: formatCzechDate(new Date()),
