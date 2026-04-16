@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
+import { Extension, mergeAttributes } from "@tiptap/core";
+import Paragraph from "@tiptap/extension-paragraph";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
 import { TextStyle } from "@tiptap/extension-text-style";
@@ -7,6 +9,95 @@ import FontFamily from "@tiptap/extension-font-family";
 import TextAlign from "@tiptap/extension-text-align";
 import Color from "@tiptap/extension-color";
 import Image from "@tiptap/extension-image";
+
+const TAB_STOP = 1.27; // cm
+
+/**
+ * Adds margin-left indentation to list items on Tab/Shift-Tab.
+ * Uses addGlobalAttributes to register the style attribute on listItem,
+ * and addKeyboardShortcuts (with high priority) to handle Tab/Shift-Tab
+ * using this.editor so TipTap's command system applies the change correctly.
+ * handleKeyDown in editorProps returns false for list items so this runs.
+ */
+const ListItemIndent = Extension.create({
+  name: "listItemIndent",
+  priority: 200,
+  addGlobalAttributes() {
+    // Register style attribute on both list types AND listItem so the
+    // stored HTML carries the margin-left on the <ul>/<ol> element.
+    return [{
+      types: ["bulletList", "orderedList"],
+      attributes: {
+        style: {
+          default: null,
+          parseHTML: (el) => el.getAttribute("style") || null,
+          renderHTML: (attrs) => (attrs.style ? { style: attrs.style } : {}),
+        },
+      },
+    }];
+  },
+  addKeyboardShortcuts() {
+    const adjustIndent = (dir: 1 | -1) => (): boolean => {
+      const { state, view } = this.editor;
+      const { $from } = state.selection;
+
+      // Find the nearest bulletList or orderedList ancestor.
+      // Indenting the <ul>/<ol> moves the entire list (bullets + text)
+      // because both live inside that element.
+      let listDepth = -1;
+      for (let d = $from.depth; d > 0; d--) {
+        const name = $from.node(d).type.name;
+        if (name === "bulletList" || name === "orderedList") { listDepth = d; break; }
+      }
+      if (listDepth < 0) return false;
+
+      const node = $from.node(listDepth);
+      const pos = $from.before(listDepth);
+      const currentStyle: string = node.attrs.style ?? "";
+      const match = currentStyle.match(/margin-left:\s*([\d.]+)cm/);
+      const current = match ? parseFloat(match[1]) : 0;
+      const next = Math.max(0, +(current + dir * TAB_STOP).toFixed(4));
+      const stripped = currentStyle.replace(/margin-left:[^;]*;?\s*/g, "").trim();
+      const newStyle = next > 0
+        ? `margin-left:${next}cm${stripped ? "; " + stripped : ""}`
+        : stripped || null;
+
+      view.dispatch(state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, style: newStyle }));
+      return true;
+    };
+    return {
+      Tab: adjustIndent(1),
+      "Shift-Tab": adjustIndent(-1),
+    };
+  },
+});
+
+/** Custom FontSize extension — adds fontSize attribute to TextStyle marks. */
+const FontSize = Extension.create({
+  name: "fontSize",
+  addGlobalAttributes() {
+    return [{
+      types: ["textStyle"],
+      attributes: {
+        fontSize: {
+          default: null,
+          parseHTML: (el) => el.style.fontSize || null,
+          renderHTML: (attrs) => attrs.fontSize ? { style: `font-size: ${attrs.fontSize}` } : {},
+        },
+      },
+    }];
+  },
+  addCommands() {
+    return {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      setFontSize: (size: string) => ({ chain }: any) =>
+        chain().setMark("textStyle", { fontSize: size }).run(),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      unsetFontSize: () => ({ chain }: any) =>
+        chain().setMark("textStyle", { fontSize: null }).run(),
+    };
+  },
+});
 import { useAuth } from "@/hooks/useAuth";
 import {
   ContractType,
@@ -15,6 +106,21 @@ import {
 } from "@/lib/contractVariables";
 import { formatTimestampCZ } from "@/lib/dateFormat";
 import styles from "./ContractTemplatesPage.module.css";
+
+/**
+ * Custom Paragraph that renders with CSS tab stops (white-space: pre-wrap +
+ * tab-size: 1.27cm). This bakes the styles into every <p> in the stored HTML
+ * so tabs align correctly in both the editor and the html2pdf PDF output.
+ * Tab stops are at every 1.27 cm from the left edge (Word's default), so a
+ * tab at any position always jumps to the next fixed mark on the line.
+ */
+const TabParagraph = Paragraph.extend({
+  renderHTML({ HTMLAttributes }) {
+    return ["p", mergeAttributes(HTMLAttributes, {
+      style: "white-space:pre-wrap;tab-size:1.27cm;",
+    }), 0];
+  },
+});
 
 const ALL_TYPES = Object.keys(CONTRACT_TYPE_LABELS) as ContractType[];
 
@@ -43,18 +149,33 @@ export default function ContractTemplatesPage() {
 
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      StarterKit.configure({ paragraph: false }),
+      TabParagraph,
+      ListItemIndent,
       Underline,
       TextStyle,
       FontFamily,
+      FontSize,
       Color,
       TextAlign.configure({ types: ["heading", "paragraph"] }),
       Image.configure({ inline: false, allowBase64: true }),
     ],
     content: "",
     editorProps: {
-      attributes: {
-        class: styles.editorContent,
+      attributes: { class: styles.editorContent },
+      handleKeyDown(view, event) {
+        if (event.key === "Tab") {
+          // Inside a list item: let ListItemIndent's keyboard shortcut handle it.
+          const { $from } = view.state.selection;
+          for (let d = $from.depth; d > 0; d--) {
+            if ($from.node(d).type.name === "listItem") return false;
+          }
+          // Outside a list: insert \t (lands on the next CSS tab stop).
+          event.preventDefault();
+          view.dispatch(view.state.tr.insertText("\t"));
+          return true;
+        }
+        return false;
       },
     },
   });
@@ -211,6 +332,27 @@ export default function ContractTemplatesPage() {
               <option value="Times New Roman">Times New Roman</option>
               <option value="Calibri">Calibri</option>
               <option value="Courier New">Courier New</option>
+            </select>
+
+            {/* Font size */}
+            <select
+              className={styles.toolSelect}
+              value={editor?.getAttributes("textStyle").fontSize ?? ""}
+              onChange={(e) => {
+                e.preventDefault();
+                const size = e.target.value;
+                if (size) {
+                  (editor?.chain().focus() as unknown as Record<string, (s: string) => { run(): void }>).setFontSize(size).run();
+                } else {
+                  (editor?.chain().focus() as unknown as Record<string, () => { run(): void }>).unsetFontSize().run();
+                }
+              }}
+              title="Velikost písma"
+            >
+              <option value="">Výchozí</option>
+              {[8,9,10,11,12,14,16,18,20,22,24,28,32,36,48,72].map(s => (
+                <option key={s} value={`${s}pt`}>{s}</option>
+              ))}
             </select>
 
             <span className={styles.toolSep} />
