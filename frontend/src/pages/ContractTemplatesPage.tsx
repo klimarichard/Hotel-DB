@@ -477,7 +477,11 @@ export default function ContractTemplatesPage() {
               onChange={handleImageFile}
             />
           </div>
-          <EditorContent editor={editor} className={styles.editor} />
+          <div className={styles.editor}>
+            <div className={styles.a4Page}>
+              <EditorContent editor={editor} />
+            </div>
+          </div>
         </div>
 
         {/* Right: variable picker */}
