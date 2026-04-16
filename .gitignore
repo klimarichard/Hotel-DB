@@ -4,6 +4,9 @@ scripts/
 # Specification document
 HR_App_Specification.docx
 
+# Local task list (personal, not tracked in git — see TODO.md)
+TODO.md
+
 # Legacy — seed CSVs are now under scripts/seeds/ (already excluded by scripts/)
 
 # Dependencies
