@@ -159,6 +159,9 @@ Two flows using Firebase Auth built-in email:
 - **`TabParagraph`** (extends `Paragraph`): bakes `white-space:pre-wrap; tab-size:1.27cm` as inline style on every `<p>`. Tab key inserts `\t` → always lands on next 1.27 cm stop from left edge.
 - **`ListItemIndent`** (priority 200, `addGlobalAttributes` on `bulletList`/`orderedList`): Tab/Shift-Tab inside a list adjusts `margin-left` on the parent `<ul>/<ol>` — moves bullets and text together. `handleKeyDown` returns `false` for list items to let this extension's `addKeyboardShortcuts` handle them.
 
+### A4 page preview
+The editor renders inside a `.a4Page` div (210 mm wide, padding 1.5 cm top/bottom, 1 cm left/right) centered on a gray "desk" background. A `repeating-linear-gradient` makes the bottom 1.5 cm of every 297 mm repeat match the desk color — creating the visual of separate pages with a gray gap between them, without JavaScript pagination. Limitation: text that falls in the bottom-margin zone renders on the gray band.
+
 ### Template variables — new additions
 - `{{birthDate}}`: formatted date of birth (`formatDateCZ(employee.dateOfBirth)`).
 - `{{passportNumber}}`, `{{visaNumber}}`: from `documents` sub-collection.
