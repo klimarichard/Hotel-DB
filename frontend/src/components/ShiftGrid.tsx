@@ -30,12 +30,15 @@ interface Props {
   canSeeInactiveFlag: boolean;
   readOnly: boolean;
   showCounterTable?: boolean;
+  showModCounts?: boolean;
+  onModPersonChange?: (employeeId: string, oldLetter: string | null, newLetter: string | null) => Promise<void>;
   onCellRequestChange?: (employeeId: string, date: string, currentRawInput: string) => void;
   alwaysReadOnlySections?: string[];
   currentEmployeeId?: string | null;
 }
 
 const DAY_NAMES = ["Ne", "Po", "Út", "St", "Čt", "Pá", "So"];
+const ALL_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 
 function getDaysInMonth(year: number, month: number): Date[] {
   const days: Date[] = [];
@@ -75,6 +78,8 @@ export default function ShiftGrid({
   canSeeInactiveFlag,
   readOnly,
   showCounterTable = false,
+  showModCounts = false,
+  onModPersonChange,
   onCellRequestChange,
   alwaysReadOnlySections = [],
   currentEmployeeId,
@@ -96,6 +101,22 @@ export default function ShiftGrid({
     for (const s of plan.modShifts) m.set(s.date, s);
     return m;
   }, [plan.modShifts]);
+
+  // MOD shift counts per manager letter (admin/director only).
+  // V+S = weekend OR public holiday (if both, counted once).
+  // PD  = Mon–Fri that is NOT a public holiday.
+  const modCountsByLetter = useMemo(() => {
+    if (!showModCounts) return null;
+    const counts = new Map<string, { pd: number; vs: number }>();
+    for (const s of plan.modShifts) {
+      const d = new Date(s.date + "T12:00:00");
+      const isVS = isWeekend(d) || holidays.has(s.date);
+      if (!counts.has(s.code)) counts.set(s.code, { pd: 0, vs: 0 });
+      const c = counts.get(s.code)!;
+      if (isVS) c.vs++; else c.pd++;
+    }
+    return counts;
+  }, [showModCounts, plan.modShifts, holidays]);
 
   const employeeMonthShifts = useMemo(() => {
     const currentIds = new Set(plan.employees.map((e) => e.employeeId));
@@ -227,7 +248,7 @@ export default function ShiftGrid({
     return m;
   }, [flatEmployees]);
 
-  // Build a lookup from full name to MOD letter
+  // Build a lookup from full name to MOD letter (for static fallback)
   const modPersonByName = useMemo(() => {
     const m = new Map<string, string>();
     for (const [letter, fullName] of Object.entries(MOD_PERSONS)) {
@@ -235,6 +256,42 @@ export default function ShiftGrid({
     }
     return m;
   }, []);
+
+  // Effective letter per employee: per-plan overrides (plan.modPersons) take
+  // priority over the static MOD_PERSONS name match for any overridden letter.
+  const effectiveLetterByEmployeeId = useMemo(() => {
+    const m = new Map<string, string>();
+    // Seed from static name-based mapping
+    for (const emp of plan.employees) {
+      const letter = modPersonByName.get(`${emp.firstName} ${emp.lastName}`);
+      if (letter) m.set(emp.employeeId, letter);
+    }
+    // Apply per-plan overrides: any letter present in modPersons supersedes static
+    const modPersons = plan.modPersons ?? {};
+    const overriddenLetters = new Set(Object.keys(modPersons));
+    if (overriddenLetters.size > 0) {
+      // Remove static entries whose letter has been overridden
+      for (const [empId, letter] of [...m.entries()]) {
+        if (overriddenLetters.has(letter)) m.delete(empId);
+      }
+      // Apply overrides (modPersons is letter → employeeId)
+      for (const [letter, empId] of Object.entries(modPersons)) {
+        m.set(empId, letter);
+      }
+    }
+    return m;
+  }, [plan.employees, plan.modPersons, modPersonByName]);
+
+  // Letters already taken by some employee (for dropdown filtering)
+  const takenLetterByLetter = useMemo(() => {
+    const m = new Map<string, string>(); // letter → employeeId
+    for (const [empId, letter] of effectiveLetterByEmployeeId.entries()) {
+      m.set(letter, empId);
+    }
+    return m;
+  }, [effectiveLetterByEmployeeId]);
+
+  const [editingModEmployee, setEditingModEmployee] = useState<string | null>(null);
 
   return (
     <div className={styles.wrapper}>
@@ -277,35 +334,99 @@ export default function ShiftGrid({
               </tr>,
               ...emps.map((emp) => {
                 const rowIdx = empRowIndex.get(emp.employeeId) ?? 0;
-                const modLetter = modPersonByName.get(`${emp.firstName} ${emp.lastName}`);
+                const modLetter = effectiveLetterByEmployeeId.get(emp.employeeId);
+                const isEditingMod = editingModEmployee === emp.employeeId;
+                const availableLetters = ALL_LETTERS.filter(
+                  (l) => !takenLetterByLetter.has(l) || takenLetterByLetter.get(l) === emp.employeeId
+                );
                 return (
                   <tr key={emp.id} className={`${styles.empRow}${emp.employeeId === currentEmployeeId ? ` ${styles.currentEmpRow}` : ""}`}>
                     <td className={`${styles.nameCell}${emp.employeeId === currentEmployeeId ? ` ${styles.currentNameCell}` : ""}`}>
-                      <span className={styles.empNameText}>
-                        {emp.lastName} {emp.firstName}
-                        {modLetter ? <span className={styles.modBadge}>{modLetter}</span> : null}
-                        {canSeeInactiveFlag && !emp.active && (
-                          <span className={styles.inactiveBadge} title="Neaktivní — nepočítá se jako dostupný">–</span>
+                      <div className={styles.nameCellInner}>
+                        {/* Left: name line + MOD count line */}
+                        <div className={styles.nameLines}>
+                          <span className={styles.empNameText}>
+                            {emp.lastName} {emp.firstName}
+                            {canSeeInactiveFlag && !emp.active && (
+                              <span className={styles.inactiveBadge} title="Neaktivní — nepočítá se jako dostupný">–</span>
+                            )}
+                          </span>
+                          {showModCounts && modLetter && modCountsByLetter && (() => {
+                            const c = modCountsByLetter.get(modLetter) ?? { pd: 0, vs: 0 };
+                            const total = c.pd + c.vs;
+                            return (
+                              <span className={styles.modCountBadge}>
+                                MOD: {total} ({c.pd} PD, {c.vs} V+S)
+                              </span>
+                            );
+                          })()}
+                        </div>
+                        {/* Badge — vedoucí only */}
+                        {section === "vedoucí" && !isEditingMod && modLetter && (
+                          <span
+                            className={`${styles.modBadge}${onModPersonChange ? ` ${styles.modBadgeEditable}` : ""}`}
+                            onClick={onModPersonChange ? () => setEditingModEmployee(emp.employeeId) : undefined}
+                            title={onModPersonChange ? "Kliknutím změníte přiřazení" : undefined}
+                          >
+                            {modLetter}
+                          </span>
                         )}
-                      </span>
-                      {canEditEmployees && (
-                        <span className={styles.empActions}>
-                          <button
-                            className={styles.empActionBtn}
-                            onClick={() => onEditEmployee(emp)}
-                            title="Upravit"
+                        {section === "vedoucí" && !isEditingMod && !modLetter && onModPersonChange && (
+                          <span
+                            className={`${styles.modBadge} ${styles.modBadgeEditable} ${styles.modBadgeEmpty}`}
+                            onClick={() => setEditingModEmployee(emp.employeeId)}
+                            title="Přiřadit MOD písmeno"
                           >
-                            ✎
-                          </button>
-                          <button
-                            className={styles.empActionBtn}
-                            onClick={() => onDeleteEmployee(emp)}
-                            title="Odebrat"
-                          >
-                            ✕
-                          </button>
-                        </span>
-                      )}
+                            +
+                          </span>
+                        )}
+                        {section === "vedoucí" && isEditingMod && onModPersonChange && (
+                          <input
+                            type="text"
+                            className={styles.modBadgeInput}
+                            defaultValue={modLetter ?? ""}
+                            maxLength={1}
+                            autoFocus
+                            placeholder="?"
+                            title={`Dostupná písmena: ${availableLetters.join(", ")} — Enter pro uložení, Esc pro zrušení`}
+                            onFocus={(e) => e.target.select()}
+                            onBlur={() => setEditingModEmployee(null)}
+                            onKeyDown={async (e) => {
+                              if (e.key === "Escape") {
+                                setEditingModEmployee(null);
+                                return;
+                              }
+                              if (e.key === "Enter") {
+                                const val = e.currentTarget.value.toUpperCase().trim();
+                                setEditingModEmployee(null);
+                                if (val === (modLetter ?? "")) return;
+                                const newLetter = val || null;
+                                if (newLetter && !availableLetters.includes(newLetter)) return;
+                                await onModPersonChange(emp.employeeId, modLetter ?? null, newLetter);
+                              }
+                            }}
+                          />
+                        )}
+                        {/* Edit/delete actions — appear on hover, to the right of badge */}
+                        {canEditEmployees && (
+                          <span className={styles.empActions}>
+                            <button
+                              className={styles.empActionBtn}
+                              onClick={() => onEditEmployee(emp)}
+                              title="Upravit"
+                            >
+                              ✎
+                            </button>
+                            <button
+                              className={styles.empActionBtn}
+                              onClick={() => onDeleteEmployee(emp)}
+                              title="Odebrat"
+                            >
+                              ✕
+                            </button>
+                          </span>
+                        )}
+                      </div>
                     </td>
                     {days.map((d, colIdx) => {
                       const dateStr = formatDate(d);

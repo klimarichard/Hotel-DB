@@ -72,6 +72,7 @@ export interface PlanDetail {
   createdBy: string;
   closedAt: string | null;
   publishedAt: string | null;
+  modPersons: Record<string, string>; // letter → employeeId, per-plan overrides
   employees: PlanEmployee[];
   shifts: ShiftDoc[];
   modShifts: ModShiftDoc[];
@@ -435,6 +436,31 @@ export default function ShiftPlannerPage() {
         };
       });
     }
+  }
+
+  // ── MOD person reassignment ────────────────────────────────────────────────
+
+  async function handleModPersonChange(
+    employeeId: string,
+    oldLetter: string | null,
+    newLetter: string | null
+  ) {
+    if (!plan) return;
+    const { modPersons } = await api.patch<{ ok: boolean; modPersons: Record<string, string> }>(
+      `/shifts/plans/${plan.id}/mod-persons`,
+      { employeeId, oldLetter, newLetter }
+    );
+    // Rename modShifts in local state to match the new letter
+    setPlan((prev) => {
+      if (!prev) return prev;
+      let modShifts = prev.modShifts;
+      if (oldLetter && newLetter && oldLetter !== newLetter) {
+        modShifts = modShifts.map((m) => m.code === oldLetter ? { ...m, code: newLetter } : m);
+      } else if (oldLetter && !newLetter) {
+        modShifts = modShifts.filter((m) => m.code !== oldLetter);
+      }
+      return { ...prev, modPersons, modShifts };
+    });
   }
 
   // ── X limit helpers ────────────────────────────────────────────────────────
@@ -1011,6 +1037,8 @@ export default function ShiftPlannerPage() {
               alwaysReadOnlySections={role === "employee" ? ["vedoucí"] : []}
               currentEmployeeId={currentEmployeeId}
               showCounterTable={plan.status === "closed" && role === "admin"}
+              showModCounts={role === "admin" || role === "director"}
+              onModPersonChange={role === "admin" || role === "director" ? handleModPersonChange : undefined}
               onCellRequestChange={
                 role === "employee" && plan.status === "published"
                   ? (employeeId, date, currentRawInput) => {

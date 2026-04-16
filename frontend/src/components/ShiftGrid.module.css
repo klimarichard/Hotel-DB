@@ -316,6 +316,19 @@
 
 /* ── Employee name cell controls ──────────────────────────────────────── */
 
+/* Name cell inner layout: [name+count lines] [badge] [actions] */
+.nameCellInner {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.nameLines {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
 .empNameText {
   display: inline-flex;
   align-items: center;
@@ -323,20 +336,56 @@
 }
 
 .modBadge {
-  display: inline-block;
-  font-size: 0.65rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 0.85rem;
   font-weight: 700;
-  color: var(--color-text-muted);
-  background: var(--color-surface-4);
-  border-radius: 3px;
-  padding: 0 3px;
-  line-height: 1.4;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-3);
+  border: 1px solid var(--color-border);
+  border-radius: 5px;
+  padding: 2px 7px;
+  line-height: 1.5;
+  min-width: 1.6rem;
+}
+
+.modBadgeEditable {
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+
+.modBadgeEditable:hover {
+  background: var(--color-primary);
+  color: #fff;
+  border-color: var(--color-primary);
+}
+
+.modBadgeEmpty {
+  opacity: 0.4;
+  font-size: 0.75rem;
+}
+
+.modBadgeInput {
+  width: 2.2rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-align: center;
+  text-transform: uppercase;
+  border: 1px solid var(--color-primary);
+  border-radius: 5px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  padding: 2px 4px;
+  outline: none;
+  flex-shrink: 0;
 }
 
 .empActions {
   display: none;
   gap: 0.15rem;
-  margin-left: 0.25rem;
+  flex-shrink: 0;
 }
 
 .nameCell:hover .empActions {
@@ -368,4 +417,13 @@
   border-radius: 3px;
   padding: 0 4px;
   line-height: 1.4;
+}
+
+.modCountBadge {
+  display: block;
+  font-size: 0.65rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  margin-top: 1px;
+  white-space: nowrap;
 }
