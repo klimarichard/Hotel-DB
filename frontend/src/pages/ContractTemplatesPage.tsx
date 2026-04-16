@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
-import { Extension, Node, mergeAttributes } from "@tiptap/core";
+import { Extension, mergeAttributes } from "@tiptap/core";
+import Paragraph from "@tiptap/extension-paragraph";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
 import { TextStyle } from "@tiptap/extension-text-style";
@@ -45,32 +46,17 @@ import { formatTimestampCZ } from "@/lib/dateFormat";
 import styles from "./ContractTemplatesPage.module.css";
 
 /**
- * Tab stop node — a fixed-width inline atom (1.27 cm, matching Word's default).
- * Every tab inserted by the user is exactly this width, so content after tabs
- * aligns perfectly across lines regardless of the text before them.
+ * Custom Paragraph that renders with CSS tab stops (white-space: pre-wrap +
+ * tab-size: 1.27cm). This bakes the styles into every <p> in the stored HTML
+ * so tabs align correctly in both the editor and the html2pdf PDF output.
+ * Tab stops are at every 1.27 cm from the left edge (Word's default), so a
+ * tab at any position always jumps to the next fixed mark on the line.
  */
-const TAB_WIDTH = "1.27cm";
-const TabStop = Node.create({
-  name: "tabStop",
-  group: "inline",
-  inline: true,
-  atom: true,
-  parseHTML() {
-    return [{ tag: "span[data-tab]" }];
-  },
+const TabParagraph = Paragraph.extend({
   renderHTML({ HTMLAttributes }) {
-    return ["span", mergeAttributes(HTMLAttributes, {
-      "data-tab": "",
-      style: `display:inline-block;width:${TAB_WIDTH};`,
-    })];
-  },
-  addKeyboardShortcuts() {
-    return {
-      Tab: () => {
-        this.editor.commands.insertContent({ type: "tabStop" });
-        return true;
-      },
-    };
+    return ["p", mergeAttributes(HTMLAttributes, {
+      style: "white-space:pre-wrap;tab-size:1.27cm;",
+    }), 0];
   },
 });
 
@@ -101,12 +87,12 @@ export default function ContractTemplatesPage() {
 
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      StarterKit.configure({ paragraph: false }),
+      TabParagraph,
       Underline,
       TextStyle,
       FontFamily,
       FontSize,
-      TabStop,
       Color,
       TextAlign.configure({ types: ["heading", "paragraph"] }),
       Image.configure({ inline: false, allowBase64: true }),
@@ -114,6 +100,15 @@ export default function ContractTemplatesPage() {
     content: "",
     editorProps: {
       attributes: { class: styles.editorContent },
+      handleKeyDown(view, event) {
+        if (event.key === "Tab") {
+          event.preventDefault();
+          const { state, dispatch } = view;
+          dispatch(state.tr.insertText("\t"));
+          return true;
+        }
+        return false;
+      },
     },
   });
 
