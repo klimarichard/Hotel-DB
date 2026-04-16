@@ -93,3 +93,7 @@ cd Hotel-DB/frontend && npm run dev
 ## Implementation details
 
 See `README.md` for full implementation notes: Firestore schema, build phase status, feature-level notes, and post-merge fix history.
+
+## TODO list
+
+A local `TODO.md` file exists in the project root (gitignored — not tracked in git). It contains the prioritised backlog of features, bugs, and improvements. Read it at the start of a session if you need context on what to work on next.
