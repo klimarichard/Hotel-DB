@@ -3,7 +3,7 @@ import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { api } from "../lib/api";
 import { useAuth } from "../hooks/useAuth";
-import { parseShiftExpression, getCellColor, SECTIONS, SECTION_LABELS, getCzechHolidays, MOD_COLORS } from "../lib/shiftConstants";
+import { parseShiftExpression, getCellColor, SECTIONS, SECTION_LABELS, getCzechHolidays, MOD_PERSONS } from "../lib/shiftConstants";
 import ShiftGrid from "../components/ShiftGrid";
 import AddEmployeeToPlanModal from "../components/AddEmployeeToPlanModal";
 import EditEmployeeInPlanModal from "../components/EditEmployeeInPlanModal";
@@ -527,6 +527,27 @@ export default function ShiftPlannerPage() {
       html += `<th style="${cs.header}">\u03a3</th>`;
       html += "</tr>";
 
+      // ── MOD letter per employee (same logic as ShiftGrid) ──
+      const modLetterByEmpId = new Map<string, string>();
+      // Seed from static name-based mapping
+      for (const emp of plan.employees) {
+        const fullName = `${emp.firstName} ${emp.lastName}`;
+        for (const [letter, name] of Object.entries(MOD_PERSONS)) {
+          if (name === fullName) modLetterByEmpId.set(emp.employeeId, letter);
+        }
+      }
+      // Apply per-plan overrides
+      const modPersons = plan.modPersons ?? {};
+      const overriddenLetters = new Set(Object.keys(modPersons));
+      if (overriddenLetters.size > 0) {
+        for (const [empId, letter] of [...modLetterByEmpId.entries()]) {
+          if (overriddenLetters.has(letter)) modLetterByEmpId.delete(empId);
+        }
+        for (const [letter, empId] of Object.entries(modPersons)) {
+          modLetterByEmpId.set(empId, letter);
+        }
+      }
+
       // Section rows
       for (const section of SECTIONS) {
         const emps = grouped.get(section) ?? [];
@@ -538,7 +559,11 @@ export default function ShiftPlannerPage() {
         // Employee rows
         for (const emp of emps) {
           html += "<tr>";
-          html += `<td style="${cs.nameCell}">${emp.lastName} ${emp.firstName}</td>`;
+          const modBadge = section === "vedouc\u00ed" ? modLetterByEmpId.get(emp.employeeId) : undefined;
+          const nameHtml = modBadge
+            ? `${emp.lastName} ${emp.firstName} <span style="display:inline-block;background:#e5e7eb;border-radius:3px;padding:0 2px;font-weight:700;font-size:5.5pt;margin-left:2px;">${modBadge}</span>`
+            : `${emp.lastName} ${emp.firstName}`;
+          html += `<td style="${cs.nameCell}">${nameHtml}</td>`;
           let shiftCount = 0;
           for (const day of daysInMonth) {
             const dateStr = fmtDate(day);
@@ -563,10 +588,7 @@ export default function ShiftPlannerPage() {
           for (const day of daysInMonth) {
             const dateStr = fmtDate(day);
             const code = modMap.get(dateStr) ?? "";
-            const modColor = MOD_COLORS[code];
-            const bg = modColor?.bg ?? (code ? "#f5f3ff" : "#fff");
-            const text = modColor?.text ?? "#374151";
-            html += `<td style="${cs.modCell}background:${bg};color:${text};">${code}</td>`;
+            html += `<td style="${cs.modCell}">${code}</td>`;
           }
           html += `<td style="${cs.modCell}"></td>`;
           html += "</tr>";
