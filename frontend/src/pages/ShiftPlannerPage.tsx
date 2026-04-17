@@ -3,7 +3,7 @@ import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { api } from "../lib/api";
 import { useAuth } from "../hooks/useAuth";
-import { parseShiftExpression } from "../lib/shiftConstants";
+import { parseShiftExpression, getCellColor, SECTIONS, SECTION_LABELS, getCzechHolidays, MOD_COLORS } from "../lib/shiftConstants";
 import ShiftGrid from "../components/ShiftGrid";
 import AddEmployeeToPlanModal from "../components/AddEmployeeToPlanModal";
 import EditEmployeeInPlanModal from "../components/EditEmployeeInPlanModal";
@@ -168,7 +168,6 @@ export default function ShiftPlannerPage() {
   const [plansList, setPlansList] = useState<PlanListItem[]>([]);
   const [copyFromId, setCopyFromId] = useState("");
 
-  const gridRef = useRef<HTMLDivElement>(null);
   const [exporting, setExporting] = useState(false);
 
   const canEdit = role === "admin" || role === "director" || role === "manager";
@@ -469,41 +468,129 @@ export default function ShiftPlannerPage() {
   // ── PDF export ─────────────────────────────────────────────────────────────
 
   async function handleExportPdf() {
-    if (!plan || !gridRef.current) return;
+    if (!plan) return;
     setExporting(true);
     try {
       const html2pdf = (await import("html2pdf.js" as string)).default;
 
-      // Clone the grid so we don't mutate the live DOM
-      const clone = gridRef.current.cloneNode(true) as HTMLElement;
+      // ── Build days array for the month ──
+      const daysInMonth: Date[] = [];
+      const d = new Date(plan.year, plan.month - 1, 1);
+      while (d.getMonth() === plan.month - 1) {
+        daysInMonth.push(new Date(d));
+        d.setDate(d.getDate() + 1);
+      }
+      const dayNames = ["Ne", "Po", "\u00dat", "St", "\u010ct", "P\u00e1", "So"];
+      const holidays = getCzechHolidays(plan.year);
+      const pad2 = (n: number) => String(n).padStart(2, "0");
+      function fmtDate(dt: Date) {
+        return `${dt.getFullYear()}-${pad2(dt.getMonth() + 1)}-${pad2(dt.getDate())}`;
+      }
+      function isWeekend(dt: Date) { return dt.getDay() === 0 || dt.getDay() === 6; }
 
-      // Strip interactive elements: edit/delete buttons, mod inputs, focus outlines
-      clone.querySelectorAll("button").forEach((b) => b.remove());
-      clone.querySelectorAll("input").forEach((inp) => inp.remove());
-      clone.querySelectorAll("[tabindex]").forEach((el) => el.removeAttribute("tabindex"));
-      // Remove box-shadow and overflow from wrapper clone (not needed in PDF)
-      clone.style.boxShadow = "none";
-      clone.style.overflow = "visible";
-      clone.style.marginBottom = "0";
+      // ── Shift lookup map ──
+      const shiftMap = new Map<string, ShiftDoc>();
+      for (const s of plan.shifts) shiftMap.set(`${s.employeeId}_${s.date}`, s);
 
-      // Build the export container
-      const container = document.createElement("div");
-      container.style.fontFamily = "Arial, sans-serif";
-      container.style.color = "#111827";
-      container.style.background = "#fff";
+      // ── MOD lookup ──
+      const modMap = new Map<string, string>();
+      for (const m of plan.modShifts) modMap.set(m.date, m.code);
 
-      // Title
-      const title = document.createElement("h2");
-      title.textContent = `Směny \u2014 ${MONTH_NAMES[plan.month - 1]} ${plan.year}`;
-      title.style.margin = "0 0 8px 0";
-      title.style.fontSize = "14pt";
-      container.appendChild(title);
+      // ── Group employees by section ──
+      const grouped = new Map<string, PlanEmployee[]>();
+      for (const section of SECTIONS) {
+        grouped.set(section, plan.employees
+          .filter((e) => e.section === section)
+          .sort((a, b) => a.displayOrder - b.displayOrder));
+      }
 
-      // Grid
-      container.appendChild(clone);
+      // ── Styles ──
+      const cs = {
+        cell: "padding:1px 2px;text-align:center;font-size:7pt;font-family:monospace;border:1px solid #d1d5db;",
+        nameCell: "padding:2px 4px;font-size:7pt;white-space:nowrap;overflow:hidden;border:1px solid #d1d5db;text-align:left;max-width:110px;",
+        header: "padding:2px;text-align:center;font-size:6.5pt;font-weight:600;border:1px solid #d1d5db;background:#f3f4f6;",
+        sectionRow: "padding:2px 4px;font-size:7pt;font-weight:700;text-transform:uppercase;background:#e5e7eb;border:1px solid #d1d5db;",
+        footerCell: "padding:1px 2px;text-align:center;font-size:6.5pt;font-weight:600;border:1px solid #d1d5db;background:#f9fafb;",
+        modCell: "padding:1px 2px;text-align:center;font-size:7pt;font-weight:700;border:1px solid #d1d5db;",
+      };
 
-      // Legend
-      const legendLines = [
+      // ── Build HTML table ──
+      let html = "";
+      // Header row
+      html += "<tr>";
+      html += `<th style="${cs.header}">Zam\u011bstnanec</th>`;
+      for (const day of daysInMonth) {
+        const wkend = isWeekend(day);
+        const hol = holidays.has(fmtDate(day));
+        const bg = hol ? "#fef2f2" : wkend ? "#f0f9ff" : "#f3f4f6";
+        html += `<th style="${cs.header}background:${bg};"><div>${day.getDate()}</div><div style="font-weight:400;font-size:5.5pt;">${dayNames[day.getDay()]}</div></th>`;
+      }
+      html += `<th style="${cs.header}">\u03a3</th>`;
+      html += "</tr>";
+
+      // Section rows
+      for (const section of SECTIONS) {
+        const emps = grouped.get(section) ?? [];
+        if (emps.length === 0) continue;
+
+        // Section header
+        html += `<tr><td colspan="${daysInMonth.length + 2}" style="${cs.sectionRow}">${SECTION_LABELS[section]}</td></tr>`;
+
+        // Employee rows
+        for (const emp of emps) {
+          html += "<tr>";
+          html += `<td style="${cs.nameCell}">${emp.lastName} ${emp.firstName}</td>`;
+          let shiftCount = 0;
+          for (const day of daysInMonth) {
+            const dateStr = fmtDate(day);
+            const shift = shiftMap.get(`${emp.employeeId}_${dateStr}`);
+            const raw = shift?.rawInput ?? "";
+            const parsed = parseShiftExpression(raw);
+            const { bg, text } = getCellColor(parsed, false);
+            const wkend = isWeekend(day);
+            const hol = holidays.has(dateStr);
+            const cellBg = bg !== "transparent" ? bg : (hol ? "#fef2f2" : wkend ? "#f0f9ff" : "#fff");
+            if (shift?.status === "assigned") shiftCount++;
+            html += `<td style="${cs.cell}background:${cellBg};color:${text};">${raw}</td>`;
+          }
+          html += `<td style="${cs.cell}font-weight:700;">${shiftCount}</td>`;
+          html += "</tr>";
+        }
+
+        // Section footer (hour totals)
+        html += "<tr>";
+        html += `<td style="${cs.footerCell}text-align:left;">\u03a3 ${SECTION_LABELS[section]}</td>`;
+        for (const day of daysInMonth) {
+          const dateStr = fmtDate(day);
+          let hours = 0;
+          for (const emp of emps) {
+            const shift = shiftMap.get(`${emp.employeeId}_${dateStr}`);
+            if (shift?.status === "assigned") hours += shift.hoursComputed;
+          }
+          html += `<td style="${cs.footerCell}">${hours || ""}</td>`;
+        }
+        html += `<td style="${cs.footerCell}"></td>`;
+        html += "</tr>";
+
+        // MOD row after vedouc\u00ed
+        if (section === "vedouc\u00ed") {
+          html += "<tr>";
+          html += `<td style="${cs.modCell}background:#f5f3ff;">MOD</td>`;
+          for (const day of daysInMonth) {
+            const dateStr = fmtDate(day);
+            const code = modMap.get(dateStr) ?? "";
+            const modColor = MOD_COLORS[code];
+            const bg = modColor?.bg ?? (code ? "#f5f3ff" : "#fff");
+            const text = modColor?.text ?? "#374151";
+            html += `<td style="${cs.modCell}background:${bg};color:${text};">${code}</td>`;
+          }
+          html += `<td style="${cs.modCell}"></td>`;
+          html += "</tr>";
+        }
+      }
+
+      // ── Legend lines ──
+      const legendText = [
         "D - denn\u00ed sm\u011bna 7:00-19:00",
         "N - no\u010dn\u00ed sm\u011bna 19:00-7:00",
         "R - 9:00-17:30",
@@ -514,35 +601,33 @@ export default function ShiftPlannerPage() {
         "Q - Amigo & Alqush",
         "K - Ankora",
         "po 6 hodin\u00e1ch je 30 minut pauza",
-      ];
-      const legend = document.createElement("div");
-      legend.style.marginTop = "6px";
-      legend.style.fontSize = "8pt";
-      legend.style.color = "#555";
-      legend.style.display = "flex";
-      legend.style.flexWrap = "wrap";
-      legend.style.gap = "2px 16px";
-      legendLines.forEach((line) => {
-        const span = document.createElement("span");
-        span.textContent = line;
-        legend.appendChild(span);
-      });
-      container.appendChild(legend);
+      ].join(" &nbsp;\u2022&nbsp; ");
 
-      document.body.appendChild(container);
+      // ── Full document ──
+      const fullHtml = `
+        <div style="font-family:Arial,sans-serif;color:#111827;background:#fff;">
+          <h2 style="margin:0 0 4px 0;font-size:12pt;">Sm\u011bny \u2014 ${MONTH_NAMES[plan.month - 1]} ${plan.year}</h2>
+          <table style="border-collapse:collapse;width:100%;table-layout:fixed;">
+            ${html}
+          </table>
+          <div style="margin-top:4px;font-size:6.5pt;color:#6b7280;">${legendText}</div>
+        </div>`;
 
-      const pad = (n: number) => String(n).padStart(2, "0");
-      const filename = `smeny_${plan.year}_${pad(plan.month)}.pdf`;
+      const wrapper = document.createElement("div");
+      wrapper.innerHTML = fullHtml;
+      document.body.appendChild(wrapper);
+
+      const filename = `smeny_${plan.year}_${pad2(plan.month)}.pdf`;
 
       await html2pdf().set({
-        margin: [8, 8, 8, 8],
+        margin: [6, 6, 6, 6],
         filename,
-        image: { type: "jpeg", quality: 0.95 },
-        html2canvas: { scale: 1.5, useCORS: true },
+        image: { type: "jpeg", quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true },
         jsPDF: { unit: "mm", format: "a4", orientation: "landscape" },
-      }).from(container).save();
+      }).from(wrapper.firstElementChild).save();
 
-      document.body.removeChild(container);
+      document.body.removeChild(wrapper);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Chyba p\u0159i exportu PDF");
     } finally {
@@ -1123,7 +1208,6 @@ export default function ShiftPlannerPage() {
           {plan && plan.employees.length > 0 && (
             <ShiftGrid
               plan={plan}
-              gridRef={gridRef}
               onCellSave={handleCellSave}
               onModSave={handleModSave}
               onEditEmployee={(emp) => setEditingEmployee(emp)}
