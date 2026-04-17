@@ -263,3 +263,13 @@
   background: var(--color-bg);
   border-radius: 8px;
 }
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.5rem;
+  margin-top: 0.75rem;
+  padding: 0.5rem 0;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}

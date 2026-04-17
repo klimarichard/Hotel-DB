@@ -1049,6 +1049,21 @@ export default function ShiftPlannerPage() {
             />
           )}
 
+          {plan && plan.employees.length > 0 && (
+            <div className={styles.legend}>
+              <span>D - denní směna 7:00-19:00</span>
+              <span>N - noční směna 19:00-7:00</span>
+              <span>R - 9:00-17:30</span>
+              <span>ZD - zaučování denní 7:00-19:00</span>
+              <span>ZN - zaučování noční 19:00-7:00</span>
+              <span>A - Ambiance</span>
+              <span>S - Superior</span>
+              <span>Q - Amigo & Alqush</span>
+              <span>K - Ankora</span>
+              <span>po 6 hodinách je 30 minut pauza</span>
+            </div>
+          )}
+
         </>
       )}
 
