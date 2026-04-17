@@ -68,6 +68,8 @@ PDFs generated client-side via `html2pdf.js` — Puppeteer was too large for Gen
 - **Consecutive X limit**: max 6 X in a row for employees/managers (hard block, no override). Admins/directors exempt.
 - **Real-time reload**: `ShiftPlannerPage` uses Firestore `onSnapshot` on the plan doc. Every mutation bumps `updatedAt`, triggering a full `loadPlan()` on all clients within ~1 s.
 - `ShiftOverridesContext` provides global pending override count for the "Směny" nav badge.
+- **Shift legend**: mandatory work-law legend (shift types D/N/R/ZD/ZN, hotel codes A/S/Q/K, break rule) displayed below the grid on `ShiftPlannerPage`.
+- **PDF export** (admin/director): "Exportovat PDF" button builds a standalone HTML table from plan data with inline light-mode styles (6pt compact fonts, `table-layout:fixed`, colgroup percentages) and renders to single-page landscape A4 via `html2pdf.js`. Includes title, full grid with cell colors, MOD badges on vedoucí names, and legend. No DOM cloning — built programmatically from `plan.shifts`, `plan.employees`, `plan.modShifts`.
 
 ### Phase 4 — Contracts
 - Company data in `companies/{companyId}` (e.g. `companies/HPM`, `companies/STP`).

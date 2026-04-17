@@ -3,7 +3,7 @@ import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { api } from "../lib/api";
 import { useAuth } from "../hooks/useAuth";
-import { parseShiftExpression } from "../lib/shiftConstants";
+import { parseShiftExpression, getCellColor, SECTIONS, SECTION_LABELS, getCzechHolidays, MOD_PERSONS } from "../lib/shiftConstants";
 import ShiftGrid from "../components/ShiftGrid";
 import AddEmployeeToPlanModal from "../components/AddEmployeeToPlanModal";
 import EditEmployeeInPlanModal from "../components/EditEmployeeInPlanModal";
@@ -167,6 +167,8 @@ export default function ShiftPlannerPage() {
   } | null>(null);
   const [plansList, setPlansList] = useState<PlanListItem[]>([]);
   const [copyFromId, setCopyFromId] = useState("");
+
+  const [exporting, setExporting] = useState(false);
 
   const canEdit = role === "admin" || role === "director" || role === "manager";
   const canPublish = role === "admin" || role === "director";
@@ -461,6 +463,192 @@ export default function ShiftPlannerPage() {
       }
       return { ...prev, modPersons, modShifts };
     });
+  }
+
+  // ── PDF export ─────────────────────────────────────────────────────────────
+
+  async function handleExportPdf() {
+    if (!plan) return;
+    setExporting(true);
+    try {
+      const html2pdf = (await import("html2pdf.js" as string)).default;
+
+      // ── Build days array for the month ──
+      const daysInMonth: Date[] = [];
+      const d = new Date(plan.year, plan.month - 1, 1);
+      while (d.getMonth() === plan.month - 1) {
+        daysInMonth.push(new Date(d));
+        d.setDate(d.getDate() + 1);
+      }
+      const dayNames = ["Ne", "Po", "\u00dat", "St", "\u010ct", "P\u00e1", "So"];
+      const holidays = getCzechHolidays(plan.year);
+      const pad2 = (n: number) => String(n).padStart(2, "0");
+      function fmtDate(dt: Date) {
+        return `${dt.getFullYear()}-${pad2(dt.getMonth() + 1)}-${pad2(dt.getDate())}`;
+      }
+      function isWeekend(dt: Date) { return dt.getDay() === 0 || dt.getDay() === 6; }
+
+      // ── Shift lookup map ──
+      const shiftMap = new Map<string, ShiftDoc>();
+      for (const s of plan.shifts) shiftMap.set(`${s.employeeId}_${s.date}`, s);
+
+      // ── MOD lookup ──
+      const modMap = new Map<string, string>();
+      for (const m of plan.modShifts) modMap.set(m.date, m.code);
+
+      // ── Group employees by section ──
+      const grouped = new Map<string, PlanEmployee[]>();
+      for (const section of SECTIONS) {
+        grouped.set(section, plan.employees
+          .filter((e) => e.section === section)
+          .sort((a, b) => a.displayOrder - b.displayOrder));
+      }
+
+      // ── Styles ──
+      const cs = {
+        cell: "padding:0 1px;text-align:center;font-size:6pt;font-family:monospace;border:1px solid #d1d5db;line-height:1.3;",
+        nameCell: "padding:1px 3px;font-size:6pt;white-space:nowrap;overflow:hidden;border:1px solid #d1d5db;text-align:left;",
+        header: "padding:1px;text-align:center;font-size:5.5pt;font-weight:600;border:1px solid #d1d5db;background:#f3f4f6;line-height:1.2;",
+        sectionRow: "padding:1px 3px;font-size:6pt;font-weight:700;text-transform:uppercase;background:#e5e7eb;border:1px solid #d1d5db;",
+        modCell: "padding:0 1px;text-align:center;font-size:6pt;font-weight:700;border:1px solid #d1d5db;line-height:1.3;",
+      };
+
+      // ── Build HTML table ──
+      let html = "";
+      // Header row
+      html += "<tr>";
+      html += `<th style="${cs.header}">Zam\u011bstnanec</th>`;
+      for (const day of daysInMonth) {
+        const wkend = isWeekend(day);
+        const hol = holidays.has(fmtDate(day));
+        const bg = hol ? "#fef2f2" : wkend ? "#f0f9ff" : "#f3f4f6";
+        html += `<th style="${cs.header}background:${bg};"><div>${day.getDate()}</div><div style="font-weight:400;font-size:5pt;">${dayNames[day.getDay()]}</div></th>`;
+      }
+      html += `<th style="${cs.header}">\u03a3</th>`;
+      html += "</tr>";
+
+      // ── MOD letter per employee (same logic as ShiftGrid) ──
+      const modLetterByEmpId = new Map<string, string>();
+      // Seed from static name-based mapping
+      for (const emp of plan.employees) {
+        const fullName = `${emp.firstName} ${emp.lastName}`;
+        for (const [letter, name] of Object.entries(MOD_PERSONS)) {
+          if (name === fullName) modLetterByEmpId.set(emp.employeeId, letter);
+        }
+      }
+      // Apply per-plan overrides
+      const modPersons = plan.modPersons ?? {};
+      const overriddenLetters = new Set(Object.keys(modPersons));
+      if (overriddenLetters.size > 0) {
+        for (const [empId, letter] of [...modLetterByEmpId.entries()]) {
+          if (overriddenLetters.has(letter)) modLetterByEmpId.delete(empId);
+        }
+        for (const [letter, empId] of Object.entries(modPersons)) {
+          modLetterByEmpId.set(empId, letter);
+        }
+      }
+
+      // Section rows
+      for (const section of SECTIONS) {
+        const emps = grouped.get(section) ?? [];
+        if (emps.length === 0) continue;
+
+        // Section header
+        html += `<tr><td colspan="${daysInMonth.length + 2}" style="${cs.sectionRow}">${SECTION_LABELS[section]}</td></tr>`;
+
+        // Employee rows
+        for (const emp of emps) {
+          html += "<tr>";
+          const modBadge = section === "vedouc\u00ed" ? modLetterByEmpId.get(emp.employeeId) : undefined;
+          const nameHtml = modBadge
+            ? `${emp.lastName} ${emp.firstName} <span style="display:inline-block;background:#e5e7eb;border-radius:3px;padding:0 2px;font-weight:700;font-size:5.5pt;margin-left:2px;">${modBadge}</span>`
+            : `${emp.lastName} ${emp.firstName}`;
+          html += `<td style="${cs.nameCell}">${nameHtml}</td>`;
+          let shiftCount = 0;
+          for (const day of daysInMonth) {
+            const dateStr = fmtDate(day);
+            const shift = shiftMap.get(`${emp.employeeId}_${dateStr}`);
+            const raw = shift?.rawInput ?? "";
+            const parsed = parseShiftExpression(raw);
+            const { bg, text } = getCellColor(parsed, false);
+            const wkend = isWeekend(day);
+            const hol = holidays.has(dateStr);
+            const cellBg = bg !== "transparent" ? bg : (hol ? "#fef2f2" : wkend ? "#f0f9ff" : "#fff");
+            if (shift?.status === "assigned") shiftCount++;
+            html += `<td style="${cs.cell}background:${cellBg};color:${text};">${raw}</td>`;
+          }
+          html += `<td style="${cs.cell}font-weight:700;">${shiftCount}</td>`;
+          html += "</tr>";
+        }
+
+        // MOD row after vedouc\u00ed
+        if (section === "vedouc\u00ed") {
+          html += "<tr>";
+          html += `<td style="${cs.modCell}background:#f5f3ff;">MOD</td>`;
+          for (const day of daysInMonth) {
+            const dateStr = fmtDate(day);
+            const code = modMap.get(dateStr) ?? "";
+            html += `<td style="${cs.modCell}">${code}</td>`;
+          }
+          html += `<td style="${cs.modCell}"></td>`;
+          html += "</tr>";
+        }
+      }
+
+      // ── Legend lines ──
+      const legendText = [
+        "D - denn\u00ed sm\u011bna 7:00-19:00",
+        "N - no\u010dn\u00ed sm\u011bna 19:00-7:00",
+        "R - 9:00-17:30",
+        "ZD - zau\u010dov\u00e1n\u00ed denn\u00ed 7:00-19:00",
+        "ZN - zau\u010dov\u00e1n\u00ed no\u010dn\u00ed 19:00-7:00",
+        "A - Ambiance",
+        "S - Superior",
+        "Q - Amigo & Alqush",
+        "K - Ankora",
+        "po 6 hodin\u00e1ch je 30 minut pauza",
+      ].join(" &nbsp;\u2022&nbsp; ");
+
+      // ── Colgroup for column widths ──
+      // Name column gets explicit width; day columns share remaining space equally
+      const colgroup = `<colgroup>
+        <col style="width:14%;" />
+        ${daysInMonth.map(() => '<col />').join("")}
+        <col style="width:3%;" />
+      </colgroup>`;
+
+      // ── Full document ──
+      const fullHtml = `
+        <div style="font-family:Arial,sans-serif;color:#111827;background:#fff;">
+          <h2 style="margin:0 0 3px 0;font-size:10pt;">Sm\u011bny \u2014 ${MONTH_NAMES[plan.month - 1]} ${plan.year}</h2>
+          <table style="border-collapse:collapse;width:100%;table-layout:fixed;">
+            ${colgroup}
+            ${html}
+          </table>
+          <div style="margin-top:2px;font-size:5.5pt;color:#6b7280;">${legendText}</div>
+        </div>`;
+
+      const wrapper = document.createElement("div");
+      wrapper.innerHTML = fullHtml;
+      document.body.appendChild(wrapper);
+
+      const filename = `smeny_${plan.year}_${pad2(plan.month)}.pdf`;
+
+      await html2pdf().set({
+        margin: [5, 5, 5, 5],
+        filename,
+        image: { type: "jpeg", quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, windowWidth: 1100 },
+        jsPDF: { unit: "mm", format: "a4", orientation: "landscape" },
+        pagebreak: { mode: ["avoid-all"] },
+      }).from(wrapper.firstElementChild).save();
+
+      document.body.removeChild(wrapper);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Chyba p\u0159i exportu PDF");
+    } finally {
+      setExporting(false);
+    }
   }
 
   // ── X limit helpers ────────────────────────────────────────────────────────
@@ -857,6 +1045,17 @@ export default function ShiftPlannerPage() {
               </button>
             )}
 
+            {/* Export PDF (admin/director) */}
+            {plan && canPublish && plan.employees.length > 0 && (
+              <button
+                className={styles.secondaryBtn}
+                onClick={handleExportPdf}
+                disabled={exporting}
+              >
+                {exporting ? "Exportuji\u2026" : "Exportovat PDF"}
+              </button>
+            )}
+
             {/* Revert plan (admin only) */}
             {plan && role === "admin" && plan.status !== "created" && (
               <button
@@ -1047,6 +1246,21 @@ export default function ShiftPlannerPage() {
                   : undefined
               }
             />
+          )}
+
+          {plan && plan.employees.length > 0 && (
+            <div className={styles.legend}>
+              <span>D - denní směna 7:00-19:00</span>
+              <span>N - noční směna 19:00-7:00</span>
+              <span>R - 9:00-17:30</span>
+              <span>ZD - zaučování denní 7:00-19:00</span>
+              <span>ZN - zaučování noční 19:00-7:00</span>
+              <span>A - Ambiance</span>
+              <span>S - Superior</span>
+              <span>Q - Amigo & Alqush</span>
+              <span>K - Ankora</span>
+              <span>po 6 hodinách je 30 minut pauza</span>
+            </div>
           )}
 
         </>
