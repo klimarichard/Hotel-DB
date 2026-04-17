@@ -29,7 +29,7 @@ export default function LoginPage() {
   const [view, setView] = useState<"login" | "forgot">("login");
 
   // Login state
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -45,10 +45,11 @@ export default function LoginPage() {
     setError(null);
     setLoading(true);
     try {
+      const email = username.includes("@") ? username : `${username}@hotel.local`;
       await signInWithEmailAndPassword(auth, email, password);
       // App.tsx redirect handles navigation
     } catch {
-      setError("Nesprávný e-mail nebo heslo.");
+      setError("Nesprávné uživatelské jméno nebo heslo.");
     } finally {
       setLoading(false);
     }
@@ -69,7 +70,7 @@ export default function LoginPage() {
   }
 
   function openForgot() {
-    setForgotEmail(email); // pre-fill from login form if typed
+    setForgotEmail(username.includes("@") ? username : username ? `${username}@hotel.local` : "");
     setForgotError(null);
     setForgotSuccess(false);
     setView("forgot");
@@ -153,14 +154,15 @@ export default function LoginPage() {
         {error && <div className={styles.error}>{error}</div>}
 
         <label className={styles.label}>
-          E-mail
+          Uživatelské jméno
           <input
             className={styles.input}
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
             required
             autoFocus
+            autoComplete="username"
           />
         </label>
 
