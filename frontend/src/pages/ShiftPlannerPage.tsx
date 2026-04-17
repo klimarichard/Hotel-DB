@@ -506,12 +506,11 @@ export default function ShiftPlannerPage() {
 
       // ── Styles ──
       const cs = {
-        cell: "padding:1px 2px;text-align:center;font-size:7pt;font-family:monospace;border:1px solid #d1d5db;",
-        nameCell: "padding:2px 4px;font-size:7pt;white-space:nowrap;overflow:hidden;border:1px solid #d1d5db;text-align:left;max-width:110px;",
-        header: "padding:2px;text-align:center;font-size:6.5pt;font-weight:600;border:1px solid #d1d5db;background:#f3f4f6;",
-        sectionRow: "padding:2px 4px;font-size:7pt;font-weight:700;text-transform:uppercase;background:#e5e7eb;border:1px solid #d1d5db;",
-        footerCell: "padding:1px 2px;text-align:center;font-size:6.5pt;font-weight:600;border:1px solid #d1d5db;background:#f9fafb;",
-        modCell: "padding:1px 2px;text-align:center;font-size:7pt;font-weight:700;border:1px solid #d1d5db;",
+        cell: "padding:0 1px;text-align:center;font-size:6pt;font-family:monospace;border:1px solid #d1d5db;line-height:1.3;",
+        nameCell: "padding:1px 3px;font-size:6pt;white-space:nowrap;overflow:hidden;border:1px solid #d1d5db;text-align:left;",
+        header: "padding:1px;text-align:center;font-size:5.5pt;font-weight:600;border:1px solid #d1d5db;background:#f3f4f6;line-height:1.2;",
+        sectionRow: "padding:1px 3px;font-size:6pt;font-weight:700;text-transform:uppercase;background:#e5e7eb;border:1px solid #d1d5db;",
+        modCell: "padding:0 1px;text-align:center;font-size:6pt;font-weight:700;border:1px solid #d1d5db;line-height:1.3;",
       };
 
       // ── Build HTML table ──
@@ -523,7 +522,7 @@ export default function ShiftPlannerPage() {
         const wkend = isWeekend(day);
         const hol = holidays.has(fmtDate(day));
         const bg = hol ? "#fef2f2" : wkend ? "#f0f9ff" : "#f3f4f6";
-        html += `<th style="${cs.header}background:${bg};"><div>${day.getDate()}</div><div style="font-weight:400;font-size:5.5pt;">${dayNames[day.getDay()]}</div></th>`;
+        html += `<th style="${cs.header}background:${bg};"><div>${day.getDate()}</div><div style="font-weight:400;font-size:5pt;">${dayNames[day.getDay()]}</div></th>`;
       }
       html += `<th style="${cs.header}">\u03a3</th>`;
       html += "</tr>";
@@ -557,21 +556,6 @@ export default function ShiftPlannerPage() {
           html += "</tr>";
         }
 
-        // Section footer (hour totals)
-        html += "<tr>";
-        html += `<td style="${cs.footerCell}text-align:left;">\u03a3 ${SECTION_LABELS[section]}</td>`;
-        for (const day of daysInMonth) {
-          const dateStr = fmtDate(day);
-          let hours = 0;
-          for (const emp of emps) {
-            const shift = shiftMap.get(`${emp.employeeId}_${dateStr}`);
-            if (shift?.status === "assigned") hours += shift.hoursComputed;
-          }
-          html += `<td style="${cs.footerCell}">${hours || ""}</td>`;
-        }
-        html += `<td style="${cs.footerCell}"></td>`;
-        html += "</tr>";
-
         // MOD row after vedouc\u00ed
         if (section === "vedouc\u00ed") {
           html += "<tr>";
@@ -603,14 +587,23 @@ export default function ShiftPlannerPage() {
         "po 6 hodin\u00e1ch je 30 minut pauza",
       ].join(" &nbsp;\u2022&nbsp; ");
 
+      // ── Colgroup for column widths ──
+      // Name column gets explicit width; day columns share remaining space equally
+      const colgroup = `<colgroup>
+        <col style="width:14%;" />
+        ${daysInMonth.map(() => '<col />').join("")}
+        <col style="width:3%;" />
+      </colgroup>`;
+
       // ── Full document ──
       const fullHtml = `
         <div style="font-family:Arial,sans-serif;color:#111827;background:#fff;">
-          <h2 style="margin:0 0 4px 0;font-size:12pt;">Sm\u011bny \u2014 ${MONTH_NAMES[plan.month - 1]} ${plan.year}</h2>
+          <h2 style="margin:0 0 3px 0;font-size:10pt;">Sm\u011bny \u2014 ${MONTH_NAMES[plan.month - 1]} ${plan.year}</h2>
           <table style="border-collapse:collapse;width:100%;table-layout:fixed;">
+            ${colgroup}
             ${html}
           </table>
-          <div style="margin-top:4px;font-size:6.5pt;color:#6b7280;">${legendText}</div>
+          <div style="margin-top:2px;font-size:5.5pt;color:#6b7280;">${legendText}</div>
         </div>`;
 
       const wrapper = document.createElement("div");
@@ -620,11 +613,12 @@ export default function ShiftPlannerPage() {
       const filename = `smeny_${plan.year}_${pad2(plan.month)}.pdf`;
 
       await html2pdf().set({
-        margin: [6, 6, 6, 6],
+        margin: [5, 5, 5, 5],
         filename,
         image: { type: "jpeg", quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true },
+        html2canvas: { scale: 2, useCORS: true, windowWidth: 1100 },
         jsPDF: { unit: "mm", format: "a4", orientation: "landscape" },
+        pagebreak: { mode: ["avoid-all"] },
       }).from(wrapper.firstElementChild).save();
 
       document.body.removeChild(wrapper);
