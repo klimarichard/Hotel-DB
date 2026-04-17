@@ -1,13 +1,35 @@
 import { useState, FormEvent } from "react";
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
 import { auth } from "@/lib/firebase";
+import { useTheme } from "@/context/ThemeContext";
 import styles from "./LoginPage.module.css";
 
+const SunIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="5"/>
+    <line x1="12" y1="1" x2="12" y2="3"/>
+    <line x1="12" y1="21" x2="12" y2="23"/>
+    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+    <line x1="1" y1="12" x2="3" y2="12"/>
+    <line x1="21" y1="12" x2="23" y2="12"/>
+    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+  </svg>
+);
+
+const MoonIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+  </svg>
+);
+
 export default function LoginPage() {
+  const { theme, toggleTheme } = useTheme();
   const [view, setView] = useState<"login" | "forgot">("login");
 
   // Login state
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -23,10 +45,11 @@ export default function LoginPage() {
     setError(null);
     setLoading(true);
     try {
+      const email = username.includes("@") ? username : `${username}@hotel.local`;
       await signInWithEmailAndPassword(auth, email, password);
       // App.tsx redirect handles navigation
     } catch {
-      setError("Nesprávný e-mail nebo heslo.");
+      setError("Nesprávné uživatelské jméno nebo heslo.");
     } finally {
       setLoading(false);
     }
@@ -47,7 +70,7 @@ export default function LoginPage() {
   }
 
   function openForgot() {
-    setForgotEmail(email); // pre-fill from login form if typed
+    setForgotEmail(username.includes("@") ? username : username ? `${username}@hotel.local` : "");
     setForgotError(null);
     setForgotSuccess(false);
     setView("forgot");
@@ -57,7 +80,17 @@ export default function LoginPage() {
     return (
       <div className={styles.page}>
         <form className={styles.card} onSubmit={handleForgot}>
-          <h1 className={styles.title}>Hotel HR</h1>
+          <div className={styles.cardHeader}>
+            <h1 className={styles.title}>Hotel HR</h1>
+            <button
+              className={styles.themeToggle}
+              onClick={toggleTheme}
+              title={theme === "dark" ? "Světlý režim" : "Tmavý režim"}
+              type="button"
+            >
+              {theme === "dark" ? <SunIcon /> : <MoonIcon />}
+            </button>
+          </div>
           <p className={styles.subtitle}>Obnova hesla</p>
 
           {forgotSuccess ? (
@@ -105,20 +138,31 @@ export default function LoginPage() {
   return (
     <div className={styles.page}>
       <form className={styles.card} onSubmit={handleSubmit}>
-        <h1 className={styles.title}>Hotel HR</h1>
+        <div className={styles.cardHeader}>
+          <h1 className={styles.title}>Hotel HR</h1>
+          <button
+            className={styles.themeToggle}
+            onClick={toggleTheme}
+            title={theme === "dark" ? "Světlý režim" : "Tmavý režim"}
+            type="button"
+          >
+            {theme === "dark" ? <SunIcon /> : <MoonIcon />}
+          </button>
+        </div>
         <p className={styles.subtitle}>Přihlaste se do systému</p>
 
         {error && <div className={styles.error}>{error}</div>}
 
         <label className={styles.label}>
-          E-mail
+          Uživatelské jméno
           <input
             className={styles.input}
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
             required
             autoFocus
+            autoComplete="username"
           />
         </label>
 

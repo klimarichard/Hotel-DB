@@ -103,6 +103,34 @@
   color: var(--color-primary-dark);
 }
 
+.cardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.themeToggle {
+  position: absolute;
+  right: 0;
+  background: none;
+  border: 1px solid var(--color-input-border);
+  border-radius: 6px;
+  padding: 0.4rem;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.themeToggle:hover {
+  background: var(--color-surface-2);
+  color: var(--color-text);
+  border-color: var(--color-text-muted);
+}
+
 .success {
   background: var(--color-active-bg);
   border: 1px solid var(--color-active-border);

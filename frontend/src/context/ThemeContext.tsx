@@ -8,8 +8,10 @@ interface ThemeContextValue {
   toggleTheme: () => void;
 }
 
+const GUEST_THEME_KEY = "hotel_hr_theme_guest";
+
 const ThemeContext = createContext<ThemeContextValue>({
-  theme: "light",
+  theme: "dark",
   toggleTheme: () => {},
 });
 
@@ -17,12 +19,16 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const storageKey = user ? `hotel_hr_theme_${user.uid}` : null;
 
-  const [theme, setTheme] = useState<Theme>("light");
+  const [theme, setTheme] = useState<Theme>(() => {
+    const guestSaved = localStorage.getItem(GUEST_THEME_KEY);
+    return guestSaved === "light" ? "light" : "dark";
+  });
 
   // Load the user's saved preference whenever the logged-in user changes
   useEffect(() => {
     if (!storageKey) {
-      setTheme("light");
+      const guestSaved = localStorage.getItem(GUEST_THEME_KEY);
+      setTheme(guestSaved === "light" ? "light" : "dark");
       return;
     }
     const saved = localStorage.getItem(storageKey);
@@ -37,7 +43,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   function toggleTheme() {
     setTheme((prev) => {
       const next = prev === "light" ? "dark" : "light";
-      if (storageKey) localStorage.setItem(storageKey, next);
+      if (storageKey) {
+        localStorage.setItem(storageKey, next);
+      } else {
+        localStorage.setItem(GUEST_THEME_KEY, next);
+      }
       return next;
     });
   }
