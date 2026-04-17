@@ -144,9 +144,11 @@ PDFs generated client-side via `html2pdf.js` — Puppeteer was too large for Gen
 
 ---
 
-## Auth — Password Reset
+## Auth — Login & Password Reset
 
-Two flows using Firebase Auth built-in email:
+**Login**: username + password. The login form accepts a bare username (e.g. `vondra`) and appends `@hotel.local` automatically. Typing a full email also works as a fallback.
+
+Two password-reset flows using Firebase Auth built-in email:
 - **Self-service**: "Zapomenuté heslo?" on login → `sendPasswordResetEmail(auth, email)`.
 - **Admin-initiated**: "Resetovat heslo" button in Settings → Uživatelé → calls `sendPasswordResetEmail` from frontend with user's email. Inline feedback clears after 4 s.
 
@@ -171,7 +173,9 @@ The editor renders inside a `.a4Page` div (210 mm wide, padding 1.5 cm top/botto
 
 ## Dark Mode
 
-- `ThemeContext.tsx`: `ThemeProvider` + `useTheme()`. Persists per-user in `localStorage` (`hotel_hr_theme_{uid}`). Applies `data-theme="dark"` to `<html>`.
+- `ThemeContext.tsx`: `ThemeProvider` + `useTheme()`. Persists per-user in `localStorage` (`hotel_hr_theme_{uid}`). Guest (pre-login) preference stored under `hotel_hr_theme_guest`. Applies `data-theme="dark"` to `<html>`.
+- **Default theme is dark** — both the login page and the initial load before any user preference is read start in dark mode.
+- Login page has its own sun/moon theme toggle inside the card header (next to "Hotel HR" title).
 - All CSS uses variables from `frontend/src/index.css`. `[data-theme="dark"]` overrides the full variable set.
 - Sidebar stays permanently dark (intentional).
 - `getCellColor(parsed, dark?)` in `shiftConstants.ts` — second arg selects light vs dark palette from `CELL_COLORS_DARK`.
