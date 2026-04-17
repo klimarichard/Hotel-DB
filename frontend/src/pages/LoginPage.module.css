@@ -1,4 +1,5 @@
 .page {
+  position: relative;
   min-height: 100vh;
   display: flex;
   align-items: center;
@@ -101,6 +102,27 @@
 
 .linkBtn:hover {
   color: var(--color-primary-dark);
+}
+
+.themeToggle {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-input-border);
+  border-radius: 8px;
+  padding: 0.5rem;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+
+.themeToggle:hover {
+  background: var(--color-surface-2);
+  color: var(--color-text);
 }
 
 .success {
