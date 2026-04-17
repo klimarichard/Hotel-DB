@@ -168,6 +168,9 @@ export default function ShiftPlannerPage() {
   const [plansList, setPlansList] = useState<PlanListItem[]>([]);
   const [copyFromId, setCopyFromId] = useState("");
 
+  const gridRef = useRef<HTMLDivElement>(null);
+  const [exporting, setExporting] = useState(false);
+
   const canEdit = role === "admin" || role === "director" || role === "manager";
   const canPublish = role === "admin" || role === "director";
 
@@ -461,6 +464,90 @@ export default function ShiftPlannerPage() {
       }
       return { ...prev, modPersons, modShifts };
     });
+  }
+
+  // ── PDF export ─────────────────────────────────────────────────────────────
+
+  async function handleExportPdf() {
+    if (!plan || !gridRef.current) return;
+    setExporting(true);
+    try {
+      const html2pdf = (await import("html2pdf.js" as string)).default;
+
+      // Clone the grid so we don't mutate the live DOM
+      const clone = gridRef.current.cloneNode(true) as HTMLElement;
+
+      // Strip interactive elements: edit/delete buttons, mod inputs, focus outlines
+      clone.querySelectorAll("button").forEach((b) => b.remove());
+      clone.querySelectorAll("input").forEach((inp) => inp.remove());
+      clone.querySelectorAll("[tabindex]").forEach((el) => el.removeAttribute("tabindex"));
+      // Remove box-shadow and overflow from wrapper clone (not needed in PDF)
+      clone.style.boxShadow = "none";
+      clone.style.overflow = "visible";
+      clone.style.marginBottom = "0";
+
+      // Build the export container
+      const container = document.createElement("div");
+      container.style.fontFamily = "Arial, sans-serif";
+      container.style.color = "#111827";
+      container.style.background = "#fff";
+
+      // Title
+      const title = document.createElement("h2");
+      title.textContent = `Směny \u2014 ${MONTH_NAMES[plan.month - 1]} ${plan.year}`;
+      title.style.margin = "0 0 8px 0";
+      title.style.fontSize = "14pt";
+      container.appendChild(title);
+
+      // Grid
+      container.appendChild(clone);
+
+      // Legend
+      const legendLines = [
+        "D - denn\u00ed sm\u011bna 7:00-19:00",
+        "N - no\u010dn\u00ed sm\u011bna 19:00-7:00",
+        "R - 9:00-17:30",
+        "ZD - zau\u010dov\u00e1n\u00ed denn\u00ed 7:00-19:00",
+        "ZN - zau\u010dov\u00e1n\u00ed no\u010dn\u00ed 19:00-7:00",
+        "A - Ambiance",
+        "S - Superior",
+        "Q - Amigo & Alqush",
+        "K - Ankora",
+        "po 6 hodin\u00e1ch je 30 minut pauza",
+      ];
+      const legend = document.createElement("div");
+      legend.style.marginTop = "6px";
+      legend.style.fontSize = "8pt";
+      legend.style.color = "#555";
+      legend.style.display = "flex";
+      legend.style.flexWrap = "wrap";
+      legend.style.gap = "2px 16px";
+      legendLines.forEach((line) => {
+        const span = document.createElement("span");
+        span.textContent = line;
+        legend.appendChild(span);
+      });
+      container.appendChild(legend);
+
+      document.body.appendChild(container);
+
+      const pad = (n: number) => String(n).padStart(2, "0");
+      const filename = `smeny_${plan.year}_${pad(plan.month)}.pdf`;
+
+      await html2pdf().set({
+        margin: [8, 8, 8, 8],
+        filename,
+        image: { type: "jpeg", quality: 0.95 },
+        html2canvas: { scale: 1.5, useCORS: true },
+        jsPDF: { unit: "mm", format: "a4", orientation: "landscape" },
+      }).from(container).save();
+
+      document.body.removeChild(container);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Chyba p\u0159i exportu PDF");
+    } finally {
+      setExporting(false);
+    }
   }
 
   // ── X limit helpers ────────────────────────────────────────────────────────
@@ -857,6 +944,17 @@ export default function ShiftPlannerPage() {
               </button>
             )}
 
+            {/* Export PDF (admin/director) */}
+            {plan && canPublish && plan.employees.length > 0 && (
+              <button
+                className={styles.secondaryBtn}
+                onClick={handleExportPdf}
+                disabled={exporting}
+              >
+                {exporting ? "Exportuji\u2026" : "Exportovat PDF"}
+              </button>
+            )}
+
             {/* Revert plan (admin only) */}
             {plan && role === "admin" && plan.status !== "created" && (
               <button
@@ -1025,6 +1123,7 @@ export default function ShiftPlannerPage() {
           {plan && plan.employees.length > 0 && (
             <ShiftGrid
               plan={plan}
+              gridRef={gridRef}
               onCellSave={handleCellSave}
               onModSave={handleModSave}
               onEditEmployee={(emp) => setEditingEmployee(emp)}
