@@ -78,16 +78,18 @@ export default function LoginPage() {
   if (view === "forgot") {
     return (
       <div className={styles.page}>
-        <button
-          className={styles.themeToggle}
-          onClick={toggleTheme}
-          title={theme === "dark" ? "Světlý režim" : "Tmavý režim"}
-          type="button"
-        >
-          {theme === "dark" ? <SunIcon /> : <MoonIcon />}
-        </button>
         <form className={styles.card} onSubmit={handleForgot}>
-          <h1 className={styles.title}>Hotel HR</h1>
+          <div className={styles.cardHeader}>
+            <h1 className={styles.title}>Hotel HR</h1>
+            <button
+              className={styles.themeToggle}
+              onClick={toggleTheme}
+              title={theme === "dark" ? "Světlý režim" : "Tmavý režim"}
+              type="button"
+            >
+              {theme === "dark" ? <SunIcon /> : <MoonIcon />}
+            </button>
+          </div>
           <p className={styles.subtitle}>Obnova hesla</p>
 
           {forgotSuccess ? (
@@ -134,16 +136,18 @@ export default function LoginPage() {
 
   return (
     <div className={styles.page}>
-      <button
-        className={styles.themeToggle}
-        onClick={toggleTheme}
-        title={theme === "dark" ? "Světlý režim" : "Tmavý režim"}
-        type="button"
-      >
-        {theme === "dark" ? <SunIcon /> : <MoonIcon />}
-      </button>
       <form className={styles.card} onSubmit={handleSubmit}>
-        <h1 className={styles.title}>Hotel HR</h1>
+        <div className={styles.cardHeader}>
+          <h1 className={styles.title}>Hotel HR</h1>
+          <button
+            className={styles.themeToggle}
+            onClick={toggleTheme}
+            title={theme === "dark" ? "Světlý režim" : "Tmavý režim"}
+            type="button"
+          >
+            {theme === "dark" ? <SunIcon /> : <MoonIcon />}
+          </button>
+        </div>
         <p className={styles.subtitle}>Přihlaste se do systému</p>
 
         {error && <div className={styles.error}>{error}</div>}
