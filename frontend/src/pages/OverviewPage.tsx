@@ -318,6 +318,7 @@ export default function OverviewPage() {
   const [plans, setPlans] = useState<PlanDetail[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [tomorrowExpanded, setTomorrowExpanded] = useState(false);
 
   useEffect(() => {
     if (!showTasks) return;
@@ -397,8 +398,6 @@ export default function OverviewPage() {
     return buildMyShifts(next7Days, plansByYM, employeeId);
   }, [employeeId, plans, plansByYM, next7Days]);
 
-  const myShiftsHasAny = myShifts?.some((r) => r.shift && r.shift.rawInput.trim() !== "") ?? false;
-
   return (
     <div className={styles.page}>
       <div className={styles.dateHeaderRow}>
@@ -453,126 +452,134 @@ export default function OverviewPage() {
           </section>
 
           <section className={styles.section}>
-            <h2 className={styles.dayHeading}>ZÍTRA</h2>
-            <div className={styles.daySubDate}>{formatLongHeader(tomorrow)}</div>
+            <button
+              type="button"
+              className={styles.collapsibleHeader}
+              onClick={() => setTomorrowExpanded((v) => !v)}
+              aria-expanded={tomorrowExpanded}
+            >
+              <div className={styles.collapsibleHeaderText}>
+                <h2 className={styles.dayHeading}>ZÍTRA</h2>
+                <div className={styles.daySubDate}>{formatLongHeader(tomorrow)}</div>
+              </div>
+              <span className={styles.chevron} aria-hidden>
+                {tomorrowExpanded ? "▾" : "▸"}
+              </span>
+            </button>
 
-            <div className={styles.subBlock}>
-              <h3 className={styles.subTitle}>Směny</h3>
-              {tomorrowStaffing ? (
-                <StaffingTable staffing={tomorrowStaffing} isDark={isDark} />
-              ) : (
-                <div className={styles.emptyInline}>
-                  Pro zítřek není k dispozici žádný plán.
+            {tomorrowExpanded && (
+              <>
+                <div className={styles.subBlock}>
+                  <h3 className={styles.subTitle}>Směny</h3>
+                  {tomorrowStaffing ? (
+                    <StaffingTable staffing={tomorrowStaffing} isDark={isDark} />
+                  ) : (
+                    <div className={styles.emptyInline}>
+                      Pro zítřek není k dispozici žádný plán.
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
 
-            {tomorrowStaffing && tomorrowStaffing.modLetter && (
-              <div className={styles.subBlock}>
-                <h3 className={styles.subTitle}>MOD</h3>
-                <ModBlock staffing={tomorrowStaffing} />
-              </div>
-            )}
+                {tomorrowStaffing && tomorrowStaffing.modLetter && (
+                  <div className={styles.subBlock}>
+                    <h3 className={styles.subTitle}>MOD</h3>
+                    <ModBlock staffing={tomorrowStaffing} />
+                  </div>
+                )}
 
-            {tomorrowStaffing && tomorrowStaffing.absentManagers.length > 0 && (
-              <div className={styles.subBlock}>
-                <h3 className={styles.subTitle}>Manažeři mimo (X)</h3>
-                <ul className={styles.absentList}>
-                  {tomorrowStaffing.absentManagers.map((e) => (
-                    <li key={e.employeeId}>{e.firstName} {e.lastName}</li>
-                  ))}
-                </ul>
-              </div>
+                {tomorrowStaffing && tomorrowStaffing.absentManagers.length > 0 && (
+                  <div className={styles.subBlock}>
+                    <h3 className={styles.subTitle}>Manažeři mimo (X)</h3>
+                    <ul className={styles.absentList}>
+                      {tomorrowStaffing.absentManagers.map((e) => (
+                        <li key={e.employeeId}>{e.firstName} {e.lastName}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </>
             )}
           </section>
 
-          {showTasks && (() => {
-            const tiles: { count: number; label: string; to: string }[] = [
-              { count: alertsCount, label: "Upozornění", to: "/upozorneni" },
-              { count: overridesCount, label: "Úpravy směn", to: "/smeny" },
-              { count: changesCount, label: "Výměny směn", to: "/smeny" },
-              { count: vacationCount, label: "Dovolenky", to: "/dovolena" },
-            ];
-            const totalPending = tiles.reduce((s, t) => s + t.count, 0);
+          {(() => {
+            const taskTiles: { count: number; label: string; to: string }[] = showTasks
+              ? [
+                  { count: alertsCount, label: "Upozornění", to: "/upozorneni" },
+                  { count: overridesCount, label: "Úpravy směn", to: "/smeny" },
+                  { count: changesCount, label: "Výměny směn", to: "/smeny" },
+                  { count: vacationCount, label: "Dovolenky", to: "/dovolena" },
+                ]
+              : [];
+
+            const nextMyShiftRow = myShifts?.find(
+              (r) => r.shift && r.shift.rawInput.trim() !== "",
+            );
+            const showMyShiftsTile = !!employeeId && !!myShifts;
+
+            if (taskTiles.length === 0 && !showMyShiftsTile) return null;
+
+            const myShiftParsed = nextMyShiftRow?.shift
+              ? parseShiftExpression(nextMyShiftRow.shift.rawInput)
+              : null;
+            const myShiftColors =
+              myShiftParsed && myShiftParsed.isValid && myShiftParsed.segments.length > 0
+                ? getCellColor(myShiftParsed, isDark)
+                : null;
+            const myShiftHotel = myShiftParsed?.segments.find((s) => s.hotel)?.hotel;
+            const myShiftWhenLabel = nextMyShiftRow
+              ? (() => {
+                  const i = myShifts!.indexOf(nextMyShiftRow);
+                  if (i === 0) return "dnes";
+                  if (i === 1) return "zítra";
+                  return `${DAY_NAMES_SHORT[nextMyShiftRow.date.getDay()]} ${nextMyShiftRow.date.getDate()}. ${nextMyShiftRow.date.getMonth() + 1}.`;
+                })()
+              : "";
+
             return (
-              <section className={styles.section}>
-                <h2 className={styles.dayHeading}>ÚKOLY</h2>
-                {totalPending === 0 ? (
-                  <div className={styles.taskEmpty}>
-                    Nejsou žádné nevyřízené úkoly.
-                  </div>
-                ) : (
-                  <div className={styles.taskGrid}>
-                    {tiles.map((t) => (
-                      <Link
-                        key={t.label}
-                        to={t.to}
-                        className={`${styles.taskTile} ${t.count === 0 ? styles.taskTileMuted : ""}`}
+              <div className={styles.tileGrid}>
+                {taskTiles.map((t) => (
+                  <Link
+                    key={t.label}
+                    to={t.to}
+                    className={`${styles.tile} ${t.count === 0 ? styles.tileMuted : ""}`}
+                  >
+                    <span className={styles.tileBig}>{t.count}</span>
+                    <span className={styles.tileLabel}>{t.label}</span>
+                  </Link>
+                ))}
+
+                {showMyShiftsTile && (
+                  <Link
+                    to="/smeny"
+                    className={`${styles.tile} ${!nextMyShiftRow ? styles.tileMuted : ""}`}
+                  >
+                    {nextMyShiftRow && myShiftColors ? (
+                      <span
+                        className={styles.tileBadge}
+                        style={{ background: myShiftColors.bg, color: myShiftColors.text }}
                       >
-                        <span className={styles.taskCount}>{t.count}</span>
-                        <span className={styles.taskLabel}>{t.label}</span>
-                      </Link>
-                    ))}
-                  </div>
+                        {nextMyShiftRow.shift!.rawInput}
+                      </span>
+                    ) : nextMyShiftRow ? (
+                      <span className={styles.tileBadge}>
+                        {nextMyShiftRow.shift!.rawInput}
+                      </span>
+                    ) : (
+                      <span className={styles.tileBig}>—</span>
+                    )}
+                    <span className={styles.tileSub}>
+                      {nextMyShiftRow
+                        ? [myShiftWhenLabel, myShiftHotel ? HOTEL_NAMES[myShiftHotel as HotelCode] : ""]
+                            .filter(Boolean)
+                            .join(" · ")
+                        : "žádné v 7 dnech"}
+                    </span>
+                    <span className={styles.tileLabel}>Moje směny</span>
+                  </Link>
                 )}
-              </section>
+              </div>
             );
           })()}
-
-          {employeeId && myShifts && myShiftsHasAny && (
-            <section className={styles.section}>
-              <h2 className={styles.sectionTitle}>Moje směny (7 dní)</h2>
-              <ul className={styles.myShifts}>
-                {myShifts.map((row, i) => {
-                  const parsed = row.shift
-                    ? parseShiftExpression(row.shift.rawInput)
-                    : null;
-                  const hasShift = !!row.shift && row.shift.rawInput.trim() !== "";
-                  const firstSeg = parsed?.segments[0];
-                  const colors =
-                    parsed && parsed.isValid && parsed.segments.length > 0
-                      ? getCellColor(parsed, isDark)
-                      : null;
-                  const hotelLabel =
-                    firstSeg?.hotel ? HOTEL_NAMES[firstSeg.hotel as HotelCode] : "";
-                  const isToday = i === 0;
-                  const isTomorrow = i === 1;
-
-                  return (
-                    <li key={row.dateKey} className={styles.myShiftRow}>
-                      <span className={styles.myShiftWhen}>
-                        {isToday && <span className={styles.todayLabel}>dnes</span>}
-                        {isTomorrow && <span className={styles.todayLabel}>zítra</span>}
-                        <span className={styles.myShiftDay}>
-                          {DAY_NAMES_SHORT[row.date.getDay()]}
-                        </span>
-                        <span className={styles.myShiftDate}>
-                          {row.date.getDate()}. {row.date.getMonth() + 1}.
-                        </span>
-                      </span>
-                      {hasShift && colors ? (
-                        <span
-                          className={styles.myShiftBadge}
-                          style={{ background: colors.bg, color: colors.text }}
-                        >
-                          {row.shift!.rawInput}
-                        </span>
-                      ) : hasShift ? (
-                        <span className={styles.myShiftBadge}>
-                          {row.shift!.rawInput}
-                        </span>
-                      ) : (
-                        <span className={styles.myShiftFree}>volno</span>
-                      )}
-                      {hotelLabel && (
-                        <span className={styles.myShiftHotel}>{hotelLabel}</span>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            </section>
-          )}
         </>
       )}
     </div>
