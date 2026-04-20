@@ -25,7 +25,7 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
-  const { user, loading, role } = useAuth();
+  const { user, loading } = useAuth();
 
   if (loading) return <div style={{ padding: "2rem" }}>Načítám...</div>;
 
@@ -50,7 +50,7 @@ export default function App() {
           </RequireAuth>
         }
       >
-        <Route index element={<Navigate to={role === "employee" ? "/smeny" : "/zamestnanci"} replace />} />
+        <Route index element={<Navigate to="/prehled" replace />} />
         <Route path="prehled" element={<OverviewPage />} />
         <Route path="zamestnanci" element={<EmployeesPage />} />
         <Route path="zamestnanci/novy" element={<EmployeeFormPage />} />
