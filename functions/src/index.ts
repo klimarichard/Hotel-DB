@@ -17,6 +17,7 @@ import { vacationRouter } from "./routes/vacation";
 import { payrollRouter } from "./routes/payroll";
 import { transitionPlanDeadlines } from "./services/planTransitions";
 import { createOrUpdatePayrollPeriod } from "./services/payrollCalculator";
+import { sweepExpiredMultisport } from "./services/multisportSweep";
 import { updateDocumentAlerts, EXPIRY_FIELDS } from "./routes/employees";
 
 admin.initializeApp();
@@ -47,6 +48,12 @@ app.get("/health", (_req, res) => {
 // HTTP trigger for manual/emulator testing of deadline transitions
 app.post("/shifts/trigger-deadlines", async (_req, res) => {
   const result = await transitionPlanDeadlines();
+  res.json(result);
+});
+
+// HTTP trigger for manual/emulator testing of Multisport auto-untick sweep
+app.post("/benefits/trigger-multisport-sweep", async (_req, res) => {
+  const result = await sweepExpiredMultisport();
   res.json(result);
 });
 
@@ -94,6 +101,14 @@ export const refreshPayroll = onSchedule("every 24 hours", async () => {
     const data = doc.data() as { year: number; month: number };
     await createOrUpdatePayrollPeriod(doc.id, data.year, data.month);
   }
+});
+
+// ─── Daily: auto-untick Multisport once multisportTo has passed ──────────────
+// Trigger manually via:
+//   curl -X POST http://127.0.0.1:5002/.../api/benefits/trigger-multisport-sweep
+
+export const sweepMultisport = onSchedule("every 24 hours", async () => {
+  await sweepExpiredMultisport();
 });
 
 // ─── Daily: refresh document expiry alerts for all employees ─────────────────
