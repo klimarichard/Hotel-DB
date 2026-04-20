@@ -4,12 +4,29 @@
   gap: 1.5rem;
 }
 
+.dateHeaderRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+}
+
 .dateHeader {
   font-size: 1.75rem;
   font-weight: 700;
   color: var(--color-text);
   text-align: center;
   margin: 0;
+}
+
+.shiftBadge {
+  font-size: 0.8125rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  padding: 0.35rem 0.85rem;
+  border-radius: 999px;
+  line-height: 1;
 }
 
 .state {
@@ -156,4 +173,250 @@
 .absentEmpty {
   color: var(--color-text-muted);
   font-size: 0.9375rem;
+}
+
+.emptyInline {
+  color: var(--color-text-muted);
+  font-size: 0.9375rem;
+  padding: 0.5rem 0;
+}
+
+.dayHeading {
+  font-size: 1.375rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-text-heading);
+  margin: 0;
+}
+
+.daySubDate {
+  font-size: 0.9375rem;
+  color: var(--color-text-muted);
+  margin-top: 0.15rem;
+}
+
+.subBlock {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.subBlock:first-of-type {
+  /* first sub-block follows the heading — still needs spacing but no divider */
+  border-top: none;
+  padding-top: 0;
+  margin-top: 1rem;
+}
+
+.subTitle {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+  font-weight: 600;
+  margin: 0 0 0.5rem 0;
+}
+
+.collapsibleHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.collapsibleHeader:focus-visible {
+  outline: 2px solid var(--color-info-border);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.collapsibleHeaderText {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.chevron {
+  font-size: 1.25rem;
+  color: var(--color-text-muted);
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.tileGrid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0.75rem;
+  align-items: stretch;
+}
+
+@media (max-width: 900px) {
+  .tileGrid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .myShiftsTile {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 560px) {
+  .tileGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  padding: 0.9rem 0.85rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  box-shadow: 0 1px 4px var(--shadow-sm);
+  text-decoration: none;
+  color: var(--color-text);
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.05s ease;
+}
+
+.tile:hover {
+  background: var(--color-surface-2);
+  border-color: var(--color-border-strong);
+}
+
+.tile:active {
+  transform: translateY(1px);
+}
+
+.taskTile {
+  aspect-ratio: 1 / 1;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  text-align: center;
+}
+
+.myShiftsTile {
+  aspect-ratio: 1 / 1;
+  gap: 0.4rem;
+  padding: 0.7rem 0.75rem;
+}
+
+.tileMuted {
+  color: var(--color-text-subtle);
+}
+
+.tileMuted .tileBig {
+  color: var(--color-text-subtle);
+}
+
+.tileBig {
+  font-size: 2.25rem;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--color-info-text);
+}
+
+.tileLabel {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+  color: var(--color-text-muted);
+}
+
+.myShiftsList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  flex: 1;
+  min-height: 0;
+}
+
+.myShiftRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.15rem 1.75rem;
+  border-radius: 3px;
+  flex: 1;
+  min-height: 0;
+}
+
+.myShiftRow:nth-child(odd) {
+  background: var(--color-surface-2);
+}
+
+.myShiftWhen {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--color-text);
+}
+
+.myShiftDay {
+  display: inline-block;
+  width: 1.2rem;
+  text-align: center;
+  color: var(--color-text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.6875rem;
+}
+
+.myShiftDate {
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.75rem;
+}
+
+.myShiftBadge {
+  display: inline-block;
+  min-width: 2.25rem;
+  text-align: center;
+  padding: 0.05rem 0.35rem;
+  border-radius: 3px;
+  font-weight: 700;
+  font-size: 0.6875rem;
+  letter-spacing: 0.02em;
+  background: var(--color-surface-3);
+  color: var(--color-text);
+}
+
+.myShiftFree {
+  color: var(--color-text-subtle);
+  font-size: 0.75rem;
+}
+
+.myShiftBlank {
+  display: inline-block;
+  min-width: 2.25rem;
+}
+
+.myShiftVacation {
+  color: var(--color-info-text);
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-style: italic;
+}
+
+.myShiftVacationPending {
+  color: var(--color-text-muted);
+  font-size: 0.6875rem;
+  font-style: italic;
+  text-align: right;
+  line-height: 1.1;
 }

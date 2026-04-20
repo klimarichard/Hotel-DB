@@ -39,7 +39,7 @@ const staffItems = [
 ];
 
 const adminItems = [
-  { to: "/upozorneni", label: "Upozornění" },
+  { to: "/upozorneni", label: "Neplatné doklady" },
   { to: "/smlouvy", label: "Šablony smluv" },
   { to: "/nastaveni", label: "Nastavení" },
 ];
