@@ -489,7 +489,7 @@ export default function PayrollPage() {
       };
 
       const cs = {
-        cell: "padding:2px 3px;text-align:right;font-size:7.5pt;font-family:Arial,sans-serif;border:1px solid #d1d5db;line-height:1.25;",
+        cell: "padding:2px 3px;text-align:center;font-size:7.5pt;font-family:Arial,sans-serif;border:1px solid #d1d5db;line-height:1.25;",
         nameCell: "padding:2px 5px;font-size:7.5pt;white-space:nowrap;border:1px solid #d1d5db;text-align:left;",
         header: "padding:3px 3px;text-align:center;font-size:7pt;font-weight:700;border:1px solid #d1d5db;background:#f3f4f6;line-height:1.2;",
         sectionRow: "padding:3px 5px;font-size:7.5pt;font-weight:700;text-transform:uppercase;background:#e5e7eb;border:1px solid #d1d5db;",
@@ -580,7 +580,7 @@ export default function PayrollPage() {
         filename,
         image: { type: "jpeg", quality: 0.98 },
         html2canvas: { scale: 2, useCORS: true, windowWidth: 1100 },
-        jsPDF: { unit: "mm", format: "a4", orientation: "landscape" },
+        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
         pagebreak: { mode: ["avoid-all"] },
       }).from(wrapper.firstElementChild).save();
 
