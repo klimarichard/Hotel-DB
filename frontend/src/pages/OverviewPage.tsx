@@ -51,14 +51,6 @@ function hotelColor(hotel: HotelCode, dark: boolean): { bg: string; text: string
   return getCellColor(parseShiftExpression(`D${hotel}`), dark);
 }
 
-function sectionRank(section: PlanEmployee["section"]): number {
-  switch (section) {
-    case "recepce": return 0;
-    case "portýři": return 1;
-    case "vedoucí": return 2;
-    default: return 3;
-  }
-}
 
 export default function OverviewPage() {
   const today = useMemo(() => new Date(), []);
@@ -129,7 +121,7 @@ export default function OverviewPage() {
         if (!seg.hotel) continue;
         const hotel = seg.hotel as HotelCode;
         const isTrainee = seg.code === "ZD" || seg.code === "ZN";
-        const isPorter = emp.section === "portýři";
+        const isPorter = seg.code === "DP" || seg.code === "NP";
         const item: StaffItem = { emp, isPorter, isTrainee };
         if (seg.code === "D" || seg.code === "ZD" || seg.code === "DP") {
           day[hotel].push(item);
@@ -140,7 +132,7 @@ export default function OverviewPage() {
     }
 
     const byOrder = (a: StaffItem, b: StaffItem) =>
-      sectionRank(a.emp.section) - sectionRank(b.emp.section) ||
+      (a.isPorter ? 1 : 0) - (b.isPorter ? 1 : 0) ||
       a.emp.displayOrder - b.emp.displayOrder ||
       a.emp.lastName.localeCompare(b.emp.lastName, "cs");
     for (const h of HOTEL_CODES) {

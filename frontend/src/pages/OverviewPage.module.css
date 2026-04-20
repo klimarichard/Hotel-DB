@@ -60,6 +60,7 @@
   width: 100%;
   border-collapse: collapse;
   font-size: 0.9375rem;
+  table-layout: fixed;
 }
 
 .hotelTable th {
