@@ -342,7 +342,7 @@ async function getFoodVoucherRate(): Promise<number> {
  * benefit is active for the payroll month. The month window is
  * [YYYY-MM-01, YYYY-MM-<lastDay>]; either date field may be null (open ended).
  */
-async function getMultisportActive(
+export async function getMultisportActive(
   employeeId: string,
   year: number,
   month: number

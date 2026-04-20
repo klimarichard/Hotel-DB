@@ -3,7 +3,7 @@ import { randomUUID } from "crypto";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireAuth, requireRole, AuthRequest } from "../middleware/auth";
-import { createOrUpdatePayrollPeriod } from "../services/payrollCalculator";
+import { createOrUpdatePayrollPeriod, getMultisportActive } from "../services/payrollCalculator";
 
 export const payrollRouter = Router();
 
@@ -269,6 +269,19 @@ payrollRouter.get(
 
 // ─── GET /payroll/periods/:id ─────────────────────────────────────────────────
 
+async function hydrateMultisport(
+  entries: Record<string, unknown>[],
+  year: number,
+  month: number
+): Promise<Record<string, unknown>[]> {
+  return Promise.all(
+    entries.map(async (e) => ({
+      ...e,
+      multisportActive: await getMultisportActive(e.id as string, year, month),
+    }))
+  );
+}
+
 payrollRouter.get(
   "/periods/:id",
   requireAuth,
@@ -283,8 +296,14 @@ payrollRouter.get(
       res.status(404).json({ error: "Mzdové období nebylo nalezeno." });
       return;
     }
-    const entries = entriesSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    res.json({ id: periodSnap.id, ...periodSnap.data(), entries });
+    const periodData = periodSnap.data() as Record<string, unknown>;
+    const rawEntries = entriesSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const entries = await hydrateMultisport(
+      rawEntries,
+      periodData.year as number,
+      periodData.month as number
+    );
+    res.json({ id: periodSnap.id, ...periodData, entries });
   }
 );
 
@@ -309,7 +328,8 @@ payrollRouter.get(
     }
     const periodRef = snap.docs[0].ref;
     const entriesSnap = await periodRef.collection("entries").get();
-    const entries = entriesSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const rawEntries = entriesSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const entries = await hydrateMultisport(rawEntries, year, month);
     res.json({ id: snap.docs[0].id, ...snap.docs[0].data(), entries });
   }
 );
