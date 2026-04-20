@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { Navigate } from "react-router-dom";
+import PayrollNotesModal from "./PayrollNotesModal";
 import styles from "./PayrollPage.module.css";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -961,7 +962,17 @@ export default function PayrollPage() {
         />
       )}
 
-      {notesModal && period && null /* notes modal wired in Commit 6 */}
+      {notesModal && period && (
+        <PayrollNotesModal
+          periodId={period.id}
+          employeeId={notesModal.id}
+          employeeLabel={`${notesModal.lastName} ${notesModal.firstName}`}
+          notes={period.entries.find((e) => e.id === notesModal.id)?.notes ?? []}
+          canEdit={canEdit}
+          onClose={() => setNotesModal(null)}
+          onChanged={loadPeriod}
+        />
+      )}
     </div>
   );
 }
