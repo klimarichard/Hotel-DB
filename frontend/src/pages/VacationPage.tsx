@@ -391,7 +391,7 @@ export default function VacationPage() {
       {/* Approved upcoming vacations — employees & managers */}
       {!canApprove && (
         <div className={styles.tableWrapper}>
-          <div className={styles.sectionTitle}>Schválené dovolené</div>
+          <div className={styles.sectionTitle}>Schválené dovolené (všichni zaměstnanci)</div>
           {approvedUpcoming === null ? (
             <div className={styles.empty}>Načítám…</div>
           ) : approvedUpcoming.length === 0 ? (
