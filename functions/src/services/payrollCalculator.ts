@@ -18,6 +18,7 @@
 
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
+import { randomUUID } from "crypto";
 
 const db = () => admin.firestore();
 
@@ -337,6 +338,62 @@ async function getFoodVoucherRate(): Promise<number> {
 }
 
 /**
+ * Read the one benefits doc for an employee and decide whether the Multisport
+ * benefit is active for the payroll month. The month window is
+ * [YYYY-MM-01, YYYY-MM-<lastDay>]; either date field may be null (open ended).
+ */
+async function getMultisportActive(
+  employeeId: string,
+  year: number,
+  month: number
+): Promise<boolean> {
+  const snap = await db()
+    .collection("employees")
+    .doc(employeeId)
+    .collection("benefits")
+    .limit(1)
+    .get();
+  if (snap.empty) return false;
+  const data = snap.docs[0].data() as Record<string, unknown>;
+  if (data.multisport !== true) return false;
+  const from = (data.multisportFrom as string | null | undefined) ?? null;
+  const to = (data.multisportTo as string | null | undefined) ?? null;
+  const first = `${year}-${String(month).padStart(2, "0")}-01`;
+  const lastDay = new Date(year, month, 0).getDate();
+  const last = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+  if (from && from > last) return false;
+  if (to && to < first) return false;
+  return true;
+}
+
+/**
+ * Find the most recent payroll period strictly before (year, month) and return
+ * that employee's entry doc data, or null. Used to seed carry-forward notes
+ * into a newly-created period.
+ */
+async function getPriorEntryData(
+  employeeId: string,
+  year: number,
+  month: number
+): Promise<Record<string, unknown> | null> {
+  const snap = await db()
+    .collection("payrollPeriods")
+    .orderBy("year", "desc")
+    .orderBy("month", "desc")
+    .get();
+  for (const p of snap.docs) {
+    const d = p.data() as Record<string, unknown>;
+    const py = d.year as number;
+    const pm = d.month as number;
+    const isPrior = py < year || (py === year && pm < month);
+    if (!isPrior) continue;
+    const entrySnap = await p.ref.collection("entries").doc(employeeId).get();
+    if (entrySnap.exists) return entrySnap.data() as Record<string, unknown>;
+  }
+  return null;
+}
+
+/**
  * Get the most recent active employment record for an employee.
  * Returns salary, hourlyRate, contractType, jobTitle.
  */
@@ -449,15 +506,20 @@ export async function createOrUpdatePayrollPeriod(
     };
   });
 
-  // Read existing entries to preserve sickLeaveHours + overrides (NOT autoOverrides)
+  // Read existing entries to preserve sickLeaveHours + overrides + notes
+  // (NOT autoOverrides — those are always recomputed)
   const existingEntriesSnap = await periodRef.collection("entries").get();
   const sickLeaveMap = new Map<string, number>();
   const overridesMap = new Map<string, Record<string, number>>();
+  const notesMap = new Map<string, Record<string, unknown>[]>();
   for (const d of existingEntriesSnap.docs) {
     const data = d.data();
     sickLeaveMap.set(d.id, (data.sickLeaveHours as number) ?? 0);
     if (data.overrides && typeof data.overrides === "object") {
       overridesMap.set(d.id, data.overrides as Record<string, number>);
+    }
+    if (Array.isArray(data.notes)) {
+      notesMap.set(d.id, data.notes as Record<string, unknown>[]);
     }
   }
 
@@ -483,8 +545,31 @@ export async function createOrUpdatePayrollPeriod(
     };
 
     const entry = calculateEntry(employee, allShifts, holidays, baseHours, foodVoucherRate, year, month);
+    const multisportActive = await getMultisportActive(employeeId, year, month);
+
+    let notes = notesMap.get(employeeId);
+    if (!notes) {
+      // Brand-new entry in a brand-new period — seed carry-forward notes from
+      // the most recent prior period, if any.
+      if (existing.empty) {
+        const priorEntry = await getPriorEntryData(employeeId, year, month);
+        const priorNotes = (priorEntry?.notes as Record<string, unknown>[] | undefined) ?? [];
+        const now = admin.firestore.Timestamp.now();
+        notes = priorNotes
+          .filter((n) => n.carryForward === true)
+          .map((n) => ({
+            ...n,
+            id: randomUUID(),
+            sourceNoteId: (n.sourceNoteId as string) ?? (n.id as string),
+            createdAt: now,
+          }));
+      } else {
+        notes = [];
+      }
+    }
+
     const entryRef = periodRef.collection("entries").doc(employeeId);
-    batch.set(entryRef, entry);
+    batch.set(entryRef, { ...entry, multisportActive, notes });
   }
 
   await batch.commit();
