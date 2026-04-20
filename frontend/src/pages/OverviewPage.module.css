@@ -218,6 +218,66 @@
   margin: 0 0 0.5rem 0;
 }
 
+.taskGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.taskTile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  padding: 1rem 0.75rem;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  text-decoration: none;
+  color: var(--color-text);
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.05s ease;
+}
+
+.taskTile:hover {
+  background: var(--color-surface-3);
+  border-color: var(--color-border-strong);
+}
+
+.taskTile:active {
+  transform: translateY(1px);
+}
+
+.taskTileMuted {
+  color: var(--color-text-subtle);
+}
+
+.taskTileMuted .taskCount {
+  color: var(--color-text-subtle);
+}
+
+.taskCount {
+  font-size: 1.75rem;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--color-info-text);
+}
+
+.taskLabel {
+  font-size: 0.8125rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+}
+
+.taskEmpty {
+  margin-top: 1rem;
+  color: var(--color-text-muted);
+  font-size: 0.9375rem;
+  padding: 0.5rem 0;
+}
+
 .myShifts {
   list-style: none;
   margin: 0;

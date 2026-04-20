@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { api } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/context/ThemeContext";
+import { useAlertsContext } from "@/context/AlertsContext";
+import { useShiftOverridesContext } from "@/context/ShiftOverridesContext";
+import { useShiftChangeRequestsContext } from "@/context/ShiftChangeRequestsContext";
 import {
   HOTEL_CODES,
   HOTEL_NAMES,
@@ -303,11 +307,27 @@ export default function OverviewPage() {
 
   const { theme } = useTheme();
   const isDark = theme === "dark";
-  const { employeeId } = useAuth();
+  const { employeeId, role } = useAuth();
+  const showTasks = role === "admin" || role === "director";
+
+  const { unreadCount: alertsCount } = useAlertsContext();
+  const { pendingCount: overridesCount } = useShiftOverridesContext();
+  const { pendingCount: changesCount } = useShiftChangeRequestsContext();
+  const [vacationCount, setVacationCount] = useState(0);
 
   const [plans, setPlans] = useState<PlanDetail[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!showTasks) return;
+    let cancelled = false;
+    api
+      .get<{ count: number }>("/vacation/pending-count")
+      .then((data) => { if (!cancelled) setVacationCount(data.count); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [showTasks]);
 
   useEffect(() => {
     let cancelled = false;
@@ -465,6 +485,39 @@ export default function OverviewPage() {
               </div>
             )}
           </section>
+
+          {showTasks && (() => {
+            const tiles: { count: number; label: string; to: string }[] = [
+              { count: alertsCount, label: "Upozornění", to: "/upozorneni" },
+              { count: overridesCount, label: "Úpravy směn", to: "/smeny" },
+              { count: changesCount, label: "Výměny směn", to: "/smeny" },
+              { count: vacationCount, label: "Dovolenky", to: "/dovolena" },
+            ];
+            const totalPending = tiles.reduce((s, t) => s + t.count, 0);
+            return (
+              <section className={styles.section}>
+                <h2 className={styles.dayHeading}>ÚKOLY</h2>
+                {totalPending === 0 ? (
+                  <div className={styles.taskEmpty}>
+                    Nejsou žádné nevyřízené úkoly.
+                  </div>
+                ) : (
+                  <div className={styles.taskGrid}>
+                    {tiles.map((t) => (
+                      <Link
+                        key={t.label}
+                        to={t.to}
+                        className={`${styles.taskTile} ${t.count === 0 ? styles.taskTileMuted : ""}`}
+                      >
+                        <span className={styles.taskCount}>{t.count}</span>
+                        <span className={styles.taskLabel}>{t.label}</span>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </section>
+            );
+          })()}
 
           {employeeId && myShifts && myShiftsHasAny && (
             <section className={styles.section}>
