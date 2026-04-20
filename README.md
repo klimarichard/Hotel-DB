@@ -29,7 +29,7 @@ This file contains implementation details, feature notes, and post-merge fix his
 | 5 | ✅ | Shift planner — `parseShiftExpression()`, monthly grid, availability rules, X-limit overrides |
 | 6 | ✅ | Vacation — request workflow, pendingEdit pattern, auto-X in shift plans, user↔employee linking |
 | 7 | ✅ | Payroll — calculation engine (replicates MZDY.xlsx), editable overrides, sick leave, food voucher rate |
-| 8 | 🔲 | Polish — stats dashboard, audit log UI, payroll export |
+| 8 | 🚧 | Polish — dashboard (`Přehled` — today's staffing, MOD, absent managers) ✅, stats, audit log UI |
 
 ---
 
@@ -196,4 +196,22 @@ The editor renders inside a `.a4Page` div (210 mm wide, padding 1.5 cm top/botto
 ## Companies
 
 `companies/{companyId}` fields: `name`, `address`, `ic`, `dic`, `fileNo` (Spisová značka).
+
+---
+
+## Dashboard — Přehled
+
+- `frontend/src/pages/OverviewPage.tsx` — route `/prehled`, visible to all roles (first entry in `navItems`, no role gate).
+- First version is today-only and read-only; reuses `GET /shifts/plans` + `GET /shifts/plans/:id` (no new backend endpoint).
+- Date comparison builds `YYYY-MM-DD` via `getFullYear/Month/Date` — never `toISOString()`.
+- **Sections:**
+  - **Směny dnes** — a fixed-layout table (`table-layout: fixed`) with one column per hotel. Hotel headers are colored via `getCellColor(parseShiftExpression("D"+hotel), isDark)` so they match the shift-plan palette and react to dark-mode. Rows: `DENNÍ` (segments `D`/`ZD`/`DP`) and `NOČNÍ` (`N`/`ZN`/`NP`). Double shifts (`DA+NS`) appear in both columns.
+  - **MOD** — letter from `modRow/{todayYMD}.code`. Name resolution: `plan.modPersons[letter]` first (per-plan override), then falls back to the static `MOD_PERSONS` mapping in `shiftConstants.ts` and finds the employee by full-name match.
+  - **Manažeři mimo (X)** — rendered only when at least one vedoucí has `rawInput === "X"` today.
+- **Per-item flags** (segment-driven, not emp.section):
+  - `(portýr)` when segment code is `DP` or `NP`.
+  - `(zaučování)` when segment code is `ZD` or `ZN`.
+  - Both can combine. Small faded `.flag` span.
+- **Sort order per hotel cell:** non-porter slots (isPorter=false) first, then porter slots; within each group by `displayOrder`, then `localeCompare(…, "cs")`.
+- **Empty states:** no plan for today's month → friendly notice (also shown to employees when the plan is still `created` since the backend filters those out for them).
 Managed in Settings → Společnosti tab. Only one card in edit mode at a time.
