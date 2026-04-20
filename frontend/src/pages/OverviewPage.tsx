@@ -521,7 +521,7 @@ export default function OverviewPage() {
                   <Link to="/smeny" className={`${styles.tile} ${styles.myShiftsTile}`}>
                     <span className={styles.tileLabel}>Moje směny</span>
                     <ul className={styles.myShiftsList}>
-                      {myShifts!.map((row, i) => {
+                      {myShifts!.map((row) => {
                         const parsed = row.shift
                           ? parseShiftExpression(row.shift.rawInput)
                           : null;
@@ -530,7 +530,6 @@ export default function OverviewPage() {
                           parsed && parsed.isValid && parsed.segments.length > 0
                             ? getCellColor(parsed, isDark)
                             : null;
-                        const hotel = parsed?.segments.find((s) => s.hotel)?.hotel;
                         const dayLabel = DAY_NAMES_SHORT[row.date.getDay()];
                         return (
                           <li key={row.dateKey} className={styles.myShiftRow}>
@@ -539,9 +538,6 @@ export default function OverviewPage() {
                               <span className={styles.myShiftDate}>
                                 {row.date.getDate()}.{row.date.getMonth() + 1}.
                               </span>
-                              {i === 0 && (
-                                <span className={styles.todayLabel}>DNES</span>
-                              )}
                             </span>
                             {hasShift ? (
                               <span
@@ -555,11 +551,8 @@ export default function OverviewPage() {
                                 {row.shift!.rawInput}
                               </span>
                             ) : (
-                              <span className={styles.myShiftFree}>volno</span>
+                              <span className={styles.myShiftFree}>—</span>
                             )}
-                            <span className={styles.myShiftHotel}>
-                              {hotel ? HOTEL_NAMES[hotel as HotelCode] : ""}
-                            </span>
                           </li>
                         );
                       })}
