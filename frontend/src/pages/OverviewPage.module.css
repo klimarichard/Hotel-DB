@@ -255,17 +255,23 @@
 
 .tileGrid {
   display: grid;
-  grid-template-columns: 2fr repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 0.75rem;
   align-items: stretch;
 }
 
 @media (max-width: 900px) {
   .tileGrid {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(3, 1fr);
   }
   .myShiftsTile {
     grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 560px) {
+  .tileGrid {
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 
