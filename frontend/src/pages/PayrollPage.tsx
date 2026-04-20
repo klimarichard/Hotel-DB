@@ -518,7 +518,7 @@ export default function PayrollPage() {
       for (const section of SECTIONS) {
         const entries = period.entries.filter((e) => e.section === section);
         if (entries.length === 0) continue;
-        rowsHtml += `<tr><td colspan="10" style="${cs.sectionRow}">${SECTION_LABELS[section] ?? section}</td></tr>`;
+        rowsHtml += `<tr><td colspan="11" style="${cs.sectionRow}">${SECTION_LABELS[section] ?? section}</td></tr>`;
         for (const entry of entries) {
           const isDpp = entry.contractType === "DPP";
           const nameHtml = entry.contractType
@@ -552,6 +552,7 @@ export default function PayrollPage() {
           rowsHtml += `<td style="${cs.cell}">${isDpp ? fmt(dppAmount) : "—"}</td>`;
           rowsHtml += `<td style="${cs.cell}">${isDpp ? "—" : navicText(extraPay)}</td>`;
           rowsHtml += `<td style="${cs.cell}">${isDpp ? "—" : fmt(foodVouchers)}</td>`;
+          rowsHtml += `<td style="${cs.cell}">${entry.multisportActive ? "ANO" : "—"}</td>`;
           rowsHtml += "</tr>";
         }
       }
@@ -567,6 +568,7 @@ export default function PayrollPage() {
         <th style="${cs.header}">DPP/FAKT.</th>
         <th style="${cs.header}">NAVÍC</th>
         <th style="${cs.header}">STRAVENKY</th>
+        <th style="${cs.header}">MULTISPORT</th>
       </tr>`;
 
       const fullHtml = `
