@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
+import { useTheme } from "@/context/ThemeContext";
 import {
   HOTEL_CODES,
   HOTEL_NAMES,
+  MOD_PERSONS,
+  getCellColor,
   parseShiftExpression,
   type HotelCode,
 } from "@/lib/shiftConstants";
@@ -18,6 +21,12 @@ interface PlanListItem {
   month: number;
   year: number;
   status: "created" | "opened" | "closed" | "published";
+}
+
+interface StaffItem {
+  emp: PlanEmployee;
+  isPorter: boolean;
+  isTrainee: boolean;
 }
 
 const DAY_NAMES_FULL = [
@@ -38,13 +47,24 @@ function todayYMD(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-function displayName(e: PlanEmployee): string {
-  return `${e.firstName} ${e.lastName}`;
+function hotelColor(hotel: HotelCode, dark: boolean): { bg: string; text: string } {
+  return getCellColor(parseShiftExpression(`D${hotel}`), dark);
+}
+
+function sectionRank(section: PlanEmployee["section"]): number {
+  switch (section) {
+    case "recepce": return 0;
+    case "portýři": return 1;
+    case "vedoucí": return 2;
+    default: return 3;
+  }
 }
 
 export default function OverviewPage() {
   const today = useMemo(() => new Date(), []);
   const todayKey = todayYMD(today);
+  const { theme } = useTheme();
+  const isDark = theme === "dark";
 
   const [plan, setPlan] = useState<PlanDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -83,8 +103,13 @@ export default function OverviewPage() {
     const empById = new Map<string, PlanEmployee>();
     for (const e of plan.employees) empById.set(e.employeeId, e);
 
-    const day: Record<HotelCode, PlanEmployee[]> = { A: [], S: [], Q: [], K: [], P: [], M: [] };
-    const night: Record<HotelCode, PlanEmployee[]> = { A: [], S: [], Q: [], K: [], P: [], M: [] };
+    const empty = (): StaffItem[] => [];
+    const day: Record<HotelCode, StaffItem[]> = {
+      A: empty(), S: empty(), Q: empty(), K: empty(), P: empty(), M: empty(),
+    };
+    const night: Record<HotelCode, StaffItem[]> = {
+      A: empty(), S: empty(), Q: empty(), K: empty(), P: empty(), M: empty(),
+    };
     const absentManagers: PlanEmployee[] = [];
 
     const todayShifts = plan.shifts.filter((s: ShiftDoc) => s.date === todayKey);
@@ -103,33 +128,69 @@ export default function OverviewPage() {
       for (const seg of parsed.segments) {
         if (!seg.hotel) continue;
         const hotel = seg.hotel as HotelCode;
+        const isTrainee = seg.code === "ZD" || seg.code === "ZN";
+        const isPorter = emp.section === "portýři";
+        const item: StaffItem = { emp, isPorter, isTrainee };
         if (seg.code === "D" || seg.code === "ZD" || seg.code === "DP") {
-          day[hotel].push(emp);
+          day[hotel].push(item);
         } else if (seg.code === "N" || seg.code === "ZN" || seg.code === "NP") {
-          night[hotel].push(emp);
+          night[hotel].push(item);
         }
       }
     }
 
-    const byOrder = (a: PlanEmployee, b: PlanEmployee) =>
-      a.displayOrder - b.displayOrder || a.lastName.localeCompare(b.lastName, "cs");
+    const byOrder = (a: StaffItem, b: StaffItem) =>
+      sectionRank(a.emp.section) - sectionRank(b.emp.section) ||
+      a.emp.displayOrder - b.emp.displayOrder ||
+      a.emp.lastName.localeCompare(b.emp.lastName, "cs");
     for (const h of HOTEL_CODES) {
       day[h].sort(byOrder);
       night[h].sort(byOrder);
     }
-    absentManagers.sort(byOrder);
-
-    const visibleHotels = HOTEL_CODES.filter(
-      (h) => day[h].length > 0 || night[h].length > 0 || (["A", "S", "Q", "K"] as HotelCode[]).includes(h)
+    absentManagers.sort(
+      (a, b) =>
+        a.displayOrder - b.displayOrder ||
+        a.lastName.localeCompare(b.lastName, "cs")
     );
 
+    const visibleHotels = HOTEL_CODES.filter(
+      (h) =>
+        day[h].length > 0 ||
+        night[h].length > 0 ||
+        (["A", "S", "Q", "K"] as HotelCode[]).includes(h)
+    );
+
+    // MOD lookup: per-plan override first, then static MOD_PERSONS name match.
     const modEntry = plan.modShifts.find((m) => m.id === todayKey);
     const modLetter = modEntry?.code ?? "";
-    const modEmployeeId = modLetter ? plan.modPersons?.[modLetter] : undefined;
-    const modEmployee = modEmployeeId ? empById.get(modEmployeeId) : undefined;
+    let modEmployee: PlanEmployee | undefined;
+    if (modLetter) {
+      const overrideEmpId = plan.modPersons?.[modLetter];
+      if (overrideEmpId) {
+        modEmployee = empById.get(overrideEmpId);
+      } else {
+        const staticName = MOD_PERSONS[modLetter];
+        if (staticName) {
+          modEmployee = plan.employees.find(
+            (e) => `${e.firstName} ${e.lastName}` === staticName
+          );
+        }
+      }
+    }
 
     return { day, night, absentManagers, visibleHotels, modLetter, modEmployee };
   }, [plan, todayKey]);
+
+  function renderName(item: StaffItem): React.ReactNode {
+    const name = `${item.emp.firstName} ${item.emp.lastName}`;
+    return (
+      <span key={item.emp.employeeId}>
+        {name}
+        {item.isPorter && <span className={styles.flag}> (portýr)</span>}
+        {item.isTrainee && <span className={styles.flag}> (zaučování)</span>}
+      </span>
+    );
+  }
 
   return (
     <div className={styles.page}>
@@ -152,9 +213,18 @@ export default function OverviewPage() {
               <thead>
                 <tr>
                   <th></th>
-                  {staffing.visibleHotels.map((h) => (
-                    <th key={h}>{HOTEL_NAMES[h]}</th>
-                  ))}
+                  {staffing.visibleHotels.map((h) => {
+                    const c = hotelColor(h, isDark);
+                    return (
+                      <th
+                        key={h}
+                        className={styles.hotelHeader}
+                        style={{ background: c.bg, color: c.text }}
+                      >
+                        {HOTEL_NAMES[h]}
+                      </th>
+                    );
+                  })}
                 </tr>
               </thead>
               <tbody>
@@ -166,9 +236,7 @@ export default function OverviewPage() {
                         <span className={styles.dash}>—</span>
                       ) : (
                         <div className={styles.nameList}>
-                          {staffing.day[h].map((e) => (
-                            <span key={e.employeeId}>{displayName(e)}</span>
-                          ))}
+                          {staffing.day[h].map((item) => renderName(item))}
                         </div>
                       )}
                     </td>
@@ -182,9 +250,7 @@ export default function OverviewPage() {
                         <span className={styles.dash}>—</span>
                       ) : (
                         <div className={styles.nameList}>
-                          {staffing.night[h].map((e) => (
-                            <span key={e.employeeId}>{displayName(e)}</span>
-                          ))}
+                          {staffing.night[h].map((item) => renderName(item))}
                         </div>
                       )}
                     </td>
@@ -195,34 +261,34 @@ export default function OverviewPage() {
           </section>
 
           <section className={styles.section}>
-            <h2 className={styles.sectionTitle}>Manažer ve službě</h2>
+            <h2 className={styles.sectionTitle}>MOD</h2>
             {staffing.modEmployee ? (
               <div className={styles.modRow}>
                 <span className={styles.modLetter}>{staffing.modLetter}</span>
-                <span>{displayName(staffing.modEmployee)}</span>
+                <span>{staffing.modEmployee.firstName} {staffing.modEmployee.lastName}</span>
               </div>
             ) : staffing.modLetter ? (
               <div className={styles.modRow}>
                 <span className={styles.modLetter}>{staffing.modLetter}</span>
-                <span className={styles.dash}>Nepřiřazeno</span>
+                <span className={styles.dash}>
+                  {MOD_PERSONS[staffing.modLetter] ?? "Nepřiřazeno"}
+                </span>
               </div>
             ) : (
               <span className={styles.dash}>—</span>
             )}
           </section>
 
-          <section className={styles.section}>
-            <h2 className={styles.sectionTitle}>Manažeři mimo (X)</h2>
-            {staffing.absentManagers.length === 0 ? (
-              <span className={styles.absentEmpty}>Nikdo.</span>
-            ) : (
+          {staffing.absentManagers.length > 0 && (
+            <section className={styles.section}>
+              <h2 className={styles.sectionTitle}>Manažeři mimo (X)</h2>
               <ul className={styles.absentList}>
                 {staffing.absentManagers.map((e) => (
-                  <li key={e.employeeId}>{displayName(e)}</li>
+                  <li key={e.employeeId}>{e.firstName} {e.lastName}</li>
                 ))}
               </ul>
-            )}
-          </section>
+            </section>
+          )}
         </>
       )}
     </div>
