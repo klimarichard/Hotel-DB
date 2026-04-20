@@ -17,6 +17,19 @@ type OverrideField =
   | "foodVouchers"
   | "dppAmount";
 
+export interface PayrollNote {
+  id: string;
+  sourceNoteId: string;
+  text: string;
+  carryForward: boolean;
+  createdBy: string;
+  createdByName: string;
+  createdAt: { seconds?: number; _seconds?: number } | null;
+  editedBy?: string;
+  editedByName?: string;
+  editedAt?: { seconds?: number; _seconds?: number } | null;
+}
+
 interface PayrollEntry {
   id: string; // employeeId
   firstName: string;
@@ -40,6 +53,8 @@ interface PayrollEntry {
   dppAmount: number | null;
   overrides?: Partial<Record<OverrideField, number>>;
   autoOverrides?: Partial<Record<OverrideField, number>>;
+  multisportActive?: boolean;
+  notes?: PayrollNote[];
 }
 
 interface PayrollPeriod {
@@ -406,6 +421,7 @@ export default function PayrollPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [sickModal, setSickModal] = useState<PayrollEntry | null>(null);
+  const [notesModal, setNotesModal] = useState<PayrollEntry | null>(null);
   const [showAllNavic, setShowAllNavic] = useState(false);
   const [recalculating, setRecalculating] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -658,7 +674,7 @@ export default function PayrollPage() {
     return (
       <>
         <tr key={`section-${section}`} className={styles.sectionRow}>
-          <td colSpan={10}>{SECTION_LABELS[section] ?? section}</td>
+          <td colSpan={12}>{SECTION_LABELS[section] ?? section}</td>
         </tr>
         {entries.map((entry) => {
           const isDpp = entry.contractType === "DPP";
@@ -790,6 +806,31 @@ export default function PayrollPage() {
                   />
                 )}
               </td>
+              <td className={styles.numCell}>
+                {entry.multisportActive ? "ANO" : <span className={styles.dash}>—</span>}
+              </td>
+              <td className={styles.numCell}>
+                {(entry.notes?.length ?? 0) > 0 ? (
+                  <button
+                    type="button"
+                    className={styles.notesBadge}
+                    onClick={() => setNotesModal(entry)}
+                    title="Zobrazit poznámky"
+                  >
+                    {entry.notes!.length}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className={styles.notesDashBtn}
+                    onClick={() => setNotesModal(entry)}
+                    title="Přidat poznámku"
+                    disabled={!canEdit}
+                  >
+                    <span className={styles.dash}>—</span>
+                  </button>
+                )}
+              </td>
             </tr>
           );
         })}
@@ -900,6 +941,8 @@ export default function PayrollPage() {
                     </span>
                   </th>
                   <th className={styles.numHeader}>STRAVENKY</th>
+                  <th className={styles.numHeader}>MULTISPORT</th>
+                  <th className={styles.numHeader}>POZNÁMKY</th>
                 </tr>
               </thead>
               <tbody>
@@ -917,6 +960,8 @@ export default function PayrollPage() {
           onSave={(h) => saveSickLeave(sickModal, h)}
         />
       )}
+
+      {notesModal && period && null /* notes modal wired in Commit 6 */}
     </div>
   );
 }
