@@ -541,7 +541,7 @@ export default function OverviewPage() {
           {(() => {
             const taskTiles: { count: number; label: string; to: string }[] = showTasks
               ? [
-                  { count: alertsCount, label: "Upozornění", to: "/upozorneni" },
+                  { count: alertsCount, label: "Neplatné doklady", to: "/upozorneni" },
                   { count: overridesCount, label: "Úpravy směn", to: "/smeny" },
                   { count: changesCount, label: "Výměny směn", to: "/smeny" },
                   { count: vacationCount, label: "Dovolenky", to: "/dovolena" },
