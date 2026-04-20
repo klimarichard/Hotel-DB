@@ -61,7 +61,8 @@ PDFs generated client-side via `html2pdf.js` — Puppeteer was too large for Gen
 - `parseShiftExpression` is duplicated verbatim in `functions/src/services/shiftParser.ts` AND `frontend/src/lib/shiftConstants.ts` — they cannot share code across packages. Keep in sync manually.
 - Shift cell composite doc ID: `${employeeId}_${date}`.
 - `ShiftGrid.module.css` wrapper must use `overflow-x: auto` (NOT `overflow: hidden`) — required for sticky employee name column.
-- Plan status transitions: `created → opened → closed → published` (one-way, server-enforced).
+- Plan status transitions: `created → opened → closed → published` (one-way, server-enforced). All three forward transitions run on the same 5-minute `checkPlanDeadlines` scheduler in `planTransitions.ts` — each checks a deadline field (`openedAt` / `closedAt` / `publishedAt`) against `Date.now()`.
+- **CREATED visibility:** employees do not see plans in `created` state (filtered in `GET /shifts/plans` and 404 from `GET /shifts/plans/:planId`). The plan only appears once it auto-opens on `openedAt`. Admin/director/manager always see all statuses.
 - One plan per (month, year) — enforced in `POST /shifts/plans` with a Firestore query.
 - Employee `status` field: `"active"` or `"terminated"` (string).
 - X limits: HPP = 8/month, PPP = 13/month, DPP = unlimited. Day/night recepce coverage minimum = 5 active employees.
@@ -89,7 +90,7 @@ PDFs generated client-side via `html2pdf.js` — Puppeteer was too large for Gen
 
 **Core files:**
 - `functions/src/services/payrollCalculator.ts` — `getCzechHolidays`, `getBaseHours`, `calculateEntry`, `createOrUpdatePayrollPeriod`. `FieldValue` from `firebase-admin/firestore` (NOT `admin.firestore.FieldValue` — undefined in modern firebase-admin).
-- `functions/src/routes/payroll.ts` — `GET/PATCH /payroll/settings`, `GET /payroll/periods`, `GET /payroll/periods/by-month/:year/:month`, `PATCH /payroll/periods/:id/entries/:employeeId`, `POST /payroll/trigger`.
+- `functions/src/routes/payroll.ts` — `GET/PATCH /payroll/settings`, `GET /payroll/periods`, `GET /payroll/periods/by-month/:year/:month`, `PATCH /payroll/periods/:id` (lock/unlock, admin), `PATCH /payroll/periods/:id/entries/:employeeId`, `POST /payroll/periods/:id/recalculate`, `POST /payroll/trigger`.
 - Scheduled `refreshPayroll` in `functions/src/index.ts` runs daily.
 
 **Calculation rules (from MZDY.xlsx):**
@@ -105,9 +106,17 @@ PDFs generated client-side via `html2pdf.js` — Puppeteer was too large for Gen
 - DPP/FAKT = `totalHours × hourlyRate` (unmasked).
 
 **Firestore schema:**
-- `payrollPeriods/{id}`: `{ year, month, shiftPlanId, baseHours, maxNightHours, maxHolidayHours, foodVoucherRate }`.
+- `payrollPeriods/{id}`: `{ year, month, shiftPlanId, baseHours, maxNightHours, maxHolidayHours, foodVoucherRate, locked, lockedAt?, lockedBy? }`.
 - `payrollPeriods/{id}/entries/{employeeId}`: calculated entry + `sickLeaveHours` (manual) + `overrides` (manual per-field) + `autoOverrides` (cascade-computed).
 - `settings/payroll`: `{ foodVoucherRate }`. Default 129.5 CZK/day.
+
+**Food voucher rate — retroactive safety:** `createOrUpdatePayrollPeriod` reads `foodVoucherRate` from the existing period first; only falls back to `settings/payroll` when the period is being created for the first time. Changing the rate in Settings therefore only affects future periods, never already-generated ones.
+
+**Locking:** Admins can lock a period via `PATCH /payroll/periods/:id` (`{ locked: true }`). Locked periods reject entry PATCHes (409), recalc requests (409), and skip the scheduled recalculation. Frontend hides the "Přepočítat" button and disables cell editing. Director can toggle lock on-screen labels but only admin role may actually flip it.
+
+**Manual recalc:** `POST /payroll/periods/:id/recalculate` re-runs `createOrUpdatePayrollPeriod(shiftPlanId, year, month)`. Triggered from the "Přepočítat" button — lets admin/director reflect shift-plan edits without waiting for the scheduled run. Rejected with 409 on locked periods.
+
+**PDF export:** `handleExportPdf` in `PayrollPage.tsx` builds an inline-styled HTML table via `html2pdf.js` and saves as `HPM_MZDY_YYMM.pdf`. A4 portrait, all employees on one page, Dovolená + Nemoc in one cell (NEMOC badge stacks beneath when > 0), NAVÍC unmasked and shown in its tiered form, contract badge next to the name, base/max metadata at the top. Effective-value precedence matches the on-screen table: `overrides` → `autoOverrides` → computed.
 
 **Override mechanism:** Double-click any numeric cell (admin/director). `overrides` are preserved across recalcs; `autoOverrides` are always recomputed. Overridden cells: amber `*` (user) or blue `↺` (auto-cascade).
 
