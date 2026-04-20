@@ -490,24 +490,26 @@ export default function EmployeeFormPage() {
               Multisport
             </label>
           </div>
-          <div className={styles.grid}>
-            <Field label="Multisport od">
-              <input
-                className={styles.input}
-                type="date"
-                value={additional.multisportFrom}
-                onChange={(e) => setA("multisportFrom", e.target.value)}
-              />
-            </Field>
-            <Field label="Multisport do">
-              <input
-                className={styles.input}
-                type="date"
-                value={additional.multisportTo}
-                onChange={(e) => setA("multisportTo", e.target.value)}
-              />
-            </Field>
-          </div>
+          {additional.multisport && (
+            <div className={styles.grid}>
+              <Field label="Multisport od">
+                <input
+                  className={styles.input}
+                  type="date"
+                  value={additional.multisportFrom}
+                  onChange={(e) => setA("multisportFrom", e.target.value)}
+                />
+              </Field>
+              <Field label="Multisport do">
+                <input
+                  className={styles.input}
+                  type="date"
+                  value={additional.multisportTo}
+                  onChange={(e) => setA("multisportTo", e.target.value)}
+                />
+              </Field>
+            </div>
+          )}
           <div className={styles.checkboxRow}>
             <label className={styles.checkboxLabel}>
               <input type="checkbox" checked={additional.allowances} onChange={(e) => setA("allowances", e.target.checked)} />
