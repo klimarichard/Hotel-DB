@@ -11,6 +11,7 @@ import AlertsPage from "@/pages/AlertsPage";
 import ContractTemplatesPage from "@/pages/ContractTemplatesPage";
 import ShiftPlannerPage from "@/pages/ShiftPlannerPage";
 import VacationPage from "@/pages/VacationPage";
+import OverviewPage from "@/pages/OverviewPage";
 import { AlertsProvider } from "@/context/AlertsContext";
 import { ShiftOverridesProvider } from "@/context/ShiftOverridesContext";
 import { ShiftChangeRequestsProvider } from "@/context/ShiftChangeRequestsContext";
@@ -50,6 +51,7 @@ export default function App() {
         }
       >
         <Route index element={<Navigate to={role === "employee" ? "/smeny" : "/zamestnanci"} replace />} />
+        <Route path="prehled" element={<OverviewPage />} />
         <Route path="zamestnanci" element={<EmployeesPage />} />
         <Route path="zamestnanci/novy" element={<EmployeeFormPage />} />
         <Route path="zamestnanci/:id" element={<EmployeeDetailPage />} />

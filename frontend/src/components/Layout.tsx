@@ -28,6 +28,7 @@ const MoonIcon = () => (
 );
 
 const navItems = [
+  { to: "/prehled", label: "Přehled" },
   { to: "/smeny", label: "Směny" },
   { to: "/dovolena", label: "Dovolená" },
 ];
