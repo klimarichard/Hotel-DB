@@ -161,17 +161,22 @@ export async function removeVacationXsFromPlans(
 // ─── Plans ──────────────────────────────────────────────────────────────────
 
 // GET /shifts/plans — list all plans
+// Employees cannot see plans in "created" state — they only appear once opened.
 shiftsRouter.get(
   "/plans",
   requireAuth,
   requireRole("admin", "director", "manager", "employee"),
-  async (_req, res) => {
+  async (req: AuthRequest, res) => {
     const snap = await db()
       .collection("shiftPlans")
       .orderBy("year", "desc")
       .orderBy("month", "desc")
       .get();
-    res.json(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    const all = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Array<Record<string, unknown> & { id: string; status: string }>;
+    const filtered = req.role === "employee"
+      ? all.filter((p) => p.status !== "created")
+      : all;
+    res.json(filtered);
   }
 );
 
@@ -211,6 +216,7 @@ shiftsRouter.post(
       year,
       status: "created",
       createdBy: req.uid ?? null,
+      openedAt: null,
       closedAt: null,
       publishedAt: null,
       createdAt: FieldValue.serverTimestamp(),
@@ -242,6 +248,12 @@ shiftsRouter.get(
     }
 
     const planData = planDoc.data()!;
+
+    // Employees may only view plans that have been opened (or beyond).
+    if ((req as AuthRequest).role === "employee" && planData.status === "created") {
+      res.status(404).json({ error: "Plán nenalezen" });
+      return;
+    }
 
     // Only return shifts for employees currently in the plan (filter orphans)
     const currentEmployeeIds = new Set(employeesSnap.docs.map((d) => d.data().employeeId as string));
@@ -375,6 +387,9 @@ shiftsRouter.patch(
       updatedAt: FieldValue.serverTimestamp(),
     };
 
+    if ("openedAt" in body) {
+      update.openedAt = body.openedAt ?? null;
+    }
     if ("closedAt" in body) {
       update.closedAt = body.closedAt ?? null;
     }

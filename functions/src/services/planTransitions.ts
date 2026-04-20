@@ -48,12 +48,23 @@ export async function transitionPlanDeadlines(): Promise<{ transitioned: string[
   // Only query plans that can still transition
   const snap = await db()
     .collection("shiftPlans")
-    .where("status", "in", ["opened", "closed"])
+    .where("status", "in", ["created", "opened", "closed"])
     .get();
 
   for (const doc of snap.docs) {
     const data = doc.data();
     const planRef = doc.ref;
+
+    // created → opened
+    if (
+      data.status === "created" &&
+      data.openedAt &&
+      new Date(data.openedAt).getTime() <= now
+    ) {
+      await planRef.update({ status: "opened", updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+      transitioned.push(`${doc.id}: created → opened`);
+      continue;
+    }
 
     // opened → closed
     if (
