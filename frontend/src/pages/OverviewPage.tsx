@@ -186,6 +186,29 @@ interface MyShiftRow {
   shift: ShiftDoc | null;
 }
 
+interface MyVacation {
+  employeeId: string;
+  startDate: string;
+  endDate: string;
+  status: "pending" | "approved" | "rejected";
+}
+
+function vacationStatusForDate(
+  dateKey: string,
+  vacations: MyVacation[] | null,
+): "approved" | "pending" | null {
+  if (!vacations) return null;
+  let hasPending = false;
+  for (const v of vacations) {
+    if (v.status === "rejected") continue;
+    if (v.startDate <= dateKey && v.endDate >= dateKey) {
+      if (v.status === "approved") return "approved";
+      if (v.status === "pending") hasPending = true;
+    }
+  }
+  return hasPending ? "pending" : null;
+}
+
 function buildMyShifts(
   days: Date[],
   plansByYM: Map<string, PlanDetail>,
@@ -314,6 +337,7 @@ export default function OverviewPage() {
   const { pendingCount: overridesCount } = useShiftOverridesContext();
   const { pendingCount: changesCount } = useShiftChangeRequestsContext();
   const [vacationCount, setVacationCount] = useState(0);
+  const [myVacations, setMyVacations] = useState<MyVacation[] | null>(null);
 
   const [plans, setPlans] = useState<PlanDetail[] | null>(null);
   const [loading, setLoading] = useState(true);
@@ -329,6 +353,19 @@ export default function OverviewPage() {
       .catch(() => {});
     return () => { cancelled = true; };
   }, [showTasks]);
+
+  useEffect(() => {
+    if (!employeeId) return;
+    let cancelled = false;
+    api
+      .get<MyVacation[]>("/vacation")
+      .then((data) => {
+        if (cancelled) return;
+        setMyVacations(data.filter((v) => v.employeeId === employeeId));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [employeeId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -522,14 +559,16 @@ export default function OverviewPage() {
                     <span className={styles.tileLabel}>Moje směny</span>
                     <ul className={styles.myShiftsList}>
                       {myShifts!.map((row) => {
-                        const parsed = row.shift
-                          ? parseShiftExpression(row.shift.rawInput)
+                        const raw = row.shift?.rawInput.trim() ?? "";
+                        const hasRealShift = raw !== "" && raw.toUpperCase() !== "X";
+                        const parsed = hasRealShift
+                          ? parseShiftExpression(raw)
                           : null;
-                        const hasShift = !!row.shift && row.shift.rawInput.trim() !== "";
                         const colors =
                           parsed && parsed.isValid && parsed.segments.length > 0
                             ? getCellColor(parsed, isDark)
                             : null;
+                        const vacStatus = vacationStatusForDate(row.dateKey, myVacations);
                         const dayLabel = DAY_NAMES_SHORT[row.date.getDay()];
                         return (
                           <li key={row.dateKey} className={styles.myShiftRow}>
@@ -539,7 +578,13 @@ export default function OverviewPage() {
                                 {row.date.getDate()}.{row.date.getMonth() + 1}.
                               </span>
                             </span>
-                            {hasShift ? (
+                            {vacStatus === "approved" ? (
+                              <span className={styles.myShiftVacation}>dovolená</span>
+                            ) : vacStatus === "pending" ? (
+                              <span className={styles.myShiftVacationPending}>
+                                dovolená (čeká na schválení)
+                              </span>
+                            ) : hasRealShift ? (
                               <span
                                 className={styles.myShiftBadge}
                                 style={
@@ -548,10 +593,10 @@ export default function OverviewPage() {
                                     : undefined
                                 }
                               >
-                                {row.shift!.rawInput}
+                                {raw}
                               </span>
                             ) : (
-                              <span className={styles.myShiftFree}>—</span>
+                              <span className={styles.myShiftBlank} aria-hidden />
                             )}
                           </li>
                         );
