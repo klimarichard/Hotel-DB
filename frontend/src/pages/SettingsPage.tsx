@@ -66,6 +66,8 @@ interface JobPositionRecord {
   departmentId: string;
   defaultSalary: number;
   hourlyRate?: number | null;
+  clothingAllowance?: number | null;
+  homeOfficeAllowance?: number | null;
   displayOrder: number;
 }
 
@@ -123,7 +125,7 @@ export default function SettingsPage() {
   // Job positions
   const [positions, setPositions] = useState<JobPositionRecord[]>([]);
   const [posEditId, setPosEditId] = useState<string | null>(null);
-  const [posForm, setPosForm] = useState<{ name: string; departmentId: string; defaultSalary: string; hourlyRate: string }>({ name: "", departmentId: "", defaultSalary: "", hourlyRate: "" });
+  const [posForm, setPosForm] = useState<{ name: string; departmentId: string; defaultSalary: string; hourlyRate: string; clothingAllowance: string; homeOfficeAllowance: string }>({ name: "", departmentId: "", defaultSalary: "", hourlyRate: "", clothingAllowance: "", homeOfficeAllowance: "" });
 
   // Payroll settings
   const [foodVoucherRate, setFoodVoucherRate] = useState<number>(129.5);
@@ -244,13 +246,20 @@ export default function SettingsPage() {
 
   function openCreatePosition() {
     setPosEditId(null);
-    setPosForm({ name: "", departmentId: departments[0]?.id ?? "", defaultSalary: "", hourlyRate: "" });
+    setPosForm({ name: "", departmentId: departments[0]?.id ?? "", defaultSalary: "", hourlyRate: "", clothingAllowance: "", homeOfficeAllowance: "" });
     setShowPosCreate(true);
   }
 
   function openEditPosition(p: JobPositionRecord) {
     setPosEditId(p.id);
-    setPosForm({ name: p.name, departmentId: p.departmentId, defaultSalary: String(p.defaultSalary ?? ""), hourlyRate: String(p.hourlyRate ?? "") });
+    setPosForm({
+      name: p.name,
+      departmentId: p.departmentId,
+      defaultSalary: String(p.defaultSalary ?? ""),
+      hourlyRate: p.hourlyRate != null ? String(p.hourlyRate) : "",
+      clothingAllowance: p.clothingAllowance != null ? String(p.clothingAllowance) : "",
+      homeOfficeAllowance: p.homeOfficeAllowance != null ? String(p.homeOfficeAllowance) : "",
+    });
     setShowPosCreate(true);
   }
 
@@ -261,6 +270,8 @@ export default function SettingsPage() {
       departmentId: posForm.departmentId,
       defaultSalary: Number(posForm.defaultSalary) || 0,
       hourlyRate: posForm.hourlyRate.trim() ? Number(posForm.hourlyRate) : null,
+      clothingAllowance: posForm.clothingAllowance.trim() ? Number(posForm.clothingAllowance) : null,
+      homeOfficeAllowance: posForm.homeOfficeAllowance.trim() ? Number(posForm.homeOfficeAllowance) : null,
     };
     try {
       if (posEditId) {
@@ -822,6 +833,26 @@ export default function SettingsPage() {
                     placeholder="—"
                   />
                 </div>
+                <div className={styles.field}>
+                  <label className={styles.label}>Náhrady - oblečení (Kč/měsíc, nepovinné)</label>
+                  <input
+                    className={styles.input}
+                    type="number"
+                    value={posForm.clothingAllowance}
+                    onChange={(e) => setPosForm({ ...posForm, clothingAllowance: e.target.value })}
+                    placeholder="—"
+                  />
+                </div>
+                <div className={styles.field}>
+                  <label className={styles.label}>Náhrady - HO (Kč/měsíc, nepovinné)</label>
+                  <input
+                    className={styles.input}
+                    type="number"
+                    value={posForm.homeOfficeAllowance}
+                    onChange={(e) => setPosForm({ ...posForm, homeOfficeAllowance: e.target.value })}
+                    placeholder="—"
+                  />
+                </div>
                 <div className={styles.formActions}>
                   <button type="button" className={styles.cancelBtn} onClick={() => { setShowPosCreate(false); setPosEditId(null); }}>Zrušit</button>
                   <button type="button" className={styles.saveBtn} onClick={handleSavePosition}>Uložit</button>
@@ -836,12 +867,14 @@ export default function SettingsPage() {
                 <th>Oddělení</th>
                 <th>Výchozí mzda</th>
                 <th>Hodinová sazba</th>
+                <th>Náhrady - oblečení</th>
+                <th>Náhrady - HO</th>
                 <th>Akce</th>
               </tr>
             </thead>
             <tbody>
               {positions.length === 0 && (
-                <tr><td colSpan={5} className={styles.empty}>Žádné pozice</td></tr>
+                <tr><td colSpan={7} className={styles.empty}>Žádné pozice</td></tr>
               )}
               {positions.map((p) => {
                 const dep = departments.find((d) => d.id === p.departmentId);
@@ -851,6 +884,8 @@ export default function SettingsPage() {
                     <td>{dep?.name ?? "—"}</td>
                     <td><SalaryCell value={p.defaultSalary} /></td>
                     <td><SalaryCell value={p.hourlyRate ?? null} /></td>
+                    <td><SalaryCell value={p.clothingAllowance ?? null} /></td>
+                    <td><SalaryCell value={p.homeOfficeAllowance ?? null} /></td>
                     <td>
                       <button className={styles.linkBtn} onClick={() => openEditPosition(p)}>Upravit</button>
                       <button className={styles.deactivateBtn} onClick={() => handleDeletePosition(p.id)}>Smazat</button>
