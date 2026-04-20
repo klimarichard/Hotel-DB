@@ -1,7 +1,7 @@
 import { Router } from "express";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
-import { requireAuth, AuthRequest } from "../middleware/auth";
+import { requireAuth, requireRole, AuthRequest } from "../middleware/auth";
 import { applyVacationXsToPlans, removeVacationXsFromPlans } from "./shifts";
 
 export const vacationRouter = Router();
@@ -29,6 +29,30 @@ vacationRouter.get("/check", requireAuth, async (req: AuthRequest, res) => {
 
   res.json({ hasVacation });
 });
+
+// ─── GET /vacation/pending-count — dashboard tile count ───────────────────────
+// Sums requests needing admin/director attention: still-pending originals plus
+// approved-but-edited requests whose edit hasn't been reviewed.
+
+vacationRouter.get(
+  "/pending-count",
+  requireAuth,
+  requireRole("admin", "director"),
+  async (_req, res) => {
+    const [pendingSnap, editSnap] = await Promise.all([
+      db()
+        .collection("vacationRequests")
+        .where("status", "==", "pending")
+        .get(),
+      db()
+        .collection("vacationRequests")
+        .where("status", "==", "approved")
+        .where("pendingEdit", "!=", null)
+        .get(),
+    ]);
+    res.json({ count: pendingSnap.size + editSnap.size });
+  }
+);
 
 // ─── GET /vacation ────────────────────────────────────────────────────────────
 // Admin/director: all requests; others: own requests only
