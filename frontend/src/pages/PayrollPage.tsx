@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { Navigate } from "react-router-dom";
+import PayrollNotesModal from "./PayrollNotesModal";
 import styles from "./PayrollPage.module.css";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -16,6 +17,19 @@ type OverrideField =
   | "extraPay"
   | "foodVouchers"
   | "dppAmount";
+
+export interface PayrollNote {
+  id: string;
+  sourceNoteId: string;
+  text: string;
+  carryForward: boolean;
+  createdBy: string;
+  createdByName: string;
+  createdAt: { seconds?: number; _seconds?: number } | null;
+  editedBy?: string;
+  editedByName?: string;
+  editedAt?: { seconds?: number; _seconds?: number } | null;
+}
 
 interface PayrollEntry {
   id: string; // employeeId
@@ -40,6 +54,8 @@ interface PayrollEntry {
   dppAmount: number | null;
   overrides?: Partial<Record<OverrideField, number>>;
   autoOverrides?: Partial<Record<OverrideField, number>>;
+  multisportActive?: boolean;
+  notes?: PayrollNote[];
 }
 
 interface PayrollPeriod {
@@ -406,6 +422,7 @@ export default function PayrollPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [sickModal, setSickModal] = useState<PayrollEntry | null>(null);
+  const [notesModal, setNotesModal] = useState<PayrollEntry | null>(null);
   const [showAllNavic, setShowAllNavic] = useState(false);
   const [recalculating, setRecalculating] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -501,7 +518,7 @@ export default function PayrollPage() {
       for (const section of SECTIONS) {
         const entries = period.entries.filter((e) => e.section === section);
         if (entries.length === 0) continue;
-        rowsHtml += `<tr><td colspan="10" style="${cs.sectionRow}">${SECTION_LABELS[section] ?? section}</td></tr>`;
+        rowsHtml += `<tr><td colspan="11" style="${cs.sectionRow}">${SECTION_LABELS[section] ?? section}</td></tr>`;
         for (const entry of entries) {
           const isDpp = entry.contractType === "DPP";
           const nameHtml = entry.contractType
@@ -535,6 +552,7 @@ export default function PayrollPage() {
           rowsHtml += `<td style="${cs.cell}">${isDpp ? fmt(dppAmount) : "—"}</td>`;
           rowsHtml += `<td style="${cs.cell}">${isDpp ? "—" : navicText(extraPay)}</td>`;
           rowsHtml += `<td style="${cs.cell}">${isDpp ? "—" : fmt(foodVouchers)}</td>`;
+          rowsHtml += `<td style="${cs.cell}">${entry.multisportActive ? "ANO" : "—"}</td>`;
           rowsHtml += "</tr>";
         }
       }
@@ -550,6 +568,7 @@ export default function PayrollPage() {
         <th style="${cs.header}">DPP/FAKT.</th>
         <th style="${cs.header}">NAVÍC</th>
         <th style="${cs.header}">STRAVENKY</th>
+        <th style="${cs.header}">MULTISPORT</th>
       </tr>`;
 
       const fullHtml = `
@@ -658,7 +677,7 @@ export default function PayrollPage() {
     return (
       <>
         <tr key={`section-${section}`} className={styles.sectionRow}>
-          <td colSpan={10}>{SECTION_LABELS[section] ?? section}</td>
+          <td colSpan={12}>{SECTION_LABELS[section] ?? section}</td>
         </tr>
         {entries.map((entry) => {
           const isDpp = entry.contractType === "DPP";
@@ -790,6 +809,31 @@ export default function PayrollPage() {
                   />
                 )}
               </td>
+              <td className={styles.numCell}>
+                {entry.multisportActive ? "ANO" : <span className={styles.dash}>—</span>}
+              </td>
+              <td className={styles.numCell}>
+                {(entry.notes?.length ?? 0) > 0 ? (
+                  <button
+                    type="button"
+                    className={styles.notesBadge}
+                    onClick={() => setNotesModal(entry)}
+                    title="Zobrazit poznámky"
+                  >
+                    {entry.notes!.length}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className={styles.notesDashBtn}
+                    onClick={() => setNotesModal(entry)}
+                    title="Přidat poznámku"
+                    disabled={!canEdit}
+                  >
+                    <span className={styles.dash}>—</span>
+                  </button>
+                )}
+              </td>
             </tr>
           );
         })}
@@ -900,6 +944,8 @@ export default function PayrollPage() {
                     </span>
                   </th>
                   <th className={styles.numHeader}>STRAVENKY</th>
+                  <th className={styles.numHeader}>MULTISPORT</th>
+                  <th className={styles.numHeader}>POZNÁMKY</th>
                 </tr>
               </thead>
               <tbody>
@@ -915,6 +961,18 @@ export default function PayrollPage() {
           entry={sickModal}
           onClose={() => setSickModal(null)}
           onSave={(h) => saveSickLeave(sickModal, h)}
+        />
+      )}
+
+      {notesModal && period && (
+        <PayrollNotesModal
+          periodId={period.id}
+          employeeId={notesModal.id}
+          employeeLabel={`${notesModal.lastName} ${notesModal.firstName}`}
+          notes={period.entries.find((e) => e.id === notesModal.id)?.notes ?? []}
+          canEdit={canEdit}
+          onClose={() => setNotesModal(null)}
+          onChanged={loadPeriod}
         />
       )}
     </div>

@@ -548,3 +548,39 @@
   opacity: 0.6;
   cursor: not-allowed;
 }
+
+/* ── Poznámky badge + add-note trigger ────────────────────────────────────── */
+
+.notesBadge {
+  display: inline-block;
+  min-width: 1.4rem;
+  padding: 0.1rem 0.45rem;
+  background: var(--color-primary);
+  color: #fff;
+  border: none;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  line-height: 1.2;
+}
+
+.notesBadge:hover {
+  background: var(--color-primary-dark);
+}
+
+.notesDashBtn {
+  background: none;
+  border: none;
+  padding: 0.1rem 0.3rem;
+  cursor: pointer;
+  color: inherit;
+}
+
+.notesDashBtn:disabled {
+  cursor: default;
+}
+
+.notesDashBtn:hover:not(:disabled) .dash {
+  color: var(--color-text);
+}

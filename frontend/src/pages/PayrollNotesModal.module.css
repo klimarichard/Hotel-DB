@@ -1,0 +1,213 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--overlay-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.modal {
+  background: var(--color-surface);
+  border-radius: 10px;
+  width: 100%;
+  max-width: 560px;
+  max-height: 80vh;
+  box-shadow: 0 8px 32px var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--color-text-heading);
+}
+
+.close {
+  background: none;
+  border: none;
+  font-size: 1rem;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 0.2rem;
+  line-height: 1;
+}
+
+.body {
+  padding: 1rem 1.25rem;
+  overflow-y: auto;
+}
+
+.empty {
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  text-align: center;
+  padding: 0.5rem 0 1rem;
+}
+
+.noteList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.noteItem {
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 0.75rem 0.85rem;
+  background: var(--color-surface-2, transparent);
+}
+
+.noteText {
+  white-space: pre-wrap;
+  font-size: 0.9rem;
+  color: var(--color-text);
+  margin: 0 0 0.35rem;
+  line-height: 1.4;
+}
+
+.noteMeta {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  margin-bottom: 0.35rem;
+}
+
+.noteFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.carryLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.noteActions {
+  display: inline-flex;
+  gap: 0.35rem;
+}
+
+.iconBtn {
+  padding: 0.25rem 0.55rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.iconBtn:hover {
+  background: var(--color-bg);
+}
+
+.iconBtnDanger {
+  color: var(--color-danger-text-strong);
+  border-color: var(--color-danger-border, var(--color-border-strong));
+}
+
+.editArea {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.textarea {
+  width: 100%;
+  min-height: 4.5rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--color-input-border);
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-family: inherit;
+  background: var(--color-input-bg);
+  color: var(--color-text);
+  resize: vertical;
+  outline: none;
+}
+
+.textarea:focus {
+  border-color: var(--color-input-focus);
+}
+
+.addSection {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.checkRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding: 0.875rem 1.25rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.cancelBtn {
+  padding: 0.45rem 1rem;
+  border-radius: 6px;
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.cancelBtn:hover:not(:disabled) {
+  background: var(--color-bg);
+}
+
+.saveBtn {
+  padding: 0.45rem 1.1rem;
+  border-radius: 6px;
+  border: none;
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.saveBtn:hover:not(:disabled) {
+  background: var(--color-primary-dark);
+}
+
+.saveBtn:disabled,
+.cancelBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.error {
+  color: var(--color-danger-text-strong);
+  font-size: 0.8125rem;
+}

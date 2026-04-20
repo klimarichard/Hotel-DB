@@ -742,6 +742,8 @@ interface AdditionalData {
   insuranceCompany?: string;
   bankAccount?: string;
   multisport?: boolean;
+  multisportFrom?: string | null;
+  multisportTo?: string | null;
   homeOffice?: number | null;
   allowances?: boolean;
 }
@@ -1210,7 +1212,15 @@ export default function EmployeeDetailPage() {
           <div className={styles.loading}>Načítám…</div>
         ) : (
           <div className={styles.fields}>
-            <div className={styles.field}><span className={styles.fieldLabel}>Multisport</span><span className={styles.fieldValue}>{additional?.multisport === true ? "Ano" : additional?.multisport === false ? "Ne" : "—"}</span></div>
+            <div className={styles.field}><span className={styles.fieldLabel}>Multisport</span><span className={styles.fieldValue}>{(() => {
+              const base = additional?.multisport === true ? "Ano" : additional?.multisport === false ? "Ne" : "—";
+              if (additional?.multisport !== true) return base;
+              const from = additional?.multisportFrom;
+              const to = additional?.multisportTo;
+              if (!from && !to) return base;
+              const range = `${from ? formatDateCZ(from) : "…"} – ${to ? formatDateCZ(to) : "…"}`;
+              return `${base} · ${range}`;
+            })()}</span></div>
             <div className={styles.field}><span className={styles.fieldLabel}>Home office</span><span className={styles.fieldValue}>{additional?.homeOffice != null ? String(additional.homeOffice) : "—"}</span></div>
             <div className={styles.field}><span className={styles.fieldLabel}>Náhrady</span><span className={styles.fieldValue}>{additional?.allowances === true ? "Ano" : additional?.allowances === false ? "Ne" : "—"}</span></div>
           </div>
