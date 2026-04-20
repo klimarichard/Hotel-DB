@@ -30,7 +30,7 @@ interface StaffItem {
 }
 
 const DAY_NAMES_FULL = [
-  "Neděle", "Pondělí", "Úterý", "Středa", "Čtvrtek", "Pátek", "Sobota",
+  "neděle", "pondělí", "úterý", "středa", "čtvrtek", "pátek", "sobota",
 ];
 
 const MONTH_GENITIVE = [
@@ -39,7 +39,7 @@ const MONTH_GENITIVE = [
 ];
 
 function formatTodayHeader(d: Date): string {
-  return `${DAY_NAMES_FULL[d.getDay()]} ${d.getDate()}. ${MONTH_GENITIVE[d.getMonth()]} ${d.getFullYear()}`;
+  return `${DAY_NAMES_FULL[d.getDay()]}, ${d.getDate()}. ${MONTH_GENITIVE[d.getMonth()]} ${d.getFullYear()}`;
 }
 
 function todayYMD(d: Date): string {
