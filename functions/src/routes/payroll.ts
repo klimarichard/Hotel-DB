@@ -185,6 +185,38 @@ payrollRouter.patch(
   }
 );
 
+// ─── POST /payroll/periods/:id/recalculate ────────────────────────────────────
+// Manual re-run of the payroll calculation for a single period. Locked periods
+// are rejected explicitly; createOrUpdatePayrollPeriod also skips them defensively.
+
+payrollRouter.post(
+  "/periods/:id/recalculate",
+  requireAuth,
+  requireRole("admin", "director"),
+  async (req: AuthRequest, res: Response) => {
+    const periodRef = db().collection("payrollPeriods").doc(req.params.id);
+    const snap = await periodRef.get();
+    if (!snap.exists) {
+      res.status(404).json({ error: "Mzdové období nebylo nalezeno." });
+      return;
+    }
+    const data = snap.data() as Record<string, unknown>;
+    if (data.locked === true) {
+      res.status(409).json({ error: "Mzdové období je uzamčeno — přepočet není povolen." });
+      return;
+    }
+    const planId = data.shiftPlanId as string | undefined;
+    const year = data.year as number | undefined;
+    const month = data.month as number | undefined;
+    if (!planId || year == null || month == null) {
+      res.status(400).json({ error: "Období nemá odkaz na směnný plán." });
+      return;
+    }
+    await createOrUpdatePayrollPeriod(planId, year, month);
+    res.json({ ok: true });
+  }
+);
+
 // ─── POST /payroll/trigger ────────────────────────────────────────────────────
 // Manual trigger for emulator testing — recalculates all published plans.
 

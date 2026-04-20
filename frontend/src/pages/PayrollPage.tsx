@@ -407,6 +407,7 @@ export default function PayrollPage() {
 
   const [sickModal, setSickModal] = useState<PayrollEntry | null>(null);
   const [showAllNavic, setShowAllNavic] = useState(false);
+  const [recalculating, setRecalculating] = useState(false);
 
   const loadPeriod = useCallback(async () => {
     setLoading(true);
@@ -445,6 +446,21 @@ export default function PayrollPage() {
       setPeriod((prev) => prev ? { ...prev, locked: next } : prev);
     } catch (e) {
       setError((e as Error).message ?? "Chyba při uzamykání.");
+    }
+  }
+
+  async function recalculate() {
+    if (!period || recalculating) return;
+    if (!window.confirm("Přepočítat mzdy pro toto období? Ruční úpravy (overrides) zůstanou zachovány.")) return;
+    setRecalculating(true);
+    setError(null);
+    try {
+      await api.post(`/payroll/periods/${period.id}/recalculate`, {});
+      await loadPeriod();
+    } catch (e) {
+      setError((e as Error).message ?? "Chyba při přepočtu.");
+    } finally {
+      setRecalculating(false);
     }
   }
 
@@ -698,6 +714,17 @@ export default function PayrollPage() {
             </span>
             <span className={styles.metaItem}>
               {isLocked && <span className={styles.lockedBadge}>🔒 Uzamčeno</span>}
+              {!isLocked && (
+                <button
+                  type="button"
+                  className={styles.lockBtn}
+                  onClick={recalculate}
+                  disabled={recalculating}
+                  title="Přepočítat mzdy podle aktuálního směnného plánu a nastavení"
+                >
+                  {recalculating ? "Přepočítávám…" : "Přepočítat"}
+                </button>
+              )}
               {canToggleLock && (
                 <button
                   type="button"
