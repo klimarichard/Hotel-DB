@@ -50,6 +50,7 @@ interface PayrollPeriod {
   maxNightHours: number;
   maxHolidayHours: number;
   foodVoucherRate: number;
+  locked?: boolean;
   entries: PayrollEntry[];
 }
 
@@ -428,7 +429,24 @@ export default function PayrollPage() {
   if (authLoading) return <div className={styles.state}>Načítám…</div>;
   if (role !== "admin" && role !== "director") return <Navigate to="/" replace />;
 
-  const canEdit = role === "admin" || role === "director";
+  const isLocked = period?.locked === true;
+  const canEdit = (role === "admin" || role === "director") && !isLocked;
+  const canToggleLock = role === "admin";
+
+  async function toggleLock() {
+    if (!period) return;
+    const next = !isLocked;
+    const confirmMsg = next
+      ? "Uzamknout mzdové období? Úpravy budou zablokovány."
+      : "Odemknout mzdové období? Úpravy budou povoleny.";
+    if (!window.confirm(confirmMsg)) return;
+    try {
+      await api.patch(`/payroll/periods/${period.id}`, { locked: next });
+      setPeriod((prev) => prev ? { ...prev, locked: next } : prev);
+    } catch (e) {
+      setError((e as Error).message ?? "Chyba při uzamykání.");
+    }
+  }
 
   function prevMonth() {
     if (selectedMonth === 1) { setSelectedYear((y) => y - 1); setSelectedMonth(12); }
@@ -677,6 +695,19 @@ export default function PayrollPage() {
             <span className={styles.metaItem}>
               <span className={styles.metaLabel}>Stravenky:</span>{" "}
               <strong>{period.foodVoucherRate.toLocaleString("cs-CZ")} Kč/den</strong>
+            </span>
+            <span className={styles.metaItem}>
+              {isLocked && <span className={styles.lockedBadge}>🔒 Uzamčeno</span>}
+              {canToggleLock && (
+                <button
+                  type="button"
+                  className={styles.lockBtn}
+                  onClick={toggleLock}
+                  title={isLocked ? "Odemknout období pro úpravy" : "Uzamknout období (zablokovat úpravy)"}
+                >
+                  {isLocked ? "Odemknout" : "Uzamknout"}
+                </button>
+              )}
             </span>
           </div>
           <div className={styles.tableWrapper}>

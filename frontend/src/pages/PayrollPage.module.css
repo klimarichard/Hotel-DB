@@ -105,6 +105,34 @@
   font-weight: 700;
 }
 
+.lockedBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.6rem;
+  background: var(--color-warning-bg, #fff7e6);
+  color: var(--color-warning-text, #a16207);
+  border: 1px solid var(--color-warning-border, #fcd34d);
+  border-radius: 999px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.lockBtn {
+  background: none;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 6px;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.lockBtn:hover {
+  background: var(--color-surface-4);
+  border-color: var(--color-text-subtle);
+}
+
 .tableWrapper {
   background: var(--color-surface);
   border-radius: 8px;
