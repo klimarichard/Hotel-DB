@@ -6,6 +6,8 @@ import {
   HOTEL_CODES,
   HOTEL_NAMES,
   MOD_PERSONS,
+  SHIFT_COLORS,
+  SHIFT_TEXT_COLORS,
   getCellColor,
   parseShiftExpression,
   type HotelCode,
@@ -51,6 +53,14 @@ function hotelDayStart(now: Date): Date {
   }
   d.setHours(0, 0, 0, 0);
   return d;
+}
+
+// Denní 07:00–18:59, noční 19:00–06:59.
+const NIGHT_CUTOFF_HOUR = 19;
+
+function currentShiftCode(now: Date): "D" | "N" {
+  const h = now.getHours();
+  return h >= DAY_CUTOFF_HOUR && h < NIGHT_CUTOFF_HOUR ? "D" : "N";
 }
 
 const DAY_NAMES_FULL = [
@@ -286,6 +296,7 @@ function ModBlock({ staffing }: { staffing: StaffingResult }) {
 export default function OverviewPage() {
   const today = useMemo(() => hotelDayStart(new Date()), []);
   const tomorrow = useMemo(() => addDays(today, 1), [today]);
+  const shiftCode = useMemo(() => currentShiftCode(new Date()), []);
   const next7Days = useMemo(() => {
     return Array.from({ length: 7 }, (_, i) => addDays(today, i));
   }, [today]);
@@ -370,7 +381,18 @@ export default function OverviewPage() {
 
   return (
     <div className={styles.page}>
-      <h1 className={styles.dateHeader}>{formatLongHeader(today)}</h1>
+      <div className={styles.dateHeaderRow}>
+        <h1 className={styles.dateHeader}>{formatLongHeader(today)}</h1>
+        <span
+          className={styles.shiftBadge}
+          style={{
+            background: SHIFT_COLORS[shiftCode],
+            color: SHIFT_TEXT_COLORS[shiftCode],
+          }}
+        >
+          {shiftCode === "D" ? "DENNÍ" : "NOČNÍ"}
+        </span>
+      </div>
 
       {loading && <div className={styles.state}>Načítám…</div>}
       {error && <div className={styles.errorState}>{error}</div>}

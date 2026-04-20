@@ -4,12 +4,29 @@
   gap: 1.5rem;
 }
 
+.dateHeaderRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+}
+
 .dateHeader {
   font-size: 1.75rem;
   font-weight: 700;
   color: var(--color-text);
   text-align: center;
   margin: 0;
+}
+
+.shiftBadge {
+  font-size: 0.8125rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  padding: 0.35rem 0.85rem;
+  border-radius: 999px;
+  line-height: 1;
 }
 
 .state {
