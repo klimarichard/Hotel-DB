@@ -201,7 +201,7 @@ The editor renders inside a `.a4Page` div (210 mm wide, padding 1.5 cm top/botto
 
 ## Dashboard — Přehled
 
-- `frontend/src/pages/OverviewPage.tsx` — route `/prehled`, visible to all roles (first entry in `navItems`, no role gate).
+- `frontend/src/pages/OverviewPage.tsx` — route `/prehled`, visible to all roles (first entry in `navItems`, no role gate). Also the default post-login landing page — the index route in `App.tsx` redirects `/` to `/prehled` for every role.
 - First version is today-only and read-only; reuses `GET /shifts/plans` + `GET /shifts/plans/:id` (no new backend endpoint).
 - Date comparison builds `YYYY-MM-DD` via `getFullYear/Month/Date` — never `toISOString()`.
 - **Sections:**
