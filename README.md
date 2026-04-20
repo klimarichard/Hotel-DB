@@ -82,6 +82,7 @@ PDFs generated client-side via `html2pdf.js` — Puppeteer was too large for Gen
 - Pracovní zařazení (job title/department/contract/company) set exclusively via employment history modal — not on the add/edit form.
 - `jobPositions` and `departments` Firestore collections managed from Settings.
 - Employment history modal: linked dropdowns (Oddělení → Pracovní pozice), auto-fills `salary` and `hourlyRate` from position defaults.
+- `jobPositions` docs carry optional `clothingAllowance` and `homeOfficeAllowance` (Kč/h, nullable). Seeded from `pozice.csv` columns "Náhrady - oblečení" and "Náhrady - HO"; editable in Settings → Pracovní pozice. Displayed as `N Kč/h` behind the same eye-toggle as salary + hourly rate.
 - Czech date formatting: `frontend/src/lib/dateFormat.ts` — `formatDateCZ(iso)`, `formatTimestampCZ(ts)`, `formatDatetimeCZ(ts)`.
 - Gendered marital status: `frontend/src/lib/genderDisplay.ts` — `displayGendered(value, gender)`.
 
