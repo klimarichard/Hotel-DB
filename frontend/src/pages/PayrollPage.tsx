@@ -50,6 +50,7 @@ interface PayrollPeriod {
   maxNightHours: number;
   maxHolidayHours: number;
   foodVoucherRate: number;
+  locked?: boolean;
   entries: PayrollEntry[];
 }
 
@@ -406,6 +407,8 @@ export default function PayrollPage() {
 
   const [sickModal, setSickModal] = useState<PayrollEntry | null>(null);
   const [showAllNavic, setShowAllNavic] = useState(false);
+  const [recalculating, setRecalculating] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const loadPeriod = useCallback(async () => {
     setLoading(true);
@@ -428,7 +431,166 @@ export default function PayrollPage() {
   if (authLoading) return <div className={styles.state}>Načítám…</div>;
   if (role !== "admin" && role !== "director") return <Navigate to="/" replace />;
 
-  const canEdit = role === "admin" || role === "director";
+  const isLocked = period?.locked === true;
+  const canEdit = (role === "admin" || role === "director") && !isLocked;
+  const canToggleLock = role === "admin";
+
+  async function toggleLock() {
+    if (!period) return;
+    const next = !isLocked;
+    const confirmMsg = next
+      ? "Uzamknout mzdové období? Úpravy budou zablokovány."
+      : "Odemknout mzdové období? Úpravy budou povoleny.";
+    if (!window.confirm(confirmMsg)) return;
+    try {
+      await api.patch(`/payroll/periods/${period.id}`, { locked: next });
+      setPeriod((prev) => prev ? { ...prev, locked: next } : prev);
+    } catch (e) {
+      setError((e as Error).message ?? "Chyba při uzamykání.");
+    }
+  }
+
+  async function recalculate() {
+    if (!period || recalculating) return;
+    if (!window.confirm("Přepočítat mzdy pro toto období? Ruční úpravy (overrides) zůstanou zachovány.")) return;
+    setRecalculating(true);
+    setError(null);
+    try {
+      await api.post(`/payroll/periods/${period.id}/recalculate`, {});
+      await loadPeriod();
+    } catch (e) {
+      setError((e as Error).message ?? "Chyba při přepočtu.");
+    } finally {
+      setRecalculating(false);
+    }
+  }
+
+  async function handleExportPdf() {
+    if (!period || exporting) return;
+    setExporting(true);
+    setError(null);
+    try {
+      const html2pdf = (await import("html2pdf.js" as string)).default;
+
+      const effNum = (e: PayrollEntry, field: OverrideField): number => {
+        const ov = e.overrides?.[field];
+        if (ov !== undefined) return ov;
+        const ao = e.autoOverrides?.[field];
+        if (ao !== undefined) return ao;
+        const raw = (e as unknown as Record<string, unknown>)[field];
+        return typeof raw === "number" ? raw : 0;
+      };
+      const fmt = (n: number) => (n === 0 ? "—" : n.toLocaleString("cs-CZ"));
+      const navicText = (extraPay: number): string => {
+        if (!extraPay || extraPay <= 0) return "—";
+        if (extraPay < 5000) return (Math.ceil(extraPay / 0.85 / 100) * 100).toLocaleString("cs-CZ");
+        if (extraPay === 5000) return (6000).toLocaleString("cs-CZ");
+        return `${(6000).toLocaleString("cs-CZ")}<br>${(extraPay - 5000).toLocaleString("cs-CZ")}`;
+      };
+
+      const cs = {
+        cell: "padding:2px 3px;text-align:center;font-size:7.5pt;font-family:Arial,sans-serif;border:1px solid #d1d5db;line-height:1.25;",
+        nameCell: "padding:2px 5px;font-size:7.5pt;white-space:nowrap;border:1px solid #d1d5db;text-align:left;",
+        header: "padding:3px 3px;text-align:center;font-size:7pt;font-weight:700;border:1px solid #d1d5db;background:#f3f4f6;line-height:1.2;",
+        sectionRow: "padding:3px 5px;font-size:7.5pt;font-weight:700;text-transform:uppercase;background:#e5e7eb;border:1px solid #d1d5db;",
+        badge: "display:inline-block;margin-left:4px;padding:0 4px;border:1px solid #d1d5db;border-radius:8px;font-size:6.5pt;color:#4b5563;background:#f3f4f6;",
+        nemoc: "display:inline-block;margin-top:1px;padding:0 3px;background:#fef3c7;color:#92400e;border-radius:3px;font-size:6.5pt;font-weight:600;",
+      };
+
+      let rowsHtml = "";
+      for (const section of SECTIONS) {
+        const entries = period.entries.filter((e) => e.section === section);
+        if (entries.length === 0) continue;
+        rowsHtml += `<tr><td colspan="10" style="${cs.sectionRow}">${SECTION_LABELS[section] ?? section}</td></tr>`;
+        for (const entry of entries) {
+          const isDpp = entry.contractType === "DPP";
+          const nameHtml = entry.contractType
+            ? `${entry.lastName} ${entry.firstName}<span style="${cs.badge}">${entry.contractType}</span>`
+            : `${entry.lastName} ${entry.firstName}`;
+          const hours = effNum(entry, "totalHours");
+          const report = effNum(entry, "reportHours");
+          const vacation = effNum(entry, "vacationHours");
+          const sick = entry.sickLeaveHours ?? 0;
+          const night = effNum(entry, "nightHours");
+          const holiday = effNum(entry, "holidayHours");
+          const weekend = effNum(entry, "weekendHours");
+          const extraPay = effNum(entry, "extraPay");
+          const foodVouchers = effNum(entry, "foodVouchers");
+          const dppAmount = entry.overrides?.dppAmount ?? entry.dppAmount ?? 0;
+
+          const vacationCell = isDpp
+            ? "—"
+            : (sick > 0
+              ? `${fmt(vacation)}<div style="${cs.nemoc}">${sick} NEMOC</div>`
+              : fmt(vacation));
+
+          rowsHtml += "<tr>";
+          rowsHtml += `<td style="${cs.nameCell}">${nameHtml}</td>`;
+          rowsHtml += `<td style="${cs.cell}">${fmt(hours)}</td>`;
+          rowsHtml += `<td style="${cs.cell}">${isDpp ? "—" : fmt(report)}</td>`;
+          rowsHtml += `<td style="${cs.cell}">${vacationCell}</td>`;
+          rowsHtml += `<td style="${cs.cell}">${isDpp ? "—" : fmt(night)}</td>`;
+          rowsHtml += `<td style="${cs.cell}">${isDpp ? "—" : fmt(holiday)}</td>`;
+          rowsHtml += `<td style="${cs.cell}">${isDpp ? "—" : fmt(weekend)}</td>`;
+          rowsHtml += `<td style="${cs.cell}">${isDpp ? fmt(dppAmount) : "—"}</td>`;
+          rowsHtml += `<td style="${cs.cell}">${isDpp ? "—" : navicText(extraPay)}</td>`;
+          rowsHtml += `<td style="${cs.cell}">${isDpp ? "—" : fmt(foodVouchers)}</td>`;
+          rowsHtml += "</tr>";
+        }
+      }
+
+      const headerHtml = `<tr>
+        <th style="${cs.header}text-align:left;">Zaměstnanec</th>
+        <th style="${cs.header}">HODINY</th>
+        <th style="${cs.header}">VÝKAZ</th>
+        <th style="${cs.header}">DOVOLENÁ</th>
+        <th style="${cs.header}">NOČNÍ</th>
+        <th style="${cs.header}">SVÁTEK</th>
+        <th style="${cs.header}">SO+NE</th>
+        <th style="${cs.header}">DPP/FAKT.</th>
+        <th style="${cs.header}">NAVÍC</th>
+        <th style="${cs.header}">STRAVENKY</th>
+      </tr>`;
+
+      const fullHtml = `
+        <div style="font-family:Arial,sans-serif;color:#111827;background:#fff;">
+          <h2 style="margin:0 0 6px 0;font-size:12pt;">Mzdy — ${MONTH_NAMES[period.month - 1]} ${period.year}</h2>
+          <div style="font-size:8pt;color:#6b7280;margin-bottom:6px;">
+            Základ: <strong>${period.baseHours}</strong> &nbsp;·&nbsp;
+            Max. nočních: <strong>${period.maxNightHours}</strong> &nbsp;·&nbsp;
+            Max. svátků: <strong>${period.maxHolidayHours}</strong> &nbsp;·&nbsp;
+            Stravenka: <strong>${period.foodVoucherRate.toLocaleString("cs-CZ")} Kč/den</strong>
+          </div>
+          <table style="border-collapse:collapse;width:100%;table-layout:auto;">
+            <thead>${headerHtml}</thead>
+            <tbody>${rowsHtml}</tbody>
+          </table>
+        </div>`;
+
+      const wrapper = document.createElement("div");
+      wrapper.innerHTML = fullHtml;
+      document.body.appendChild(wrapper);
+
+      const pad2 = (n: number) => String(n).padStart(2, "0");
+      const yy = pad2(period.year % 100);
+      const filename = `HPM_MZDY_${yy}${pad2(period.month)}.pdf`;
+
+      await html2pdf().set({
+        margin: [6, 6, 6, 6],
+        filename,
+        image: { type: "jpeg", quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, windowWidth: 1100 },
+        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+        pagebreak: { mode: ["avoid-all"] },
+      }).from(wrapper.firstElementChild).save();
+
+      document.body.removeChild(wrapper);
+    } catch (e) {
+      setError((e as Error).message ?? "Chyba při exportu PDF.");
+    } finally {
+      setExporting(false);
+    }
+  }
 
   function prevMonth() {
     if (selectedMonth === 1) { setSelectedYear((y) => y - 1); setSelectedMonth(12); }
@@ -677,6 +839,39 @@ export default function PayrollPage() {
             <span className={styles.metaItem}>
               <span className={styles.metaLabel}>Stravenky:</span>{" "}
               <strong>{period.foodVoucherRate.toLocaleString("cs-CZ")} Kč/den</strong>
+            </span>
+            <span className={styles.metaItem}>
+              {isLocked && <span className={styles.lockedBadge}>🔒 Uzamčeno</span>}
+              {!isLocked && (
+                <button
+                  type="button"
+                  className={styles.lockBtn}
+                  onClick={recalculate}
+                  disabled={recalculating}
+                  title="Přepočítat mzdy podle aktuálního směnného plánu a nastavení"
+                >
+                  {recalculating ? "Přepočítávám…" : "Přepočítat"}
+                </button>
+              )}
+              <button
+                type="button"
+                className={styles.lockBtn}
+                onClick={handleExportPdf}
+                disabled={exporting}
+                title="Exportovat mzdy do PDF"
+              >
+                {exporting ? "Exportuji…" : "Exportovat PDF"}
+              </button>
+              {canToggleLock && (
+                <button
+                  type="button"
+                  className={styles.lockBtn}
+                  onClick={toggleLock}
+                  title={isLocked ? "Odemknout období pro úpravy" : "Uzamknout období (zablokovat úpravy)"}
+                >
+                  {isLocked ? "Odemknout" : "Uzamknout"}
+                </button>
+              )}
             </span>
           </div>
           <div className={styles.tableWrapper}>

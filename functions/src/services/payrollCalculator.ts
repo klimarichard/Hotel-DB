@@ -376,7 +376,6 @@ export async function createOrUpdatePayrollPeriod(
 ): Promise<void> {
   const holidays = getCzechHolidays(year);
   const baseHours = getBaseHours(year, month);
-  const foodVoucherRate = await getFoodVoucherRate();
 
   // Count Czech holidays that fall within this month
   const monthPrefix = `${year}-${String(month).padStart(2, "0")}-`;
@@ -395,6 +394,17 @@ export async function createOrUpdatePayrollPeriod(
     .limit(1)
     .get();
 
+  // Locked periods are immutable — skip entirely.
+  if (!existing.empty && (existing.docs[0].data() as Record<string, unknown>).locked === true) {
+    return;
+  }
+
+  // Preserve the rate stored on an existing period; only pull from settings for new periods.
+  // This ensures a settings change does not retroactively alter past payrolls.
+  const foodVoucherRate = existing.empty
+    ? await getFoodVoucherRate()
+    : ((existing.docs[0].data().foodVoucherRate as number | undefined) ?? await getFoodVoucherRate());
+
   let periodRef: admin.firestore.DocumentReference;
   const periodData = {
     year,
@@ -411,6 +421,7 @@ export async function createOrUpdatePayrollPeriod(
     periodRef = periodsRef.doc();
     await periodRef.set({
       ...periodData,
+      locked: false,
       createdAt: FieldValue.serverTimestamp(),
     });
   } else {

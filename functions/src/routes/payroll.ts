@@ -105,6 +105,41 @@ payrollRouter.get(
   }
 );
 
+// ─── PATCH /payroll/periods/:id ───────────────────────────────────────────────
+// Lock/unlock a payroll period (admin only). Locked periods are read-only.
+
+payrollRouter.patch(
+  "/periods/:id",
+  requireAuth,
+  requireRole("admin"),
+  async (req: AuthRequest, res: Response) => {
+    const { locked } = req.body as { locked?: boolean };
+    if (typeof locked !== "boolean") {
+      res.status(400).json({ error: "Pole 'locked' musí být boolean." });
+      return;
+    }
+    const periodRef = db().collection("payrollPeriods").doc(req.params.id);
+    const snap = await periodRef.get();
+    if (!snap.exists) {
+      res.status(404).json({ error: "Mzdové období nebylo nalezeno." });
+      return;
+    }
+    const update: Record<string, unknown> = {
+      locked,
+      updatedAt: FieldValue.serverTimestamp(),
+    };
+    if (locked) {
+      update.lockedAt = FieldValue.serverTimestamp();
+      update.lockedBy = req.uid;
+    } else {
+      update.lockedAt = FieldValue.delete();
+      update.lockedBy = FieldValue.delete();
+    }
+    await periodRef.update(update);
+    res.json({ ok: true, locked });
+  }
+);
+
 // ─── PATCH /payroll/periods/:id/entries/:employeeId ──────────────────────────
 
 payrollRouter.patch(
@@ -112,6 +147,17 @@ payrollRouter.patch(
   requireAuth,
   requireRole("admin", "director"),
   async (req: AuthRequest, res: Response) => {
+    const periodRef = db().collection("payrollPeriods").doc(req.params.id);
+    const periodSnap = await periodRef.get();
+    if (!periodSnap.exists) {
+      res.status(404).json({ error: "Mzdové období nebylo nalezeno." });
+      return;
+    }
+    if ((periodSnap.data() as Record<string, unknown>).locked === true) {
+      res.status(409).json({ error: "Mzdové období je uzamčeno — úpravy nejsou povoleny." });
+      return;
+    }
+
     const { sickLeaveHours, overrides, autoOverrides } = req.body as {
       sickLeaveHours?: number;
       overrides?: Record<string, number>;
@@ -131,12 +177,42 @@ payrollRouter.patch(
       res.status(400).json({ error: "Nic k uložení." });
       return;
     }
-    const entryRef = db()
-      .collection("payrollPeriods")
-      .doc(req.params.id)
+    const entryRef = periodRef
       .collection("entries")
       .doc(req.params.employeeId);
     await entryRef.update(update);
+    res.json({ ok: true });
+  }
+);
+
+// ─── POST /payroll/periods/:id/recalculate ────────────────────────────────────
+// Manual re-run of the payroll calculation for a single period. Locked periods
+// are rejected explicitly; createOrUpdatePayrollPeriod also skips them defensively.
+
+payrollRouter.post(
+  "/periods/:id/recalculate",
+  requireAuth,
+  requireRole("admin", "director"),
+  async (req: AuthRequest, res: Response) => {
+    const periodRef = db().collection("payrollPeriods").doc(req.params.id);
+    const snap = await periodRef.get();
+    if (!snap.exists) {
+      res.status(404).json({ error: "Mzdové období nebylo nalezeno." });
+      return;
+    }
+    const data = snap.data() as Record<string, unknown>;
+    if (data.locked === true) {
+      res.status(409).json({ error: "Mzdové období je uzamčeno — přepočet není povolen." });
+      return;
+    }
+    const planId = data.shiftPlanId as string | undefined;
+    const year = data.year as number | undefined;
+    const month = data.month as number | undefined;
+    if (!planId || year == null || month == null) {
+      res.status(400).json({ error: "Období nemá odkaz na směnný plán." });
+      return;
+    }
+    await createOrUpdatePayrollPeriod(planId, year, month);
     res.json({ ok: true });
   }
 );
