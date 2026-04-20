@@ -25,6 +25,14 @@ interface VacationRequest {
   pendingEdit: PendingEdit | null;
 }
 
+interface ApprovedUpcoming {
+  employeeId: string;
+  firstName: string;
+  lastName: string;
+  startDate: string;
+  endDate: string;
+}
+
 function StatusBadge({ status }: { status: VacationRequest["status"] }) {
   const labels = { pending: "Čeká", approved: "Schváleno", rejected: "Zamítnuto" };
   return (
@@ -40,6 +48,7 @@ export default function VacationPage() {
 
   const [requests, setRequests] = useState<VacationRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [approvedUpcoming, setApprovedUpcoming] = useState<ApprovedUpcoming[] | null>(null);
 
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -66,6 +75,16 @@ export default function VacationPage() {
       .catch(() => setRequests([]))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (canApprove) return;
+    let cancelled = false;
+    api
+      .get<ApprovedUpcoming[]>("/vacation/approved-upcoming")
+      .then((data) => { if (!cancelled) setApprovedUpcoming(data); })
+      .catch(() => { if (!cancelled) setApprovedUpcoming([]); });
+    return () => { cancelled = true; };
+  }, [canApprove]);
 
   const myRequests = requests.filter((r) => r.uid === user?.uid);
   const allRequests = requests; // admin/director already gets all from backend
@@ -368,6 +387,37 @@ export default function VacationPage() {
           </table>
         )}
       </div>
+
+      {/* Approved upcoming vacations — employees & managers */}
+      {!canApprove && (
+        <div className={styles.tableWrapper}>
+          <div className={styles.sectionTitle}>Schválené dovolené (všichni zaměstnanci)</div>
+          {approvedUpcoming === null ? (
+            <div className={styles.empty}>Načítám…</div>
+          ) : approvedUpcoming.length === 0 ? (
+            <div className={styles.empty}>Žádné schválené dovolené.</div>
+          ) : (
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th>Zaměstnanec</th>
+                  <th>Od</th>
+                  <th>Do</th>
+                </tr>
+              </thead>
+              <tbody>
+                {approvedUpcoming.map((v, i) => (
+                  <tr key={`${v.employeeId}-${v.startDate}-${i}`}>
+                    <td>{v.lastName} {v.firstName}</td>
+                    <td>{formatDateCZ(v.startDate)}</td>
+                    <td>{formatDateCZ(v.endDate)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
 
       {/* All requests — admin/director only */}
       {canApprove && (

@@ -54,6 +54,38 @@ vacationRouter.get(
   }
 );
 
+// ─── GET /vacation/approved-upcoming ──────────────────────────────────────────
+// Lightweight list of approved vacations whose endDate is today or later, for
+// every authenticated user. Only name + date range fields are returned so
+// employees can see where colleagues already have approved vacation without
+// leaking reasons or other metadata. Sorted by startDate ascending.
+
+vacationRouter.get("/approved-upcoming", requireAuth, async (_req, res) => {
+  // YYYY-MM-DD in the Prague timezone, regardless of Cloud Functions TZ.
+  const todayYMD = new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "Europe/Prague",
+  }).format(new Date());
+
+  const snap = await db()
+    .collection("vacationRequests")
+    .where("status", "==", "approved")
+    .get();
+
+  const rows = snap.docs
+    .map((d) => d.data() as Record<string, unknown>)
+    .filter((v) => ((v.endDate as string) ?? "") >= todayYMD)
+    .map((v) => ({
+      employeeId: (v.employeeId as string) ?? "",
+      firstName: (v.firstName as string) ?? "",
+      lastName: (v.lastName as string) ?? "",
+      startDate: (v.startDate as string) ?? "",
+      endDate: (v.endDate as string) ?? "",
+    }))
+    .sort((a, b) => a.startDate.localeCompare(b.startDate));
+
+  res.json(rows);
+});
+
 // ─── GET /vacation ────────────────────────────────────────────────────────────
 // Admin/director: all requests; others: own requests only
 
