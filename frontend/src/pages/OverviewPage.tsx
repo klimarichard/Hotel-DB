@@ -39,6 +39,20 @@ interface StaffingResult {
   modEmployee: PlanEmployee | undefined;
 }
 
+// Hotel day rolls over at 07:00 local time — a shift worked on the night of
+// the 20th that ends at 06:00 on the 21st is still part of the 20th. Before
+// 07:00 we show the previous calendar date as "dnes".
+const DAY_CUTOFF_HOUR = 7;
+
+function hotelDayStart(now: Date): Date {
+  const d = new Date(now);
+  if (d.getHours() < DAY_CUTOFF_HOUR) {
+    d.setDate(d.getDate() - 1);
+  }
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
 const DAY_NAMES_FULL = [
   "neděle", "pondělí", "úterý", "středa", "čtvrtek", "pátek", "sobota",
 ];
@@ -270,7 +284,7 @@ function ModBlock({ staffing }: { staffing: StaffingResult }) {
 }
 
 export default function OverviewPage() {
-  const today = useMemo(() => new Date(), []);
+  const today = useMemo(() => hotelDayStart(new Date()), []);
   const tomorrow = useMemo(() => addDays(today, 1), [today]);
   const next7Days = useMemo(() => {
     return Array.from({ length: 7 }, (_, i) => addDays(today, i));
