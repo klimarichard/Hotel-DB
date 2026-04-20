@@ -21,17 +21,17 @@ const EyeOffIcon = () => (
   </svg>
 );
 
-function SalaryCell({ value }: { value: number | null | undefined }) {
+function SalaryCell({ value, suffix = "Kč" }: { value: number | null | undefined; suffix?: string }) {
   const [visible, setVisible] = useState(false);
   if (value == null) return <>—</>;
   return (
     <span className={styles.salaryCell}>
-      {visible ? `${value.toLocaleString("cs-CZ")} Kč` : "•••••"}
+      {visible ? `${value.toLocaleString("cs-CZ")} ${suffix}` : "•••••"}
       <button
         type="button"
         className={styles.revealBtn}
         onClick={() => setVisible((v) => !v)}
-        title={visible ? "Skrýt mzdu" : "Zobrazit mzdu"}
+        title={visible ? "Skrýt hodnotu" : "Zobrazit hodnotu"}
       >
         {visible ? <EyeOffIcon /> : <EyeIcon />}
       </button>
@@ -834,7 +834,7 @@ export default function SettingsPage() {
                   />
                 </div>
                 <div className={styles.field}>
-                  <label className={styles.label}>Náhrady - oblečení (Kč/měsíc, nepovinné)</label>
+                  <label className={styles.label}>Náhrady - oblečení (Kč/hod, nepovinné)</label>
                   <input
                     className={styles.input}
                     type="number"
@@ -844,7 +844,7 @@ export default function SettingsPage() {
                   />
                 </div>
                 <div className={styles.field}>
-                  <label className={styles.label}>Náhrady - HO (Kč/měsíc, nepovinné)</label>
+                  <label className={styles.label}>Náhrady - HO (Kč/hod, nepovinné)</label>
                   <input
                     className={styles.input}
                     type="number"
@@ -884,8 +884,8 @@ export default function SettingsPage() {
                     <td>{dep?.name ?? "—"}</td>
                     <td><SalaryCell value={p.defaultSalary} /></td>
                     <td><SalaryCell value={p.hourlyRate ?? null} /></td>
-                    <td><SalaryCell value={p.clothingAllowance ?? null} /></td>
-                    <td><SalaryCell value={p.homeOfficeAllowance ?? null} /></td>
+                    <td><SalaryCell value={p.clothingAllowance ?? null} suffix="Kč/h" /></td>
+                    <td><SalaryCell value={p.homeOfficeAllowance ?? null} suffix="Kč/h" /></td>
                     <td>
                       <button className={styles.linkBtn} onClick={() => openEditPosition(p)}>Upravit</button>
                       <button className={styles.deactivateBtn} onClick={() => handleDeletePosition(p.id)}>Smazat</button>
