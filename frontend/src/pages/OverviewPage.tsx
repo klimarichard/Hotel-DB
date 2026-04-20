@@ -364,49 +364,68 @@ export default function OverviewPage() {
       {!loading && !error && (
         <>
           <section className={styles.section}>
-            <h2 className={styles.sectionTitle}>Směny dnes</h2>
-            {todayStaffing ? (
-              <StaffingTable staffing={todayStaffing} isDark={isDark} />
-            ) : (
-              <div className={styles.emptyInline}>
-                Pro dnešní den není k dispozici žádný plán.
+            <h2 className={styles.dayHeading}>DNES</h2>
+
+            <div className={styles.subBlock}>
+              <h3 className={styles.subTitle}>Směny</h3>
+              {todayStaffing ? (
+                <StaffingTable staffing={todayStaffing} isDark={isDark} />
+              ) : (
+                <div className={styles.emptyInline}>
+                  Pro dnešní den není k dispozici žádný plán.
+                </div>
+              )}
+            </div>
+
+            {todayStaffing && (
+              <div className={styles.subBlock}>
+                <h3 className={styles.subTitle}>MOD</h3>
+                <ModBlock staffing={todayStaffing} />
+              </div>
+            )}
+
+            {todayStaffing && todayStaffing.absentManagers.length > 0 && (
+              <div className={styles.subBlock}>
+                <h3 className={styles.subTitle}>Manažeři mimo (X)</h3>
+                <ul className={styles.absentList}>
+                  {todayStaffing.absentManagers.map((e) => (
+                    <li key={e.employeeId}>{e.firstName} {e.lastName}</li>
+                  ))}
+                </ul>
               </div>
             )}
           </section>
 
-          {todayStaffing && (
-            <section className={styles.section}>
-              <h2 className={styles.sectionTitle}>MOD</h2>
-              <ModBlock staffing={todayStaffing} />
-            </section>
-          )}
-
-          {todayStaffing && todayStaffing.absentManagers.length > 0 && (
-            <section className={styles.section}>
-              <h2 className={styles.sectionTitle}>Manažeři mimo (X)</h2>
-              <ul className={styles.absentList}>
-                {todayStaffing.absentManagers.map((e) => (
-                  <li key={e.employeeId}>{e.firstName} {e.lastName}</li>
-                ))}
-              </ul>
-            </section>
-          )}
-
           <section className={styles.section}>
-            <h2 className={styles.sectionTitle}>Zítra · {formatLongHeader(tomorrow)}</h2>
-            {tomorrowStaffing ? (
-              <>
+            <h2 className={styles.dayHeading}>ZÍTRA</h2>
+            <div className={styles.daySubDate}>{formatLongHeader(tomorrow)}</div>
+
+            <div className={styles.subBlock}>
+              <h3 className={styles.subTitle}>Směny</h3>
+              {tomorrowStaffing ? (
                 <StaffingTable staffing={tomorrowStaffing} isDark={isDark} />
-                {tomorrowStaffing.modLetter && (
-                  <div className={styles.tomorrowMod}>
-                    <span className={styles.tomorrowModLabel}>MOD:</span>
-                    <ModBlock staffing={tomorrowStaffing} />
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className={styles.emptyInline}>
-                Pro zítřek není k dispozici žádný plán.
+              ) : (
+                <div className={styles.emptyInline}>
+                  Pro zítřek není k dispozici žádný plán.
+                </div>
+              )}
+            </div>
+
+            {tomorrowStaffing && tomorrowStaffing.modLetter && (
+              <div className={styles.subBlock}>
+                <h3 className={styles.subTitle}>MOD</h3>
+                <ModBlock staffing={tomorrowStaffing} />
+              </div>
+            )}
+
+            {tomorrowStaffing && tomorrowStaffing.absentManagers.length > 0 && (
+              <div className={styles.subBlock}>
+                <h3 className={styles.subTitle}>Manažeři mimo (X)</h3>
+                <ul className={styles.absentList}>
+                  {tomorrowStaffing.absentManagers.map((e) => (
+                    <li key={e.employeeId}>{e.firstName} {e.lastName}</li>
+                  ))}
+                </ul>
               </div>
             )}
           </section>
