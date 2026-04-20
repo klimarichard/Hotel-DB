@@ -895,8 +895,8 @@ export default function SettingsPage() {
                     autoFocus
                   />
                 </div>
-                <p style={{ fontSize: "0.8125rem", color: "var(--color-warning-text)", background: "var(--color-warning-bg)", padding: "0.5rem 0.75rem", borderRadius: 4, marginBottom: "0.75rem" }}>
-                  Upozornění: Tato změna ovlivní výpočty všech mzdových období.
+                <p style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)", background: "var(--color-surface-3)", padding: "0.5rem 0.75rem", borderRadius: 4, marginBottom: "0.75rem" }}>
+                  Nová sazba se použije pouze pro nově vytvořená mzdová období. Dříve vypočtená období si ponechají svou původní sazbu.
                 </p>
                 <div className={styles.formActions}>
                   <button type="button" className={styles.cancelBtn} onClick={() => setShowVoucherConfirm(false)} disabled={voucherSaving}>
