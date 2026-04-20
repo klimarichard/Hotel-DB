@@ -70,6 +70,7 @@ export interface PlanDetail {
   year: number;
   status: PlanStatus;
   createdBy: string;
+  openedAt: string | null;
   closedAt: string | null;
   publishedAt: string | null;
   modPersons: Record<string, string>; // letter → employeeId, per-plan overrides
@@ -174,12 +175,13 @@ export default function ShiftPlannerPage() {
   const canPublish = role === "admin" || role === "director";
 
   // Local draft for deadline inputs — avoids live-saving on every keystroke
-  const [deadlineDraft, setDeadlineDraft] = useState({ closedAt: "", publishedAt: "" });
+  const [deadlineDraft, setDeadlineDraft] = useState({ openedAt: "", closedAt: "", publishedAt: "" });
 
   // Sync draft whenever the plan loads, changes month, or status changes
   useEffect(() => {
     if (plan) {
       setDeadlineDraft({
+        openedAt: toDatetimeLocal(plan.openedAt),
         closedAt: toDatetimeLocal(plan.closedAt),
         publishedAt: toDatetimeLocal(plan.publishedAt),
       });
@@ -348,6 +350,7 @@ export default function ShiftPlannerPage() {
           // Clear the deadline that guarded the status we're leaving,
           // so the auto-trigger doesn't immediately re-apply it.
           const deadlineToClear =
+            plan.status === "opened" ? "openedAt" :
             plan.status === "closed" ? "closedAt" :
             plan.status === "published" ? "publishedAt" : null;
           if (deadlineToClear) {
@@ -366,7 +369,7 @@ export default function ShiftPlannerPage() {
 
   // ── Deadline management ────────────────────────────────────────────────────
 
-  async function handleDeadlineChange(field: "closedAt" | "publishedAt", value: string) {
+  async function handleDeadlineChange(field: "openedAt" | "closedAt" | "publishedAt", value: string) {
     if (!plan) return;
     const iso = value ? new Date(value).toISOString() : null;
     try {
@@ -1080,12 +1083,54 @@ export default function ShiftPlannerPage() {
           </div>
 
           {/* Deadline bar — visible to all when there is a saved deadline or user can edit.
-              Uzavření shown only when opened; Publikování only when closed. */}
+              Otevření shown only when created; Uzavření when opened; Publikování when closed. */}
           {plan && (
+            (plan.status === "created" && (canEdit || plan.openedAt)) ||
             (plan.status === "opened" && (canEdit || plan.closedAt)) ||
             (plan.status === "closed" && (canEdit || plan.publishedAt))
           ) && (
             <div className={styles.deadlineBar}>
+              {plan.status === "created" && (canEdit || plan.openedAt) && (
+                <div className={styles.deadlineItem}>
+                  <label className={styles.deadlineLabel}>Otevření:</label>
+                  {canEdit && (
+                    <>
+                      <input
+                        type="datetime-local"
+                        className={styles.deadlineInput}
+                        value={deadlineDraft.openedAt}
+                        onChange={(e) => setDeadlineDraft((d) => ({ ...d, openedAt: e.target.value }))}
+                      />
+                      <button
+                        className={styles.deadlineSave}
+                        onClick={() => handleDeadlineChange("openedAt", deadlineDraft.openedAt)}
+                        title="Uložit termín"
+                      >
+                        Uložit
+                      </button>
+                    </>
+                  )}
+                  {plan.openedAt && (
+                    <>
+                      <span className={styles.deadlineCountdown}>
+                        ({deadlineCountdown(plan.openedAt)})
+                      </span>
+                      {canEdit && (
+                        <button
+                          className={styles.deadlineClear}
+                          onClick={() => {
+                            setDeadlineDraft((d) => ({ ...d, openedAt: "" }));
+                            handleDeadlineChange("openedAt", "");
+                          }}
+                          title="Zrušit termín"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
               {plan.status === "opened" && (canEdit || plan.closedAt) && (
                 <div className={styles.deadlineItem}>
                   <label className={styles.deadlineLabel}>Uzavření:</label>
