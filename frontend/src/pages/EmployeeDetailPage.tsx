@@ -1214,6 +1214,7 @@ export default function EmployeeDetailPage() {
           <div className={styles.fields}>
             <div className={styles.field}><span className={styles.fieldLabel}>Multisport</span><span className={styles.fieldValue}>{(() => {
               const base = additional?.multisport === true ? "Ano" : additional?.multisport === false ? "Ne" : "—";
+              if (additional?.multisport !== true) return base;
               const from = additional?.multisportFrom;
               const to = additional?.multisportTo;
               if (!from && !to) return base;
