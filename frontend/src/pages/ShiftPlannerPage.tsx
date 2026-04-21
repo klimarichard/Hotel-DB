@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { api } from "../lib/api";
@@ -173,6 +173,11 @@ export default function ShiftPlannerPage() {
   const [showExportMenu, setShowExportMenu] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement>(null);
 
+  const headerRef = useRef<HTMLDivElement>(null);
+  const planBarRef = useRef<HTMLDivElement>(null);
+  const [headerHeight, setHeaderHeight] = useState(0);
+  const [stickyTop, setStickyTop] = useState(0);
+
   const canEdit = role === "admin" || role === "director" || role === "manager";
   const canPublish = role === "admin" || role === "director";
 
@@ -200,6 +205,18 @@ export default function ShiftPlannerPage() {
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, [showExportMenu]);
+
+  useLayoutEffect(() => {
+    function measure() {
+      const h = headerRef.current?.offsetHeight ?? 0;
+      const p = planBarRef.current?.offsetHeight ?? 0;
+      setHeaderHeight(h);
+      setStickyTop(h + p);
+    }
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [plan?.status, loading]);
 
   const { refresh: refreshOverrideCount } = useShiftOverridesContext();
   const { pendingCount: changeRequestCount, refresh: refreshChangeRequestCount } = useShiftChangeRequestsContext();
@@ -945,7 +962,7 @@ export default function ShiftPlannerPage() {
   return (
     <div>
       {/* Header — month nav centred as the page's primary control */}
-      <div className={styles.header}>
+      <div className={styles.header} ref={headerRef} style={{ position: "sticky", top: 0, zIndex: 10, background: "var(--color-bg)" }}>
         <div />
         <div className={styles.monthNav}>
           <button className={styles.navBtn} onClick={prevMonth}>‹</button>
@@ -964,7 +981,7 @@ export default function ShiftPlannerPage() {
       {!loading && !error && (
         <>
           {/* Plan bar */}
-          <div className={styles.planBar}>
+          <div ref={planBarRef} className={styles.planBar} style={{ position: "sticky", top: headerHeight, zIndex: 10, background: "var(--color-bg)", paddingBottom: "0.5rem" }}>
             {plan ? (
               <StatusBadge status={plan.status} />
             ) : (
@@ -1405,6 +1422,7 @@ export default function ShiftPlannerPage() {
                     }
                   : undefined
               }
+              stickyTop={stickyTop}
             />
           )}
 

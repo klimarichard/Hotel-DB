@@ -1,3 +1,12 @@
+.stickyHeader {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--color-bg);
+  padding-bottom: 0.25rem;
+  margin-bottom: 0.75rem;
+}
+
 .header {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
@@ -55,7 +64,6 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  margin-bottom: 1rem;
   flex-wrap: wrap;
 }
 

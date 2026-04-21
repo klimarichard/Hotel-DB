@@ -1,6 +1,6 @@
 .shell {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
 }
 
 /* ── Sidebar (always dark regardless of theme) ────────────────────────────── */

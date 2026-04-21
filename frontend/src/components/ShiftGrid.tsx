@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import type { PlanDetail, PlanEmployee, ShiftDoc, ModShiftDoc } from "../pages/ShiftPlannerPage";
 import { SECTION_LABELS, SECTIONS, type Section, getCzechHolidays, MOD_PERSONS, parseShiftExpression } from "../lib/shiftConstants";
 import ShiftCell from "./ShiftCell";
@@ -35,6 +35,7 @@ interface Props {
   onCellRequestChange?: (employeeId: string, date: string, currentRawInput: string) => void;
   alwaysReadOnlySections?: string[];
   currentEmployeeId?: string | null;
+  stickyTop?: number;
 }
 
 const DAY_NAMES = ["Ne", "Po", "Út", "St", "Čt", "Pá", "So"];
@@ -83,6 +84,7 @@ export default function ShiftGrid({
   onCellRequestChange,
   alwaysReadOnlySections = [],
   currentEmployeeId,
+  stickyTop = 0,
 }: Props) {
   const days = useMemo(() => getDaysInMonth(plan.year, plan.month), [plan.year, plan.month]);
 
@@ -294,7 +296,7 @@ export default function ShiftGrid({
   const [editingModEmployee, setEditingModEmployee] = useState<string | null>(null);
 
   return (
-    <div className={styles.wrapper}>
+    <div className={styles.wrapper} style={{ "--sticky-top": `${stickyTop}px` } as React.CSSProperties}>
       <table className={styles.grid}>
         <colgroup>
           <col className={styles.nameCol} />

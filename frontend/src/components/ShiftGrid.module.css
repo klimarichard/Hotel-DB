@@ -1,5 +1,7 @@
 .wrapper {
   overflow-x: auto;
+  overflow-y: auto;
+  max-height: calc(100vh - 4rem - var(--sticky-top, 0px) - 4rem);
   border-radius: 8px;
   box-shadow: 0 1px 4px var(--shadow-sm);
   background: var(--color-surface);
@@ -32,9 +34,10 @@
 
 .nameHeader {
   position: sticky;
+  top: 0;
   left: 0;
   background: var(--color-surface-2);
-  z-index: 2;
+  z-index: 3;
   text-align: left;
   padding: 0.5rem 0.75rem;
   font-size: 0.75rem;
@@ -47,6 +50,10 @@
 }
 
 .dayHeader {
+  position: sticky;
+  top: 0;
+  background: var(--color-surface-2);
+  z-index: 1;
   text-align: center;
   font-size: 0.75rem;
   font-weight: 600;
@@ -65,6 +72,10 @@
 }
 
 .totalHeader {
+  position: sticky;
+  top: 0;
+  background: var(--color-surface-2);
+  z-index: 1;
   text-align: center;
   font-size: 0.75rem;
   font-weight: 600;
