@@ -12,6 +12,56 @@ const db = () => admin.firestore();
 const VALID_SECTIONS = ["vedoucí", "recepce", "portýři"] as const;
 const VALID_SHIFT_TYPES = ["D", "N", "R", "DP", "NP"] as const;
 
+// ─── Section ordering helper ─────────────────────────────────────────────────
+
+/**
+ * Re-number planEmployees within a single section so displayOrder is contiguous 1..N.
+ *
+ * If `target` is given, the targeted doc is anchored at `target.newOrder`:
+ *   - When `oldOrder` is undefined or `newOrder <= oldOrder` (insert / move-up), the
+ *     target wins ties and lands AT `newOrder`, pushing collisions down.
+ *   - When `newOrder > oldOrder` (move-down), the target loses ties so it still lands
+ *     at `newOrder` after the gap left behind is closed.
+ *
+ * Without a target, simply compacts the section (used after deletes).
+ */
+async function renumberSection(
+  planRef: admin.firestore.DocumentReference,
+  section: string,
+  target?: { docId: string; newOrder: number; oldOrder?: number }
+): Promise<void> {
+  const snap = await planRef
+    .collection("planEmployees")
+    .where("section", "==", section)
+    .get();
+
+  const rows = snap.docs.map((d) => {
+    const currentOrder = Number(d.data().displayOrder ?? 0);
+    let effectiveOrder = currentOrder;
+    if (target && d.id === target.docId) {
+      const movingDown =
+        target.oldOrder !== undefined && target.newOrder > target.oldOrder;
+      effectiveOrder = movingDown ? target.newOrder + 0.5 : target.newOrder - 0.5;
+    }
+    return { id: d.id, currentOrder, effectiveOrder };
+  });
+
+  rows.sort((a, b) => a.effectiveOrder - b.effectiveOrder);
+
+  const batch = db().batch();
+  let dirty = false;
+  rows.forEach((row, idx) => {
+    const finalOrder = idx + 1;
+    if (finalOrder !== row.currentOrder) {
+      batch.update(planRef.collection("planEmployees").doc(row.id), {
+        displayOrder: finalOrder,
+      });
+      dirty = true;
+    }
+  });
+  if (dirty) await batch.commit();
+}
+
 // ─── Vacation X helpers ──────────────────────────────────────────────────────
 
 /**
@@ -513,8 +563,15 @@ shiftsRouter.post(
       createdAt: FieldValue.serverTimestamp(),
     });
 
+    // Make displayOrder contiguous and shift collisions down within the section.
+    await renumberSection(planRef, section, { docId: ref.id, newOrder: displayOrder });
+
     // Auto-fill approved vacation days as X for this employee in this month
     await applyVacationXs(planRef, employeeId, planData.year as number, planData.month as number);
+
+    // Bump plan.updatedAt so connected clients reload via the onSnapshot listener
+    // (other employees' displayOrders may have shifted).
+    await planRef.update({ updatedAt: FieldValue.serverTimestamp() });
 
     res.status(201).json({ id: ref.id });
   }
@@ -548,13 +605,40 @@ shiftsRouter.put(
       return;
     }
 
-    await db()
-      .collection("shiftPlans")
-      .doc(planId)
-      .collection("planEmployees")
-      .doc(docId)
-      .update({ section, primaryShiftType, primaryHotel, displayOrder, active, updatedAt: FieldValue.serverTimestamp() });
-    await db().collection("shiftPlans").doc(planId).update({ updatedAt: FieldValue.serverTimestamp() });
+    const planRef = db().collection("shiftPlans").doc(planId);
+    const empRef = planRef.collection("planEmployees").doc(docId);
+
+    // Capture pre-update state so we can renumber correctly when section or
+    // displayOrder changes.
+    const prevSnap = await empRef.get();
+    if (!prevSnap.exists) {
+      res.status(404).json({ error: "Zaměstnanec v plánu nenalezen" });
+      return;
+    }
+    const prev = prevSnap.data() as { section: string; displayOrder: number };
+
+    await empRef.update({
+      section,
+      primaryShiftType,
+      primaryHotel,
+      displayOrder,
+      active,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    if (prev.section !== section) {
+      // Compact the section the employee left, then insert into the new one.
+      await renumberSection(planRef, prev.section);
+      await renumberSection(planRef, section, { docId, newOrder: displayOrder });
+    } else {
+      await renumberSection(planRef, section, {
+        docId,
+        newOrder: displayOrder,
+        oldOrder: Number(prev.displayOrder),
+      });
+    }
+
+    await planRef.update({ updatedAt: FieldValue.serverTimestamp() });
     res.json({ ok: true });
   }
 );
@@ -574,10 +658,15 @@ shiftsRouter.delete(
       res.status(404).json({ error: "Zaměstnanec v plánu nenalezen" });
       return;
     }
-    const employeeId = empDoc.data()!.employeeId as string;
+    const employeeData = empDoc.data()!;
+    const employeeId = employeeData.employeeId as string;
+    const section = employeeData.section as string;
 
     // Delete the planEmployee doc
     await empDoc.ref.delete();
+
+    // Compact the section so remaining employees keep contiguous displayOrders.
+    await renumberSection(planRef, section);
 
     // Cascade: delete all shift docs for this employee in this plan
     const shiftsSnap = await planRef

@@ -1477,6 +1477,7 @@ export default function ShiftPlannerPage() {
       {showAddEmployee && plan && (
         <AddEmployeeToPlanModal
           planId={plan.id}
+          existingEmployees={plan.employees}
           onClose={() => setShowAddEmployee(false)}
           onAdded={(emp) => {
             setPlan((prev) =>
