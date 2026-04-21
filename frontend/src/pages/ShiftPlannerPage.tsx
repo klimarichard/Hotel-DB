@@ -703,7 +703,6 @@ export default function ShiftPlannerPage() {
     // Header row
     const header = [
       "Zaměstnanec",
-      "Sekce",
       ...daysInMonth.map((dt) => pad2(dt.getDate())),
       "Celkem směn",
     ];
@@ -716,7 +715,7 @@ export default function ShiftPlannerPage() {
         .sort((a, b) => a.displayOrder - b.displayOrder);
       if (sectionEmps.length === 0) continue;
 
-      rows.push([escape(SECTION_LABELS[section]), "", ...daysInMonth.map(() => ""), ""].join(";"));
+      rows.push([escape(SECTION_LABELS[section]), ...daysInMonth.map(() => ""), ""].join(";"));
 
       for (const emp of sectionEmps) {
         let shiftCount = 0;
@@ -729,7 +728,7 @@ export default function ShiftPlannerPage() {
         });
         const modLetter = section === "vedoucí" ? (effectiveModPersons.get(emp.employeeId) ?? "") : "";
         const name = `${emp.lastName} ${emp.firstName}${modLetter ? ` (${modLetter})` : ""}`;
-        rows.push([escape(name), escape(SECTION_LABELS[section]), ...cells, escape(String(shiftCount))].join(";"));
+        rows.push([escape(name), ...cells, escape(String(shiftCount))].join(";"));
       }
 
       // MOD row after vedoucí
@@ -738,7 +737,7 @@ export default function ShiftPlannerPage() {
           const dateStr = `${dt.getFullYear()}-${pad2(dt.getMonth() + 1)}-${pad2(dt.getDate())}`;
           return escape(modMap.get(dateStr) ?? "");
         });
-        rows.push([escape("MOD"), escape("vedoucí"), ...modCells, ""].join(";"));
+        rows.push([escape("MOD"), ...modCells, ""].join(";"));
       }
     }
 
