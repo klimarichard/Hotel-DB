@@ -224,10 +224,14 @@ export default function ShiftPlannerPage() {
 
   // ── Load plan for selected month/year ──────────────────────────────────────
 
-  const loadPlan = useCallback(() => {
-    setLoading(true);
-    setError(null);
-    setPlan(null);
+  // silent=true: update plan in-place without blanking the grid (used after
+  // mutations where the user should see the result immediately without a flash).
+  const loadPlan = useCallback((silent = false) => {
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+      setPlan(null);
+    }
 
     api
       .get<PlanListItem[]>("/shifts/plans")
@@ -237,7 +241,7 @@ export default function ShiftPlannerPage() {
           (p) => p.month === selectedMonth && p.year === selectedYear
         );
         if (!match) {
-          setLoading(false);
+          if (!silent) setLoading(false);
           return;
         }
         return api.get<PlanDetail>(`/shifts/plans/${match.id}`).then((detail) => {
@@ -249,8 +253,8 @@ export default function ShiftPlannerPage() {
             .catch(() => {});
         });
       })
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
+      .catch((e) => { if (!silent) setError(e.message); })
+      .finally(() => { if (!silent) setLoading(false); });
   }, [selectedMonth, selectedYear]);
 
   useEffect(() => {
@@ -274,7 +278,7 @@ export default function ShiftPlannerPage() {
       }
       if (updatedAt !== lastUpdatedAtRef.current) {
         lastUpdatedAtRef.current = updatedAt;
-        loadPlan();
+        loadPlan(true);
       }
     });
     return () => { unsub(); lastUpdatedAtRef.current = undefined; };
@@ -462,8 +466,7 @@ export default function ShiftPlannerPage() {
     if (!window.confirm(`Odebrat ${emp.lastName} ${emp.firstName} z plánu?`)) return;
     try {
       await api.delete(`/shifts/plans/${plan.id}/employees/${emp.id}`);
-      // Don't patch local state — the backend renumbers the section after deletion.
-      // The onSnapshot listener reloads the full plan once updatedAt is bumped.
+      loadPlan(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Chyba při odebírání zaměstnance");
     }
@@ -1479,9 +1482,8 @@ export default function ShiftPlannerPage() {
           existingEmployees={plan.employees}
           onClose={() => setShowAddEmployee(false)}
           onAdded={() => {
-            // Don't patch local state — the backend renumbers neighbours too.
-            // The onSnapshot listener will reload the full plan once updatedAt is bumped.
             setShowAddEmployee(false);
+            loadPlan(true);
           }}
         />
       )}
@@ -1546,9 +1548,8 @@ export default function ShiftPlannerPage() {
           employee={editingEmployee}
           onClose={() => setEditingEmployee(null)}
           onSaved={() => {
-            // Don't patch local state — neighbours may have been renumbered too.
-            // The onSnapshot listener will reload the full plan once updatedAt is bumped.
             setEditingEmployee(null);
+            loadPlan(true);
           }}
         />
       )}
