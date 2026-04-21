@@ -728,7 +728,7 @@ export default function ShiftPlannerPage() {
     // Employee rows grouped by section
     for (const section of SECTIONS) {
       const sectionEmps = plan.employees
-        .filter((e) => e.section === section && e.active)
+        .filter((e) => e.section === section)
         .sort((a, b) => a.displayOrder - b.displayOrder);
       if (sectionEmps.length === 0) continue;
 
