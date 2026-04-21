@@ -73,6 +73,25 @@ export const CELL_COLORS: Record<string, { bg: string; text: string }> = {
 const DEFAULT_CELL_COLOR = { bg: "#f0f9ff", text: "#0c4a6e" };
 const DEFAULT_CELL_COLOR_DARK = { bg: "#1e3a5f", text: "#93c5fd" };
 
+// Lighter/more pastel variants used for ZD and ZN substitution shifts
+const Z_CELL_COLORS: Record<string, { bg: string; text: string }> = {
+  A: { bg: "#f0fdf4", text: "#166534" },   // Ambiance — lighter green
+  S: { bg: "#fffbeb", text: "#92400e" },   // Superior — lighter amber
+  Q: { bg: "#fae8ff", text: "#a21caf" },   // Amigo — lighter fuchsia
+  K: { bg: "#f5f3ff", text: "#5b21b6" },   // Ankora — lighter violet
+  P: { bg: "#f9fafb", text: "#6b7280" },   // Perla — lighter gray
+  M: { bg: "#f9fafb", text: "#6b7280" },   // Metropol — lighter gray
+};
+
+const Z_CELL_COLORS_DARK: Record<string, { bg: string; text: string }> = {
+  A: { bg: "#065f46", text: "#a7f3d0" },   // Ambiance — lighter dark green
+  S: { bg: "#92400e", text: "#fef3c7" },   // Superior — lighter dark amber
+  Q: { bg: "#6b21a8", text: "#f5d0fe" },   // Amigo — lighter dark fuchsia
+  K: { bg: "#4c1d95", text: "#ddd6fe" },   // Ankora — lighter dark violet
+  P: { bg: "#4b5563", text: "#e5e7eb" },   // Perla — lighter dark gray
+  M: { bg: "#4b5563", text: "#e5e7eb" },   // Metropol — lighter dark gray
+};
+
 const CELL_COLORS_DARK: Record<string, { bg: string; text: string }> = {
   A:  { bg: "#064e3b", text: "#6ee7b7" },   // Ambiance — dark green
   S:  { bg: "#713f12", text: "#fde68a" },   // Superior — dark gold
@@ -93,6 +112,11 @@ export function getCellColor(parsed: ParseResult, dark = false): { bg: string; t
   if (!first) return { bg: "transparent", text: dark ? "#94a3b8" : "#374151" };
   if (first.code === "X") return colors["X"];
   if (first.code === "HO") return colors["HO"] ?? defaultColor;
+  const isZShift = first.code === "ZD" || first.code === "ZN";
+  if (isZShift) {
+    const zColors = dark ? Z_CELL_COLORS_DARK : Z_CELL_COLORS;
+    return (first.hotel ? zColors[first.hotel] : null) ?? defaultColor;
+  }
   const isPortyr = first.code === "DP" || first.code === "NP";
   const hotel = first.hotel;
   if (isPortyr && hotel) return colors["P" + hotel] ?? colors[hotel] ?? defaultColor;
