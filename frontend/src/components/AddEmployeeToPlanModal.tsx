@@ -19,11 +19,15 @@ interface Employee {
 
 interface Props {
   planId: string;
+  existingEmployees: PlanEmployee[];
   onClose: () => void;
-  onAdded: (emp: PlanEmployee) => void;
+  onAdded: () => void;
 }
 
-export default function AddEmployeeToPlanModal({ planId, onClose, onAdded }: Props) {
+export default function AddEmployeeToPlanModal({ planId, existingEmployees, onClose, onAdded }: Props) {
+  const nextOrderFor = (s: Section) =>
+    existingEmployees.filter((e) => e.section === s).length + 1;
+
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loadingEmps, setLoadingEmps] = useState(true);
   const [search, setSearch] = useState("");
@@ -32,10 +36,17 @@ export default function AddEmployeeToPlanModal({ planId, onClose, onAdded }: Pro
   const [section, setSection] = useState<Section>("recepce");
   const [primaryShiftType, setPrimaryShiftType] = useState<ShiftType | "">("");
   const [primaryHotel, setPrimaryHotel] = useState<HotelCode | "">("");
-  const [displayOrder, setDisplayOrder] = useState(100);
+  const [displayOrder, setDisplayOrder] = useState(() => nextOrderFor("recepce"));
   const [active, setActive] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // When the user picks a different section, reset the position to the next
+  // free slot in that section (the user can still override it manually).
+  function handleSectionChange(next: Section) {
+    setSection(next);
+    setDisplayOrder(nextOrderFor(next));
+  }
 
   useEffect(() => {
     api
@@ -58,7 +69,7 @@ export default function AddEmployeeToPlanModal({ planId, onClose, onAdded }: Pro
     setSaving(true);
     setError(null);
     try {
-      const result = await api.post<{ id: string }>(`/shifts/plans/${planId}/employees`, {
+      await api.post<{ id: string }>(`/shifts/plans/${planId}/employees`, {
         employeeId: selected.id,
         firstName: selected.firstName,
         lastName: selected.lastName,
@@ -68,18 +79,7 @@ export default function AddEmployeeToPlanModal({ planId, onClose, onAdded }: Pro
         displayOrder,
         active,
       });
-      onAdded({
-        id: result.id,
-        employeeId: selected.id,
-        firstName: selected.firstName,
-        lastName: selected.lastName,
-        section,
-        primaryShiftType: (primaryShiftType || null) as "D" | "N" | "R" | null,
-        primaryHotel: (primaryHotel || null) as string | null,
-        displayOrder,
-        active,
-        contractType: null,
-      });
+      onAdded();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Chyba při ukládání");
     } finally {
@@ -138,7 +138,7 @@ export default function AddEmployeeToPlanModal({ planId, onClose, onAdded }: Pro
           <select
             className={styles.select}
             value={section}
-            onChange={(e) => setSection(e.target.value as Section)}
+            onChange={(e) => handleSectionChange(e.target.value as Section)}
           >
             {SECTIONS.map((s) => (
               <option key={s} value={s}>{s}</option>

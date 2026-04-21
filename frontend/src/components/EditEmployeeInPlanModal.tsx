@@ -14,7 +14,7 @@ interface Props {
   planId: string;
   employee: PlanEmployee;
   onClose: () => void;
-  onSaved: (updated: PlanEmployee) => void;
+  onSaved: () => void;
 }
 
 export default function EditEmployeeInPlanModal({ planId, employee, onClose, onSaved }: Props) {
@@ -37,14 +37,7 @@ export default function EditEmployeeInPlanModal({ planId, employee, onClose, onS
         displayOrder,
         active,
       });
-      onSaved({
-        ...employee,
-        section,
-        primaryShiftType: (primaryShiftType || null) as "D" | "N" | "R" | "DP" | "NP" | null,
-        primaryHotel: (primaryHotel || null) as string | null,
-        displayOrder,
-        active,
-      });
+      onSaved();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Chyba při ukládání");
     } finally {
