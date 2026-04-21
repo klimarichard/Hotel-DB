@@ -21,7 +21,7 @@ interface Props {
   planId: string;
   existingEmployees: PlanEmployee[];
   onClose: () => void;
-  onAdded: (emp: PlanEmployee) => void;
+  onAdded: () => void;
 }
 
 export default function AddEmployeeToPlanModal({ planId, existingEmployees, onClose, onAdded }: Props) {
@@ -69,7 +69,7 @@ export default function AddEmployeeToPlanModal({ planId, existingEmployees, onCl
     setSaving(true);
     setError(null);
     try {
-      const result = await api.post<{ id: string }>(`/shifts/plans/${planId}/employees`, {
+      await api.post<{ id: string }>(`/shifts/plans/${planId}/employees`, {
         employeeId: selected.id,
         firstName: selected.firstName,
         lastName: selected.lastName,
@@ -79,18 +79,7 @@ export default function AddEmployeeToPlanModal({ planId, existingEmployees, onCl
         displayOrder,
         active,
       });
-      onAdded({
-        id: result.id,
-        employeeId: selected.id,
-        firstName: selected.firstName,
-        lastName: selected.lastName,
-        section,
-        primaryShiftType: (primaryShiftType || null) as "D" | "N" | "R" | null,
-        primaryHotel: (primaryHotel || null) as string | null,
-        displayOrder,
-        active,
-        contractType: null,
-      });
+      onAdded();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Chyba při ukládání");
     } finally {

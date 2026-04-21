@@ -462,9 +462,8 @@ export default function ShiftPlannerPage() {
     if (!window.confirm(`Odebrat ${emp.lastName} ${emp.firstName} z plánu?`)) return;
     try {
       await api.delete(`/shifts/plans/${plan.id}/employees/${emp.id}`);
-      setPlan((prev) =>
-        prev ? { ...prev, employees: prev.employees.filter((e) => e.id !== emp.id) } : prev
-      );
+      // Don't patch local state — the backend renumbers the section after deletion.
+      // The onSnapshot listener reloads the full plan once updatedAt is bumped.
     } catch (e) {
       setError(e instanceof Error ? e.message : "Chyba při odebírání zaměstnance");
     }
@@ -1479,10 +1478,9 @@ export default function ShiftPlannerPage() {
           planId={plan.id}
           existingEmployees={plan.employees}
           onClose={() => setShowAddEmployee(false)}
-          onAdded={(emp) => {
-            setPlan((prev) =>
-              prev ? { ...prev, employees: [...prev.employees, emp] } : prev
-            );
+          onAdded={() => {
+            // Don't patch local state — the backend renumbers neighbours too.
+            // The onSnapshot listener will reload the full plan once updatedAt is bumped.
             setShowAddEmployee(false);
           }}
         />
@@ -1547,17 +1545,9 @@ export default function ShiftPlannerPage() {
           planId={plan.id}
           employee={editingEmployee}
           onClose={() => setEditingEmployee(null)}
-          onSaved={(updated) => {
-            setPlan((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    employees: prev.employees.map((e) =>
-                      e.id === updated.id ? updated : e
-                    ),
-                  }
-                : prev
-            );
+          onSaved={() => {
+            // Don't patch local state — neighbours may have been renumbered too.
+            // The onSnapshot listener will reload the full plan once updatedAt is bumped.
             setEditingEmployee(null);
           }}
         />
