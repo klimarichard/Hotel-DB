@@ -170,6 +170,8 @@ export default function ShiftPlannerPage() {
   const [copyFromId, setCopyFromId] = useState("");
 
   const [exporting, setExporting] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
 
   const canEdit = role === "admin" || role === "director" || role === "manager";
   const canPublish = role === "admin" || role === "director";
@@ -187,6 +189,17 @@ export default function ShiftPlannerPage() {
       });
     }
   }, [plan?.id, plan?.status]);
+
+  useEffect(() => {
+    if (!showExportMenu) return;
+    function handleClick(e: MouseEvent) {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
+        setShowExportMenu(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [showExportMenu]);
 
   const { refresh: refreshOverrideCount } = useShiftOverridesContext();
   const { pendingCount: changeRequestCount, refresh: refreshChangeRequestCount } = useShiftChangeRequestsContext();
@@ -654,6 +667,91 @@ export default function ShiftPlannerPage() {
     }
   }
 
+  // ── CSV export ─────────────────────────────────────────────────────────────
+
+  function handleExportCsv() {
+    if (!plan) return;
+    const pad2 = (n: number) => String(n).padStart(2, "0");
+
+    const daysInMonth: Date[] = [];
+    const d = new Date(plan.year, plan.month - 1, 1);
+    while (d.getMonth() === plan.month - 1) {
+      daysInMonth.push(new Date(d));
+      d.setDate(d.getDate() + 1);
+    }
+
+    const shiftMap = new Map<string, ShiftDoc>();
+    for (const s of plan.shifts) shiftMap.set(`${s.employeeId}_${s.date}`, s);
+    const modMap = new Map<string, string>();
+    for (const m of plan.modShifts) modMap.set(m.date, m.code);
+
+    // Resolve MOD letter for a vedoucí employee
+    const modPersonsMap = new Map(Object.entries(plan.modPersons ?? {}));
+    const effectiveModPersons = new Map<string, string>(); // employeeId → letter
+    for (const [letter, empId] of modPersonsMap) effectiveModPersons.set(empId, letter);
+    for (const [letter, fullName] of Object.entries(MOD_PERSONS)) {
+      const emp = plan.employees.find(
+        (e) => e.section === "vedoucí" && !effectiveModPersons.has(e.employeeId) &&
+          `${e.lastName} ${e.firstName}` === fullName
+      );
+      if (emp) effectiveModPersons.set(emp.employeeId, letter);
+    }
+
+    const escape = (v: string) => `"${v.replace(/"/g, '""')}"`;
+    const rows: string[] = [];
+
+    // Header row
+    const header = [
+      "Zaměstnanec",
+      "Sekce",
+      ...daysInMonth.map((dt) => pad2(dt.getDate())),
+      "Celkem směn",
+    ];
+    rows.push(header.map(escape).join(";"));
+
+    // Employee rows grouped by section
+    for (const section of SECTIONS) {
+      const sectionEmps = plan.employees
+        .filter((e) => e.section === section && e.active)
+        .sort((a, b) => a.displayOrder - b.displayOrder);
+      if (sectionEmps.length === 0) continue;
+
+      rows.push([escape(SECTION_LABELS[section]), "", ...daysInMonth.map(() => ""), ""].join(";"));
+
+      for (const emp of sectionEmps) {
+        let shiftCount = 0;
+        const cells = daysInMonth.map((dt) => {
+          const dateStr = `${dt.getFullYear()}-${pad2(dt.getMonth() + 1)}-${pad2(dt.getDate())}`;
+          const shift = shiftMap.get(`${emp.employeeId}_${dateStr}`);
+          const raw = shift?.rawInput ?? "";
+          if (raw && raw !== "X") shiftCount++;
+          return escape(raw);
+        });
+        const modLetter = section === "vedoucí" ? (effectiveModPersons.get(emp.employeeId) ?? "") : "";
+        const name = `${emp.lastName} ${emp.firstName}${modLetter ? ` (${modLetter})` : ""}`;
+        rows.push([escape(name), escape(SECTION_LABELS[section]), ...cells, escape(String(shiftCount))].join(";"));
+      }
+
+      // MOD row after vedoucí
+      if (section === "vedoucí") {
+        const modCells = daysInMonth.map((dt) => {
+          const dateStr = `${dt.getFullYear()}-${pad2(dt.getMonth() + 1)}-${pad2(dt.getDate())}`;
+          return escape(modMap.get(dateStr) ?? "");
+        });
+        rows.push([escape("MOD"), escape("vedoucí"), ...modCells, ""].join(";"));
+      }
+    }
+
+    const bom = "\uFEFF";
+    const blob = new Blob([bom + rows.join("\r\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `smeny_${plan.year}_${pad2(plan.month)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   // ── X limit helpers ────────────────────────────────────────────────────────
 
   function getXLimit(contractType: string | null): number | null {
@@ -1048,15 +1146,33 @@ export default function ShiftPlannerPage() {
               </button>
             )}
 
-            {/* Export PDF (admin/director) */}
+            {/* Export (admin/director) */}
             {plan && canPublish && plan.employees.length > 0 && (
-              <button
-                className={styles.secondaryBtn}
-                onClick={handleExportPdf}
-                disabled={exporting}
-              >
-                {exporting ? "Exportuji\u2026" : "Exportovat PDF"}
-              </button>
+              <div className={styles.exportWrapper} ref={exportMenuRef}>
+                <button
+                  className={styles.secondaryBtn}
+                  onClick={() => setShowExportMenu((v) => !v)}
+                  disabled={exporting}
+                >
+                  {exporting ? "Exportuji\u2026" : "Exportovat \u25be"}
+                </button>
+                {showExportMenu && (
+                  <div className={styles.exportMenu}>
+                    <button
+                      className={styles.exportMenuItem}
+                      onClick={() => { setShowExportMenu(false); handleExportPdf(); }}
+                    >
+                      PDF
+                    </button>
+                    <button
+                      className={styles.exportMenuItem}
+                      onClick={() => { setShowExportMenu(false); handleExportCsv(); }}
+                    >
+                      CSV
+                    </button>
+                  </div>
+                )}
+              </div>
             )}
 
             {/* Revert plan (admin only) */}
