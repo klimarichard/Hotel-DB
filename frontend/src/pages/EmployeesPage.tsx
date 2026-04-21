@@ -31,15 +31,20 @@ export default function EmployeesPage() {
       .finally(() => setLoading(false));
   }, [statusFilter]);
 
-  const filtered = employees.filter((e) => {
-    const q = search.toLowerCase();
-    return (
-      !q ||
-      (e.firstName ?? "").toLowerCase().includes(q) ||
-      (e.lastName ?? "").toLowerCase().includes(q) ||
-      (e.currentJobTitle ?? "").toLowerCase().includes(q)
-    );
-  });
+  const filtered = employees
+    .filter((e) => {
+      const q = search.toLowerCase();
+      return (
+        !q ||
+        (e.firstName ?? "").toLowerCase().includes(q) ||
+        (e.lastName ?? "").toLowerCase().includes(q) ||
+        (e.currentJobTitle ?? "").toLowerCase().includes(q)
+      );
+    })
+    .sort((a, b) => {
+      const last = (a.lastName ?? "").localeCompare(b.lastName ?? "", "cs");
+      return last !== 0 ? last : (a.firstName ?? "").localeCompare(b.firstName ?? "", "cs");
+    });
 
   return (
     <div>

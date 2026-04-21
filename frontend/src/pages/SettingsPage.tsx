@@ -121,9 +121,11 @@ export default function SettingsPage() {
   const [depEditName, setDepEditName] = useState("");
   const [depNewName, setDepNewName] = useState("");
   const [depError, setDepError] = useState<string | null>(null);
+  const [depSort, setDepSort] = useState<{ col: "name"; dir: "asc" | "desc" }>({ col: "name", dir: "asc" });
 
   // Job positions
   const [positions, setPositions] = useState<JobPositionRecord[]>([]);
+  const [posSort, setPosSort] = useState<{ col: "name" | "department"; dir: "asc" | "desc" }>({ col: "name", dir: "asc" });
   const [posEditId, setPosEditId] = useState<string | null>(null);
   const [posForm, setPosForm] = useState<{ name: string; departmentId: string; defaultSalary: string; hourlyRate: string; clothingAllowance: string; homeOfficeAllowance: string }>({ name: "", departmentId: "", defaultSalary: "", hourlyRate: "", clothingAllowance: "", homeOfficeAllowance: "" });
 
@@ -318,6 +320,31 @@ export default function SettingsPage() {
 
   if (authLoading) return null;
   if (role !== "admin") return <Navigate to="/" replace />;
+
+  function toggleDepSort(col: "name") {
+    setDepSort((s) => ({ col, dir: s.col === col && s.dir === "asc" ? "desc" : "asc" }));
+  }
+
+  function togglePosSort(col: "name" | "department") {
+    setPosSort((s) => ({ col, dir: s.col === col && s.dir === "asc" ? "desc" : "asc" }));
+  }
+
+  const sortedDepartments = [...departments].sort((a, b) => {
+    const cmp = a.name.localeCompare(b.name, "cs");
+    return depSort.dir === "asc" ? cmp : -cmp;
+  });
+
+  const sortedPositions = [...positions].sort((a, b) => {
+    let cmp = 0;
+    if (posSort.col === "name") {
+      cmp = a.name.localeCompare(b.name, "cs");
+    } else {
+      const depA = departments.find((d) => d.id === a.departmentId)?.name ?? "";
+      const depB = departments.find((d) => d.id === b.departmentId)?.name ?? "";
+      cmp = depA.localeCompare(depB, "cs");
+    }
+    return posSort.dir === "asc" ? cmp : -cmp;
+  });
 
   function openLinkModal(uid: string, currentEmployeeId: string | null) {
     setLinkingUid(uid);
@@ -732,15 +759,17 @@ export default function SettingsPage() {
           <table className={styles.table}>
             <thead>
               <tr>
-                <th>Název</th>
+                <th className={styles.sortableHeader} onClick={() => toggleDepSort("name")}>
+                  Název {depSort.col === "name" ? (depSort.dir === "asc" ? "▲" : "▼") : "⇅"}
+                </th>
                 <th>Akce</th>
               </tr>
             </thead>
             <tbody>
-              {departments.length === 0 && (
+              {sortedDepartments.length === 0 && (
                 <tr><td colSpan={2} className={styles.empty}>Žádná oddělení</td></tr>
               )}
-              {departments.map((d) => (
+              {sortedDepartments.map((d) => (
                 <tr key={d.id}>
                   <td>
                     {depEditId === d.id ? (
@@ -863,8 +892,12 @@ export default function SettingsPage() {
           <table className={styles.table}>
             <thead>
               <tr>
-                <th>Název</th>
-                <th>Oddělení</th>
+                <th className={styles.sortableHeader} onClick={() => togglePosSort("name")}>
+                  Název {posSort.col === "name" ? (posSort.dir === "asc" ? "▲" : "▼") : "⇅"}
+                </th>
+                <th className={styles.sortableHeader} onClick={() => togglePosSort("department")}>
+                  Oddělení {posSort.col === "department" ? (posSort.dir === "asc" ? "▲" : "▼") : "⇅"}
+                </th>
                 <th>Výchozí mzda</th>
                 <th>Hodinová sazba</th>
                 <th>Náhrady - oblečení</th>
@@ -873,10 +906,10 @@ export default function SettingsPage() {
               </tr>
             </thead>
             <tbody>
-              {positions.length === 0 && (
+              {sortedPositions.length === 0 && (
                 <tr><td colSpan={7} className={styles.empty}>Žádné pozice</td></tr>
               )}
-              {positions.map((p) => {
+              {sortedPositions.map((p) => {
                 const dep = departments.find((d) => d.id === p.departmentId);
                 return (
                   <tr key={p.id}>
