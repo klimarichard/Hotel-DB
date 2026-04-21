@@ -280,6 +280,35 @@ export default function ShiftPlannerPage() {
     return () => { unsub(); lastUpdatedAtRef.current = undefined; };
   }, [plan?.id, loadPlan]);
 
+  // ── Frontend deadline timer ───────────────────────────────────────────────
+  // The scheduled Cloud Function runs every 5 min in production but never in
+  // the emulator. This timer fires at the exact deadline moment and calls the
+  // trigger endpoint so transitions happen on time in both environments.
+
+  useEffect(() => {
+    if (!plan) return;
+
+    const deadlineIso =
+      plan.status === "created" ? plan.openedAt :
+      plan.status === "opened"  ? plan.closedAt :
+      plan.status === "closed"  ? plan.publishedAt :
+      null;
+
+    if (!deadlineIso) return;
+
+    const msUntil = new Date(deadlineIso).getTime() - Date.now();
+
+    const trigger = () => api.post("/shifts/trigger-deadlines", {}).catch(() => {});
+
+    if (msUntil <= 0) {
+      trigger();
+      return;
+    }
+
+    const timer = window.setTimeout(trigger, msUntil);
+    return () => window.clearTimeout(timer);
+  }, [plan?.id, plan?.status, plan?.openedAt, plan?.closedAt, plan?.publishedAt]);
+
   // ── Month navigation ───────────────────────────────────────────────────────
 
   function prevMonth() {
