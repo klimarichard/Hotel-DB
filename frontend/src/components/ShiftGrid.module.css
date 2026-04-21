@@ -15,19 +15,19 @@
 }
 
 .nameCol {
-  width: 160px;
+  width: 144px;
 }
 
 .dayCol {
-  width: 44px;
+  width: 40px;
 }
 
 .weekendCol {
-  width: 44px;
+  width: 40px;
 }
 
 .totalCol {
-  width: 64px;
+  width: 58px;
 }
 
 /* ── Headers ──────────────────────────────────────────────────────────── */
@@ -39,8 +39,8 @@
   background: var(--color-surface-2);
   z-index: 3;
   text-align: left;
-  padding: 0.5rem 0.75rem;
-  font-size: 0.75rem;
+  padding: 0.4rem 0.65rem;
+  font-size: 0.7rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -55,17 +55,17 @@
   background: var(--color-surface-2);
   z-index: 1;
   text-align: center;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   font-weight: 600;
   color: var(--color-text-secondary);
-  padding: 0.3rem 0;
+  padding: 0.25rem 0;
   border-bottom: 2px solid var(--color-border);
   white-space: nowrap;
-  min-width: 44px;
+  min-width: 40px;
 }
 
 .dayName {
-  font-size: 0.65rem;
+  font-size: 0.6rem;
   color: var(--color-text-subtle);
   text-transform: uppercase;
   font-weight: 400;
@@ -77,10 +77,10 @@
   background: var(--color-surface-2);
   z-index: 1;
   text-align: center;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   font-weight: 600;
   color: var(--color-text-muted);
-  padding: 0.3rem 0.5rem;
+  padding: 0.25rem 0.4rem;
   border-bottom: 2px solid var(--color-border);
   white-space: nowrap;
 }
@@ -112,12 +112,12 @@
 .sectionRow td,
 .sectionCell {
   background: var(--color-surface-3);
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--color-text-secondary);
-  padding: 0.35rem 0.75rem;
+  padding: 0.3rem 0.65rem;
   border-top: 1px solid var(--color-border);
   border-bottom: 1px solid var(--color-border);
 }
@@ -177,8 +177,8 @@
   left: 0;
   background: var(--color-surface);
   z-index: 1;
-  padding: 0 0.75rem;
-  font-size: 0.8125rem;
+  padding: 0 0.65rem;
+  font-size: 0.75rem;
   white-space: nowrap;
   border-bottom: 1px solid var(--color-border);
   border-right: 1px solid var(--color-border);
@@ -194,10 +194,10 @@
 
 .totalCell {
   text-align: center;
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
   font-weight: 600;
   color: var(--color-text-secondary);
-  padding: 0 0.5rem;
+  padding: 0 0.4rem;
   border-left: 2px solid var(--color-border);
   white-space: nowrap;
 }
@@ -213,20 +213,20 @@
   left: 0;
   background: var(--color-surface-2);
   z-index: 1;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   font-weight: 600;
   color: var(--color-text-secondary);
-  padding: 0.35rem 0.75rem;
+  padding: 0.3rem 0.65rem;
   white-space: nowrap;
   border-right: 1px solid var(--color-border);
 }
 
 .footerCell {
   text-align: center;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   font-weight: 600;
   color: var(--color-text-secondary);
-  padding: 0.35rem 0;
+  padding: 0.3rem 0;
   background: var(--color-surface-2);
 }
 
@@ -243,12 +243,12 @@
   left: 0;
   background: var(--color-mod-bg);
   z-index: 1;
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--color-mod-text);
-  padding: 0.35rem 0.75rem;
+  padding: 0.3rem 0.65rem;
   white-space: nowrap;
   border-right: 1px solid var(--color-border);
 }
@@ -261,12 +261,12 @@
 
 .counterSeparatorCell {
   background: var(--color-surface-3);
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--color-text-secondary);
-  padding: 0.35rem 0.75rem;
+  padding: 0.3rem 0.65rem;
   border-top: 1px solid var(--color-border);
   border-bottom: 1px solid var(--color-border);
 }
@@ -280,10 +280,10 @@
   left: 0;
   background: var(--color-surface-2);
   z-index: 1;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   font-weight: 700;
   color: var(--color-text-secondary);
-  padding: 3px 0.75rem;
+  padding: 2px 0.65rem;
   white-space: nowrap;
   border-right: 1px solid var(--color-border);
 }
@@ -292,28 +292,28 @@
 .counterCell0 {
   background: #fee2e2;
   color: #dc2626;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   font-weight: 600;
   text-align: center;
-  padding: 3px 0;
+  padding: 2px 0;
 }
 
 .counterCell1 {
   background: #dcfce7;
   color: #15803d;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   font-weight: 600;
   text-align: center;
-  padding: 3px 0;
+  padding: 2px 0;
 }
 
 .counterCell2 {
   background: #dbeafe;
   color: #1d4ed8;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   font-weight: 600;
   text-align: center;
-  padding: 3px 0;
+  padding: 2px 0;
 }
 
 /* Dark mode: swap — saturated bg + light text */
@@ -331,7 +331,7 @@
 .nameCellInner {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.4rem;
 }
 
 .nameLines {
@@ -351,15 +351,15 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  font-size: 0.85rem;
+  font-size: 0.78rem;
   font-weight: 700;
   color: var(--color-text-secondary);
   background: var(--color-surface-3);
   border: 1px solid var(--color-border);
   border-radius: 5px;
-  padding: 2px 7px;
+  padding: 2px 6px;
   line-height: 1.5;
-  min-width: 1.6rem;
+  min-width: 1.5rem;
 }
 
 .modBadgeEditable {
@@ -375,12 +375,12 @@
 
 .modBadgeEmpty {
   opacity: 0.4;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
 }
 
 .modBadgeInput {
-  width: 2.2rem;
-  font-size: 0.85rem;
+  width: 2rem;
+  font-size: 0.78rem;
   font-weight: 700;
   text-align: center;
   text-transform: uppercase;
@@ -408,7 +408,7 @@
   border: none;
   cursor: pointer;
   padding: 1px 3px;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   color: var(--color-text-subtle);
   border-radius: 3px;
   line-height: 1;
@@ -421,7 +421,7 @@
 
 .inactiveBadge {
   display: inline-block;
-  font-size: 0.65rem;
+  font-size: 0.6rem;
   font-weight: 700;
   color: var(--color-text-subtle);
   background: var(--color-surface-4);
@@ -432,7 +432,7 @@
 
 .modCountBadge {
   display: block;
-  font-size: 0.65rem;
+  font-size: 0.6rem;
   font-weight: 500;
   color: var(--color-text-muted);
   margin-top: 1px;
