@@ -57,17 +57,17 @@ export default function VacationCollisionResolutionModal({
           <button className={styles.closeBtn} onClick={onCancel}>✕</button>
         </div>
         <div className={styles.body}>
-          <p style={{ fontSize: "0.875rem", color: "#374151", margin: "0 0 0.75rem" }}>
-            <strong>{employeeName}</strong> má v žádaném období dny, kdy už je zapsaná směna.
+          <p style={{ fontSize: "0.875rem", color: "var(--color-text-secondary)", margin: "0 0 0.75rem" }}>
+            <strong style={{ color: "var(--color-text)" }}>{employeeName}</strong> má v žádaném období dny, kdy už je zapsaná směna.
             Pro každý takový den vyberte, zda směnu přepsat na X, nebo zachovat.
           </p>
 
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem", color: "var(--color-text)" }}>
             <thead>
               <tr style={{ borderBottom: "1px solid var(--color-border)" }}>
-                <th style={{ textAlign: "left", padding: "6px 8px" }}>Datum</th>
-                <th style={{ textAlign: "left", padding: "6px 8px" }}>Aktuální směna</th>
-                <th style={{ textAlign: "left", padding: "6px 8px" }}>Volba</th>
+                <th style={{ textAlign: "left", padding: "6px 8px", color: "var(--color-text-secondary)", fontWeight: 500 }}>Datum</th>
+                <th style={{ textAlign: "left", padding: "6px 8px", color: "var(--color-text-secondary)", fontWeight: 500 }}>Aktuální směna</th>
+                <th style={{ textAlign: "left", padding: "6px 8px", color: "var(--color-text-secondary)", fontWeight: 500 }}>Volba</th>
               </tr>
             </thead>
             <tbody>
@@ -76,7 +76,7 @@ export default function VacationCollisionResolutionModal({
                   <td style={{ padding: "8px" }}>{formatDate(c.date)}</td>
                   <td style={{ padding: "8px" }}>{c.rawInput}</td>
                   <td style={{ padding: "8px" }}>
-                    <label style={{ marginRight: "0.75rem", cursor: "pointer" }}>
+                    <label style={{ marginRight: "0.75rem", cursor: "pointer", color: "var(--color-text)" }}>
                       <input
                         type="radio"
                         name={`choice-${c.date}`}
@@ -87,7 +87,7 @@ export default function VacationCollisionResolutionModal({
                       />{" "}
                       Přepsat na X
                     </label>
-                    <label style={{ cursor: "pointer" }}>
+                    <label style={{ cursor: "pointer", color: "var(--color-text)" }}>
                       <input
                         type="radio"
                         name={`choice-${c.date}`}

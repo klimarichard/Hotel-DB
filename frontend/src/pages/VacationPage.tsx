@@ -9,10 +9,20 @@ import VacationCollisionInfoModal, {
 import VacationCollisionResolutionModal from "../components/VacationCollisionResolutionModal";
 
 function extractCollisions(e: unknown): ShiftCollision[] | null {
-  if (!(e instanceof ApiError) || e.status !== 409) return null;
-  const body = e.body as { error?: string; collisions?: ShiftCollision[] } | null;
-  if (!body || body.error !== "shift_collision" || !Array.isArray(body.collisions)) return null;
-  return body.collisions;
+  // Preferred path — ApiError with structured body
+  if (e instanceof ApiError && e.status === 409) {
+    const body = e.body as { error?: string; collisions?: ShiftCollision[] } | null;
+    if (body && body.error === "shift_collision" && Array.isArray(body.collisions)) {
+      return body.collisions;
+    }
+  }
+  // Fallback — duck-typed for cases where instanceof fails across HMR/bundle
+  // boundaries (the error class identity may differ but the shape is stable).
+  const anyE = e as { status?: number; body?: { error?: string; collisions?: ShiftCollision[] } };
+  if (anyE && anyE.status === 409 && anyE.body && anyE.body.error === "shift_collision" && Array.isArray(anyE.body.collisions)) {
+    return anyE.body.collisions;
+  }
+  return null;
 }
 
 interface PendingEdit {
