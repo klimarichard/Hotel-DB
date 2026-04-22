@@ -955,7 +955,7 @@ export default function SettingsPage() {
                   </table>
                 </div>
                 {posCascade.affectedUnlockedPayrolls.length > 0 && (
-                  <div style={{ padding: "0.5rem 0.75rem", background: "#fef9c3", border: "1px solid #fde047", borderRadius: "4px", marginBottom: "0.75rem", fontSize: "0.8125rem" }}>
+                  <div style={{ padding: "0.5rem 0.75rem", background: "#fef9c3", border: "1px solid #fde047", borderRadius: "4px", marginBottom: "0.75rem", fontSize: "0.8125rem", color: "#713f12" }}>
                     <strong>Pozor:</strong> Tato změna ovlivní následující neuzamčené mzdové období(a). Po uložení spusťte v daném období „Přepočítat":
                     <ul style={{ margin: "0.25rem 0 0", paddingLeft: "1.25rem" }}>
                       {posCascade.affectedUnlockedPayrolls.map((p) => (
