@@ -1020,7 +1020,7 @@ export default function ShiftPlannerPage() {
             )}
 
             {/* Create plan */}
-            {!plan && canEdit && (
+            {!plan && canPublish && (
               <>
                 {plansList.length > 0 && (
                   <select
@@ -1047,7 +1047,7 @@ export default function ShiftPlannerPage() {
             )}
 
             {/* Open plan */}
-            {plan?.status === "created" && canEdit && (
+            {plan?.status === "created" && canPublish && (
               <button
                 className={styles.primaryBtn}
                 onClick={() => handleTransitionStatus("opened")}
@@ -1058,7 +1058,7 @@ export default function ShiftPlannerPage() {
             )}
 
             {/* Close plan */}
-            {plan?.status === "opened" && canEdit && (
+            {plan?.status === "opened" && canPublish && (
               <button
                 className={styles.primaryBtn}
                 onClick={() => handleTransitionStatus("closed")}
@@ -1090,7 +1090,7 @@ export default function ShiftPlannerPage() {
             )}
 
             {/* Copy employees into existing created plan */}
-            {plan?.status === "created" && canEdit && plansList.filter(p => p.id !== plan.id).length > 0 && (
+            {plan?.status === "created" && canPublish && plansList.filter(p => p.id !== plan.id).length > 0 && (
               <>
                 <select
                   className={styles.copyFromSelect}
@@ -1248,15 +1248,15 @@ export default function ShiftPlannerPage() {
           {/* Deadline bar — visible to all when there is a saved deadline or user can edit.
               Otevření shown only when created; Uzavření when opened; Publikování when closed. */}
           {plan && (
-            (plan.status === "created" && (canEdit || plan.openedAt)) ||
-            (plan.status === "opened" && (canEdit || plan.closedAt)) ||
-            (plan.status === "closed" && (canEdit || plan.publishedAt))
+            (plan.status === "created" && (canPublish || plan.openedAt)) ||
+            (plan.status === "opened" && (canPublish || plan.closedAt)) ||
+            (plan.status === "closed" && (canPublish || plan.publishedAt))
           ) && (
             <div className={styles.deadlineBar}>
-              {plan.status === "created" && (canEdit || plan.openedAt) && (
+              {plan.status === "created" && (canPublish || plan.openedAt) && (
                 <div className={styles.deadlineItem}>
                   <label className={styles.deadlineLabel}>Otevření:</label>
-                  {canEdit && (
+                  {canPublish && (
                     <>
                       <input
                         type="datetime-local"
@@ -1278,7 +1278,7 @@ export default function ShiftPlannerPage() {
                       <span className={styles.deadlineCountdown}>
                         ({deadlineCountdown(plan.openedAt)})
                       </span>
-                      {canEdit && (
+                      {canPublish && (
                         <button
                           className={styles.deadlineClear}
                           onClick={() => {
@@ -1294,10 +1294,10 @@ export default function ShiftPlannerPage() {
                   )}
                 </div>
               )}
-              {plan.status === "opened" && (canEdit || plan.closedAt) && (
+              {plan.status === "opened" && (canPublish || plan.closedAt) && (
                 <div className={styles.deadlineItem}>
                   <label className={styles.deadlineLabel}>Uzavření:</label>
-                  {canEdit && (
+                  {canPublish && (
                     <>
                       <input
                         type="datetime-local"
@@ -1319,7 +1319,7 @@ export default function ShiftPlannerPage() {
                       <span className={styles.deadlineCountdown}>
                         ({deadlineCountdown(plan.closedAt)})
                       </span>
-                      {canEdit && (
+                      {canPublish && (
                         <button
                           className={styles.deadlineClear}
                           onClick={() => {
@@ -1335,10 +1335,10 @@ export default function ShiftPlannerPage() {
                   )}
                 </div>
               )}
-              {plan.status === "closed" && (canEdit || plan.publishedAt) && (
+              {plan.status === "closed" && (canPublish || plan.publishedAt) && (
                 <div className={styles.deadlineItem}>
                   <label className={styles.deadlineLabel}>Publikování:</label>
-                  {canEdit && (
+                  {canPublish && (
                     <>
                       <input
                         type="datetime-local"
@@ -1360,7 +1360,7 @@ export default function ShiftPlannerPage() {
                       <span className={styles.deadlineCountdown}>
                         ({deadlineCountdown(plan.publishedAt)})
                       </span>
-                      {canEdit && (
+                      {canPublish && (
                         <button
                           className={styles.deadlineClear}
                           onClick={() => {
