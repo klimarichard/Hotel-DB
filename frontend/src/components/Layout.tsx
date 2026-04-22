@@ -4,6 +4,7 @@ import { auth } from "@/lib/firebase";
 import { useAuth } from "@/hooks/useAuth";
 import { useAlertsContext } from "@/context/AlertsContext";
 import { useShiftOverridesContext } from "@/context/ShiftOverridesContext";
+import { useVacationContext } from "@/context/VacationContext";
 import { useTheme } from "@/context/ThemeContext";
 import styles from "./Layout.module.css";
 
@@ -48,6 +49,8 @@ export default function Layout() {
   const { user, role } = useAuth();
   const { unreadCount } = useAlertsContext();
   const { pendingCount: pendingOverrideCount } = useShiftOverridesContext();
+  const { pendingCount: pendingVacationCount } = useVacationContext();
+  const showVacationBadge = (role === "admin" || role === "director") && pendingVacationCount > 0;
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
 
@@ -73,6 +76,11 @@ export default function Layout() {
                   <span className={styles.navLinkInner}>
                     {item.label}
                     <span className={styles.badge}>{pendingOverrideCount}</span>
+                  </span>
+                ) : item.to === "/dovolena" && showVacationBadge ? (
+                  <span className={styles.navLinkInner}>
+                    {item.label}
+                    <span className={styles.badge}>{pendingVacationCount}</span>
                   </span>
                 ) : (
                   item.label
