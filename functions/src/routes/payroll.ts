@@ -446,6 +446,54 @@ payrollRouter.post(
   }
 );
 
+// ─── POST /payroll/periods/by-month/:year/:month ──────────────────────────────
+// Manually create a payrollPeriod for an already-published plan. Useful for
+// seeded plans that bypassed the publish trigger. Refuses to overwrite an
+// existing period (admins should use /recalculate for that).
+
+payrollRouter.post(
+  "/periods/by-month/:year/:month",
+  requireAuth,
+  requireRole("admin", "director"),
+  async (req: AuthRequest, res: Response) => {
+    const year = parseInt(req.params.year);
+    const month = parseInt(req.params.month);
+    if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) {
+      res.status(400).json({ error: "Neplatný rok nebo měsíc." });
+      return;
+    }
+
+    const existing = await db()
+      .collection("payrollPeriods")
+      .where("year", "==", year)
+      .where("month", "==", month)
+      .limit(1)
+      .get();
+    if (!existing.empty) {
+      res.status(409).json({ error: "Mzdové období pro tento měsíc už existuje." });
+      return;
+    }
+
+    const planSnap = await db()
+      .collection("shiftPlans")
+      .where("year", "==", year)
+      .where("month", "==", month)
+      .where("status", "==", "published")
+      .limit(1)
+      .get();
+    if (planSnap.empty) {
+      res.status(404).json({
+        error: "Pro tento měsíc neexistuje publikovaný směnný plán.",
+      });
+      return;
+    }
+
+    const planId = planSnap.docs[0].id;
+    await createOrUpdatePayrollPeriod(planId, year, month);
+    res.status(201).json({ ok: true });
+  }
+);
+
 // ─── POST /payroll/trigger ────────────────────────────────────────────────────
 // Manual trigger for emulator testing — recalculates all published plans.
 

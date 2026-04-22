@@ -104,7 +104,7 @@ PDFs generated client-side via `html2pdf.js` — Puppeteer was too large for Gen
 
 **Core files:**
 - `functions/src/services/payrollCalculator.ts` — `getCzechHolidays`, `getBaseHours`, `calculateEntry`, `createOrUpdatePayrollPeriod`. `FieldValue` from `firebase-admin/firestore` (NOT `admin.firestore.FieldValue` — undefined in modern firebase-admin).
-- `functions/src/routes/payroll.ts` — `GET/PATCH /payroll/settings`, `GET /payroll/periods`, `GET /payroll/periods/by-month/:year/:month`, `PATCH /payroll/periods/:id` (lock/unlock, admin), `PATCH /payroll/periods/:id/entries/:employeeId`, `POST /payroll/periods/:id/recalculate`, `POST /payroll/trigger`.
+- `functions/src/routes/payroll.ts` — `GET/PATCH /payroll/settings`, `GET /payroll/periods`, `GET /payroll/periods/by-month/:year/:month`, `POST /payroll/periods/by-month/:year/:month` (manual create from already-published plan, admin/director), `PATCH /payroll/periods/:id` (lock/unlock, admin), `PATCH /payroll/periods/:id/entries/:employeeId`, `POST /payroll/periods/:id/recalculate`, `POST /payroll/trigger`.
 - Scheduled `refreshPayroll` in `functions/src/index.ts` runs daily.
 
 **Calculation rules (from MZDY.xlsx):**
@@ -129,6 +129,8 @@ PDFs generated client-side via `html2pdf.js` — Puppeteer was too large for Gen
 **Locking:** Admins can lock a period via `PATCH /payroll/periods/:id` (`{ locked: true }`). Locked periods reject entry PATCHes (409), recalc requests (409), and skip the scheduled recalculation. Frontend hides the "Přepočítat" button and disables cell editing. Director can toggle lock on-screen labels but only admin role may actually flip it.
 
 **Manual recalc:** `POST /payroll/periods/:id/recalculate` re-runs `createOrUpdatePayrollPeriod(shiftPlanId, year, month)`. Triggered from the "Přepočítat" button — lets admin/director reflect shift-plan edits without waiting for the scheduled run. Rejected with 409 on locked periods.
+
+**Manual create:** `POST /payroll/periods/by-month/:year/:month` looks up the published shift plan for that month and runs `createOrUpdatePayrollPeriod` for it. Used by the "Vytvořit mzdy ručně" button on the empty state of `PayrollPage` — covers seeded plans where the publish trigger never fired. 404 when no published plan exists for the month, 409 when a period already exists (use recalc instead).
 
 **PDF export:** `handleExportPdf` in `PayrollPage.tsx` builds an inline-styled HTML table via `html2pdf.js` and saves as `HPM_MZDY_YYMM.pdf`. A4 portrait, all employees on one page, Dovolená + Nemoc in one cell (NEMOC badge stacks beneath when > 0), NAVÍC unmasked and shown in its tiered form, contract badge next to the name, base/max metadata at the top. Effective-value precedence matches the on-screen table: `overrides` → `autoOverrides` → computed.
 

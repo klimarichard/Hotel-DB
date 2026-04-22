@@ -425,6 +425,7 @@ export default function PayrollPage() {
   const [notesModal, setNotesModal] = useState<PayrollEntry | null>(null);
   const [showAllNavic, setShowAllNavic] = useState(false);
   const [recalculating, setRecalculating] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [exporting, setExporting] = useState(false);
 
   const loadPeriod = useCallback(async () => {
@@ -464,6 +465,24 @@ export default function PayrollPage() {
       setPeriod((prev) => prev ? { ...prev, locked: next } : prev);
     } catch (e) {
       setError((e as Error).message ?? "Chyba při uzamykání.");
+    }
+  }
+
+  async function handleCreatePeriod() {
+    if (creating) return;
+    if (!window.confirm(
+      `Vytvořit mzdy pro ${MONTH_NAMES[selectedMonth - 1]} ${selectedYear}? ` +
+      `Pro tento měsíc musí existovat publikovaný směnný plán.`
+    )) return;
+    setCreating(true);
+    setError(null);
+    try {
+      await api.post(`/payroll/periods/by-month/${selectedYear}/${selectedMonth}`, {});
+      await loadPeriod();
+    } catch (e) {
+      setError((e as Error).message ?? "Chyba při vytváření mzdového období.");
+    } finally {
+      setCreating(false);
     }
   }
 
@@ -862,6 +881,17 @@ export default function PayrollPage() {
           Žádné mzdové období pro {MONTH_NAMES[selectedMonth - 1]} {selectedYear}.
           <br />
           <span className={styles.emptyHint}>Mzdy se generují automaticky po publikování směnného plánu.</span>
+          <br />
+          <button
+            type="button"
+            className={styles.lockBtn}
+            onClick={handleCreatePeriod}
+            disabled={creating}
+            style={{ marginTop: "1rem" }}
+            title="Vytvořit mzdové období z již publikovaného směnného plánu pro tento měsíc"
+          >
+            {creating ? "Vytvářím…" : "Vytvořit mzdy ručně"}
+          </button>
         </div>
       )}
 
