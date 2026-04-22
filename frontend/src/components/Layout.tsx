@@ -80,7 +80,7 @@ export default function Layout() {
               </NavLink>
             </li>
           ))}
-          {role !== "employee" &&
+          {(role === "admin" || role === "director") &&
             staffItems.map((item) => (
               <li key={item.to}>
                 <NavLink
