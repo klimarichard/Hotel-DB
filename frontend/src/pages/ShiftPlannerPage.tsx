@@ -219,8 +219,9 @@ export default function ShiftPlannerPage() {
   }, [plan?.status, loading]);
 
   const { refresh: refreshOverrideCount } = useShiftOverridesContext();
-  const { pendingCount: changeRequestCount, refresh: refreshChangeRequestCount } = useShiftChangeRequestsContext();
+  const { refresh: refreshChangeRequestCount } = useShiftChangeRequestsContext();
   const [planOverrideCount, setPlanOverrideCount] = useState(0);
+  const [planChangeRequestCount, setPlanChangeRequestCount] = useState(0);
 
   // ── Load plan for selected month/year ──────────────────────────────────────
 
@@ -250,6 +251,10 @@ export default function ShiftPlannerPage() {
           api
             .get<{ id: string; status: string }[]>(`/shifts/plans/${match.id}/shiftOverrides`)
             .then((overrides) => setPlanOverrideCount(overrides.filter((o) => o.status === "pending").length))
+            .catch(() => {});
+          api
+            .get<{ id: string; status: string }[]>(`/shifts/plans/${match.id}/shiftChangeRequests`)
+            .then((reqs) => setPlanChangeRequestCount(reqs.filter((r) => r.status === "pending").length))
             .catch(() => {});
         });
       })
@@ -1159,7 +1164,7 @@ export default function ShiftPlannerPage() {
                 style={{ position: "relative" }}
               >
                 Žádosti o změny
-                {changeRequestCount > 0 && (
+                {planChangeRequestCount > 0 && (
                   <span style={{
                     position: "absolute",
                     top: "-6px",
@@ -1177,7 +1182,7 @@ export default function ShiftPlannerPage() {
                     padding: "0 3px",
                     lineHeight: 1,
                   }}>
-                    {changeRequestCount}
+                    {planChangeRequestCount}
                   </span>
                 )}
               </button>
@@ -1414,7 +1419,10 @@ export default function ShiftPlannerPage() {
               planId={plan.id}
               employees={plan.employees}
               canReview={true}
-              onResolved={() => { refreshChangeRequestCount(); }}
+              onResolved={() => {
+                setPlanChangeRequestCount((c) => Math.max(0, c - 1));
+                refreshChangeRequestCount();
+              }}
             />
           )}
 
@@ -1538,6 +1546,8 @@ export default function ShiftPlannerPage() {
               reason,
             });
             setPendingChangeRequest(null);
+            setPlanChangeRequestCount((c) => c + 1);
+            refreshChangeRequestCount();
           }}
           onClose={() => setPendingChangeRequest(null)}
         />

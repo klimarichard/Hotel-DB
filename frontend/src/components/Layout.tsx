@@ -4,6 +4,7 @@ import { auth } from "@/lib/firebase";
 import { useAuth } from "@/hooks/useAuth";
 import { useAlertsContext } from "@/context/AlertsContext";
 import { useShiftOverridesContext } from "@/context/ShiftOverridesContext";
+import { useShiftChangeRequestsContext } from "@/context/ShiftChangeRequestsContext";
 import { useVacationContext } from "@/context/VacationContext";
 import { useTheme } from "@/context/ThemeContext";
 import styles from "./Layout.module.css";
@@ -49,7 +50,9 @@ export default function Layout() {
   const { user, role } = useAuth();
   const { unreadCount } = useAlertsContext();
   const { pendingCount: pendingOverrideCount } = useShiftOverridesContext();
+  const { pendingCount: pendingChangeRequestCount } = useShiftChangeRequestsContext();
   const { pendingCount: pendingVacationCount } = useVacationContext();
+  const shiftsBadgeCount = pendingOverrideCount + pendingChangeRequestCount;
   const showVacationBadge = (role === "admin" || role === "director") && pendingVacationCount > 0;
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
@@ -72,10 +75,10 @@ export default function Layout() {
                   [styles.navLink, isActive ? styles.active : ""].join(" ")
                 }
               >
-                {item.to === "/smeny" && pendingOverrideCount > 0 ? (
+                {item.to === "/smeny" && shiftsBadgeCount > 0 ? (
                   <span className={styles.navLinkInner}>
                     {item.label}
-                    <span className={styles.badge}>{pendingOverrideCount}</span>
+                    <span className={styles.badge}>{shiftsBadgeCount}</span>
                   </span>
                 ) : item.to === "/dovolena" && showVacationBadge ? (
                   <span className={styles.navLinkInner}>
