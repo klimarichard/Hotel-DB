@@ -15,6 +15,7 @@ import OverviewPage from "@/pages/OverviewPage";
 import { AlertsProvider } from "@/context/AlertsContext";
 import { ShiftOverridesProvider } from "@/context/ShiftOverridesContext";
 import { ShiftChangeRequestsProvider } from "@/context/ShiftChangeRequestsContext";
+import { VacationProvider } from "@/context/VacationContext";
 import { ThemeProvider } from "@/context/ThemeContext";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -50,7 +51,9 @@ export default function App() {
             <AlertsProvider>
               <ShiftOverridesProvider>
                 <ShiftChangeRequestsProvider>
-                  <Layout />
+                  <VacationProvider>
+                    <Layout />
+                  </VacationProvider>
                 </ShiftChangeRequestsProvider>
               </ShiftOverridesProvider>
             </AlertsProvider>

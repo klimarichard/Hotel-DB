@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, ApiError } from "../lib/api";
 import { useAuth } from "../hooks/useAuth";
+import { useVacationContext } from "@/context/VacationContext";
 import { formatDateCZ, formatDatetimeCZ } from "../lib/dateFormat";
 import styles from "./VacationPage.module.css";
 import VacationCollisionInfoModal, {
@@ -65,6 +66,7 @@ function StatusBadge({ status }: { status: VacationRequest["status"] }) {
 
 export default function VacationPage() {
   const { user, role, employeeId } = useAuth();
+  const { refresh: refreshVacationBadge } = useVacationContext();
   const canApprove = role === "admin" || role === "director";
 
   const [requests, setRequests] = useState<VacationRequest[]>([]);
@@ -158,6 +160,7 @@ export default function VacationPage() {
       setEndDate("");
       setReason("");
       setFormSuccess(true);
+      refreshVacationBadge();
     } catch (e) {
       const collisions = extractCollisions(e);
       if (collisions) {
@@ -188,6 +191,7 @@ export default function VacationPage() {
         return { ...r, status: "approved" as const };
       })
     );
+    refreshVacationBadge();
   }
 
   async function handleApprove(id: string) {
@@ -235,6 +239,7 @@ export default function VacationPage() {
       );
       setRejectingId(null);
       setRejectionReason("");
+      refreshVacationBadge();
     } finally {
       setActionSaving(false);
     }
@@ -245,6 +250,7 @@ export default function VacationPage() {
     try {
       await api.delete(`/vacation/${id}`);
       setRequests((prev) => prev.filter((r) => r.id !== id));
+      refreshVacationBadge();
     } finally {
       setActionSaving(false);
     }
@@ -273,6 +279,7 @@ export default function VacationPage() {
         })
       );
       setEditingId(null);
+      refreshVacationBadge();
     } catch (e) {
       const collisions = extractCollisions(e);
       if (collisions) setInfoCollisions(collisions);

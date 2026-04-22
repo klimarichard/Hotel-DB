@@ -6,6 +6,7 @@ import { useTheme } from "@/context/ThemeContext";
 import { useAlertsContext } from "@/context/AlertsContext";
 import { useShiftOverridesContext } from "@/context/ShiftOverridesContext";
 import { useShiftChangeRequestsContext } from "@/context/ShiftChangeRequestsContext";
+import { useVacationContext } from "@/context/VacationContext";
 import {
   HOTEL_CODES,
   HOTEL_NAMES,
@@ -336,23 +337,13 @@ export default function OverviewPage() {
   const { unreadCount: alertsCount } = useAlertsContext();
   const { pendingCount: overridesCount } = useShiftOverridesContext();
   const { pendingCount: changesCount } = useShiftChangeRequestsContext();
-  const [vacationCount, setVacationCount] = useState(0);
+  const { pendingCount: vacationCount } = useVacationContext();
   const [myVacations, setMyVacations] = useState<MyVacation[] | null>(null);
 
   const [plans, setPlans] = useState<PlanDetail[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tomorrowExpanded, setTomorrowExpanded] = useState(false);
-
-  useEffect(() => {
-    if (!showTasks) return;
-    let cancelled = false;
-    api
-      .get<{ count: number }>("/vacation/pending-count")
-      .then((data) => { if (!cancelled) setVacationCount(data.count); })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [showTasks]);
 
   useEffect(() => {
     if (!employeeId) return;
