@@ -17,7 +17,7 @@
  */
 
 import * as admin from "firebase-admin";
-import { FieldValue } from "firebase-admin/firestore";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { randomUUID } from "crypto";
 
 const db = () => admin.firestore();
@@ -554,7 +554,7 @@ export async function createOrUpdatePayrollPeriod(
       if (existing.empty) {
         const priorEntry = await getPriorEntryData(employeeId, year, month);
         const priorNotes = (priorEntry?.notes as Record<string, unknown>[] | undefined) ?? [];
-        const now = admin.firestore.Timestamp.now();
+        const now = Timestamp.now();
         notes = priorNotes
           .filter((n) => n.carryForward === true)
           .map((n) => ({
