@@ -294,13 +294,19 @@ vacationRouter.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
     | null
     | undefined;
 
-  // Optional client-side resolution: array of YYYY-MM-DD dates to KEEP
-  // (i.e. don't overwrite with X). Only meaningful on approval.
+  // Client-side resolution payload: array of YYYY-MM-DD dates the user
+  // explicitly chose to KEEP (i.e. don't overwrite with X). Anything not
+  // in this list — including all other collision dates — is implicitly an
+  // overwrite.
+  //
+  // Presence of the field signals "the user came through the resolution
+  // dialog, trust their choice"; absence means "no dialog yet — gate on
+  // collisions and force the UI to open the dialog by returning 409".
+  const excludeProvided = "excludeDates" in body;
   const rawExcluded = body.excludeDates;
   const excludeDates: string[] = Array.isArray(rawExcluded)
     ? (rawExcluded as unknown[]).filter((x): x is string => typeof x === "string")
     : [];
-  const excludeSet = new Set(excludeDates);
 
   if (pendingEdit) {
     // Acting on a pending edit of an already-approved request
@@ -309,17 +315,17 @@ vacationRouter.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
       const oldEnd = data.endDate as string;
       const { startDate: newStart, endDate: newEnd, reason: newReason } = pendingEdit;
 
-      // Defense-in-depth: re-check collisions on the new dates. If any
-      // collision is NOT in excludeDates, the UI is stale — block.
-      const collisions = await findShiftCollisions(
-        data.employeeId as string,
-        newStart,
-        newEnd
-      );
-      const unresolved = collisions.filter((c) => !excludeSet.has(c.date));
-      if (unresolved.length > 0) {
-        res.status(409).json({ error: "shift_collision", collisions });
-        return;
+      // Force the resolution dialog if the caller hasn't sent excludeDates yet.
+      if (!excludeProvided) {
+        const collisions = await findShiftCollisions(
+          data.employeeId as string,
+          newStart,
+          newEnd
+        );
+        if (collisions.length > 0) {
+          res.status(409).json({ error: "shift_collision", collisions });
+          return;
+        }
       }
 
       await docRef.update({
@@ -350,14 +356,13 @@ vacationRouter.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
       return;
     }
 
-    if (status === "approved") {
+    if (status === "approved" && !excludeProvided) {
       const collisions = await findShiftCollisions(
         data.employeeId as string,
         data.startDate as string,
         data.endDate as string
       );
-      const unresolved = collisions.filter((c) => !excludeSet.has(c.date));
-      if (unresolved.length > 0) {
+      if (collisions.length > 0) {
         res.status(409).json({ error: "shift_collision", collisions });
         return;
       }
