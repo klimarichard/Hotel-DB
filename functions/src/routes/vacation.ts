@@ -203,7 +203,7 @@ vacationRouter.post("/", requireAuth, async (req: AuthRequest, res) => {
     rejectionReason: null,
   });
 
-  res.status(201).json({ id: ref.id });
+  res.status(201).json({ id: ref.id, firstName, lastName });
 });
 
 // ─── PATCH /vacation/:id ──────────────────────────────────────────────────────

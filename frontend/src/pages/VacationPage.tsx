@@ -135,12 +135,15 @@ export default function VacationPage() {
     }
     setSubmitting(true);
     try {
-      const result = await api.post<{ id: string }>("/vacation", { startDate, endDate, reason });
+      const result = await api.post<{ id: string; firstName: string; lastName: string }>(
+        "/vacation",
+        { startDate, endDate, reason },
+      );
       const newRequest: VacationRequest = {
         id: result.id,
         employeeId: employeeId,
-        firstName: "",
-        lastName: "",
+        firstName: result.firstName,
+        lastName: result.lastName,
         uid: user!.uid,
         startDate,
         endDate,
