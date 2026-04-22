@@ -57,6 +57,12 @@ PDFs generated client-side via `html2pdf.js` — Puppeteer was too large for Gen
 - User↔employee link: `employeeId` field on `users/{uid}`. Set via `PATCH /auth/users/:uid/employee`.
 - Notifications on plan publish intentionally skipped.
 - `GET /vacation/approved-upcoming` — all authenticated users, returns name + date fields for approved vacations whose `endDate >= today` (Prague TZ). Powers the `Schválené dovolené (všichni zaměstnanci)` section on `VacationPage`, shown to employees and managers only — admin/director already see every request in `Všechny žádosti`.
+- **Shift-collision check:** vacation requests/approvals can't silently overwrite pre-scheduled work.
+  - `findShiftCollisions(employeeId, startDate, endDate)` in `shifts.ts` returns every shift cell whose `status === "assigned"` in the range (X / blank cells are not collisions).
+  - `POST /vacation` and the employee-edit branch of `PATCH /vacation/:id` return `409 { error: "shift_collision", collisions }` if any assigned shift sits in the range — hard block, surfaced as a read-only `VacationCollisionInfoModal`.
+  - `PATCH /vacation/:id` on admin approval accepts optional `excludeDates: string[]` in the body. If the field is **absent**, the endpoint re-checks collisions and 409s to force the UI to open the resolution dialog. If **present** (even empty), the user's picks are trusted — `excludedDates` is persisted on the request doc, and `applyVacationXs` skips those days when repainting X cells on every overlapping plan.
+  - `GET /vacation/check-collisions` is the UI pre-check used by `handleApprove` in `VacationPage.tsx` before opening `VacationCollisionResolutionModal`. Employees are scoped to their own `employeeId`; admin/director can check anyone.
+  - `api.ts` throws `ApiError { status, body, message }` so the page can extract the structured 409 payload instead of relying on the message string.
 
 ### Phase 5 — Shift Planner
 - `parseShiftExpression` is duplicated verbatim in `functions/src/services/shiftParser.ts` AND `frontend/src/lib/shiftConstants.ts` — they cannot share code across packages. Keep in sync manually.
