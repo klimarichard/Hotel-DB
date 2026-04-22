@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, ApiError } from "../lib/api";
 import { useAuth } from "../hooks/useAuth";
-import { formatDateCZ } from "../lib/dateFormat";
+import { formatDateCZ, formatDatetimeCZ } from "../lib/dateFormat";
 import styles from "./VacationPage.module.css";
 import VacationCollisionInfoModal, {
   type ShiftCollision,
@@ -511,6 +511,7 @@ export default function VacationPage() {
               <thead>
                 <tr>
                   <th>Zaměstnanec</th>
+                  <th>Žádáno</th>
                   <th>Od</th>
                   <th>Do</th>
                   <th>Poznámka</th>
@@ -528,6 +529,7 @@ export default function VacationPage() {
                       <td>
                         {req.lastName} {req.firstName}
                       </td>
+                      <td>{formatDatetimeCZ(req.requestedAt)}</td>
                       <td>{formatDateCZ(req.startDate)}</td>
                       <td>{formatDateCZ(req.endDate)}</td>
                       <td>{req.reason || "—"}</td>
@@ -566,7 +568,7 @@ export default function VacationPage() {
                     </tr>
                     {req.pendingEdit && (
                       <tr key={`pendingedit-${req.id}`} className={styles.pendingEditRow}>
-                        <td colSpan={6}>
+                        <td colSpan={7}>
                           <span className={styles.pendingEditLabel}>Navrhovaná změna:</span>
                           <span className={styles.pendingEditDates}>
                             {formatDateCZ(req.pendingEdit.startDate)}
@@ -594,7 +596,7 @@ export default function VacationPage() {
                     )}
                     {rejectingId === req.id && (
                       <tr key={`reject-${req.id}`} className={styles.rejectRow}>
-                        <td colSpan={6}>
+                        <td colSpan={7}>
                           <input
                             className={styles.rejectInput}
                             placeholder="Důvod zamítnutí (volitelné)…"
