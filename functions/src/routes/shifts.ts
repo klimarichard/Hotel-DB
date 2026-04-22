@@ -64,10 +64,86 @@ async function renumberSection(
 
 // ─── Vacation X helpers ──────────────────────────────────────────────────────
 
+export interface ShiftCollision {
+  date: string;       // YYYY-MM-DD
+  rawInput: string;   // e.g. "DA", "N", "ZD"
+  planId: string;
+  planMonth: number;
+  planYear: number;
+}
+
+/**
+ * For the given employee and date range, return every existing shift cell
+ * with status === "assigned" that falls inside the range. Used to gate
+ * vacation requests/approvals against pre-scheduled work.
+ *
+ * X shifts (status "day_off") and blank cells (status "unassigned") are
+ * intentionally excluded — re-applying X over X is a no-op, and blank
+ * cells are obviously safe to overwrite.
+ */
+export async function findShiftCollisions(
+  employeeId: string,
+  startDate: string,
+  endDate: string
+): Promise<ShiftCollision[]> {
+  const startD = new Date(startDate + "T00:00:00");
+  const endD = new Date(endDate + "T00:00:00");
+  const cur = new Date(startD.getFullYear(), startD.getMonth(), 1);
+  const months: { year: number; month: number }[] = [];
+  while (cur <= endD) {
+    months.push({ year: cur.getFullYear(), month: cur.getMonth() + 1 });
+    cur.setMonth(cur.getMonth() + 1);
+  }
+
+  const out: ShiftCollision[] = [];
+  for (const { year, month } of months) {
+    const planSnap = await db()
+      .collection("shiftPlans")
+      .where("year", "==", year)
+      .where("month", "==", month)
+      .limit(1)
+      .get();
+    if (planSnap.empty) continue;
+    const planDoc = planSnap.docs[0];
+
+    const lastDay = new Date(year, month, 0).getDate();
+    const monthStart = `${year}-${String(month).padStart(2, "0")}-01`;
+    const monthEnd = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+    const clampedStart = startDate < monthStart ? monthStart : startDate;
+    const clampedEnd = endDate > monthEnd ? monthEnd : endDate;
+
+    const shiftSnap = await planDoc.ref
+      .collection("shifts")
+      .where("employeeId", "==", employeeId)
+      .where("date", ">=", clampedStart)
+      .where("date", "<=", clampedEnd)
+      .get();
+
+    for (const s of shiftSnap.docs) {
+      const sd = s.data() as Record<string, unknown>;
+      if (sd.status !== "assigned") continue;
+      out.push({
+        date: sd.date as string,
+        rawInput: (sd.rawInput as string) ?? "",
+        planId: planDoc.id,
+        planMonth: month,
+        planYear: year,
+      });
+    }
+  }
+
+  out.sort((a, b) => a.date.localeCompare(b.date));
+  return out;
+}
+
 /**
  * For a given plan and employee, find all approved vacation requests that
  * overlap with the plan's month and batch-write X shift docs.
  * Exported so vacation.ts can call applyVacationXsToPlans.
+ *
+ * Honors each request's optional `excludedDates: string[]` field — those
+ * days are skipped so the existing shift cell survives. Used by the
+ * approval-time collision-resolution dialog.
  */
 export async function applyVacationXs(
   planRef: admin.firestore.DocumentReference,
@@ -91,24 +167,29 @@ export async function applyVacationXs(
 
   const batch = db().batch();
   for (const doc of overlapping) {
-    const { startDate, endDate } = doc.data() as { startDate: string; endDate: string };
+    const dd = doc.data() as Record<string, unknown>;
+    const startDate = dd.startDate as string;
+    const endDate = dd.endDate as string;
+    const excluded = new Set<string>(Array.isArray(dd.excludedDates) ? (dd.excludedDates as string[]) : []);
     const clampedStart = startDate < monthStart ? monthStart : startDate;
     const clampedEnd = endDate > monthEnd ? monthEnd : endDate;
     const cur = new Date(clampedStart + "T00:00:00");
     const end = new Date(clampedEnd + "T00:00:00");
     while (cur <= end) {
-      const dateStr = cur.toISOString().slice(0, 10);
-      const docId = `${employeeId}_${dateStr}`;
-      batch.set(planRef.collection("shifts").doc(docId), {
-        employeeId,
-        date: dateStr,
-        rawInput: "X",
-        segments: [{ code: "X", hotel: null, hours: 0 }],
-        hoursComputed: 0,
-        isDouble: false,
-        status: "day_off",
-        updatedAt: FieldValue.serverTimestamp(),
-      });
+      const dateStr = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}-${String(cur.getDate()).padStart(2, "0")}`;
+      if (!excluded.has(dateStr)) {
+        const docId = `${employeeId}_${dateStr}`;
+        batch.set(planRef.collection("shifts").doc(docId), {
+          employeeId,
+          date: dateStr,
+          rawInput: "X",
+          segments: [{ code: "X", hotel: null, hours: 0 }],
+          hoursComputed: 0,
+          isDouble: false,
+          status: "day_off",
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+      }
       cur.setDate(cur.getDate() + 1);
     }
   }

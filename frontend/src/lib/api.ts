@@ -9,6 +9,23 @@ async function getAuthHeader(): Promise<Record<string, string>> {
   return { Authorization: `Bearer ${token}` };
 }
 
+/**
+ * Error thrown by the api helper on a non-2xx response. Carries the HTTP
+ * status and the parsed JSON body so callers can branch on structured
+ * error payloads (e.g. 409 shift-collision details) instead of relying on
+ * the message string.
+ */
+export class ApiError extends Error {
+  status: number;
+  body: unknown;
+  constructor(status: number, body: unknown, message: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.body = body;
+  }
+}
+
 async function request<T>(
   method: string,
   path: string,
@@ -24,8 +41,12 @@ async function request<T>(
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error ?? res.statusText);
+    const errBody = await res.json().catch(() => ({ error: res.statusText }));
+    const message =
+      (errBody && typeof errBody === "object" && "error" in errBody
+        ? String((errBody as { error?: unknown }).error)
+        : "") || res.statusText;
+    throw new ApiError(res.status, errBody, message);
   }
   return res.json() as Promise<T>;
 }

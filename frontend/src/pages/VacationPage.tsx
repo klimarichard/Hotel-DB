@@ -1,8 +1,29 @@
 import { useEffect, useState } from "react";
-import { api } from "../lib/api";
+import { api, ApiError } from "../lib/api";
 import { useAuth } from "../hooks/useAuth";
 import { formatDateCZ } from "../lib/dateFormat";
 import styles from "./VacationPage.module.css";
+import VacationCollisionInfoModal, {
+  type ShiftCollision,
+} from "../components/VacationCollisionInfoModal";
+import VacationCollisionResolutionModal from "../components/VacationCollisionResolutionModal";
+
+function extractCollisions(e: unknown): ShiftCollision[] | null {
+  // Preferred path — ApiError with structured body
+  if (e instanceof ApiError && e.status === 409) {
+    const body = e.body as { error?: string; collisions?: ShiftCollision[] } | null;
+    if (body && body.error === "shift_collision" && Array.isArray(body.collisions)) {
+      return body.collisions;
+    }
+  }
+  // Fallback — duck-typed for cases where instanceof fails across HMR/bundle
+  // boundaries (the error class identity may differ but the shape is stable).
+  const anyE = e as { status?: number; body?: { error?: string; collisions?: ShiftCollision[] } };
+  if (anyE && anyE.status === 409 && anyE.body && anyE.body.error === "shift_collision" && Array.isArray(anyE.body.collisions)) {
+    return anyE.body.collisions;
+  }
+  return null;
+}
 
 interface PendingEdit {
   startDate: string;
@@ -68,6 +89,14 @@ export default function VacationPage() {
   const [editReason, setEditReason] = useState("");
   const [editSaving, setEditSaving] = useState(false);
 
+  // Collision modals
+  const [infoCollisions, setInfoCollisions] = useState<ShiftCollision[] | null>(null);
+  const [resolution, setResolution] = useState<{
+    requestId: string;
+    employeeName: string;
+    collisions: ShiftCollision[];
+  } | null>(null);
+
   useEffect(() => {
     api
       .get<VacationRequest[]>("/vacation")
@@ -127,32 +156,61 @@ export default function VacationPage() {
       setReason("");
       setFormSuccess(true);
     } catch (e) {
-      setFormError(e instanceof Error ? e.message : "Chyba při odesílání");
+      const collisions = extractCollisions(e);
+      if (collisions) {
+        setInfoCollisions(collisions);
+      } else {
+        setFormError(e instanceof Error ? e.message : "Chyba při odesílání");
+      }
     } finally {
       setSubmitting(false);
     }
   }
 
+  async function persistApproval(id: string, excludeDates: string[]) {
+    await api.patch(`/vacation/${id}`, { status: "approved", excludeDates });
+    setRequests((prev) =>
+      prev.map((r) => {
+        if (r.id !== id) return r;
+        if (r.pendingEdit) {
+          // Approving an edit — apply new dates and clear pendingEdit
+          return {
+            ...r,
+            startDate: r.pendingEdit.startDate,
+            endDate: r.pendingEdit.endDate,
+            reason: r.pendingEdit.reason,
+            pendingEdit: null,
+          };
+        }
+        return { ...r, status: "approved" as const };
+      })
+    );
+  }
+
   async function handleApprove(id: string) {
+    const req = requests.find((r) => r.id === id);
+    if (!req) return;
+
+    // Pre-check against the dates that will actually be approved (pendingEdit
+    // wins if present). 409 from the backend is also handled defensively.
+    const startDate = req.pendingEdit?.startDate ?? req.startDate;
+    const endDate = req.pendingEdit?.endDate ?? req.endDate;
+
     setActionSaving(true);
     try {
-      await api.patch(`/vacation/${id}`, { status: "approved" });
-      setRequests((prev) =>
-        prev.map((r) => {
-          if (r.id !== id) return r;
-          if (r.pendingEdit) {
-            // Approving an edit — apply new dates and clear pendingEdit
-            return {
-              ...r,
-              startDate: r.pendingEdit.startDate,
-              endDate: r.pendingEdit.endDate,
-              reason: r.pendingEdit.reason,
-              pendingEdit: null,
-            };
-          }
-          return { ...r, status: "approved" as const };
-        })
+      const { collisions } = await api.get<{ collisions: ShiftCollision[] }>(
+        `/vacation/check-collisions?employeeId=${encodeURIComponent(req.employeeId)}` +
+        `&startDate=${startDate}&endDate=${endDate}`
       );
+      if (collisions.length === 0) {
+        await persistApproval(id, []);
+      } else {
+        setResolution({
+          requestId: id,
+          employeeName: `${req.lastName} ${req.firstName}`.trim(),
+          collisions,
+        });
+      }
     } finally {
       setActionSaving(false);
     }
@@ -213,7 +271,9 @@ export default function VacationPage() {
       );
       setEditingId(null);
     } catch (e) {
-      // Silently fail — user can retry
+      const collisions = extractCollisions(e);
+      if (collisions) setInfoCollisions(collisions);
+      // Other errors silently fail — user can retry
     } finally {
       setEditSaving(false);
     }
@@ -417,6 +477,25 @@ export default function VacationPage() {
             </table>
           )}
         </div>
+      )}
+
+      {/* Collision modals */}
+      {infoCollisions && (
+        <VacationCollisionInfoModal
+          collisions={infoCollisions}
+          onClose={() => setInfoCollisions(null)}
+        />
+      )}
+      {resolution && (
+        <VacationCollisionResolutionModal
+          employeeName={resolution.employeeName}
+          collisions={resolution.collisions}
+          onCancel={() => setResolution(null)}
+          onSubmit={async (excludeDates) => {
+            await persistApproval(resolution.requestId, excludeDates);
+            setResolution(null);
+          }}
+        />
       )}
 
       {/* All requests — admin/director only */}

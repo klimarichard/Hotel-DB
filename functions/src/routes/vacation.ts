@@ -2,7 +2,7 @@ import { Router } from "express";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireAuth, requireRole, AuthRequest } from "../middleware/auth";
-import { applyVacationXsToPlans, removeVacationXsFromPlans } from "./shifts";
+import { applyVacationXsToPlans, removeVacationXsFromPlans, findShiftCollisions } from "./shifts";
 
 export const vacationRouter = Router();
 const db = () => admin.firestore();
@@ -86,6 +86,47 @@ vacationRouter.get("/approved-upcoming", requireAuth, async (_req, res) => {
   res.json(rows);
 });
 
+// ─── GET /vacation/check-collisions ──────────────────────────────────────────
+// Pre-check used by the UI before submitting a vacation request or before an
+// admin/director approves one. Employees can only check their own employeeId
+// (matched against users/{uid}.employeeId); admin/director can check anyone.
+
+vacationRouter.get(
+  "/check-collisions",
+  requireAuth,
+  async (req: AuthRequest, res) => {
+    const { employeeId, startDate, endDate } = req.query as {
+      employeeId?: string;
+      startDate?: string;
+      endDate?: string;
+    };
+    if (!employeeId || !startDate || !endDate) {
+      res.status(400).json({ error: "employeeId, startDate, endDate are required" });
+      return;
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+      res.status(400).json({ error: "Neplatný formát data (YYYY-MM-DD)" });
+      return;
+    }
+
+    const role = req.role;
+    const isAdminOrDirector = role === "admin" || role === "director";
+    if (!isAdminOrDirector) {
+      const userDoc = await db().collection("users").doc(req.uid!).get();
+      const userEmpId = userDoc.exists
+        ? ((userDoc.data() as Record<string, unknown>).employeeId as string | null)
+        : null;
+      if (userEmpId !== employeeId) {
+        res.status(403).json({ error: "Nemáte oprávnění" });
+        return;
+      }
+    }
+
+    const collisions = await findShiftCollisions(employeeId, startDate, endDate);
+    res.json({ collisions });
+  }
+);
+
 // ─── GET /vacation ────────────────────────────────────────────────────────────
 // Admin/director: all requests; others: own requests only
 
@@ -139,6 +180,13 @@ vacationRouter.post("/", requireAuth, async (req: AuthRequest, res) => {
   const empData = empDoc.exists ? (empDoc.data() as Record<string, unknown>) : {};
   const firstName = (empData.firstName as string) ?? (userData.name as string) ?? "";
   const lastName = (empData.lastName as string) ?? "";
+
+  // Hard-block if any non-X shift already exists in the requested date range.
+  const collisions = await findShiftCollisions(employeeId, startDate, endDate);
+  if (collisions.length > 0) {
+    res.status(409).json({ error: "shift_collision", collisions });
+    return;
+  }
 
   const ref = await db().collection("vacationRequests").add({
     employeeId,
@@ -206,6 +254,17 @@ vacationRouter.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
       return;
     }
 
+    // Hard-block if the new dates collide with non-X shifts.
+    const editCollisions = await findShiftCollisions(
+      data.employeeId as string,
+      startDate,
+      endDate
+    );
+    if (editCollisions.length > 0) {
+      res.status(409).json({ error: "shift_collision", collisions: editCollisions });
+      return;
+    }
+
     if (data.status === "pending") {
       // Pending request — update dates directly, no approval needed
       await docRef.update({ startDate, endDate, reason });
@@ -235,6 +294,20 @@ vacationRouter.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
     | null
     | undefined;
 
+  // Client-side resolution payload: array of YYYY-MM-DD dates the user
+  // explicitly chose to KEEP (i.e. don't overwrite with X). Anything not
+  // in this list — including all other collision dates — is implicitly an
+  // overwrite.
+  //
+  // Presence of the field signals "the user came through the resolution
+  // dialog, trust their choice"; absence means "no dialog yet — gate on
+  // collisions and force the UI to open the dialog by returning 409".
+  const excludeProvided = "excludeDates" in body;
+  const rawExcluded = body.excludeDates;
+  const excludeDates: string[] = Array.isArray(rawExcluded)
+    ? (rawExcluded as unknown[]).filter((x): x is string => typeof x === "string")
+    : [];
+
   if (pendingEdit) {
     // Acting on a pending edit of an already-approved request
     if (status === "approved") {
@@ -242,15 +315,30 @@ vacationRouter.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
       const oldEnd = data.endDate as string;
       const { startDate: newStart, endDate: newEnd, reason: newReason } = pendingEdit;
 
+      // Force the resolution dialog if the caller hasn't sent excludeDates yet.
+      if (!excludeProvided) {
+        const collisions = await findShiftCollisions(
+          data.employeeId as string,
+          newStart,
+          newEnd
+        );
+        if (collisions.length > 0) {
+          res.status(409).json({ error: "shift_collision", collisions });
+          return;
+        }
+      }
+
       await docRef.update({
         startDate: newStart,
         endDate: newEnd,
         reason: newReason,
         pendingEdit: null,
+        excludedDates: excludeDates,
         reviewedBy: req.uid ?? null,
         reviewedAt: FieldValue.serverTimestamp(),
       });
-      // Remove old X shifts, then write new ones
+      // Remove old X shifts, then write new ones (applyVacationXs reads
+      // the request's excludedDates field and skips those days)
       await removeVacationXsFromPlans(data.employeeId as string, oldStart, oldEnd);
       await applyVacationXsToPlans(data.employeeId as string, newStart, newEnd);
     } else {
@@ -268,11 +356,24 @@ vacationRouter.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
       return;
     }
 
+    if (status === "approved" && !excludeProvided) {
+      const collisions = await findShiftCollisions(
+        data.employeeId as string,
+        data.startDate as string,
+        data.endDate as string
+      );
+      if (collisions.length > 0) {
+        res.status(409).json({ error: "shift_collision", collisions });
+        return;
+      }
+    }
+
     await docRef.update({
       status,
       reviewedBy: req.uid ?? null,
       reviewedAt: FieldValue.serverTimestamp(),
       rejectionReason: status === "rejected" ? ((body.rejectionReason as string) ?? null) : null,
+      ...(status === "approved" ? { excludedDates: excludeDates } : {}),
     });
 
     if (status === "approved") {
