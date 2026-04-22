@@ -49,6 +49,12 @@ Full technical spec: `HR_App_Specification.docx` (excluded from git). Key sectio
 `admin` → `director` → `manager` → `employee` (least privileged).
 Custom claims set via Firebase Admin SDK; stored on `users/` Firestore collection.
 
+Frontend enforces role gating in two layers (see README → "Route & menu role gating"):
+- **Menu** in `frontend/src/components/Layout.tsx` hides privileged links.
+- **Routes** in `frontend/src/App.tsx` wrap privileged pages in `<RequireRole allow={[…]}>`, which redirects unauthorized roles to `/`.
+
+When adding a new page, add both — the route guard is the real gate; the menu entry is for discoverability. Backend endpoints must still enforce the role independently.
+
 ### Sensitive encrypted fields
 AES-256-GCM encrypted in Cloud Functions — never store in plaintext or return raw to frontend:
 - `employees.birthNumber` (rodné číslo)
