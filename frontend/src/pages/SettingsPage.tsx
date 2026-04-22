@@ -3,7 +3,7 @@ import { Navigate } from "react-router-dom";
 import { sendPasswordResetEmail } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useAuth, UserRole } from "@/hooks/useAuth";
-import { authApi, UserProfile, api } from "@/lib/api";
+import { authApi, UserProfile, api, ApiError } from "@/lib/api";
 import styles from "./SettingsPage.module.css";
 
 const EyeIcon = () => (
@@ -71,6 +71,18 @@ interface JobPositionRecord {
   displayOrder: number;
 }
 
+interface PosCascadePreview {
+  fieldChange: { hourlyRate: { from: number | null; to: number | null } };
+  affectedEmployees: Array<{
+    id: string;
+    firstName: string;
+    lastName: string;
+    currentHourlyRate: number | null;
+    isManualOverride: boolean;
+  }>;
+  affectedUnlockedPayrolls: Array<{ id: string; year: number; month: number }>;
+}
+
 const DEFAULT_COMPANY_IDS = ["HPM", "STP"];
 
 const ROLES: UserRole[] = ["admin", "director", "manager", "employee"];
@@ -128,6 +140,8 @@ export default function SettingsPage() {
   const [posSort, setPosSort] = useState<{ col: "name" | "department"; dir: "asc" | "desc" }>({ col: "name", dir: "asc" });
   const [posEditId, setPosEditId] = useState<string | null>(null);
   const [posForm, setPosForm] = useState<{ name: string; departmentId: string; defaultSalary: string; hourlyRate: string; clothingAllowance: string; homeOfficeAllowance: string }>({ name: "", departmentId: "", defaultSalary: "", hourlyRate: "", clothingAllowance: "", homeOfficeAllowance: "" });
+  const [posCascade, setPosCascade] = useState<PosCascadePreview | null>(null);
+  const [posCascadeSaving, setPosCascadeSaving] = useState(false);
 
   // Payroll settings
   const [foodVoucherRate, setFoodVoucherRate] = useState<number>(129.5);
@@ -265,7 +279,7 @@ export default function SettingsPage() {
     setShowPosCreate(true);
   }
 
-  async function handleSavePosition() {
+  async function handleSavePosition(confirmCascade = false) {
     if (!posForm.name.trim() || !posForm.departmentId) return;
     const payload = {
       name: posForm.name.trim(),
@@ -277,15 +291,30 @@ export default function SettingsPage() {
     };
     try {
       if (posEditId) {
-        await api.patch(`/jobPositions/${posEditId}`, payload);
+        await api.patch(`/jobPositions/${posEditId}`, { ...payload, confirmCascade });
       } else {
         await api.post("/jobPositions", { ...payload, displayOrder: positions.length });
       }
       setShowPosCreate(false);
       setPosEditId(null);
+      setPosCascade(null);
       await loadPositions();
-    } catch {
-      // silent
+    } catch (err: unknown) {
+      if (err instanceof ApiError && err.status === 409
+        && err.body && typeof err.body === "object"
+        && (err.body as { requiresConfirmation?: boolean }).requiresConfirmation) {
+        setPosCascade(err.body as PosCascadePreview);
+      }
+      // else: silent
+    }
+  }
+
+  async function handleConfirmPosCascade() {
+    setPosCascadeSaving(true);
+    try {
+      await handleSavePosition(true);
+    } finally {
+      setPosCascadeSaving(false);
     }
   }
 
@@ -884,7 +913,62 @@ export default function SettingsPage() {
                 </div>
                 <div className={styles.formActions}>
                   <button type="button" className={styles.cancelBtn} onClick={() => { setShowPosCreate(false); setPosEditId(null); }}>Zrušit</button>
-                  <button type="button" className={styles.saveBtn} onClick={handleSavePosition}>Uložit</button>
+                  <button type="button" className={styles.saveBtn} onClick={() => handleSavePosition(false)}>Uložit</button>
+                </div>
+              </div>
+            </div>
+          )}
+          {posCascade && (
+            <div className={styles.modal}>
+              <div className={styles.modalBox} style={{ maxWidth: "640px" }}>
+                <h2 className={styles.modalTitle}>Změna hodinové sazby</h2>
+                <p style={{ margin: "0 0 0.75rem", fontSize: "0.875rem" }}>
+                  Hodinová sazba pozice se mění z{" "}
+                  <strong>{posCascade.fieldChange.hourlyRate.from ?? "—"}</strong>{" "}
+                  na <strong>{posCascade.fieldChange.hourlyRate.to ?? "—"}</strong> Kč/hod.
+                  Tato změna se promítne do aktivních pracovních záznamů následujících zaměstnanců:
+                </p>
+                <div style={{ maxHeight: "240px", overflowY: "auto", marginBottom: "0.75rem", border: "1px solid #e5e7eb", borderRadius: "4px" }}>
+                  <table className={styles.table} style={{ margin: 0 }}>
+                    <thead>
+                      <tr>
+                        <th>Zaměstnanec</th>
+                        <th>Aktuální sazba</th>
+                        <th>Upozornění</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {posCascade.affectedEmployees.map((e) => (
+                        <tr key={e.id}>
+                          <td>{e.lastName} {e.firstName}</td>
+                          <td>{e.currentHourlyRate ?? "—"}</td>
+                          <td>
+                            {e.isManualOverride && (
+                              <span style={{ display: "inline-block", padding: "0 6px", background: "#fef3c7", color: "#92400e", borderRadius: "3px", fontSize: "0.75rem", fontWeight: 600 }}>
+                                ručně upraveno
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {posCascade.affectedUnlockedPayrolls.length > 0 && (
+                  <div style={{ padding: "0.5rem 0.75rem", background: "#fef9c3", border: "1px solid #fde047", borderRadius: "4px", marginBottom: "0.75rem", fontSize: "0.8125rem" }}>
+                    <strong>Pozor:</strong> Tato změna ovlivní následující neuzamčené mzdové období(a). Po uložení spusťte v daném období „Přepočítat":
+                    <ul style={{ margin: "0.25rem 0 0", paddingLeft: "1.25rem" }}>
+                      {posCascade.affectedUnlockedPayrolls.map((p) => (
+                        <li key={p.id}>{String(p.month).padStart(2, "0")}/{p.year}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                <div className={styles.formActions}>
+                  <button type="button" className={styles.cancelBtn} disabled={posCascadeSaving} onClick={() => setPosCascade(null)}>Zrušit</button>
+                  <button type="button" className={styles.saveBtn} disabled={posCascadeSaving} onClick={handleConfirmPosCascade}>
+                    {posCascadeSaving ? "Ukládám…" : "Potvrdit a přepsat"}
+                  </button>
                 </div>
               </div>
             </div>
