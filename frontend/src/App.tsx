@@ -1,5 +1,5 @@
 import { Routes, Route, Navigate } from "react-router-dom";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth, type UserRole } from "@/hooks/useAuth";
 import LoginPage from "@/pages/LoginPage";
 import Layout from "@/components/Layout";
 import EmployeesPage from "@/pages/EmployeesPage";
@@ -21,6 +21,13 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   if (loading) return <div style={{ padding: "2rem" }}>Načítám...</div>;
   if (!user) return <Navigate to="/login" replace />;
+  return <>{children}</>;
+}
+
+function RequireRole({ allow, children }: { allow: ReadonlyArray<UserRole>; children: React.ReactNode }) {
+  const { role, loading } = useAuth();
+  if (loading) return <div style={{ padding: "2rem" }}>Načítám...</div>;
+  if (!role || !allow.includes(role)) return <Navigate to="/" replace />;
   return <>{children}</>;
 }
 
@@ -52,16 +59,16 @@ export default function App() {
       >
         <Route index element={<Navigate to="/prehled" replace />} />
         <Route path="prehled" element={<OverviewPage />} />
-        <Route path="zamestnanci" element={<EmployeesPage />} />
-        <Route path="zamestnanci/novy" element={<EmployeeFormPage />} />
-        <Route path="zamestnanci/:id" element={<EmployeeDetailPage />} />
-        <Route path="zamestnanci/:id/upravit" element={<EmployeeFormPage />} />
-        <Route path="smlouvy" element={<ContractTemplatesPage />} />
         <Route path="smeny" element={<ShiftPlannerPage />} />
         <Route path="dovolena" element={<VacationPage />} />
-        <Route path="mzdy" element={<PayrollPage />} />
-        <Route path="upozorneni" element={<AlertsPage />} />
-        <Route path="nastaveni" element={<SettingsPage />} />
+        <Route path="zamestnanci" element={<RequireRole allow={["admin", "director"]}><EmployeesPage /></RequireRole>} />
+        <Route path="zamestnanci/novy" element={<RequireRole allow={["admin", "director"]}><EmployeeFormPage /></RequireRole>} />
+        <Route path="zamestnanci/:id" element={<RequireRole allow={["admin", "director"]}><EmployeeDetailPage /></RequireRole>} />
+        <Route path="zamestnanci/:id/upravit" element={<RequireRole allow={["admin", "director"]}><EmployeeFormPage /></RequireRole>} />
+        <Route path="mzdy" element={<RequireRole allow={["admin", "director"]}><PayrollPage /></RequireRole>} />
+        <Route path="smlouvy" element={<RequireRole allow={["admin", "director"]}><ContractTemplatesPage /></RequireRole>} />
+        <Route path="upozorneni" element={<RequireRole allow={["admin", "director"]}><AlertsPage /></RequireRole>} />
+        <Route path="nastaveni" element={<RequireRole allow={["admin"]}><SettingsPage /></RequireRole>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
