@@ -1090,7 +1090,7 @@ export default function ShiftPlannerPage() {
             )}
 
             {/* Copy employees into existing created plan */}
-            {plan?.status === "created" && canEdit && plansList.filter(p => p.id !== plan.id).length > 0 && (
+            {plan?.status === "created" && canPublish && plansList.filter(p => p.id !== plan.id).length > 0 && (
               <>
                 <select
                   className={styles.copyFromSelect}

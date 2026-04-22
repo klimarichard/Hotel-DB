@@ -687,7 +687,7 @@ shiftsRouter.delete(
 shiftsRouter.post(
   "/plans/:planId/copy-employees",
   requireAuth,
-  requireRole("admin", "director", "manager"),
+  requireRole("admin", "director"),
   async (req, res) => {
     const { planId } = req.params;
     const body = req.body as Record<string, unknown>;
