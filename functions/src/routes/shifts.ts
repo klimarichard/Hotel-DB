@@ -234,7 +234,7 @@ shiftsRouter.get(
 shiftsRouter.post(
   "/plans",
   requireAuth,
-  requireRole("admin", "director", "manager"),
+  requireRole("admin", "director"),
   async (req: AuthRequest, res) => {
     const body = req.body as Record<string, unknown>;
     const month = Number(body.month);
@@ -355,7 +355,7 @@ shiftsRouter.get(
 shiftsRouter.patch(
   "/plans/:planId",
   requireAuth,
-  requireRole("admin", "director", "manager"),
+  requireRole("admin", "director"),
   async (req, res) => {
     const { planId } = req.params;
     const body = req.body as Record<string, unknown>;
@@ -421,7 +421,7 @@ shiftsRouter.patch(
 shiftsRouter.patch(
   "/plans/:planId/deadlines",
   requireAuth,
-  requireRole("admin", "director", "manager"),
+  requireRole("admin", "director"),
   async (req, res) => {
     const { planId } = req.params;
     const body = req.body as Record<string, unknown>;
