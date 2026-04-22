@@ -63,6 +63,7 @@ PDFs generated client-side via `html2pdf.js` — Puppeteer was too large for Gen
   - `PATCH /vacation/:id` on admin approval accepts optional `excludeDates: string[]` in the body. If the field is **absent**, the endpoint re-checks collisions and 409s to force the UI to open the resolution dialog. If **present** (even empty), the user's picks are trusted — `excludedDates` is persisted on the request doc, and `applyVacationXs` skips those days when repainting X cells on every overlapping plan.
   - `GET /vacation/check-collisions` is the UI pre-check used by `handleApprove` in `VacationPage.tsx` before opening `VacationCollisionResolutionModal`. Employees are scoped to their own `employeeId`; admin/director can check anyone.
   - `api.ts` throws `ApiError { status, body, message }` so the page can extract the structured 409 payload instead of relying on the message string.
+- **Optimistic insert on self-request:** `POST /vacation` returns `{ id, firstName, lastName }`. `handleSubmit` in `VacationPage.tsx` uses those values when prepending the new row — otherwise admin/director self-requests appeared nameless in `Všechny žádosti` until the next refetch.
 
 ### Phase 5 — Shift Planner
 - `parseShiftExpression` is duplicated verbatim in `functions/src/services/shiftParser.ts` AND `frontend/src/lib/shiftConstants.ts` — they cannot share code across packages. Keep in sync manually.
