@@ -91,6 +91,7 @@ PDFs generated client-side via `html2pdf.js` — Puppeteer was too large for Gen
 - `jobPositions` and `departments` Firestore collections managed from Settings.
 - Employment history modal: linked dropdowns (Oddělení → Pracovní pozice), auto-fills `salary` and `hourlyRate` from position defaults.
 - `jobPositions` docs carry optional `clothingAllowance` and `homeOfficeAllowance` (Kč/h, nullable). Seeded from `pozice.csv` columns "Náhrady - oblečení" and "Náhrady - HO"; editable in Settings → Pracovní pozice. Displayed as `N Kč/h` behind the same eye-toggle as salary + hourly rate.
+- Settings → Pracovní pozice: editing `hourlyRate` cascades the new value to every active employment record where `currentJobTitle === position.name` AND `currentDepartment === position.department.name` (denormalized fields on `employees/{id}`). PATCH `/jobPositions/:id` returns `409 { requiresConfirmation, fieldChange, affectedEmployees, affectedUnlockedPayrolls }` when the change would touch employees; the UI shows a confirmation dialog flagging employees whose current rate already differs from the position default (`isManualOverride`), plus any unlocked `payrollPeriods` that contain those employees and would need a manual Recount. On confirm, re-PATCH with `confirmCascade: true`. Cascade only covers `hourlyRate` — `defaultSalary` is intentionally excluded (driven by signed contracts), and `clothingAllowance`/`homeOfficeAllowance` are not yet snapshotted onto employment records.
 - Employee list always sorted by `lastName` then `firstName` (Czech locale) — new employees appear in correct position immediately.
 - Settings → Oddělení: clickable "Název" header sorts asc/desc. Settings → Pracovní pozice: clickable "Název" and "Oddělení" headers with asc/desc toggle. Active column shows ▲/▼, inactive ⇅.
 - Shift plan export: "Exportovat ▾" button opens a PDF/CSV dropdown. CSV is semicolon-delimited UTF-8 BOM, one row per employee (name, rawInput per day, monthly shift count), section separator rows, MOD row after vedoucí. All employees included regardless of active flag. Filename: `smeny_{year}_{month}.csv`.
@@ -115,7 +116,7 @@ PDFs generated client-side via `html2pdf.js` — Puppeteer was too large for Gen
 - HODINY = sum of `hoursComputed` for `"assigned"` shifts. Both `totalHours` and `weekendHours` are `Math.ceil()`'d before downstream calculations.
 - VÝKAZ = `MIN(baseHours, totalHours)`. Manager credit: `+countMonFriHolidays × 8` for `section === "vedoucí"`.
 - DOVOLENÁ (HPP) = `MAX(0, baseHours − reportHours)`. PPP = `MAX(0, baseHours/2 − reportHours)`. DPP = null.
-- NAVÍC = `CEIL((hourlyRate × extraHours) / 100) × 100`. Tiered display: <5000 → gross-up; =5000 → 6000; >5000 → two lines.
+- NAVÍC (`extraPay`, raw net) = `hourlyRate × extraHours`. Stored unrounded — editing reveals the raw net value. Display rounding (gross-up + ceil to nearest 100) lives only in `formatNavic` / `navicText`. Tiered display: <5000 net → gross-up; =5000 → 6000; >5000 → two lines.
 - STRAVENKY = `workingDays × foodVoucherRate`. Working day = shift with `hoursComputed > 6`.
 - DPP/FAKT = `totalHours × hourlyRate` (unmasked).
 

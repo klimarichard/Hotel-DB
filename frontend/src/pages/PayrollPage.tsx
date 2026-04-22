@@ -134,7 +134,7 @@ function computeCascades(
     if (entry.totalHours > effReport && entry.hourlyRate && entry.hourlyRate > 0
       && userOv.extraPay === undefined) {
       effExtraHours = entry.totalHours - effReport;
-      const cp = Math.ceil(entry.hourlyRate * effExtraHours / 100) * 100;
+      const cp = entry.hourlyRate * effExtraHours;
       newAutoOv.extraPay = cp;
       effExtraPay = cp;
     } else if (userOv.extraPay === undefined) {
@@ -161,7 +161,7 @@ function computeCascades(
       if (entry.hourlyRate && entry.hourlyRate > 0 && userOv.extraPay === undefined) {
         effExtraHours += rem;
         newAutoOv.extraPay = ((newAutoOv.extraPay as number | undefined) ?? effExtraPay)
-          + Math.ceil(entry.hourlyRate * rem / 100) * 100;
+          + entry.hourlyRate * rem;
         effExtraPay = newAutoOv.extraPay as number;
       }
     } else if (userOv.reportHours === undefined) {
@@ -185,7 +185,7 @@ function computeCascades(
       if (userOv.extraPay === undefined) {
         const remainingExtraHours = effExtraHours - transferH;
         newAutoOv.extraPay = remainingExtraHours > 0
-          ? Math.ceil(entry.hourlyRate * remainingExtraHours / 100) * 100
+          ? entry.hourlyRate * remainingExtraHours
           : 0;
       }
     }
