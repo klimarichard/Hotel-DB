@@ -199,6 +199,18 @@ Two password-reset flows using Firebase Auth built-in email:
 - **Self-service**: "Zapomenuté heslo?" on login → `sendPasswordResetEmail(auth, email)`.
 - **Admin-initiated**: "Resetovat heslo" button in Settings → Uživatelé → calls `sendPasswordResetEmail` from frontend with user's email. Inline feedback clears after 4 s.
 
+### Route & menu role gating
+
+Role visibility is enforced in two layers in the frontend, both mirroring the backend role checks:
+
+- **Menu (`frontend/src/components/Layout.tsx`)** — `navItems` render for everyone; `staffItems` (`Zaměstnanci`, `Mzdy`) and `adminItems` (`Neplatné doklady`, `Šablony smluv`, `Nastavení`) render only for `admin`/`director`.
+- **Routes (`frontend/src/App.tsx`)** — `RequireRole allow={[…]}` wraps every privileged route and redirects unauthorized roles to `/`. Allow lists:
+  - all roles: `/prehled`, `/smeny`, `/dovolena`
+  - `admin` + `director`: `/zamestnanci/*`, `/mzdy`, `/smlouvy`, `/upozorneni`
+  - `admin` only: `/nastaveni`
+
+The route guard is the source of truth — the menu is just for discoverability. Backend endpoints are the final gate regardless.
+
 ---
 
 ## Contract Templates — Editor (TipTap)
