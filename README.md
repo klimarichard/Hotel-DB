@@ -115,7 +115,7 @@ PDFs generated client-side via `html2pdf.js` — Puppeteer was too large for Gen
 - HODINY = sum of `hoursComputed` for `"assigned"` shifts. Both `totalHours` and `weekendHours` are `Math.ceil()`'d before downstream calculations.
 - VÝKAZ = `MIN(baseHours, totalHours)`. Manager credit: `+countMonFriHolidays × 8` for `section === "vedoucí"`.
 - DOVOLENÁ (HPP) = `MAX(0, baseHours − reportHours)`. PPP = `MAX(0, baseHours/2 − reportHours)`. DPP = null.
-- NAVÍC = `CEIL((hourlyRate × extraHours) / 100) × 100`. Tiered display: <5000 → gross-up; =5000 → 6000; >5000 → two lines.
+- NAVÍC (`extraPay`, raw net) = `hourlyRate × extraHours`. Stored unrounded — editing reveals the raw net value. Display rounding (gross-up + ceil to nearest 100) lives only in `formatNavic` / `navicText`. Tiered display: <5000 net → gross-up; =5000 → 6000; >5000 → two lines.
 - STRAVENKY = `workingDays × foodVoucherRate`. Working day = shift with `hoursComputed > 6`.
 - DPP/FAKT = `totalHours × hourlyRate` (unmasked).
 

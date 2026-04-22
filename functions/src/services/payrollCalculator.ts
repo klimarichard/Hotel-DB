@@ -9,7 +9,8 @@
  *  - Vacation (HPP) = baseHours − reportHours
  *  - Vacation (PPP) = MAX(0, baseHours/2 − reportHours)
  *  - Extra hours = MAX(0, totalHours − baseHours)
- *  - NAVÍC = CEIL(hourlyRate × extraHours / 100) × 100  (or 0 if no hourlyRate)
+ *  - NAVÍC (extraPay, raw net) = hourlyRate × extraHours  (or 0 if no hourlyRate).
+ *      Display rounding (gross-up + ceil to nearest 100) lives in the UI's formatNavic only.
  *  - Food vouchers = workingDays × foodVoucherRate
  *  - DPP: only totalHours (= dppHours) — all other columns null
  *  - Vedoucí (managers): reportHours += countMonFriHolidays × 8 (holiday credit)
@@ -215,11 +216,10 @@ export function calculateEntry(
     }
   }
 
-  // NAVÍC: round up to nearest 100 CZK
+  // NAVÍC: raw net (hourlyRate × extraHours). Display rounding happens in the UI.
   let extraPay = 0;
   if (!isDpp && extraHours > 0 && employee.hourlyRate != null && employee.hourlyRate > 0) {
-    const raw = employee.hourlyRate * extraHours;
-    extraPay = Math.ceil(raw / 100) * 100;
+    extraPay = employee.hourlyRate * extraHours;
   }
 
   const foodVouchers = isDpp ? 0 : workingDays * foodVoucherRate;
@@ -247,7 +247,7 @@ export function calculateEntry(
     if (totalHours > effReport && employee.hourlyRate != null && employee.hourlyRate > 0
       && userOv.extraPay === undefined) {
       effExtraHours = totalHours - effReport;
-      const cp = Math.ceil(employee.hourlyRate * effExtraHours / 100) * 100;
+      const cp = employee.hourlyRate * effExtraHours;
       newAutoOv.extraPay = cp;
       effExtraPay = cp;
     } else if (userOv.extraPay === undefined) {
@@ -269,7 +269,7 @@ export function calculateEntry(
       effReport = newAutoOv.reportHours;
       if (employee.hourlyRate != null && employee.hourlyRate > 0 && userOv.extraPay === undefined) {
         effExtraHours += rem;
-        newAutoOv.extraPay = (newAutoOv.extraPay ?? effExtraPay) + Math.ceil(employee.hourlyRate * rem / 100) * 100;
+        newAutoOv.extraPay = (newAutoOv.extraPay ?? effExtraPay) + employee.hourlyRate * rem;
         effExtraPay = newAutoOv.extraPay;
       }
     }
@@ -294,7 +294,7 @@ export function calculateEntry(
       if (userOv.extraPay === undefined) {
         const remainingExtraHours = effExtraHours - transferH;
         newAutoOv.extraPay = remainingExtraHours > 0
-          ? Math.ceil(employee.hourlyRate * remainingExtraHours / 100) * 100
+          ? employee.hourlyRate * remainingExtraHours
           : 0;
       }
     }
