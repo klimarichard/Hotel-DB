@@ -3,6 +3,7 @@ import { signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/aut
 import { auth } from "@/lib/firebase";
 import { useTheme } from "@/context/ThemeContext";
 import Button from "@/components/Button";
+import logo from "@/assets/logo.svg";
 import styles from "./LoginPage.module.css";
 
 const SunIcon = () => (
@@ -81,6 +82,7 @@ export default function LoginPage() {
     return (
       <div className={styles.page}>
         <form className={styles.card} onSubmit={handleForgot}>
+          <img src={logo} alt="" className={styles.logo} />
           <div className={styles.cardHeader}>
             <h1 className={styles.title}>HPM Intranet</h1>
           <button
@@ -139,6 +141,7 @@ export default function LoginPage() {
   return (
     <div className={styles.page}>
       <form className={styles.card} onSubmit={handleSubmit}>
+        <img src={logo} alt="" className={styles.logo} />
         <div className={styles.cardHeader}>
           <h1 className={styles.title}>HPM Intranet</h1>
           <button

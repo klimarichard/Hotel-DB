@@ -18,6 +18,13 @@
   gap: 1rem;
 }
 
+.logo {
+  display: block;
+  width: 72px;
+  height: 72px;
+  margin: 0 auto;
+}
+
 .title {
   font-size: 1.6rem;
   font-weight: 700;

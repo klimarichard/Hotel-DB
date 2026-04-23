@@ -7,7 +7,7 @@ import { useShiftOverridesContext } from "@/context/ShiftOverridesContext";
 import { useShiftChangeRequestsContext } from "@/context/ShiftChangeRequestsContext";
 import { useVacationContext } from "@/context/VacationContext";
 import { useTheme } from "@/context/ThemeContext";
-import logoMark from "@/assets/logo-mark.svg";
+import logoMark from "@/assets/logo.svg";
 import styles from "./Layout.module.css";
 
 const SunIcon = () => (
