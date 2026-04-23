@@ -69,6 +69,11 @@ Uses a **tab-based layout** — every new settings section must be a new tab, ne
 ### Modal dismissal
 Modals close **only** via explicit buttons (✕, Zrušit, or the action button) — never on backdrop click. Clicking the overlay was dismissing half-edited forms and causing data loss. When adding a new modal, do not wire `onClick={onClose}` onto the overlay `<div>`.
 
+### Shared `<Button>` component
+Use `frontend/src/components/Button.tsx` for any new text-bearing button. Variants: `primary` | `secondary` | `danger` | `ghost`. Sizes: `sm` | `md`. Passes through native `<button>` props (`type`, `disabled`, `onClick`, `style`, etc.). `block` prop makes it full-width.
+
+Out of scope (keep local CSS): icon-only buttons (`closeBtn`, `empActionBtn`, `themeToggle`), toolbar buttons (TipTap `toolBtn`/`varBtn`), inline field togglers (`revealBtn`, `clearBtn`), row-level status pills (green `approveBtn`, red-outline `rejectBtn`), month nav (`navBtn`). A shared `<IconButton>` for the icon-only cluster is a planned follow-up.
+
 ## Development
 
 ### Backend build step
