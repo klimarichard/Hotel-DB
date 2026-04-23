@@ -33,20 +33,6 @@
   margin: 0;
 }
 
-.closeBtn {
-  background: none;
-  border: none;
-  font-size: 1rem;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  padding: 2px 6px;
-  border-radius: 4px;
-}
-
-.closeBtn:hover {
-  background: var(--color-surface-4);
-}
-
 .body {
   padding: 16px 20px;
   overflow-y: auto;

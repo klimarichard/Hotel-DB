@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { formatDateCZ } from "../lib/dateFormat";
 import Button from "./Button";
+import IconButton from "./IconButton";
 import styles from "./AddEmployeeToPlanModal.module.css";
 
 interface Props {
@@ -43,7 +44,7 @@ export default function ShiftChangeRequestModal({
       <div className={styles.modal}>
         <div className={styles.header}>
           <h2 className={styles.title}>Žádost o změnu směny</h2>
-          <button className={styles.closeBtn} onClick={onClose}>✕</button>
+          <IconButton onClick={onClose} aria-label="Zavřít">✕</IconButton>
         </div>
         <div className={styles.body}>
           <p style={{ fontSize: "0.875rem", color: "#374151", margin: "0 0 1rem" }}>
