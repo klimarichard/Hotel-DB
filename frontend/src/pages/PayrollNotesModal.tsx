@@ -94,8 +94,8 @@ export default function PayrollNotesModal({
   }
 
   return (
-    <div className={styles.overlay} onClick={onClose}>
-      <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+    <div className={styles.overlay}>
+      <div className={styles.modal}>
         <div className={styles.header}>
           <span className={styles.title}>Poznámky — {employeeLabel}</span>
           <button className={styles.close} onClick={onClose}>✕</button>

@@ -20,8 +20,8 @@ function formatDate(ymd: string): string {
 
 export default function VacationCollisionInfoModal({ collisions, onClose }: Props) {
   return (
-    <div className={styles.overlay} onClick={onClose}>
-      <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+    <div className={styles.overlay}>
+      <div className={styles.modal}>
         <div className={styles.header}>
           <h2 className={styles.title}>Tyto dny už mají naplánovanou směnu</h2>
           <button className={styles.closeBtn} onClick={onClose}>✕</button>

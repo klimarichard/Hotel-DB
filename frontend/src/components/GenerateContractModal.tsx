@@ -95,8 +95,8 @@ export default function GenerateContractModal({
   const allVars = VARIABLE_GROUPS.flatMap((g) => g.vars);
 
   return (
-    <div className={styles.overlay} onClick={onClose}>
-      <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+    <div className={styles.overlay}>
+      <div className={styles.modal}>
         <div className={styles.header}>
           <h2 className={styles.title}>Generovat smlouvu</h2>
           <button className={styles.closeBtn} onClick={onClose}>✕</button>

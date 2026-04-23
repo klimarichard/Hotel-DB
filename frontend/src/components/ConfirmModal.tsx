@@ -30,7 +30,6 @@ export default function ConfirmModal({
         justifyContent: "center",
         zIndex: 1000,
       }}
-      onClick={onCancel}
     >
       <div
         style={{
@@ -41,7 +40,6 @@ export default function ConfirmModal({
           display: "flex",
           flexDirection: "column",
         }}
-        onClick={(e) => e.stopPropagation()}
       >
         <div
           style={{
