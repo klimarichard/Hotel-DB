@@ -1,3 +1,4 @@
+import Button from "./Button";
 import styles from "./AddEmployeeToPlanModal.module.css";
 
 export interface ShiftCollision {
@@ -51,7 +52,7 @@ export default function VacationCollisionInfoModal({ collisions, onClose }: Prop
           </ul>
         </div>
         <div className={styles.footer}>
-          <button className={styles.saveBtn} onClick={onClose}>Zavřít</button>
+          <Button variant="primary" onClick={onClose}>Zavřít</Button>
         </div>
       </div>
     </div>

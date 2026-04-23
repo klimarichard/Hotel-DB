@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { formatDateCZ } from "../lib/dateFormat";
+import Button from "./Button";
 import styles from "./AddEmployeeToPlanModal.module.css";
 
 interface Props {
@@ -63,14 +64,14 @@ export default function ShiftChangeRequestModal({
           {error && <p className={styles.error}>{error}</p>}
         </div>
         <div className={styles.footer}>
-          <button className={styles.cancelBtn} onClick={onClose}>Zrušit</button>
-          <button
-            className={styles.saveBtn}
+          <Button variant="secondary" onClick={onClose}>Zrušit</Button>
+          <Button
+            variant="primary"
             onClick={handleSubmit}
             disabled={saving || !reason.trim()}
           >
             {saving ? "Odesílám…" : "Odeslat žádost"}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api } from "@/lib/api";
 import { formatDatetimeCZ } from "@/lib/dateFormat";
+import Button from "@/components/Button";
 import ConfirmModal from "@/components/ConfirmModal";
 import styles from "./PayrollNotesModal.module.css";
 import type { PayrollNote } from "./PayrollPage";
@@ -205,17 +206,17 @@ export default function PayrollNotesModal({
         </div>
 
         <div className={styles.actions}>
-          <button className={styles.cancelBtn} onClick={onClose} disabled={busy}>
+          <Button variant="secondary" onClick={onClose} disabled={busy}>
             Zavřít
-          </button>
+          </Button>
           {canEdit && (
-            <button
-              className={styles.saveBtn}
+            <Button
+              variant="primary"
               onClick={addNote}
               disabled={busy || !newText.trim()}
             >
               {busy ? "Ukládám…" : "Přidat poznámku"}
-            </button>
+            </Button>
           )}
         </div>
       </div>
