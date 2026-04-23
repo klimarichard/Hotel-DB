@@ -379,8 +379,8 @@ function SickLeaveModal({
   }
 
   return (
-    <div className={styles.modalOverlay} onClick={onClose}>
-      <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+    <div className={styles.modalOverlay}>
+      <div className={styles.modal}>
         <div className={styles.modalHeader}>
           <span className={styles.modalTitle}>Nemoc — {entry.lastName} {entry.firstName}</span>
           <button className={styles.modalClose} onClick={onClose}>✕</button>

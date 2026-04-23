@@ -494,8 +494,8 @@ function AddEntryModal({
   }
 
   return (
-    <div className={styles.modalOverlay} onClick={onClose}>
-      <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+    <div className={styles.modalOverlay}>
+      <div className={styles.modal}>
         <div className={styles.modalHeader}>
           <span className={styles.modalTitle}>{isEdit ? "Upravit záznam" : "Přidat záznam do historie"}</span>
           <button className={styles.modalClose} onClick={onClose}>✕</button>

@@ -46,10 +46,9 @@ export default function VacationCollisionResolutionModal({
   }
 
   return (
-    <div className={styles.overlay} onClick={onCancel}>
+    <div className={styles.overlay}>
       <div
         className={styles.modal}
-        onClick={(e) => e.stopPropagation()}
         style={{ width: "min(560px, 95vw)" }}
       >
         <div className={styles.header}>

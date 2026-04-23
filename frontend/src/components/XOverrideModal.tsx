@@ -43,8 +43,8 @@ export default function XOverrideModal({ employeeName, date, violations, onSubmi
   }
 
   return (
-    <div className={styles.overlay} onClick={onCancel}>
-      <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+    <div className={styles.overlay}>
+      <div className={styles.modal}>
         <div className={styles.header}>
           <h2 className={styles.title}>Překročení limitu X</h2>
           <button className={styles.closeBtn} onClick={onCancel}>✕</button>
