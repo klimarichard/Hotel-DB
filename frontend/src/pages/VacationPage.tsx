@@ -8,6 +8,7 @@ import VacationCollisionInfoModal, {
   type ShiftCollision,
 } from "../components/VacationCollisionInfoModal";
 import VacationCollisionResolutionModal from "../components/VacationCollisionResolutionModal";
+import Button from "../components/Button";
 
 function extractCollisions(e: unknown): ShiftCollision[] | null {
   // Preferred path — ApiError with structured body
@@ -333,13 +334,13 @@ export default function VacationPage() {
                   onChange={(e) => setReason(e.target.value)}
                 />
               </div>
-              <button
-                className={styles.submitBtn}
+              <Button
+                variant="primary"
                 onClick={handleSubmit}
                 disabled={submitting || !startDate || !endDate}
               >
                 {submitting ? "Odesílám…" : "Odeslat žádost"}
-              </button>
+              </Button>
             </div>
             {formError && <p className={styles.error}>{formError}</p>}
             {formSuccess && (
@@ -434,19 +435,21 @@ export default function VacationPage() {
                             value={editReason}
                             onChange={(e) => setEditReason(e.target.value)}
                           />
-                          <button
-                            className={styles.confirmRejectBtn}
+                          <Button
+                            variant="primary"
+                            size="sm"
                             onClick={() => handleSubmitEdit(req.id)}
                             disabled={editSaving || !editStart || !editEnd}
                           >
                             {editSaving ? "Ukládám…" : "Uložit"}
-                          </button>
-                          <button
-                            className={styles.cancelBtn}
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="sm"
                             onClick={() => setEditingId(null)}
                           >
                             Zrušit
-                          </button>
+                          </Button>
                         </div>
                       </td>
                     </tr>
@@ -613,19 +616,21 @@ export default function VacationPage() {
                             value={rejectionReason}
                             onChange={(e) => setRejectionReason(e.target.value)}
                           />
-                          <button
-                            className={styles.confirmRejectBtn}
+                          <Button
+                            variant="danger"
+                            size="sm"
                             onClick={() => handleReject(req.id)}
                             disabled={actionSaving}
                           >
                             Potvrdit zamítnutí
-                          </button>
-                          <button
-                            className={styles.cancelBtn}
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="sm"
                             onClick={() => setRejectingId(null)}
                           >
                             Zrušit
-                          </button>
+                          </Button>
                         </td>
                       </tr>
                     )}

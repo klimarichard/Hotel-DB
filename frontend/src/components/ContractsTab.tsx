@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { getStorage, ref, getDownloadURL, deleteObject } from "firebase/storage";
 import { useAuth } from "@/hooks/useAuth";
+import Button from "./Button";
 import GenerateContractModal from "./GenerateContractModal";
 import {
   ContractType,
@@ -162,12 +163,12 @@ export default function ContractsTab({ employeeId, employeeData, companyData }: 
         <h3 className={styles.tabTitle}>Smlouvy zaměstnance</h3>
         {canEdit && (
           <div className={styles.standaloneWrapper} ref={dropdownRef}>
-            <button
-              className={styles.generateBtn}
+            <Button
+              variant="primary"
               onClick={() => setStandaloneDropdown((v) => !v)}
             >
               Generovat ▾
-            </button>
+            </Button>
             {standaloneDropdown && (
               <div className={styles.dropdown}>
                 {STANDALONE_TYPES.map((t) => (

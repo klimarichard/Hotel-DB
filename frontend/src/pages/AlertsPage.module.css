@@ -19,21 +19,6 @@
   margin: 0;
 }
 
-.markAllBtn {
-  padding: 0.45rem 1rem;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border-strong);
-  border-radius: 6px;
-  font-size: 0.875rem;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.markAllBtn:hover {
-  background: var(--color-surface-4);
-}
-
 /* ── Sections ─────────────────────────────────────────────────────────────── */
 
 .section {

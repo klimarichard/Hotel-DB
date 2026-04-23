@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import Button from "@/components/Button";
 import { useEditor, EditorContent } from "@tiptap/react";
 import { Extension, mergeAttributes } from "@tiptap/core";
 import Paragraph from "@tiptap/extension-paragraph";
@@ -279,9 +280,9 @@ export default function ContractTemplatesPage() {
               {saveMsg}
             </span>
           )}
-          <button className={styles.saveBtn} onClick={handleSave} disabled={saving}>
+          <Button variant="primary" onClick={handleSave} disabled={saving}>
             {saving ? "Ukládám…" : "Uložit šablonu"}
-          </button>
+          </Button>
         </div>
       </div>
 

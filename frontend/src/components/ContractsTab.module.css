@@ -25,21 +25,6 @@
   position: relative;
 }
 
-.generateBtn {
-  padding: 7px 14px;
-  background: var(--color-primary);
-  color: #fff;
-  border: none;
-  border-radius: 6px;
-  font-size: 0.875rem;
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.generateBtn:hover {
-  background: var(--color-primary-dark);
-}
-
 .dropdown {
   position: absolute;
   right: 0;
