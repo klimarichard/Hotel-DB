@@ -65,7 +65,7 @@ export default function Layout() {
   return (
     <div className={styles.shell}>
       <nav className={styles.sidebar}>
-        <div className={styles.logo}>Hotel HR</div>
+        <div className={styles.logo}>HPM Intranet</div>
         <ul className={styles.nav}>
           {navItems.map((item) => (
             <li key={item.to}>

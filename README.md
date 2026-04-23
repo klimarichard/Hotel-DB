@@ -1,6 +1,6 @@
-# Hotel HR App — Implementation Reference
+# HPM Intranet — Implementation Reference
 
-This file contains implementation details, feature notes, and post-merge fix history for the Hotel HR App. For Claude's working instructions see `CLAUDE.md`.
+This file contains implementation details, feature notes, and post-merge fix history for the HPM Intranet (formerly "Hotel HR App"). For Claude's working instructions see `CLAUDE.md`.
 
 ---
 
@@ -245,7 +245,7 @@ The editor renders inside a `.a4Page` div (210 mm wide, padding 1.5 cm top/botto
 
 - `ThemeContext.tsx`: `ThemeProvider` + `useTheme()`. Persists per-user in `localStorage` (`hotel_hr_theme_{uid}`). Guest (pre-login) preference stored under `hotel_hr_theme_guest`. Applies `data-theme="dark"` to `<html>`.
 - **Default theme is dark** — both the login page and the initial load before any user preference is read start in dark mode.
-- Login page has its own sun/moon theme toggle inside the card header (next to "Hotel HR" title).
+- Login page has its own sun/moon theme toggle inside the card header (next to the "HPM Intranet" title).
 - All CSS uses variables from `frontend/src/index.css`. `[data-theme="dark"]` overrides the full variable set.
 - Sidebar stays permanently dark (intentional).
 - `getCellColor(parsed, dark?)` in `shiftConstants.ts` — second arg selects light vs dark palette from `CELL_COLORS_DARK`.

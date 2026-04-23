@@ -81,12 +81,12 @@ export default function LoginPage() {
       <div className={styles.page}>
         <form className={styles.card} onSubmit={handleForgot}>
           <div className={styles.cardHeader}>
-            <h1 className={styles.title}>Hotel HR</h1>
-            <button
-              className={styles.themeToggle}
-              onClick={toggleTheme}
-              title={theme === "dark" ? "Světlý režim" : "Tmavý režim"}
-              type="button"
+            <h1 className={styles.title}>HPM Intranet</h1>
+          <button
+            className={styles.themeToggle}
+            onClick={toggleTheme}
+            title={theme === "dark" ? "Světlý režim" : "Tmavý režim"}
+            type="button"
             >
               {theme === "dark" ? <SunIcon /> : <MoonIcon />}
             </button>
@@ -139,7 +139,7 @@ export default function LoginPage() {
     <div className={styles.page}>
       <form className={styles.card} onSubmit={handleSubmit}>
         <div className={styles.cardHeader}>
-          <h1 className={styles.title}>Hotel HR</h1>
+          <h1 className={styles.title}>HPM Intranet</h1>
           <button
             className={styles.themeToggle}
             onClick={toggleTheme}
