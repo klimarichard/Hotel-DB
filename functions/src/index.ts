@@ -15,6 +15,7 @@ import { contractsRouter } from "./routes/contracts";
 import { shiftsRouter } from "./routes/shifts";
 import { vacationRouter } from "./routes/vacation";
 import { payrollRouter } from "./routes/payroll";
+import { statsRouter } from "./routes/stats";
 import { transitionPlanDeadlines } from "./services/planTransitions";
 import { createOrUpdatePayrollPeriod } from "./services/payrollCalculator";
 import { sweepExpiredMultisport } from "./services/multisportSweep";
@@ -39,6 +40,7 @@ app.use("/", contractsRouter);
 app.use("/shifts", shiftsRouter);
 app.use("/vacation", vacationRouter);
 app.use("/payroll", payrollRouter);
+app.use("/stats", statsRouter);
 
 // Health check
 app.get("/health", (_req, res) => {
