@@ -149,11 +149,13 @@ interface BarTileProps {
 
 function BarTile({ title, data, palette, orientation }: BarTileProps) {
   const empty = data.length === 0 || data.every((r) => r.value === 0);
-  // Height scales with bar count so long lists stay readable.
+  // Height scales with bar count so every bar gets room for its tick label
+  // and value label. 40px per row keeps horizontal charts readable; the
+  // vertical (age) chart has fixed buckets so the height is constant.
   const dynamicHeight =
     orientation === "horizontal"
-      ? Math.max(170, data.length * 28 + 20)
-      : 200;
+      ? Math.max(240, data.length * 40 + 40)
+      : 280;
 
   return (
     <div className={styles.tile}>
@@ -176,7 +178,8 @@ function BarTile({ title, data, palette, orientation }: BarTileProps) {
                   type="category"
                   stroke={palette.axis}
                   fontSize={11}
-                  width={120}
+                  width={150}
+                  interval={0}
                   tickLine={false}
                 />
                 <Tooltip
@@ -193,7 +196,7 @@ function BarTile({ title, data, palette, orientation }: BarTileProps) {
             ) : (
               <BarChart data={data} margin={{ top: 16, right: 8, bottom: 4, left: -16 }}>
                 <CartesianGrid stroke={palette.grid} strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="label" stroke={palette.axis} fontSize={11} tickLine={false} />
+                <XAxis dataKey="label" stroke={palette.axis} fontSize={11} interval={0} tickLine={false} />
                 <YAxis stroke={palette.axis} fontSize={11} allowDecimals={false} />
                 <Tooltip
                   contentStyle={{ fontSize: 12 }}

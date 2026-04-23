@@ -530,8 +530,6 @@ export default function OverviewPage() {
             )}
           </section>
 
-          {showTasks && <HeadcountStats />}
-
           {(() => {
             const taskTiles: { count: number; label: string; to: string }[] = showTasks
               ? [
@@ -612,6 +610,8 @@ export default function OverviewPage() {
               </div>
             );
           })()}
+
+          {showTasks && <HeadcountStats />}
         </>
       )}
     </div>

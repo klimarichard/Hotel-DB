@@ -17,7 +17,7 @@
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
   gap: 1rem;
 }
 
@@ -29,7 +29,7 @@
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  min-height: 220px;
+  min-height: 300px;
 }
 
 .tileTitle {
@@ -61,7 +61,7 @@
 
 .chartArea {
   flex: 1;
-  min-height: 170px;
+  min-height: 240px;
 }
 
 .state {
