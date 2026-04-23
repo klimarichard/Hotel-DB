@@ -2,7 +2,7 @@ import { Router } from "express";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireAuth, requireRole, AuthRequest } from "../middleware/auth";
-import { encryptFields, redactFields, decrypt } from "../services/encryption";
+import { encryptFields, redactFields, decrypt, decryptFields } from "../services/encryption";
 
 export const employeesRouter = Router();
 
@@ -40,6 +40,109 @@ employeesRouter.get(
     });
 
     res.json(employees);
+  }
+);
+
+// ─── EXPORT ──────────────────────────────────────────────────────────────────
+
+/**
+ * GET /api/employees/export
+ * Returns merged rows (root + contact + documents + benefits + latest employment)
+ * for CSV export on the frontend.
+ *
+ * Query params (all optional):
+ *   status, companyId, department, contractType, nationality, jobTitle
+ *   includeSensitive=true — decrypts birthNumber / idCardNumber / insuranceNumber
+ *                          / bankAccount; writes ONE auditLog entry per export.
+ *
+ * Must be declared before GET /:id so Express matches "export" as a literal.
+ * TODO: When the "accountant" role is introduced, add it to requireRole(...) below.
+ */
+employeesRouter.get(
+  "/export",
+  requireAuth,
+  requireRole("admin", "director"),
+  async (req: AuthRequest, res) => {
+    const includeSensitive = req.query.includeSensitive === "true";
+
+    let query: admin.firestore.Query = db().collection("employees");
+    if (req.query.status) query = query.where("status", "==", req.query.status);
+    if (req.query.companyId) query = query.where("currentCompanyId", "==", req.query.companyId);
+    if (req.query.department) query = query.where("currentDepartment", "==", req.query.department);
+    if (req.query.contractType) query = query.where("currentContractType", "==", req.query.contractType);
+    if (req.query.nationality) query = query.where("nationality", "==", req.query.nationality);
+    if (req.query.jobTitle) query = query.where("currentJobTitle", "==", req.query.jobTitle);
+
+    const snapshot = await query.get();
+
+    const rows = await Promise.all(
+      snapshot.docs.map(async (empDoc) => {
+        const empRef = empDoc.ref;
+        const [contactSnap, documentsSnap, benefitsSnap, employmentSnap] = await Promise.all([
+          empRef.collection("contact").limit(1).get(),
+          empRef.collection("documents").limit(1).get(),
+          empRef.collection("benefits").limit(1).get(),
+          empRef.collection("employment").orderBy("startDate", "desc").limit(1).get(),
+        ]);
+
+        let root = empDoc.data() as Record<string, unknown>;
+        let documents = documentsSnap.empty
+          ? {}
+          : (documentsSnap.docs[0].data() as Record<string, unknown>);
+        let benefits = benefitsSnap.empty
+          ? {}
+          : (benefitsSnap.docs[0].data() as Record<string, unknown>);
+        const contact = contactSnap.empty
+          ? {}
+          : (contactSnap.docs[0].data() as Record<string, unknown>);
+        const employment = employmentSnap.empty
+          ? {}
+          : (employmentSnap.docs[0].data() as Record<string, unknown>);
+
+        if (includeSensitive) {
+          root = decryptFields(root, [...SENSITIVE_FIELDS]);
+          documents = decryptFields(documents, [...DOCUMENT_SENSITIVE_FIELDS]);
+          benefits = decryptFields(benefits, [...BENEFITS_SENSITIVE_FIELDS]);
+        } else {
+          root = redactFields(root, [...SENSITIVE_FIELDS]);
+          documents = redactFields(documents, [...DOCUMENT_SENSITIVE_FIELDS]);
+          benefits = redactFields(benefits, [...BENEFITS_SENSITIVE_FIELDS]);
+        }
+
+        return {
+          id: empDoc.id,
+          ...root,
+          contact,
+          documents,
+          benefits,
+          employment,
+        };
+      })
+    );
+
+    if (includeSensitive) {
+      await db().collection("auditLog").add({
+        userId: req.uid,
+        action: "export",
+        fields: [
+          ...SENSITIVE_FIELDS,
+          ...DOCUMENT_SENSITIVE_FIELDS,
+          ...BENEFITS_SENSITIVE_FIELDS,
+        ],
+        filters: {
+          status: req.query.status ?? null,
+          companyId: req.query.companyId ?? null,
+          department: req.query.department ?? null,
+          contractType: req.query.contractType ?? null,
+          nationality: req.query.nationality ?? null,
+          jobTitle: req.query.jobTitle ?? null,
+        },
+        employeeCount: rows.length,
+        timestamp: FieldValue.serverTimestamp(),
+      });
+    }
+
+    res.json({ employees: rows });
   }
 );
 
