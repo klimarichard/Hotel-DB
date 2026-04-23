@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { api } from "@/lib/api";
+import Button from "@/components/Button";
+import ExportEmployeesModal from "@/components/ExportEmployeesModal";
 import styles from "./EmployeesPage.module.css";
 
 interface Employee {
@@ -21,6 +23,7 @@ export default function EmployeesPage() {
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<"active" | "terminated">("active");
   const [search, setSearch] = useState("");
+  const [showExport, setShowExport] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -50,10 +53,17 @@ export default function EmployeesPage() {
     <div>
       <div className={styles.header}>
         <h1 className={styles.title}>Zaměstnanci</h1>
-        <Link to="/zamestnanci/novy" className={styles.addBtn}>
-          + Přidat zaměstnance
-        </Link>
+        <div className={styles.headerActions}>
+          <Button variant="secondary" onClick={() => setShowExport(true)}>
+            Exportovat CSV
+          </Button>
+          <Link to="/zamestnanci/novy" className={styles.addBtn}>
+            + Přidat zaměstnance
+          </Link>
+        </div>
       </div>
+
+      {showExport && <ExportEmployeesModal onClose={() => setShowExport(false)} />}
 
       <div className={styles.filters}>
         <input
