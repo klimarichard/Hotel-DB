@@ -255,15 +255,15 @@ The editor renders inside a `.a4Page` div (210 mm wide, padding 1.5 cm top/botto
 ## UI components
 
 - **`frontend/src/components/Button.tsx`** — shared button primitive with variants `primary` | `secondary` | `danger` | `ghost` and sizes `sm` | `md`. Wraps `<button>`, passes native props through (`type`, `disabled`, `onClick`, `style`). `block` prop for full-width. All modal actions, form submits, and page/toolbar actions use it. The CSS module (`Button.module.css`) reads shared tokens (`--color-primary`, `--radius-md`, `--space-*`, `--font-weight-*`) from `index.css`. Focus ring comes from the global `:focus-visible` rule.
+- **`frontend/src/components/IconButton.tsx`** — shared icon-only button primitive. Single variant `close` today, covering every modal-header ✕ (7 call sites across `AddEmployeeToPlanModal`, `EditEmployeeInPlanModal`, `GenerateContractModal`, `ShiftChangeRequestModal`, `VacationCollisionInfoModal`, `VacationCollisionResolutionModal`, `XOverrideModal`). `aria-label` is a *required* prop (TS-enforced) because the visible content is a glyph. Passes native props through. Focus ring from the global `:focus-visible`.
 - **Intentionally not migrated** (local CSS per-file):
-  - Icon-only buttons: `closeBtn` (✕ in modal headers), `empActionBtn` (✎/✕ on shift-grid hover), `themeToggle`, `logoutBtn`, the shift-grid MOD badge inputs.
+  - Icon-only buttons that are genuinely one-off or use non-standard patterns: `empActionBtn` (✎/✕ on shift-grid hover, 7px on-hover row action), `revealBtn` / `navicRevealBtn` (opacity-based field togglers, not hover-bg), `lockBtn` / `nemocBtn` / `notesDashBtn` / `removeChangeBtn` (single-use micro-actions), the shift-grid MOD badge inputs (text inputs, not buttons).
+  - Text-bearing buttons with misleading CSS names (not actually icon-only): `themeToggle` (contains "Světlý"/"Tmavý" label + SVG), `logoutBtn` (contains "Odhlásit"), `iconBtn`/`iconBtnDanger` in `PayrollNotesModal` (contain "Zrušit"/"Uložit"/"Upravit"/"Smazat"). If these ever migrate, they go to `<Button>`, not `<IconButton>`.
   - TipTap toolbar: `toolBtn`, `varBtn` in `ContractTemplatesPage`.
-  - Inline field togglers: `revealBtn` (reveal encrypted fields), `clearBtn`/`unclearBtn` (EmployeeForm sensitive-field clear).
   - Row-level status pills: `approveBtn` (green), `rejectBtn` (red-outline), `deleteBtn` (gray→red on hover), `editBtn` (blue info-style) — kept because they encode status via color.
   - Month/period nav: `navBtn` in `ShiftPlannerPage` and `PayrollPage`.
-  - Per-note micro-actions: `iconBtn`/`iconBtnDanger` in `PayrollNotesModal`.
-  - Miscellaneous small inline actions: `lockBtn`, `nemocBtn`, `navicRevealBtn`, `notesDashBtn`, `postSaveBannerBtn`, `addChangeBtn`, `removeChangeBtn`, `editRowBtn`.
-  - `<Link>` elements styled as buttons: `EmployeesPage` addBtn Link, `EmployeeFormPage` cancelBtn Link — the shared `<Button>` only wraps `<button>`.
+  - Other text-bearing single-use buttons: `clearBtn`/`unclearBtn` (EmployeeForm sensitive-field clear), `postSaveBannerBtn`, `addChangeBtn`, `editRowBtn`.
+  - `<Link>` elements styled as buttons: `EmployeesPage` addBtn Link, `EmployeeFormPage` cancelBtn Link — the shared primitives only wrap `<button>`.
 - **Typography & tokens**: Inter loaded from `fonts.bunny.net` via `<link>` in `frontend/index.html`. Spacing scale (`--space-1…7`), radius scale (`--radius-sm|md|lg`), font-weights (`--font-weight-regular|medium|semibold|bold`) live in `index.css` `:root`.
 - **Favicon / logo**: `frontend/public/favicon.svg` (gold Old Town Hotels monogram). Reusable copy at `frontend/src/assets/logo-mark.svg`, imported into `Layout.tsx` and rendered at 26×26px beside the "HPM Intranet" wordmark via `styles.logoMark`. Login card is not yet wired up (reserved for Tier 3).
 - **Active nav link**: `Layout.module.css` → `.active` combines the existing `#3b82f6` 3px left-border and `#2d3f54` fill with a soft primary-tinted inner shadow (`box-shadow: inset 0 0 18px rgba(59, 130, 246, 0.12)`) so the selected row reads as "lit up" rather than merely shaded.

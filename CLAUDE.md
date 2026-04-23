@@ -72,7 +72,12 @@ Modals close **only** via explicit buttons (✕, Zrušit, or the action button) 
 ### Shared `<Button>` component
 Use `frontend/src/components/Button.tsx` for any new text-bearing button. Variants: `primary` | `secondary` | `danger` | `ghost`. Sizes: `sm` | `md`. Passes through native `<button>` props (`type`, `disabled`, `onClick`, `style`, etc.). `block` prop makes it full-width.
 
-Out of scope (keep local CSS): icon-only buttons (`closeBtn`, `empActionBtn`, `themeToggle`), toolbar buttons (TipTap `toolBtn`/`varBtn`), inline field togglers (`revealBtn`, `clearBtn`), row-level status pills (green `approveBtn`, red-outline `rejectBtn`), month nav (`navBtn`). A shared `<IconButton>` for the icon-only cluster is a planned follow-up.
+Out of scope (keep local CSS): toolbar buttons (TipTap `toolBtn`/`varBtn`), inline field togglers (`revealBtn`, `clearBtn`), row-level status pills (green `approveBtn`, red-outline `rejectBtn`), month nav (`navBtn`).
+
+### Shared `<IconButton>` component
+Use `frontend/src/components/IconButton.tsx` for modal-header close (`✕`) and other icon-only dismissal buttons. Only variant today is `close`. `aria-label` is a required prop because the visible content is a glyph — screen readers need the label. Passes through native `<button>` props like `<Button>`.
+
+Out of scope (keep local CSS): `empActionBtn` (7px on-hover row action, shift grid), `revealBtn` / `navicRevealBtn` (opacity-based field togglers), and the one-off micro-actions `lockBtn` / `nemocBtn` / `notesDashBtn` / `removeChangeBtn`. `themeToggle` / `logoutBtn` are text-bearing buttons despite their CSS names; if ever shared, they would move to `<Button>`, not `<IconButton>`.
 
 ## Development
 
