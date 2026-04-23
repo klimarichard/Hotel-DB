@@ -467,15 +467,23 @@ export default function ShiftPlannerPage() {
 
   // ── Employee edit / delete ─────────────────────────────────────────────────
 
-  async function handleDeleteEmployee(emp: PlanEmployee) {
+  function handleDeleteEmployee(emp: PlanEmployee) {
     if (!plan) return;
-    if (!window.confirm(`Odebrat ${emp.lastName} ${emp.firstName} z plánu?`)) return;
-    try {
-      await api.delete(`/shifts/plans/${plan.id}/employees/${emp.id}`);
-      loadPlan(true);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Chyba při odebírání zaměstnance");
-    }
+    setConfirmModal({
+      title: "Odebrat zaměstnance",
+      message: `Odebrat ${emp.lastName} ${emp.firstName} z plánu?`,
+      confirmLabel: "Odebrat",
+      danger: true,
+      onConfirm: async () => {
+        setConfirmModal(null);
+        try {
+          await api.delete(`/shifts/plans/${plan.id}/employees/${emp.id}`);
+          loadPlan(true);
+        } catch (e) {
+          setError(e instanceof Error ? e.message : "Chyba při odebírání zaměstnance");
+        }
+      },
+    });
   }
 
   // ── MOD save ───────────────────────────────────────────────────────────────
