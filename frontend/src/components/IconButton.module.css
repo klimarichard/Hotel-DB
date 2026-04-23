@@ -1,0 +1,59 @@
+.iconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  user-select: none;
+}
+
+.iconButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* ── close — modal header ✕ ─────────────────────────────────────────────── */
+
+.close {
+  background: none;
+  border: none;
+  font-size: 1rem;
+  color: var(--color-text-muted);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+}
+
+.close:hover:not(:disabled) {
+  background: var(--color-surface-4);
+}
+
+/* ── action — bordered inline ✎ / ✓ / ✕ ─────────────────────────────────── */
+
+.action {
+  padding: 0.25rem 0.55rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+}
+
+.action:hover:not(:disabled) {
+  background: var(--color-bg);
+}
+
+/* ── danger — action with red tint ──────────────────────────────────────── */
+
+.danger {
+  padding: 0.25rem 0.55rem;
+  border: 1px solid var(--color-danger-border, var(--color-border-strong));
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-danger-text-strong);
+  font-size: 0.75rem;
+}
+
+.danger:hover:not(:disabled) {
+  background: var(--color-bg);
+}
