@@ -1,4 +1,4 @@
-# Hotel HR App — Claude Guidelines
+# HPM Intranet — Claude Guidelines
 
 ## Git Workflow
 
