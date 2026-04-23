@@ -215,7 +215,7 @@ export default function ExportEmployeesModal({ onClose }: Props) {
                   <button
                     type="button"
                     key={s}
-                    className={status === s ? styles.pillActive : styles.pill}
+                    className={[styles.pill, status === s ? styles.pillActive : ""].join(" ")}
                     onClick={() => setStatus(s)}
                   >
                     {STATUS_LABELS[s]}
