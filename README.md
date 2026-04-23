@@ -247,7 +247,7 @@ The editor renders inside a `.a4Page` div (210 mm wide, padding 1.5 cm top/botto
 - **Default theme is dark** — both the login page and the initial load before any user preference is read start in dark mode.
 - Login page has its own sun/moon theme toggle inside the card header (next to the "HPM Intranet" title).
 - All CSS uses variables from `frontend/src/index.css`. `[data-theme="dark"]` overrides the full variable set.
-- Sidebar stays permanently dark (intentional).
+- Sidebar stays permanently dark in both themes (intentional). Background is a subtle vertical gradient `#1e2a3a → #192432` (`Layout.module.css` → `.sidebar`).
 - `getCellColor(parsed, dark?)` in `shiftConstants.ts` — second arg selects light vs dark palette from `CELL_COLORS_DARK`.
 
 ---
@@ -265,7 +265,9 @@ The editor renders inside a `.a4Page` div (210 mm wide, padding 1.5 cm top/botto
   - Miscellaneous small inline actions: `lockBtn`, `nemocBtn`, `navicRevealBtn`, `notesDashBtn`, `postSaveBannerBtn`, `addChangeBtn`, `removeChangeBtn`, `editRowBtn`.
   - `<Link>` elements styled as buttons: `EmployeesPage` addBtn Link, `EmployeeFormPage` cancelBtn Link — the shared `<Button>` only wraps `<button>`.
 - **Typography & tokens**: Inter loaded from `fonts.bunny.net` via `<link>` in `frontend/index.html`. Spacing scale (`--space-1…7`), radius scale (`--radius-sm|md|lg`), font-weights (`--font-weight-regular|medium|semibold|bold`) live in `index.css` `:root`.
-- **Favicon / logo**: `frontend/public/favicon.svg` (gold Old Town Hotels monogram). Reusable copy for sidebar/login at `frontend/src/assets/logo-mark.svg` (wired into the sidebar in a later tier).
+- **Favicon / logo**: `frontend/public/favicon.svg` (gold Old Town Hotels monogram). Reusable copy at `frontend/src/assets/logo-mark.svg`, imported into `Layout.tsx` and rendered at 26×26px beside the "HPM Intranet" wordmark via `styles.logoMark`. Login card is not yet wired up (reserved for Tier 3).
+- **Active nav link**: `Layout.module.css` → `.active` combines the existing `#3b82f6` 3px left-border and `#2d3f54` fill with a soft primary-tinted inner shadow (`box-shadow: inset 0 0 18px rgba(59, 130, 246, 0.12)`) so the selected row reads as "lit up" rather than merely shaded.
+- **Sidebar user bar**: `.userBar` uses `gap: var(--space-2)` between email, role, logout and theme toggle (no per-element `margin-top` rules). `.userEmail` is `0.8125rem`.
 
 ---
 

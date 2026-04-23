@@ -7,6 +7,7 @@ import { useShiftOverridesContext } from "@/context/ShiftOverridesContext";
 import { useShiftChangeRequestsContext } from "@/context/ShiftChangeRequestsContext";
 import { useVacationContext } from "@/context/VacationContext";
 import { useTheme } from "@/context/ThemeContext";
+import logoMark from "@/assets/logo-mark.svg";
 import styles from "./Layout.module.css";
 
 const SunIcon = () => (
@@ -65,7 +66,10 @@ export default function Layout() {
   return (
     <div className={styles.shell}>
       <nav className={styles.sidebar}>
-        <div className={styles.logo}>HPM Intranet</div>
+        <div className={styles.logo}>
+          <img src={logoMark} alt="" className={styles.logoMark} />
+          <span>HPM Intranet</span>
+        </div>
         <ul className={styles.nav}>
           {navItems.map((item) => (
             <li key={item.to}>
