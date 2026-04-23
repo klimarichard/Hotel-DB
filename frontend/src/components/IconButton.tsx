@@ -1,7 +1,7 @@
 import type { ButtonHTMLAttributes } from "react";
 import styles from "./IconButton.module.css";
 
-type Variant = "close" | "action" | "danger";
+type Variant = "close";
 
 interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
