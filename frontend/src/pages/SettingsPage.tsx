@@ -133,6 +133,7 @@ export default function SettingsPage() {
   const [depEditId, setDepEditId] = useState<string | null>(null);
   const [depEditName, setDepEditName] = useState("");
   const [depNewName, setDepNewName] = useState("");
+  const [showDepCreate, setShowDepCreate] = useState(false);
   const [depError, setDepError] = useState<string | null>(null);
   const [depSort, setDepSort] = useState<{ col: "name"; dir: "asc" | "desc" }>({ col: "name", dir: "asc" });
 
@@ -230,6 +231,7 @@ export default function SettingsPage() {
     try {
       await api.post("/departments", { name, displayOrder: departments.length });
       setDepNewName("");
+      setShowDepCreate(false);
       await loadDepartments();
     } catch (e: unknown) {
       setDepError((e as Error).message ?? "Chyba při vytváření.");
@@ -489,6 +491,11 @@ export default function SettingsPage() {
         {settingsTab === "jobPositions" && (
           <Button variant="primary" onClick={openCreatePosition} disabled={departments.length === 0}>
             + Přidat pozici
+          </Button>
+        )}
+        {settingsTab === "departments" && (
+          <Button variant="primary" onClick={() => { setDepNewName(""); setDepError(null); setShowDepCreate(true); }}>
+            + Přidat oddělení
           </Button>
         )}
       </div>
@@ -803,35 +810,50 @@ export default function SettingsPage() {
                     )}
                   </td>
                   <td>
-                    {depEditId === d.id ? (
-                      <>
-                        <Button variant="primary" size="sm" onClick={() => handleSaveDepartment(d.id)}>Uložit</Button>
-                        <Button variant="secondary" size="sm" onClick={() => { setDepEditId(null); setDepEditName(""); }}>Zrušit</Button>
-                      </>
-                    ) : (
-                      <>
-                        <button className={styles.linkBtn} onClick={() => { setDepEditId(d.id); setDepEditName(d.name); }}>Upravit</button>
-                        <button className={styles.deactivateBtn} onClick={() => handleDeleteDepartment(d.id)}>Smazat</button>
-                      </>
-                    )}
+                    <div className={styles.rowActions}>
+                      {depEditId === d.id ? (
+                        <>
+                          <Button variant="primary" size="sm" onClick={() => handleSaveDepartment(d.id)}>Uložit</Button>
+                          <Button variant="secondary" size="sm" onClick={() => { setDepEditId(null); setDepEditName(""); }}>Zrušit</Button>
+                        </>
+                      ) : (
+                        <>
+                          <button className={styles.linkBtn} onClick={() => { setDepEditId(d.id); setDepEditName(d.name); }}>Upravit</button>
+                          <button className={styles.deactivateBtn} onClick={() => handleDeleteDepartment(d.id)}>Smazat</button>
+                        </>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
-              <tr>
-                <td>
-                  <input
-                    className={styles.input}
-                    placeholder="Nové oddělení…"
-                    value={depNewName}
-                    onChange={(e) => setDepNewName(e.target.value)}
-                  />
-                </td>
-                <td>
-                  <Button variant="primary" size="sm" onClick={handleCreateDepartment}>+ Přidat</Button>
-                </td>
-              </tr>
             </tbody>
           </table>
+          {showDepCreate && (
+            <div className={styles.modal}>
+              <div className={styles.modalBox}>
+                <h2 className={styles.modalTitle}>Nové oddělení</h2>
+                <div className={styles.field}>
+                  <label className={styles.label}>Název</label>
+                  <input
+                    className={styles.input}
+                    value={depNewName}
+                    onChange={(e) => setDepNewName(e.target.value)}
+                    autoFocus
+                    onKeyDown={(e) => { if (e.key === "Enter") handleCreateDepartment(); }}
+                  />
+                </div>
+                {depError && <p className={styles.formError}>{depError}</p>}
+                <div className={styles.formActions}>
+                  <Button variant="secondary" onClick={() => { setShowDepCreate(false); setDepNewName(""); }}>
+                    Zrušit
+                  </Button>
+                  <Button variant="primary" onClick={handleCreateDepartment} disabled={!depNewName.trim()}>
+                    Uložit
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
         </>
       )}
 
@@ -995,8 +1017,10 @@ export default function SettingsPage() {
                     <td><SalaryCell value={p.clothingAllowance ?? null} suffix="Kč/h" /></td>
                     <td><SalaryCell value={p.homeOfficeAllowance ?? null} suffix="Kč/h" /></td>
                     <td>
-                      <button className={styles.linkBtn} onClick={() => openEditPosition(p)}>Upravit</button>
-                      <button className={styles.deactivateBtn} onClick={() => handleDeletePosition(p.id)}>Smazat</button>
+                      <div className={styles.rowActions}>
+                        <button className={styles.linkBtn} onClick={() => openEditPosition(p)}>Upravit</button>
+                        <button className={styles.deactivateBtn} onClick={() => handleDeletePosition(p.id)}>Smazat</button>
+                      </div>
                     </td>
                   </tr>
                 );
