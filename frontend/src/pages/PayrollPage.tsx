@@ -4,6 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Navigate } from "react-router-dom";
 import PayrollNotesModal from "./PayrollNotesModal";
 import Button from "@/components/Button";
+import ConfirmModal from "@/components/ConfirmModal";
 import styles from "./PayrollPage.module.css";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -428,6 +429,13 @@ export default function PayrollPage() {
   const [recalculating, setRecalculating] = useState(false);
   const [creating, setCreating] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [confirmModal, setConfirmModal] = useState<{
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    danger?: boolean;
+    onConfirm: () => void;
+  } | null>(null);
 
   const loadPeriod = useCallback(async () => {
     setLoading(true);
@@ -454,52 +462,70 @@ export default function PayrollPage() {
   const canEdit = (role === "admin" || role === "director") && !isLocked;
   const canToggleLock = role === "admin";
 
-  async function toggleLock() {
+  function toggleLock() {
     if (!period) return;
     const next = !isLocked;
-    const confirmMsg = next
-      ? "Uzamknout mzdové období? Úpravy budou zablokovány."
-      : "Odemknout mzdové období? Úpravy budou povoleny.";
-    if (!window.confirm(confirmMsg)) return;
-    try {
-      await api.patch(`/payroll/periods/${period.id}`, { locked: next });
-      setPeriod((prev) => prev ? { ...prev, locked: next } : prev);
-    } catch (e) {
-      setError((e as Error).message ?? "Chyba při uzamykání.");
-    }
+    setConfirmModal({
+      title: next ? "Uzamknout období" : "Odemknout období",
+      message: next
+        ? "Uzamknout mzdové období? Úpravy budou zablokovány."
+        : "Odemknout mzdové období? Úpravy budou povoleny.",
+      confirmLabel: next ? "Uzamknout" : "Odemknout",
+      danger: next,
+      onConfirm: async () => {
+        setConfirmModal(null);
+        try {
+          await api.patch(`/payroll/periods/${period.id}`, { locked: next });
+          setPeriod((prev) => prev ? { ...prev, locked: next } : prev);
+        } catch (e) {
+          setError((e as Error).message ?? "Chyba při uzamykání.");
+        }
+      },
+    });
   }
 
-  async function handleCreatePeriod() {
+  function handleCreatePeriod() {
     if (creating) return;
-    if (!window.confirm(
-      `Vytvořit mzdy pro ${MONTH_NAMES[selectedMonth - 1]} ${selectedYear}? ` +
-      `Pro tento měsíc musí existovat publikovaný směnný plán.`
-    )) return;
-    setCreating(true);
-    setError(null);
-    try {
-      await api.post(`/payroll/periods/by-month/${selectedYear}/${selectedMonth}`, {});
-      await loadPeriod();
-    } catch (e) {
-      setError((e as Error).message ?? "Chyba při vytváření mzdového období.");
-    } finally {
-      setCreating(false);
-    }
+    setConfirmModal({
+      title: "Vytvořit mzdy",
+      message: `Vytvořit mzdy pro ${MONTH_NAMES[selectedMonth - 1]} ${selectedYear}? Pro tento měsíc musí existovat publikovaný směnný plán.`,
+      confirmLabel: "Vytvořit",
+      onConfirm: async () => {
+        setConfirmModal(null);
+        setCreating(true);
+        setError(null);
+        try {
+          await api.post(`/payroll/periods/by-month/${selectedYear}/${selectedMonth}`, {});
+          await loadPeriod();
+        } catch (e) {
+          setError((e as Error).message ?? "Chyba při vytváření mzdového období.");
+        } finally {
+          setCreating(false);
+        }
+      },
+    });
   }
 
-  async function recalculate() {
+  function recalculate() {
     if (!period || recalculating) return;
-    if (!window.confirm("Přepočítat mzdy pro toto období? Ruční úpravy (overrides) zůstanou zachovány.")) return;
-    setRecalculating(true);
-    setError(null);
-    try {
-      await api.post(`/payroll/periods/${period.id}/recalculate`, {});
-      await loadPeriod();
-    } catch (e) {
-      setError((e as Error).message ?? "Chyba při přepočtu.");
-    } finally {
-      setRecalculating(false);
-    }
+    setConfirmModal({
+      title: "Přepočítat mzdy",
+      message: "Přepočítat mzdy pro toto období? Ruční úpravy (overrides) zůstanou zachovány.",
+      confirmLabel: "Přepočítat",
+      onConfirm: async () => {
+        setConfirmModal(null);
+        setRecalculating(true);
+        setError(null);
+        try {
+          await api.post(`/payroll/periods/${period.id}/recalculate`, {});
+          await loadPeriod();
+        } catch (e) {
+          setError((e as Error).message ?? "Chyba při přepočtu.");
+        } finally {
+          setRecalculating(false);
+        }
+      },
+    });
   }
 
   async function handleExportPdf() {
@@ -1004,6 +1030,17 @@ export default function PayrollPage() {
           canEdit={canEdit}
           onClose={() => setNotesModal(null)}
           onChanged={loadPeriod}
+        />
+      )}
+
+      {confirmModal && (
+        <ConfirmModal
+          title={confirmModal.title}
+          message={confirmModal.message}
+          confirmLabel={confirmModal.confirmLabel}
+          danger={confirmModal.danger}
+          onConfirm={confirmModal.onConfirm}
+          onCancel={() => setConfirmModal(null)}
         />
       )}
     </div>

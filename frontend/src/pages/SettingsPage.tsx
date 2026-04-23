@@ -5,6 +5,7 @@ import { auth } from "@/lib/firebase";
 import { useAuth, UserRole } from "@/hooks/useAuth";
 import { authApi, UserProfile, api, ApiError } from "@/lib/api";
 import Button from "@/components/Button";
+import ConfirmModal from "@/components/ConfirmModal";
 import styles from "./SettingsPage.module.css";
 
 const EyeIcon = () => (
@@ -135,6 +136,7 @@ export default function SettingsPage() {
   const [depNewName, setDepNewName] = useState("");
   const [showDepCreate, setShowDepCreate] = useState(false);
   const [depError, setDepError] = useState<string | null>(null);
+  const [depDeleteId, setDepDeleteId] = useState<string | null>(null);
   const [depSort, setDepSort] = useState<{ col: "name"; dir: "asc" | "desc" }>({ col: "name", dir: "asc" });
 
   // Job positions
@@ -144,6 +146,7 @@ export default function SettingsPage() {
   const [posForm, setPosForm] = useState<{ name: string; departmentId: string; defaultSalary: string; hourlyRate: string; clothingAllowance: string; homeOfficeAllowance: string }>({ name: "", departmentId: "", defaultSalary: "", hourlyRate: "", clothingAllowance: "", homeOfficeAllowance: "" });
   const [posCascade, setPosCascade] = useState<PosCascadePreview | null>(null);
   const [posCascadeSaving, setPosCascadeSaving] = useState(false);
+  const [posDeleteId, setPosDeleteId] = useState<string | null>(null);
 
   // Payroll settings
   const [foodVoucherRate, setFoodVoucherRate] = useState<number>(129.5);
@@ -252,8 +255,10 @@ export default function SettingsPage() {
     }
   }
 
-  async function handleDeleteDepartment(id: string) {
-    if (!confirm("Opravdu smazat toto oddělení?")) return;
+  async function confirmDeleteDepartment() {
+    if (!depDeleteId) return;
+    const id = depDeleteId;
+    setDepDeleteId(null);
     setDepError(null);
     try {
       await api.delete(`/departments/${id}`);
@@ -321,8 +326,10 @@ export default function SettingsPage() {
     }
   }
 
-  async function handleDeletePosition(id: string) {
-    if (!confirm("Opravdu smazat tuto pozici?")) return;
+  async function confirmDeletePosition() {
+    if (!posDeleteId) return;
+    const id = posDeleteId;
+    setPosDeleteId(null);
     try {
       await api.delete(`/jobPositions/${id}`);
       await loadPositions();
@@ -819,7 +826,7 @@ export default function SettingsPage() {
                       ) : (
                         <>
                           <button className={styles.linkBtn} onClick={() => { setDepEditId(d.id); setDepEditName(d.name); }}>Upravit</button>
-                          <button className={styles.deactivateBtn} onClick={() => handleDeleteDepartment(d.id)}>Smazat</button>
+                          <button className={styles.deactivateBtn} onClick={() => setDepDeleteId(d.id)}>Smazat</button>
                         </>
                       )}
                     </div>
@@ -1019,7 +1026,7 @@ export default function SettingsPage() {
                     <td>
                       <div className={styles.rowActions}>
                         <button className={styles.linkBtn} onClick={() => openEditPosition(p)}>Upravit</button>
-                        <button className={styles.deactivateBtn} onClick={() => handleDeletePosition(p.id)}>Smazat</button>
+                        <button className={styles.deactivateBtn} onClick={() => setPosDeleteId(p.id)}>Smazat</button>
                       </div>
                     </td>
                   </tr>
@@ -1092,6 +1099,28 @@ export default function SettingsPage() {
             </div>
           )}
         </div>
+      )}
+
+      {depDeleteId && (
+        <ConfirmModal
+          title="Smazat oddělení"
+          message="Opravdu smazat toto oddělení? Tato akce je nevratná."
+          confirmLabel="Smazat"
+          danger
+          onConfirm={confirmDeleteDepartment}
+          onCancel={() => setDepDeleteId(null)}
+        />
+      )}
+
+      {posDeleteId && (
+        <ConfirmModal
+          title="Smazat pozici"
+          message="Opravdu smazat tuto pozici? Tato akce je nevratná."
+          confirmLabel="Smazat"
+          danger
+          onConfirm={confirmDeletePosition}
+          onCancel={() => setPosDeleteId(null)}
+        />
       )}
     </div>
   );

@@ -69,6 +69,13 @@ Uses a **tab-based layout** — every new settings section must be a new tab, ne
 ### Modal dismissal
 Modals close **only** via explicit buttons (✕, Zrušit, or the action button) — never on backdrop click. Clicking the overlay was dismissing half-edited forms and causing data loss. When adding a new modal, do not wire `onClick={onClose}` onto the overlay `<div>`.
 
+### No native browser dialogs
+Never use `window.confirm`, `window.alert`, `window.prompt` (or their unqualified `confirm`/`alert`/`prompt` forms) anywhere in the frontend. They render with browser chrome ("localhost:3000 říká…") which breaks visual consistency. Every confirmation, destructive-action check, and error message goes through `frontend/src/components/ConfirmModal.tsx`:
+- Hold a pending payload (or an object with `{ title, message, onConfirm, ... }`) in component state; render `<ConfirmModal>` when that state is set; clear it in both `onConfirm` (after the action) and `onCancel`.
+- Destructive actions: pass `danger` so the primary button renders red.
+- Error messages / info-only dialogs: pass `showCancel={false}` to turn ConfirmModal into a one-button dialog (typically titled "Chyba", `confirmLabel="OK"`).
+- If you ever feel you need a native dialog for prototyping, extend `ConfirmModal` instead.
+
 ### Shared `<Button>` component
 Use `frontend/src/components/Button.tsx` for any new text-bearing button. Variants: `primary` | `secondary` | `danger` | `ghost`. Sizes: `sm` | `md`. Passes through native `<button>` props (`type`, `disabled`, `onClick`, `style`, etc.). `block` prop makes it full-width.
 

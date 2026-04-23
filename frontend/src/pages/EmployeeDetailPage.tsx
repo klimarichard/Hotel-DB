@@ -804,6 +804,7 @@ export default function EmployeeDetailPage() {
     message: string;
     confirmLabel: string;
     cancelLabel?: string;
+    showCancel?: boolean;
     danger?: boolean;
     onConfirm: () => void;
     onCancel?: () => void;
@@ -890,7 +891,15 @@ export default function EmployeeDetailPage() {
     const executeDelete = (deleteUser: boolean) => {
       api.delete(`/employees/${id}?deleteUser=${deleteUser}`)
         .then(() => navigate("/zamestnanci"))
-        .catch((e: Error) => alert(e.message));
+        .catch((e: Error) => {
+          setConfirmModal({
+            title: "Chyba",
+            message: e.message,
+            confirmLabel: "OK",
+            showCancel: false,
+            onConfirm: () => setConfirmModal(null),
+          });
+        });
     };
 
     // Step 1: confirm employee deletion
@@ -1289,6 +1298,7 @@ export default function EmployeeDetailPage() {
           message={confirmModal.message}
           confirmLabel={confirmModal.confirmLabel}
           cancelLabel={confirmModal.cancelLabel}
+          showCancel={confirmModal.showCancel}
           danger={confirmModal.danger}
           onConfirm={confirmModal.onConfirm}
           onCancel={confirmModal.onCancel ?? (() => setConfirmModal(null))}
