@@ -61,7 +61,7 @@ AES-256-GCM encrypted in Cloud Functions — never store in plaintext or return 
 - `documents.idCardNumber`
 - `benefits.insuranceNumber`, `benefits.bankAccount`
 
-Every reveal is logged to `auditLog/`.
+Every reveal is logged to `auditLog/`. Known audit-log `action` values: `"reveal"` (single-field reveal via `POST /api/employees/:id/reveal`) and `"export"` (bulk CSV export via `GET /api/employees/export?includeSensitive=true` — one entry per export, not per field). When adding new sensitive-data surfaces, extend this list rather than inventing a third action name.
 
 ### Settings page
 Uses a **tab-based layout** — every new settings section must be a new tab, never appended below.
