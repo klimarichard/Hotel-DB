@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { ViolationInfo } from "../pages/ShiftPlannerPage";
 import Button from "./Button";
+import IconButton from "./IconButton";
 import styles from "./AddEmployeeToPlanModal.module.css";
 
 interface Props {
@@ -48,7 +49,7 @@ export default function XOverrideModal({ employeeName, date, violations, onSubmi
       <div className={styles.modal}>
         <div className={styles.header}>
           <h2 className={styles.title}>Překročení limitu X</h2>
-          <button className={styles.closeBtn} onClick={onCancel}>✕</button>
+          <IconButton onClick={onCancel} aria-label="Zavřít">✕</IconButton>
         </div>
         <div className={styles.body}>
           <p style={{ fontSize: "0.875rem", color: "#374151", margin: "0 0 0.75rem" }}>

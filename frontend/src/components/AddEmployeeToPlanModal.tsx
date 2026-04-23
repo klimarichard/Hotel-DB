@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
 import Button from "./Button";
+import IconButton from "./IconButton";
 import {
   SECTIONS,
   HOTEL_CODES,
@@ -93,7 +94,7 @@ export default function AddEmployeeToPlanModal({ planId, existingEmployees, onCl
       <div className={styles.modal}>
         <div className={styles.header}>
           <h2 className={styles.title}>Přidat zaměstnance do plánu</h2>
-          <button className={styles.closeBtn} onClick={onClose}>✕</button>
+          <IconButton onClick={onClose} aria-label="Zavřít">✕</IconButton>
         </div>
         <div className={styles.body}>
           {/* Employee search */}

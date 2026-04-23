@@ -1,5 +1,6 @@
 import { useState } from "react";
 import Button from "./Button";
+import IconButton from "./IconButton";
 import styles from "./AddEmployeeToPlanModal.module.css";
 import type { ShiftCollision } from "./VacationCollisionInfoModal";
 
@@ -54,7 +55,7 @@ export default function VacationCollisionResolutionModal({
       >
         <div className={styles.header}>
           <h2 className={styles.title}>Kolize s naplánovanými směnami</h2>
-          <button className={styles.closeBtn} onClick={onCancel}>✕</button>
+          <IconButton onClick={onCancel} aria-label="Zavřít">✕</IconButton>
         </div>
         <div className={styles.body}>
           <p style={{ fontSize: "0.875rem", color: "var(--color-text-secondary)", margin: "0 0 0.75rem" }}>

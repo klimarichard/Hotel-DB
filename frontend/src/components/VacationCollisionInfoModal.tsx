@@ -1,4 +1,5 @@
 import Button from "./Button";
+import IconButton from "./IconButton";
 import styles from "./AddEmployeeToPlanModal.module.css";
 
 export interface ShiftCollision {
@@ -25,7 +26,7 @@ export default function VacationCollisionInfoModal({ collisions, onClose }: Prop
       <div className={styles.modal}>
         <div className={styles.header}>
           <h2 className={styles.title}>Tyto dny už mají naplánovanou směnu</h2>
-          <button className={styles.closeBtn} onClick={onClose}>✕</button>
+          <IconButton onClick={onClose} aria-label="Zavřít">✕</IconButton>
         </div>
         <div className={styles.body}>
           <div
