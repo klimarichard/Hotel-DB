@@ -66,6 +66,9 @@ Every reveal is logged to `auditLog/`.
 ### Settings page
 Uses a **tab-based layout** — every new settings section must be a new tab, never appended below.
 
+### Modal dismissal
+Modals close **only** via explicit buttons (✕, Zrušit, or the action button) — never on backdrop click. Clicking the overlay was dismissing half-edited forms and causing data loss. When adding a new modal, do not wire `onClick={onClose}` onto the overlay `<div>`.
+
 ## Development
 
 ### Backend build step
