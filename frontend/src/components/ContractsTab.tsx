@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { getStorage, ref, getDownloadURL, deleteObject } from "firebase/storage";
 import { useAuth } from "@/hooks/useAuth";
 import Button from "./Button";
+import ConfirmModal from "./ConfirmModal";
 import GenerateContractModal from "./GenerateContractModal";
 import {
   ContractType,
@@ -48,6 +49,7 @@ export default function ContractsTab({ employeeId, employeeData, companyData }: 
   const [contracts, setContracts] = useState<ContractRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [generateModal, setGenerateModal] = useState<ContractType | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ContractRecord | null>(null);
   const [standaloneDropdown, setStandaloneDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const uploadRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -88,9 +90,10 @@ export default function ContractsTab({ employeeId, employeeData, companyData }: 
     window.open(url, "_blank");
   }
 
-  async function handleDeleteUnsigned(contract: ContractRecord) {
-    if (!user) return;
-    if (!confirm("Smazat nepodepsanou smlouvu?")) return;
+  async function confirmDeleteUnsigned() {
+    if (!user || !deleteTarget) return;
+    const contract = deleteTarget;
+    setDeleteTarget(null);
 
     const token = await user.getIdToken();
 
@@ -243,7 +246,7 @@ export default function ContractsTab({ employeeId, employeeData, companyData }: 
                         </label>
                         <button
                           className={`${styles.actionBtn} ${styles.deleteBtn}`}
-                          onClick={() => handleDeleteUnsigned(c)}
+                          onClick={() => setDeleteTarget(c)}
                         >
                           Smazat
                         </button>
@@ -276,6 +279,17 @@ export default function ContractsTab({ employeeId, employeeData, companyData }: 
             setGenerateModal(null);
             await fetchContracts();
           }}
+        />
+      )}
+
+      {deleteTarget && (
+        <ConfirmModal
+          title="Smazat smlouvu"
+          message="Smazat nepodepsanou smlouvu? Tato akce je nevratná."
+          confirmLabel="Smazat"
+          danger
+          onConfirm={confirmDeleteUnsigned}
+          onCancel={() => setDeleteTarget(null)}
         />
       )}
     </div>
