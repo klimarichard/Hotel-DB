@@ -40,26 +40,6 @@
   color: var(--color-danger-text-strong);
 }
 
-.saveBtn {
-  padding: 8px 18px;
-  background: var(--color-primary);
-  color: #fff;
-  border: none;
-  border-radius: 6px;
-  font-size: 0.875rem;
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.saveBtn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.saveBtn:hover:not(:disabled) {
-  background: var(--color-primary-dark);
-}
-
 /* Three-column workspace */
 .workspace {
   display: grid;

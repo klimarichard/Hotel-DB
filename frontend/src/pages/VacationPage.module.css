@@ -63,27 +63,6 @@
   min-width: 260px;
 }
 
-.submitBtn {
-  padding: 0.5rem 1.25rem;
-  background: #3b82f6;
-  color: #fff;
-  border: none;
-  border-radius: 6px;
-  font-size: 0.875rem;
-  font-weight: 500;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.submitBtn:hover:not(:disabled) {
-  background: #2563eb;
-}
-
-.submitBtn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
 .error {
   margin-top: 0.5rem;
   font-size: 0.8125rem;
@@ -252,32 +231,6 @@
 }
 
 .rejectInput:focus { border-color: var(--color-danger-text-strong); }
-
-.confirmRejectBtn {
-  padding: 4px 12px;
-  background: var(--color-danger-text-strong);
-  color: #fff;
-  border: none;
-  border-radius: 4px;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  cursor: pointer;
-  margin-right: 0.5rem;
-}
-
-.confirmRejectBtn:disabled { opacity: 0.5; cursor: not-allowed; }
-
-.cancelBtn {
-  padding: 4px 12px;
-  background: var(--color-surface-4);
-  border: 1px solid var(--color-border-strong);
-  border-radius: 4px;
-  font-size: 0.8125rem;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-}
-
-.cancelBtn:hover { background: var(--color-border); }
 
 /* ── Edit button ──────────────────────────────────────────────────────────── */
 

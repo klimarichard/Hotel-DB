@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import Button from "./Button";
 import {
   ContractType,
   CONTRACT_TYPE_LABELS,
@@ -167,18 +168,18 @@ export default function GenerateContractModal({
         <div className={styles.footer}>
           {step === "confirm" && (
             <>
-              <button className={styles.cancelBtn} onClick={onClose}>Zrušit</button>
-              <button
-                className={styles.generateBtn}
+              <Button variant="secondary" onClick={onClose}>Zrušit</Button>
+              <Button
+                variant="primary"
                 onClick={handleGenerate}
                 disabled={loadingTemplate || !template}
               >
                 Generovat PDF
-              </button>
+              </Button>
             </>
           )}
           {(step === "done" || step === "error") && (
-            <button className={styles.cancelBtn} onClick={onClose}>Zavřít</button>
+            <Button variant="secondary" onClick={onClose}>Zavřít</Button>
           )}
         </div>
       </div>

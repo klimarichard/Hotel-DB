@@ -7,6 +7,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
 import { formatDateCZ, formatDatetimeCZ } from "../lib/dateFormat";
+import Button from "./Button";
 import styles from "./ShiftOverridePanel.module.css";
 
 interface OverrideRequest {
@@ -129,13 +130,14 @@ export default function MyRequestsPanel({ planId }: Props) {
                       </td>
                       <td>
                         {req.status === "pending" && (
-                          <button
-                            className={styles.cancelBtn}
+                          <Button
+                            variant="secondary"
+                            size="sm"
                             disabled={cancellingId === req.id}
                             onClick={() => cancelOverride(req.id)}
                           >
                             {cancellingId === req.id ? "…" : "Zrušit"}
-                          </button>
+                          </Button>
                         )}
                       </td>
                     </tr>
@@ -179,13 +181,14 @@ export default function MyRequestsPanel({ planId }: Props) {
                       </td>
                       <td>
                         {req.status === "pending" && (
-                          <button
-                            className={styles.cancelBtn}
+                          <Button
+                            variant="secondary"
+                            size="sm"
                             disabled={cancellingId === req.id}
                             onClick={() => cancelChange(req.id)}
                           >
                             {cancellingId === req.id ? "…" : "Zrušit"}
-                          </button>
+                          </Button>
                         )}
                       </td>
                     </tr>

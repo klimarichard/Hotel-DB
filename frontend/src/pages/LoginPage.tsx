@@ -2,6 +2,7 @@ import { useState, FormEvent } from "react";
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useTheme } from "@/context/ThemeContext";
+import Button from "@/components/Button";
 import styles from "./LoginPage.module.css";
 
 const SunIcon = () => (
@@ -98,9 +99,9 @@ export default function LoginPage() {
               <div className={styles.success}>
                 E-mail s odkazem pro obnovu hesla byl odeslán na <strong>{forgotEmail}</strong>.
               </div>
-              <button type="button" className={styles.btn} onClick={() => setView("login")}>
+              <Button variant="primary" block onClick={() => setView("login")}>
                 Zpět na přihlášení
-              </button>
+              </Button>
             </>
           ) : (
             <>
@@ -118,9 +119,9 @@ export default function LoginPage() {
                 />
               </label>
 
-              <button className={styles.btn} type="submit" disabled={forgotLoading}>
+              <Button variant="primary" block type="submit" disabled={forgotLoading}>
                 {forgotLoading ? "Odesílám…" : "Odeslat odkaz pro obnovu hesla"}
-              </button>
+              </Button>
               <button
                 type="button"
                 className={styles.linkBtn}
@@ -177,9 +178,9 @@ export default function LoginPage() {
           />
         </label>
 
-        <button className={styles.btn} type="submit" disabled={loading}>
+        <Button variant="primary" block type="submit" disabled={loading}>
           {loading ? "Přihlašuji..." : "Přihlásit se"}
-        </button>
+        </Button>
         <button type="button" className={styles.linkBtn} onClick={openForgot}>
           Zapomenuté heslo?
         </button>

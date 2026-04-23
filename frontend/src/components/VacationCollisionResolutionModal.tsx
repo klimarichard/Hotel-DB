@@ -1,4 +1,5 @@
 import { useState } from "react";
+import Button from "./Button";
 import styles from "./AddEmployeeToPlanModal.module.css";
 import type { ShiftCollision } from "./VacationCollisionInfoModal";
 
@@ -106,12 +107,12 @@ export default function VacationCollisionResolutionModal({
           {error && <p className={styles.error}>{error}</p>}
         </div>
         <div className={styles.footer}>
-          <button className={styles.cancelBtn} onClick={onCancel} disabled={saving}>
+          <Button variant="secondary" onClick={onCancel} disabled={saving}>
             Zrušit schválení
-          </button>
-          <button className={styles.saveBtn} onClick={handleSubmit} disabled={saving}>
+          </Button>
+          <Button variant="primary" onClick={handleSubmit} disabled={saving}>
             {saving ? "Schvaluji…" : "Schválit s výběrem"}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

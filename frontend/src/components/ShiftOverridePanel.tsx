@@ -3,6 +3,7 @@ import { api } from "../lib/api";
 import { parseShiftExpression } from "../lib/shiftConstants";
 import { formatDateCZ } from "../lib/dateFormat";
 import type { PlanEmployee } from "../pages/ShiftPlannerPage";
+import Button from "./Button";
 import styles from "./ShiftOverridePanel.module.css";
 
 interface OverrideRequest {
@@ -175,19 +176,21 @@ export default function ShiftOverridePanel({ planId, employees, onOverrideResolv
                         value={rejectionReason}
                         onChange={(e) => setRejectionReason(e.target.value)}
                       />
-                      <button
-                        className={styles.confirmRejectBtn}
+                      <Button
+                        variant="danger"
+                        size="sm"
                         onClick={() => handleReject(req.id)}
                         disabled={saving}
                       >
                         Potvrdit zamítnutí
-                      </button>
-                      <button
-                        className={styles.cancelBtn}
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="sm"
                         onClick={() => setRejectingId(null)}
                       >
                         Zrušit
-                      </button>
+                      </Button>
                     </td>
                   </tr>
                 )}

@@ -1,6 +1,7 @@
 import { useState, useEffect, FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "@/lib/api";
+import Button from "@/components/Button";
 import styles from "./EmployeeFormPage.module.css";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -524,9 +525,9 @@ export default function EmployeeFormPage() {
           <Link to={isEdit ? `/zamestnanci/${id}` : "/zamestnanci"} className={styles.cancelBtn}>
             Zrušit
           </Link>
-          <button type="submit" className={styles.saveBtn} disabled={saving}>
+          <Button type="submit" variant="primary" disabled={saving}>
             {saving ? "Ukládám…" : isEdit ? "Uložit změny" : "Vytvořit zaměstnance"}
-          </button>
+          </Button>
         </div>
       </form>
     </div>

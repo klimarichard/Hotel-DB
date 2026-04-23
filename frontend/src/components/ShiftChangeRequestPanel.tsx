@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../lib/api";
 import type { PlanEmployee } from "../pages/ShiftPlannerPage";
 import { formatDateCZ, formatDatetimeCZ } from "../lib/dateFormat";
+import Button from "./Button";
 import styles from "./ShiftOverridePanel.module.css";
 
 interface ChangeRequest {
@@ -157,19 +158,21 @@ export default function ShiftChangeRequestPanel({ planId, employees, onResolved,
                         value={rejectionReason}
                         onChange={(e) => setRejectionReason(e.target.value)}
                       />
-                      <button
-                        className={styles.confirmRejectBtn}
+                      <Button
+                        variant="danger"
+                        size="sm"
                         onClick={() => handleReject(req.id)}
                         disabled={saving}
                       >
                         Potvrdit zamítnutí
-                      </button>
-                      <button
-                        className={styles.cancelBtn}
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="sm"
                         onClick={() => setRejectingId(null)}
                       >
                         Zrušit
-                      </button>
+                      </Button>
                     </td>
                   </tr>
                 )}

@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { api } from "@/lib/api";
 import { useAlertsContext } from "@/context/AlertsContext";
 import { formatDateCZ } from "@/lib/dateFormat";
+import Button from "@/components/Button";
 import styles from "./AlertsPage.module.css";
 
 interface Alert {
@@ -101,9 +102,9 @@ export default function AlertsPage() {
       <div className={styles.header}>
         <h1 className={styles.title}>Upozornění na expiraci dokladů</h1>
         {unread.length > 0 && (
-          <button className={styles.markAllBtn} onClick={markAllRead}>
+          <Button variant="secondary" onClick={markAllRead}>
             Označit vše jako přečtené
-          </button>
+          </Button>
         )}
       </div>
 

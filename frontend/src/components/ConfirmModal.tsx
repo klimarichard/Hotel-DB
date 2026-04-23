@@ -1,3 +1,4 @@
+import Button from "./Button";
 import styles from "./ConfirmModal.module.css";
 
 interface Props {
@@ -30,16 +31,13 @@ export default function ConfirmModal({
         <div className={styles.body}>{message}</div>
         <div className={styles.footer}>
           {showCancel && (
-            <button className={styles.cancelBtn} onClick={onCancel}>
+            <Button variant="secondary" onClick={onCancel}>
               {cancelLabel}
-            </button>
+            </Button>
           )}
-          <button
-            className={`${styles.confirmBtn} ${danger ? styles.danger : ""}`}
-            onClick={onConfirm}
-          >
+          <Button variant={danger ? "danger" : "primary"} onClick={onConfirm}>
             {confirmLabel}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

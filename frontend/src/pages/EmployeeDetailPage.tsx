@@ -7,6 +7,7 @@ import { formatDateCZ } from "@/lib/dateFormat";
 import { displayGendered } from "@/lib/genderDisplay";
 import ContractsTab from "@/components/ContractsTab";
 import GenerateContractModal from "@/components/GenerateContractModal";
+import Button from "@/components/Button";
 import {
   ContractType as SmlouvaContractType,
   CONTRACT_TYPE_LABELS,
@@ -687,10 +688,10 @@ function AddEntryModal({
             {error && <p className={styles.modalError}>{error}</p>}
           </div>
           <div className={styles.modalActions}>
-            <button type="button" className={styles.modalCancelBtn} onClick={onClose}>Zrušit</button>
-            <button type="submit" className={styles.modalSaveBtn} disabled={saving}>
+            <Button variant="secondary" onClick={onClose}>Zrušit</Button>
+            <Button type="submit" variant="primary" disabled={saving}>
               {saving ? "Ukládám…" : "Uložit"}
-            </button>
+            </Button>
           </div>
         </form>
       </div>
@@ -942,17 +943,17 @@ export default function EmployeeDetailPage() {
           </div>
         </div>
         <div style={{ display: "flex", gap: "0.5rem" }}>
-          <button className={styles.editBtn} onClick={() => navigate(`/zamestnanci/${id}/upravit`)}>
+          <Button variant="secondary" onClick={() => navigate(`/zamestnanci/${id}/upravit`)}>
             Upravit
-          </button>
+          </Button>
           {canDelete && (
-            <button
-              className={styles.deleteBtn}
+            <Button
+              variant="danger"
               onClick={handleDeleteEmployee}
               disabled={deleteLoading}
             >
               {deleteLoading ? "…" : "Smazat"}
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -983,7 +984,7 @@ export default function EmployeeDetailPage() {
         <>
           <div className={styles.historyHeader}>
             <span className={styles.historyTitle}>Historie pracovního poměru</span>
-            <button className={styles.addBtn} onClick={() => setShowModal(true)}>+ Přidat záznam</button>
+            <Button variant="primary" size="sm" onClick={() => setShowModal(true)}>+ Přidat záznam</Button>
           </div>
           <div className={styles.section}>
             <div className={styles.sectionBody}>
@@ -1016,24 +1017,26 @@ export default function EmployeeDetailPage() {
                               if (types.length === 0) return null;
                               if (types.length === 1) {
                                 return (
-                                  <button
-                                    className={styles.generateBtn}
+                                  <Button
+                                    variant="primary"
+                                    size="sm"
                                     onClick={() => setGenerateModal({ row, contractType: types[0] })}
                                   >
                                     Generovat smlouvu
-                                  </button>
+                                  </Button>
                                 );
                               }
                               return (
                                 <div className={styles.generateDropdown}>
-                                  <button
-                                    className={styles.generateBtn}
+                                  <Button
+                                    variant="primary"
+                                    size="sm"
                                     onClick={() => setGenerateDropdownRowId(
                                       generateDropdownRowId === row.id ? null : row.id
                                     )}
                                   >
                                     Generovat smlouvu ▾
-                                  </button>
+                                  </Button>
                                   {generateDropdownRowId === row.id && (
                                     <div className={styles.generateDropdownMenu}>
                                       {types.map((t) => (

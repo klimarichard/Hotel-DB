@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { api } from "../lib/api";
+import Button from "./Button";
 import {
   SECTIONS,
   HOTEL_CODES,
@@ -116,14 +117,10 @@ export default function EditEmployeeInPlanModal({ planId, employee, onClose, onS
           {error && <p className={styles.error}>{error}</p>}
         </div>
         <div className={styles.footer}>
-          <button className={styles.cancelBtn} onClick={onClose}>Zrušit</button>
-          <button
-            className={styles.saveBtn}
-            onClick={handleSubmit}
-            disabled={saving}
-          >
+          <Button variant="secondary" onClick={onClose}>Zrušit</Button>
+          <Button variant="primary" onClick={handleSubmit} disabled={saving}>
             {saving ? "Ukládám…" : "Uložit"}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

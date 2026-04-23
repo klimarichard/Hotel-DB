@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { ViolationInfo } from "../pages/ShiftPlannerPage";
+import Button from "./Button";
 import styles from "./AddEmployeeToPlanModal.module.css";
 
 interface Props {
@@ -74,14 +75,14 @@ export default function XOverrideModal({ employeeName, date, violations, onSubmi
           {error && <p className={styles.error}>{error}</p>}
         </div>
         <div className={styles.footer}>
-          <button className={styles.cancelBtn} onClick={onCancel}>Zrušit</button>
-          <button
-            className={styles.saveBtn}
+          <Button variant="secondary" onClick={onCancel}>Zrušit</Button>
+          <Button
+            variant="primary"
             onClick={handleSubmit}
             disabled={saving || !reason.trim()}
           >
             {saving ? "Odesílám…" : "Odeslat žádost o X"}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

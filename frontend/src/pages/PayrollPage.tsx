@@ -3,6 +3,7 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { Navigate } from "react-router-dom";
 import PayrollNotesModal from "./PayrollNotesModal";
+import Button from "@/components/Button";
 import styles from "./PayrollPage.module.css";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -398,10 +399,10 @@ function SickLeaveModal({
           {error && <div className={styles.modalError}>{error}</div>}
         </div>
         <div className={styles.modalActions}>
-          <button className={styles.modalCancelBtn} onClick={onClose} disabled={saving}>Zrušit</button>
-          <button className={styles.modalSaveBtn} onClick={handleSave} disabled={saving}>
+          <Button variant="secondary" onClick={onClose} disabled={saving}>Zrušit</Button>
+          <Button variant="primary" onClick={handleSave} disabled={saving}>
             {saving ? "Ukládám…" : "Uložit"}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

@@ -252,6 +252,23 @@ The editor renders inside a `.a4Page` div (210 mm wide, padding 1.5 cm top/botto
 
 ---
 
+## UI components
+
+- **`frontend/src/components/Button.tsx`** — shared button primitive with variants `primary` | `secondary` | `danger` | `ghost` and sizes `sm` | `md`. Wraps `<button>`, passes native props through (`type`, `disabled`, `onClick`, `style`). `block` prop for full-width. All modal actions, form submits, and page/toolbar actions use it. The CSS module (`Button.module.css`) reads shared tokens (`--color-primary`, `--radius-md`, `--space-*`, `--font-weight-*`) from `index.css`. Focus ring comes from the global `:focus-visible` rule.
+- **Intentionally not migrated** (local CSS per-file):
+  - Icon-only buttons: `closeBtn` (✕ in modal headers), `empActionBtn` (✎/✕ on shift-grid hover), `themeToggle`, `logoutBtn`, the shift-grid MOD badge inputs.
+  - TipTap toolbar: `toolBtn`, `varBtn` in `ContractTemplatesPage`.
+  - Inline field togglers: `revealBtn` (reveal encrypted fields), `clearBtn`/`unclearBtn` (EmployeeForm sensitive-field clear).
+  - Row-level status pills: `approveBtn` (green), `rejectBtn` (red-outline), `deleteBtn` (gray→red on hover), `editBtn` (blue info-style) — kept because they encode status via color.
+  - Month/period nav: `navBtn` in `ShiftPlannerPage` and `PayrollPage`.
+  - Per-note micro-actions: `iconBtn`/`iconBtnDanger` in `PayrollNotesModal`.
+  - Miscellaneous small inline actions: `lockBtn`, `nemocBtn`, `navicRevealBtn`, `notesDashBtn`, `postSaveBannerBtn`, `addChangeBtn`, `removeChangeBtn`, `editRowBtn`.
+  - `<Link>` elements styled as buttons: `EmployeesPage` addBtn Link, `EmployeeFormPage` cancelBtn Link — the shared `<Button>` only wraps `<button>`.
+- **Typography & tokens**: Inter loaded from `fonts.bunny.net` via `<link>` in `frontend/index.html`. Spacing scale (`--space-1…7`), radius scale (`--radius-sm|md|lg`), font-weights (`--font-weight-regular|medium|semibold|bold`) live in `index.css` `:root`.
+- **Favicon / logo**: `frontend/public/favicon.svg` (gold Old Town Hotels monogram). Reusable copy for sidebar/login at `frontend/src/assets/logo-mark.svg` (wired into the sidebar in a later tier).
+
+---
+
 ## Companies
 
 `companies/{companyId}` fields: `name`, `address`, `ic`, `dic`, `fileNo` (Spisová značka).
