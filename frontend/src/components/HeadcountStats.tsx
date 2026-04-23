@@ -181,10 +181,9 @@ function BarTile({ title, data, palette, orientation }: BarTileProps) {
                 />
                 <Tooltip
                   contentStyle={{ fontSize: 12 }}
-                  formatter={(v: number) => [v, "Počet"]}
                   cursor={{ fill: palette.grid, fillOpacity: 0.25 }}
                 />
-                <Bar dataKey="value" fill={palette.bar} radius={[0, 4, 4, 0]}>
+                <Bar dataKey="value" name="Počet" fill={palette.bar} radius={[0, 4, 4, 0]}>
                   <LabelList dataKey="value" position="right" fontSize={11} fill={palette.axis} />
                   {data.map((_, i) => (
                     <Cell key={i} fill={palette.bar} />
@@ -198,10 +197,9 @@ function BarTile({ title, data, palette, orientation }: BarTileProps) {
                 <YAxis stroke={palette.axis} fontSize={11} allowDecimals={false} />
                 <Tooltip
                   contentStyle={{ fontSize: 12 }}
-                  formatter={(v: number) => [v, "Počet"]}
                   cursor={{ fill: palette.grid, fillOpacity: 0.25 }}
                 />
-                <Bar dataKey="value" fill={palette.bar} radius={[4, 4, 0, 0]}>
+                <Bar dataKey="value" name="Počet" fill={palette.bar} radius={[4, 4, 0, 0]}>
                   <LabelList dataKey="value" position="top" fontSize={11} fill={palette.axis} />
                 </Bar>
               </BarChart>

@@ -22,6 +22,7 @@ import type {
   PlanEmployee,
   ShiftDoc,
 } from "./ShiftPlannerPage";
+import HeadcountStats from "@/components/HeadcountStats";
 import styles from "./OverviewPage.module.css";
 
 interface PlanListItem {
@@ -528,6 +529,8 @@ export default function OverviewPage() {
               </>
             )}
           </section>
+
+          {showTasks && <HeadcountStats />}
 
           {(() => {
             const taskTiles: { count: number; label: string; to: string }[] = showTasks
