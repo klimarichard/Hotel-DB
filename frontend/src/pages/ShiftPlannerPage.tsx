@@ -13,6 +13,7 @@ import ShiftOverridePanel from "../components/ShiftOverridePanel";
 import ShiftChangeRequestPanel from "../components/ShiftChangeRequestPanel";
 import MyRequestsPanel from "../components/MyRequestsPanel";
 import ShiftChangeRequestModal from "../components/ShiftChangeRequestModal";
+import Button from "../components/Button";
 import { useShiftOverridesContext } from "../context/ShiftOverridesContext";
 import { useShiftChangeRequestsContext } from "../context/ShiftChangeRequestsContext";
 import styles from "./ShiftPlannerPage.module.css";
@@ -1041,57 +1042,57 @@ export default function ShiftPlannerPage() {
                     ))}
                   </select>
                 )}
-                <button
-                  className={styles.primaryBtn}
+                <Button
+                  variant="primary"
                   onClick={handleCreatePlan}
                   disabled={actionLoading}
                 >
                   Vytvořit plán
-                </button>
+                </Button>
               </>
             )}
 
             {/* Open plan */}
             {plan?.status === "created" && canPublish && (
-              <button
-                className={styles.primaryBtn}
+              <Button
+                variant="primary"
                 onClick={() => handleTransitionStatus("opened")}
                 disabled={actionLoading}
               >
                 Otevřít plán
-              </button>
+              </Button>
             )}
 
             {/* Close plan */}
             {plan?.status === "opened" && canPublish && (
-              <button
-                className={styles.primaryBtn}
+              <Button
+                variant="primary"
                 onClick={() => handleTransitionStatus("closed")}
                 disabled={actionLoading}
               >
                 Uzavřít plán
-              </button>
+              </Button>
             )}
 
             {/* Publish plan */}
             {plan?.status === "closed" && canPublish && (
-              <button
-                className={styles.primaryBtn}
+              <Button
+                variant="primary"
                 onClick={() => handleTransitionStatus("published")}
                 disabled={actionLoading}
               >
                 Publikovat
-              </button>
+              </Button>
             )}
 
             {/* Add employee */}
             {plan && (plan.status !== "published" || role === "admin") && canEdit && (
-              <button
-                className={styles.secondaryBtn}
+              <Button
+                variant="secondary"
                 onClick={() => setShowAddEmployee(true)}
               >
                 + Přidat zaměstnance
-              </button>
+              </Button>
             )}
 
             {/* Copy employees into existing created plan */}
@@ -1112,13 +1113,13 @@ export default function ShiftPlannerPage() {
                     ))}
                 </select>
                 {copyFromId && (
-                  <button
-                    className={styles.secondaryBtn}
+                  <Button
+                    variant="secondary"
                     onClick={handleCopyEmployees}
                     disabled={actionLoading}
                   >
                     Kopírovat
-                  </button>
+                  </Button>
                 )}
               </>
             )}
@@ -1126,8 +1127,8 @@ export default function ShiftPlannerPage() {
             {/* Unavailability requests toggle */}
             {/* Override requests toggle (admin/director only) */}
             {plan && canPublish && (
-              <button
-                className={styles.secondaryBtn}
+              <Button
+                variant="secondary"
                 onClick={() => setShowOverrideRequests((v) => !v)}
                 style={{ position: "relative" }}
               >
@@ -1153,13 +1154,13 @@ export default function ShiftPlannerPage() {
                     {planOverrideCount}
                   </span>
                 )}
-              </button>
+              </Button>
             )}
 
             {/* Admin/director: separate Žádosti o změny button with badge */}
             {plan && canPublish && (
-              <button
-                className={styles.secondaryBtn}
+              <Button
+                variant="secondary"
                 onClick={() => setShowChangeRequests((v) => !v)}
                 style={{ position: "relative" }}
               >
@@ -1185,29 +1186,29 @@ export default function ShiftPlannerPage() {
                     {planChangeRequestCount}
                   </span>
                 )}
-              </button>
+              </Button>
             )}
 
             {/* Employee/manager: combined Moje žádosti button */}
             {plan && !canPublish && (
-              <button
-                className={styles.secondaryBtn}
+              <Button
+                variant="secondary"
                 onClick={() => setShowMyRequests((v) => !v)}
               >
                 Moje žádosti
-              </button>
+              </Button>
             )}
 
             {/* Export (admin/director) */}
             {plan && canPublish && plan.employees.length > 0 && (
               <div className={styles.exportWrapper} ref={exportMenuRef}>
-                <button
-                  className={styles.secondaryBtn}
+                <Button
+                  variant="secondary"
                   onClick={() => setShowExportMenu((v) => !v)}
                   disabled={exporting}
                 >
                   {exporting ? "Exportuji\u2026" : "Exportovat \u25be"}
-                </button>
+                </Button>
                 {showExportMenu && (
                   <div className={styles.exportMenu}>
                     <button
@@ -1229,24 +1230,25 @@ export default function ShiftPlannerPage() {
 
             {/* Revert plan (admin only) */}
             {plan && role === "admin" && plan.status !== "created" && (
-              <button
-                className={styles.secondaryBtn}
+              <Button
+                variant="secondary"
                 onClick={confirmRevertPlan}
                 disabled={actionLoading}
               >
                 ← Vrátit zpět
-              </button>
+              </Button>
             )}
 
             {/* Delete plan (admin, any status) */}
             {plan && role === "admin" && (
-              <button
-                className={styles.dangerBtn}
+              <Button
+                variant="danger"
                 onClick={confirmDeletePlan}
                 disabled={actionLoading}
+                style={{ marginLeft: "auto" }}
               >
                 Smazat plán
-              </button>
+              </Button>
             )}
           </div>
 

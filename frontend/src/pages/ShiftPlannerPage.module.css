@@ -104,40 +104,6 @@
 
 /* ── Buttons ──────────────────────────────────────────────────────────── */
 
-.primaryBtn {
-  padding: 7px 14px;
-  background: var(--color-primary);
-  color: #fff;
-  border: none;
-  border-radius: 6px;
-  font-size: 0.875rem;
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.primaryBtn:hover:not(:disabled) {
-  background: var(--color-primary-dark);
-}
-
-.primaryBtn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.secondaryBtn {
-  padding: 7px 14px;
-  background: var(--color-surface);
-  color: var(--color-text-secondary);
-  border: 1px solid var(--color-border-strong);
-  border-radius: 6px;
-  font-size: 0.875rem;
-  cursor: pointer;
-}
-
-.secondaryBtn:hover {
-  background: var(--color-bg);
-}
-
 .exportWrapper {
   position: relative;
   display: inline-block;
@@ -182,20 +148,6 @@
   cursor: pointer;
 }
 
-.dangerBtn {
-  padding: 7px 14px;
-  background: var(--color-danger-bg);
-  color: var(--color-danger-text-strong);
-  border: 1px solid var(--color-danger-border);
-  border-radius: 6px;
-  font-size: 0.875rem;
-  cursor: pointer;
-  margin-left: auto;
-}
-
-.dangerBtn:hover:not(:disabled) {
-  filter: brightness(0.95);
-}
 
 .dangerBtn:disabled {
   opacity: 0.5;
