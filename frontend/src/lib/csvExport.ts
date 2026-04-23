@@ -30,6 +30,13 @@ export interface ExportColumn {
   sensitive?: boolean;
   /** Which tab/group the checkbox lives under in the modal. */
   group: ColumnGroup;
+  /**
+   * Force Excel to treat the cell as a literal string. Needed for ID-like fields
+   * (visa, passport, bank account, insurance, phone, birth number…) where Excel
+   * would otherwise strip leading zeros, drop leading "+", or mis-parse a "/" as
+   * a division. Emits `="value"` — Excel's only reliable text escape.
+   */
+  forceText?: boolean;
 }
 
 /**
@@ -42,12 +49,12 @@ export const EXPORT_COLUMNS: ExportColumn[] = [
   { key: "firstName",         label: "Jméno",              source: "root",       field: "firstName",         format: "text", group: "basic" },
   { key: "dateOfBirth",       label: "Datum narození",     source: "root",       field: "dateOfBirth",       format: "date", group: "basic" },
   { key: "gender",            label: "Pohlaví",            source: "root",       field: "gender",            format: "text", group: "basic" },
-  { key: "idCardNumber",      label: "Číslo OP",           source: "documents",  field: "idCardNumber",      format: "text", sensitive: true, group: "documents" },
-  { key: "passportNumber",    label: "Číslo pasu",         source: "documents",  field: "passportNumber",    format: "text", group: "documents" },
+  { key: "idCardNumber",      label: "Číslo OP",           source: "documents",  field: "idCardNumber",      format: "text", sensitive: true, forceText: true, group: "documents" },
+  { key: "passportNumber",    label: "Číslo pasu",         source: "documents",  field: "passportNumber",    format: "text", forceText: true, group: "documents" },
   { key: "passportIssueDate", label: "Vydání pasu",        source: "documents",  field: "passportIssueDate", format: "date", group: "documents" },
   { key: "passportExpiry",    label: "Platnost pasu",      source: "documents",  field: "passportExpiry",    format: "date", group: "documents" },
   { key: "passportAuthority", label: "Vydávající úřad",    source: "documents",  field: "passportAuthority", format: "text", group: "documents" },
-  { key: "visaNumber",        label: "Povolení k pobytu",  source: "documents",  field: "visaNumber",        format: "text", group: "documents" },
+  { key: "visaNumber",        label: "Povolení k pobytu",  source: "documents",  field: "visaNumber",        format: "text", forceText: true, group: "documents" },
   { key: "visaIssueDate",     label: "Vydání povolení",    source: "documents",  field: "visaIssueDate",     format: "date", group: "documents" },
   { key: "visaExpiry",        label: "Platnost povolení",  source: "documents",  field: "visaExpiry",        format: "date", group: "documents" },
   { key: "visaType",          label: "Typ povolení",       source: "documents",  field: "visaType",          format: "text", group: "documents" },
@@ -56,14 +63,14 @@ export const EXPORT_COLUMNS: ExportColumn[] = [
   { key: "birthSurname",      label: "Rodné příjmení",     source: "root",       field: "birthSurname",      format: "text", group: "basic" },
   { key: "nationality",       label: "Státní příslušnost", source: "root",       field: "nationality",       format: "text", group: "basic" },
   { key: "placeOfBirth",      label: "Místo narození",     source: "root",       field: "placeOfBirth",      format: "text", group: "basic" },
-  { key: "birthNumber",       label: "Rodné číslo",        source: "root",       field: "birthNumber",       format: "text", sensitive: true, group: "sensitive" },
+  { key: "birthNumber",       label: "Rodné číslo",        source: "root",       field: "birthNumber",       format: "text", sensitive: true, forceText: true, group: "sensitive" },
   { key: "maritalStatus",     label: "Rodinný stav",       source: "root",       field: "maritalStatus",     format: "text", group: "basic" },
   { key: "education",         label: "Vzdělání",           source: "root",       field: "education",         format: "text", group: "basic" },
-  { key: "phone",             label: "Telefon",            source: "contact",    field: "phone",             format: "text", group: "contact" },
+  { key: "phone",             label: "Telefon",            source: "contact",    field: "phone",             format: "text", forceText: true, group: "contact" },
   { key: "email",             label: "E-mail",             source: "contact",    field: "email",             format: "text", group: "contact" },
   { key: "insuranceCompany",  label: "Zdrav. pojišťovna",  source: "benefits",   field: "insuranceCompany",  format: "text", group: "benefits" },
-  { key: "insuranceNumber",   label: "Číslo pojištěnce",   source: "benefits",   field: "insuranceNumber",   format: "text", sensitive: true, group: "benefits" },
-  { key: "bankAccount",       label: "Číslo účtu",         source: "benefits",   field: "bankAccount",       format: "text", sensitive: true, group: "benefits" },
+  { key: "insuranceNumber",   label: "Číslo pojištěnce",   source: "benefits",   field: "insuranceNumber",   format: "text", sensitive: true, forceText: true, group: "benefits" },
+  { key: "bankAccount",       label: "Číslo účtu",         source: "benefits",   field: "bankAccount",       format: "text", sensitive: true, forceText: true, group: "benefits" },
   { key: "multisport",        label: "Multisport",         source: "benefits",   field: "multisport",        format: "ano", group: "benefits" },
   { key: "homeOffice",        label: "HO",                 source: "benefits",   field: "homeOffice",        format: "numberOrEmpty", group: "benefits" },
   { key: "allowances",        label: "Náhrady",            source: "benefits",   field: "allowances",        format: "ano", group: "benefits" },
@@ -171,10 +178,24 @@ export function getCellValue(row: ExportRow, column: ExportColumn): string {
   }
 }
 
+/**
+ * Format a single CSV cell, applying the column's forceText flag. Excel strips
+ * leading zeros and mangles values starting with "+" unless the cell is
+ * prefixed with `=` and wrapped in double quotes — i.e. written as `="value"`.
+ * That literal is then quoted per RFC 4180 so the inner quotes are doubled.
+ */
+function formatCsvCell(row: ExportRow, column: ExportColumn): string {
+  const value = getCellValue(row, column);
+  if (column.forceText && value !== "") {
+    return escapeCsvCell(`="${value.replace(/"/g, '""')}"`);
+  }
+  return escapeCsvCell(value);
+}
+
 export function toCsv(rows: ExportRow[], columns: ExportColumn[]): string {
   const header = columns.map((c) => escapeCsvCell(c.label)).join(";");
   const body = rows
-    .map((row) => columns.map((c) => escapeCsvCell(getCellValue(row, c))).join(";"))
+    .map((row) => columns.map((c) => formatCsvCell(row, c)).join(";"))
     .join("\r\n");
   return body.length > 0 ? `${header}\r\n${body}\r\n` : `${header}\r\n`;
 }
@@ -205,4 +226,17 @@ export function defaultExportFilename(today = new Date()): string {
   const mm = pad(today.getMonth() + 1);
   const dd = pad(today.getDate());
   return `zamestnanci_${yyyy}-${mm}-${dd}.csv`;
+}
+
+/**
+ * Normalize a user-provided filename:
+ *   - strip characters forbidden in Windows/macOS filenames (`\\ / : * ? " < > |`)
+ *   - trim
+ *   - ensure a ".csv" suffix (case-insensitive)
+ *   - fall back to the default if the user cleared the field entirely
+ */
+export function sanitizeFilename(input: string, fallback = defaultExportFilename()): string {
+  const stripped = input.replace(/[\\/:*?"<>|]/g, "").trim();
+  if (!stripped) return fallback;
+  return /\.csv$/i.test(stripped) ? stripped : `${stripped}.csv`;
 }

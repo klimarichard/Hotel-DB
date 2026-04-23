@@ -9,6 +9,7 @@ import {
   toCsv,
   downloadCsv,
   defaultExportFilename,
+  sanitizeFilename,
   type ExportColumn,
   type ExportRow,
   type ColumnGroup,
@@ -50,6 +51,7 @@ export default function ExportEmployeesModal({ onClose }: Props) {
     () => new Set(EXPORT_COLUMNS.filter((c) => !c.sensitive).map((c) => c.key))
   );
   const [includeSensitive, setIncludeSensitive] = useState(false);
+  const [filename, setFilename] = useState<string>(() => defaultExportFilename());
 
   // ─── UI state ─────────────────────────────────────────────────────────────
   const [exporting, setExporting] = useState(false);
@@ -183,7 +185,7 @@ export default function ExportEmployeesModal({ onClose }: Props) {
       }
 
       const csv = toCsv(filtered, exportableColumns);
-      downloadCsv(defaultExportFilename(), csv);
+      downloadCsv(sanitizeFilename(filename), csv);
       onClose();
     } catch (e) {
       if (e instanceof ApiError) setError(e.message || `Chyba ${e.status}`);
@@ -343,6 +345,23 @@ export default function ExportEmployeesModal({ onClose }: Props) {
                   </div>
                 );
               })}
+            </section>
+
+            {/* ── Název souboru ── */}
+            <section className={styles.section}>
+              <h3 className={styles.sectionHeading}>Název souboru</h3>
+              <input
+                className={styles.filenameInput}
+                type="text"
+                value={filename}
+                onChange={(e) => setFilename(e.target.value)}
+                onBlur={() => setFilename((f) => sanitizeFilename(f))}
+                placeholder={defaultExportFilename()}
+              />
+              <div className={styles.hint}>
+                Přípona <code>.csv</code> se doplní automaticky. Nepovolené znaky
+                (<code>\ / : * ? " &lt; &gt; |</code>) se odstraní.
+              </div>
             </section>
 
             {/* ── Citlivé údaje ── */}
