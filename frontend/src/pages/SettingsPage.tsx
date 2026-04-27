@@ -62,6 +62,13 @@ interface DepartmentRecord {
   displayOrder: number;
 }
 
+interface EducationLevelRecord {
+  id: string;
+  name: string;
+  code: string;
+  displayOrder: number;
+}
+
 interface JobPositionRecord {
   id: string;
   name: string;
@@ -127,7 +134,7 @@ export default function SettingsPage() {
   const [linkEmployeeId, setLinkEmployeeId] = useState<string>("");
   const [linkSaving, setLinkSaving] = useState(false);
 
-  const [settingsTab, setSettingsTab] = useState<"users" | "companies" | "departments" | "jobPositions" | "payroll">("users");
+  const [settingsTab, setSettingsTab] = useState<"users" | "companies" | "departments" | "jobPositions" | "education" | "payroll">("users");
 
   // Departments
   const [departments, setDepartments] = useState<DepartmentRecord[]>([]);
@@ -138,6 +145,18 @@ export default function SettingsPage() {
   const [depError, setDepError] = useState<string | null>(null);
   const [depDeleteId, setDepDeleteId] = useState<string | null>(null);
   const [depSort, setDepSort] = useState<{ col: "name"; dir: "asc" | "desc" }>({ col: "name", dir: "asc" });
+
+  // Education levels
+  const [educationLevels, setEducationLevels] = useState<EducationLevelRecord[]>([]);
+  const [eduEditId, setEduEditId] = useState<string | null>(null);
+  const [eduEditName, setEduEditName] = useState("");
+  const [eduEditCode, setEduEditCode] = useState("");
+  const [eduNewName, setEduNewName] = useState("");
+  const [eduNewCode, setEduNewCode] = useState("");
+  const [showEduCreate, setShowEduCreate] = useState(false);
+  const [eduError, setEduError] = useState<string | null>(null);
+  const [eduDeleteId, setEduDeleteId] = useState<string | null>(null);
+  const [eduSort, setEduSort] = useState<{ col: "name" | "code"; dir: "asc" | "desc" }>({ col: "name", dir: "asc" });
 
   // Job positions
   const [positions, setPositions] = useState<JobPositionRecord[]>([]);
@@ -216,7 +235,16 @@ export default function SettingsPage() {
     }
   }, []);
 
-  useEffect(() => { loadDepartments(); loadPositions(); }, [loadDepartments, loadPositions]);
+  const loadEducationLevels = useCallback(async () => {
+    try {
+      const list = await api.get<EducationLevelRecord[]>("/educationLevels");
+      setEducationLevels(list);
+    } catch {
+      setEducationLevels([]);
+    }
+  }, []);
+
+  useEffect(() => { loadDepartments(); loadPositions(); loadEducationLevels(); }, [loadDepartments, loadPositions, loadEducationLevels]);
 
   useEffect(() => {
     api.get<{ foodVoucherRate: number }>("/payroll/settings")
@@ -265,6 +293,51 @@ export default function SettingsPage() {
       await loadDepartments();
     } catch (e: unknown) {
       setDepError((e as Error).message ?? "Nelze smazat oddělení.");
+    }
+  }
+
+  async function handleCreateEducation() {
+    const name = eduNewName.trim();
+    const code = eduNewCode.trim();
+    if (!name || !code) return;
+    setEduError(null);
+    try {
+      await api.post("/educationLevels", { name, code, displayOrder: educationLevels.length });
+      setEduNewName("");
+      setEduNewCode("");
+      setShowEduCreate(false);
+      await loadEducationLevels();
+    } catch (e: unknown) {
+      setEduError((e as Error).message ?? "Chyba při vytváření.");
+    }
+  }
+
+  async function handleSaveEducation(id: string) {
+    const name = eduEditName.trim();
+    const code = eduEditCode.trim();
+    if (!name || !code) return;
+    setEduError(null);
+    try {
+      await api.patch(`/educationLevels/${id}`, { name, code });
+      setEduEditId(null);
+      setEduEditName("");
+      setEduEditCode("");
+      await loadEducationLevels();
+    } catch (e: unknown) {
+      setEduError((e as Error).message ?? "Chyba při ukládání.");
+    }
+  }
+
+  async function confirmDeleteEducation() {
+    if (!eduDeleteId) return;
+    const id = eduDeleteId;
+    setEduDeleteId(null);
+    setEduError(null);
+    try {
+      await api.delete(`/educationLevels/${id}`);
+      await loadEducationLevels();
+    } catch (e: unknown) {
+      setEduError((e as Error).message ?? "Nelze smazat.");
     }
   }
 
@@ -364,6 +437,10 @@ export default function SettingsPage() {
     setDepSort((s) => ({ col, dir: s.col === col && s.dir === "asc" ? "desc" : "asc" }));
   }
 
+  function toggleEduSort(col: "name" | "code") {
+    setEduSort((s) => ({ col, dir: s.col === col && s.dir === "asc" ? "desc" : "asc" }));
+  }
+
   function togglePosSort(col: "name" | "department") {
     setPosSort((s) => ({ col, dir: s.col === col && s.dir === "asc" ? "desc" : "asc" }));
   }
@@ -371,6 +448,13 @@ export default function SettingsPage() {
   const sortedDepartments = [...departments].sort((a, b) => {
     const cmp = a.name.localeCompare(b.name, "cs");
     return depSort.dir === "asc" ? cmp : -cmp;
+  });
+
+  const sortedEducationLevels = [...educationLevels].sort((a, b) => {
+    const av = eduSort.col === "code" ? a.code : a.name;
+    const bv = eduSort.col === "code" ? b.code : b.name;
+    const cmp = (av ?? "").localeCompare(bv ?? "", "cs");
+    return eduSort.dir === "asc" ? cmp : -cmp;
   });
 
   const sortedPositions = [...positions].sort((a, b) => {
@@ -505,6 +589,11 @@ export default function SettingsPage() {
             + Přidat oddělení
           </Button>
         )}
+        {settingsTab === "education" && (
+          <Button variant="primary" onClick={() => { setEduNewName(""); setEduError(null); setShowEduCreate(true); }}>
+            + Přidat vzdělání
+          </Button>
+        )}
       </div>
 
       <div className={styles.tabs}>
@@ -512,6 +601,7 @@ export default function SettingsPage() {
         <button className={settingsTab === "companies" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("companies")}>Společnosti</button>
         <button className={settingsTab === "departments" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("departments")}>Oddělení</button>
         <button className={settingsTab === "jobPositions" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("jobPositions")}>Pracovní pozice</button>
+        <button className={settingsTab === "education" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("education")}>Vzdělání</button>
         <button className={settingsTab === "payroll" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("payroll")}>Mzdy</button>
       </div>
 
@@ -1037,6 +1127,106 @@ export default function SettingsPage() {
         </>
       )}
 
+      {settingsTab === "education" && (
+        <>
+          {eduError && <p className={styles.errorState}>{eduError}</p>}
+          <table className={styles.table}>
+            <thead>
+              <tr>
+                <th className={styles.sortableHeader} onClick={() => toggleEduSort("name")}>
+                  Název {eduSort.col === "name" ? (eduSort.dir === "asc" ? "▲" : "▼") : "⇅"}
+                </th>
+                <th className={styles.sortableHeader} onClick={() => toggleEduSort("code")}>
+                  Kód {eduSort.col === "code" ? (eduSort.dir === "asc" ? "▲" : "▼") : "⇅"}
+                </th>
+                <th>Akce</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sortedEducationLevels.length === 0 && (
+                <tr><td colSpan={3} className={styles.empty}>Žádná vzdělání</td></tr>
+              )}
+              {sortedEducationLevels.map((e) => (
+                <tr key={e.id}>
+                  <td>
+                    {eduEditId === e.id ? (
+                      <input
+                        className={styles.input}
+                        value={eduEditName}
+                        onChange={(ev) => setEduEditName(ev.target.value)}
+                      />
+                    ) : (
+                      e.name
+                    )}
+                  </td>
+                  <td>
+                    {eduEditId === e.id ? (
+                      <input
+                        className={styles.input}
+                        value={eduEditCode}
+                        onChange={(ev) => setEduEditCode(ev.target.value)}
+                        style={{ maxWidth: 80 }}
+                      />
+                    ) : (
+                      e.code ?? ""
+                    )}
+                  </td>
+                  <td>
+                    <div className={styles.rowActions}>
+                      {eduEditId === e.id ? (
+                        <>
+                          <Button variant="primary" size="sm" onClick={() => handleSaveEducation(e.id)}>Uložit</Button>
+                          <Button variant="secondary" size="sm" onClick={() => { setEduEditId(null); setEduEditName(""); setEduEditCode(""); }}>Zrušit</Button>
+                        </>
+                      ) : (
+                        <>
+                          <button className={styles.linkBtn} onClick={() => { setEduEditId(e.id); setEduEditName(e.name); setEduEditCode(e.code ?? ""); }}>Upravit</button>
+                          <button className={styles.deactivateBtn} onClick={() => setEduDeleteId(e.id)}>Smazat</button>
+                        </>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {showEduCreate && (
+            <div className={styles.modal}>
+              <div className={styles.modalBox}>
+                <h2 className={styles.modalTitle}>Nové vzdělání</h2>
+                <div className={styles.field}>
+                  <label className={styles.label}>Kód</label>
+                  <input
+                    className={styles.input}
+                    value={eduNewCode}
+                    onChange={(e) => setEduNewCode(e.target.value)}
+                    autoFocus
+                  />
+                </div>
+                <div className={styles.field}>
+                  <label className={styles.label}>Název</label>
+                  <input
+                    className={styles.input}
+                    value={eduNewName}
+                    onChange={(e) => setEduNewName(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") handleCreateEducation(); }}
+                  />
+                </div>
+                {eduError && <p className={styles.formError}>{eduError}</p>}
+                <div className={styles.formActions}>
+                  <Button variant="secondary" onClick={() => { setShowEduCreate(false); setEduNewName(""); setEduNewCode(""); }}>
+                    Zrušit
+                  </Button>
+                  <Button variant="primary" onClick={handleCreateEducation} disabled={!eduNewName.trim() || !eduNewCode.trim()}>
+                    Uložit
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
       {settingsTab === "payroll" && (
         <div style={{ maxWidth: 480 }}>
           <h2 style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--color-text-heading)", marginBottom: "1rem" }}>
@@ -1120,6 +1310,17 @@ export default function SettingsPage() {
           danger
           onConfirm={confirmDeletePosition}
           onCancel={() => setPosDeleteId(null)}
+        />
+      )}
+
+      {eduDeleteId && (
+        <ConfirmModal
+          title="Smazat vzdělání"
+          message="Opravdu smazat tuto úroveň vzdělání? Tato akce je nevratná."
+          confirmLabel="Smazat"
+          danger
+          onConfirm={confirmDeleteEducation}
+          onCancel={() => setEduDeleteId(null)}
         />
       )}
     </div>

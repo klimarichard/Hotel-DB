@@ -7,23 +7,6 @@ import styles from "./EmployeeFormPage.module.css";
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const MARITAL_STATUSES = ["svobodný/á", "ženatý/vdaná", "rozvedený/á", "vdovec/vdova"];
-const EDUCATIONS = [
-  "A - bez vzdělání",
-  "B - neúplné základní vzdělání",
-  "C - základní vzdělání",
-  "D - nižší střední vzdělání",
-  "E - nižší střední odborné vzdělání",
-  "H - střední odborné vzdělání s výučním listem",
-  "J - střední nebo střední odborné vzdělání bez maturity i výučního listu",
-  "K - úplné střední všeobecné vzdělání",
-  "L - úplné střední odborné vzdělání s vyučením i maturitou",
-  "M - úplně střední odborné vzdělání s maturitou (bez vyučení)",
-  "N - vyšší odborné vzdělání",
-  "P - vyšší odborné vzdělání v konzervatoři",
-  "R - vysokoškolské bakalářské vzdělání",
-  "T - vysokoškolské magisterské vzdělání",
-  "V - vysokoškolské doktorské vzdělání",
-];
 
 // ─── State shapes ────────────────────────────────────────────────────────────
 
@@ -159,6 +142,16 @@ export default function EmployeeFormPage() {
   const [contact, setContact] = useState<ContactForm>(emptyContact);
   const [documents, setDocuments] = useState<DocumentsForm>(emptyDocuments);
   const [additional, setAdditional] = useState<AdditionalForm>(emptyAdditional);
+
+  const [educationOptions, setEducationOptions] = useState<string[]>([]);
+
+  useEffect(() => {
+    api.get<Array<{ id: string; name: string; code: string }>>("/educationLevels")
+      .then((list) => setEducationOptions(
+        list.map((l) => (l.code ? `${l.code} - ${l.name}` : l.name))
+      ))
+      .catch(() => setEducationOptions([]));
+  }, []);
 
   // Tracks which sensitive fields the user has explicitly marked for deletion
   const [cleared, setCleared] = useState<Set<string>>(new Set());
@@ -341,7 +334,10 @@ export default function EmployeeFormPage() {
             <Field label="Vzdělání">
               <select className={styles.input} value={personal.education} onChange={(e) => setP("education", e.target.value)}>
                 <option value="">— vyberte —</option>
-                {EDUCATIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+                {educationOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+                {personal.education && !educationOptions.includes(personal.education) && (
+                  <option value={personal.education}>{personal.education}</option>
+                )}
               </select>
             </Field>
             <Field label="Státní příslušnost">
