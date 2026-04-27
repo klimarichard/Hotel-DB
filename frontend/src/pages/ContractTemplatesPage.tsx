@@ -456,6 +456,43 @@ export default function ContractTemplatesPage() {
     return () => { editor.off("transaction", handler); };
   }, [editor]);
 
+  /**
+   * Visually push every page-break node down to the start of the next A4
+   * page (with a 15 mm top margin on the new page). The .a4Page CSS uses a
+   * 309 mm cycle (297 mm paper + 12 mm gap), so a page break inserted at
+   * offset Y is stretched to height ((floor(Y/309)+1)*309 + 15) - Y mm.
+   * Heights are reset to 0 first so re-measurement on subsequent
+   * transactions accounts for cumulative effect of breaks above.
+   */
+  useEffect(() => {
+    if (!editor) return;
+    const PAGE_CYCLE_MM = 309;
+    const TOP_MARGIN_MM = 15;
+    const measure = () => {
+      const a4 = document.querySelector(`.${styles.a4Page}`) as HTMLElement | null;
+      if (!a4) return;
+      const a4Rect = a4.getBoundingClientRect();
+      const pxPerMm = a4Rect.width / 210;
+      const breaks = Array.from(
+        a4.querySelectorAll<HTMLElement>('[data-page-break="true"]')
+      );
+      breaks.forEach((br) => { br.style.height = "0px"; });
+      // Re-measure in DOM order so each break sees the cumulative shift
+      // from breaks above it.
+      breaks.forEach((br) => {
+        const offsetTop = br.getBoundingClientRect().top - a4.getBoundingClientRect().top;
+        const offsetMm = offsetTop / pxPerMm;
+        const targetMm = (Math.floor(offsetMm / PAGE_CYCLE_MM) + 1) * PAGE_CYCLE_MM + TOP_MARGIN_MM;
+        const heightMm = Math.max(0, targetMm - offsetMm);
+        br.style.height = `${heightMm * pxPerMm}px`;
+      });
+    };
+    const handler = () => requestAnimationFrame(measure);
+    editor.on("transaction", handler);
+    handler();
+    return () => { editor.off("transaction", handler); };
+  }, [editor]);
+
   // Load the selected template's content into the editor.
   // Depending on `selectedTemplateId` (not the whole templates map) ensures
   // the effect re-fires once fetchTemplates() resolves and the id materializes,
