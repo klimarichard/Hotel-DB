@@ -236,6 +236,9 @@ The route guard is the source of truth — the menu is just for discoverability.
 ### A4 page preview
 The editor renders inside a `.a4Page` div (210 mm wide, padding 1.5 cm top/bottom, 1 cm left/right) centered on a gray "desk" background. A `repeating-linear-gradient` makes the bottom 1.5 cm of every 297 mm repeat match the desk color — creating the visual of separate pages with a gray gap between them, without JavaScript pagination. Limitation: text that falls in the bottom-margin zone renders on the gray band.
 
+### First-load preview fix
+The "load template into editor" effect depends on `templates[selected]?.id` (computed as `selectedTemplateId`), not on `selected` alone. Initial mount has `templates = {}` while `fetchTemplates()` is still in flight, so `selectedTemplateId` starts undefined; the effect renders an empty `<p></p>` and re-fires once the id materializes. Saving doesn't bounce the editor because the id stays the same after `fetchTemplates()` re-populates the map.
+
 ### Template variables — new additions
 - `{{birthDate}}`: formatted date of birth (`formatDateCZ(employee.dateOfBirth)`).
 - `{{passportNumber}}`, `{{visaNumber}}`: from `documents` sub-collection.
