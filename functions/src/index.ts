@@ -27,7 +27,7 @@ admin.initializeApp();
 const app = express();
 
 app.use(cors({ origin: true }));
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
 
 // Routes
 app.use("/auth", authRouter);
