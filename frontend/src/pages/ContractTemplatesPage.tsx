@@ -200,26 +200,29 @@ export default function ContractTemplatesPage() {
     fetchTemplates();
   }, [fetchTemplates]);
 
-  // Load the selected template's content into the editor
+  // Load the selected template's content into the editor.
+  // Depending on `selectedTemplateId` (not the whole templates map) ensures
+  // the effect re-fires once fetchTemplates() resolves and the id materializes,
+  // while staying stable across saves that re-fetch the list under the same id.
+  const selectedTemplateId = templates[selected]?.id;
   useEffect(() => {
     if (!editor || !user) return;
 
-    const existing = templates[selected];
-    if (!existing) {
+    if (!selectedTemplateId) {
       editor.commands.setContent("<p></p>");
       return;
     }
 
     (async () => {
       const token = await user.getIdToken();
-      const resp = await fetch(`/api/contractTemplates/${existing.id}`, {
+      const resp = await fetch(`/api/contractTemplates/${selectedTemplateId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!resp.ok) return;
       const doc: TemplateDoc = await resp.json();
       editor.commands.setContent(doc.htmlContent || "<p></p>");
     })();
-  }, [selected, editor, user]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedTemplateId, editor, user]);
 
   function insertVariable(key: string) {
     if (!editor) return;
