@@ -146,8 +146,10 @@ export default function EmployeeFormPage() {
   const [educationOptions, setEducationOptions] = useState<string[]>([]);
 
   useEffect(() => {
-    api.get<Array<{ id: string; name: string }>>("/educationLevels")
-      .then((list) => setEducationOptions(list.map((l) => l.name)))
+    api.get<Array<{ id: string; name: string; code: string }>>("/educationLevels")
+      .then((list) => setEducationOptions(
+        list.map((l) => (l.code ? `${l.code} - ${l.name}` : l.name))
+      ))
       .catch(() => setEducationOptions([]));
   }, []);
 

@@ -65,6 +65,7 @@ interface DepartmentRecord {
 interface EducationLevelRecord {
   id: string;
   name: string;
+  code: string;
   displayOrder: number;
 }
 
@@ -149,11 +150,13 @@ export default function SettingsPage() {
   const [educationLevels, setEducationLevels] = useState<EducationLevelRecord[]>([]);
   const [eduEditId, setEduEditId] = useState<string | null>(null);
   const [eduEditName, setEduEditName] = useState("");
+  const [eduEditCode, setEduEditCode] = useState("");
   const [eduNewName, setEduNewName] = useState("");
+  const [eduNewCode, setEduNewCode] = useState("");
   const [showEduCreate, setShowEduCreate] = useState(false);
   const [eduError, setEduError] = useState<string | null>(null);
   const [eduDeleteId, setEduDeleteId] = useState<string | null>(null);
-  const [eduSort, setEduSort] = useState<{ col: "name"; dir: "asc" | "desc" }>({ col: "name", dir: "asc" });
+  const [eduSort, setEduSort] = useState<{ col: "name" | "code"; dir: "asc" | "desc" }>({ col: "name", dir: "asc" });
 
   // Job positions
   const [positions, setPositions] = useState<JobPositionRecord[]>([]);
@@ -295,11 +298,13 @@ export default function SettingsPage() {
 
   async function handleCreateEducation() {
     const name = eduNewName.trim();
-    if (!name) return;
+    const code = eduNewCode.trim();
+    if (!name || !code) return;
     setEduError(null);
     try {
-      await api.post("/educationLevels", { name, displayOrder: educationLevels.length });
+      await api.post("/educationLevels", { name, code, displayOrder: educationLevels.length });
       setEduNewName("");
+      setEduNewCode("");
       setShowEduCreate(false);
       await loadEducationLevels();
     } catch (e: unknown) {
@@ -309,12 +314,14 @@ export default function SettingsPage() {
 
   async function handleSaveEducation(id: string) {
     const name = eduEditName.trim();
-    if (!name) return;
+    const code = eduEditCode.trim();
+    if (!name || !code) return;
     setEduError(null);
     try {
-      await api.patch(`/educationLevels/${id}`, { name });
+      await api.patch(`/educationLevels/${id}`, { name, code });
       setEduEditId(null);
       setEduEditName("");
+      setEduEditCode("");
       await loadEducationLevels();
     } catch (e: unknown) {
       setEduError((e as Error).message ?? "Chyba při ukládání.");
@@ -430,7 +437,7 @@ export default function SettingsPage() {
     setDepSort((s) => ({ col, dir: s.col === col && s.dir === "asc" ? "desc" : "asc" }));
   }
 
-  function toggleEduSort(col: "name") {
+  function toggleEduSort(col: "name" | "code") {
     setEduSort((s) => ({ col, dir: s.col === col && s.dir === "asc" ? "desc" : "asc" }));
   }
 
@@ -444,7 +451,9 @@ export default function SettingsPage() {
   });
 
   const sortedEducationLevels = [...educationLevels].sort((a, b) => {
-    const cmp = a.name.localeCompare(b.name, "cs");
+    const av = eduSort.col === "code" ? a.code : a.name;
+    const bv = eduSort.col === "code" ? b.code : b.name;
+    const cmp = (av ?? "").localeCompare(bv ?? "", "cs");
     return eduSort.dir === "asc" ? cmp : -cmp;
   });
 
@@ -1127,12 +1136,15 @@ export default function SettingsPage() {
                 <th className={styles.sortableHeader} onClick={() => toggleEduSort("name")}>
                   Název {eduSort.col === "name" ? (eduSort.dir === "asc" ? "▲" : "▼") : "⇅"}
                 </th>
+                <th className={styles.sortableHeader} onClick={() => toggleEduSort("code")}>
+                  Kód {eduSort.col === "code" ? (eduSort.dir === "asc" ? "▲" : "▼") : "⇅"}
+                </th>
                 <th>Akce</th>
               </tr>
             </thead>
             <tbody>
               {sortedEducationLevels.length === 0 && (
-                <tr><td colSpan={2} className={styles.empty}>Žádná vzdělání</td></tr>
+                <tr><td colSpan={3} className={styles.empty}>Žádná vzdělání</td></tr>
               )}
               {sortedEducationLevels.map((e) => (
                 <tr key={e.id}>
@@ -1148,15 +1160,27 @@ export default function SettingsPage() {
                     )}
                   </td>
                   <td>
+                    {eduEditId === e.id ? (
+                      <input
+                        className={styles.input}
+                        value={eduEditCode}
+                        onChange={(ev) => setEduEditCode(ev.target.value)}
+                        style={{ maxWidth: 80 }}
+                      />
+                    ) : (
+                      e.code ?? ""
+                    )}
+                  </td>
+                  <td>
                     <div className={styles.rowActions}>
                       {eduEditId === e.id ? (
                         <>
                           <Button variant="primary" size="sm" onClick={() => handleSaveEducation(e.id)}>Uložit</Button>
-                          <Button variant="secondary" size="sm" onClick={() => { setEduEditId(null); setEduEditName(""); }}>Zrušit</Button>
+                          <Button variant="secondary" size="sm" onClick={() => { setEduEditId(null); setEduEditName(""); setEduEditCode(""); }}>Zrušit</Button>
                         </>
                       ) : (
                         <>
-                          <button className={styles.linkBtn} onClick={() => { setEduEditId(e.id); setEduEditName(e.name); }}>Upravit</button>
+                          <button className={styles.linkBtn} onClick={() => { setEduEditId(e.id); setEduEditName(e.name); setEduEditCode(e.code ?? ""); }}>Upravit</button>
                           <button className={styles.deactivateBtn} onClick={() => setEduDeleteId(e.id)}>Smazat</button>
                         </>
                       )}
@@ -1171,21 +1195,29 @@ export default function SettingsPage() {
               <div className={styles.modalBox}>
                 <h2 className={styles.modalTitle}>Nové vzdělání</h2>
                 <div className={styles.field}>
+                  <label className={styles.label}>Kód</label>
+                  <input
+                    className={styles.input}
+                    value={eduNewCode}
+                    onChange={(e) => setEduNewCode(e.target.value)}
+                    autoFocus
+                  />
+                </div>
+                <div className={styles.field}>
                   <label className={styles.label}>Název</label>
                   <input
                     className={styles.input}
                     value={eduNewName}
                     onChange={(e) => setEduNewName(e.target.value)}
-                    autoFocus
                     onKeyDown={(e) => { if (e.key === "Enter") handleCreateEducation(); }}
                   />
                 </div>
                 {eduError && <p className={styles.formError}>{eduError}</p>}
                 <div className={styles.formActions}>
-                  <Button variant="secondary" onClick={() => { setShowEduCreate(false); setEduNewName(""); }}>
+                  <Button variant="secondary" onClick={() => { setShowEduCreate(false); setEduNewName(""); setEduNewCode(""); }}>
                     Zrušit
                   </Button>
-                  <Button variant="primary" onClick={handleCreateEducation} disabled={!eduNewName.trim()}>
+                  <Button variant="primary" onClick={handleCreateEducation} disabled={!eduNewName.trim() || !eduNewCode.trim()}>
                     Uložit
                   </Button>
                 </div>
