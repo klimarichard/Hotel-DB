@@ -404,15 +404,24 @@
 
 .a4Page :global(table td),
 .a4Page :global(table th) {
-  border: 1px solid #888;
+  border: 1px solid #000;
   padding: 4px 8px;
   vertical-align: top;
   min-width: 40px;
 }
 
 .a4Page :global(table th) {
-  background: #f0f0f0;
   font-weight: 600;
+}
+
+/* Borderless tables. The class lands either on <table> directly (saved
+ * HTML / PDF, via renderHTML) OR on the .tableWrapper div that TipTap's
+ * column-resize NodeView wraps around the table in the live editor (via
+ * the ProseMirror Decoration). A descendant selector matches both. */
+.a4Page :global(.hpm-borderless td),
+.a4Page :global(.hpm-borderless th) {
+  border: 1px dashed #b8becc !important;
+  background: transparent !important;
 }
 
 /* Selected cell highlight (TipTap convention) */
@@ -427,4 +436,11 @@
 .a4Page :global(table) :global(td),
 .a4Page :global(table) :global(th) {
   position: relative;
+}
+
+/* Make ::marker font-size match the LI's font-size (set by the FontSize
+ * dropdown when the cursor is inside a list — see ListItemStyle extension). */
+.a4Page :global(li::marker) {
+  font-size: inherit;
+  font-family: inherit;
 }

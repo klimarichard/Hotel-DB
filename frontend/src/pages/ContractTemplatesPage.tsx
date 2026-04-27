@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useReducer } from "react";
 import Button from "@/components/Button";
 import { useEditor, EditorContent } from "@tiptap/react";
 import { Extension, Node, mergeAttributes } from "@tiptap/core";
@@ -10,10 +10,60 @@ import FontFamily from "@tiptap/extension-font-family";
 import TextAlign from "@tiptap/extension-text-align";
 import Color from "@tiptap/extension-color";
 import Image from "@tiptap/extension-image";
-import { Table } from "@tiptap/extension-table";
+import { Table as TableBase } from "@tiptap/extension-table";
 import { TableRow } from "@tiptap/extension-table-row";
 import { TableHeader } from "@tiptap/extension-table-header";
 import { TableCell } from "@tiptap/extension-table-cell";
+
+/**
+ * Table extended with a `borderless` attribute. The base @tiptap/extension-table
+ * registers a NodeView for column resizing that owns the live <table> DOM
+ * element, so neither addAttributes' renderHTML nor an extension-level
+ * renderHTML override can write a class onto it. Instead, we apply the
+ * `hpm-borderless` class via a ProseMirror Decoration that runs on every
+ * state update — the decoration writes class on top of whatever NodeView
+ * rendered the table, which is exactly what we want.
+ *
+ * parseHTML on the attribute keeps save/reload round-trips working: when
+ * the editor loads HTML containing <table class="hpm-borderless">, the
+ * attribute is restored to true.
+ */
+const Table = TableBase.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      borderless: {
+        default: false,
+        parseHTML: (el) => el.classList.contains("hpm-borderless"),
+        renderHTML: (attrs) =>
+          attrs.borderless ? { class: "hpm-borderless" } : {},
+      },
+    };
+  },
+  addProseMirrorPlugins() {
+    const parent = this.parent?.() ?? [];
+    return [
+      ...parent,
+      new Plugin({
+        key: new PluginKey("table-borderless-class"),
+        props: {
+          decorations(state) {
+            const decos: Decoration[] = [];
+            state.doc.descendants((node, pos) => {
+              if (node.type.name === "table" && node.attrs.borderless) {
+                decos.push(
+                  Decoration.node(pos, pos + node.nodeSize, { class: "hpm-borderless" })
+                );
+              }
+              return undefined;
+            });
+            return DecorationSet.create(state.doc, decos);
+          },
+        },
+      }),
+    ];
+  },
+});
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 
@@ -225,6 +275,30 @@ const SearchHighlight = Extension.create({
   },
 });
 
+/**
+ * Adds a `style` attribute to `listItem` so we can persist `font-size`
+ * directly on the <li>. The browser renders `::marker` (the "1." / "•")
+ * using the LI's font-size, not the inline marks inside the paragraph,
+ * so without this the marker stays at the editor default no matter how
+ * the user formats the item's text. The FontSize dropdown handler updates
+ * this attribute alongside the textStyle mark when the cursor is in a list.
+ */
+const ListItemStyle = Extension.create({
+  name: "listItemStyle",
+  addGlobalAttributes() {
+    return [{
+      types: ["listItem"],
+      attributes: {
+        style: {
+          default: null,
+          parseHTML: (el) => el.getAttribute("style") || null,
+          renderHTML: (attrs) => (attrs.style ? { style: attrs.style } : {}),
+        },
+      },
+    }];
+  },
+});
+
 /** Custom FontSize extension — adds fontSize attribute to TextStyle marks. */
 const FontSize = Extension.create({
   name: "fontSize",
@@ -303,6 +377,10 @@ export default function ContractTemplatesPage() {
   const [findQuery, setFindQuery] = useState("");
   const [replaceQuery, setReplaceQuery] = useState("");
   const findInputRef = useRef<HTMLInputElement>(null);
+  // Force a rerender on every editor transaction so isActive(...) checks
+  // (active toolbar buttons, in-table contextual buttons, etc.) reflect
+  // selection changes. TipTap React v3 doesn't subscribe to these by default.
+  const [, forceRerender] = useReducer((x: number) => x + 1, 0);
 
   const editor = useEditor({
     extensions: [
@@ -314,6 +392,7 @@ export default function ContractTemplatesPage() {
       FontFamily,
       FontSize,
       LineHeight,
+      ListItemStyle,
       Color,
       TextAlign.configure({ types: ["heading", "paragraph"] }),
       Image.configure({ inline: false, allowBase64: true }),
@@ -369,6 +448,13 @@ export default function ContractTemplatesPage() {
   useEffect(() => {
     fetchTemplates();
   }, [fetchTemplates]);
+
+  useEffect(() => {
+    if (!editor) return;
+    const handler = () => forceRerender();
+    editor.on("transaction", handler);
+    return () => { editor.off("transaction", handler); };
+  }, [editor]);
 
   // Load the selected template's content into the editor.
   // Depending on `selectedTemplateId` (not the whole templates map) ensures
@@ -614,6 +700,30 @@ export default function ContractTemplatesPage() {
                 } else {
                   (editor?.chain().focus() as unknown as Record<string, () => { run(): void }>).unsetFontSize().run();
                 }
+                // Propagate font-size onto the parent <li> directly so the
+                // browser's ::marker (the "1." / "•") inherits it. Chain-based
+                // updateAttributes was unreliable here — use setNodeMarkup on
+                // the listItem ancestor instead.
+                if (editor) {
+                  const { state, view } = editor;
+                  const { $from } = state.selection;
+                  let liDepth = -1;
+                  for (let d = $from.depth; d > 0; d--) {
+                    if ($from.node(d).type.name === "listItem") { liDepth = d; break; }
+                  }
+                  if (liDepth >= 0) {
+                    const liNode = $from.node(liDepth);
+                    const liPos = $from.before(liDepth);
+                    const curStyle: string = liNode.attrs.style ?? "";
+                    const stripped = curStyle.replace(/font-size:[^;]*;?\s*/gi, "").trim();
+                    const newStyle = size
+                      ? (stripped ? `font-size: ${size}; ${stripped}` : `font-size: ${size}`)
+                      : (stripped || null);
+                    view.dispatch(
+                      state.tr.setNodeMarkup(liPos, undefined, { ...liNode.attrs, style: newStyle })
+                    );
+                  }
+                }
               }}
               title="Velikost písma"
             >
@@ -774,6 +884,27 @@ export default function ContractTemplatesPage() {
                 <button className={styles.toolBtn} onMouseDown={(e) => { e.preventDefault(); editor?.chain().focus().deleteRow().run(); }} title="Smazat řádek">−R</button>
                 <button className={styles.toolBtn} onMouseDown={(e) => { e.preventDefault(); editor?.chain().focus().deleteColumn().run(); }} title="Smazat sloupec">−C</button>
                 <button className={styles.toolBtn} onMouseDown={(e) => { e.preventDefault(); editor?.chain().focus().deleteTable().run(); }} title="Smazat tabulku">×T</button>
+                <button
+                  className={`${styles.toolBtn} ${editor?.getAttributes("table").borderless ? styles.toolBtnActive : ""}`}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    if (!editor) return;
+                    const { state, view } = editor;
+                    const { $from } = state.selection;
+                    let tableDepth = -1;
+                    for (let d = $from.depth; d > 0; d--) {
+                      if ($from.node(d).type.name === "table") { tableDepth = d; break; }
+                    }
+                    if (tableDepth < 0) return;
+                    const tableNode = $from.node(tableDepth);
+                    const tablePos = $from.before(tableDepth);
+                    const cur = !!tableNode.attrs.borderless;
+                    view.dispatch(
+                      state.tr.setNodeMarkup(tablePos, undefined, { ...tableNode.attrs, borderless: !cur })
+                    );
+                  }}
+                  title="Skrýt / zobrazit okraje tabulky"
+                >▦</button>
               </>
             )}
 
