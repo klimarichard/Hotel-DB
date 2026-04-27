@@ -12,7 +12,7 @@ import {
   fillTemplate,
   getMissingVariables,
 } from "@/lib/contractVariables";
-import { generatePdf, useContractGeneration } from "@/hooks/useContractGeneration";
+import { generatePdf, generateDocx, useContractGeneration } from "@/hooks/useContractGeneration";
 import { useAuth } from "@/hooks/useAuth";
 import styles from "./GenerateContractModal.module.css";
 
@@ -42,6 +42,8 @@ export default function GenerateContractModal({
   const [step, setStep] = useState<Step>("confirm");
   const [errorMsg, setErrorMsg] = useState("");
   const [template, setTemplate] = useState<string | null>(null);
+  const [templateFormat, setTemplateFormat] = useState<"html" | "docx">("html");
+  const [docxVariables, setDocxVariables] = useState<string[]>([]);
   const [loadingTemplate, setLoadingTemplate] = useState(true);
 
   const signatory: SignatoryData = {
@@ -50,7 +52,9 @@ export default function GenerateContractModal({
   };
 
   const vars = resolveVariables(employeeData, companyData, signatory);
-  const missing = template ? getMissingVariables(template, vars) : [];
+  const missing = templateFormat === "html"
+    ? (template ? getMissingVariables(template, vars) : [])
+    : docxVariables.filter((k) => !vars[k]);
 
   useEffect(() => {
     if (!user) return;
@@ -62,7 +66,15 @@ export default function GenerateContractModal({
         });
         if (resp.ok) {
           const doc = await resp.json();
-          setTemplate(doc.htmlContent ?? "");
+          const fmt: "html" | "docx" = doc.templateFormat === "docx" ? "docx" : "html";
+          setTemplateFormat(fmt);
+          if (fmt === "docx") {
+            setDocxVariables(Array.isArray(doc.variables) ? doc.variables : []);
+            // template stays null — we fetch the bytes lazily at generate time
+            setTemplate("__docx__");
+          } else {
+            setTemplate(doc.htmlContent ?? "");
+          }
         } else {
           setTemplate("");
         }
@@ -79,6 +91,33 @@ export default function GenerateContractModal({
     setStep("generating");
 
     try {
+      if (templateFormat === "docx") {
+        if (!user) throw new Error("Not authenticated");
+        const token = await user.getIdToken();
+        const resp = await fetch(`/api/contractTemplates/${contractType}/docx`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!resp.ok) throw new Error("Šablonu .docx se nepodařilo načíst");
+        const bytes = await resp.arrayBuffer();
+        const blob = generateDocx(bytes, vars);
+
+        // Prototype: download directly, skip Storage upload + Firestore record.
+        const filenameBase = `${employeeData.lastName ?? "smlouva"}_${contractType}_${vars.today.replace(/\.\s*/g, "-").replace(/-$/, "")}`;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${filenameBase}.docx`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        setStep("done");
+        // No contract record created in DOCX prototype mode — pass empty id.
+        onGenerated("");
+        return;
+      }
+
       const filled = fillTemplate(template, vars);
       const blob = await generatePdf(filled);
       const id = await uploadContract(employeeId, blob, {
@@ -124,7 +163,8 @@ export default function GenerateContractModal({
                       <ul className={styles.missingList}>
                         {missing.map((k) => {
                           const label = allVars.find((v) => v.key === k)?.label ?? k;
-                          return <li key={k}>{label} <code>{`{{${k}}}`}</code></li>;
+                          const tag = templateFormat === "docx" ? `{${k}}` : `{{${k}}}`;
+                          return <li key={k}>{label} <code>{tag}</code></li>;
                         })}
                       </ul>
                       <p>Smlouva bude vygenerována s nevyplněnými poli.</p>
@@ -136,7 +176,11 @@ export default function GenerateContractModal({
                     <table>
                       <tbody>
                         {allVars
-                          .filter((v) => template.includes(`{{${v.key}}}`))
+                          .filter((v) =>
+                            templateFormat === "docx"
+                              ? docxVariables.includes(v.key)
+                              : template.includes(`{{${v.key}}}`)
+                          )
                           .map((v) => (
                             <tr key={v.key}>
                               <td className={styles.varKey}>{v.label}</td>
@@ -175,7 +219,7 @@ export default function GenerateContractModal({
                 onClick={handleGenerate}
                 disabled={loadingTemplate || !template}
               >
-                Generovat PDF
+                {templateFormat === "docx" ? "Generovat .docx" : "Generovat PDF"}
               </Button>
             </>
           )}

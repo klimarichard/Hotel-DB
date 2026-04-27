@@ -1,4 +1,6 @@
 import { getStorage, ref, uploadBytes, deleteObject } from "firebase/storage";
+import PizZip from "pizzip";
+import Docxtemplater from "docxtemplater";
 import { useAuth } from "./useAuth";
 import type { ContractType } from "../lib/contractVariables";
 
@@ -38,6 +40,35 @@ export async function generatePdf(filledHtml: string): Promise<Blob> {
   } finally {
     document.body.removeChild(wrapper);
   }
+}
+
+/**
+ * Fill {key} placeholders in a .docx template and return a filled .docx Blob.
+ * The template bytes come from `GET /api/contractTemplates/:id/docx`.
+ *
+ * docxtemplater throws structured errors when placeholders are malformed
+ * (e.g. when Word split the `{` and `}` across runs). We rewrap the message
+ * to something useful for the UI.
+ */
+export function generateDocx(templateBytes: ArrayBuffer, vars: Record<string, string>): Blob {
+  const zip = new PizZip(templateBytes);
+  const doc = new Docxtemplater(zip, {
+    paragraphLoop: true,
+    linebreaks: true,
+    nullGetter: () => "",
+  });
+  try {
+    doc.render(vars);
+  } catch (err) {
+    const e = err as { message?: string; properties?: { errors?: Array<{ properties?: { explanation?: string } }> } };
+    const detail = e.properties?.errors?.[0]?.properties?.explanation;
+    throw new Error(detail ? `Šablona obsahuje chybu: ${detail}` : (e.message ?? "Chyba při plnění šablony"));
+  }
+  const out = doc.getZip().generate({
+    type: "blob",
+    mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  });
+  return out as Blob;
 }
 
 /**
