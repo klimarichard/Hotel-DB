@@ -211,35 +211,45 @@
 }
 
 /*
- * A4 page (210 mm × 297 mm). Padding: 1.5 cm top/bottom, 1 cm left/right.
- * The repeating-linear-gradient makes the bottom-margin zone (last 1.5 cm of
- * each 297 mm repeat) match the desk color — creating the visual of separate
- * pages with a gray gap between them, without JavaScript pagination.
+ * A4 page (210 mm × 297 mm) with multipage feel.
+ * - min-height: 297 mm so an empty template always shows one full A4 page.
+ * - The repeating-linear-gradient paints a visible "desk gap" of 12 mm
+ *   between every 297 mm slice, simulating stacked pages without
+ *   JavaScript pagination. Cycle length = 309 mm = page (297) + gap (12).
+ * - box-shadow gives the whole block a subtle paper-on-desk lift.
+ *
+ * Padding (1.5 cm top/bottom, 1 cm left/right) only applies to the very
+ * first and last "page" of the block — content flowing across a gap
+ * still flows continuously inside the editor (manual ↧ page-break node
+ * is the way to force a clean break before the gap).
  */
 .a4Page {
   width: 210mm;
+  min-height: 297mm;
   margin: 0 auto 32px;
   padding: 1.5cm 1cm;
   background-color: #fff;
   background-image: repeating-linear-gradient(
     to bottom,
-    #fff                    0,
-    #fff                    calc(297mm - 1.5cm),
-    #d4d4d4                 calc(297mm - 1.5cm),
-    #d4d4d4                 297mm
+    #fff       0,
+    #fff       297mm,
+    #d4d4d4    297mm,
+    #d4d4d4    309mm
   );
   box-sizing: border-box;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
 }
 
 [data-theme="dark"] .a4Page {
   background-color: #1e1e1e;
   background-image: repeating-linear-gradient(
     to bottom,
-    #1e1e1e                 0,
-    #1e1e1e                 calc(297mm - 1.5cm),
-    #2a2a2a                 calc(297mm - 1.5cm),
-    #2a2a2a                 297mm
+    #1e1e1e    0,
+    #1e1e1e    297mm,
+    #2a2a2a    297mm,
+    #2a2a2a    309mm
   );
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
 }
 
 .editorContent {
