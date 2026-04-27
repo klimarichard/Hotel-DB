@@ -335,3 +335,112 @@
   background: var(--color-info-bg-strong);
   border-color: var(--color-info-border);
 }
+
+/* Find & Replace bar (slides in below toolbar when active) */
+.findBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-info-bg);
+  flex-shrink: 0;
+}
+
+.findInput {
+  flex: 1;
+  min-width: 0;
+  max-width: 240px;
+  padding: 4px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 0.875rem;
+}
+
+.findBtn {
+  padding: 4px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.findBtn:hover:not(:disabled) {
+  background: var(--color-surface-2);
+}
+
+.findBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.findClose {
+  margin-left: auto;
+  padding: 0 8px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+/* Search-hit decoration applied by SearchHighlight */
+:global(.tt-search-hit) {
+  background: rgba(255, 235, 59, 0.6);
+  border-radius: 2px;
+}
+
+/* Tables in the A4 page */
+.a4Page :global(table) {
+  border-collapse: collapse;
+  margin: 0.5cm 0;
+  table-layout: fixed;
+  width: 100%;
+}
+
+.a4Page :global(table td),
+.a4Page :global(table th) {
+  border: 1px solid #000;
+  padding: 4px 8px;
+  vertical-align: top;
+  min-width: 40px;
+}
+
+.a4Page :global(table th) {
+  font-weight: 600;
+}
+
+/* Borderless tables. The class lands either on <table> directly (saved
+ * HTML / PDF, via renderHTML) OR on the .tableWrapper div that TipTap's
+ * column-resize NodeView wraps around the table in the live editor (via
+ * the ProseMirror Decoration). A descendant selector matches both. */
+.a4Page :global(.hpm-borderless td),
+.a4Page :global(.hpm-borderless th) {
+  border: 1px dashed #b8becc !important;
+  background: transparent !important;
+}
+
+/* Selected cell highlight (TipTap convention) */
+.a4Page :global(table .selectedCell::after) {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(33, 150, 243, 0.15);
+  pointer-events: none;
+}
+
+.a4Page :global(table) :global(td),
+.a4Page :global(table) :global(th) {
+  position: relative;
+}
+
+/* Make ::marker font-size match the LI's font-size (set by the FontSize
+ * dropdown when the cursor is inside a list — see ListItemStyle extension). */
+.a4Page :global(li::marker) {
+  font-size: inherit;
+  font-family: inherit;
+}

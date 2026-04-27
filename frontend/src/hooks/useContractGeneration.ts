@@ -21,7 +21,26 @@ export async function generatePdf(filledHtml: string): Promise<Blob> {
   wrapper.style.fontSize = "11pt";
   wrapper.style.lineHeight = "1.5";
   wrapper.style.color = "#000";
-  wrapper.innerHTML = filledHtml;
+  // Inject table border rules: tables with data-borderless="true" render
+  // without any visible border in the PDF; default tables get 1px solid.
+  // (The editor's CSS module is scoped to .a4Page and not present on this
+  // detached wrapper, so we inline the rules here.)
+  const styleTag = document.createElement("style");
+  styleTag.textContent = `
+    table { border-collapse: collapse; margin: 0.5cm 0; }
+    table td, table th {
+      border: 1px solid #000;
+      padding: 4px 8px;
+      vertical-align: top;
+    }
+    table.hpm-borderless td, table.hpm-borderless th { border: none; }
+    table th { font-weight: 600; }
+    li::marker { font-size: inherit; font-family: inherit; }
+  `;
+  wrapper.appendChild(styleTag);
+  const contentDiv = document.createElement("div");
+  contentDiv.innerHTML = filledHtml;
+  wrapper.appendChild(contentDiv);
   document.body.appendChild(wrapper);
 
   const opt = {
