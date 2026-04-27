@@ -335,3 +335,123 @@
   background: var(--color-info-bg-strong);
   border-color: var(--color-info-border);
 }
+
+/* Format toggle bar above editor / DOCX panel */
+.formatBar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface-2);
+  flex-shrink: 0;
+  font-size: 0.8125rem;
+}
+
+.formatLabel {
+  color: var(--color-text-muted);
+}
+
+.formatValue {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.linkBtn {
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-info-text);
+  padding: 4px 10px;
+  font-size: 0.8125rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.linkBtn:hover:not(:disabled) {
+  background: var(--color-info-bg);
+}
+
+.linkBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.formatError {
+  color: var(--color-danger-text-strong);
+  margin-left: 12px;
+}
+
+/* DOCX panel — replaces toolbar+editor when format=docx */
+.docxPanel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 32px 48px;
+  overflow-y: auto;
+  background: var(--color-surface);
+}
+
+.docxTitle {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0 0 12px;
+}
+
+.docxBody {
+  max-width: 540px;
+  text-align: center;
+  color: var(--color-text-muted);
+  margin: 0 0 24px;
+  line-height: 1.5;
+}
+
+.docxBody code {
+  background: var(--color-surface-3);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 0.875rem;
+}
+
+.docxActions {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 32px;
+}
+
+.docxVarsBox {
+  width: 100%;
+  max-width: 540px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 12px 16px;
+  background: var(--color-surface-2);
+}
+
+.docxVarsTitle {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0 0 8px;
+}
+
+.docxVarsEmpty {
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+.docxVarsList {
+  margin: 0;
+  padding-left: 20px;
+  columns: 2;
+  font-size: 0.8125rem;
+}
+
+.docxVarsList code {
+  background: var(--color-surface-3);
+  padding: 1px 4px;
+  border-radius: 3px;
+}

@@ -130,6 +130,8 @@ interface TemplateMeta {
   type: ContractType;
   name: string;
   variables: string[];
+  templateFormat?: "html" | "docx";
+  docxStoragePath?: string | null;
   updatedAt?: { seconds: number } | null;
 }
 
@@ -140,6 +142,7 @@ interface TemplateDoc extends TemplateMeta {
 export default function ContractTemplatesPage() {
   const { user } = useAuth();
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const docxInputRef = useRef<HTMLInputElement>(null);
   const [templates, setTemplates] = useState<Record<ContractType, TemplateMeta | null>>(
     {} as Record<ContractType, TemplateMeta | null>
   );
@@ -147,6 +150,10 @@ export default function ContractTemplatesPage() {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [docxBusy, setDocxBusy] = useState(false);
+  const [docxError, setDocxError] = useState<string | null>(null);
+
+  const currentFormat: "html" | "docx" = templates[selected]?.templateFormat ?? "html";
 
   const editor = useEditor({
     extensions: [
@@ -262,6 +269,89 @@ export default function ContractTemplatesPage() {
     }
   }
 
+  async function handleDocxUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !user) return;
+    setDocxBusy(true);
+    setDocxError(null);
+    try {
+      const buf = await file.arrayBuffer();
+      // Browser-safe base64 encoding for binary data.
+      let binary = "";
+      const bytes = new Uint8Array(buf);
+      const chunk = 0x8000;
+      for (let i = 0; i < bytes.length; i += chunk) {
+        binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+      }
+      const docxBase64 = btoa(binary);
+      const token = await user.getIdToken();
+      const resp = await fetch(`/api/contractTemplates/${selected}/docx`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          type: selected,
+          name: CONTRACT_TYPE_LABELS[selected],
+          docxBase64,
+        }),
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.error ?? "Nahrání selhalo");
+      }
+      await fetchTemplates();
+      setSaveMsg("Nahráno");
+      setTimeout(() => setSaveMsg(null), 3000);
+    } catch (err) {
+      setDocxError(err instanceof Error ? err.message : "Neznámá chyba");
+    } finally {
+      setDocxBusy(false);
+    }
+  }
+
+  async function handleDocxDownload() {
+    if (!user) return;
+    const token = await user.getIdToken();
+    const resp = await fetch(`/api/contractTemplates/${selected}/docx`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!resp.ok) {
+      setDocxError("Stažení selhalo");
+      return;
+    }
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${selected}.docx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  async function handleDocxRevert() {
+    if (!user) return;
+    setDocxBusy(true);
+    setDocxError(null);
+    try {
+      const token = await user.getIdToken();
+      const resp = await fetch(`/api/contractTemplates/${selected}/docx`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!resp.ok) throw new Error("Vrácení do HTML selhalo");
+      await fetchTemplates();
+    } catch (err) {
+      setDocxError(err instanceof Error ? err.message : "Neznámá chyba");
+    } finally {
+      setDocxBusy(false);
+    }
+  }
+
   function handleImageFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file || !editor) return;
@@ -283,9 +373,11 @@ export default function ContractTemplatesPage() {
               {saveMsg}
             </span>
           )}
-          <Button variant="primary" onClick={handleSave} disabled={saving}>
-            {saving ? "Ukládám…" : "Uložit šablonu"}
-          </Button>
+          {currentFormat === "html" && (
+            <Button variant="primary" onClick={handleSave} disabled={saving}>
+              {saving ? "Ukládám…" : "Uložit šablonu"}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -319,8 +411,76 @@ export default function ContractTemplatesPage() {
           )}
         </aside>
 
-        {/* Center: TipTap editor */}
+        {/* Center: TipTap editor or DOCX panel */}
         <div className={styles.editorWrapper}>
+          <div className={styles.formatBar}>
+            <span className={styles.formatLabel}>Formát:</span>
+            <span className={styles.formatValue}>
+              {currentFormat === "docx" ? "DOCX (Word)" : "HTML (TipTap editor)"}
+            </span>
+            {currentFormat === "html" ? (
+              <button
+                className={styles.linkBtn}
+                onClick={() => docxInputRef.current?.click()}
+                disabled={docxBusy}
+                title="Nahrát .docx soubor a přepnout šablonu na DOCX"
+              >
+                Přepnout na DOCX (Word)
+              </button>
+            ) : (
+              <button
+                className={styles.linkBtn}
+                onClick={handleDocxRevert}
+                disabled={docxBusy}
+                title="Smazat .docx a vrátit šablonu na HTML editor"
+              >
+                Vrátit na HTML editor
+              </button>
+            )}
+            <input
+              ref={docxInputRef}
+              type="file"
+              accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              style={{ display: "none" }}
+              onChange={handleDocxUpload}
+            />
+            {docxError && <span className={styles.formatError}>{docxError}</span>}
+          </div>
+          {currentFormat === "docx" ? (
+            <div className={styles.docxPanel}>
+              <h2 className={styles.docxTitle}>Šablona DOCX</h2>
+              <p className={styles.docxBody}>
+                Tato šablona je v DOCX formátu — uprav ji v Microsoft Wordu (nebo
+                jiném DOCX editoru), pak nahraj zpět. Ve šabloně používej proměnné
+                ve tvaru <code>{"{key}"}</code> (jednoduché složené závorky, ne dvojité).
+              </p>
+              <div className={styles.docxActions}>
+                <Button variant="primary" onClick={handleDocxDownload} disabled={docxBusy}>
+                  Stáhnout aktuální .docx
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => docxInputRef.current?.click()}
+                  disabled={docxBusy}
+                >
+                  {docxBusy ? "Nahrávám…" : "Nahrát novou verzi"}
+                </Button>
+              </div>
+              <div className={styles.docxVarsBox}>
+                <p className={styles.docxVarsTitle}>Detekované proměnné v šabloně</p>
+                {(templates[selected]?.variables ?? []).length === 0 ? (
+                  <p className={styles.docxVarsEmpty}>Žádné proměnné nenalezeny.</p>
+                ) : (
+                  <ul className={styles.docxVarsList}>
+                    {(templates[selected]?.variables ?? []).map((k) => (
+                      <li key={k}><code>{`{${k}}`}</code></li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          ) : (
+          <>
           <div className={styles.toolbar}>
             {/* Font family */}
             <select
@@ -486,25 +646,44 @@ export default function ContractTemplatesPage() {
               <EditorContent editor={editor} />
             </div>
           </div>
+          </>
+          )}
         </div>
 
         {/* Right: variable picker */}
         <aside className={styles.varPanel}>
           <p className={styles.varPanelTitle}>Proměnné</p>
-          <p className={styles.varPanelHint}>Kliknutím vložíte do dokumentu</p>
+          <p className={styles.varPanelHint}>
+            {currentFormat === "docx"
+              ? `Použij ve Wordu jako {key} (jednoduché závorky)`
+              : "Kliknutím vložíte do dokumentu"}
+          </p>
           {VARIABLE_GROUPS.map((group) => (
             <div key={group.group} className={styles.varGroup}>
               <p className={styles.varGroupLabel}>{group.group}</p>
-              {group.vars.map((v) => (
-                <button
-                  key={v.key}
-                  className={styles.varBtn}
-                  onClick={() => insertVariable(v.key)}
-                  title={`{{${v.key}}}`}
-                >
-                  {v.label}
-                </button>
-              ))}
+              {group.vars.map((v) => {
+                const syntax = currentFormat === "docx" ? `{${v.key}}` : `{{${v.key}}}`;
+                return (
+                  <button
+                    key={v.key}
+                    className={styles.varBtn}
+                    onClick={() => {
+                      if (currentFormat === "docx") {
+                        navigator.clipboard?.writeText(syntax).catch(() => {});
+                      } else {
+                        insertVariable(v.key);
+                      }
+                    }}
+                    title={
+                      currentFormat === "docx"
+                        ? `${syntax} — kliknutím zkopíruješ do schránky`
+                        : syntax
+                    }
+                  >
+                    {v.label}
+                  </button>
+                );
+              })}
             </div>
           ))}
         </aside>
