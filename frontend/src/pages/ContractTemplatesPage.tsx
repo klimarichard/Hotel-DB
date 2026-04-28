@@ -67,6 +67,30 @@ const Table = TableBase.extend({
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 
+const ResizableImage = Image.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      width: {
+        default: null,
+        parseHTML: (el) => {
+          const styleW = (el as HTMLElement).style.width;
+          if (styleW) return styleW;
+          return (el as HTMLElement).getAttribute("width") || null;
+        },
+        renderHTML: (attrs) => (attrs.width ? { style: `width: ${attrs.width}` } : {}),
+      },
+    };
+  },
+});
+
+const IMAGE_WIDTH_PRESETS: { label: string; value: string }[] = [
+  { label: "25%", value: "25%" },
+  { label: "50%", value: "50%" },
+  { label: "75%", value: "75%" },
+  { label: "100%", value: "100%" },
+];
+
 const TAB_STOP = 1.27; // cm
 
 /**
@@ -395,7 +419,7 @@ export default function ContractTemplatesPage() {
       ListItemStyle,
       Color,
       TextAlign.configure({ types: ["heading", "paragraph"] }),
-      Image.configure({ inline: false, allowBase64: true }),
+      ResizableImage.configure({ inline: false, allowBase64: true }),
       Table.configure({ resizable: true }),
       TableRow,
       TableHeader,
@@ -983,6 +1007,33 @@ export default function ContractTemplatesPage() {
               style={{ display: "none" }}
               onChange={handleImageFile}
             />
+            {editor?.isActive("image") && (
+              <>
+                {IMAGE_WIDTH_PRESETS.map((p) => {
+                  const cur = editor?.getAttributes("image").width;
+                  const active = cur === p.value;
+                  return (
+                    <button
+                      key={p.value}
+                      className={`${styles.toolBtn} ${active ? styles.toolBtnActive : ""}`}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        editor?.chain().focus().updateAttributes("image", { width: p.value }).run();
+                      }}
+                      title={`Šířka obrázku ${p.label}`}
+                    >{p.label}</button>
+                  );
+                })}
+                <button
+                  className={styles.toolBtn}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    editor?.chain().focus().updateAttributes("image", { width: null }).run();
+                  }}
+                  title="Původní velikost"
+                >⤢</button>
+              </>
+            )}
           </div>
           {findOpen && (
             <div className={styles.findBar}>
