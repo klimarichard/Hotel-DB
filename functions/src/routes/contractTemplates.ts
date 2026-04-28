@@ -86,15 +86,31 @@ contractTemplatesRouter.get(
  * Upsert a template. Admin + director only.
  * Body: { type, name, htmlContent }
  */
+interface Margins {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+}
+
+function isValidMargins(m: unknown): m is Margins {
+  if (!m || typeof m !== "object") return false;
+  const obj = m as Record<string, unknown>;
+  return (["top", "bottom", "left", "right"] as const).every(
+    (k) => typeof obj[k] === "number" && Number.isFinite(obj[k]) && (obj[k] as number) >= 0 && (obj[k] as number) <= 100
+  );
+}
+
 contractTemplatesRouter.put(
   "/:id",
   requireAuth,
   requireRole("admin", "director"),
   async (req: AuthRequest, res: Response) => {
-    const { type, name, htmlContent } = req.body as {
+    const { type, name, htmlContent, margins } = req.body as {
       type: ContractType;
       name: string;
       htmlContent: string;
+      margins?: unknown;
     };
 
     if (!type || !name || htmlContent === undefined) {
@@ -102,22 +118,27 @@ contractTemplatesRouter.put(
       return;
     }
 
+    if (margins !== undefined && !isValidMargins(margins)) {
+      res.status(400).json({ error: "margins must be {top,bottom,left,right} numbers in mm (0–100)" });
+      return;
+    }
+
     const variables = extractVariables(htmlContent);
+
+    const payload: Record<string, unknown> = {
+      type,
+      name,
+      htmlContent,
+      variables,
+      updatedAt: FieldValue.serverTimestamp(),
+      updatedBy: req.uid,
+    };
+    if (margins !== undefined) payload.margins = margins;
 
     await db()
       .collection("contractTemplates")
       .doc(req.params.id)
-      .set(
-        {
-          type,
-          name,
-          htmlContent,
-          variables,
-          updatedAt: FieldValue.serverTimestamp(),
-          updatedBy: req.uid,
-        },
-        { merge: true }
-      );
+      .set(payload, { merge: true });
 
     res.json({ id: req.params.id, variables });
   }
