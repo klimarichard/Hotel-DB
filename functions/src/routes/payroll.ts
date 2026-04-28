@@ -1,7 +1,7 @@
 import { Router, Response } from "express";
 import { randomUUID } from "crypto";
 import * as admin from "firebase-admin";
-import { FieldValue } from "firebase-admin/firestore";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { requireAuth, requireRole, AuthRequest } from "../middleware/auth";
 import { createOrUpdatePayrollPeriod, getMultisportActive } from "../services/payrollCalculator";
 
@@ -23,10 +23,10 @@ interface PayrollNoteDoc {
   carryForward: boolean;
   createdBy: string;
   createdByName: string;
-  createdAt: admin.firestore.Timestamp | FieldValue;
+  createdAt: Timestamp | FieldValue;
   editedBy?: string;
   editedByName?: string;
-  editedAt?: admin.firestore.Timestamp | FieldValue;
+  editedAt?: Timestamp | FieldValue;
 }
 
 async function getUserName(uid: string): Promise<string> {
@@ -78,7 +78,7 @@ payrollRouter.post(
     const month = periodData.month as number;
 
     const createdByName = await getUserName(req.uid!);
-    const now = admin.firestore.Timestamp.now();
+    const now = Timestamp.now();
     const noteId = randomUUID();
     const note: PayrollNoteDoc = {
       id: noteId,
@@ -171,7 +171,7 @@ payrollRouter.patch(
       carryForward: hasCarryForward ? (body.carryForward as boolean) : notes[idx].carryForward,
       editedBy: req.uid!,
       editedByName,
-      editedAt: admin.firestore.Timestamp.now(),
+      editedAt: Timestamp.now(),
     };
     const nextNotes = notes.slice();
     nextNotes[idx] = updated;
