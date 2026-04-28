@@ -116,8 +116,9 @@ PDFs generated client-side via `html2pdf.js` — Puppeteer was too large for Gen
 - Max holiday hours = `12 × (Czech public holidays in month)`.
 - Night hours per shift = 8 for each N/NP/ZN segment.
 - HODINY = sum of `hoursComputed` for `"assigned"` shifts. Both `totalHours` and `weekendHours` are `Math.ceil()`'d before downstream calculations.
-- VÝKAZ = `MIN(baseHours, totalHours)`. Manager credit: `+countMonFriHolidays × 8` for `section === "vedoucí"`.
+- VÝKAZ = `MIN(baseHours, totalHours + managerBonus)`. `managerBonus = countMonFriHolidays × 8` for `section === "vedoucí"`, else 0. **Hard-capped at baseHours** — the monthly norm is a ceiling, never exceeded. Anything that would push Výkaz over the norm spills into `extraHours` and cascades into SVÁTEK / NAVÍC (see below).
 - DOVOLENÁ (HPP) = `MAX(0, baseHours − reportHours)`. PPP = `MAX(0, baseHours/2 − reportHours)`. DPP = null.
+- `extraHours` = `MAX(0, (totalHours + managerBonus) − baseHours)` — actual overtime plus any manager-credit overflow. Routed by Req-3 cascade: SVÁTEK first (capped at `maxHolidayHours`), the remainder stays as NAVÍC.
 - NAVÍC (`extraPay`, raw net) = `hourlyRate × extraHours`. Stored unrounded — editing reveals the raw net value. Display rounding (gross-up + ceil to nearest 100) lives only in `formatNavic` / `navicText`. Tiered display: <5000 net → gross-up; =5000 → 6000; >5000 → two lines.
 - STRAVENKY = `workingDays × foodVoucherRate`. Working day = shift with `hoursComputed > 6`.
 - DPP/FAKT = `totalHours × hourlyRate` (unmasked).
