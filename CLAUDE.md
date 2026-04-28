@@ -3,12 +3,13 @@
 ## Git Workflow
 
 - **Always create a new branch before making any changes.** Never work directly on `master`.
-- Branch naming: `feature/short-description`, `fix/short-description`, `chore/short-description`
+- Branch naming: `feature/short-description`, `fix/short-description`, `chore/short-description`.
 - **Commit after every logical step** on the branch — don't batch everything into one commit.
-- **Only the user decides when to merge and push.** Never do either without explicit instruction.
-- **Never delete branches** — they serve as backups.
+- **Push every feature/fix/chore branch to `origin` continuously.** On the first commit run `git push -u origin <branch>` to set upstream tracking; after each subsequent commit run `git push`. This keeps the remote as a live backup of in-progress work. No confirmation needed for these branch backup pushes.
+- **Merging into `master` and pushing `master` still require explicit user instruction.** Never run `git merge` into `master` or `git push origin master` (or `git push` while on `master`) without the user saying so.
+- **Never delete branches** — they serve as backups, both locally and on `origin`.
 - Use clear, descriptive commit messages explaining *why*, not just *what*.
-- **Before any `git push`**, update `CLAUDE.md` + `README.md` (implementation details) and project memory as the last commit on the branch.
+- **Before pushing `master`** (i.e. just before the merge-then-push step), update `CLAUDE.md` + `README.md` (implementation details) and project memory as the last commit on the merged branch. This rule applies only to `master` pushes, not to per-branch backup pushes.
 
 ## Data Safety — TOP PRIORITY
 
