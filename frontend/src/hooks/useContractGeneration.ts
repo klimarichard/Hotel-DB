@@ -1,18 +1,6 @@
-import { getStorage, ref, deleteObject } from "firebase/storage";
 import { useAuth } from "./useAuth";
+import { blobToBase64 } from "../lib/blobToBase64";
 import type { ContractType } from "../lib/contractVariables";
-
-/** Convert a Blob to a base64 string (no data: prefix) for JSON transport. */
-async function blobToBase64(blob: Blob): Promise<string> {
-  const buffer = await blob.arrayBuffer();
-  const bytes = new Uint8Array(buffer);
-  let binary = "";
-  const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) {
-    binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunk)));
-  }
-  return btoa(binary);
-}
 
 export interface ContractMeta {
   type: ContractType;
@@ -129,12 +117,5 @@ export function useContractGeneration() {
     return id;
   }
 
-  /** Delete the unsigned PDF from Storage (backend record deletion is separate) */
-  async function deleteStorageFile(storagePath: string): Promise<void> {
-    const storage = getStorage();
-    const storageRef = ref(storage, storagePath);
-    await deleteObject(storageRef);
-  }
-
-  return { uploadContract, deleteStorageFile };
+  return { uploadContract };
 }
