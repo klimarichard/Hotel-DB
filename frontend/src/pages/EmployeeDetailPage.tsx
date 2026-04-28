@@ -12,7 +12,6 @@ import {
   ContractType as SmlouvaContractType,
   CONTRACT_TYPE_LABELS,
   CHANGE_TYPE_TO_CONTRACTS,
-  CompanyData,
 } from "@/lib/contractVariables";
 import styles from "./EmployeeDetailPage.module.css";
 
@@ -798,7 +797,6 @@ export default function EmployeeDetailPage() {
     types: SmlouvaContractType[];
   } | null>(null);
   const [generateDropdownRowId, setGenerateDropdownRowId] = useState<string | null>(null);
-  const [company, setCompany] = useState<CompanyData | null>(null);
   const [confirmModal, setConfirmModal] = useState<{
     title: string;
     message: string;
@@ -872,11 +870,7 @@ export default function EmployeeDetailPage() {
       setLoadedSections((s) => new Set(s).add("documents"));
       api.get<DocumentsData | null>(`/employees/${id}/documents`).then(setDocuments).catch(() => {});
     }
-    if (!loadedSections.has("company") && employee?.currentCompanyId) {
-      setLoadedSections((s) => new Set(s).add("company"));
-      api.get<CompanyData>(`/companies/${employee.currentCompanyId}`).then(setCompany).catch(() => {});
-    }
-  }, [page, id, loadedSections, employee]);
+  }, [page, id, loadedSections]);
 
   async function handleDeleteEmployee() {
     if (!employee || !id) return;
@@ -1122,7 +1116,6 @@ export default function EmployeeDetailPage() {
             passportNumber: documents?.passportNumber,
             visaNumber: documents?.visaNumber,
           }}
-          companyData={company ?? {}}
         />
       )}
 
@@ -1268,6 +1261,7 @@ export default function EmployeeDetailPage() {
           employeeId={id!}
           contractType={generateModal.contractType}
           employmentRowId={generateModal.row.id}
+          companyId={generateModal.row.companyId ?? null}
           employeeData={{
             id: employee.id,
             firstName: employee.firstName,
@@ -1285,7 +1279,6 @@ export default function EmployeeDetailPage() {
             startDate: generateModal.row.startDate,
             endDate: generateModal.row.endDate ?? undefined,
           }}
-          companyData={company ?? {}}
           onClose={() => setGenerateModal(null)}
           onGenerated={() => {
             setGenerateModal(null);

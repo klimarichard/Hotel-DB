@@ -20,8 +20,15 @@ interface Props {
   employeeId: string;
   contractType: ContractType;
   employmentRowId?: string;
+  /**
+   * ID of the company that this contract should reference. For row-tied
+   * contracts, pass the row's `companyId` (legally correct for that
+   * specific contract); for standalone contracts, pass the employee's
+   * current company. The modal fetches the doc itself so the parent
+   * doesn't have to keep a `company` state in sync.
+   */
+  companyId: string | null | undefined;
   employeeData: EmployeeData;
-  companyData: CompanyData;
   onClose: () => void;
   onGenerated: (contractId: string) => void;
 }
@@ -32,8 +39,8 @@ export default function GenerateContractModal({
   employeeId,
   contractType,
   employmentRowId,
+  companyId,
   employeeData,
-  companyData,
   onClose,
   onGenerated,
 }: Props) {
@@ -44,6 +51,8 @@ export default function GenerateContractModal({
   const [template, setTemplate] = useState<string | null>(null);
   const [margins, setMargins] = useState<PageMargins>(DEFAULT_MARGINS);
   const [loadingTemplate, setLoadingTemplate] = useState(true);
+  const [companyData, setCompanyData] = useState<CompanyData>({});
+  const [loadingCompany, setLoadingCompany] = useState(false);
 
   const signatory: SignatoryData = {
     displayName: user?.displayName ?? user?.email ?? "",
@@ -75,6 +84,32 @@ export default function GenerateContractModal({
       }
     })();
   }, [user, contractType]);
+
+  useEffect(() => {
+    if (!user || !companyId) {
+      setCompanyData({});
+      return;
+    }
+    setLoadingCompany(true);
+    (async () => {
+      try {
+        const token = await user.getIdToken();
+        const resp = await fetch(`/api/companies/${companyId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (resp.ok) {
+          const doc = await resp.json();
+          setCompanyData(doc as CompanyData);
+        } else {
+          setCompanyData({});
+        }
+      } catch {
+        setCompanyData({});
+      } finally {
+        setLoadingCompany(false);
+      }
+    })();
+  }, [user, companyId]);
 
   async function handleGenerate() {
     if (!template) return;
@@ -111,8 +146,8 @@ export default function GenerateContractModal({
 
           {step === "confirm" && (
             <>
-              {loadingTemplate ? (
-                <p className={styles.info}>Načítám šablonu…</p>
+              {loadingTemplate || loadingCompany ? (
+                <p className={styles.info}>Načítám…</p>
               ) : !template ? (
                 <p className={styles.warn}>
                   Šablona pro tento typ smlouvy není uložena. Uložte ji nejdříve v sekci
@@ -175,7 +210,7 @@ export default function GenerateContractModal({
               <Button
                 variant="primary"
                 onClick={handleGenerate}
-                disabled={loadingTemplate || !template}
+                disabled={loadingTemplate || loadingCompany || !template}
               >
                 Generovat PDF
               </Button>

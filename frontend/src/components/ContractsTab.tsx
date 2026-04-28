@@ -9,7 +9,6 @@ import {
   CONTRACT_TYPE_LABELS,
   STANDALONE_TYPES,
   EmployeeData,
-  CompanyData,
 } from "@/lib/contractVariables";
 import { formatTimestampCZ } from "@/lib/dateFormat";
 import styles from "./ContractsTab.module.css";
@@ -29,7 +28,6 @@ interface ContractRecord {
 interface Props {
   employeeId: string;
   employeeData: EmployeeData;
-  companyData: CompanyData;
 }
 
 const STATUS_LABEL: Record<ContractRecord["status"], string> = {
@@ -44,7 +42,7 @@ const STATUS_CLASS: Record<ContractRecord["status"], string> = {
   archived: styles.statusArchived,
 };
 
-export default function ContractsTab({ employeeId, employeeData, companyData }: Props) {
+export default function ContractsTab({ employeeId, employeeData }: Props) {
   const { user, role } = useAuth();
   const [contracts, setContracts] = useState<ContractRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -272,8 +270,8 @@ export default function ContractsTab({ employeeId, employeeData, companyData }: 
         <GenerateContractModal
           employeeId={employeeId}
           contractType={generateModal}
+          companyId={employeeData.currentCompanyId ?? null}
           employeeData={employeeData}
-          companyData={companyData}
           onClose={() => setGenerateModal(null)}
           onGenerated={async () => {
             setGenerateModal(null);
