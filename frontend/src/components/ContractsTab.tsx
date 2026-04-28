@@ -69,7 +69,7 @@ export default function ContractsTab({ employeeId, employeeData }: Props) {
 
   useEffect(() => {
     fetchContracts();
-  }, [employeeId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [employeeId, user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Close dropdown on outside click
   useEffect(() => {
