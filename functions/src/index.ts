@@ -27,7 +27,10 @@ admin.initializeApp();
 const app = express();
 
 app.use(cors({ origin: true }));
-app.use(express.json());
+// 10mb covers contract PDFs that contain embedded base64 images
+// (logos, scanned signatures). Base64-encoded blob is ~33% larger
+// than the raw PDF, so a 3 MB PDF lands around 4 MB of JSON body.
+app.use(express.json({ limit: "10mb" }));
 
 // Routes
 app.use("/auth", authRouter);

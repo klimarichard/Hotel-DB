@@ -1,6 +1,18 @@
-import { getStorage, ref, uploadBytes, deleteObject } from "firebase/storage";
+import { getStorage, ref, deleteObject } from "firebase/storage";
 import { useAuth } from "./useAuth";
 import type { ContractType } from "../lib/contractVariables";
+
+/** Convert a Blob to a base64 string (no data: prefix) for JSON transport. */
+async function blobToBase64(blob: Blob): Promise<string> {
+  const buffer = await blob.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunk)));
+  }
+  return btoa(binary);
+}
 
 export interface ContractMeta {
   type: ContractType;
@@ -86,19 +98,15 @@ export function useContractGeneration() {
   ): Promise<string> {
     if (!user) throw new Error("Not authenticated");
 
-    // Upload PDF to Storage
-    const contractId = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-    const storage = getStorage();
-    const storagePath = `contracts/${employeeId}/${contractId}.pdf`;
-    const storageRef = ref(storage, storagePath);
-    await uploadBytes(storageRef, blob, { contentType: "application/pdf" });
-
-    // Create Firestore metadata record
+    // storage.rules deny all direct client access. Upload the PDF
+    // through the Cloud Function endpoint, which uses the Admin SDK
+    // to write to Storage and create the Firestore record atomically.
     const token = await user.getIdToken();
+    const pdfBase64 = await blobToBase64(blob);
+
     const body: Record<string, unknown> = {
       type: meta.type,
-      status: "unsigned",
-      unsignedStoragePath: storagePath,
+      pdfBase64,
     };
     if (meta.employmentRowId) body.employmentRowId = meta.employmentRowId;
     if (meta.notes) body.notes = meta.notes;
@@ -113,13 +121,8 @@ export function useContractGeneration() {
     });
 
     if (!resp.ok) {
-      // Roll back Storage upload
-      try {
-        await deleteObject(storageRef);
-      } catch {
-        // ignore cleanup errors
-      }
-      throw new Error("Failed to create contract record");
+      const text = await resp.text().catch(() => "");
+      throw new Error(`Failed to create contract record${text ? `: ${text}` : ""}`);
     }
 
     const { id } = await resp.json();
