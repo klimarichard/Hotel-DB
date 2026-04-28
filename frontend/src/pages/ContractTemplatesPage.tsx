@@ -67,6 +67,48 @@ const Table = TableBase.extend({
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 
+const ResizableImage = Image.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      width: {
+        default: null,
+        parseHTML: (el) => {
+          const styleW = (el as HTMLElement).style.width;
+          if (styleW) return styleW;
+          return (el as HTMLElement).getAttribute("width") || null;
+        },
+        renderHTML: (attrs) => (attrs.width ? { style: `width: ${attrs.width}` } : {}),
+      },
+      align: {
+        default: null,
+        parseHTML: (el) => {
+          const ml = (el as HTMLElement).style.marginLeft;
+          const mr = (el as HTMLElement).style.marginRight;
+          if (ml === "auto" && mr === "auto") return "center";
+          if (ml === "auto" && mr !== "auto") return "right";
+          if ((ml === "0px" || ml === "0") && mr === "auto") return "left";
+          return null;
+        },
+        renderHTML: (attrs) => {
+          if (!attrs.align) return {};
+          if (attrs.align === "center") return { style: "display: block; margin-left: auto; margin-right: auto" };
+          if (attrs.align === "right") return { style: "display: block; margin-left: auto; margin-right: 0" };
+          if (attrs.align === "left") return { style: "display: block; margin-left: 0; margin-right: auto" };
+          return {};
+        },
+      },
+    };
+  },
+});
+
+const IMAGE_WIDTH_PRESETS: { label: string; value: string }[] = [
+  { label: "25%", value: "25%" },
+  { label: "50%", value: "50%" },
+  { label: "75%", value: "75%" },
+  { label: "100%", value: "100%" },
+];
+
 const TAB_STOP = 1.27; // cm
 
 /**
@@ -395,7 +437,7 @@ export default function ContractTemplatesPage() {
       ListItemStyle,
       Color,
       TextAlign.configure({ types: ["heading", "paragraph"] }),
-      Image.configure({ inline: false, allowBase64: true }),
+      ResizableImage.configure({ inline: false, allowBase64: true }),
       Table.configure({ resizable: true }),
       TableRow,
       TableHeader,
@@ -914,36 +956,6 @@ export default function ContractTemplatesPage() {
               }}
               title="Vložit tabulku 3×3"
             >⊞</button>
-            {editor?.isActive("table") && (
-              <>
-                <button className={styles.toolBtn} onMouseDown={(e) => { e.preventDefault(); editor?.chain().focus().addRowAfter().run(); }} title="Přidat řádek pod">+R</button>
-                <button className={styles.toolBtn} onMouseDown={(e) => { e.preventDefault(); editor?.chain().focus().addColumnAfter().run(); }} title="Přidat sloupec vpravo">+C</button>
-                <button className={styles.toolBtn} onMouseDown={(e) => { e.preventDefault(); editor?.chain().focus().deleteRow().run(); }} title="Smazat řádek">−R</button>
-                <button className={styles.toolBtn} onMouseDown={(e) => { e.preventDefault(); editor?.chain().focus().deleteColumn().run(); }} title="Smazat sloupec">−C</button>
-                <button className={styles.toolBtn} onMouseDown={(e) => { e.preventDefault(); editor?.chain().focus().deleteTable().run(); }} title="Smazat tabulku">×T</button>
-                <button
-                  className={`${styles.toolBtn} ${editor?.getAttributes("table").borderless ? styles.toolBtnActive : ""}`}
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    if (!editor) return;
-                    const { state, view } = editor;
-                    const { $from } = state.selection;
-                    let tableDepth = -1;
-                    for (let d = $from.depth; d > 0; d--) {
-                      if ($from.node(d).type.name === "table") { tableDepth = d; break; }
-                    }
-                    if (tableDepth < 0) return;
-                    const tableNode = $from.node(tableDepth);
-                    const tablePos = $from.before(tableDepth);
-                    const cur = !!tableNode.attrs.borderless;
-                    view.dispatch(
-                      state.tr.setNodeMarkup(tablePos, undefined, { ...tableNode.attrs, borderless: !cur })
-                    );
-                  }}
-                  title="Skrýt / zobrazit okraje tabulky"
-                >▦</button>
-              </>
-            )}
 
             <span className={styles.toolSep} />
 
@@ -984,6 +996,84 @@ export default function ContractTemplatesPage() {
               onChange={handleImageFile}
             />
           </div>
+          {(editor?.isActive("table") || editor?.isActive("image")) && (
+            <div className={styles.toolbarSecondary}>
+              {editor?.isActive("table") && (
+                <>
+                  <button className={styles.toolBtn} onMouseDown={(e) => { e.preventDefault(); editor?.chain().focus().addRowAfter().run(); }} title="Přidat řádek pod">+R</button>
+                  <button className={styles.toolBtn} onMouseDown={(e) => { e.preventDefault(); editor?.chain().focus().addColumnAfter().run(); }} title="Přidat sloupec vpravo">+C</button>
+                  <button className={styles.toolBtn} onMouseDown={(e) => { e.preventDefault(); editor?.chain().focus().deleteRow().run(); }} title="Smazat řádek">−R</button>
+                  <button className={styles.toolBtn} onMouseDown={(e) => { e.preventDefault(); editor?.chain().focus().deleteColumn().run(); }} title="Smazat sloupec">−C</button>
+                  <button className={styles.toolBtn} onMouseDown={(e) => { e.preventDefault(); editor?.chain().focus().deleteTable().run(); }} title="Smazat tabulku">×T</button>
+                  <button
+                    className={`${styles.toolBtn} ${editor?.getAttributes("table").borderless ? styles.toolBtnActive : ""}`}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      if (!editor) return;
+                      const { state, view } = editor;
+                      const { $from } = state.selection;
+                      let tableDepth = -1;
+                      for (let d = $from.depth; d > 0; d--) {
+                        if ($from.node(d).type.name === "table") { tableDepth = d; break; }
+                      }
+                      if (tableDepth < 0) return;
+                      const tableNode = $from.node(tableDepth);
+                      const tablePos = $from.before(tableDepth);
+                      const cur = !!tableNode.attrs.borderless;
+                      view.dispatch(
+                        state.tr.setNodeMarkup(tablePos, undefined, { ...tableNode.attrs, borderless: !cur })
+                      );
+                    }}
+                    title="Skrýt / zobrazit okraje tabulky"
+                  >▦</button>
+                </>
+              )}
+              {editor?.isActive("image") && (
+                <>
+                  {IMAGE_WIDTH_PRESETS.map((p) => {
+                    const cur = editor?.getAttributes("image").width;
+                    const active = cur === p.value;
+                    return (
+                      <button
+                        key={p.value}
+                        className={`${styles.toolBtn} ${active ? styles.toolBtnActive : ""}`}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          editor?.chain().focus().updateAttributes("image", { width: p.value }).run();
+                        }}
+                        title={`Šířka obrázku ${p.label}`}
+                      >{p.label}</button>
+                    );
+                  })}
+                  <button
+                    className={styles.toolBtn}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      editor?.chain().focus().updateAttributes("image", { width: null }).run();
+                    }}
+                    title="Původní velikost"
+                  >⤢</button>
+                  {(["left", "center", "right"] as const).map((a) => {
+                    const cur = editor?.getAttributes("image").align;
+                    const active = cur === a;
+                    const glyph = a === "left" ? "⬅" : a === "center" ? "↔" : "➡";
+                    const label = a === "left" ? "Vlevo" : a === "center" ? "Na střed" : "Vpravo";
+                    return (
+                      <button
+                        key={a}
+                        className={`${styles.toolBtn} ${active ? styles.toolBtnActive : ""}`}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          editor?.chain().focus().updateAttributes("image", { align: a }).run();
+                        }}
+                        title={label}
+                      >{glyph}</button>
+                    );
+                  })}
+                </>
+              )}
+            </div>
+          )}
           {findOpen && (
             <div className={styles.findBar}>
               <input
