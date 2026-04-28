@@ -115,6 +115,10 @@ cd Hotel-DB/frontend && npm run dev
 - Node.js v24 at `C:\Program Files\nodejs\node.exe` — not always on PATH.
 - Auth after emulator restart: existing sessions are invalidated — users must log out and back in.
 - **Date arithmetic in the browser**: never use `new Date("YYYY-MM-DD").toISOString()` — in UTC+2 it returns the previous day. Use `new Date(y, m-1, d)` (local time) and format with `getFullYear/Month/Date`.
+- **firebase-admin imports**: in Cloud Functions code, import `FieldValue` and `Timestamp` from `firebase-admin/firestore` directly. The legacy namespace forms `admin.firestore.FieldValue` / `admin.firestore.Timestamp` are `undefined` at runtime under the version pinned here and throw `TypeError: Cannot read properties of undefined (reading 'now' / 'serverTimestamp')`. Both `services/payrollCalculator.ts` and `routes/payroll.ts` were bitten by this — apply the same import pattern in any new server-side code that touches timestamps.
+
+### Client → Firestore boundary
+Direct Firestore client SDK access is blocked by `firestore.rules`. Every read and write goes through Cloud Functions (Express routes mounted at `/api/*`, Admin SDK on the server side). When adding a new feature that needs to persist user state, add an Express endpoint — do not call `firebase/firestore` directly from React. The `theme` field on `users/{uid}` is a worked example: `GET/PUT /api/auth/me/theme` are the only paths the frontend uses; `ThemeContext` keeps `localStorage` purely as a flash-prevention cache, not as a source of truth.
 
 ## Implementation details
 

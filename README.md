@@ -106,7 +106,7 @@ PDFs generated client-side via `html2pdf.js` — Puppeteer was too large for Gen
 ## Phase 7 — Payroll Implementation Notes
 
 **Core files:**
-- `functions/src/services/payrollCalculator.ts` — `getCzechHolidays`, `getBaseHours`, `calculateEntry`, `createOrUpdatePayrollPeriod`. `FieldValue` from `firebase-admin/firestore` (NOT `admin.firestore.FieldValue` — undefined in modern firebase-admin).
+- `functions/src/services/payrollCalculator.ts` — `getCzechHolidays`, `getBaseHours`, `calculateEntry`, `createOrUpdatePayrollPeriod`. `FieldValue` and `Timestamp` are imported from `firebase-admin/firestore` (NOT `admin.firestore.FieldValue` / `admin.firestore.Timestamp` — both are undefined in modern firebase-admin and throw `TypeError: Cannot read properties of undefined (reading 'now')` at runtime). The same trap bit `routes/payroll.ts` later for the notes endpoints — apply the same import pattern in any new payroll surface.
 - `functions/src/routes/payroll.ts` — `GET/PATCH /payroll/settings`, `GET /payroll/periods`, `GET /payroll/periods/by-month/:year/:month`, `POST /payroll/periods/by-month/:year/:month` (manual create from already-published plan, admin/director), `PATCH /payroll/periods/:id` (lock/unlock, admin), `PATCH /payroll/periods/:id/entries/:employeeId`, `POST /payroll/periods/:id/recalculate`, `POST /payroll/trigger`.
 - Scheduled `refreshPayroll` in `functions/src/index.ts` runs daily.
 
@@ -263,7 +263,8 @@ The "load template into editor" effect depends on `templates[selected]?.id` (com
 
 ## Dark Mode
 
-- `ThemeContext.tsx`: `ThemeProvider` + `useTheme()`. Persists per-user in `localStorage` (`hotel_hr_theme_{uid}`). Guest (pre-login) preference stored under `hotel_hr_theme_guest`. Applies `data-theme="dark"` to `<html>`.
+- `ThemeContext.tsx`: `ThemeProvider` + `useTheme()`. Authoritative preference is the `theme` field on `users/{uid}` Firestore doc, fetched on login via `GET /api/auth/me/theme` and written on toggle via `PUT /api/auth/me/theme` (`functions/src/routes/auth.ts`). `localStorage` (`hotel_hr_theme_{uid}`) is kept as a flash-prevention cache — applied immediately on mount, then reconciled when the backend response lands. Guest (pre-login) preference stored under `hotel_hr_theme_guest` in `localStorage` only. Applies `data-theme="dark"` to `<html>`.
+- **Why the round-trip**: `firestore.rules` blocks all direct client Firestore access, so the preference must travel through Cloud Functions. Bonus side effects: themes follow users across browsers/devices, and the `seed-admin.js` script can pre-set `theme: "dark"` on the seeded admin doc so the dev login lands in dark mode out of the box.
 - **Default theme is dark** — both the login page and the initial load before any user preference is read start in dark mode.
 - Login page has its own sun/moon theme toggle inside the card header (next to the "HPM Intranet" title).
 - All CSS uses variables from `frontend/src/index.css`. `[data-theme="dark"]` overrides the full variable set.
