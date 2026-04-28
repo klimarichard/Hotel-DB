@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from "react";
-import { getStorage, ref, getDownloadURL, deleteObject } from "firebase/storage";
 import { useAuth } from "@/hooks/useAuth";
 import Button from "./Button";
 import ConfirmModal from "./ConfirmModal";
@@ -10,6 +9,7 @@ import {
   STANDALONE_TYPES,
   EmployeeData,
 } from "@/lib/contractVariables";
+import { blobToBase64 } from "@/lib/blobToBase64";
 import { formatTimestampCZ } from "@/lib/dateFormat";
 import styles from "./ContractsTab.module.css";
 
@@ -69,7 +69,7 @@ export default function ContractsTab({ employeeId, employeeData }: Props) {
 
   useEffect(() => {
     fetchContracts();
-  }, [employeeId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [employeeId, user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -82,10 +82,19 @@ export default function ContractsTab({ employeeId, employeeData }: Props) {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  async function handleDownload(storagePath: string) {
-    const storage = getStorage();
-    const url = await getDownloadURL(ref(storage, storagePath));
+  async function handleDownload(contractId: string, kind: "unsigned" | "signed") {
+    if (!user) return;
+    const token = await user.getIdToken();
+    const resp = await fetch(
+      `/api/employees/${employeeId}/contracts/${contractId}/download?kind=${kind}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (!resp.ok) return;
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
     window.open(url, "_blank");
+    // Revoke after the new tab has had time to claim the URL.
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
   }
 
   async function confirmDeleteUnsigned() {
@@ -94,21 +103,10 @@ export default function ContractsTab({ employeeId, employeeData }: Props) {
     setDeleteTarget(null);
 
     const token = await user.getIdToken();
-
-    // Delete Firestore record
     await fetch(`/api/employees/${employeeId}/contracts/${contract.id}`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${token}` },
     });
-
-    // Delete Storage file
-    if (contract.unsignedStoragePath) {
-      try {
-        await deleteObject(ref(getStorage(), contract.unsignedStoragePath));
-      } catch {
-        // ignore — file may already be gone
-      }
-    }
 
     await fetchContracts();
   }
@@ -116,21 +114,19 @@ export default function ContractsTab({ employeeId, employeeData }: Props) {
   async function handleUploadSigned(contract: ContractRecord, file: File) {
     if (!user) return;
 
-    const storage = getStorage();
-    const { uploadBytes } = await import("firebase/storage");
-    const storagePath = `contracts/${employeeId}/${contract.id}_signed.pdf`;
-    const storageRef = ref(storage, storagePath);
-    await uploadBytes(storageRef, file, { contentType: "application/pdf" });
-
+    const pdfBase64 = await blobToBase64(file);
     const token = await user.getIdToken();
-    await fetch(`/api/employees/${employeeId}/contracts/${contract.id}`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ status: "signed", signedStoragePath: storagePath }),
-    });
+    await fetch(
+      `/api/employees/${employeeId}/contracts/${contract.id}/signed-pdf`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ pdfBase64 }),
+      }
+    );
 
     await fetchContracts();
   }
@@ -217,7 +213,7 @@ export default function ContractsTab({ employeeId, employeeData }: Props) {
                     {c.unsignedStoragePath && (
                       <button
                         className={styles.actionBtn}
-                        onClick={() => handleDownload(c.unsignedStoragePath!)}
+                        onClick={() => handleDownload(c.id, "unsigned")}
                       >
                         Stáhnout
                       </button>
@@ -225,7 +221,7 @@ export default function ContractsTab({ employeeId, employeeData }: Props) {
                     {c.signedStoragePath && (
                       <button
                         className={styles.actionBtn}
-                        onClick={() => handleDownload(c.signedStoragePath!)}
+                        onClick={() => handleDownload(c.id, "signed")}
                       >
                         Podepsaná
                       </button>
