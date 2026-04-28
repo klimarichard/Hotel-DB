@@ -8,11 +8,24 @@ export interface ContractMeta {
   notes?: string;
 }
 
+export interface PageMargins {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+}
+
+export const DEFAULT_MARGINS: PageMargins = { top: 15, bottom: 15, left: 15, right: 15 };
+
 /**
  * Generate a PDF Blob from filled HTML using html2pdf.js.
  * The library is loaded lazily so it doesn't affect initial bundle size.
+ * html2pdf's margin order is [top, left, bottom, right].
  */
-export async function generatePdf(filledHtml: string): Promise<Blob> {
+export async function generatePdf(
+  filledHtml: string,
+  margins: PageMargins = DEFAULT_MARGINS
+): Promise<Blob> {
   const html2pdf = (await import("html2pdf.js" as string)).default;
 
   // Wrap the HTML in a styled container for consistent A4 rendering
@@ -44,7 +57,7 @@ export async function generatePdf(filledHtml: string): Promise<Blob> {
   document.body.appendChild(wrapper);
 
   const opt = {
-    margin: [15, 15, 15, 15] as [number, number, number, number], // mm
+    margin: [margins.top, margins.left, margins.bottom, margins.right] as [number, number, number, number],
     filename: "smlouva.pdf",
     image: { type: "jpeg", quality: 0.98 },
     html2canvas: { scale: 2, useCORS: true },

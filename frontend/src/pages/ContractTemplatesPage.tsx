@@ -401,8 +401,29 @@ interface TemplateMeta {
   updatedAt?: { seconds: number } | null;
 }
 
+interface PageMargins {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+}
+
+const DEFAULT_MARGINS: PageMargins = { top: 15, bottom: 15, left: 15, right: 15 };
+
+const MARGIN_PRESETS: { key: string; label: string; value: PageMargins }[] = [
+  { key: "standard", label: "Standardní", value: { top: 25, bottom: 25, left: 25, right: 25 } },
+  { key: "narrow", label: "Úzké", value: { top: 13, bottom: 13, left: 13, right: 13 } },
+  { key: "moderate", label: "Střední", value: { top: 25, bottom: 25, left: 19, right: 19 } },
+  { key: "wide", label: "Široké", value: { top: 25, bottom: 25, left: 51, right: 51 } },
+];
+
+function marginsEqual(a: PageMargins, b: PageMargins): boolean {
+  return a.top === b.top && a.bottom === b.bottom && a.left === b.left && a.right === b.right;
+}
+
 interface TemplateDoc extends TemplateMeta {
   htmlContent: string;
+  margins?: PageMargins;
 }
 
 export default function ContractTemplatesPage() {
@@ -419,6 +440,8 @@ export default function ContractTemplatesPage() {
   const [findQuery, setFindQuery] = useState("");
   const [replaceQuery, setReplaceQuery] = useState("");
   const findInputRef = useRef<HTMLInputElement>(null);
+  const [marginsOpen, setMarginsOpen] = useState(false);
+  const [margins, setMargins] = useState<PageMargins>(DEFAULT_MARGINS);
   // Force a rerender on every editor transaction so isActive(...) checks
   // (active toolbar buttons, in-table contextual buttons, etc.) reflect
   // selection changes. TipTap React v3 doesn't subscribe to these by default.
@@ -509,7 +532,7 @@ export default function ContractTemplatesPage() {
   useEffect(() => {
     if (!editor) return;
     const PAGE_CYCLE_MM = 309;
-    const TOP_MARGIN_MM = 15;
+    const TOP_MARGIN_MM = margins.top;
     const measure = () => {
       const a4 = document.querySelector(`.${styles.a4Page}`) as HTMLElement | null;
       if (!a4) return;
@@ -533,7 +556,7 @@ export default function ContractTemplatesPage() {
     editor.on("transaction", handler);
     handler();
     return () => { editor.off("transaction", handler); };
-  }, [editor]);
+  }, [editor, margins]);
 
   // Load the selected template's content into the editor.
   // Depending on `selectedTemplateId` (not the whole templates map) ensures
@@ -556,6 +579,7 @@ export default function ContractTemplatesPage() {
       if (!resp.ok) return;
       const doc: TemplateDoc = await resp.json();
       editor.commands.setContent(doc.htmlContent || "<p></p>");
+      setMargins(doc.margins ?? DEFAULT_MARGINS);
     })();
   }, [selectedTemplateId, editor, user]);
 
@@ -583,6 +607,7 @@ export default function ContractTemplatesPage() {
           type: selected,
           name: CONTRACT_TYPE_LABELS[selected],
           htmlContent,
+          margins,
         }),
       });
 
@@ -969,6 +994,13 @@ export default function ContractTemplatesPage() {
               title="Konec stránky (force page break in PDF)"
             >↧</button>
 
+            {/* Page margins */}
+            <button
+              className={`${styles.toolBtn} ${marginsOpen ? styles.toolBtnActive : ""}`}
+              onMouseDown={(e) => { e.preventDefault(); setMarginsOpen((v) => !v); }}
+              title="Okraje stránky"
+            >⊟</button>
+
             {/* Find & Replace */}
             <button
               className={`${styles.toolBtn} ${findOpen ? styles.toolBtnActive : ""}`}
@@ -1074,6 +1106,50 @@ export default function ContractTemplatesPage() {
               )}
             </div>
           )}
+          {marginsOpen && (
+            <div className={styles.marginsBar}>
+              {MARGIN_PRESETS.map((p) => {
+                const active = marginsEqual(margins, p.value);
+                return (
+                  <button
+                    key={p.key}
+                    className={`${styles.marginsPreset} ${active ? styles.marginsPresetActive : ""}`}
+                    onClick={() => setMargins(p.value)}
+                    type="button"
+                  >{p.label}</button>
+                );
+              })}
+              {(["top", "bottom", "left", "right"] as const).map((side) => {
+                const label = side === "top" ? "Nahoře" : side === "bottom" ? "Dole" : side === "left" ? "Vlevo" : "Vpravo";
+                return (
+                  <label key={side} className={styles.marginsField}>
+                    {label}
+                    <input
+                      className={styles.marginsInput}
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={1}
+                      value={margins[side]}
+                      onChange={(e) => {
+                        const n = Number(e.target.value);
+                        if (!Number.isFinite(n)) return;
+                        setMargins((m) => ({ ...m, [side]: Math.max(0, Math.min(100, n)) }));
+                      }}
+                    />
+                    mm
+                  </label>
+                );
+              })}
+              <button
+                className={styles.findClose}
+                onClick={() => setMarginsOpen(false)}
+                title="Zavřít"
+                aria-label="Zavřít okraje"
+                type="button"
+              >✕</button>
+            </div>
+          )}
           {findOpen && (
             <div className={styles.findBar}>
               <input
@@ -1109,7 +1185,15 @@ export default function ContractTemplatesPage() {
             </div>
           )}
           <div className={styles.editor}>
-            <div className={styles.a4Page}>
+            <div
+              className={styles.a4Page}
+              style={{
+                paddingTop: `${margins.top}mm`,
+                paddingBottom: `${margins.bottom}mm`,
+                paddingLeft: `${margins.left}mm`,
+                paddingRight: `${margins.right}mm`,
+              }}
+            >
               <EditorContent editor={editor} />
             </div>
           </div>
