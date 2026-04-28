@@ -158,3 +158,31 @@ authRouter.get("/me", requireAuth, async (req: AuthRequest, res) => {
   }
   res.json({ uid: doc.id, ...doc.data() });
 });
+
+/**
+ * GET /api/auth/me/theme
+ * Returns the current user's saved theme preference, or null if unset.
+ */
+authRouter.get("/me/theme", requireAuth, async (req: AuthRequest, res) => {
+  const doc = await admin.firestore().collection("users").doc(req.uid!).get();
+  const theme = doc.exists ? (doc.data()?.theme ?? null) : null;
+  res.json({ theme });
+});
+
+/**
+ * PUT /api/auth/me/theme
+ * Persists the current user's theme preference.
+ * Body: { theme: "light" | "dark" }
+ */
+authRouter.put("/me/theme", requireAuth, async (req: AuthRequest, res) => {
+  const { theme } = req.body as { theme: unknown };
+  if (theme !== "light" && theme !== "dark") {
+    res.status(400).json({ error: "theme must be 'light' or 'dark'" });
+    return;
+  }
+  await admin.firestore().collection("users").doc(req.uid!).set(
+    { theme, updatedAt: FieldValue.serverTimestamp() },
+    { merge: true }
+  );
+  res.json({ theme });
+});
