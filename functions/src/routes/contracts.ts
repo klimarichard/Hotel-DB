@@ -31,8 +31,18 @@ contractsRouter.get(
 
 /**
  * POST /api/employees/:employeeId/contracts
- * Create a contract metadata record after the PDF is already in Storage.
- * Body: { type, status, employmentRowId?, unsignedStoragePath?, notes? }
+ * Atomically upload the PDF to Storage (via Admin SDK) and create the
+ * Firestore metadata record. storage.rules deny all direct client
+ * access, so the client base64-encodes the blob and the upload happens
+ * server-side here.
+ *
+ * Body: { type, pdfBase64?, status?, employmentRowId?, notes? }
+ *
+ * If pdfBase64 is present, it's decoded and written to
+ * contracts/{employeeId}/{generatedDocId}.pdf, and the resulting path
+ * is stored as unsignedStoragePath on the metadata doc. If absent,
+ * only the metadata record is created (kept for callers that upload
+ * separately, e.g. the future signed-PDF upload flow).
  */
 contractsRouter.post(
   "/employees/:employeeId/contracts",
@@ -41,21 +51,42 @@ contractsRouter.post(
   async (req: AuthRequest, res: Response) => {
     const {
       type,
+      pdfBase64,
       status = "unsigned",
       employmentRowId,
-      unsignedStoragePath,
       notes,
     } = req.body as {
       type: ContractType;
+      pdfBase64?: string;
       status?: ContractStatus;
       employmentRowId?: string;
-      unsignedStoragePath?: string;
       notes?: string;
     };
 
     if (!type) {
       res.status(400).json({ error: "type is required" });
       return;
+    }
+
+    const employeeId = req.params.employeeId;
+
+    // Reserve a doc id up-front so the storage path lines up with the
+    // metadata record (`contracts/{employeeId}/{docId}.pdf`).
+    const docRef = db()
+      .collection("employees")
+      .doc(employeeId)
+      .collection("contracts")
+      .doc();
+
+    let unsignedStoragePath: string | undefined;
+    if (pdfBase64) {
+      const buffer = Buffer.from(pdfBase64, "base64");
+      unsignedStoragePath = `contracts/${employeeId}/${docRef.id}.pdf`;
+      const file = admin.storage().bucket().file(unsignedStoragePath);
+      await file.save(buffer, {
+        contentType: "application/pdf",
+        metadata: { metadata: { uploadedBy: req.uid ?? "unknown" } },
+      });
     }
 
     const docData: Record<string, unknown> = {
@@ -68,13 +99,8 @@ contractsRouter.post(
     if (unsignedStoragePath) docData.unsignedStoragePath = unsignedStoragePath;
     if (notes) docData.notes = notes;
 
-    const ref = await db()
-      .collection("employees")
-      .doc(req.params.employeeId)
-      .collection("contracts")
-      .add(docData);
-
-    res.status(201).json({ id: ref.id });
+    await docRef.set(docData);
+    res.status(201).json({ id: docRef.id });
   }
 );
 
