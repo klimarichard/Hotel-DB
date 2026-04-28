@@ -127,3 +127,7 @@ See `README.md` for full implementation notes: Firestore schema, build phase sta
 ## TODO list
 
 A local `TODO.md` file exists in the project root (gitignored — not tracked in git). It contains the prioritised backlog of features, bugs, and improvements. Read it at the start of a session if you need context on what to work on next.
+
+## Payroll computation notes
+
+A local `payroll.md` file at the project root (gitignored) is the canonical reference for **all** payroll-computation details: calculation rules, cascades, Firestore schema for `payrollPeriods/*`, locking, recalc, PDF export, notes, multisport. README intentionally contains none of this. Whenever you change payroll-related code, update `payroll.md` to keep it in sync — the file is local-only, so no commit.
