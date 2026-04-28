@@ -7,6 +7,9 @@ HR_App_Specification.docx
 # Local task list (personal, not tracked in git — see TODO.md)
 TODO.md
 
+# Payroll implementation notes — kept local, see CLAUDE.md
+payroll.md
+
 # Legacy — seed CSVs are now under scripts/seeds/ (already excluded by scripts/)
 
 # Dependencies

@@ -28,7 +28,7 @@ This file contains implementation details, feature notes, and post-merge fix his
 | 4 | ✅ | Contract module — TipTap editor, html2pdf.js PDF export, Firebase Storage, companies API |
 | 5 | ✅ | Shift planner — `parseShiftExpression()`, monthly grid, availability rules, X-limit overrides |
 | 6 | ✅ | Vacation — request workflow, pendingEdit pattern, auto-X in shift plans, user↔employee linking |
-| 7 | ✅ | Payroll — calculation engine (replicates MZDY.xlsx), editable overrides, sick leave, food voucher rate |
+| 7 | ✅ | Payroll — see local `payroll.md` for implementation notes |
 | 8 | 🚧 | Polish — dashboard (`Přehled` — today's staffing, MOD, absent managers) ✅, stats, audit log UI |
 
 ---
@@ -100,82 +100,6 @@ PDFs generated client-side via `html2pdf.js` — Puppeteer was too large for Gen
 - Shift plan page: month nav and plan bar are individually sticky (`position: sticky`) within `.main`; ShiftGrid thead sticks within the wrapper (`overflow-y: auto`, bounded `max-height`). Layout `.shell` uses `height: 100vh` so `.main` is the real scroll container.
 - Czech date formatting: `frontend/src/lib/dateFormat.ts` — `formatDateCZ(iso)`, `formatTimestampCZ(ts)`, `formatDatetimeCZ(ts)`.
 - Gendered marital status: `frontend/src/lib/genderDisplay.ts` — `displayGendered(value, gender)`.
-
----
-
-## Phase 7 — Payroll Implementation Notes
-
-**Core files:**
-- `functions/src/services/payrollCalculator.ts` — `getCzechHolidays`, `getBaseHours`, `calculateEntry`, `createOrUpdatePayrollPeriod`. `FieldValue` and `Timestamp` are imported from `firebase-admin/firestore` (NOT `admin.firestore.FieldValue` / `admin.firestore.Timestamp` — both are undefined in modern firebase-admin and throw `TypeError: Cannot read properties of undefined (reading 'now')` at runtime). The same trap bit `routes/payroll.ts` later for the notes endpoints — apply the same import pattern in any new payroll surface.
-- `functions/src/routes/payroll.ts` — `GET/PATCH /payroll/settings`, `GET /payroll/periods`, `GET /payroll/periods/by-month/:year/:month`, `POST /payroll/periods/by-month/:year/:month` (manual create from already-published plan, admin/director), `PATCH /payroll/periods/:id` (lock/unlock, admin), `PATCH /payroll/periods/:id/entries/:employeeId`, `POST /payroll/periods/:id/recalculate`, `POST /payroll/trigger`.
-- Scheduled `refreshPayroll` in `functions/src/index.ts` runs daily.
-
-**Calculation rules (from MZDY.xlsx):**
-- Base hours = `(Mon–Fri days in month) × 8`. Holidays on workdays count toward base.
-- Max night hours = `FLOOR(baseHours/12) × 8`.
-- Max holiday hours = `12 × (Czech public holidays in month)`.
-- Night hours per shift = 8 for each N/NP/ZN segment.
-- HODINY = sum of `hoursComputed` for `"assigned"` shifts. Both `totalHours` and `weekendHours` are `Math.ceil()`'d before downstream calculations.
-- VÝKAZ = `MIN(baseHours, totalHours + managerBonus)`. `managerBonus = countMonFriHolidays × 8` for `section === "vedoucí"`, else 0. **Hard-capped at baseHours** — the monthly norm is a ceiling, never exceeded. Anything that would push Výkaz over the norm spills into `extraHours` and cascades into SVÁTEK / NAVÍC (see below).
-- DOVOLENÁ (HPP) = `MAX(0, baseHours − reportHours)`. PPP = `MAX(0, baseHours/2 − reportHours)`. DPP = null.
-- `extraHours` = `MAX(0, (totalHours + managerBonus) − baseHours)` — actual overtime plus any manager-credit overflow. Routed by Req-3 cascade: SVÁTEK first (capped at `maxHolidayHours`), the remainder stays as NAVÍC.
-- NAVÍC (`extraPay`, raw net) = `hourlyRate × extraHours`. Stored unrounded — editing reveals the raw net value. Display rounding (gross-up + ceil to nearest 100) lives only in `formatNavic` / `navicText`. Tiered display: <5000 net → gross-up; =5000 → 6000; >5000 → two lines.
-- STRAVENKY = `workingDays × foodVoucherRate`. Working day = shift with `hoursComputed > 6`.
-- DPP/FAKT = `totalHours × hourlyRate` (unmasked).
-
-**Firestore schema:**
-- `payrollPeriods/{id}`: `{ year, month, shiftPlanId, baseHours, maxNightHours, maxHolidayHours, foodVoucherRate, locked, lockedAt?, lockedBy? }`.
-- `payrollPeriods/{id}/entries/{employeeId}`: calculated entry + `sickLeaveHours` (manual) + `overrides` (manual per-field) + `autoOverrides` (cascade-computed).
-- `settings/payroll`: `{ foodVoucherRate }`. Default 129.5 CZK/day.
-
-**Food voucher rate — retroactive safety:** `createOrUpdatePayrollPeriod` reads `foodVoucherRate` from the existing period first; only falls back to `settings/payroll` when the period is being created for the first time. Changing the rate in Settings therefore only affects future periods, never already-generated ones.
-
-**Locking:** Admins can lock a period via `PATCH /payroll/periods/:id` (`{ locked: true }`). Locked periods reject entry PATCHes (409), recalc requests (409), and skip the scheduled recalculation. Frontend hides the "Přepočítat" button and disables cell editing. Director can toggle lock on-screen labels but only admin role may actually flip it.
-
-**Manual recalc:** `POST /payroll/periods/:id/recalculate` re-runs `createOrUpdatePayrollPeriod(shiftPlanId, year, month)`. Triggered from the "Přepočítat" button — lets admin/director reflect shift-plan edits without waiting for the scheduled run. Rejected with 409 on locked periods.
-
-**Manual create:** `POST /payroll/periods/by-month/:year/:month` looks up the published shift plan for that month and runs `createOrUpdatePayrollPeriod` for it. Used by the "Vytvořit mzdy ručně" button on the empty state of `PayrollPage` — covers seeded plans where the publish trigger never fired. 404 when no published plan exists for the month, 409 when a period already exists (use recalc instead).
-
-**PDF export:** `handleExportPdf` in `PayrollPage.tsx` builds an inline-styled HTML table via `html2pdf.js` and saves as `HPM_MZDY_YYMM.pdf`. A4 portrait, all employees on one page, Dovolená + Nemoc in one cell (NEMOC badge stacks beneath when > 0), NAVÍC unmasked and shown in its tiered form, contract badge next to the name, base/max metadata at the top. Effective-value precedence matches the on-screen table: `overrides` → `autoOverrides` → computed.
-
-**Override mechanism:** Double-click any numeric cell (admin/director). `overrides` are preserved across recalcs; `autoOverrides` are always recomputed. Overridden cells: amber `*` (user) or blue `↺` (auto-cascade).
-
-**Cascade rules** (`calculateEntry` backend + `computeCascades` frontend — keep in sync, marked "MIRROR"):
-- Req 1: Manual Výkaz → auto-recalc Dovolená + NAVÍC if Hodiny > Výkaz.
-- Req 2: Nemoc → deduct from Dovolená; excess → deduct from Výkaz → generate NAVÍC.
-- Req 3: NAVÍC > 0 + unworked holiday hours → transfer into SVÁTEK.
-- Req 4: Manager holiday credit (see above).
-- Resolution order: `overrides` > `autoOverrides` > computed.
-
-**Poznámky column (admin + director):** Notes live as an array on each
-`payrollPeriods/{id}/entries/{employeeId}` doc. Each note tracks
-`{ id, sourceNoteId, text, carryForward, createdBy, createdByName, createdAt, editedBy?, editedByName?, editedAt? }`. Endpoints on `functions/src/routes/payroll.ts`:
-`POST/PATCH/DELETE /payroll/periods/:id/entries/:employeeId/notes[/:noteId]`.
-Rejected (409) on locked periods. Adding a note with `carryForward: true`
-also copies it into every existing future period for that employee (new
-id, same `sourceNoteId`). Edits and deletes affect only the current
-period — past and future copies stay put. When a brand-new period is
-generated by `createOrUpdatePayrollPeriod`, carry-forward notes from the
-most recent prior period are seeded automatically. The `PayrollNotesModal`
-(frontend) reuses `ConfirmModal` for delete confirmation.
-
-**Multisport column:** Shows `ANO` when the employee is enrolled for the
-payroll's month, otherwise `—`. Computed in
-`createOrUpdatePayrollPeriod` from `employees/{id}/benefits` using
-`multisport === true && (multisportFrom ?? -∞) <= lastDay && (multisportTo ?? +∞) >= firstDay`.
-Persisted on the entry as `multisportActive`. Included in the PDF export;
-the Poznámky column is intentionally PDF-excluded.
-
-**Multisport date range (employee form + detail):** `multisportFrom` and
-`multisportTo` (plaintext, `YYYY-MM-DD`) live on the one benefits doc
-alongside the existing `multisport` boolean. Both may be null (open-ended
-start or end). `EmployeeFormPage` exposes them as `<input type="date">`
-fields next to the existing checkbox; `EmployeeDetailPage` shows the
-range as e.g. `Ano · 1.5.2026 – 31.8.2026`. Scheduled function
-`sweepMultisport` in `functions/src/index.ts` runs daily, compares
-Europe/Prague today vs. `multisportTo`, and unticks `multisport` for
-expired rows (dates are preserved for history). Manual trigger for
-emulator: `POST /benefits/trigger-multisport-sweep`.
 
 ---
 
