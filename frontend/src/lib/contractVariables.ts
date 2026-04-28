@@ -143,15 +143,14 @@ export interface EmployeeData {
 }
 
 /**
- * Whether a free-form nationality string should be treated as Czech.
- * Anything unrecognized (including empty) is treated as foreign — safer
- * default for contract generation since the foreign branch typically
- * adds legally required fields (passport/visa).
+ * Whether a nationality code should be treated as Czech. Compared
+ * exactly against the canonical "CZE" code; the nationality field will
+ * become a fixed dropdown of country codes, so no fuzzy matching is
+ * needed. Empty / unknown is treated as foreign — safer default since
+ * the foreign branch typically adds legally required fields.
  */
 function isCzechNationality(nat: string): boolean {
-  const n = nat.trim().toLowerCase();
-  if (!n) return false;
-  return ["čr", "cz", "česká", "česká republika", "czech", "czech republic"].includes(n);
+  return nat.trim() === "CZE";
 }
 
 export interface CompanyData {
