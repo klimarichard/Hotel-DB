@@ -119,8 +119,13 @@ function computeCascades(
   let effReport = userOv.reportHours ?? entry.autoOverrides?.reportHours ?? entry.reportHours;
   let effVacation = userOv.vacationHours ?? entry.autoOverrides?.vacationHours ?? entry.vacationHours;
   let effExtraPay = userOv.extraPay ?? entry.autoOverrides?.extraPay ?? entry.extraPay;
-  // Track extra hours directly to avoid rounding errors in NAVÍC→SVÁTEK transfer
-  let effExtraHours = Math.max(0, entry.totalHours - baseHours);
+  // Track extra hours directly to avoid rounding errors in NAVÍC→SVÁTEK transfer.
+  // entry.extraHours already includes manager-bonus overflow (rawReportHours - baseHours).
+  let effExtraHours = entry.extraHours;
+  // Raw manager-credit hours = capped Výkaz + overflow = totalHours + managerBonus.
+  // Used as the upper bound when the user manually lowers Výkaz so the cascade
+  // routes the freed hours into NAVÍC/SVÁTEK.
+  const rawReport = entry.reportHours + entry.extraHours;
 
   if (trigger === "reportHours" && !isDpp) {
     effReport = newValue;
@@ -132,15 +137,15 @@ function computeCascades(
       newAutoOv.vacationHours = cv;
       effVacation = cv;
     }
-    // Cascade Výkaz → NAVÍC (when Hodiny > new Výkaz)
-    if (entry.totalHours > effReport && entry.hourlyRate && entry.hourlyRate > 0
+    // Cascade Výkaz → NAVÍC (when raw report > new Výkaz)
+    if (rawReport > effReport && entry.hourlyRate && entry.hourlyRate > 0
       && userOv.extraPay === undefined) {
-      effExtraHours = entry.totalHours - effReport;
+      effExtraHours = rawReport - effReport;
       const cp = entry.hourlyRate * effExtraHours;
       newAutoOv.extraPay = cp;
       effExtraPay = cp;
     } else if (userOv.extraPay === undefined) {
-      // Výkaz raised above Hodiny — clear any cascaded NAVÍC
+      // Výkaz raised above raw credit — clear any cascaded NAVÍC
       effExtraHours = 0;
       delete newAutoOv.extraPay;
       effExtraPay = entry.extraPay;

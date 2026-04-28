@@ -199,11 +199,15 @@ export function calculateEntry(
 
   // ── Manager holiday credit (vedoucí section) ──────────────────────────────
   // Managers get Mon–Fri holidays counted toward VÝKAZ regardless of whether worked.
+  // VÝKAZ is hard-capped at baseHours (the monthly norm). Any excess from manager
+  // bonus or actual overtime spills into `extraHours`, which the cascades below
+  // route into SVÁTEK first (capped at maxHolidayHours) and the remainder into NAVÍC.
   const isVeduci = employee.section === "vedoucí";
   const managerBonus = isVeduci ? countMonFriHolidays(year, month, holidays) * 8 : 0;
-  const reportHours = isVeduci ? totalHours + managerBonus : Math.min(baseHours, totalHours);
+  const rawReportHours = totalHours + managerBonus;
+  const reportHours = Math.min(baseHours, rawReportHours);
 
-  const extraHours = Math.max(0, totalHours - baseHours);
+  const extraHours = Math.max(0, rawReportHours - baseHours);
   const maxNightHours = Math.floor(baseHours / 12) * 8;
   const nightCapped = Math.min(maxNightHours, nightHours);
 
@@ -244,9 +248,9 @@ export function calculateEntry(
       newAutoOv.vacationHours = cv;
       effVacation = cv;
     }
-    if (totalHours > effReport && employee.hourlyRate != null && employee.hourlyRate > 0
+    if (rawReportHours > effReport && employee.hourlyRate != null && employee.hourlyRate > 0
       && userOv.extraPay === undefined) {
-      effExtraHours = totalHours - effReport;
+      effExtraHours = rawReportHours - effReport;
       const cp = employee.hourlyRate * effExtraHours;
       newAutoOv.extraPay = cp;
       effExtraPay = cp;
