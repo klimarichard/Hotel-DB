@@ -5,11 +5,12 @@
 - **Always create a new branch before making any changes.** Never work directly on `master`.
 - Branch naming: `feature/short-description`, `fix/short-description`, `chore/short-description`.
 - **Commit after every logical step** on the branch — don't batch everything into one commit.
-- **Push every feature/fix/chore branch to `origin` continuously.** On the first commit run `git push -u origin <branch>` to set upstream tracking; after each subsequent commit run `git push`. This keeps the remote as a live backup of in-progress work. No confirmation needed for these branch backup pushes.
-- **Merging into `master` and pushing `master` still require explicit user instruction.** Never run `git merge` into `master` or `git push origin master` (or `git push` while on `master`) without the user saying so.
-- **Never delete branches** — they serve as backups, both locally and on `origin`.
+- **Feature/fix/chore branches stay local until merge time.** Don't push a branch on creation or after each commit — keep the work local while it's in progress.
+- **At merge time, push the branch as a backup *before* merging.** When the user says to merge into `master`: (1) `git push -u origin <branch>` to set upstream and back up the branch, (2) merge into `master` with `--no-ff`, (3) push `master`. The branch ref on `origin` then serves as a permanent backup of the pre-merge tip.
+- **Merging into `master` and pushing `master` require explicit user instruction.** Never run `git merge` into `master` or `git push origin master` (or `git push` while on `master`) without the user saying so. The branch backup push at step (1) is implicit in a "merge to master" instruction — no separate confirmation needed.
+- **Never delete branches** — they serve as backups, both locally and on `origin` once pushed at merge time.
 - Use clear, descriptive commit messages explaining *why*, not just *what*.
-- **Before pushing `master`** (i.e. just before the merge-then-push step), update `CLAUDE.md` + `README.md` (implementation details) and project memory as the last commit on the merged branch. This rule applies only to `master` pushes, not to per-branch backup pushes.
+- **Before pushing `master`** (i.e. just before the merge-then-push step), update `CLAUDE.md` + `README.md` (implementation details) and project memory as the last commit on the branch.
 
 ## Data Safety — TOP PRIORITY
 
