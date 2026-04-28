@@ -80,6 +80,24 @@ const ResizableImage = Image.extend({
         },
         renderHTML: (attrs) => (attrs.width ? { style: `width: ${attrs.width}` } : {}),
       },
+      align: {
+        default: null,
+        parseHTML: (el) => {
+          const ml = (el as HTMLElement).style.marginLeft;
+          const mr = (el as HTMLElement).style.marginRight;
+          if (ml === "auto" && mr === "auto") return "center";
+          if (ml === "auto" && mr !== "auto") return "right";
+          if ((ml === "0px" || ml === "0") && mr === "auto") return "left";
+          return null;
+        },
+        renderHTML: (attrs) => {
+          if (!attrs.align) return {};
+          if (attrs.align === "center") return { style: "display: block; margin-left: auto; margin-right: auto" };
+          if (attrs.align === "right") return { style: "display: block; margin-left: auto; margin-right: 0" };
+          if (attrs.align === "left") return { style: "display: block; margin-left: 0; margin-right: auto" };
+          return {};
+        },
+      },
     };
   },
 });
@@ -1032,6 +1050,23 @@ export default function ContractTemplatesPage() {
                   }}
                   title="Původní velikost"
                 >⤢</button>
+                {(["left", "center", "right"] as const).map((a) => {
+                  const cur = editor?.getAttributes("image").align;
+                  const active = cur === a;
+                  const glyph = a === "left" ? "⬅" : a === "center" ? "↔" : "➡";
+                  const label = a === "left" ? "Vlevo" : a === "center" ? "Na střed" : "Vpravo";
+                  return (
+                    <button
+                      key={a}
+                      className={`${styles.toolBtn} ${active ? styles.toolBtnActive : ""}`}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        editor?.chain().focus().updateAttributes("image", { align: a }).run();
+                      }}
+                      title={label}
+                    >{glyph}</button>
+                  );
+                })}
               </>
             )}
           </div>
