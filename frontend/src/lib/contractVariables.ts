@@ -60,6 +60,9 @@ export const VARIABLE_GROUPS: { group: string; vars: { key: string; label: strin
       { key: "visaNumber", label: "Číslo povolení k pobytu" },
       { key: "currentJobTitle", label: "Pracovní pozice" },
       { key: "currentDepartment", label: "Oddělení" },
+      { key: "nationality", label: "Státní příslušnost" },
+      { key: "isCzech", label: "Je Čech (pro {{#if}})" },
+      { key: "isForeigner", label: "Je cizinec (pro {{#if}})" },
     ],
   },
   {
@@ -126,6 +129,7 @@ export interface EmployeeData {
   zip?: string;
   // personal fields
   birthDate?: string; // pre-formatted Czech date (DD. MM. YYYY)
+  nationality?: string; // free-form string from employee.nationality
   // document sub-doc fields (decrypted, merged in by caller)
   birthNumber?: string;
   idCardNumber?: string;
@@ -136,6 +140,18 @@ export interface EmployeeData {
   salary?: string | number;
   startDate?: string;
   endDate?: string;
+}
+
+/**
+ * Whether a free-form nationality string should be treated as Czech.
+ * Anything unrecognized (including empty) is treated as foreign — safer
+ * default for contract generation since the foreign branch typically
+ * adds legally required fields (passport/visa).
+ */
+function isCzechNationality(nat: string): boolean {
+  const n = nat.trim().toLowerCase();
+  if (!n) return false;
+  return ["čr", "cz", "česká", "česká republika", "czech", "czech republic"].includes(n);
 }
 
 export interface CompanyData {
@@ -163,6 +179,9 @@ export function resolveVariables(
 ): Record<string, string> {
   const str = (v: unknown) => (v !== undefined && v !== null ? String(v) : "");
 
+  const nationality = str(employee.nationality);
+  const czech = isCzechNationality(nationality);
+
   const vars: Record<string, string> = {
     firstName: str(employee.firstName),
     lastName: str(employee.lastName),
@@ -174,6 +193,9 @@ export function resolveVariables(
     visaNumber: str(employee.visaNumber),
     currentJobTitle: str(employee.currentJobTitle),
     currentDepartment: str(employee.currentDepartment),
+    nationality,
+    isCzech: czech ? "ano" : "",
+    isForeigner: czech ? "" : "ano",
     address: str(employee.address),
     city: str(employee.city),
     zip: str(employee.zip),
@@ -196,21 +218,50 @@ export function resolveVariables(
   return vars;
 }
 
+const IF_RE = /\{\{#if\s+(\w+)\}\}([\s\S]*?)\{\{\/if\}\}/g;
+const UNLESS_RE = /\{\{#unless\s+(\w+)\}\}([\s\S]*?)\{\{\/unless\}\}/g;
+const EMPTY_P_RE = /<p[^>]*>\s*<\/p>/g;
+
+/**
+ * Resolve {{#if X}}…{{/if}} and {{#unless X}}…{{/unless}} blocks against
+ * vars. `if` keeps the inner content when vars[X] is a truthy non-empty
+ * string; `unless` is the inverse. After stripping a block, any empty
+ * <p></p> wrappers left behind by the editor are removed so a deleted
+ * line doesn't leave a blank paragraph in the output.
+ *
+ * Nesting is not supported: blocks are matched non-greedily and a nested
+ * inner {{#if}} would close its own outer block prematurely.
+ */
+function processConditionals(html: string, vars: Record<string, string>): string {
+  let out = html;
+  out = out.replace(IF_RE, (_m, key, inner) => (vars[key] ? inner : ""));
+  out = out.replace(UNLESS_RE, (_m, key, inner) => (vars[key] ? "" : inner));
+  out = out.replace(EMPTY_P_RE, "");
+  return out;
+}
+
 /**
  * Replace all `{{key}}` placeholders in the HTML with their resolved values.
+ * Conditional blocks ({{#if X}}…{{/if}} and {{#unless X}}…{{/unless}}) are
+ * resolved first so their content is either kept or stripped before
+ * variable substitution runs.
  */
 export function fillTemplate(html: string, vars: Record<string, string>): string {
-  return html.replace(/\{\{(\w+)\}\}/g, (_match, key) => vars[key] ?? `{{${key}}}`);
+  const processed = processConditionals(html, vars);
+  return processed.replace(/\{\{(\w+)\}\}/g, (_match, key) => vars[key] ?? `{{${key}}}`);
 }
 
 /**
  * Return the list of `{{key}}` placeholders in the HTML that have no value
- * (value is empty string) after resolution — signals missing data to the user.
+ * (value is empty string) after resolution — signals missing data to the
+ * user. Variables that only appear inside a conditional block whose
+ * condition is false are not considered missing because they won't render.
  */
 export function getMissingVariables(html: string, vars: Record<string, string>): string[] {
+  const processed = processConditionals(html, vars);
   const missing: string[] = [];
   const seen = new Set<string>();
-  for (const match of html.matchAll(/\{\{(\w+)\}\}/g)) {
+  for (const match of processed.matchAll(/\{\{(\w+)\}\}/g)) {
     const key = match[1];
     if (!seen.has(key) && !vars[key]) {
       missing.push(key);

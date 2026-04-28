@@ -1118,6 +1118,7 @@ export default function EmployeeDetailPage() {
             currentCompanyId: employee.currentCompanyId ?? undefined,
             address: contact?.permanentAddress,
             birthDate: employee.dateOfBirth ? formatDateCZ(employee.dateOfBirth) : undefined,
+            nationality: employee.nationality,
             passportNumber: documents?.passportNumber,
             visaNumber: documents?.visaNumber,
           }}
@@ -1276,6 +1277,7 @@ export default function EmployeeDetailPage() {
             currentCompanyId: employee.currentCompanyId ?? undefined,
             address: contact?.permanentAddress,
             birthDate: employee.dateOfBirth ? formatDateCZ(employee.dateOfBirth) : undefined,
+            nationality: employee.nationality,
             passportNumber: documents?.passportNumber,
             visaNumber: documents?.visaNumber,
             contractType: generateModal.row.contractType,
