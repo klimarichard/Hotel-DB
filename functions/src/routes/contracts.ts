@@ -147,8 +147,112 @@ contractsRouter.patch(
 );
 
 /**
+ * GET /api/employees/:employeeId/contracts/:contractId/download?kind=unsigned|signed
+ * Streams the requested PDF back to the client. storage.rules deny direct
+ * client access, so reads must go through the Admin SDK here.
+ */
+contractsRouter.get(
+  "/employees/:employeeId/contracts/:contractId/download",
+  requireAuth,
+  requireRole("admin", "director", "manager"),
+  async (req: AuthRequest, res: Response) => {
+    const kind = req.query.kind === "signed" ? "signed" : "unsigned";
+
+    const ref = db()
+      .collection("employees")
+      .doc(req.params.employeeId)
+      .collection("contracts")
+      .doc(req.params.contractId);
+
+    const snap = await ref.get();
+    if (!snap.exists) {
+      res.status(404).json({ error: "Contract not found" });
+      return;
+    }
+
+    const data = snap.data() as Record<string, unknown>;
+    const path = kind === "signed" ? data.signedStoragePath : data.unsignedStoragePath;
+    if (typeof path !== "string" || !path) {
+      res.status(404).json({ error: `No ${kind} PDF for this contract` });
+      return;
+    }
+
+    const file = admin.storage().bucket().file(path);
+    const [exists] = await file.exists();
+    if (!exists) {
+      res.status(404).json({ error: "PDF file missing in storage" });
+      return;
+    }
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `inline; filename="${req.params.contractId}_${kind}.pdf"`
+    );
+    file.createReadStream()
+      .on("error", (e) => {
+        if (!res.headersSent) res.status(500).json({ error: e.message });
+        else res.end();
+      })
+      .pipe(res);
+  }
+);
+
+/**
+ * POST /api/employees/:employeeId/contracts/:contractId/signed-pdf
+ * Upload a signed PDF (base64 in body) via Admin SDK and update the
+ * contract record. storage.rules deny client uploads.
+ *
+ * Body: { pdfBase64 }
+ */
+contractsRouter.post(
+  "/employees/:employeeId/contracts/:contractId/signed-pdf",
+  requireAuth,
+  requireRole("admin", "director"),
+  async (req: AuthRequest, res: Response) => {
+    const { pdfBase64 } = req.body as { pdfBase64?: string };
+    if (!pdfBase64) {
+      res.status(400).json({ error: "pdfBase64 is required" });
+      return;
+    }
+
+    const employeeId = req.params.employeeId;
+    const contractId = req.params.contractId;
+
+    const ref = db()
+      .collection("employees")
+      .doc(employeeId)
+      .collection("contracts")
+      .doc(contractId);
+
+    const existing = await ref.get();
+    if (!existing.exists) {
+      res.status(404).json({ error: "Contract not found" });
+      return;
+    }
+
+    const buffer = Buffer.from(pdfBase64, "base64");
+    const signedStoragePath = `contracts/${employeeId}/${contractId}_signed.pdf`;
+    const file = admin.storage().bucket().file(signedStoragePath);
+    await file.save(buffer, {
+      contentType: "application/pdf",
+      metadata: { metadata: { uploadedBy: req.uid ?? "unknown" } },
+    });
+
+    await ref.update({
+      status: "signed",
+      signedStoragePath,
+      signedAt: FieldValue.serverTimestamp(),
+      signedUploadedBy: req.uid,
+    });
+
+    res.json({ ok: true, signedStoragePath });
+  }
+);
+
+/**
  * DELETE /api/employees/:employeeId/contracts/:contractId
- * Deletes the Firestore record. Frontend is responsible for deleting Storage files.
+ * Deletes the Firestore record and any associated Storage files (best-effort).
  */
 contractsRouter.delete(
   "/employees/:employeeId/contracts/:contractId",
@@ -166,6 +270,15 @@ contractsRouter.delete(
       res.status(404).json({ error: "Contract not found" });
       return;
     }
+
+    const data = existing.data() as Record<string, unknown>;
+    const paths = [data.unsignedStoragePath, data.signedStoragePath].filter(
+      (p): p is string => typeof p === "string" && p.length > 0
+    );
+    const bucket = admin.storage().bucket();
+    await Promise.all(
+      paths.map((p) => bucket.file(p).delete().catch(() => undefined))
+    );
 
     await ref.delete();
     res.json({ ok: true });
