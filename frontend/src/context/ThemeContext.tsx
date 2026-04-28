@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { authApi } from "@/lib/api";
 
 type Theme = "light" | "dark";
 
@@ -24,16 +25,35 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     return guestSaved === "light" ? "light" : "dark";
   });
 
-  // Load the user's saved preference whenever the logged-in user changes
+  // On login, seed from the localStorage cache to avoid a flash, then fetch
+  // the authoritative preference from the backend (Firestore via Cloud Function).
   useEffect(() => {
-    if (!storageKey) {
+    if (!storageKey || !user) {
       const guestSaved = localStorage.getItem(GUEST_THEME_KEY);
       setTheme(guestSaved === "light" ? "light" : "dark");
       return;
     }
-    const saved = localStorage.getItem(storageKey);
-    setTheme(saved === "dark" ? "dark" : "light");
-  }, [storageKey]);
+
+    const cached = localStorage.getItem(storageKey);
+    if (cached === "light" || cached === "dark") {
+      setTheme(cached);
+    }
+
+    let cancelled = false;
+    authApi
+      .getTheme()
+      .then(({ theme: remote }) => {
+        if (cancelled) return;
+        if (remote === "light" || remote === "dark") {
+          setTheme(remote);
+          localStorage.setItem(storageKey, remote);
+        }
+      })
+      .catch((e) => console.error("Failed to load theme:", e));
+    return () => {
+      cancelled = true;
+    };
+  }, [storageKey, user]);
 
   // Apply the theme attribute to <html> so CSS variables take effect
   useEffect(() => {
@@ -43,8 +63,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   function toggleTheme() {
     setTheme((prev) => {
       const next = prev === "light" ? "dark" : "light";
-      if (storageKey) {
+      if (storageKey && user) {
         localStorage.setItem(storageKey, next);
+        authApi
+          .setTheme(next)
+          .catch((e) => console.error("Failed to persist theme:", e));
       } else {
         localStorage.setItem(GUEST_THEME_KEY, next);
       }

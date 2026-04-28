@@ -87,4 +87,7 @@ export const authApi = {
   linkEmployee: (uid: string, employeeId: string | null) =>
     api.patch<{ success: boolean }>(`/auth/users/${uid}/employee`, { employeeId }),
   me: () => api.get<UserProfile>("/auth/me"),
+  getTheme: () => api.get<{ theme: "light" | "dark" | null }>("/auth/me/theme"),
+  setTheme: (theme: "light" | "dark") =>
+    api.put<{ theme: "light" | "dark" }>("/auth/me/theme", { theme }),
 };
