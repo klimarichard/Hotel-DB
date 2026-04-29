@@ -2,9 +2,48 @@ import { Router, Response } from "express";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireAuth, requireRole, AuthRequest } from "../middleware/auth";
+import { renderPdf, RenderMargins } from "../services/pdfRenderer";
 import type { ContractType } from "./contractTemplates";
 
 export const contractsRouter = Router();
+
+/**
+ * POST /api/contracts/render-pdf
+ * Server-side PDF generation via Puppeteer (real headless Chromium).
+ * Replaces the old client-side html2pdf.js path so the PDF matches the
+ * editor preview byte-for-byte — same rendering engine the user sees in
+ * the browser.
+ *
+ * Body: { html, margins? }
+ *   - html: filled HTML body content (no <html>/<body> wrapper)
+ *   - margins: optional { top, bottom, left, right } in mm (defaults 15)
+ *
+ * Returns: application/pdf binary
+ */
+contractsRouter.post(
+  "/contracts/render-pdf",
+  requireAuth,
+  requireRole("admin", "director"),
+  async (req: AuthRequest, res: Response) => {
+    const { html, margins } = req.body as {
+      html?: string;
+      margins?: RenderMargins;
+    };
+    if (typeof html !== "string" || !html) {
+      res.status(400).json({ error: "html is required" });
+      return;
+    }
+    try {
+      const pdf = await renderPdf(html, margins);
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Length", pdf.length.toString());
+      res.send(pdf);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Unknown error";
+      res.status(500).json({ error: `PDF rendering failed: ${msg}` });
+    }
+  }
+);
 
 const db = () => admin.firestore();
 

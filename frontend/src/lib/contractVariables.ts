@@ -219,23 +219,59 @@ export function resolveVariables(
 
 const IF_RE = /\{\{#if\s+(\w+)\}\}([\s\S]*?)\{\{\/if\}\}/g;
 const UNLESS_RE = /\{\{#unless\s+(\w+)\}\}([\s\S]*?)\{\{\/unless\}\}/g;
-const EMPTY_P_RE = /<p[^>]*>\s*<\/p>/g;
+// Sentinel that marks where a conditional block was stripped. Used so we
+// can later remove only the empty <p></p> wrappers that are adjacent to
+// the strip point, while preserving intentional blank lines elsewhere.
+const STRIP_MARKER = "HPM_STRIPPED";
+// Drop any <p>…marker…</p> whose only contents reduce to the marker —
+// the wrapping paragraph existed solely to hold the conditional. Then
+// strip any leftover bare markers (e.g. when the conditional sat
+// between paragraphs at block level). Empty <p></p> elsewhere are
+// preserved as intentional blank lines.
+const P_AROUND_MARKER_RE = new RegExp(
+  `<p[^>]*>\\s*${STRIP_MARKER}\\s*<\\/p>`,
+  "g"
+);
+const BARE_MARKER_RE = new RegExp(STRIP_MARKER, "g");
 
 /**
  * Resolve {{#if X}}…{{/if}} and {{#unless X}}…{{/unless}} blocks against
  * vars. `if` keeps the inner content when vars[X] is a truthy non-empty
  * string; `unless` is the inverse. After stripping a block, any empty
- * <p></p> wrappers left behind by the editor are removed so a deleted
- * line doesn't leave a blank paragraph in the output.
+ * <p></p> wrappers immediately adjacent to the strip point are removed
+ * so a deleted line doesn't leave a blank paragraph behind. Empty
+ * paragraphs that are *not* adjacent to a stripped block are preserved
+ * — they're intentional blank lines authored in the template.
  *
  * Nesting is not supported: blocks are matched non-greedily and a nested
  * inner {{#if}} would close its own outer block prematurely.
  */
 function processConditionals(html: string, vars: Record<string, string>): string {
   let out = html;
-  out = out.replace(IF_RE, (_m, key, inner) => (vars[key] ? inner : ""));
-  out = out.replace(UNLESS_RE, (_m, key, inner) => (vars[key] ? "" : inner));
-  out = out.replace(EMPTY_P_RE, "");
+  out = out.replace(IF_RE, (_m, key, inner) => (vars[key] ? inner : STRIP_MARKER));
+  out = out.replace(UNLESS_RE, (_m, key, inner) => (vars[key] ? STRIP_MARKER : inner));
+  out = out.replace(P_AROUND_MARKER_RE, "");
+  out = out.replace(BARE_MARKER_RE, "");
+  return out;
+}
+
+// Strip a trailing run of truly-empty <p></p> at the document end —
+// TipTap's editor often leaves a dangling empty paragraph after the
+// last block that, when re-rendered with margin-bottom, can overflow
+// onto a blank second page in the generated PDF.
+const TRAILING_EMPTY_PS_RE = /(?:<p[^>]*>\s*<\/p>\s*)+$/;
+// Normalise a truly-empty <p></p> (kept as an intentional blank line by
+// the author) to <p><br></p>. Bare empty <p> elements collapse to zero
+// height in Chromium when re-rendered outside the editor's
+// contenteditable surface, so the blank line wouldn't show in the PDF;
+// inserting a <br> forces the browser to render the paragraph at one
+// line of height, matching what the editor preview shows.
+const EMPTY_P_RE = /<p([^>]*)>\s*<\/p>/g;
+
+function normaliseEmptyParagraphs(html: string): string {
+  let out = html;
+  out = out.replace(TRAILING_EMPTY_PS_RE, "");
+  out = out.replace(EMPTY_P_RE, "<p$1><br></p>");
   return out;
 }
 
@@ -243,11 +279,16 @@ function processConditionals(html: string, vars: Record<string, string>): string
  * Replace all `{{key}}` placeholders in the HTML with their resolved values.
  * Conditional blocks ({{#if X}}…{{/if}} and {{#unless X}}…{{/unless}}) are
  * resolved first so their content is either kept or stripped before
- * variable substitution runs.
+ * variable substitution runs. Empty paragraphs are normalised so they
+ * render as visible blank lines in the generated PDF.
  */
 export function fillTemplate(html: string, vars: Record<string, string>): string {
   const processed = processConditionals(html, vars);
-  return processed.replace(/\{\{(\w+)\}\}/g, (_match, key) => vars[key] ?? `{{${key}}}`);
+  const substituted = processed.replace(
+    /\{\{(\w+)\}\}/g,
+    (_match, key) => vars[key] ?? `{{${key}}}`
+  );
+  return normaliseEmptyParagraphs(substituted);
 }
 
 /**
