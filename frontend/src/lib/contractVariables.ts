@@ -247,6 +247,14 @@ function processConditionals(html: string, vars: Record<string, string>): string
 // last block that, when re-rendered with margin-bottom, can overflow
 // onto a blank second page in the generated PDF.
 const TRAILING_EMPTY_PS_RE = /(?:<p[^>]*>\s*<\/p>\s*)+$/;
+// Strip empty <p></p> runs that immediately precede a <table>. The
+// table has its own margin-top (0.5cm in RENDER_CSS), so the author's
+// blank paragraphs above the table — added for visual spacing in the
+// editor — would otherwise stack with the table margin and push the
+// row past the page boundary. Single-row tables can never break
+// (Chromium implicit break-inside: avoid on <tr>), so even a small
+// overshoot moves the whole table to the next page.
+const EMPTY_PS_BEFORE_TABLE_RE = /(?:<p[^>]*>\s*<\/p>\s*)+(?=<table\b)/g;
 // Normalise a truly-empty <p></p> (kept as an intentional blank line by
 // the author) to <p><br></p>. Bare empty <p> elements collapse to zero
 // height in Chromium when re-rendered outside the editor's
@@ -258,6 +266,7 @@ const EMPTY_P_RE = /<p([^>]*)>\s*<\/p>/g;
 function normaliseEmptyParagraphs(html: string): string {
   let out = html;
   out = out.replace(TRAILING_EMPTY_PS_RE, "");
+  out = out.replace(EMPTY_PS_BEFORE_TABLE_RE, "");
   out = out.replace(EMPTY_P_RE, "<p$1><br></p>");
   return out;
 }
