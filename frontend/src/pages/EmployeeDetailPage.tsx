@@ -1188,7 +1188,7 @@ export default function EmployeeDetailPage() {
             currentDepartment: employee.currentDepartment,
             currentCompanyId: employee.currentCompanyId ?? undefined,
             address: contact?.permanentAddress,
-            birthDate: employee.dateOfBirth ? formatDateCZ(employee.dateOfBirth) : undefined,
+            birthDate: employee.dateOfBirth ?? undefined,
             nationality: employee.nationality,
             passportNumber: documents?.passportNumber,
             visaNumber: documents?.visaNumber,
@@ -1348,7 +1348,7 @@ export default function EmployeeDetailPage() {
             currentDepartment: employee.currentDepartment,
             currentCompanyId: employee.currentCompanyId ?? undefined,
             address: contact?.permanentAddress,
-            birthDate: employee.dateOfBirth ? formatDateCZ(employee.dateOfBirth) : undefined,
+            birthDate: employee.dateOfBirth ?? undefined,
             nationality: employee.nationality,
             passportNumber: documents?.passportNumber,
             visaNumber: documents?.visaNumber,
@@ -1356,6 +1356,9 @@ export default function EmployeeDetailPage() {
             salary: generateModal.row.salary,
             startDate: generateModal.row.startDate,
             endDate: generateModal.row.endDate ?? undefined,
+            workLocation: generateModal.row.workLocation,
+            probationPeriod: generateModal.row.probationPeriod,
+            signingDate: generateModal.row.signingDate ?? undefined,
           }}
           rowSnapshot={buildRowSnapshot(generateModal.row)}
           onClose={() => setGenerateModal(null)}

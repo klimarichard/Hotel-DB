@@ -1,3 +1,5 @@
+import { formatDateCZ } from "./dateFormat";
+
 export type ContractType =
   | "nastup_hpp"
   | "nastup_ppp"
@@ -80,6 +82,13 @@ export const VARIABLE_GROUPS: { group: string; vars: { key: string; label: strin
       { key: "salary", label: "Plat" },
       { key: "startDate", label: "Datum nástupu" },
       { key: "endDate", label: "Datum ukončení" },
+      { key: "workLocation", label: "Místo výkonu práce" },
+      { key: "probationPeriod", label: "Zkušební doba" },
+      { key: "signingDate", label: "Datum podpisu" },
+      { key: "hasProbation", label: "Má zkušební dobu (pro {{#if}})" },
+      { key: "noProbation", label: "Nemá zkušební dobu (pro {{#if}})" },
+      { key: "hasEndDate", label: "Má datum ukončení (pro {{#if}})" },
+      { key: "noEndDate", label: "Nemá datum ukončení (pro {{#if}})" },
     ],
   },
   {
@@ -108,13 +117,6 @@ export const VARIABLE_GROUPS: { group: string; vars: { key: string; label: strin
   },
 ];
 
-/** Format a JS Date to Czech format: "dd. MM. yyyy" */
-function formatCzechDate(date: Date): string {
-  const d = date.getDate().toString().padStart(2, "0");
-  const m = (date.getMonth() + 1).toString().padStart(2, "0");
-  const y = date.getFullYear();
-  return `${d}. ${m}. ${y}`;
-}
 
 export interface EmployeeData {
   id: string;
@@ -128,7 +130,7 @@ export interface EmployeeData {
   city?: string;
   zip?: string;
   // personal fields
-  birthDate?: string; // pre-formatted Czech date (DD. MM. YYYY)
+  birthDate?: string; // raw ISO date (YYYY-MM-DD); resolveVariables formats it
   nationality?: string; // free-form string from employee.nationality
   // document sub-doc fields (decrypted, merged in by caller)
   birthNumber?: string;
@@ -140,6 +142,9 @@ export interface EmployeeData {
   salary?: string | number;
   startDate?: string;
   endDate?: string;
+  workLocation?: string;
+  probationPeriod?: string;
+  signingDate?: string; // raw ISO date (YYYY-MM-DD); resolveVariables formats it
 }
 
 /**
@@ -181,11 +186,18 @@ export function resolveVariables(
   const nationality = str(employee.nationality);
   const czech = isCzechNationality(nationality);
 
+  // Probation: free-form string (e.g. "2 měsíce", "0", ""). Treat as
+  // "has probation" only when it contains a non-zero digit, so "0",
+  // "0 měsíců", and "" all collapse to noProbation = true.
+  const probationStr = str(employee.probationPeriod).trim();
+  const hasProbation = /[1-9]/.test(probationStr);
+  const hasEndDate = str(employee.endDate).trim() !== "";
+
   const vars: Record<string, string> = {
     firstName: str(employee.firstName),
     lastName: str(employee.lastName),
     fullName: [employee.firstName, employee.lastName].filter(Boolean).join(" "),
-    birthDate: str(employee.birthDate),
+    birthDate: formatDateCZ(employee.birthDate),
     birthNumber: str(employee.birthNumber),
     idCardNumber: str(employee.idCardNumber),
     passportNumber: str(employee.passportNumber),
@@ -200,8 +212,15 @@ export function resolveVariables(
     zip: str(employee.zip),
     contractType: str(employee.contractType),
     salary: str(employee.salary),
-    startDate: str(employee.startDate),
-    endDate: str(employee.endDate),
+    startDate: formatDateCZ(employee.startDate),
+    endDate: formatDateCZ(employee.endDate),
+    workLocation: str(employee.workLocation),
+    probationPeriod: probationStr,
+    signingDate: formatDateCZ(employee.signingDate),
+    hasProbation: hasProbation ? "ano" : "",
+    noProbation: hasProbation ? "" : "ano",
+    hasEndDate: hasEndDate ? "ano" : "",
+    noEndDate: hasEndDate ? "" : "ano",
     companyName: str(company.name),
     companyAddress: str(company.address),
     ic: str(company.ic),
@@ -209,7 +228,7 @@ export function resolveVariables(
     companyFileNo: str(company.fileNo),
     signatoryName: str(signatory.displayName),
     signatoryTitle: str(signatory.title),
-    today: formatCzechDate(new Date()),
+    today: formatDateCZ(new Date()),
     contractNumber: "",
     ...overrides,
   };
