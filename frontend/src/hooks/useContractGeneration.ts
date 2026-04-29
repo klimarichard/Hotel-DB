@@ -7,6 +7,14 @@ export interface ContractMeta {
   employmentRowId?: string;
   notes?: string;
   rowSnapshot?: Record<string, unknown>;
+  /**
+   * Human-readable filename (without extension) used by the download
+   * endpoint's Content-Disposition header. Computed at generation time
+   * from the contract type + row + employee name; persisted on the
+   * contract doc so subsequent downloads use the same name even if the
+   * underlying row is later edited.
+   */
+  displayName?: string;
 }
 
 export interface PageMargins {
@@ -74,6 +82,7 @@ export function useContractGeneration() {
     if (meta.employmentRowId) body.employmentRowId = meta.employmentRowId;
     if (meta.notes) body.notes = meta.notes;
     if (meta.rowSnapshot) body.rowSnapshot = meta.rowSnapshot;
+    if (meta.displayName) body.displayName = meta.displayName;
 
     const resp = await fetch(`/api/employees/${employeeId}/contracts`, {
       method: "POST",

@@ -95,6 +95,7 @@ contractsRouter.post(
       employmentRowId,
       notes,
       rowSnapshot,
+      displayName,
     } = req.body as {
       type: ContractType;
       pdfBase64?: string;
@@ -102,6 +103,7 @@ contractsRouter.post(
       employmentRowId?: string;
       notes?: string;
       rowSnapshot?: Record<string, unknown>;
+      displayName?: string;
     };
 
     if (!type) {
@@ -140,6 +142,7 @@ contractsRouter.post(
     if (unsignedStoragePath) docData.unsignedStoragePath = unsignedStoragePath;
     if (notes) docData.notes = notes;
     if (rowSnapshot) docData.rowSnapshot = rowSnapshot;
+    if (displayName) docData.displayName = displayName;
 
     await docRef.set(docData);
     res.status(201).json({ id: docRef.id });
@@ -226,10 +229,25 @@ contractsRouter.get(
       return;
     }
 
+    // Prefer the human-readable displayName persisted on the contract
+    // doc; fall back to the contractId for older contracts that don't
+    // have one. Signed copies get a " - podepsaná" suffix to distinguish
+    // them in the user's Downloads folder.
+    const displayBase = typeof data.displayName === "string" && data.displayName
+      ? data.displayName
+      : `${req.params.contractId}_${kind}`;
+    const filenameBase = kind === "signed" ? `${displayBase} - podepsaná` : displayBase;
+    // Browsers accept UTF-8 filenames via filename*=UTF-8''<percent-encoded>;
+    // include a plain-ASCII fallback for legacy clients via the standard
+    // `filename=` parameter (diacritics replaced).
+    const asciiFallback = filenameBase
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .replace(/[^\x20-\x7e]/g, "_");
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
       "Content-Disposition",
-      `inline; filename="${req.params.contractId}_${kind}.pdf"`
+      `inline; filename="${asciiFallback}.pdf"; filename*=UTF-8''${encodeURIComponent(filenameBase)}.pdf`
     );
     file.createReadStream()
       .on("error", (e) => {

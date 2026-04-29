@@ -11,6 +11,7 @@ import {
 } from "@/lib/contractVariables";
 import { blobToBase64 } from "@/lib/blobToBase64";
 import { formatTimestampCZ } from "@/lib/dateFormat";
+import { buildContractName } from "@/lib/contractNaming";
 import styles from "./ContractsTab.module.css";
 
 interface ContractRecord {
@@ -99,10 +100,36 @@ export default function ContractsTab({ employeeId, employeeData, onContractsChan
       { headers: { Authorization: `Bearer ${token}` } }
     );
     if (!resp.ok) return;
+
+    // Pull the human-readable filename from Content-Disposition. Prefer
+    // filename*=UTF-8''… (proper UTF-8 with diacritics) and fall back to
+    // the ASCII filename="…" if the UTF-8 form is missing.
+    const cd = resp.headers.get("Content-Disposition") ?? "";
+    let filename = "smlouva.pdf";
+    const utf8 = cd.match(/filename\*\s*=\s*UTF-8''([^;]+)/i);
+    if (utf8) {
+      try {
+        filename = decodeURIComponent(utf8[1]);
+      } catch {
+        // fall through to ASCII match
+      }
+    }
+    if (filename === "smlouva.pdf") {
+      const ascii = cd.match(/filename\s*=\s*"?([^";]+)"?/i);
+      if (ascii) filename = ascii[1];
+    }
+
+    // A blob URL has no filename, so saving from a preview tab would land
+    // a generic name. Trigger a real download via a hidden <a download>
+    // so the browser writes the file as `filename`.
     const blob = await resp.blob();
     const url = URL.createObjectURL(blob);
-    window.open(url, "_blank");
-    // Revoke after the new tab has had time to claim the URL.
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
   }
 
@@ -330,6 +357,11 @@ export default function ContractsTab({ employeeId, employeeData, onContractsChan
           contractType={generateModal}
           companyId={employeeData.currentCompanyId ?? null}
           employeeData={employeeData}
+          displayName={buildContractName(
+            generateModal,
+            undefined,
+            `${employeeData.firstName ?? ""} ${employeeData.lastName ?? ""}`.trim()
+          )}
           onClose={() => setGenerateModal(null)}
           onGenerated={async () => {
             setGenerateModal(null);
