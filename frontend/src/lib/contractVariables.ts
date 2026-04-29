@@ -56,23 +56,14 @@ export const VARIABLE_GROUPS: { group: string; vars: { key: string; label: strin
       { key: "lastName", label: "Příjmení" },
       { key: "fullName", label: "Celé jméno" },
       { key: "birthDate", label: "Datum narození" },
-      { key: "birthNumber", label: "Rodné číslo" },
-      { key: "idCardNumber", label: "Číslo OP" },
+      { key: "address", label: "Adresa" },
       { key: "passportNumber", label: "Číslo pasu" },
       { key: "visaNumber", label: "Číslo povolení k pobytu" },
       { key: "currentJobTitle", label: "Pracovní pozice" },
-      { key: "currentDepartment", label: "Oddělení" },
-      { key: "nationality", label: "Státní příslušnost" },
       { key: "isCzech", label: "Je Čech (pro {{#if}})" },
       { key: "isForeigner", label: "Je cizinec (pro {{#if}})" },
-    ],
-  },
-  {
-    group: "Adresa",
-    vars: [
-      { key: "address", label: "Ulice a číslo" },
-      { key: "city", label: "Město" },
-      { key: "zip", label: "PSČ" },
+      { key: "hasPermanentResidence", label: "Má trvalý pobyt (pro {{#if}})" },
+      { key: "noPermanentResidence", label: "Nemá trvalý pobyt (pro {{#if}})" },
     ],
   },
   {
@@ -97,22 +88,13 @@ export const VARIABLE_GROUPS: { group: string; vars: { key: string; label: strin
       { key: "companyName", label: "Název firmy" },
       { key: "companyAddress", label: "Adresa firmy" },
       { key: "ic", label: "IČO" },
-      { key: "dic", label: "DIČ" },
       { key: "companyFileNo", label: "Spisová značka" },
-    ],
-  },
-  {
-    group: "Podepisující",
-    vars: [
-      { key: "signatoryName", label: "Jméno podepisujícího" },
-      { key: "signatoryTitle", label: "Funkce podepisujícího" },
     ],
   },
   {
     group: "Dokument",
     vars: [
       { key: "today", label: "Dnešní datum" },
-      { key: "contractNumber", label: "Číslo smlouvy" },
     ],
   },
 ];
@@ -123,20 +105,16 @@ export interface EmployeeData {
   firstName?: string;
   lastName?: string;
   currentJobTitle?: string;
-  currentDepartment?: string;
   currentCompanyId?: string;
   // contact sub-doc fields (merged in by caller)
   address?: string;
-  city?: string;
-  zip?: string;
   // personal fields
   birthDate?: string; // raw ISO date (YYYY-MM-DD); resolveVariables formats it
   nationality?: string; // free-form string from employee.nationality
-  // document sub-doc fields (decrypted, merged in by caller)
-  birthNumber?: string;
-  idCardNumber?: string;
+  // document sub-doc fields (merged in by caller)
   passportNumber?: string;
   visaNumber?: string;
+  visaType?: string; // free-form string from documents.visaType
   // employment row (merged in by caller)
   contractType?: string;
   salary?: string | number;
@@ -162,23 +140,16 @@ export interface CompanyData {
   name?: string;
   address?: string;
   ic?: string;
-  dic?: string;
   fileNo?: string;
 }
 
-export interface SignatoryData {
-  displayName?: string;
-  title?: string;
-}
-
 /**
- * Resolve all template variables from employee, company, and signatory data.
+ * Resolve all template variables from employee and company data.
  * `overrides` can patch any key (e.g. employment row values from history modal).
  */
 export function resolveVariables(
   employee: EmployeeData,
   company: CompanyData,
-  signatory: SignatoryData,
   overrides: Record<string, string> = {}
 ): Record<string, string> {
   const str = (v: unknown) => (v !== undefined && v !== null ? String(v) : "");
@@ -192,24 +163,25 @@ export function resolveVariables(
   const probationStr = str(employee.probationPeriod).trim();
   const hasProbation = /[1-9]/.test(probationStr);
   const hasEndDate = str(employee.endDate).trim() !== "";
+  // Visa type: matches the canonical string "trvalý pobyt" exactly
+  // (case-insensitive, trimmed) — anything else, including empty,
+  // counts as no permanent residence.
+  const hasPermanentResidence =
+    str(employee.visaType).trim().toLowerCase() === "trvalý pobyt";
 
   const vars: Record<string, string> = {
     firstName: str(employee.firstName),
     lastName: str(employee.lastName),
     fullName: [employee.firstName, employee.lastName].filter(Boolean).join(" "),
     birthDate: formatDateCZ(employee.birthDate),
-    birthNumber: str(employee.birthNumber),
-    idCardNumber: str(employee.idCardNumber),
     passportNumber: str(employee.passportNumber),
     visaNumber: str(employee.visaNumber),
     currentJobTitle: str(employee.currentJobTitle),
-    currentDepartment: str(employee.currentDepartment),
-    nationality,
     isCzech: czech ? "ano" : "",
     isForeigner: czech ? "" : "ano",
+    hasPermanentResidence: hasPermanentResidence ? "ano" : "",
+    noPermanentResidence: hasPermanentResidence ? "" : "ano",
     address: str(employee.address),
-    city: str(employee.city),
-    zip: str(employee.zip),
     contractType: str(employee.contractType),
     salary: str(employee.salary),
     startDate: formatDateCZ(employee.startDate),
@@ -224,12 +196,8 @@ export function resolveVariables(
     companyName: str(company.name),
     companyAddress: str(company.address),
     ic: str(company.ic),
-    dic: str(company.dic),
     companyFileNo: str(company.fileNo),
-    signatoryName: str(signatory.displayName),
-    signatoryTitle: str(signatory.title),
     today: formatDateCZ(new Date()),
-    contractNumber: "",
     ...overrides,
   };
 

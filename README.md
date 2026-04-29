@@ -202,6 +202,20 @@ Four derived conditional flags drive `{{#if}}` blocks for the common branches:
 
 Both polarities of each flag are emitted so templates can pick the more readable phrasing per block.
 
+### Template variable pruning + hasPermanentResidence conditional (2026-04-29)
+Trimmed the contract-template variable surface to just the keys real templates use. The picker (`VARIABLE_GROUPS` in `frontend/src/lib/contractVariables.ts`) and `resolveVariables` no longer emit:
+- `birthNumber`, `idCardNumber`, `currentDepartment` (employee)
+- `nationality` (kept on `EmployeeData` as the input for `isCzech` / `isForeigner`, but not emitted as a template var)
+- `city`, `zip` (address is now a single line; templates use `{{address}}`)
+- `dic` (company)
+- `signatoryName`, `signatoryTitle` — entire `SignatoryData` interface and the `signatory` argument to `resolveVariables` are gone
+- `contractNumber`
+
+These removals only affect the contract-template surface — the underlying Firestore fields, encryption, Employee form, Employee detail page, CSV export, and audit logging are untouched. References to any of the above in old templates will render as literal `{{key}}` text now (templates are being redone, so back-compat shims aren't worth keeping).
+
+Added under "Zaměstnanec":
+- `hasPermanentResidence` / `noPermanentResidence` — conditionals driven by `documents.visaType === "trvalý pobyt"` (case-insensitive, trimmed). `visaType` is plumbed through both `GenerateContractModal` call sites (Historie row + Smlouvy standalone) so the flag resolves correctly in either flow.
+
 ### Human-readable contract download filenames (2026-04-29)
 Contract storage paths stay short and stable (`contracts/{employeeId}/{contractId}.pdf`) — only the *download* filename is human-readable. The frontend computes a Czech display name at generation time via `frontend/src/lib/contractNaming.ts`'s `buildContractName(type, row, fullName)`:
 
