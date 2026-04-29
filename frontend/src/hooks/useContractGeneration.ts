@@ -6,6 +6,7 @@ export interface ContractMeta {
   type: ContractType;
   employmentRowId?: string;
   notes?: string;
+  rowSnapshot?: Record<string, unknown>;
 }
 
 export interface PageMargins {
@@ -98,6 +99,7 @@ export function useContractGeneration() {
     };
     if (meta.employmentRowId) body.employmentRowId = meta.employmentRowId;
     if (meta.notes) body.notes = meta.notes;
+    if (meta.rowSnapshot) body.rowSnapshot = meta.rowSnapshot;
 
     const resp = await fetch(`/api/employees/${employeeId}/contracts`, {
       method: "POST",

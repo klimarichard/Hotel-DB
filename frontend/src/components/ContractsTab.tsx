@@ -28,6 +28,14 @@ interface ContractRecord {
 interface Props {
   employeeId: string;
   employeeData: EmployeeData;
+  /**
+   * Notify the parent whenever the contracts collection changes (create,
+   * delete, signed-PDF upload/delete, archive, unarchive). Lets the
+   * parent (EmployeeDetailPage) refresh its own copy of the list, which
+   * drives the "hide Generovat once a matching contract exists" logic
+   * in the Historie tab.
+   */
+  onContractsChanged?: () => void;
 }
 
 const STATUS_LABEL: Record<ContractRecord["status"], string> = {
@@ -42,7 +50,7 @@ const STATUS_CLASS: Record<ContractRecord["status"], string> = {
   archived: styles.statusArchived,
 };
 
-export default function ContractsTab({ employeeId, employeeData }: Props) {
+export default function ContractsTab({ employeeId, employeeData, onContractsChanged }: Props) {
   const { user, role } = useAuth();
   const [contracts, setContracts] = useState<ContractRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -98,6 +106,11 @@ export default function ContractsTab({ employeeId, employeeData }: Props) {
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
   }
 
+  async function refreshAfterMutation() {
+    await fetchContracts();
+    onContractsChanged?.();
+  }
+
   async function confirmDeleteUnsigned() {
     if (!user || !deleteTarget) return;
     const contract = deleteTarget;
@@ -109,7 +122,7 @@ export default function ContractsTab({ employeeId, employeeData }: Props) {
       headers: { Authorization: `Bearer ${token}` },
     });
 
-    await fetchContracts();
+    await refreshAfterMutation();
   }
 
   async function handleUploadSigned(contract: ContractRecord, file: File) {
@@ -129,7 +142,7 @@ export default function ContractsTab({ employeeId, employeeData }: Props) {
       }
     );
 
-    await fetchContracts();
+    await refreshAfterMutation();
   }
 
   function handleFileInput(contract: ContractRecord, files: FileList | null) {
@@ -148,7 +161,7 @@ export default function ContractsTab({ employeeId, employeeData }: Props) {
       },
       body: JSON.stringify({ status: "archived" }),
     });
-    await fetchContracts();
+    await refreshAfterMutation();
   }
 
   async function confirmDeleteSigned() {
@@ -165,7 +178,7 @@ export default function ContractsTab({ employeeId, employeeData }: Props) {
       }
     );
 
-    await fetchContracts();
+    await refreshAfterMutation();
   }
 
   async function handleUnarchive(contract: ContractRecord) {
@@ -180,7 +193,7 @@ export default function ContractsTab({ employeeId, employeeData }: Props) {
       },
       body: JSON.stringify({ status: restored }),
     });
-    await fetchContracts();
+    await refreshAfterMutation();
   }
 
   if (loading) {
