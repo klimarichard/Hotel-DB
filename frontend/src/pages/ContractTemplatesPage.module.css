@@ -296,6 +296,14 @@
   margin-bottom: 0.5em;
 }
 
+.editorContent ul {
+  list-style-type: "– ";
+}
+
+.editorContent ul ul {
+  list-style-type: circle;
+}
+
 .editorContent li {
   line-height: 1.3;
 }

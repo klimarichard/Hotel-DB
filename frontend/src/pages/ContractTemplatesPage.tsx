@@ -945,6 +945,18 @@ export default function ContractTemplatesPage() {
               onMouseDown={(e) => { e.preventDefault(); editor?.chain().focus().toggleOrderedList().run(); }}
               title="Číslovaný seznam"
             >1.</button>
+            <button
+              className={styles.toolBtn}
+              disabled={!editor?.can().sinkListItem("listItem")}
+              onMouseDown={(e) => { e.preventDefault(); editor?.chain().focus().sinkListItem("listItem").run(); }}
+              title="Vnořit položku seznamu"
+            >→]</button>
+            <button
+              className={styles.toolBtn}
+              disabled={!editor?.can().liftListItem("listItem")}
+              onMouseDown={(e) => { e.preventDefault(); editor?.chain().focus().liftListItem("listItem").run(); }}
+              title="Vynořit položku seznamu"
+            >[←</button>
 
             <span className={styles.toolSep} />
 
