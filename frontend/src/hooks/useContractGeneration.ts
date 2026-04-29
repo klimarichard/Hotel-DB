@@ -19,67 +19,41 @@ export interface PageMargins {
 export const DEFAULT_MARGINS: PageMargins = { top: 15, bottom: 15, left: 15, right: 15 };
 
 /**
- * Generate a PDF Blob from filled HTML using html2pdf.js.
- * The library is loaded lazily so it doesn't affect initial bundle size.
- * html2pdf's margin order is [top, left, bottom, right].
- */
-export async function generatePdf(
-  filledHtml: string,
-  margins: PageMargins = DEFAULT_MARGINS
-): Promise<Blob> {
-  const html2pdf = (await import("html2pdf.js" as string)).default;
-
-  // Wrap the HTML in a styled container for consistent A4 rendering
-  const wrapper = document.createElement("div");
-  wrapper.style.fontFamily = "Arial, sans-serif";
-  wrapper.style.fontSize = "11pt";
-  wrapper.style.lineHeight = "1.5";
-  wrapper.style.color = "#000";
-  // Inject table border rules: tables with data-borderless="true" render
-  // without any visible border in the PDF; default tables get 1px solid.
-  // (The editor's CSS module is scoped to .a4Page and not present on this
-  // detached wrapper, so we inline the rules here.)
-  const styleTag = document.createElement("style");
-  styleTag.textContent = `
-    table { border-collapse: collapse; margin: 0.5cm 0; }
-    table td, table th {
-      border: 1px solid #000;
-      padding: 4px 8px;
-      vertical-align: top;
-    }
-    table.hpm-borderless td, table.hpm-borderless th { border: none; }
-    table th { font-weight: 600; }
-    li::marker { font-size: inherit; font-family: inherit; }
-  `;
-  wrapper.appendChild(styleTag);
-  const contentDiv = document.createElement("div");
-  contentDiv.innerHTML = filledHtml;
-  wrapper.appendChild(contentDiv);
-  document.body.appendChild(wrapper);
-
-  const opt = {
-    margin: [margins.top, margins.left, margins.bottom, margins.right] as [number, number, number, number],
-    filename: "smlouva.pdf",
-    image: { type: "jpeg", quality: 0.98 },
-    html2canvas: { scale: 2, useCORS: true },
-    jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-  };
-
-  try {
-    const blob: Blob = await html2pdf().set(opt).from(wrapper).outputPdf("blob");
-    return blob;
-  } finally {
-    document.body.removeChild(wrapper);
-  }
-}
-
-/**
- * Upload a contract PDF to Firebase Storage and create the Firestore record.
- * Returns the contract ID.
+ * Generate a contract PDF Blob by sending the filled HTML to the
+ * server-side Puppeteer renderer. Real headless Chromium drives the
+ * rendering, so the PDF matches the editor preview exactly — same
+ * font-metrics, same line-spacing, native list markers, etc. The
+ * earlier client-side html2pdf.js path was abandoned because
+ * html2canvas drifted from the browser's own rendering.
  */
 export function useContractGeneration() {
   const { user } = useAuth();
 
+  async function generatePdf(
+    filledHtml: string,
+    margins: PageMargins = DEFAULT_MARGINS
+  ): Promise<Blob> {
+    if (!user) throw new Error("Not authenticated");
+    const token = await user.getIdToken();
+    const resp = await fetch("/api/contracts/render-pdf", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ html: filledHtml, margins }),
+    });
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => "");
+      throw new Error(`PDF rendering failed${text ? `: ${text}` : ""}`);
+    }
+    return resp.blob();
+  }
+
+  /**
+   * Upload a contract PDF to Firebase Storage and create the Firestore
+   * record. Returns the contract ID.
+   */
   async function uploadContract(
     employeeId: string,
     blob: Blob,
@@ -119,5 +93,5 @@ export function useContractGeneration() {
     return id;
   }
 
-  return { uploadContract };
+  return { generatePdf, uploadContract };
 }

@@ -82,7 +82,12 @@ app.post("/employees/trigger-alert-refresh", async (_req, res) => {
   res.json({ refreshed });
 });
 
-export const api = functions.https.onRequest(app);
+// Bumped memory + timeout to fit Puppeteer's Chromium launch
+// (~500 MB resident, ~3–5s cold start). Other endpoints share the
+// same instance; the cost is amortised.
+export const api = functions
+  .runWith({ memory: "1GB", timeoutSeconds: 60 })
+  .https.onRequest(app);
 
 // ─── Scheduled function: auto-transition plans at their deadlines ─────────────
 // Runs every 5 minutes in production. In the emulator, trigger manually via:

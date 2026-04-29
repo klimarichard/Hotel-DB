@@ -12,7 +12,7 @@ import {
   fillTemplate,
   getMissingVariables,
 } from "@/lib/contractVariables";
-import { generatePdf, useContractGeneration, DEFAULT_MARGINS, type PageMargins } from "@/hooks/useContractGeneration";
+import { useContractGeneration, DEFAULT_MARGINS, type PageMargins } from "@/hooks/useContractGeneration";
 import { useAuth } from "@/hooks/useAuth";
 import styles from "./GenerateContractModal.module.css";
 
@@ -52,7 +52,7 @@ export default function GenerateContractModal({
   onGenerated,
 }: Props) {
   const { user, role } = useAuth();
-  const { uploadContract } = useContractGeneration();
+  const { generatePdf, uploadContract } = useContractGeneration();
   const [step, setStep] = useState<Step>("confirm");
   const [errorMsg, setErrorMsg] = useState("");
   const [template, setTemplate] = useState<string | null>(null);
