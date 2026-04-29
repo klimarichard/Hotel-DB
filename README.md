@@ -191,6 +191,20 @@ Three derived variables drive the typical "Czech vs foreigner" branch:
 
 Empty / unknown nationality is treated as foreign because the foreign branch typically adds legally required fields (passport / visa).
 
+### Row-sourced template variables + probation/end-date conditionals (2026-04-29)
+Three plain variables sourced from the employment row are exposed in the template variable picker (under "Pracovní podmínky"):
+- `{{workLocation}}` / `{{probationPeriod}}` — free-form strings stored on the row.
+- `{{signingDate}}` — raw ISO; `resolveVariables` formats it with the shared `formatDateCZ` helper, so it lands in the rendered contract as "DD. MM. YYYY".
+
+Four derived conditional flags drive `{{#if}}` blocks for the common branches:
+- `hasProbation` / `noProbation` — `noProbation` is true when the probation string is empty, `"0"`, `"0 měsíců"`, or otherwise contains no non-zero digit (heuristic: `/[1-9]/.test(probationPeriod)`). Anything with a real number is `hasProbation`.
+- `hasEndDate` / `noEndDate` — `noEndDate` is true when `endDate` is null/empty (open-ended employment); useful for hiding the fixed-term clause on indefinite contracts.
+
+Both polarities of each flag are emitted so templates can pick the more readable phrasing per block.
+
+### Uniform "DD. MM. YYYY" date format across the app (2026-04-29)
+Every user-facing date in the app now renders as "DD. MM. YYYY" — Czech-style with spaces between segments. The three formatter helpers in `frontend/src/lib/dateFormat.ts` (`formatDateCZ`, `formatTimestampCZ`, `formatDatetimeCZ`) all emit the spaced form, and `formatDateCZ` now also accepts JS Date objects so contract output uses the same helper as the rest of the UI. The previous duplicate `formatContractDate` in `contractVariables.ts` was removed; contract dates and UI dates can no longer drift apart. The convention lives in one place — change it in `dateFormat.ts` and every screen plus every contract follows.
+
 ### Contract PDF upload routes through backend (2026-04-28)
 `storage.rules` deny all direct client access, so the PDF upload now happens server-side. `POST /api/employees/:employeeId/contracts` accepts an optional `pdfBase64` field; when present, the handler reserves a Firestore doc id, decodes the base64 buffer, writes `contracts/{employeeId}/{docId}.pdf` via the Admin SDK (`admin.storage().bucket().file().save()`), then creates the metadata record with `unsignedStoragePath` set — single atomic operation. `express.json` limit was bumped to 10 MB to fit PDFs with embedded base64 logos.
 
