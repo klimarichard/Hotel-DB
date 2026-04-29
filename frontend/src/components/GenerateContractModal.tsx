@@ -7,7 +7,6 @@ import {
   VARIABLE_GROUPS,
   EmployeeData,
   CompanyData,
-  SignatoryData,
   resolveVariables,
   fillTemplate,
   getMissingVariables,
@@ -58,7 +57,7 @@ export default function GenerateContractModal({
   onClose,
   onGenerated,
 }: Props) {
-  const { user, role } = useAuth();
+  const { user } = useAuth();
   const { generatePdf, uploadContract } = useContractGeneration();
   const [step, setStep] = useState<Step>("confirm");
   const [errorMsg, setErrorMsg] = useState("");
@@ -68,12 +67,7 @@ export default function GenerateContractModal({
   const [companyData, setCompanyData] = useState<CompanyData>({});
   const [loadingCompany, setLoadingCompany] = useState(false);
 
-  const signatory: SignatoryData = {
-    displayName: user?.displayName ?? user?.email ?? "",
-    title: role === "admin" ? "Administrátor" : role === "director" ? "Ředitel" : "",
-  };
-
-  const vars = resolveVariables(employeeData, companyData, signatory);
+  const vars = resolveVariables(employeeData, companyData);
   const missing = template ? getMissingVariables(template, vars) : [];
 
   useEffect(() => {
