@@ -251,6 +251,45 @@ contractsRouter.post(
 );
 
 /**
+ * DELETE /api/employees/:employeeId/contracts/:contractId/signed-pdf
+ * Removes the signed PDF and reverts the record back to "unsigned".
+ * Clears signedStoragePath/signedAt/signedUploadedBy.
+ */
+contractsRouter.delete(
+  "/employees/:employeeId/contracts/:contractId/signed-pdf",
+  requireAuth,
+  requireRole("admin", "director"),
+  async (req: AuthRequest, res: Response) => {
+    const ref = db()
+      .collection("employees")
+      .doc(req.params.employeeId)
+      .collection("contracts")
+      .doc(req.params.contractId);
+
+    const existing = await ref.get();
+    if (!existing.exists) {
+      res.status(404).json({ error: "Contract not found" });
+      return;
+    }
+
+    const data = existing.data() as Record<string, unknown>;
+    const signedPath = data.signedStoragePath;
+    if (typeof signedPath === "string" && signedPath) {
+      await admin.storage().bucket().file(signedPath).delete().catch(() => undefined);
+    }
+
+    await ref.update({
+      status: "unsigned",
+      signedStoragePath: FieldValue.delete(),
+      signedAt: FieldValue.delete(),
+      signedUploadedBy: FieldValue.delete(),
+    });
+
+    res.json({ ok: true });
+  }
+);
+
+/**
  * DELETE /api/employees/:employeeId/contracts/:contractId
  * Deletes the Firestore record and any associated Storage files (best-effort).
  */

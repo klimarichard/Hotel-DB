@@ -48,6 +48,7 @@ export default function ContractsTab({ employeeId, employeeData }: Props) {
   const [loading, setLoading] = useState(true);
   const [generateModal, setGenerateModal] = useState<ContractType | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ContractRecord | null>(null);
+  const [deleteSignedTarget, setDeleteSignedTarget] = useState<ContractRecord | null>(null);
   const [standaloneDropdown, setStandaloneDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const uploadRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -150,6 +151,38 @@ export default function ContractsTab({ employeeId, employeeData }: Props) {
     await fetchContracts();
   }
 
+  async function confirmDeleteSigned() {
+    if (!user || !deleteSignedTarget) return;
+    const contract = deleteSignedTarget;
+    setDeleteSignedTarget(null);
+
+    const token = await user.getIdToken();
+    await fetch(
+      `/api/employees/${employeeId}/contracts/${contract.id}/signed-pdf`,
+      {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      }
+    );
+
+    await fetchContracts();
+  }
+
+  async function handleUnarchive(contract: ContractRecord) {
+    if (!user) return;
+    const restored = contract.signedStoragePath ? "signed" : "unsigned";
+    const token = await user.getIdToken();
+    await fetch(`/api/employees/${employeeId}/contracts/${contract.id}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ status: restored }),
+    });
+    await fetchContracts();
+  }
+
   if (loading) {
     return <p className={styles.loading}>Načítám smlouvy…</p>;
   }
@@ -247,11 +280,27 @@ export default function ContractsTab({ employeeId, employeeData }: Props) {
                       </>
                     )}
                     {canEdit && c.status === "signed" && (
+                      <>
+                        <button
+                          className={`${styles.actionBtn} ${styles.deleteBtn}`}
+                          onClick={() => setDeleteSignedTarget(c)}
+                        >
+                          Smazat podepsanou
+                        </button>
+                        <button
+                          className={styles.actionBtn}
+                          onClick={() => handleArchive(c)}
+                        >
+                          Archivovat
+                        </button>
+                      </>
+                    )}
+                    {canEdit && c.status === "archived" && (
                       <button
                         className={styles.actionBtn}
-                        onClick={() => handleArchive(c)}
+                        onClick={() => handleUnarchive(c)}
                       >
-                        Archivovat
+                        Obnovit
                       </button>
                     )}
                   </div>
@@ -284,6 +333,17 @@ export default function ContractsTab({ employeeId, employeeData }: Props) {
           danger
           onConfirm={confirmDeleteUnsigned}
           onCancel={() => setDeleteTarget(null)}
+        />
+      )}
+
+      {deleteSignedTarget && (
+        <ConfirmModal
+          title="Smazat podepsanou smlouvu"
+          message="Smazat podepsanou kopii? Smlouva se vrátí do stavu Nepodepsáno. Tato akce je nevratná."
+          confirmLabel="Smazat"
+          danger
+          onConfirm={confirmDeleteSigned}
+          onCancel={() => setDeleteSignedTarget(null)}
         />
       )}
     </div>
