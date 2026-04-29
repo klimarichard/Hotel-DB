@@ -269,6 +269,15 @@ Contract PDFs are now generated server-side by a real headless Chromium via Pupp
 ### Denser list spacing (2026-04-29)
 Numbered and bullet lists in templates were inheriting body `line-height: 1.6`, and TipTap wraps each `<li>` in a `<p>` that picked up the global `p { margin: 0 0 0.5em }` between items, making lists look loose. Two CSS rules fix it: `li { line-height: 1.3 }` and `li > p { margin: 0 }`. Applied in both `frontend/src/pages/ContractTemplatesPage.module.css` (editor preview) and `functions/src/services/pdfRenderer.ts` `RENDER_CSS` (Puppeteer renderer) so the PDF still matches the editor byte-for-byte.
 
+### Nested lists + custom bullet glyphs (2026-04-29)
+TipTap's schema permits `<ul>` inside `<ol>` (and arbitrary further nesting), but the `ListItemIndent` extension takes Tab/Shift-Tab inside a list to apply CSS `margin-left` on the whole `<ul>/<ol>`, which shadows TipTap's default `sinkListItem` keybinding. Two new toolbar buttons next to ≡ / `1.` expose nesting explicitly:
+- **→]** Vnořit položku seznamu — `sinkListItem("listItem")`, disabled when `editor.can().sinkListItem` returns false (cursor not in a list, or already at the deepest possible level for that position).
+- **[←** Vynořit položku seznamu — `liftListItem("listItem")`, disabled when there's nothing to lift out of.
+
+After sinking, click the bullet/ordered toolbar button to convert the freshly-nested list to the desired type (e.g. `<ul>` inside `<ol>`).
+
+Bullet glyphs: top-level `<ul>` uses `list-style-type: "– "` (en-dash + space) regardless of whether it sits at document root or inside an `<ol>`; `<ul>` nested inside another `<ul>` switches to `circle`. Both rules live in the editor CSS and the Puppeteer `RENDER_CSS`. `<ol>` markers stay default (decimal).
+
 ### Generovat button hidden when matching contract exists (2026-04-29)
 Contract docs now carry an optional `rowSnapshot` field — a freeze-frame of the row's identifying parameters at generation time. Snapshot fields: `companyId, contractType, jobTitle, department, startDate, endDate, salary, hourlyRate, agreedReward, workLocation, probationPeriod, agreedWorkScope, signingDate`. `POST /api/employees/:id/contracts` accepts and persists `rowSnapshot`; `useContractGeneration.uploadContract` forwards it; `GenerateContractModal` takes a `rowSnapshot` prop; `EmployeeDetailPage` builds the snapshot from the row at modal open.
 
