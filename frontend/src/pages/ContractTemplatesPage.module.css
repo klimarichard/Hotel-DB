@@ -296,6 +296,14 @@
   margin-bottom: 0.5em;
 }
 
+.editorContent li {
+  line-height: 1.3;
+}
+
+.editorContent li > p {
+  margin: 0;
+}
+
 /* Variable placeholder highlight */
 .editorContent :global(.tiptap-variable) {
   background: var(--color-info-bg-strong);
