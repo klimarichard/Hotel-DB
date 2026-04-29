@@ -30,6 +30,8 @@ const RENDER_CSS = `
   p { margin: 0 0 0.5em; }
   img { max-width: 100%; height: auto; display: block; }
   ul, ol { padding-left: 1.5em; margin-bottom: 0.5em; }
+  li { line-height: 1.3; }
+  li > p { margin: 0; }
   table {
     border-collapse: collapse;
     margin: 0.5cm 0;
