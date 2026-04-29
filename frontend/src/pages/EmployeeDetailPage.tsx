@@ -13,6 +13,7 @@ import {
   CONTRACT_TYPE_LABELS,
   CHANGE_TYPE_TO_CONTRACTS,
 } from "@/lib/contractVariables";
+import { buildContractName } from "@/lib/contractNaming";
 import styles from "./EmployeeDetailPage.module.css";
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
@@ -1361,6 +1362,15 @@ export default function EmployeeDetailPage() {
             signingDate: generateModal.row.signingDate ?? undefined,
           }}
           rowSnapshot={buildRowSnapshot(generateModal.row)}
+          displayName={buildContractName(
+            generateModal.contractType,
+            {
+              contractType: generateModal.row.contractType,
+              startDate: generateModal.row.startDate,
+              changes: generateModal.row.changes,
+            },
+            `${employee.firstName ?? ""} ${employee.lastName ?? ""}`.trim()
+          )}
           onClose={() => setGenerateModal(null)}
           onGenerated={() => {
             setGenerateModal(null);

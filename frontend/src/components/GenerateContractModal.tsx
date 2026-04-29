@@ -35,6 +35,12 @@ interface Props {
    * has been edited since the contract was generated.
    */
   rowSnapshot?: Record<string, unknown>;
+  /**
+   * Human-readable filename (without extension) for the generated
+   * contract. Persisted on the contract doc so the download endpoint
+   * can serve it via Content-Disposition.
+   */
+  displayName?: string;
   onClose: () => void;
   onGenerated: (contractId: string) => void;
 }
@@ -48,6 +54,7 @@ export default function GenerateContractModal({
   companyId,
   employeeData,
   rowSnapshot,
+  displayName,
   onClose,
   onGenerated,
 }: Props) {
@@ -129,6 +136,7 @@ export default function GenerateContractModal({
         type: contractType,
         employmentRowId,
         rowSnapshot,
+        displayName,
       });
       setStep("done");
       onGenerated(id);
