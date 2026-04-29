@@ -29,27 +29,59 @@ export async function generatePdf(
 ): Promise<Blob> {
   const html2pdf = (await import("html2pdf.js" as string)).default;
 
-  // Wrap the HTML in a styled container for consistent A4 rendering
+  // Wrap the HTML in a styled container for consistent A4 rendering.
+  // Line-height matches the editor's `.editorContent` (1.6).
   const wrapper = document.createElement("div");
   wrapper.style.fontFamily = "Arial, sans-serif";
   wrapper.style.fontSize = "11pt";
-  wrapper.style.lineHeight = "1.5";
+  wrapper.style.lineHeight = "1.6";
   wrapper.style.color = "#000";
-  // Inject table border rules: tables with data-borderless="true" render
-  // without any visible border in the PDF; default tables get 1px solid.
-  // (The editor's CSS module is scoped to .a4Page and not present on this
-  // detached wrapper, so we inline the rules here.)
+  // The editor's CSS module is scoped to `.a4Page` / `.editorContent`
+  // and not present on this detached wrapper, so we mirror the rules
+  // here. **MUST stay in lockstep with `ContractTemplatesPage.module.css`**
+  // — anything that affects layout, spacing, or marker rendering in the
+  // editor preview must be replicated below or the PDF will diverge.
+  // The list rules in particular use the same ::before counter scheme
+  // the editor uses, so editor preview and PDF render identically
+  // (html2canvas can't reliably render native ::marker, but it handles
+  // ::before content with counters correctly).
   const styleTag = document.createElement("style");
   styleTag.textContent = `
-    table { border-collapse: collapse; margin: 0.5cm 0; }
+    p { margin: 0 0 0.5em; }
+    img { max-width: 100%; height: auto; display: block; }
+    table {
+      border-collapse: collapse;
+      margin: 0.5cm 0;
+      table-layout: fixed;
+      width: 100%;
+    }
     table td, table th {
       border: 1px solid #000;
       padding: 4px 8px;
       vertical-align: top;
+      min-width: 40px;
     }
     table.hpm-borderless td, table.hpm-borderless th { border: none; }
     table th { font-weight: 600; }
-    li::marker { font-size: inherit; font-family: inherit; }
+
+    ul, ol { list-style: none; padding-left: 1.5em; margin: 0 0 0.5em; }
+    ol { counter-reset: ol-counter; }
+    ol > li { counter-increment: ol-counter; position: relative; }
+    ol > li::before {
+      content: counter(ol-counter) ".";
+      position: absolute;
+      right: calc(100% + 0.4em);
+      top: 0;
+      white-space: nowrap;
+    }
+    ul > li { position: relative; }
+    ul > li::before {
+      content: "\\2022";
+      position: absolute;
+      right: calc(100% + 0.4em);
+      top: 0;
+    }
+    li > p:last-child { margin-bottom: 0; }
   `;
   wrapper.appendChild(styleTag);
   const contentDiv = document.createElement("div");
