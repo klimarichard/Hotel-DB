@@ -29,6 +29,12 @@ interface Props {
    */
   companyId: string | null | undefined;
   employeeData: EmployeeData;
+  /**
+   * Snapshot of the row's identifying parameters at generation time.
+   * Persisted on the contract doc so we can later detect whether the row
+   * has been edited since the contract was generated.
+   */
+  rowSnapshot?: Record<string, unknown>;
   onClose: () => void;
   onGenerated: (contractId: string) => void;
 }
@@ -41,6 +47,7 @@ export default function GenerateContractModal({
   employmentRowId,
   companyId,
   employeeData,
+  rowSnapshot,
   onClose,
   onGenerated,
 }: Props) {
@@ -121,6 +128,7 @@ export default function GenerateContractModal({
       const id = await uploadContract(employeeId, blob, {
         type: contractType,
         employmentRowId,
+        rowSnapshot,
       });
       setStep("done");
       onGenerated(id);

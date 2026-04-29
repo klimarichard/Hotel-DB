@@ -55,12 +55,14 @@ contractsRouter.post(
       status = "unsigned",
       employmentRowId,
       notes,
+      rowSnapshot,
     } = req.body as {
       type: ContractType;
       pdfBase64?: string;
       status?: ContractStatus;
       employmentRowId?: string;
       notes?: string;
+      rowSnapshot?: Record<string, unknown>;
     };
 
     if (!type) {
@@ -98,6 +100,7 @@ contractsRouter.post(
     if (employmentRowId) docData.employmentRowId = employmentRowId;
     if (unsignedStoragePath) docData.unsignedStoragePath = unsignedStoragePath;
     if (notes) docData.notes = notes;
+    if (rowSnapshot) docData.rowSnapshot = rowSnapshot;
 
     await docRef.set(docData);
     res.status(201).json({ id: docRef.id });

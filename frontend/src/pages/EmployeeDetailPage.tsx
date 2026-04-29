@@ -166,6 +166,55 @@ interface EmploymentRow {
   changes?: ChangeRow[];
 }
 
+interface ContractRecord {
+  id: string;
+  type: SmlouvaContractType;
+  status: "unsigned" | "signed" | "archived";
+  employmentRowId?: string;
+  rowSnapshot?: Record<string, unknown>;
+}
+
+// Fields included in the row snapshot used to detect "this contract still
+// matches the row". Any change to one of these will cause the Generovat
+// button to reappear for that row.
+const SNAPSHOT_FIELDS: (keyof EmploymentRow)[] = [
+  "companyId",
+  "contractType",
+  "jobTitle",
+  "department",
+  "startDate",
+  "endDate",
+  "salary",
+  "hourlyRate",
+  "agreedReward",
+  "workLocation",
+  "probationPeriod",
+  "agreedWorkScope",
+  "signingDate",
+];
+
+function buildRowSnapshot(row: EmploymentRow): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const k of SNAPSHOT_FIELDS) {
+    const v = row[k];
+    out[k] = v === undefined ? null : v;
+  }
+  return out;
+}
+
+function snapshotsEqual(
+  a: Record<string, unknown> | undefined,
+  b: Record<string, unknown> | undefined
+): boolean {
+  if (!a || !b) return false;
+  for (const k of SNAPSHOT_FIELDS) {
+    const av = a[k] ?? null;
+    const bv = b[k] ?? null;
+    if (av !== bv) return false;
+  }
+  return true;
+}
+
 const TODAY = new Date().toISOString().split("T")[0];
 const END_OF_YEAR = `${new Date().getFullYear()}-12-31`;
 
@@ -780,6 +829,7 @@ export default function EmployeeDetailPage() {
 
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [employment, setEmployment] = useState<EmploymentRow[]>([]);
+  const [contracts, setContracts] = useState<ContractRecord[]>([]);
   const [contact, setContact] = useState<ContactData | null>(null);
   const [documents, setDocuments] = useState<DocumentsData | null>(null);
   const [additional, setAdditional] = useState<AdditionalData | null>(null);
@@ -832,14 +882,39 @@ export default function EmployeeDetailPage() {
       api.get<Employee>(`/employees/${id}`),
       api.get<EmploymentRow[]>(`/employees/${id}/employment`),
       api.get<AlertItem[]>(`/employees/${id}/alerts`),
+      api.get<ContractRecord[]>(`/employees/${id}/contracts`).catch(() => [] as ContractRecord[]),
     ])
-      .then(([emp, history, empAlerts]) => {
+      .then(([emp, history, empAlerts, contractsList]) => {
         setEmployee(emp);
         setEmployment(history);
         setAlerts(empAlerts);
+        setContracts(contractsList);
       })
       .finally(() => setLoading(false));
   }, [id]);
+
+  async function refetchContracts() {
+    if (!id) return;
+    try {
+      const list = await api.get<ContractRecord[]>(`/employees/${id}/contracts`);
+      setContracts(list);
+    } catch {
+      // ignore — list stays as-is until next refetch
+    }
+  }
+
+  // For a given (row, type), is there already a contract that matches the
+  // row's current parameters? Used to hide the Generovat button/dropdown
+  // item when no fresh contract is needed for that row + type.
+  function hasMatchingContract(row: EmploymentRow, type: SmlouvaContractType): boolean {
+    const current = buildRowSnapshot(row);
+    return contracts.some(
+      (c) =>
+        c.employmentRowId === row.id &&
+        c.type === type &&
+        snapshotsEqual(c.rowSnapshot, current)
+    );
+  }
 
   // Lazy-load sub-sections when first expanded
   useEffect(() => {
@@ -1016,7 +1091,9 @@ export default function EmployeeDetailPage() {
                               Upravit
                             </button>
                             {(() => {
-                              const types = getContractTypesForRow(row);
+                              const types = getContractTypesForRow(row).filter(
+                                (t) => !hasMatchingContract(row, t)
+                              );
                               if (types.length === 0) return null;
                               if (types.length === 1) {
                                 return (
@@ -1116,6 +1193,7 @@ export default function EmployeeDetailPage() {
             passportNumber: documents?.passportNumber,
             visaNumber: documents?.visaNumber,
           }}
+          onContractsChanged={refetchContracts}
         />
       )}
 
@@ -1279,9 +1357,11 @@ export default function EmployeeDetailPage() {
             startDate: generateModal.row.startDate,
             endDate: generateModal.row.endDate ?? undefined,
           }}
+          rowSnapshot={buildRowSnapshot(generateModal.row)}
           onClose={() => setGenerateModal(null)}
           onGenerated={() => {
             setGenerateModal(null);
+            refetchContracts();
             setPage("smlouvy");
           }}
         />
