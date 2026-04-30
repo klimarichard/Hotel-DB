@@ -217,7 +217,6 @@ function snapshotsEqual(
 }
 
 const TODAY = new Date().toISOString().split("T")[0];
-const END_OF_YEAR = `${new Date().getFullYear()}-12-31`;
 
 const CHANGE_TYPES = ["nástup", "ukončení", "změna smlouvy"] as const;
 type ChangeType = typeof CHANGE_TYPES[number];
@@ -414,6 +413,39 @@ function AddEntryModal({
   const [error, setError] = useState<string | null>(null);
   const [departments, setDepartments] = useState<DepartmentRec[]>([]);
   const [positions, setPositions] = useState<JobPositionRec[]>([]);
+  const [dppMaxMonthlyReward, setDppMaxMonthlyReward] = useState<number | null>(null);
+  // Manual override for DPP "Sjednaná odměna" — when true, auto-compute is suppressed.
+  // Pre-existing rows start in manual mode so saved values aren't overwritten on edit.
+  const [agreedRewardManual, setAgreedRewardManual] = useState<boolean>(
+    !!initialRow?.agreedReward
+  );
+
+  useEffect(() => {
+    api.get<{ dppMaxMonthlyReward: number }>("/payroll/settings")
+      .then((s) => setDppMaxMonthlyReward(s.dppMaxMonthlyReward))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (form.contractType !== "DPP") return;
+    if (agreedRewardManual) return;
+    if (dppMaxMonthlyReward == null) return;
+    let months: number;
+    if (!form.endDate) {
+      months = 12;
+    } else {
+      if (!form.startDate) return;
+      const [sy, sm] = form.startDate.split("-").map(Number);
+      const [ey, em] = form.endDate.split("-").map(Number);
+      if (!sy || !sm || !ey || !em) return;
+      months = (ey - sy) * 12 + (em - sm) + 1;
+      if (months <= 0) return;
+    }
+    const computed = Math.ceil((dppMaxMonthlyReward * months) / 10000) * 10000;
+    setForm((f) =>
+      f.agreedReward === String(computed) ? f : { ...f, agreedReward: String(computed) }
+    );
+  }, [form.contractType, form.startDate, form.endDate, dppMaxMonthlyReward, agreedRewardManual]);
 
   useEffect(() => {
     let cancelled = false;
@@ -450,10 +482,12 @@ function AddEntryModal({
         next.changes = [{ ...emptyChangeRow }];
       }
       if (field === "contractType") {
-        next.endDate = value === "DPP" ? END_OF_YEAR : "";
+        next.endDate = "";
+        next.agreedReward = "";
       }
       return next;
     });
+    if (field === "contractType") setAgreedRewardManual(false);
   }
 
   function updateChange(i: number, field: keyof ChangeRow, value: string) {
@@ -663,8 +697,26 @@ function AddEntryModal({
                       <input className={styles.modalInput} type="date" value={form.endDate} onChange={(e) => setField("endDate", e.target.value)} />
                     </div>
                     <div className={styles.modalField}>
-                      <label className={styles.modalLabel}>Sjednaná odměna (Kč)</label>
-                      <input className={styles.modalInput} type="number" value={form.agreedReward} onChange={(e) => setField("agreedReward", e.target.value)} placeholder="0" />
+                      <label className={styles.modalLabel}>
+                        Sjednaná odměna (Kč)
+                        {agreedRewardManual && (
+                          <button
+                            type="button"
+                            onClick={() => setAgreedRewardManual(false)}
+                            style={{ marginLeft: "0.5rem", fontSize: "0.75rem", background: "none", border: "none", color: "var(--color-link, var(--color-accent))", cursor: "pointer", padding: 0 }}
+                            title="Vypočítat automaticky podle nastavení"
+                          >
+                            ↻ auto
+                          </button>
+                        )}
+                      </label>
+                      <input
+                        className={styles.modalInput}
+                        type="number"
+                        value={form.agreedReward}
+                        onChange={(e) => { setAgreedRewardManual(true); setField("agreedReward", e.target.value); }}
+                        placeholder="0"
+                      />
                     </div>
                     <div className={styles.modalField}>
                       <label className={styles.modalLabel}>Datum podpisu</label>
@@ -1360,6 +1412,8 @@ export default function EmployeeDetailPage() {
             workLocation: generateModal.row.workLocation,
             probationPeriod: generateModal.row.probationPeriod,
             signingDate: generateModal.row.signingDate ?? undefined,
+            agreedWorkScope: generateModal.row.agreedWorkScope,
+            agreedReward: generateModal.row.agreedReward ?? undefined,
           }}
           rowSnapshot={buildRowSnapshot(generateModal.row)}
           displayName={buildContractName(
