@@ -87,6 +87,21 @@ export const VARIABLE_GROUPS: { group: string; vars: VariableDef[] }[] = [
     ],
   },
   {
+    group: "Dodatky",
+    vars: [
+      { key: "dodatekEffectiveDate", label: "Platnost dodatku" },
+      { key: "newSalary", label: "Nová mzda" },
+      { key: "salaryChangeVerb", label: "Sloveso změny mzdy (zvyšuje/mění)" },
+      { key: "isDodatekMzda", label: "Je dodatek o mzdě (pro {{#if}})", kind: "if" },
+      { key: "newJobTitle", label: "Nová pozice" },
+      { key: "isDodatekPozice", label: "Je dodatek o pozici (pro {{#if}})", kind: "if" },
+      { key: "newWorkScope", label: "Nový úvazek" },
+      { key: "isDodatekUvazek", label: "Je dodatek o úvazku (pro {{#if}})", kind: "if" },
+      { key: "newEndDate", label: "Nový konec smlouvy" },
+      { key: "isDodatekZmenaKonce", label: "Je dodatek o změně konce poměru (pro {{#if}})", kind: "if" },
+    ],
+  },
+  {
     group: "Společnost",
     vars: [
       { key: "companyName", label: "Název firmy" },
@@ -133,6 +148,13 @@ export interface EmployeeData {
   // DPP fields
   agreedWorkScope?: string;
   agreedReward?: string | number;
+  // Dodatek fields — populated when generating "změna smlouvy" contracts.
+  // dodatekEffectiveDate is raw ISO; resolveVariables formats it.
+  dodatekEffectiveDate?: string;
+  dodatekChanges?: { changeKind: string; value: string }[];
+  // Salary in force immediately before this dodatek — used to compute
+  // salaryChangeVerb ("zvyšuje" if newSalary > oldSalary, else "mění").
+  oldSalary?: string | number;
 }
 
 /**
@@ -206,6 +228,33 @@ export function resolveVariables(
     noEndDate: hasEndDate ? "" : "ano",
     agreedWorkScope: str(employee.agreedWorkScope),
     agreedReward: str(employee.agreedReward),
+    ...(() => {
+      const changes = employee.dodatekChanges ?? [];
+      const findValue = (kind: string) =>
+        changes.find((c) => c.changeKind === kind)?.value ?? "";
+      const has = (kind: string) => changes.some((c) => c.changeKind === kind);
+      const newSalaryStr = findValue("mzda");
+      const newSalaryNum = Number(newSalaryStr);
+      const oldSalaryNum = Number(employee.oldSalary);
+      const salaryChangeVerb =
+        Number.isFinite(newSalaryNum) && Number.isFinite(oldSalaryNum)
+          ? newSalaryNum > oldSalaryNum
+            ? "zvyšuje"
+            : "mění"
+          : "";
+      return {
+        dodatekEffectiveDate: formatDateCZ(employee.dodatekEffectiveDate),
+        newSalary: str(newSalaryStr),
+        newJobTitle: str(findValue("pracovní pozice")),
+        newWorkScope: str(findValue("úvazek")),
+        newEndDate: formatDateCZ(findValue("délka smlouvy")),
+        salaryChangeVerb,
+        isDodatekMzda: has("mzda") ? "ano" : "",
+        isDodatekPozice: has("pracovní pozice") ? "ano" : "",
+        isDodatekUvazek: has("úvazek") ? "ano" : "",
+        isDodatekZmenaKonce: has("délka smlouvy") ? "ano" : "",
+      };
+    })(),
     companyName: str(company.name),
     companyAddress: str(company.address),
     ic: str(company.ic),

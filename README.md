@@ -308,6 +308,18 @@ Two new keys exposed under "Pracovní podmínky" in the contract-template variab
 
 Both fields are populated from the employment row when `GenerateContractModal` is opened, so DPP templates can reference them directly instead of reusing the generic `{{salary}}` slot. The fields existed on the row schema before this commit; only the variable plumbing is new.
 
+### Dodatek template variables (2026-04-30)
+New "Dodatky" group in the contract-template variable picker covers the four change kinds a `změna smlouvy` row can carry plus a salary-direction verb:
+
+- `{{dodatekEffectiveDate}}` — "Platnost dodatku", date the dodatek takes effect (= `row.startDate`, formatted via `formatDateCZ`).
+- `{{newSalary}}` / `{{isDodatekMzda}}` — value + conditional flag for `changeKind === "mzda"`.
+- `{{newJobTitle}}` / `{{isDodatekPozice}}` — for `"pracovní pozice"`.
+- `{{newWorkScope}}` / `{{isDodatekUvazek}}` — for `"úvazek"`.
+- `{{newEndDate}}` / `{{isDodatekZmenaKonce}}` — for `"délka smlouvy"` (formatted as date).
+- `{{salaryChangeVerb}}` — emits `"zvyšuje"` if the new salary is greater than the salary in force immediately before the dodatek, `"mění"` otherwise. Empty string if either side is missing or non-numeric. The "old salary" is computed by `findOldSalary(row, employment)` in `EmployeeDetailPage.tsx`: walks history in chronological order, each `nástup`'s `salary` sets the baseline and each `změna smlouvy` with a `"mzda"` change overrides it; returns the latest value applied before this row.
+
+`EmployeeData` carries two raw fields — `dodatekEffectiveDate` (ISO) and `dodatekChanges: { changeKind, value }[]` — plus `oldSalary`. `resolveVariables` derives every dodatek-related output from these inputs, so the template surface is single-source-of-truth from the row's `changes` array. Conditional flags use `changes.some(c => c.changeKind === kind)` rather than checking value emptiness, so a present-but-blank entry still triggers the section.
+
 ### Ctrl+Shift+Space inserts non-breaking space (2026-04-30)
 Small `NbspKeybind` extension binds `Mod-Shift-Space` (Ctrl on Win/Linux, Cmd on macOS — matches MS Word) to `view.dispatch(state.tr.insertText(' '))`. The character is indistinguishable from a regular space in the editor (matching Word's behaviour — no visual marker) but round-trips through saved HTML and the Puppeteer-rendered PDF as a real U+00A0, so wrapping never splits Czech one-letter prepositions ("v Praze") or `number + unit` pairs ("150 000 Kč").
 

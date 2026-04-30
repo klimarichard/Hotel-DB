@@ -238,6 +238,34 @@ function findOriginalSigningDate(
   return candidates[0]?.signingDate ?? undefined;
 }
 
+/**
+ * Salary in force immediately before `row` takes effect. Walks the history
+ * in chronological order: a `nástup` row's `salary` sets the baseline; a
+ * `změna smlouvy` row's "mzda" change overrides it. Returns the latest
+ * value applied before `row.startDate` (or before `row` itself if dates
+ * tie). Used as `{{oldSalary}}` so resolveVariables can pick the
+ * "zvyšuje"/"mění" verb on a salary dodatek.
+ */
+function findOldSalary(
+  row: EmploymentRow,
+  all: EmploymentRow[]
+): number | undefined {
+  const sorted = [...all]
+    .filter((r) => r.id !== row.id && (r.startDate < row.startDate || (r.startDate === row.startDate)))
+    .sort((a, b) => a.startDate.localeCompare(b.startDate));
+  let current: number | undefined;
+  for (const r of sorted) {
+    if (r.changeType === "nástup" && r.salary != null) {
+      current = r.salary;
+    } else if (r.changeType === "změna smlouvy") {
+      const mzda = r.changes?.find((c) => c.changeKind === "mzda")?.value;
+      const n = Number(mzda);
+      if (Number.isFinite(n)) current = n;
+    }
+  }
+  return current;
+}
+
 const CHANGE_TYPES = ["nástup", "ukončení", "změna smlouvy"] as const;
 type ChangeType = typeof CHANGE_TYPES[number];
 
@@ -1435,6 +1463,15 @@ export default function EmployeeDetailPage() {
             originalSigningDate: findOriginalSigningDate(generateModal.row, employment),
             agreedWorkScope: generateModal.row.agreedWorkScope,
             agreedReward: generateModal.row.agreedReward ?? undefined,
+            dodatekEffectiveDate:
+              generateModal.row.changeType === "změna smlouvy"
+                ? generateModal.row.startDate
+                : undefined,
+            dodatekChanges: generateModal.row.changes?.map((c) => ({
+              changeKind: c.changeKind,
+              value: c.value,
+            })),
+            oldSalary: findOldSalary(generateModal.row, employment),
           }}
           rowSnapshot={buildRowSnapshot(generateModal.row)}
           displayName={buildContractName(
