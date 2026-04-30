@@ -164,8 +164,34 @@ const ListItemIndent = Extension.create({
       view.dispatch(state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, style: newStyle }));
       return true;
     };
+
+    // Tab inside a list item with the caret past the start of the row inserts
+    // a literal \t character into the paragraph, leaving the bullet/number and
+    // any text to the left of the caret in place. The paragraph already has
+    // `tab-size: 1.27cm` from TabParagraph so the tab paints the same gap as
+    // outside lists.
+    const insertTabOrIndent = (): boolean => {
+      const { state, view } = this.editor;
+      const { $from, empty } = state.selection;
+      let listItemDepth = -1;
+      for (let d = $from.depth; d > 0; d--) {
+        if ($from.node(d).type.name === "listItem") { listItemDepth = d; break; }
+      }
+      const atRowStart =
+        listItemDepth >= 0 &&
+        empty &&
+        $from.parentOffset === 0 &&
+        $from.index(listItemDepth) === 0;
+      if (atRowStart) return adjustIndent(1)();
+      if (listItemDepth >= 0) {
+        view.dispatch(state.tr.insertText("\t").scrollIntoView());
+        return true;
+      }
+      return false;
+    };
+
     return {
-      Tab: adjustIndent(1),
+      Tab: insertTabOrIndent,
       "Shift-Tab": adjustIndent(-1),
     };
   },
