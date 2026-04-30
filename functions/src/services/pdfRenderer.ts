@@ -49,6 +49,18 @@ const RENDER_CSS = `
   table.hpm-borderless td, table.hpm-borderless th { border: none; }
   table th { font-weight: 600; }
   li::marker { font-size: inherit; }
+  /*
+   * Page-break node ↧ — strip every visual the editor may have baked
+   * into the saved HTML (older templates carried inline border-top +
+   * margin). We only want the page-break-before behaviour in the PDF,
+   * not the dashed divider or the 1 cm gap.
+   */
+  [data-page-break] {
+    border: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    height: 0 !important;
+  }
 `;
 
 let browserPromise: Promise<Browser> | null = null;

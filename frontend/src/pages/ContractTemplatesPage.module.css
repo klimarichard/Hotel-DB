@@ -255,6 +255,18 @@
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
 }
 
+/*
+ * Page-break node ↧ — visual dashed divider in the editor only. Saved HTML
+ * keeps just `page-break-before: always; height: 0;` (set inline by
+ * PageBreak.renderHTML), so the PDF gets a clean break with no visible
+ * mark. The styling lives here so it never reaches the Puppeteer
+ * renderer's CSS.
+ */
+.a4Page [data-page-break] {
+  border-top: 2px dashed #999;
+  margin: 1cm 0;
+}
+
 [data-theme="dark"] .a4Page {
   background-color: #1e1e1e;
   background-image: repeating-linear-gradient(
