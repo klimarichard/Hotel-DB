@@ -13,6 +13,7 @@ import { blobToBase64 } from "@/lib/blobToBase64";
 import { formatTimestampCZ } from "@/lib/dateFormat";
 import { buildContractName } from "@/lib/contractNaming";
 import styles from "./ContractsTab.module.css";
+import modalStyles from "./ConfirmModal.module.css";
 
 interface ContractRecord {
   id: string;
@@ -55,7 +56,9 @@ export default function ContractsTab({ employeeId, employeeData, onContractsChan
   const { user, role } = useAuth();
   const [contracts, setContracts] = useState<ContractRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [generateModal, setGenerateModal] = useState<ContractType | null>(null);
+  const [generateModal, setGenerateModal] = useState<{ type: ContractType; signingDate?: string } | null>(null);
+  const [signingDatePrompt, setSigningDatePrompt] = useState<ContractType | null>(null);
+  const [signingDateDraft, setSigningDateDraft] = useState<string>("");
   const [deleteTarget, setDeleteTarget] = useState<ContractRecord | null>(null);
   const [deleteSignedTarget, setDeleteSignedTarget] = useState<ContractRecord | null>(null);
   const [standaloneDropdown, setStandaloneDropdown] = useState(false);
@@ -246,7 +249,8 @@ export default function ContractsTab({ employeeId, employeeData, onContractsChan
                     key={t}
                     className={styles.dropdownItem}
                     onClick={() => {
-                      setGenerateModal(t);
+                      setSigningDatePrompt(t);
+                      setSigningDateDraft(new Date().toISOString().split("T")[0]);
                       setStandaloneDropdown(false);
                     }}
                   >
@@ -351,14 +355,58 @@ export default function ContractsTab({ employeeId, employeeData, onContractsChan
         </table>
       )}
 
+      {signingDatePrompt && (
+        <div className={modalStyles.overlay}>
+          <div className={modalStyles.modal}>
+            <div className={modalStyles.header}>
+              <h2 className={modalStyles.title}>
+                {CONTRACT_TYPE_LABELS[signingDatePrompt]} — datum podpisu
+              </h2>
+            </div>
+            <div className={modalStyles.body}>
+              <input
+                type="date"
+                value={signingDateDraft}
+                onChange={(e) => setSigningDateDraft(e.target.value)}
+                autoFocus
+                style={{
+                  width: "100%",
+                  padding: "8px 10px",
+                  fontSize: "0.875rem",
+                  border: "1px solid var(--color-border)",
+                  borderRadius: "6px",
+                  background: "var(--color-surface)",
+                  color: "var(--color-text)",
+                }}
+              />
+            </div>
+            <div className={modalStyles.footer}>
+              <Button variant="secondary" onClick={() => setSigningDatePrompt(null)}>
+                Zrušit
+              </Button>
+              <Button
+                variant="primary"
+                disabled={!signingDateDraft}
+                onClick={() => {
+                  setGenerateModal({ type: signingDatePrompt, signingDate: signingDateDraft });
+                  setSigningDatePrompt(null);
+                }}
+              >
+                Pokračovat
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {generateModal && (
         <GenerateContractModal
           employeeId={employeeId}
-          contractType={generateModal}
+          contractType={generateModal.type}
           companyId={employeeData.currentCompanyId ?? null}
-          employeeData={employeeData}
+          employeeData={{ ...employeeData, signingDate: generateModal.signingDate }}
           displayName={buildContractName(
-            generateModal,
+            generateModal.type,
             undefined,
             `${employeeData.firstName ?? ""} ${employeeData.lastName ?? ""}`.trim()
           )}
