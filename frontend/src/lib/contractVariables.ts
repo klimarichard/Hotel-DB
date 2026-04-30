@@ -48,7 +48,8 @@ export const CHANGE_TYPE_TO_CONTRACTS: Record<string, ContractType[]> = {
 };
 
 /** All available template variables with human-readable labels grouped by source */
-export const VARIABLE_GROUPS: { group: string; vars: { key: string; label: string }[] }[] = [
+export type VariableDef = { key: string; label: string; kind?: "if" };
+export const VARIABLE_GROUPS: { group: string; vars: VariableDef[] }[] = [
   {
     group: "Zaměstnanec",
     vars: [
@@ -60,10 +61,10 @@ export const VARIABLE_GROUPS: { group: string; vars: { key: string; label: strin
       { key: "passportNumber", label: "Číslo pasu" },
       { key: "visaNumber", label: "Číslo povolení k pobytu" },
       { key: "currentJobTitle", label: "Pracovní pozice" },
-      { key: "isCzech", label: "Je Čech (pro {{#if}})" },
-      { key: "isForeigner", label: "Je cizinec (pro {{#if}})" },
-      { key: "hasPermanentResidence", label: "Má trvalý pobyt (pro {{#if}})" },
-      { key: "noPermanentResidence", label: "Nemá trvalý pobyt (pro {{#if}})" },
+      { key: "isCzech", label: "Je Čech (pro {{#if}})", kind: "if" },
+      { key: "isForeigner", label: "Je cizinec (pro {{#if}})", kind: "if" },
+      { key: "hasPermanentResidence", label: "Má trvalý pobyt (pro {{#if}})", kind: "if" },
+      { key: "noPermanentResidence", label: "Nemá trvalý pobyt (pro {{#if}})", kind: "if" },
     ],
   },
   {
@@ -76,10 +77,10 @@ export const VARIABLE_GROUPS: { group: string; vars: { key: string; label: strin
       { key: "workLocation", label: "Místo výkonu práce" },
       { key: "probationPeriod", label: "Zkušební doba" },
       { key: "signingDate", label: "Datum podpisu" },
-      { key: "hasProbation", label: "Má zkušební dobu (pro {{#if}})" },
-      { key: "noProbation", label: "Nemá zkušební dobu (pro {{#if}})" },
-      { key: "hasEndDate", label: "Má datum ukončení (pro {{#if}})" },
-      { key: "noEndDate", label: "Nemá datum ukončení (pro {{#if}})" },
+      { key: "hasProbation", label: "Má zkušební dobu (pro {{#if}})", kind: "if" },
+      { key: "noProbation", label: "Nemá zkušební dobu (pro {{#if}})", kind: "if" },
+      { key: "hasEndDate", label: "Má datum ukončení (pro {{#if}})", kind: "if" },
+      { key: "noEndDate", label: "Nemá datum ukončení (pro {{#if}})", kind: "if" },
       { key: "agreedWorkScope", label: "Rozsah práce DPP" },
       { key: "agreedReward", label: "Odměna DPP" },
     ],

@@ -609,8 +609,20 @@ export default function ContractTemplatesPage() {
     })();
   }, [selectedTemplateId, editor, user]);
 
-  function insertVariable(key: string) {
+  function insertVariable(key: string, kind?: "if") {
     if (!editor) return;
+    if (kind === "if") {
+      const left = `{{#if ${key}}}`;
+      const right = `{{/if}}`;
+      const from = editor.state.selection.from;
+      editor
+        .chain()
+        .focus()
+        .insertContent(left + right)
+        .setTextSelection(from + left.length)
+        .run();
+      return;
+    }
     editor.chain().focus().insertContent(`{{${key}}}`).run();
   }
 
@@ -1248,8 +1260,8 @@ export default function ContractTemplatesPage() {
                 <button
                   key={v.key}
                   className={styles.varBtn}
-                  onClick={() => insertVariable(v.key)}
-                  title={`{{${v.key}}}`}
+                  onClick={() => insertVariable(v.key, v.kind)}
+                  title={v.kind === "if" ? `{{#if ${v.key}}}{{/if}}` : `{{${v.key}}}`}
                 >
                   {v.label}
                 </button>
