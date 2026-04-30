@@ -265,7 +265,11 @@ const PageBreak = Node.create({
       "div",
       mergeAttributes(HTMLAttributes, {
         "data-page-break": "true",
-        style: "page-break-before: always; border-top: 2px dashed #999; margin: 1cm 0; height: 0;",
+        // Only the structural bits live in the saved HTML so the PDF
+        // renderer doesn't paint a dashed line on the page. The visual
+        // dashed divider is added by editor-only CSS (see
+        // `.a4Page [data-page-break]` in ContractTemplatesPage.module.css).
+        style: "page-break-before: always; height: 0;",
         "aria-label": "Konec stránky",
       }),
     ];

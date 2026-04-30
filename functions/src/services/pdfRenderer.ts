@@ -49,6 +49,18 @@ const RENDER_CSS = `
   table.hpm-borderless td, table.hpm-borderless th { border: none; }
   table th { font-weight: 600; }
   li::marker { font-size: inherit; }
+  /*
+   * Page-break node ↧ — strip every visual the editor may have baked
+   * into the saved HTML (older templates carried inline border-top +
+   * margin). We only want the page-break-before behaviour in the PDF,
+   * not the dashed divider or the 1 cm gap.
+   */
+  [data-page-break] {
+    border: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    height: 0 !important;
+  }
 `;
 
 let browserPromise: Promise<Browser> | null = null;
@@ -101,6 +113,33 @@ export async function renderPdf(
 <body>${bodyHtml}</body>
 </html>`;
     await page.setContent(fullHtml, { waitUntil: "networkidle0" });
+
+    // Body text on page 1 starts after the logo image; on page 2+ it would
+    // start at `margins.top` from the page edge — too high. Measure where
+    // the first <img> ends in the rendered DOM and bump the default @page
+    // top margin by that much so page 2+ start at the same y-offset as the
+    // post-logo body text on page 1. `@page :first` reverts page 1 to the
+    // template's original top margin so the logo still pins to where the
+    // template author put it.
+    const logoBottomPx = await page.evaluate(() => {
+      const img = document.body.querySelector("img");
+      return img ? img.getBoundingClientRect().bottom : 0;
+    });
+    const PX_TO_MM = 25.4 / 96;
+    const logoMm = +(logoBottomPx * PX_TO_MM).toFixed(1);
+    if (logoMm > 0) {
+      await page.addStyleTag({
+        content: `
+          @page {
+            margin: ${margins.top + logoMm}mm ${margins.right}mm ${margins.bottom}mm ${margins.left}mm;
+          }
+          @page :first {
+            margin-top: ${margins.top}mm;
+          }
+        `,
+      });
+    }
+
     const pdf = await page.pdf({
       format: "A4",
       printBackground: true,
