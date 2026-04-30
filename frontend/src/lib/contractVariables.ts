@@ -80,6 +80,8 @@ export const VARIABLE_GROUPS: { group: string; vars: { key: string; label: strin
       { key: "noProbation", label: "Nemá zkušební dobu (pro {{#if}})" },
       { key: "hasEndDate", label: "Má datum ukončení (pro {{#if}})" },
       { key: "noEndDate", label: "Nemá datum ukončení (pro {{#if}})" },
+      { key: "agreedWorkScope", label: "Rozsah práce DPP" },
+      { key: "agreedReward", label: "Odměna DPP" },
     ],
   },
   {
@@ -123,6 +125,9 @@ export interface EmployeeData {
   workLocation?: string;
   probationPeriod?: string;
   signingDate?: string; // raw ISO date (YYYY-MM-DD); resolveVariables formats it
+  // DPP fields
+  agreedWorkScope?: string;
+  agreedReward?: string | number;
 }
 
 /**
@@ -193,6 +198,8 @@ export function resolveVariables(
     noProbation: hasProbation ? "" : "ano",
     hasEndDate: hasEndDate ? "ano" : "",
     noEndDate: hasEndDate ? "" : "ano",
+    agreedWorkScope: str(employee.agreedWorkScope),
+    agreedReward: str(employee.agreedReward),
     companyName: str(company.name),
     companyAddress: str(company.address),
     ic: str(company.ic),
