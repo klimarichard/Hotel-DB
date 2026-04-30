@@ -172,6 +172,10 @@ export default function SettingsPage() {
   const [foodVoucherRateDraft, setFoodVoucherRateDraft] = useState<string>("");
   const [showVoucherConfirm, setShowVoucherConfirm] = useState(false);
   const [voucherSaving, setVoucherSaving] = useState(false);
+  const [dppMaxMonthlyReward, setDppMaxMonthlyReward] = useState<number>(11999);
+  const [dppMaxMonthlyRewardDraft, setDppMaxMonthlyRewardDraft] = useState<string>("");
+  const [showDppMaxConfirm, setShowDppMaxConfirm] = useState(false);
+  const [dppMaxSaving, setDppMaxSaving] = useState(false);
   const [showPosCreate, setShowPosCreate] = useState(false);
 
   // Companies
@@ -247,10 +251,12 @@ export default function SettingsPage() {
   useEffect(() => { loadDepartments(); loadPositions(); loadEducationLevels(); }, [loadDepartments, loadPositions, loadEducationLevels]);
 
   useEffect(() => {
-    api.get<{ foodVoucherRate: number }>("/payroll/settings")
+    api.get<{ foodVoucherRate: number; dppMaxMonthlyReward: number }>("/payroll/settings")
       .then((s) => {
         setFoodVoucherRate(s.foodVoucherRate);
         setFoodVoucherRateDraft(String(s.foodVoucherRate));
+        setDppMaxMonthlyReward(s.dppMaxMonthlyReward);
+        setDppMaxMonthlyRewardDraft(String(s.dppMaxMonthlyReward));
       })
       .catch(() => {});
   }, []);
@@ -1243,6 +1249,63 @@ export default function SettingsPage() {
           <p style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
             Tato hodnota se násobí počtem odpracovaných dnů v měsíci. Výchozí hodnota: 129,5 Kč/den.
           </p>
+
+          <h2 style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--color-text-heading)", marginTop: "2rem", marginBottom: "1rem" }}>
+            Maximální měsíční odměna DPP
+          </h2>
+          <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "0.5rem" }}>
+            <span style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--color-text)" }}>
+              {dppMaxMonthlyReward.toLocaleString("cs-CZ")} Kč / měsíc
+            </span>
+            <button className={styles.linkBtn} onClick={() => { setDppMaxMonthlyRewardDraft(String(dppMaxMonthlyReward)); setShowDppMaxConfirm(true); }}>
+              Upravit
+            </button>
+          </div>
+          <p style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
+            Limit pro automatický výpočet sjednané odměny u DPP smluv. Výchozí hodnota: 11 999 Kč/měsíc.
+          </p>
+
+          {showDppMaxConfirm && (
+            <div className={styles.modal}>
+              <div className={styles.modalBox} style={{ maxWidth: 400 }}>
+                <h2 className={styles.modalTitle}>Změnit maximální měsíční odměnu DPP</h2>
+                <div className={styles.field}>
+                  <label className={styles.label}>Nová hodnota (Kč/měsíc)</label>
+                  <input
+                    className={styles.input}
+                    type="number"
+                    step="100"
+                    value={dppMaxMonthlyRewardDraft}
+                    onChange={(e) => setDppMaxMonthlyRewardDraft(e.target.value)}
+                    autoFocus
+                  />
+                </div>
+                <div className={styles.formActions}>
+                  <Button variant="secondary" onClick={() => setShowDppMaxConfirm(false)} disabled={dppMaxSaving}>
+                    Zrušit
+                  </Button>
+                  <Button
+                    variant="primary"
+                    disabled={dppMaxSaving || !dppMaxMonthlyRewardDraft || Number(dppMaxMonthlyRewardDraft) <= 0}
+                    onClick={async () => {
+                      setDppMaxSaving(true);
+                      try {
+                        await api.patch("/payroll/settings", { dppMaxMonthlyReward: Number(dppMaxMonthlyRewardDraft) });
+                        setDppMaxMonthlyReward(Number(dppMaxMonthlyRewardDraft));
+                        setShowDppMaxConfirm(false);
+                      } catch {
+                        // silent
+                      } finally {
+                        setDppMaxSaving(false);
+                      }
+                    }}
+                  >
+                    {dppMaxSaving ? "Ukládám…" : "Uložit"}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {showVoucherConfirm && (
             <div className={styles.modal}>

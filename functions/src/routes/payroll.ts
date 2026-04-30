@@ -225,8 +225,10 @@ payrollRouter.get(
   requireRole("admin", "director"),
   async (_req: AuthRequest, res: Response) => {
     const snap = await db().collection("settings").doc("payroll").get();
-    const rate = snap.exists ? (snap.data()?.foodVoucherRate as number ?? 129.5) : 129.5;
-    res.json({ foodVoucherRate: rate });
+    const data = snap.exists ? snap.data() : undefined;
+    const foodVoucherRate = (data?.foodVoucherRate as number | undefined) ?? 129.5;
+    const dppMaxMonthlyReward = (data?.dppMaxMonthlyReward as number | undefined) ?? 11999;
+    res.json({ foodVoucherRate, dppMaxMonthlyReward });
   }
 );
 
@@ -237,16 +239,29 @@ payrollRouter.patch(
   requireAuth,
   requireRole("admin"),
   async (req: AuthRequest, res: Response) => {
-    const { foodVoucherRate } = req.body as { foodVoucherRate: number };
-    if (typeof foodVoucherRate !== "number" || foodVoucherRate <= 0) {
-      res.status(400).json({ error: "Neplatná sazba stravenky." });
-      return;
-    }
-    await db().collection("settings").doc("payroll").set({
-      foodVoucherRate,
+    const { foodVoucherRate, dppMaxMonthlyReward } = req.body as {
+      foodVoucherRate?: number;
+      dppMaxMonthlyReward?: number;
+    };
+    const update: Record<string, unknown> = {
       updatedAt: FieldValue.serverTimestamp(),
       updatedBy: req.uid,
-    }, { merge: true });
+    };
+    if (foodVoucherRate !== undefined) {
+      if (typeof foodVoucherRate !== "number" || foodVoucherRate <= 0) {
+        res.status(400).json({ error: "Neplatná sazba stravenky." });
+        return;
+      }
+      update.foodVoucherRate = foodVoucherRate;
+    }
+    if (dppMaxMonthlyReward !== undefined) {
+      if (typeof dppMaxMonthlyReward !== "number" || dppMaxMonthlyReward <= 0) {
+        res.status(400).json({ error: "Neplatná maximální měsíční odměna DPP." });
+        return;
+      }
+      update.dppMaxMonthlyReward = dppMaxMonthlyReward;
+    }
+    await db().collection("settings").doc("payroll").set(update, { merge: true });
     res.json({ ok: true });
   }
 );
