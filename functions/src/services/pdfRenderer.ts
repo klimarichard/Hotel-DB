@@ -113,6 +113,33 @@ export async function renderPdf(
 <body>${bodyHtml}</body>
 </html>`;
     await page.setContent(fullHtml, { waitUntil: "networkidle0" });
+
+    // Body text on page 1 starts after the logo image; on page 2+ it would
+    // start at `margins.top` from the page edge — too high. Measure where
+    // the first <img> ends in the rendered DOM and bump the default @page
+    // top margin by that much so page 2+ start at the same y-offset as the
+    // post-logo body text on page 1. `@page :first` reverts page 1 to the
+    // template's original top margin so the logo still pins to where the
+    // template author put it.
+    const logoBottomPx = await page.evaluate(() => {
+      const img = document.body.querySelector("img");
+      return img ? img.getBoundingClientRect().bottom : 0;
+    });
+    const PX_TO_MM = 25.4 / 96;
+    const logoMm = +(logoBottomPx * PX_TO_MM).toFixed(1);
+    if (logoMm > 0) {
+      await page.addStyleTag({
+        content: `
+          @page {
+            margin: ${margins.top + logoMm}mm ${margins.right}mm ${margins.bottom}mm ${margins.left}mm;
+          }
+          @page :first {
+            margin-top: ${margins.top}mm;
+          }
+        `,
+      });
+    }
+
     const pdf = await page.pdf({
       format: "A4",
       printBackground: true,
