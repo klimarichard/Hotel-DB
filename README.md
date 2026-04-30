@@ -288,6 +288,26 @@ Contract docs now carry an optional `rowSnapshot` field — a freeze-frame of th
 
 Also: the `useEffect` in `ContractsTab` that fires `fetchContracts` now lists `user` in its deps. The previous `[employeeId]` only caused a stuck "Načítám smlouvy…" state when auth hadn't hydrated by mount — `fetchContracts` returns early when `user` is null and never set `loading=false` because the effect didn't re-run when `user` changed.
 
+### DPP row defaults + auto-computed Sjednaná odměna (2026-04-30)
+Two changes to how DPP rows behave on the employment-history modal:
+
+1. **End date defaults to empty.** The previous form pre-filled "Konec smlouvy" with 31. 12. of the current year whenever DPP was selected. Open-ended DPP is the common case in this hotel's hiring pattern, so the auto-fill was misleading more often than helpful. The contract-type switch now clears `endDate` for every type — DPP behaves like the others, and a fixed-term DPP requires an explicit date.
+
+2. **"Sjednaná odměna" auto-computes from a settings cap.** A new payroll setting `dppMaxMonthlyReward` (Mzdy → Nastavení tab, default **11 999 Kč/měsíc**) drives a `useEffect` that fills the field whenever `contractType === "DPP"`:
+   - **No end date** → `max × 12`, ceil to the nearest 10 000 (= 150 000 Kč with default).
+   - **With end date** → `max × ((endY−startY)·12 + (endM−startM) + 1)` months, ceil to the nearest 10 000.
+
+   Typing in the input flips an `agreedRewardManual` flag and freezes the value; a small "↻ auto" link beside the label re-engages auto-compute. Editing an existing row that already has a saved reward starts in manual mode so historical values are never overwritten silently. Switching contract type clears the reward and resets the manual flag.
+
+`GET/PATCH /payroll/settings` now reads/writes `dppMaxMonthlyReward` alongside `foodVoucherRate`; PATCH validates and accepts each field independently so editing one sub-section doesn't require sending the other. The Mzdy settings page (`SettingsPage.tsx`) renders the new value in its own sub-block under the existing meal-voucher controls — same "Upravit" → ConfirmModal pattern.
+
+### DPP template variables — Rozsah práce + Odměna (2026-04-30)
+Two new keys exposed under "Pracovní podmínky" in the contract-template variable picker:
+- `{{agreedWorkScope}}` — "Rozsah práce DPP" (free-form string from the row, e.g. *"max. 300 hodin ročně"*).
+- `{{agreedReward}}` — "Odměna DPP" (numeric Kč, stringified the same way as `{{salary}}`).
+
+Both fields are populated from the employment row when `GenerateContractModal` is opened, so DPP templates can reference them directly instead of reusing the generic `{{salary}}` slot. The fields existed on the row schema before this commit; only the variable plumbing is new.
+
 ### Contract company resolved from row, not parent state (2026-04-28)
 `GenerateContractModal` now takes a `companyId` prop and fetches `/api/companies/:id` itself, replacing the previous `companyData={company ?? {}}` parent-state pattern. The row-tied modal (history-row trigger) passes `companyId={row.companyId}` — the legally correct company for that specific contract, not whichever company the employee currently has assigned. The standalone modal (multisport / hmotná odpovědnost) passes `companyId={employeeData.currentCompanyId}`. Eliminates two failure modes: `currentCompanyId` being null (company never fetched, all `{{companyName}}/{{ic}}/...` were empty) and an old row pointing at a different company than current.
 
