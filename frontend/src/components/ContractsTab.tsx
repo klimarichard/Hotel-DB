@@ -56,9 +56,16 @@ export default function ContractsTab({ employeeId, employeeData, onContractsChan
   const { user, role } = useAuth();
   const [contracts, setContracts] = useState<ContractRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [generateModal, setGenerateModal] = useState<{ type: ContractType; signingDate?: string } | null>(null);
+  const [generateModal, setGenerateModal] = useState<{
+    type: ContractType;
+    signingDate?: string;
+    requestedAt?: string;
+    validFrom?: string;
+  } | null>(null);
   const [signingDatePrompt, setSigningDatePrompt] = useState<ContractType | null>(null);
   const [signingDateDraft, setSigningDateDraft] = useState<string>("");
+  const [requestedAtDraft, setRequestedAtDraft] = useState<string>("");
+  const [validFromDraft, setValidFromDraft] = useState<string>("");
   const [deleteTarget, setDeleteTarget] = useState<ContractRecord | null>(null);
   const [deleteSignedTarget, setDeleteSignedTarget] = useState<ContractRecord | null>(null);
   const [standaloneDropdown, setStandaloneDropdown] = useState(false);
@@ -249,8 +256,11 @@ export default function ContractsTab({ employeeId, employeeData, onContractsChan
                     key={t}
                     className={styles.dropdownItem}
                     onClick={() => {
+                      const today = new Date().toISOString().split("T")[0];
                       setSigningDatePrompt(t);
-                      setSigningDateDraft(new Date().toISOString().split("T")[0]);
+                      setSigningDateDraft(today);
+                      setRequestedAtDraft(today);
+                      setValidFromDraft(today);
                       setStandaloneDropdown(false);
                     }}
                   >
@@ -355,56 +365,104 @@ export default function ContractsTab({ employeeId, employeeData, onContractsChan
         </table>
       )}
 
-      {signingDatePrompt && (
-        <div className={modalStyles.overlay}>
-          <div className={modalStyles.modal}>
-            <div className={modalStyles.header}>
-              <h2 className={modalStyles.title}>
-                {CONTRACT_TYPE_LABELS[signingDatePrompt]} — datum podpisu
-              </h2>
-            </div>
-            <div className={modalStyles.body}>
-              <input
-                type="date"
-                value={signingDateDraft}
-                onChange={(e) => setSigningDateDraft(e.target.value)}
-                autoFocus
-                style={{
-                  width: "100%",
-                  padding: "8px 10px",
-                  fontSize: "0.875rem",
-                  border: "1px solid var(--color-border)",
-                  borderRadius: "6px",
-                  background: "var(--color-surface)",
-                  color: "var(--color-text)",
-                }}
-              />
-            </div>
-            <div className={modalStyles.footer}>
-              <Button variant="secondary" onClick={() => setSigningDatePrompt(null)}>
-                Zrušit
-              </Button>
-              <Button
-                variant="primary"
-                disabled={!signingDateDraft}
-                onClick={() => {
-                  setGenerateModal({ type: signingDatePrompt, signingDate: signingDateDraft });
-                  setSigningDatePrompt(null);
-                }}
-              >
-                Pokračovat
-              </Button>
+      {signingDatePrompt && (() => {
+        const isMultisport = signingDatePrompt === "multisport";
+        const dateInputStyle: React.CSSProperties = {
+          width: "100%",
+          padding: "8px 10px",
+          fontSize: "0.875rem",
+          border: "1px solid var(--color-border)",
+          borderRadius: "6px",
+          background: "var(--color-surface)",
+          color: "var(--color-text)",
+        };
+        const labelStyle: React.CSSProperties = {
+          display: "block",
+          fontSize: "0.8125rem",
+          fontWeight: 500,
+          color: "var(--color-text-secondary)",
+          marginBottom: "4px",
+        };
+        const fieldStyle: React.CSSProperties = { marginBottom: "12px" };
+        const canContinue = signingDateDraft && (!isMultisport || (requestedAtDraft && validFromDraft));
+        return (
+          <div className={modalStyles.overlay}>
+            <div className={modalStyles.modal}>
+              <div className={modalStyles.header}>
+                <h2 className={modalStyles.title}>
+                  {CONTRACT_TYPE_LABELS[signingDatePrompt]}
+                </h2>
+              </div>
+              <div className={modalStyles.body}>
+                <div style={fieldStyle}>
+                  <label style={labelStyle}>Datum podpisu</label>
+                  <input
+                    type="date"
+                    value={signingDateDraft}
+                    onChange={(e) => setSigningDateDraft(e.target.value)}
+                    autoFocus
+                    style={dateInputStyle}
+                  />
+                </div>
+                {isMultisport && (
+                  <>
+                    <div style={fieldStyle}>
+                      <label style={labelStyle}>Datum žádosti</label>
+                      <input
+                        type="date"
+                        value={requestedAtDraft}
+                        onChange={(e) => setRequestedAtDraft(e.target.value)}
+                        style={dateInputStyle}
+                      />
+                    </div>
+                    <div style={{ ...fieldStyle, marginBottom: 0 }}>
+                      <label style={labelStyle}>Platnost od</label>
+                      <input
+                        type="date"
+                        value={validFromDraft}
+                        onChange={(e) => setValidFromDraft(e.target.value)}
+                        style={dateInputStyle}
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
+              <div className={modalStyles.footer}>
+                <Button variant="secondary" onClick={() => setSigningDatePrompt(null)}>
+                  Zrušit
+                </Button>
+                <Button
+                  variant="primary"
+                  disabled={!canContinue}
+                  onClick={() => {
+                    setGenerateModal({
+                      type: signingDatePrompt,
+                      signingDate: signingDateDraft,
+                      requestedAt: isMultisport ? requestedAtDraft : undefined,
+                      validFrom: isMultisport ? validFromDraft : undefined,
+                    });
+                    setSigningDatePrompt(null);
+                  }}
+                >
+                  Pokračovat
+                </Button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {generateModal && (
         <GenerateContractModal
           employeeId={employeeId}
           contractType={generateModal.type}
           companyId={employeeData.currentCompanyId ?? null}
-          employeeData={{ ...employeeData, signingDate: generateModal.signingDate }}
+          employeeData={{
+            ...employeeData,
+            signingDate: generateModal.signingDate,
+            requestedAt: generateModal.requestedAt,
+            validFrom: generateModal.validFrom,
+          }}
           displayName={buildContractName(
             generateModal.type,
             undefined,

@@ -111,6 +111,14 @@ export const VARIABLE_GROUPS: { group: string; vars: VariableDef[] }[] = [
     ],
   },
   {
+    group: "Multisport",
+    vars: [
+      { key: "requestedAt", label: "Datum žádosti" },
+      { key: "validFrom", label: "Platnost od" },
+      { key: "validFromMonth", label: "Měsíc začátku platnosti (např. leden 2026)" },
+    ],
+  },
+  {
     group: "Dokument",
     vars: [
       { key: "today", label: "Dnešní datum" },
@@ -155,6 +163,10 @@ export interface EmployeeData {
   // Salary in force immediately before this dodatek — used to compute
   // salaryChangeVerb ("zvyšuje" if newSalary > oldSalary, else "mění").
   oldSalary?: string | number;
+  // Multisport-specific dates — collected by the standalone-contract
+  // signing-date prompt. Raw ISO; resolveVariables formats them.
+  requestedAt?: string;
+  validFrom?: string;
 }
 
 /**
@@ -166,6 +178,23 @@ export interface EmployeeData {
  */
 function isCzechNationality(nat: string): boolean {
   return nat.trim() === "CZE";
+}
+
+const CZECH_MONTHS = [
+  "leden", "únor", "březen", "duben", "květen", "červen",
+  "červenec", "srpen", "září", "říjen", "listopad", "prosinec",
+];
+
+/**
+ * Czech month + year (e.g. "leden 2026") parsed from a raw ISO date
+ * string. Empty string when the input isn't a usable YYYY-MM-DD prefix.
+ */
+function czechMonthYear(iso: string | undefined): string {
+  if (!iso) return "";
+  const [yearStr, monthStr] = iso.split("-");
+  const monthIdx = Number(monthStr) - 1;
+  if (!yearStr || monthIdx < 0 || monthIdx >= 12) return "";
+  return `${CZECH_MONTHS[monthIdx]} ${yearStr}`;
 }
 
 export interface CompanyData {
@@ -260,6 +289,9 @@ export function resolveVariables(
     ic: str(company.ic),
     companyFileNo: str(company.fileNo),
     today: formatDateCZ(new Date()),
+    requestedAt: formatDateCZ(employee.requestedAt),
+    validFrom: formatDateCZ(employee.validFrom),
+    validFromMonth: czechMonthYear(employee.validFrom),
     ...overrides,
   };
 

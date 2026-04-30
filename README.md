@@ -308,6 +308,14 @@ Two new keys exposed under "Pracovní podmínky" in the contract-template variab
 
 Both fields are populated from the employment row when `GenerateContractModal` is opened, so DPP templates can reference them directly instead of reusing the generic `{{salary}}` slot. The fields existed on the row schema before this commit; only the variable plumbing is new.
 
+### Multisport template variables + 3-field signing-date prompt (2026-04-30)
+The standalone-contract signing-date prompt now collects **three** dates when the type is `multisport` (single date for `hmotna_odpovednost`): "Datum podpisu", "Datum žádosti", "Platnost od". All three are seeded to today on open and validated together — the Pokračovat button stays disabled until every required field has a value. Modal title dropped the "— datum podpisu" suffix since the prompt isn't single-purpose anymore.
+
+The chosen values flow through `<GenerateContractModal>`'s `employeeData` and surface as three new picker entries under a new **Multisport** group in `VARIABLE_GROUPS`:
+- `{{requestedAt}}` — "Datum žádosti", formatted via `formatDateCZ`.
+- `{{validFrom}}` — "Platnost od", formatted via `formatDateCZ`.
+- `{{validFromMonth}}` — "Měsíc začátku platnosti (např. leden 2026)". Computed from the raw ISO `validFrom` by `czechMonthYear()` (new helper) which indexes into a `CZECH_MONTHS` array and appends the year — e.g. `2026-01-15` → `"leden 2026"`. Empty string when the input isn't a valid `YYYY-MM-DD` prefix.
+
 ### PDF page 2+ top margin offset by page-1 logo (2026-04-30)
 Contracts with a logo image at the top of page 1 used to look unbalanced on page 2: body text started flush at the template's `margins.top` distance from the page edge, far higher than the post-logo content on page 1. `pdfRenderer.ts` now measures where the first `<img>` ends in the rendered DOM (via `page.evaluate(() => img.getBoundingClientRect().bottom)` after `page.setContent`), converts to mm at 96 DPI, and injects `@page` CSS:
 
