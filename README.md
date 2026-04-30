@@ -308,6 +308,19 @@ Two new keys exposed under "Pracovní podmínky" in the contract-template variab
 
 Both fields are populated from the employment row when `GenerateContractModal` is opened, so DPP templates can reference them directly instead of reusing the generic `{{salary}}` slot. The fields existed on the row schema before this commit; only the variable plumbing is new.
 
+### Custom standalone contract templates (2026-04-30)
+Admin / director users can now create their own contract templates via a **+ Nová šablona** button on the **Šablony smluv** page. The button opens a small modal with two fields — a snake_case ID slug and a Czech display name — and `POST /api/contractTemplates` creates the doc with `kind: "standalone"`, empty `htmlContent`, and default 15 mm margins. Custom templates are always standalone (history-tied templates stay locked to the 9 built-in IDs because their generation is keyed to specific changeType→contractType mappings).
+
+The frontend `ContractType` was a closed union over the 9 built-in IDs; it's now a `string` alias so custom slugs flow through every type-tagged surface (state shapes, props, the `Record<>` indexes). `BUILTIN_CONTRACT_TYPES` retains the closed set for places that still need it. `CONTRACT_TYPE_LABELS` is now `Record<string, string>` and only carries the 9 built-in entries — custom-template labels resolve at runtime from the fetched list (`GET /api/contractTemplates`).
+
+Surfaces that needed the runtime label resolution:
+- `ContractTemplatesPage` sidebar concatenates `ALL_TYPES` (built-ins) with `customTypes` (filter `kind === "standalone"` from the fetched list); each entry renders with its proper label.
+- `ContractsTab` Generovat ▾ dropdown does the same — built-in standalone types plus custom — and the standalone signing-date prompt resolves its title via `CONTRACT_TYPE_LABELS[id] ?? customStandalone.find(...).name ?? id`.
+- The contracts table's type column uses the same fallback chain.
+- `buildContractName` got a `default` branch + optional `fallbackLabel` parameter so custom templates emit `"<TemplateName> Klíma Richard"` filenames.
+
+Backend: `POST /api/contractTemplates` validates the slug (`^[a-z][a-z0-9_]{1,39}$`), rejects collisions with the 9 built-in IDs, rejects existing IDs (409). The existing `PUT /:id` body type was widened from `ContractType` to plain `string` so saves to custom-id slugs go through. The listing endpoint now returns the new `kind` field (`"standalone"` for custom, `null` for built-ins).
+
 ### Multisport template variables + 3-field signing-date prompt (2026-04-30)
 The standalone-contract signing-date prompt now collects **three** dates when the type is `multisport` (single date for `hmotna_odpovednost`): "Datum podpisu", "Datum žádosti", "Platnost od". All three are seeded to today on open and validated together — the Pokračovat button stays disabled until every required field has a value. Modal title dropped the "— datum podpisu" suffix since the prompt isn't single-purpose anymore.
 
