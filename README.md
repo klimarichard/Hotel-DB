@@ -308,6 +308,22 @@ Two new keys exposed under "Pracovní podmínky" in the contract-template variab
 
 Both fields are populated from the employment row when `GenerateContractModal` is opened, so DPP templates can reference them directly instead of reusing the generic `{{salary}}` slot. The fields existed on the row schema before this commit; only the variable plumbing is new.
 
+### PDF page 2+ top margin offset by page-1 logo (2026-04-30)
+Contracts with a logo image at the top of page 1 used to look unbalanced on page 2: body text started flush at the template's `margins.top` distance from the page edge, far higher than the post-logo content on page 1. `pdfRenderer.ts` now measures where the first `<img>` ends in the rendered DOM (via `page.evaluate(() => img.getBoundingClientRect().bottom)` after `page.setContent`), converts to mm at 96 DPI, and injects `@page` CSS:
+
+```css
+@page { margin: <top + logoMm>mm <right>mm <bottom>mm <left>mm; }
+@page :first { margin-top: <top>mm; }
+```
+
+`@page :first` reverts page 1 to the template's original top margin so the logo stays pinned where the template author placed it; the default `@page` rule pushes pages 2+ down so their body text starts at the same y-offset as page 1's post-logo content. When no `<img>` is present in the body, `logoMm` is 0 and no `@page` rules are injected — fully back-compatible. Existing `page.pdf({ margin })` call left intact as a fallback for the no-image path.
+
+### Page-break divider hidden in PDF export (2026-04-30)
+`PageBreak` previously baked `border-top: 2px dashed #999; margin: 1cm 0` into its `renderHTML` inline style so the editor could show the divider — but that style also reached the Puppeteer renderer and painted the dashed line on the actual PDF page. Split the visual concerns:
+- `PageBreak.renderHTML` now emits only `page-break-before: always; height: 0;` — the structural part needed for paginated print, nothing visual.
+- A new editor-only rule `.a4Page [data-page-break]` in `ContractTemplatesPage.module.css` paints the dashed divider, scoped so it never reaches the Puppeteer `RENDER_CSS`.
+- Defensive override in `pdfRenderer.ts` `RENDER_CSS` strips `border` / `margin` / `padding` / `height` from `[data-page-break]` with `!important`, so older templates whose saved HTML still carries the inline border render cleanly without needing to be re-saved.
+
 ### Standalone contract — signing date prompt (2026-04-30)
 Standalone contracts (`hmotna_odpovednost`, `multisport`) are not tied to a history row, so they had no `signingDate` — `{{signingDate}}` resolved to an empty string in their templates. Picking either type from the **Generovat ▾** dropdown on the Smlouvy tab now opens a small "Datum podpisu" prompt (one `<input type="date">`, defaults to today, dismissed only via Zrušit / Pokračovat per the no-backdrop-dismiss convention). Confirming carries the chosen date through `<GenerateContractModal>` as `employeeData.signingDate`, which `resolveVariables` formats via `formatDateCZ` like every other date variable. The prompt reuses `ConfirmModal.module.css` (overlay/modal/header/title/body/footer) so it matches the rest of the app's modal styling without duplicating CSS.
 
