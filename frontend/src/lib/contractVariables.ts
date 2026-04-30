@@ -1,17 +1,27 @@
 import { formatDateCZ } from "./dateFormat";
 
-export type ContractType =
-  | "nastup_hpp"
-  | "nastup_ppp"
-  | "nastup_dpp"
-  | "ukonceni_hpp_ppp"
-  | "ukonceni_dpp"
-  | "ukonceni_zkusebni"
-  | "zmena_smlouvy"
-  | "hmotna_odpovednost"
-  | "multisport";
+/**
+ * `ContractType` was originally a closed union over the 9 built-in template
+ * ids. As of 2026-04-30 admin/director users can create their own
+ * standalone templates with arbitrary slug ids, so the type is widened to
+ * `string`. The labels map and the *_TYPES arrays still enumerate only the
+ * built-ins; custom templates surface via runtime fetches.
+ */
+export type ContractType = string;
 
-export const CONTRACT_TYPE_LABELS: Record<ContractType, string> = {
+export const BUILTIN_CONTRACT_TYPES = [
+  "nastup_hpp",
+  "nastup_ppp",
+  "nastup_dpp",
+  "ukonceni_hpp_ppp",
+  "ukonceni_dpp",
+  "ukonceni_zkusebni",
+  "zmena_smlouvy",
+  "hmotna_odpovednost",
+  "multisport",
+] as const;
+
+export const CONTRACT_TYPE_LABELS: Record<string, string> = {
   nastup_hpp: "Nástup HPP",
   nastup_ppp: "Nástup PPP",
   nastup_dpp: "Nástup DPP",
@@ -23,7 +33,7 @@ export const CONTRACT_TYPE_LABELS: Record<ContractType, string> = {
   multisport: "Multisport",
 };
 
-/** Contract types that are triggered by a history row */
+/** Contract types that are triggered by a history row (built-in only — custom templates are always standalone) */
 export const HISTORY_TIED_TYPES: ContractType[] = [
   "nastup_hpp",
   "nastup_ppp",
@@ -34,7 +44,7 @@ export const HISTORY_TIED_TYPES: ContractType[] = [
   "zmena_smlouvy",
 ];
 
-/** Contract types generated independently of a history row */
+/** Built-in contract types generated independently of a history row */
 export const STANDALONE_TYPES: ContractType[] = [
   "hmotna_odpovednost",
   "multisport",

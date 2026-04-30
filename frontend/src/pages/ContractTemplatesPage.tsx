@@ -417,6 +417,7 @@ const FontSize = Extension.create({
   },
 });
 import { useAuth } from "@/hooks/useAuth";
+import modalStyles from "@/components/ConfirmModal.module.css";
 import {
   ContractType,
   CONTRACT_TYPE_LABELS,
@@ -446,6 +447,8 @@ interface TemplateMeta {
   id: string;
   type: ContractType;
   name: string;
+  /** "standalone" for user-created custom templates; null/undefined for built-ins. */
+  kind?: "standalone" | null;
   variables: string[];
   updatedAt?: { seconds: number } | null;
 }
@@ -478,11 +481,15 @@ interface TemplateDoc extends TemplateMeta {
 export default function ContractTemplatesPage() {
   const { user } = useAuth();
   const imageInputRef = useRef<HTMLInputElement>(null);
-  const [templates, setTemplates] = useState<Record<ContractType, TemplateMeta | null>>(
-    {} as Record<ContractType, TemplateMeta | null>
-  );
+  const [templates, setTemplates] = useState<Record<string, TemplateMeta | null>>({});
+  const [customTypes, setCustomTypes] = useState<TemplateMeta[]>([]);
   const [selected, setSelected] = useState<ContractType>(ALL_TYPES[0]);
   const [saving, setSaving] = useState(false);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [createIdDraft, setCreateIdDraft] = useState("");
+  const [createNameDraft, setCreateNameDraft] = useState("");
+  const [createSaving, setCreateSaving] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [findOpen, setFindOpen] = useState(false);
@@ -553,10 +560,11 @@ export default function ContractTemplatesPage() {
     });
     if (!resp.ok) return;
     const list: TemplateMeta[] = await resp.json();
-    const map: Record<ContractType, TemplateMeta | null> = {} as Record<ContractType, TemplateMeta | null>;
+    const map: Record<string, TemplateMeta | null> = {};
     for (const t of ALL_TYPES) map[t] = null;
-    for (const t of list) map[t.type] = t;
+    for (const t of list) map[t.type ?? t.id] = t;
     setTemplates(map);
+    setCustomTypes(list.filter((t) => t.kind === "standalone"));
     setLoading(false);
   }, [user]);
 
@@ -776,7 +784,21 @@ export default function ContractTemplatesPage() {
   return (
     <div className={styles.page}>
       <div className={styles.header}>
-        <h1 className={styles.title}>Šablony smluv</h1>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+          <h1 className={styles.title}>Šablony smluv</h1>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              setCreateIdDraft("");
+              setCreateNameDraft("");
+              setCreateError(null);
+              setCreateModalOpen(true);
+            }}
+          >
+            + Nová šablona
+          </Button>
+        </div>
         <div className={styles.headerActions}>
           {saveMsg && (
             <span className={`${styles.saveMsg} ${saveMsg === "Uloženo" ? styles.saveMsgOk : styles.saveMsgErr}`}>
@@ -796,15 +818,18 @@ export default function ContractTemplatesPage() {
             <p className={styles.loadingText}>Načítám…</p>
           ) : (
             <ul className={styles.templateList}>
-              {ALL_TYPES.map((type) => {
-                const meta = templates[type];
+              {[
+                ...ALL_TYPES.map((id) => ({ id, label: CONTRACT_TYPE_LABELS[id] })),
+                ...customTypes.map((t) => ({ id: t.id, label: t.name })),
+              ].map(({ id, label }) => {
+                const meta = templates[id];
                 return (
                   <li
-                    key={type}
-                    className={`${styles.templateItem} ${selected === type ? styles.templateItemActive : ""}`}
-                    onClick={() => setSelected(type)}
+                    key={id}
+                    className={`${styles.templateItem} ${selected === id ? styles.templateItemActive : ""}`}
+                    onClick={() => setSelected(id)}
                   >
-                    <span className={styles.templateName}>{CONTRACT_TYPE_LABELS[type]}</span>
+                    <span className={styles.templateName}>{label}</span>
                     {meta ? (
                       <span className={styles.templateDate}>
                         {formatTimestampCZ(meta.updatedAt)}
@@ -1294,6 +1319,131 @@ export default function ContractTemplatesPage() {
           ))}
         </aside>
       </div>
+
+      {createModalOpen && (
+        <div className={modalStyles.overlay}>
+          <div className={modalStyles.modal}>
+            <div className={modalStyles.header}>
+              <h2 className={modalStyles.title}>Nová šablona</h2>
+            </div>
+            <div className={modalStyles.body}>
+              <div style={{ marginBottom: 12 }}>
+                <label
+                  style={{
+                    display: "block",
+                    fontSize: "0.8125rem",
+                    fontWeight: 500,
+                    color: "var(--color-text-secondary)",
+                    marginBottom: 4,
+                  }}
+                >
+                  ID (slug)
+                </label>
+                <input
+                  type="text"
+                  value={createIdDraft}
+                  onChange={(e) => setCreateIdDraft(e.target.value)}
+                  placeholder="napr. nova_smlouva"
+                  autoFocus
+                  style={{
+                    width: "100%",
+                    padding: "8px 10px",
+                    fontSize: "0.875rem",
+                    border: "1px solid var(--color-border)",
+                    borderRadius: "6px",
+                    background: "var(--color-surface)",
+                    color: "var(--color-text)",
+                    fontFamily: "monospace",
+                  }}
+                />
+                <p style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", margin: "4px 0 0" }}>
+                  Malá písmena, číslice a podtržítka. Začíná písmenem.
+                </p>
+              </div>
+              <div>
+                <label
+                  style={{
+                    display: "block",
+                    fontSize: "0.8125rem",
+                    fontWeight: 500,
+                    color: "var(--color-text-secondary)",
+                    marginBottom: 4,
+                  }}
+                >
+                  Název
+                </label>
+                <input
+                  type="text"
+                  value={createNameDraft}
+                  onChange={(e) => setCreateNameDraft(e.target.value)}
+                  placeholder="napr. Nová smlouva"
+                  style={{
+                    width: "100%",
+                    padding: "8px 10px",
+                    fontSize: "0.875rem",
+                    border: "1px solid var(--color-border)",
+                    borderRadius: "6px",
+                    background: "var(--color-surface)",
+                    color: "var(--color-text)",
+                  }}
+                />
+              </div>
+              {createError && (
+                <p style={{ fontSize: "0.8125rem", color: "var(--color-danger-text-strong)", marginTop: 10 }}>
+                  {createError}
+                </p>
+              )}
+            </div>
+            <div className={modalStyles.footer}>
+              <Button
+                variant="secondary"
+                onClick={() => setCreateModalOpen(false)}
+                disabled={createSaving}
+              >
+                Zrušit
+              </Button>
+              <Button
+                variant="primary"
+                disabled={createSaving || !createIdDraft.trim() || !createNameDraft.trim()}
+                onClick={async () => {
+                  if (!user) return;
+                  setCreateSaving(true);
+                  setCreateError(null);
+                  try {
+                    const token = await user.getIdToken();
+                    const resp = await fetch("/api/contractTemplates", {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${token}`,
+                      },
+                      body: JSON.stringify({
+                        id: createIdDraft.trim(),
+                        name: createNameDraft.trim(),
+                      }),
+                    });
+                    if (!resp.ok) {
+                      const body = await resp.json().catch(() => ({}));
+                      setCreateError(body.error ?? "Chyba při vytváření šablony.");
+                      return;
+                    }
+                    const created = await resp.json();
+                    setCreateModalOpen(false);
+                    await fetchTemplates();
+                    setSelected(created.id);
+                  } catch (e) {
+                    setCreateError((e as Error).message ?? "Chyba při vytváření šablony.");
+                  } finally {
+                    setCreateSaving(false);
+                  }
+                }}
+              >
+                {createSaving ? "Vytvářím…" : "Vytvořit"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
