@@ -60,7 +60,8 @@ function yearOf(iso: string | undefined): string {
 export function buildContractName(
   type: ContractType,
   row: ContractNameRow | undefined,
-  fullName: string
+  fullName: string,
+  fallbackLabel?: string
 ): string {
   const name = fullName.trim() || "neznámý zaměstnanec";
 
@@ -91,5 +92,10 @@ export function buildContractName(
       return `Hmotná odpovědnost ${name}`;
     case "multisport":
       return `Multisport ${name}`;
+
+    default:
+      // Custom standalone template — fall back to the user-supplied label
+      // (the template's `name` field) or the slug id if none was passed.
+      return `${fallbackLabel || type} ${name}`.replace(/\s+/g, " ").trim();
   }
 }

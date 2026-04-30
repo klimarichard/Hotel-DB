@@ -54,12 +54,73 @@ contractTemplatesRouter.get(
         id: d.id,
         type: data.type,
         name: data.name,
+        kind: data.kind ?? null,
         variables: data.variables ?? [],
         updatedAt: data.updatedAt,
         updatedBy: data.updatedBy,
       };
     });
     res.json(docs);
+  }
+);
+
+/**
+ * POST /api/contractTemplates
+ * Create a new custom standalone template. Admin + director only.
+ * Body: { id, name }. id must be a snake_case slug not already in use.
+ */
+const BUILTIN_IDS = new Set<string>([
+  "nastup_hpp",
+  "nastup_ppp",
+  "nastup_dpp",
+  "ukonceni_hpp_ppp",
+  "ukonceni_dpp",
+  "ukonceni_zkusebni",
+  "zmena_smlouvy",
+  "hmotna_odpovednost",
+  "multisport",
+]);
+const SLUG_RE = /^[a-z][a-z0-9_]{1,39}$/;
+
+contractTemplatesRouter.post(
+  "/",
+  requireAuth,
+  requireRole("admin", "director"),
+  async (req: AuthRequest, res: Response) => {
+    const { id, name } = req.body as { id?: string; name?: string };
+    if (!id || !name || !name.trim()) {
+      res.status(400).json({ error: "id a name jsou povinné." });
+      return;
+    }
+    if (!SLUG_RE.test(id)) {
+      res.status(400).json({
+        error: "id musí být snake_case (písmena, číslice, podtržítka), 2–40 znaků, začínat písmenem.",
+      });
+      return;
+    }
+    if (BUILTIN_IDS.has(id)) {
+      res.status(409).json({ error: "Toto id koliduje s vestavěnou šablonou." });
+      return;
+    }
+    const ref = db().collection("contractTemplates").doc(id);
+    const existing = await ref.get();
+    if (existing.exists) {
+      res.status(409).json({ error: "Šablona s tímto id již existuje." });
+      return;
+    }
+    await ref.set({
+      type: id,
+      name: name.trim(),
+      kind: "standalone",
+      htmlContent: "",
+      variables: [],
+      margins: { top: 15, bottom: 15, left: 15, right: 15 },
+      createdAt: FieldValue.serverTimestamp(),
+      createdBy: req.uid,
+      updatedAt: FieldValue.serverTimestamp(),
+      updatedBy: req.uid,
+    });
+    res.status(201).json({ id, name: name.trim(), kind: "standalone" });
   }
 );
 
@@ -107,7 +168,7 @@ contractTemplatesRouter.put(
   requireRole("admin", "director"),
   async (req: AuthRequest, res: Response) => {
     const { type, name, htmlContent, margins } = req.body as {
-      type: ContractType;
+      type: string;
       name: string;
       htmlContent: string;
       margins?: unknown;

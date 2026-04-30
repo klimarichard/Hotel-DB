@@ -66,6 +66,10 @@ export default function ContractsTab({ employeeId, employeeData, onContractsChan
   const [signingDateDraft, setSigningDateDraft] = useState<string>("");
   const [requestedAtDraft, setRequestedAtDraft] = useState<string>("");
   const [validFromDraft, setValidFromDraft] = useState<string>("");
+  // Custom user-created standalone templates fetched from the backend.
+  // Built-in standalone types live in STANDALONE_TYPES; the dropdown
+  // concatenates the two sources.
+  const [customStandalone, setCustomStandalone] = useState<{ id: string; name: string }[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<ContractRecord | null>(null);
   const [deleteSignedTarget, setDeleteSignedTarget] = useState<ContractRecord | null>(null);
   const [standaloneDropdown, setStandaloneDropdown] = useState(false);
@@ -90,6 +94,25 @@ export default function ContractsTab({ employeeId, employeeData, onContractsChan
   useEffect(() => {
     fetchContracts();
   }, [employeeId, user]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch user-created custom standalone templates so the Generovat ▾
+  // dropdown can list them alongside the built-in two. Only admins see
+  // this tab's edit affordances anyway, but the listing endpoint is
+  // admin/director-gated server-side too.
+  useEffect(() => {
+    if (!user || !canEdit) return;
+    (async () => {
+      const token = await user.getIdToken();
+      const resp = await fetch("/api/contractTemplates", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!resp.ok) return;
+      const list = (await resp.json()) as { id: string; name: string; kind?: string | null }[];
+      setCustomStandalone(
+        list.filter((t) => t.kind === "standalone").map((t) => ({ id: t.id, name: t.name }))
+      );
+    })();
+  }, [user, canEdit]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -251,20 +274,23 @@ export default function ContractsTab({ employeeId, employeeData, onContractsChan
             </Button>
             {standaloneDropdown && (
               <div className={styles.dropdown}>
-                {STANDALONE_TYPES.map((t) => (
+                {[
+                  ...STANDALONE_TYPES.map((t) => ({ id: t, label: CONTRACT_TYPE_LABELS[t] })),
+                  ...customStandalone.map((t) => ({ id: t.id, label: t.name })),
+                ].map((entry) => (
                   <button
-                    key={t}
+                    key={entry.id}
                     className={styles.dropdownItem}
                     onClick={() => {
                       const today = new Date().toISOString().split("T")[0];
-                      setSigningDatePrompt(t);
+                      setSigningDatePrompt(entry.id);
                       setSigningDateDraft(today);
                       setRequestedAtDraft(today);
                       setValidFromDraft(today);
                       setStandaloneDropdown(false);
                     }}
                   >
-                    {CONTRACT_TYPE_LABELS[t]}
+                    {entry.label}
                   </button>
                 ))}
               </div>
@@ -288,7 +314,7 @@ export default function ContractsTab({ employeeId, employeeData, onContractsChan
           <tbody>
             {contracts.map((c) => (
               <tr key={c.id}>
-                <td>{CONTRACT_TYPE_LABELS[c.type]}</td>
+                <td>{CONTRACT_TYPE_LABELS[c.type] ?? customStandalone.find((t) => t.id === c.type)?.name ?? c.type}</td>
                 <td>{formatTimestampCZ(c.generatedAt)}</td>
                 <td>
                   <span className={`${styles.status} ${STATUS_CLASS[c.status]}`}>
@@ -367,6 +393,10 @@ export default function ContractsTab({ employeeId, employeeData, onContractsChan
 
       {signingDatePrompt && (() => {
         const isMultisport = signingDatePrompt === "multisport";
+        const promptLabel =
+          CONTRACT_TYPE_LABELS[signingDatePrompt] ??
+          customStandalone.find((t) => t.id === signingDatePrompt)?.name ??
+          signingDatePrompt;
         const dateInputStyle: React.CSSProperties = {
           width: "100%",
           padding: "8px 10px",
@@ -389,9 +419,7 @@ export default function ContractsTab({ employeeId, employeeData, onContractsChan
           <div className={modalStyles.overlay}>
             <div className={modalStyles.modal}>
               <div className={modalStyles.header}>
-                <h2 className={modalStyles.title}>
-                  {CONTRACT_TYPE_LABELS[signingDatePrompt]}
-                </h2>
+                <h2 className={modalStyles.title}>{promptLabel}</h2>
               </div>
               <div className={modalStyles.body}>
                 <div style={fieldStyle}>
@@ -466,7 +494,8 @@ export default function ContractsTab({ employeeId, employeeData, onContractsChan
           displayName={buildContractName(
             generateModal.type,
             undefined,
-            `${employeeData.firstName ?? ""} ${employeeData.lastName ?? ""}`.trim()
+            `${employeeData.firstName ?? ""} ${employeeData.lastName ?? ""}`.trim(),
+            customStandalone.find((t) => t.id === generateModal.type)?.name
           )}
           onClose={() => setGenerateModal(null)}
           onGenerated={async () => {
