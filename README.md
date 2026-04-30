@@ -308,6 +308,11 @@ Two new keys exposed under "Pracovní podmínky" in the contract-template variab
 
 Both fields are populated from the employment row when `GenerateContractModal` is opened, so DPP templates can reference them directly instead of reusing the generic `{{salary}}` slot. The fields existed on the row schema before this commit; only the variable plumbing is new.
 
+### `{{originalSigningDate}}` template variable (2026-04-30)
+New variable exposed under "Pracovní podmínky" labelled "Datum podpisu původní smlouvy". Distinct from `{{signingDate}}` (signing date of the document being generated) — `{{originalSigningDate}}` is the signing date of the most recent prior `nástup` row that the current row sits on top of. Used in dodatek and ukončení templates that reference "smlouva ze dne …".
+
+`findOriginalSigningDate(row, employment)` in `EmployeeDetailPage.tsx` filters history to `nástup` rows with `startDate <= row.startDate` (excluding the row itself), sorts descending by `startDate`, and returns the first match's `signingDate`. Re-hire timelines resolve to the latest nástup (the contract currently in force). The value is plumbed via `EmployeeData.originalSigningDate` and formatted by `resolveVariables` through the shared `formatDateCZ` helper.
+
 ### Conditional variable picker inserts full {{#if}} block (2026-04-30)
 The variable picker entries flagged as conditionals (the eight keys whose label ends with "(pro {{#if}})") now insert the entire `{{#if KEY}}{{/if}}` block in one click and place the cursor between the opening and closing markers. `VARIABLE_GROUPS` entries carry an optional `kind?: "if"` (new `VariableDef` type), and `insertVariable(key, kind)` in `ContractTemplatesPage.tsx` branches on it — for `if` it composes left/right, runs `insertContent(left + right)`, then `setTextSelection(from + left.length)` to land the caret at the insertion point. Plain variables still insert the bare `{{key}}` as before. Tooltip on the button shows whichever snippet would be inserted.
 

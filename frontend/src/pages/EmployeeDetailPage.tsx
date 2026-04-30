@@ -218,6 +218,26 @@ function snapshotsEqual(
 
 const TODAY = new Date().toISOString().split("T")[0];
 
+/**
+ * Signing date of the most recent prior "nástup" row that the given row
+ * sits on top of. Used as `{{originalSigningDate}}` for amendments and
+ * terminations whose body references "smlouva ze dne …" — that date is the
+ * underlying nástup's signingDate, not the dodatek/ukončení's own.
+ *
+ * Picks the latest nástup with `startDate <= row.startDate` (excluding
+ * the row itself). Successive amendments still resolve to the original
+ * nástup, which is the Czech-practice referent.
+ */
+function findOriginalSigningDate(
+  row: EmploymentRow,
+  all: EmploymentRow[]
+): string | undefined {
+  const candidates = all
+    .filter((r) => r.id !== row.id && r.changeType === "nástup" && r.startDate <= row.startDate)
+    .sort((a, b) => b.startDate.localeCompare(a.startDate));
+  return candidates[0]?.signingDate ?? undefined;
+}
+
 const CHANGE_TYPES = ["nástup", "ukončení", "změna smlouvy"] as const;
 type ChangeType = typeof CHANGE_TYPES[number];
 
@@ -1412,6 +1432,7 @@ export default function EmployeeDetailPage() {
             workLocation: generateModal.row.workLocation,
             probationPeriod: generateModal.row.probationPeriod,
             signingDate: generateModal.row.signingDate ?? undefined,
+            originalSigningDate: findOriginalSigningDate(generateModal.row, employment),
             agreedWorkScope: generateModal.row.agreedWorkScope,
             agreedReward: generateModal.row.agreedReward ?? undefined,
           }}

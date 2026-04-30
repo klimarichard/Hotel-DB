@@ -77,6 +77,7 @@ export const VARIABLE_GROUPS: { group: string; vars: VariableDef[] }[] = [
       { key: "workLocation", label: "Místo výkonu práce" },
       { key: "probationPeriod", label: "Zkušební doba" },
       { key: "signingDate", label: "Datum podpisu" },
+      { key: "originalSigningDate", label: "Datum podpisu původní smlouvy" },
       { key: "hasProbation", label: "Má zkušební dobu (pro {{#if}})", kind: "if" },
       { key: "noProbation", label: "Nemá zkušební dobu (pro {{#if}})", kind: "if" },
       { key: "hasEndDate", label: "Má datum ukončení (pro {{#if}})", kind: "if" },
@@ -126,6 +127,9 @@ export interface EmployeeData {
   workLocation?: string;
   probationPeriod?: string;
   signingDate?: string; // raw ISO date (YYYY-MM-DD); resolveVariables formats it
+  // Signing date of the most recent prior "nástup" row — the contract this
+  // dodatek/ukončení references. Raw ISO; resolveVariables formats it.
+  originalSigningDate?: string;
   // DPP fields
   agreedWorkScope?: string;
   agreedReward?: string | number;
@@ -195,6 +199,7 @@ export function resolveVariables(
     workLocation: str(employee.workLocation),
     probationPeriod: probationStr,
     signingDate: formatDateCZ(employee.signingDate),
+    originalSigningDate: formatDateCZ(employee.originalSigningDate),
     hasProbation: hasProbation ? "ano" : "",
     noProbation: hasProbation ? "" : "ano",
     hasEndDate: hasEndDate ? "ano" : "",
