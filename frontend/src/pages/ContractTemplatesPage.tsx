@@ -197,6 +197,25 @@ const ListItemIndent = Extension.create({
   },
 });
 
+/**
+ * Ctrl+Shift+Space inserts a non-breaking space (U+00A0). Matches the MS
+ * Word keybind. Czech typography uses nbsp after one-letter prepositions
+ * (v, k, z, s, o, u) and between number + unit; templates need it
+ * frequently.
+ */
+const NbspKeybind = Extension.create({
+  name: "nbspKeybind",
+  addKeyboardShortcuts() {
+    return {
+      "Mod-Shift-Space": () => {
+        const { state, view } = this.editor;
+        view.dispatch(state.tr.insertText(" ").scrollIntoView());
+        return true;
+      },
+    };
+  },
+});
+
 /** Line-height attribute on TextStyle — toolbar select offers 1.0/1.15/1.5/2.0/3.0. */
 const LineHeight = Extension.create({
   name: "lineHeight",
@@ -478,6 +497,7 @@ export default function ContractTemplatesPage() {
       StarterKit.configure({ paragraph: false }),
       TabParagraph,
       ListItemIndent,
+      NbspKeybind,
       Underline,
       TextStyle,
       FontFamily,
