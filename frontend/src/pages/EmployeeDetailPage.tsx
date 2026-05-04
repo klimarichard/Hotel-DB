@@ -1529,7 +1529,7 @@ export default function EmployeeDetailPage() {
         )}
       </Section>
 
-      {role === "admin" && id && (
+      {(role === "admin" || role === "director") && id && (
         <Section title="Historie změn" sectionKey="audit" expanded={expanded.has("audit")} onToggle={toggle}>
           {expanded.has("audit") ? <EmployeeAuditHistory employeeId={id} /> : null}
         </Section>

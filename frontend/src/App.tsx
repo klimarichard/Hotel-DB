@@ -73,7 +73,7 @@ export default function App() {
         <Route path="smlouvy" element={<RequireRole allow={["admin", "director"]}><ContractTemplatesPage /></RequireRole>} />
         <Route path="upozorneni" element={<RequireRole allow={["admin", "director"]}><AlertsPage /></RequireRole>} />
         <Route path="nastaveni" element={<RequireRole allow={["admin"]}><SettingsPage /></RequireRole>} />
-        <Route path="audit" element={<RequireRole allow={["admin"]}><AuditLogPage /></RequireRole>} />
+        <Route path="audit" element={<RequireRole allow={["admin", "director"]}><AuditLogPage /></RequireRole>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
