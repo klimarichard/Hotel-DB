@@ -4,6 +4,7 @@ import * as admin from "firebase-admin";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { requireAuth, requireRole, AuthRequest } from "../middleware/auth";
 import { createOrUpdatePayrollPeriod, getMultisportActive } from "../services/payrollCalculator";
+import { ctxFromReq, logCreate, logUpdate, logDelete, writeAudit } from "../services/auditLog";
 
 export const payrollRouter = Router();
 
@@ -96,6 +97,14 @@ payrollRouter.post(
       updatedAt: FieldValue.serverTimestamp(),
     });
 
+    await logCreate(ctxFromReq(req), {
+      collection: "payrollPeriods/entries/notes",
+      resourceId: periodId,
+      subResourceId: noteId,
+      employeeId,
+      summary: { text, carryForward, period: `${year}-${String(month).padStart(2, "0")}` },
+    });
+
     // Seed into existing future periods if carryForward
     if (carryForward) {
       const futureSnap = await db()
@@ -180,6 +189,14 @@ payrollRouter.patch(
       notes: nextNotes,
       updatedAt: FieldValue.serverTimestamp(),
     });
+    await logUpdate(ctxFromReq(req), {
+      collection: "payrollPeriods/entries/notes",
+      resourceId: periodId,
+      subResourceId: noteId,
+      employeeId,
+      before: { text: notes[idx].text, carryForward: notes[idx].carryForward },
+      after: { text: updated.text, carryForward: updated.carryForward },
+    });
     res.json({ ok: true });
   }
 );
@@ -209,9 +226,17 @@ payrollRouter.delete(
       res.status(404).json({ error: "Poznámka nenalezena." });
       return;
     }
+    const removed = notes.find((n) => n.id === noteId);
     await entryRef.update({
       notes: nextNotes,
       updatedAt: FieldValue.serverTimestamp(),
+    });
+    await logDelete(ctxFromReq(req), {
+      collection: "payrollPeriods/entries/notes",
+      resourceId: periodId,
+      subResourceId: noteId,
+      employeeId,
+      summary: { text: removed?.text, carryForward: removed?.carryForward },
     });
     res.json({ ok: true });
   }
@@ -261,7 +286,16 @@ payrollRouter.patch(
       }
       update.dppMaxMonthlyReward = dppMaxMonthlyReward;
     }
-    await db().collection("settings").doc("payroll").set(update, { merge: true });
+    const settingsRef = db().collection("settings").doc("payroll");
+    const beforeSnap = await settingsRef.get();
+    const before = beforeSnap.exists ? (beforeSnap.data() as Record<string, unknown>) : {};
+    await settingsRef.set(update, { merge: true });
+    await logUpdate(ctxFromReq(req), {
+      collection: "settings",
+      resourceId: "payroll",
+      before,
+      after: { ...before, ...update },
+    });
     res.json({ ok: true });
   }
 );
@@ -379,7 +413,14 @@ payrollRouter.patch(
       update.lockedAt = FieldValue.delete();
       update.lockedBy = FieldValue.delete();
     }
+    const before = snap.data() as Record<string, unknown>;
     await periodRef.update(update);
+    await logUpdate(ctxFromReq(req), {
+      collection: "payrollPeriods",
+      resourceId: req.params.id,
+      before: { locked: before.locked ?? false },
+      after: { locked },
+    });
     res.json({ ok: true, locked });
   }
 );
@@ -424,7 +465,25 @@ payrollRouter.patch(
     const entryRef = periodRef
       .collection("entries")
       .doc(req.params.employeeId);
+    const beforeSnap = await entryRef.get();
+    const before = beforeSnap.exists ? (beforeSnap.data() as Record<string, unknown>) : {};
     await entryRef.update(update);
+    await logUpdate(ctxFromReq(req), {
+      collection: "payrollPeriods/entries",
+      resourceId: req.params.id,
+      subResourceId: req.params.employeeId,
+      employeeId: req.params.employeeId,
+      before: {
+        sickLeaveHours: before.sickLeaveHours,
+        overrides: before.overrides,
+        autoOverrides: before.autoOverrides,
+      },
+      after: {
+        sickLeaveHours: update.sickLeaveHours ?? before.sickLeaveHours,
+        overrides: update.overrides ?? before.overrides,
+        autoOverrides: update.autoOverrides ?? before.autoOverrides,
+      },
+    });
     res.json({ ok: true });
   }
 );
@@ -457,6 +516,12 @@ payrollRouter.post(
       return;
     }
     await createOrUpdatePayrollPeriod(planId, year, month);
+    await writeAudit(ctxFromReq(req), {
+      action: "update",
+      collection: "payrollPeriods",
+      resourceId: req.params.id,
+      extra: { kind: "recalculate", year, month },
+    });
     res.json({ ok: true });
   }
 );
@@ -505,6 +570,11 @@ payrollRouter.post(
 
     const planId = planSnap.docs[0].id;
     await createOrUpdatePayrollPeriod(planId, year, month);
+    await logCreate(ctxFromReq(req), {
+      collection: "payrollPeriods",
+      resourceId: `${year}-${String(month).padStart(2, "0")}`,
+      summary: { year, month, shiftPlanId: planId },
+    });
     res.status(201).json({ ok: true });
   }
 );

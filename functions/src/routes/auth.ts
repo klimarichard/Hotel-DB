@@ -2,6 +2,7 @@ import { Router } from "express";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireAuth, requireRole, AuthRequest, UserRole } from "../middleware/auth";
+import { ctxFromReq, logCreate, logUpdate } from "../services/auditLog";
 
 export const authRouter = Router();
 
@@ -23,13 +24,24 @@ authRouter.post(
       return;
     }
 
+    const userRef = admin.firestore().collection("users").doc(uid);
+    const beforeSnap = await userRef.get();
+    const before = beforeSnap.exists ? (beforeSnap.data() as Record<string, unknown>) : {};
+
     await admin.auth().setCustomUserClaims(uid, { role });
 
     // Also update the users/ collection
-    await admin.firestore().collection("users").doc(uid).set(
+    await userRef.set(
       { role, updatedAt: FieldValue.serverTimestamp() },
       { merge: true }
     );
+
+    await logUpdate(ctxFromReq(req), {
+      collection: "users",
+      resourceId: uid,
+      before: { role: before.role },
+      after: { role },
+    });
 
     res.json({ success: true });
   }
@@ -72,6 +84,13 @@ authRouter.post(
       lastLogin: null,
     });
 
+    await logCreate(ctxFromReq(req), {
+      collection: "users",
+      resourceId: userRecord.uid,
+      employeeId: employeeId ?? undefined,
+      summary: { name, email, role, employeeId: employeeId ?? null },
+    });
+
     res.status(201).json({ uid: userRecord.uid });
   }
 );
@@ -90,6 +109,12 @@ authRouter.patch(
     await admin.firestore().collection("users").doc(uid).update({
       active: false,
       updatedAt: FieldValue.serverTimestamp(),
+    });
+    await logUpdate(ctxFromReq(req), {
+      collection: "users",
+      resourceId: uid,
+      before: { active: true },
+      after: { active: false },
     });
     res.json({ success: true });
   }
@@ -120,6 +145,12 @@ authRouter.patch(
       active: true,
       updatedAt: FieldValue.serverTimestamp(),
     });
+    await logUpdate(ctxFromReq(req), {
+      collection: "users",
+      resourceId: uid,
+      before: { active: false },
+      after: { active: true },
+    });
     res.json({ success: true });
   }
 );
@@ -137,9 +168,21 @@ authRouter.patch(
     const { uid } = req.params;
     const { employeeId } = req.body as { employeeId: string | null };
 
-    await admin.firestore().collection("users").doc(uid).update({
+    const userRef = admin.firestore().collection("users").doc(uid);
+    const beforeSnap = await userRef.get();
+    const before = beforeSnap.exists ? (beforeSnap.data() as Record<string, unknown>) : {};
+
+    await userRef.update({
       employeeId: employeeId ?? null,
       updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    await logUpdate(ctxFromReq(req), {
+      collection: "users",
+      resourceId: uid,
+      employeeId: employeeId ?? (before.employeeId as string | undefined),
+      before: { employeeId: before.employeeId ?? null },
+      after: { employeeId: employeeId ?? null },
     });
 
     res.json({ success: true });

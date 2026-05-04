@@ -2,6 +2,7 @@ import { Router, Response } from "express";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireAuth, requireRole, AuthRequest } from "../middleware/auth";
+import { ctxFromReq, logCreate, logUpdate } from "../services/auditLog";
 
 export const contractTemplatesRouter = Router();
 
@@ -120,6 +121,11 @@ contractTemplatesRouter.post(
       updatedAt: FieldValue.serverTimestamp(),
       updatedBy: req.uid,
     });
+    await logCreate(ctxFromReq(req), {
+      collection: "contractTemplates",
+      resourceId: id,
+      summary: { type: id, name: name.trim(), kind: "standalone" },
+    });
     res.status(201).json({ id, name: name.trim(), kind: "standalone" });
   }
 );
@@ -196,10 +202,32 @@ contractTemplatesRouter.put(
     };
     if (margins !== undefined) payload.margins = margins;
 
-    await db()
-      .collection("contractTemplates")
-      .doc(req.params.id)
-      .set(payload, { merge: true });
+    const ref = db().collection("contractTemplates").doc(req.params.id);
+    const beforeSnap = await ref.get();
+    const before = beforeSnap.exists ? (beforeSnap.data() as Record<string, unknown>) : {};
+    await ref.set(payload, { merge: true });
+
+    // The htmlContent is verbose; record only what changed semantically by
+    // logging a compact diff on type/name/variables/margins, plus a flag
+    // whether htmlContent itself changed.
+    await logUpdate(ctxFromReq(req), {
+      collection: "contractTemplates",
+      resourceId: req.params.id,
+      before: {
+        type: before.type,
+        name: before.name,
+        variables: before.variables,
+        margins: before.margins,
+        htmlContentLength: typeof before.htmlContent === "string" ? before.htmlContent.length : 0,
+      },
+      after: {
+        type,
+        name,
+        variables,
+        margins: payload.margins ?? before.margins,
+        htmlContentLength: htmlContent.length,
+      },
+    });
 
     res.json({ id: req.params.id, variables });
   }

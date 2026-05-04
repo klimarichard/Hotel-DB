@@ -2,6 +2,7 @@ import { Router, Response } from "express";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireAuth, requireRole, AuthRequest } from "../middleware/auth";
+import { ctxFromReq, logUpdate } from "../services/auditLog";
 
 export const companiesRouter = Router();
 
@@ -57,21 +58,31 @@ companiesRouter.put(
       fileNo?: string;
     };
 
-    await db()
-      .collection("companies")
-      .doc(req.params.id)
-      .set(
-        {
-          name: name ?? "",
-          address: address ?? "",
-          ic: ic ?? "",
-          dic: dic ?? "",
-          fileNo: fileNo ?? "",
-          updatedAt: FieldValue.serverTimestamp(),
-          updatedBy: req.uid,
-        },
-        { merge: true }
-      );
+    const ref = db().collection("companies").doc(req.params.id);
+    const beforeSnap = await ref.get();
+    const before = beforeSnap.exists ? (beforeSnap.data() as Record<string, unknown>) : {};
+    const after = {
+      name: name ?? "",
+      address: address ?? "",
+      ic: ic ?? "",
+      dic: dic ?? "",
+      fileNo: fileNo ?? "",
+    };
+    await ref.set(
+      {
+        ...after,
+        updatedAt: FieldValue.serverTimestamp(),
+        updatedBy: req.uid,
+      },
+      { merge: true }
+    );
+
+    await logUpdate(ctxFromReq(req), {
+      collection: "companies",
+      resourceId: req.params.id,
+      before,
+      after: { ...before, ...after },
+    });
 
     res.json({ id: req.params.id });
   }
