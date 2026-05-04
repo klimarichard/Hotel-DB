@@ -787,8 +787,7 @@ export default function ContractTemplatesPage() {
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
           <h1 className={styles.title}>Šablony smluv</h1>
           <Button
-            variant="secondary"
-            size="sm"
+            variant="primary"
             onClick={() => {
               setCreateIdDraft("");
               setCreateNameDraft("");
