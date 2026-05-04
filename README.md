@@ -541,3 +541,20 @@ Tab labels show pending counts as red pill badges.
 **Cross-plan list endpoints** — `GET /api/shifts/overrides/pending` and `GET /api/shifts/changeRequests/pending` use `collectionGroup` queries on `(status == "pending", requestedAt desc)`. Both composite indexes are declared in `firestore.indexes.json`. Per-plan modals on `ShiftPlannerPage` are unchanged — they remain the primary action surface for approve/reject; the Upozornění hub is the cross-plan read-only/list view.
 
 **Audit log** — probation-alert writes are system-generated (scheduled refresh + on-employment-edit cascade) and intentionally NOT in the audit log. The triggering employment row create/edit is already audited, which is the user-meaningful event.
+
+---
+
+## Per-role menu order
+
+Settings → **Menu** (admin-only) lets admin configure the sidebar order independently for each of the four roles. The four roles render side-by-side as cards; each card shows the role's items with ▲▼ buttons to reorder, plus a "Kopírovat z…" dropdown that overwrites the draft with another role's order (filtered to ids the target role can access — e.g., copying admin → employee drops `nastaveni` because employee can't see it). Single Uložit at the bottom of the tab commits all four lists.
+
+**Storage** — `settings/menuOrder` Firestore doc with shape `{ admin: [...ids], director: [...], manager: [...], employee: [...] }`. Saved on every PUT through the audit log.
+
+**Registry** — `frontend/src/lib/menuItems.ts` is the single source of truth for sidebar items (id, label, path, allowed roles). When adding a new menu item, register it here and add the matching `<Route>` in `App.tsx` — the sidebar appends new items at the end of any saved order automatically, so existing orderings don't need backfilling. The backend mirrors this list (validates ids + role permissions on PUT) at `functions/src/routes/menuOrder.ts`.
+
+**Layout consumption** — `frontend/src/components/Layout.tsx` calls `GET /api/settings/menu-order/me` once on mount and runs `resolveOrderForRole(role, savedOrder)`, which drops forbidden/unknown ids and appends any allowed items missing from the saved list. Falls back to the registry's default declaration order when no order is saved. The three previous hardcoded arrays (`navItems` / `staffItems` / `adminItems`) are gone — replaced by one flat list keyed by item id, with badges (Směny, Dovolená, Upozornění) still resolved per-id.
+
+**Endpoints**:
+- `GET /api/settings/menu-order` — admin only; returns the full map.
+- `GET /api/settings/menu-order/me` — any authenticated user; returns just their role's order (or `null` for default).
+- `PUT /api/settings/menu-order` — admin only; validated against the registry (ids must exist, must be allowed for the target role); audit-logged.
