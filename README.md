@@ -29,7 +29,7 @@ This file contains implementation details, feature notes, and post-merge fix his
 | 5 | ✅ | Shift planner — `parseShiftExpression()`, monthly grid, availability rules, X-limit overrides |
 | 6 | ✅ | Vacation — request workflow, pendingEdit pattern, auto-X in shift plans, user↔employee linking |
 | 7 | ✅ | Payroll — see local `payroll.md` for implementation notes |
-| 8 | 🚧 | Polish — dashboard (`Přehled` — today's staffing, MOD, absent managers) ✅, stats, audit log UI ✅ |
+| 8 | 🚧 | Polish — dashboard (`Přehled` — today's staffing, MOD, absent managers) ✅, stats, audit log UI ✅, Upozornění hub ✅ |
 
 ---
 
@@ -518,3 +518,26 @@ Managed in Settings → Společnosti tab. Only one card in edit mode at a time.
 **Nav** — added under `adminItems` in `Layout.tsx` (visible to both admin and director, like the other admin items).
 
 **Retention** — none. Entries persist forever per the user's choice. If volume becomes a problem later, add a scheduled prune in `functions/src/index.ts`.
+
+---
+
+## Upozornění hub
+
+`/upozorneni` (admin + director) is a tabbed page that aggregates everything that needs admin attention. The menu label is **Upozornění** (was "Neplatné doklady").
+
+**Tabs**
+1. **Doklady** — document-expiry alerts from the `alerts/` collection (existing). Read/unread state in client localStorage (`hotel_hr_read_alert_ids_v2`).
+2. **Zkušební doba** — probation-end alerts from `probationAlerts/`. Read/unread in `hotel_hr_read_probation_alert_ids_v1`.
+3. **Dovolená** — pending vacation requests (status `pending` or approved-with-pendingEdit). Sourced from `GET /vacation` filtered client-side. Workflow-driven (approve/reject in `VacationPage` makes the row disappear).
+4. **Výjimky** — pending shift override requests across all plans. New endpoint `GET /api/shifts/overrides/pending` runs a `collectionGroup` query and denormalizes `planId/planYear/planMonth` per row.
+5. **Žádosti o změny** — same pattern via `GET /api/shifts/changeRequests/pending`.
+
+Tab labels show pending counts as red pill badges.
+
+**Probation alert generator** — `functions/src/services/probationAlerts.ts`. Mirrors `updateDocumentAlerts`: parses the free-form `probationPeriod` string (e.g., "3 měsíce", "30 dní", "2 týdny", or a bare number defaulting to months — accent-insensitive match), computes the calendar-correct end-date, and upserts an alert iff end-date is within `PROBATION_ALERT_DAYS = 14`. Triggered on every employment row create + edit (best-effort, never blocks the response), cascade-deleted on employee delete, and re-scanned daily by `refreshProbationAlerts`. Manual emulator trigger: `POST /api/employees/trigger-probation-refresh`. Unparseable / zero values delete any existing alert.
+
+**Sidebar badge for `/upozorneni`** — sums **only** unread document + unread probation counts. Vacation/overrides/changes already have their own badges on `/dovolena` and `/smeny`; double-counting them here would be confusing.
+
+**Cross-plan list endpoints** — `GET /api/shifts/overrides/pending` and `GET /api/shifts/changeRequests/pending` use `collectionGroup` queries on `(status == "pending", requestedAt desc)`. Both composite indexes are declared in `firestore.indexes.json`. Per-plan modals on `ShiftPlannerPage` are unchanged — they remain the primary action surface for approve/reject; the Upozornění hub is the cross-plan read-only/list view.
+
+**Audit log** — probation-alert writes are system-generated (scheduled refresh + on-employment-edit cascade) and intentionally NOT in the audit log. The triggering employment row create/edit is already audited, which is the user-meaningful event.
