@@ -1,143 +1,78 @@
-import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
-import { api } from "@/lib/api";
+import { useState } from "react";
 import { useAlertsContext } from "@/context/AlertsContext";
-import { formatDateCZ } from "@/lib/dateFormat";
-import Button from "@/components/Button";
+import { useVacationContext } from "@/context/VacationContext";
+import { useShiftOverridesContext } from "@/context/ShiftOverridesContext";
+import { useShiftChangeRequestsContext } from "@/context/ShiftChangeRequestsContext";
+import DocumentExpiryTab from "./upozorneni/DocumentExpiryTab";
+import ProbationTab from "./upozorneni/ProbationTab";
+import PendingVacationTab from "./upozorneni/PendingVacationTab";
+import PendingShiftOverridesTab from "./upozorneni/PendingShiftOverridesTab";
+import PendingShiftChangeRequestsTab from "./upozorneni/PendingShiftChangeRequestsTab";
 import styles from "./AlertsPage.module.css";
 
-interface Alert {
-  id: string;
-  employeeId: string;
-  employeeFirstName: string;
-  employeeLastName: string;
-  fieldLabel: string;
-  expiryDate: string;
-  daysUntilExpiry: number;
-  status: "expiring" | "expired";
-}
-
-function DaysBadge({ days }: { days: number }) {
-  if (days < 0) return <span className={styles.badgeExpired}>Prošlé o {Math.abs(days)} dní</span>;
-  if (days === 0) return <span className={styles.badgeExpired}>Vyprší dnes</span>;
-  return <span className={styles.badgeExpiring}>Za {days} dní</span>;
-}
-
-interface AlertTableProps {
-  alerts: Alert[];
-  showAction?: boolean;
-  onMarkRead?: (id: string) => void;
-  muted?: boolean;
-}
-
-function AlertTable({ alerts, showAction, onMarkRead, muted }: AlertTableProps) {
-  return (
-    <div className={styles.tableWrapper}>
-      <table className={styles.table}>
-        <thead>
-          <tr>
-            <th>Zaměstnanec</th>
-            <th>Doklad</th>
-            <th>Datum expirace</th>
-            <th>Zbývá</th>
-            {showAction && <th></th>}
-          </tr>
-        </thead>
-        <tbody>
-          {alerts.map((alert) => (
-            <tr
-              key={alert.id}
-              className={
-                muted
-                  ? styles.rowRead
-                  : alert.status === "expired"
-                  ? styles.rowExpired
-                  : styles.rowExpiring
-              }
-            >
-              <td>
-                <Link to={`/zamestnanci/${alert.employeeId}`} className={styles.empLink}>
-                  {alert.employeeLastName} {alert.employeeFirstName}
-                </Link>
-              </td>
-              <td>{alert.fieldLabel}</td>
-              <td>{formatDateCZ(alert.expiryDate)}</td>
-              <td><DaysBadge days={alert.daysUntilExpiry} /></td>
-              {showAction && (
-                <td>
-                  <button
-                    className={styles.markReadBtn}
-                    onClick={() => onMarkRead?.(alert.id)}
-                  >
-                    Přečteno
-                  </button>
-                </td>
-              )}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
+type Tab = "doklady" | "zkusebni" | "dovolena" | "vyjimky" | "zmeny";
 
 export default function AlertsPage() {
-  const [alerts, setAlerts] = useState<Alert[]>([]);
-  const [loading, setLoading] = useState(true);
-  const { readIds, markRead, markAllRead } = useAlertsContext();
+  const [tab, setTab] = useState<Tab>("doklady");
+  const { unreadCount, unreadProbationCount } = useAlertsContext();
+  const { pendingCount: vacationCount } = useVacationContext();
+  const { pendingCount: overridesCount } = useShiftOverridesContext();
+  const { pendingCount: changesCount } = useShiftChangeRequestsContext();
 
-  useEffect(() => {
-    api.get<Alert[]>("/alerts")
-      .then(setAlerts)
-      .finally(() => setLoading(false));
-  }, []);
-
-  if (loading) return <div className={styles.state}>Načítám…</div>;
-
-  const unread = alerts.filter((a) => !readIds.has(a.id));
-  const read   = alerts.filter((a) =>  readIds.has(a.id));
+  function tabLabel(label: string, count: number) {
+    if (count <= 0) return label;
+    return (
+      <span className={styles.tabInner}>
+        {label}
+        <span className={styles.tabCount}>{count}</span>
+      </span>
+    );
+  }
 
   return (
     <div>
       <div className={styles.header}>
-        <h1 className={styles.title}>Upozornění na expiraci dokladů</h1>
-        {unread.length > 0 && (
-          <Button variant="secondary" onClick={markAllRead}>
-            Označit vše jako přečtené
-          </Button>
-        )}
+        <h1 className={styles.title}>Upozornění</h1>
       </div>
 
-      {/* Unread section */}
-      <div className={styles.section}>
-        <div className={styles.sectionLabel}>
-          Nepřečtené
-          {unread.length > 0 && (
-            <span className={styles.countBadge}>{unread.length}</span>
-          )}
-        </div>
-        {unread.length === 0 ? (
-          <div className={styles.empty}>Žádná nepřečtená upozornění.</div>
-        ) : (
-          <AlertTable
-            alerts={unread}
-            showAction
-            onMarkRead={(id) => markRead([id])}
-          />
-        )}
+      <div className={styles.tabs}>
+        <button
+          className={tab === "doklady" ? styles.tabActive : styles.tabBtn}
+          onClick={() => setTab("doklady")}
+        >
+          {tabLabel("Doklady", unreadCount)}
+        </button>
+        <button
+          className={tab === "zkusebni" ? styles.tabActive : styles.tabBtn}
+          onClick={() => setTab("zkusebni")}
+        >
+          {tabLabel("Zkušební doba", unreadProbationCount)}
+        </button>
+        <button
+          className={tab === "dovolena" ? styles.tabActive : styles.tabBtn}
+          onClick={() => setTab("dovolena")}
+        >
+          {tabLabel("Dovolená", vacationCount)}
+        </button>
+        <button
+          className={tab === "vyjimky" ? styles.tabActive : styles.tabBtn}
+          onClick={() => setTab("vyjimky")}
+        >
+          {tabLabel("Výjimky", overridesCount)}
+        </button>
+        <button
+          className={tab === "zmeny" ? styles.tabActive : styles.tabBtn}
+          onClick={() => setTab("zmeny")}
+        >
+          {tabLabel("Žádosti o změny", changesCount)}
+        </button>
       </div>
 
-      {/* Read section — only shown when there are read alerts */}
-      {read.length > 0 && (
-        <div className={styles.section}>
-          <div className={styles.sectionLabel}>Přečtené</div>
-          <AlertTable alerts={read} muted />
-        </div>
-      )}
-
-      {alerts.length === 0 && (
-        <div className={styles.empty}>Žádná upozornění. Všechny doklady jsou platné.</div>
-      )}
+      {tab === "doklady" && <DocumentExpiryTab />}
+      {tab === "zkusebni" && <ProbationTab />}
+      {tab === "dovolena" && <PendingVacationTab />}
+      {tab === "vyjimky" && <PendingShiftOverridesTab />}
+      {tab === "zmeny" && <PendingShiftChangeRequestsTab />}
     </div>
   );
 }

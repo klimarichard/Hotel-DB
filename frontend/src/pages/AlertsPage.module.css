@@ -157,3 +157,63 @@
   background: var(--color-surface-4);
   color: var(--color-text-secondary);
 }
+
+/* ── Tabs (Upozornění hub) ────────────────────────────────────────────────── */
+
+.tabs {
+  display: flex;
+  gap: 0.25rem;
+  border-bottom: 2px solid var(--color-border);
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.tabBtn,
+.tabActive {
+  padding: 0.5rem 1.1rem;
+  border: none;
+  background: none;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  transition: color 0.15s;
+}
+
+.tabActive {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+  font-weight: 600;
+}
+
+.tabBtn:hover {
+  color: var(--color-text-secondary);
+}
+
+.tabInner {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.tabCount {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  padding: 0 0.35rem;
+  background: #ef4444;
+  color: #fff;
+  border-radius: 9999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.tabHeader {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.75rem;
+}
