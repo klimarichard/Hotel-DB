@@ -6,6 +6,7 @@ import { useAuth, UserRole } from "@/hooks/useAuth";
 import { authApi, UserProfile, api, ApiError } from "@/lib/api";
 import Button from "@/components/Button";
 import ConfirmModal from "@/components/ConfirmModal";
+import MenuOrderTab from "./settings/MenuOrderTab";
 import styles from "./SettingsPage.module.css";
 
 const EyeIcon = () => (
@@ -134,7 +135,7 @@ export default function SettingsPage() {
   const [linkEmployeeId, setLinkEmployeeId] = useState<string>("");
   const [linkSaving, setLinkSaving] = useState(false);
 
-  const [settingsTab, setSettingsTab] = useState<"users" | "companies" | "departments" | "jobPositions" | "education" | "payroll">("users");
+  const [settingsTab, setSettingsTab] = useState<"users" | "companies" | "departments" | "jobPositions" | "education" | "payroll" | "menu">("users");
 
   // Departments
   const [departments, setDepartments] = useState<DepartmentRecord[]>([]);
@@ -609,6 +610,7 @@ export default function SettingsPage() {
         <button className={settingsTab === "jobPositions" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("jobPositions")}>Pracovní pozice</button>
         <button className={settingsTab === "education" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("education")}>Vzdělání</button>
         <button className={settingsTab === "payroll" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("payroll")}>Mzdy</button>
+        <button className={settingsTab === "menu" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("menu")}>Menu</button>
       </div>
 
       {showCreate && settingsTab === "users" && (
@@ -1353,6 +1355,8 @@ export default function SettingsPage() {
           )}
         </div>
       )}
+
+      {settingsTab === "menu" && <MenuOrderTab />}
 
       {depDeleteId && (
         <ConfirmModal

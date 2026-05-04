@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
@@ -7,6 +8,8 @@ import { useShiftOverridesContext } from "@/context/ShiftOverridesContext";
 import { useShiftChangeRequestsContext } from "@/context/ShiftChangeRequestsContext";
 import { useVacationContext } from "@/context/VacationContext";
 import { useTheme } from "@/context/ThemeContext";
+import { api } from "@/lib/api";
+import { resolveOrderForRole } from "@/lib/menuItems";
 import logoMark from "@/assets/logo.svg";
 import styles from "./Layout.module.css";
 
@@ -30,24 +33,6 @@ const MoonIcon = () => (
   </svg>
 );
 
-const navItems = [
-  { to: "/prehled", label: "Přehled" },
-  { to: "/smeny", label: "Směny" },
-  { to: "/dovolena", label: "Dovolená" },
-];
-
-const staffItems = [
-  { to: "/zamestnanci", label: "Zaměstnanci" },
-  { to: "/mzdy", label: "Mzdy" },
-];
-
-const adminItems = [
-  { to: "/upozorneni", label: "Upozornění" },
-  { to: "/smlouvy", label: "Šablony smluv" },
-  { to: "/audit", label: "Log změn" },
-  { to: "/nastaveni", label: "Nastavení" },
-];
-
 export default function Layout() {
   const { user, role } = useAuth();
   const { unreadCount, unreadProbationCount } = useAlertsContext();
@@ -59,6 +44,27 @@ export default function Layout() {
   const showVacationBadge = (role === "admin" || role === "director") && pendingVacationCount > 0;
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
+
+  // Per-role saved menu order (admin-configurable in Settings → Menu).
+  // null = falls back to default order from menuItems.ts.
+  const [savedOrder, setSavedOrder] = useState<string[] | null>(null);
+
+  useEffect(() => {
+    if (!role) return;
+    api
+      .get<{ order: string[] | null }>("/settings/menu-order/me")
+      .then((res) => setSavedOrder(res.order))
+      .catch(() => setSavedOrder(null));
+  }, [role]);
+
+  const items = role ? resolveOrderForRole(role, savedOrder) : [];
+
+  function badgeFor(id: string): number {
+    if (id === "smeny") return shiftsBadgeCount;
+    if (id === "dovolena") return showVacationBadge ? pendingVacationCount : 0;
+    if (id === "upozorneni") return upozorneniBadge;
+    return 0;
+  }
 
   async function handleLogout() {
     await signOut(auth);
@@ -73,63 +79,28 @@ export default function Layout() {
           <span>HPM Intranet</span>
         </div>
         <ul className={styles.nav}>
-          {navItems.map((item) => (
-            <li key={item.to}>
-              <NavLink
-                to={item.to}
-                className={({ isActive }) =>
-                  [styles.navLink, isActive ? styles.active : ""].join(" ")
-                }
-              >
-                {item.to === "/smeny" && shiftsBadgeCount > 0 ? (
-                  <span className={styles.navLinkInner}>
-                    {item.label}
-                    <span className={styles.badge}>{shiftsBadgeCount}</span>
-                  </span>
-                ) : item.to === "/dovolena" && showVacationBadge ? (
-                  <span className={styles.navLinkInner}>
-                    {item.label}
-                    <span className={styles.badge}>{pendingVacationCount}</span>
-                  </span>
-                ) : (
-                  item.label
-                )}
-              </NavLink>
-            </li>
-          ))}
-          {(role === "admin" || role === "director") &&
-            staffItems.map((item) => (
-              <li key={item.to}>
+          {items.map((item) => {
+            const badge = badgeFor(item.id);
+            return (
+              <li key={item.id}>
                 <NavLink
-                  to={item.to}
+                  to={item.path}
                   className={({ isActive }) =>
                     [styles.navLink, isActive ? styles.active : ""].join(" ")
                   }
                 >
-                  {item.label}
+                  {badge > 0 ? (
+                    <span className={styles.navLinkInner}>
+                      {item.label}
+                      <span className={styles.badge}>{badge}</span>
+                    </span>
+                  ) : (
+                    item.label
+                  )}
                 </NavLink>
               </li>
-            ))
-          }
-          {(role === "admin" || role === "director") &&
-            adminItems.map((item) => (
-              <li key={item.to}>
-                <NavLink
-                  to={item.to}
-                  className={({ isActive }) =>
-                    [styles.navLink, isActive ? styles.active : ""].join(" ")
-                  }
-                >
-                  <span className={styles.navLinkInner}>
-                    {item.label}
-                    {item.to === "/upozorneni" && upozorneniBadge > 0 && (
-                      <span className={styles.badge}>{upozorneniBadge}</span>
-                    )}
-                  </span>
-                </NavLink>
-              </li>
-            ))
-          }
+            );
+          })}
         </ul>
         <div className={styles.userBar}>
           <span className={styles.userEmail}>{user?.email}</span>
