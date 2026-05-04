@@ -6,11 +6,12 @@ export type UserRole = "admin" | "director" | "manager" | "employee";
 export interface AuthRequest extends Request {
   uid?: string;
   role?: UserRole;
+  userEmail?: string;
 }
 
 /**
  * Verifies the Firebase ID token from the Authorization header and
- * attaches uid + role to the request. Returns 401/403 on failure.
+ * attaches uid + role + email to the request. Returns 401/403 on failure.
  */
 export function requireAuth(req: AuthRequest, res: Response, next: NextFunction): void {
   const authHeader = req.headers.authorization;
@@ -26,6 +27,7 @@ export function requireAuth(req: AuthRequest, res: Response, next: NextFunction)
     .then((decoded) => {
       req.uid = decoded.uid;
       req.role = (decoded.role as UserRole) ?? undefined;
+      req.userEmail = decoded.email ?? "";
       next();
     })
     .catch(() => {

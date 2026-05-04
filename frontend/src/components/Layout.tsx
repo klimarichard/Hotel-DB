@@ -44,6 +44,7 @@ const staffItems = [
 const adminItems = [
   { to: "/upozorneni", label: "Neplatné doklady" },
   { to: "/smlouvy", label: "Šablony smluv" },
+  { to: "/audit", label: "Auditní log", adminOnly: true },
   { to: "/nastaveni", label: "Nastavení" },
 ];
 
@@ -110,7 +111,9 @@ export default function Layout() {
             ))
           }
           {(role === "admin" || role === "director") &&
-            adminItems.map((item) => (
+            adminItems
+              .filter((item) => !item.adminOnly || role === "admin")
+              .map((item) => (
               <li key={item.to}>
                 <NavLink
                   to={item.to}

@@ -2,6 +2,7 @@ import { Router, Response } from "express";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireAuth, requireRole, AuthRequest } from "../middleware/auth";
+import { ctxFromReq, logCreate, logUpdate, logDelete } from "../services/auditLog";
 
 export const departmentsRouter = Router();
 
@@ -42,6 +43,11 @@ departmentsRouter.post(
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     });
+    await logCreate(ctxFromReq(req), {
+      collection: "departments",
+      resourceId: ref.id,
+      summary: { name, displayOrder },
+    });
     res.json({ id: ref.id });
   }
 );
@@ -60,7 +66,16 @@ departmentsRouter.patch(
     const update: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp() };
     if (typeof name === "string") update.name = name;
     if (typeof displayOrder === "number") update.displayOrder = displayOrder;
-    await db().collection("departments").doc(req.params.id).update(update);
+    const ref = db().collection("departments").doc(req.params.id);
+    const beforeSnap = await ref.get();
+    const before = beforeSnap.exists ? (beforeSnap.data() as Record<string, unknown>) : {};
+    await ref.update(update);
+    await logUpdate(ctxFromReq(req), {
+      collection: "departments",
+      resourceId: req.params.id,
+      before,
+      after: { ...before, ...update },
+    });
     res.json({ ok: true });
   }
 );
@@ -83,7 +98,15 @@ departmentsRouter.delete(
       res.status(400).json({ error: "Nelze smazat oddělení, které obsahuje pozice." });
       return;
     }
-    await db().collection("departments").doc(req.params.id).delete();
+    const ref = db().collection("departments").doc(req.params.id);
+    const beforeSnap = await ref.get();
+    const beforeData = beforeSnap.exists ? (beforeSnap.data() as Record<string, unknown>) : {};
+    await ref.delete();
+    await logDelete(ctxFromReq(req), {
+      collection: "departments",
+      resourceId: req.params.id,
+      summary: { name: beforeData.name },
+    });
     res.json({ ok: true });
   }
 );

@@ -3,6 +3,13 @@ import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireAuth, requireRole, AuthRequest } from "../middleware/auth";
 import { encryptFields, redactFields, decrypt, decryptFields } from "../services/encryption";
+import {
+  ctxFromReq,
+  logCreate,
+  logUpdate,
+  logDelete,
+  writeAudit,
+} from "../services/auditLog";
 
 export const employeesRouter = Router();
 
@@ -121,24 +128,25 @@ employeesRouter.get(
     );
 
     if (includeSensitive) {
-      await db().collection("auditLog").add({
-        userId: req.uid,
+      await writeAudit(ctxFromReq(req), {
         action: "export",
-        fields: [
-          ...SENSITIVE_FIELDS,
-          ...DOCUMENT_SENSITIVE_FIELDS,
-          ...BENEFITS_SENSITIVE_FIELDS,
-        ],
-        filters: {
-          status: req.query.status ?? null,
-          companyId: req.query.companyId ?? null,
-          department: req.query.department ?? null,
-          contractType: req.query.contractType ?? null,
-          nationality: req.query.nationality ?? null,
-          jobTitle: req.query.jobTitle ?? null,
+        collection: "employees",
+        extra: {
+          fields: [
+            ...SENSITIVE_FIELDS,
+            ...DOCUMENT_SENSITIVE_FIELDS,
+            ...BENEFITS_SENSITIVE_FIELDS,
+          ],
+          filters: {
+            status: req.query.status ?? null,
+            companyId: req.query.companyId ?? null,
+            department: req.query.department ?? null,
+            contractType: req.query.contractType ?? null,
+            nationality: req.query.nationality ?? null,
+            jobTitle: req.query.jobTitle ?? null,
+          },
+          employeeCount: rows.length,
         },
-        employeeCount: rows.length,
-        timestamp: FieldValue.serverTimestamp(),
       });
     }
 
@@ -206,6 +214,20 @@ employeesRouter.post(
     );
 
     const ref = await db().collection("employees").add(employeeData);
+    await logCreate(ctxFromReq(req), {
+      collection: "employees",
+      resourceId: ref.id,
+      employeeId: ref.id,
+      summary: {
+        firstName: body.firstName,
+        lastName: body.lastName,
+        currentDepartment: body.currentDepartment,
+        currentJobTitle: body.currentJobTitle,
+        currentContractType: body.currentContractType,
+        currentCompanyId: body.currentCompanyId,
+      },
+      sensitiveFields: [...SENSITIVE_FIELDS],
+    });
     res.status(201).json({ id: ref.id });
   }
 );
@@ -239,7 +261,24 @@ employeesRouter.patch(
       }
     }
 
-    await db().collection("employees").doc(req.params.id).update(updated);
+    const empRef = db().collection("employees").doc(req.params.id);
+    const beforeSnap = await empRef.get();
+    const before = beforeSnap.exists ? (beforeSnap.data() as Record<string, unknown>) : {};
+    await empRef.update(updated);
+
+    // Build the post-write view from the request body so we can diff against
+    // the before-snapshot. clearFields turn into nulls so the diff registers a
+    // change (FieldValue.delete sentinels would be opaque).
+    const afterForLog: Record<string, unknown> = { ...payload };
+    for (const f of clearFields) afterForLog[f] = null;
+    await logUpdate(ctxFromReq(req), {
+      collection: "employees",
+      resourceId: req.params.id,
+      employeeId: req.params.id,
+      before,
+      after: { ...before, ...afterForLog },
+      sensitiveFields: [...SENSITIVE_FIELDS],
+    });
     res.json({ success: true });
   }
 );
@@ -308,13 +347,12 @@ employeesRouter.post(
 
     const plaintext = decrypt(encryptedValue);
 
-    // Audit log
-    await db().collection("auditLog").add({
-      userId: req.uid,
-      employeeId: req.params.id,
-      fieldName: field,
+    await writeAudit(ctxFromReq(req), {
       action: "reveal",
-      timestamp: FieldValue.serverTimestamp(),
+      collection: "employees",
+      resourceId: req.params.id,
+      employeeId: req.params.id,
+      extra: { fieldName: field },
     });
 
     res.json({ value: plaintext });
@@ -351,6 +389,7 @@ employeesRouter.put(
   async (req: AuthRequest, res) => {
     const colRef = db().collection("employees").doc(req.params.id).collection("contact");
     const snap = await colRef.limit(1).get();
+    const before = snap.empty ? {} : (snap.docs[0].data() as Record<string, unknown>);
     const data = {
       ...req.body,
       updatedAt: FieldValue.serverTimestamp(),
@@ -360,6 +399,13 @@ employeesRouter.put(
     } else {
       await snap.docs[0].ref.set(data);
     }
+    await logUpdate(ctxFromReq(req), {
+      collection: "employees/contact",
+      resourceId: req.params.id,
+      employeeId: req.params.id,
+      before,
+      after: { ...before, ...(req.body as Record<string, unknown>) },
+    });
     res.json({ success: true });
   }
 );
@@ -415,6 +461,24 @@ employeesRouter.post(
         updatedAt: now,
       });
     }
+
+    await logCreate(ctxFromReq(req), {
+      collection: "employees/employment",
+      resourceId: req.params.id,
+      subResourceId: newRow.id,
+      employeeId: req.params.id,
+      summary: {
+        startDate: body.startDate,
+        endDate: body.endDate,
+        status: body.status,
+        contractType: body.contractType,
+        jobTitle: body.jobTitle,
+        department: body.department,
+        companyId: body.companyId,
+        salary: body.salary,
+        hourlyRate: body.hourlyRate,
+      },
+    });
 
     res.status(201).json({ id: newRow.id });
   }
@@ -544,11 +608,25 @@ employeesRouter.put(
 
     const colRef = db().collection("employees").doc(req.params.id).collection("documents");
     const snap = await colRef.limit(1).get();
+    const before = snap.empty ? {} : (snap.docs[0].data() as Record<string, unknown>);
     if (snap.empty) {
       await colRef.add(data);
     } else {
       await snap.docs[0].ref.update(data); // update preserves unmentioned fields
     }
+
+    // Build the after-view from the plaintext body (sensitive values are
+    // redacted by logUpdate, so we never store ciphertext).
+    const afterForLog: Record<string, unknown> = { ...before, ...payload };
+    for (const f of clearFields) afterForLog[f] = null;
+    await logUpdate(ctxFromReq(req), {
+      collection: "employees/documents",
+      resourceId: req.params.id,
+      employeeId: req.params.id,
+      before,
+      after: afterForLog,
+      sensitiveFields: [...DOCUMENT_SENSITIVE_FIELDS],
+    });
     res.json({ success: true });
   }
 );
@@ -603,11 +681,23 @@ employeesRouter.put(
 
     const colRef = db().collection("employees").doc(req.params.id).collection("benefits");
     const snap = await colRef.limit(1).get();
+    const before = snap.empty ? {} : (snap.docs[0].data() as Record<string, unknown>);
     if (snap.empty) {
       await colRef.add(data);
     } else {
       await snap.docs[0].ref.update(data);
     }
+
+    const afterForLog: Record<string, unknown> = { ...before, ...payload };
+    for (const f of clearFields) afterForLog[f] = null;
+    await logUpdate(ctxFromReq(req), {
+      collection: "employees/benefits",
+      resourceId: req.params.id,
+      employeeId: req.params.id,
+      before,
+      after: afterForLog,
+      sensitiveFields: [...BENEFITS_SENSITIVE_FIELDS],
+    });
     res.json({ success: true });
   }
 );
@@ -633,6 +723,7 @@ employeesRouter.patch(
       return;
     }
 
+    const before = rowSnap.data() as Record<string, unknown>;
     await rowRef.update({ ...body, updatedAt: now });
 
     if (body.status === "active") {
@@ -644,6 +735,15 @@ employeesRouter.patch(
         updatedAt: now,
       });
     }
+
+    await logUpdate(ctxFromReq(req), {
+      collection: "employees/employment",
+      resourceId: req.params.id,
+      subResourceId: req.params.rowId,
+      employeeId: req.params.id,
+      before,
+      after: { ...before, ...body },
+    });
 
     res.json({ success: true });
   }
@@ -750,8 +850,27 @@ employeesRouter.delete(
       await batch.commit();
     }
 
+    // Capture summary before delete for the audit log
+    const empSnap = await empRef.get();
+    const empData = empSnap.exists ? (empSnap.data() as Record<string, unknown>) : {};
+
     // Delete the employee document
     await empRef.delete();
+
+    await logDelete(ctxFromReq(req as AuthRequest), {
+      collection: "employees",
+      resourceId: id,
+      employeeId: id,
+      summary: {
+        firstName: empData.firstName,
+        lastName: empData.lastName,
+        currentDepartment: empData.currentDepartment,
+        currentJobTitle: empData.currentJobTitle,
+        currentContractType: empData.currentContractType,
+        deleteUser,
+      },
+      sensitiveFields: [...SENSITIVE_FIELDS],
+    });
 
     res.json({ ok: true });
   }

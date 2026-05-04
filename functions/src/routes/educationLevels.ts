@@ -2,6 +2,7 @@ import { Router, Response } from "express";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireAuth, requireRole, AuthRequest } from "../middleware/auth";
+import { ctxFromReq, logCreate, logUpdate, logDelete } from "../services/auditLog";
 
 export const educationLevelsRouter = Router();
 
@@ -42,6 +43,11 @@ educationLevelsRouter.post(
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     });
+    await logCreate(ctxFromReq(req), {
+      collection: "educationLevels",
+      resourceId: ref.id,
+      summary: { name: name.trim(), code: code.trim() },
+    });
     res.json({ id: ref.id });
   }
 );
@@ -56,7 +62,16 @@ educationLevelsRouter.patch(
     if (typeof name === "string") update.name = name.trim();
     if (typeof code === "string") update.code = code.trim();
     if (typeof displayOrder === "number") update.displayOrder = displayOrder;
-    await db().collection("educationLevels").doc(req.params.id).update(update);
+    const ref = db().collection("educationLevels").doc(req.params.id);
+    const beforeSnap = await ref.get();
+    const before = beforeSnap.exists ? (beforeSnap.data() as Record<string, unknown>) : {};
+    await ref.update(update);
+    await logUpdate(ctxFromReq(req), {
+      collection: "educationLevels",
+      resourceId: req.params.id,
+      before,
+      after: { ...before, ...update },
+    });
     res.json({ ok: true });
   }
 );
@@ -66,7 +81,15 @@ educationLevelsRouter.delete(
   requireAuth,
   requireRole("admin"),
   async (req: AuthRequest, res: Response) => {
-    await db().collection("educationLevels").doc(req.params.id).delete();
+    const ref = db().collection("educationLevels").doc(req.params.id);
+    const beforeSnap = await ref.get();
+    const beforeData = beforeSnap.exists ? (beforeSnap.data() as Record<string, unknown>) : {};
+    await ref.delete();
+    await logDelete(ctxFromReq(req), {
+      collection: "educationLevels",
+      resourceId: req.params.id,
+      summary: { name: beforeData.name, code: beforeData.code },
+    });
     res.json({ ok: true });
   }
 );

@@ -5,6 +5,13 @@ import { requireAuth, requireRole, AuthRequest } from "../middleware/auth";
 import { parseShiftExpression, HOTEL_CODES } from "../services/shiftParser";
 import { snapshotShifts, deleteCollection } from "../services/planTransitions";
 import { createOrUpdatePayrollPeriod } from "../services/payrollCalculator";
+import {
+  ctxFromReq,
+  logCreate,
+  logUpdate,
+  logDelete,
+  writeAudit,
+} from "../services/auditLog";
 
 export const shiftsRouter = Router();
 const db = () => admin.firestore();
@@ -353,6 +360,11 @@ shiftsRouter.post(
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     });
+    await logCreate(ctxFromReq(req), {
+      collection: "shiftPlans",
+      resourceId: ref.id,
+      summary: { year, month },
+    });
     res.status(201).json({ id: ref.id });
   }
 );
@@ -494,6 +506,12 @@ shiftsRouter.patch(
       status: newStatus,
       updatedAt: FieldValue.serverTimestamp(),
     });
+    await logUpdate(ctxFromReq(req as AuthRequest), {
+      collection: "shiftPlans",
+      resourceId: planId,
+      before: { status: currentStatus },
+      after: { status: newStatus },
+    });
     res.json({ ok: true });
   }
 );
@@ -528,7 +546,22 @@ shiftsRouter.patch(
       update.publishedAt = body.publishedAt ?? null;
     }
 
+    const before = planDoc.data() as Record<string, unknown>;
     await planRef.update(update);
+    await logUpdate(ctxFromReq(req as AuthRequest), {
+      collection: "shiftPlans",
+      resourceId: planId,
+      before: {
+        openedAt: before.openedAt ?? null,
+        closedAt: before.closedAt ?? null,
+        publishedAt: before.publishedAt ?? null,
+      },
+      after: {
+        openedAt: "openedAt" in body ? (body.openedAt ?? null) : (before.openedAt ?? null),
+        closedAt: "closedAt" in body ? (body.closedAt ?? null) : (before.closedAt ?? null),
+        publishedAt: "publishedAt" in body ? (body.publishedAt ?? null) : (before.publishedAt ?? null),
+      },
+    });
     res.json({ ok: true });
   }
 );
@@ -552,7 +585,13 @@ shiftsRouter.delete(
     for (const col of subCols) {
       await deleteCollection(planRef.collection(col));
     }
+    const before = planDoc.data() as Record<string, unknown>;
     await planRef.delete();
+    await logDelete(ctxFromReq(req as AuthRequest), {
+      collection: "shiftPlans",
+      resourceId: planId,
+      summary: { year: before.year, month: before.month, status: before.status },
+    });
     res.json({ ok: true });
   }
 );
@@ -654,6 +693,14 @@ shiftsRouter.post(
     // (other employees' displayOrders may have shifted).
     await planRef.update({ updatedAt: FieldValue.serverTimestamp() });
 
+    await logCreate(ctxFromReq(req as AuthRequest), {
+      collection: "shiftPlans/planEmployees",
+      resourceId: planId,
+      subResourceId: ref.id,
+      employeeId,
+      summary: { firstName, lastName, section, primaryShiftType, primaryHotel },
+    });
+
     res.status(201).json({ id: ref.id });
   }
 );
@@ -720,6 +767,15 @@ shiftsRouter.put(
     }
 
     await planRef.update({ updatedAt: FieldValue.serverTimestamp() });
+    const employeeIdForLog = (prevSnap.data() as Record<string, unknown>).employeeId as string | undefined;
+    await logUpdate(ctxFromReq(req as AuthRequest), {
+      collection: "shiftPlans/planEmployees",
+      resourceId: planId,
+      subResourceId: docId,
+      employeeId: employeeIdForLog,
+      before: prev as unknown as Record<string, unknown>,
+      after: { section, primaryShiftType, primaryHotel, displayOrder, active },
+    });
     res.json({ ok: true });
   }
 );
@@ -760,6 +816,18 @@ shiftsRouter.delete(
       await batch.commit();
     }
     await planRef.update({ updatedAt: FieldValue.serverTimestamp() });
+    await logDelete(ctxFromReq(req as AuthRequest), {
+      collection: "shiftPlans/planEmployees",
+      resourceId: planId,
+      subResourceId: docId,
+      employeeId,
+      summary: {
+        firstName: employeeData.firstName,
+        lastName: employeeData.lastName,
+        section,
+        cascadedShifts: shiftsSnap.size,
+      },
+    });
     res.json({ ok: true });
   }
 );
@@ -808,6 +876,13 @@ shiftsRouter.post(
     for (const doc of sourceSnap.docs) {
       await applyVacationXs(targetPlanRef, doc.data().employeeId as string, targetYear, targetMonth);
     }
+
+    await writeAudit(ctxFromReq(req as AuthRequest), {
+      action: "create",
+      collection: "shiftPlans/planEmployees",
+      resourceId: planId,
+      extra: { kind: "copy-employees", sourcePlanId, copied: sourceSnap.size },
+    });
 
     res.json({ ok: true, copied: sourceSnap.size });
   }
@@ -862,22 +937,37 @@ shiftsRouter.put(
     }
 
     const docId = `${employeeId}_${date}`;
-    await db()
+    const shiftRef = db()
       .collection("shiftPlans")
       .doc(planId)
       .collection("shifts")
-      .doc(docId)
-      .set({
-        employeeId,
-        date,
-        rawInput: parsed.rawInput,
-        segments: parsed.segments,
-        hoursComputed: parsed.hoursComputed,
-        isDouble: parsed.isDouble,
-        status,
-        updatedAt: FieldValue.serverTimestamp(),
-      });
+      .doc(docId);
+    const beforeSnap = await shiftRef.get();
+    const beforeRaw = beforeSnap.exists ? ((beforeSnap.data() as Record<string, unknown>).rawInput as string) ?? "" : "";
+    await shiftRef.set({
+      employeeId,
+      date,
+      rawInput: parsed.rawInput,
+      segments: parsed.segments,
+      hoursComputed: parsed.hoursComputed,
+      isDouble: parsed.isDouble,
+      status,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
     await db().collection("shiftPlans").doc(planId).update({ updatedAt: FieldValue.serverTimestamp() });
+
+    // Compact form: only log the rawInput change. Segments + hours are
+    // derived from rawInput so storing them would just inflate the log.
+    if (beforeRaw !== parsed.rawInput) {
+      await logUpdate(ctxFromReq(req), {
+        collection: "shiftPlans/shifts",
+        resourceId: planId,
+        subResourceId: `${employeeId}_${date}`,
+        employeeId,
+        before: { rawInput: beforeRaw },
+        after: { rawInput: parsed.rawInput },
+      });
+    }
     res.json({ ok: true, hoursComputed: parsed.hoursComputed });
   }
 );
@@ -901,13 +991,24 @@ shiftsRouter.delete(
     }
 
     const docId = `${employeeId}_${date}`;
-    await db()
+    const shiftRef = db()
       .collection("shiftPlans")
       .doc(planId)
       .collection("shifts")
-      .doc(docId)
-      .delete();
+      .doc(docId);
+    const beforeSnap = await shiftRef.get();
+    const beforeData = beforeSnap.exists ? (beforeSnap.data() as Record<string, unknown>) : {};
+    await shiftRef.delete();
     await db().collection("shiftPlans").doc(planId).update({ updatedAt: FieldValue.serverTimestamp() });
+    if (beforeSnap.exists) {
+      await logDelete(ctxFromReq(req), {
+        collection: "shiftPlans/shifts",
+        resourceId: planId,
+        subResourceId: `${employeeId}_${date}`,
+        employeeId,
+        summary: { date, rawInput: beforeData.rawInput },
+      });
+    }
     res.json({ ok: true });
   }
 );
@@ -955,6 +1056,14 @@ shiftsRouter.put(
       batch.set(ref, { ...rule, updatedAt: FieldValue.serverTimestamp() });
     }
     await batch.commit();
+    await writeAudit(ctxFromReq(req as AuthRequest), {
+      action: "update",
+      collection: "shiftPlans/rules",
+      resourceId: planId,
+      extra: {
+        rules: rules.map((r) => ({ ruleType: r.ruleType, value: r.value, enabled: r.enabled })),
+      },
+    });
     res.json({ ok: true });
   }
 );
@@ -1015,6 +1124,13 @@ shiftsRouter.post(
         reviewedAt: null,
         rejectionReason: null,
       });
+    await logCreate(ctxFromReq(req), {
+      collection: "shiftPlans/unavailabilityRequests",
+      resourceId: planId,
+      subResourceId: ref.id,
+      employeeId,
+      summary: { date, reason, isException },
+    });
     res.status(201).json({ id: ref.id });
   }
 );
@@ -1034,17 +1150,27 @@ shiftsRouter.patch(
       return;
     }
 
-    await db()
+    const reqRef = db()
       .collection("shiftPlans")
       .doc(planId)
       .collection("unavailabilityRequests")
-      .doc(reqId)
-      .update({
-        status,
-        reviewedBy: req.uid ?? null,
-        reviewedAt: FieldValue.serverTimestamp(),
-        rejectionReason: status === "rejected" ? ((body.rejectionReason as string) ?? null) : null,
-      });
+      .doc(reqId);
+    const beforeSnap = await reqRef.get();
+    const before = beforeSnap.exists ? (beforeSnap.data() as Record<string, unknown>) : {};
+    await reqRef.update({
+      status,
+      reviewedBy: req.uid ?? null,
+      reviewedAt: FieldValue.serverTimestamp(),
+      rejectionReason: status === "rejected" ? ((body.rejectionReason as string) ?? null) : null,
+    });
+    await logUpdate(ctxFromReq(req), {
+      collection: "shiftPlans/unavailabilityRequests",
+      resourceId: planId,
+      subResourceId: reqId,
+      employeeId: before.employeeId as string | undefined,
+      before: { status: before.status },
+      after: { status },
+    });
     res.json({ ok: true });
   }
 );
@@ -1138,6 +1264,13 @@ shiftsRouter.post(
         rejectionReason: null,
       });
     await db().collection("shiftPlans").doc(planId).update({ updatedAt: FieldValue.serverTimestamp() });
+    await logCreate(ctxFromReq(req), {
+      collection: "shiftPlans/shiftOverrideRequests",
+      resourceId: planId,
+      subResourceId: ref.id,
+      employeeId,
+      summary: { date, requestedInput, reason, violationTypes },
+    });
     res.status(201).json({ id: ref.id });
   }
 );
@@ -1209,6 +1342,14 @@ shiftsRouter.patch(
       rejectionReason: status === "rejected" ? ((body.rejectionReason as string) ?? null) : null,
     });
     await db().collection("shiftPlans").doc(planId).update({ updatedAt: FieldValue.serverTimestamp() });
+    await logUpdate(ctxFromReq(req), {
+      collection: "shiftPlans/shiftOverrideRequests",
+      resourceId: planId,
+      subResourceId: reqId,
+      employeeId: overrideData.employeeId as string | undefined,
+      before: { status: overrideData.status },
+      after: { status },
+    });
     res.json({ ok: true });
   }
 );
@@ -1242,6 +1383,13 @@ shiftsRouter.delete(
     }
     await ref.delete();
     await db().collection("shiftPlans").doc(planId).update({ updatedAt: FieldValue.serverTimestamp() });
+    await logDelete(ctxFromReq(req), {
+      collection: "shiftPlans/shiftOverrideRequests",
+      resourceId: planId,
+      subResourceId: reqId,
+      employeeId: data.employeeId as string | undefined,
+      summary: { date: data.date, requestedInput: data.requestedInput, reason: data.reason },
+    });
     res.json({ ok: true });
   }
 );
@@ -1344,6 +1492,13 @@ shiftsRouter.post(
         rejectionReason: null,
       });
     await db().collection("shiftPlans").doc(planId).update({ updatedAt: FieldValue.serverTimestamp() });
+    await logCreate(ctxFromReq(req), {
+      collection: "shiftPlans/shiftChangeRequests",
+      resourceId: planId,
+      subResourceId: ref.id,
+      employeeId,
+      summary: { date, currentRawInput, reason },
+    });
     res.status(201).json({ id: ref.id });
   }
 );
@@ -1375,6 +1530,7 @@ shiftsRouter.patch(
       return;
     }
 
+    const beforeData = changeReqDoc.data() as Record<string, unknown>;
     await changeReqRef.update({
       status,
       reviewedBy: req.uid ?? null,
@@ -1382,6 +1538,14 @@ shiftsRouter.patch(
       rejectionReason: status === "rejected" ? ((body.rejectionReason as string) ?? null) : null,
     });
     await db().collection("shiftPlans").doc(planId).update({ updatedAt: FieldValue.serverTimestamp() });
+    await logUpdate(ctxFromReq(req), {
+      collection: "shiftPlans/shiftChangeRequests",
+      resourceId: planId,
+      subResourceId: reqId,
+      employeeId: beforeData.employeeId as string | undefined,
+      before: { status: beforeData.status },
+      after: { status },
+    });
     res.json({ ok: true });
   }
 );
@@ -1415,6 +1579,13 @@ shiftsRouter.delete(
     }
     await ref.delete();
     await db().collection("shiftPlans").doc(planId).update({ updatedAt: FieldValue.serverTimestamp() });
+    await logDelete(ctxFromReq(req), {
+      collection: "shiftPlans/shiftChangeRequests",
+      resourceId: planId,
+      subResourceId: reqId,
+      employeeId: data.employeeId as string | undefined,
+      summary: { date: data.date, currentRawInput: data.currentRawInput, reason: data.reason },
+    });
     res.json({ ok: true });
   }
 );
@@ -1484,6 +1655,13 @@ shiftsRouter.patch(
     });
 
     await batch.commit();
+    await logUpdate(ctxFromReq(req), {
+      collection: "shiftPlans",
+      resourceId: planId,
+      employeeId,
+      before: { modPersons: currentModPersons },
+      after: { modPersons: updated },
+    });
     res.json({ ok: true, modPersons: updated });
   }
 );
@@ -1507,13 +1685,24 @@ shiftsRouter.put(
       return;
     }
 
-    await db()
+    const modRef = db()
       .collection("shiftPlans")
       .doc(planId)
       .collection("modRow")
-      .doc(date)
-      .set({ code, updatedAt: FieldValue.serverTimestamp() });
+      .doc(date);
+    const beforeSnap = await modRef.get();
+    const beforeCode = beforeSnap.exists ? ((beforeSnap.data() as Record<string, unknown>).code as string | undefined) ?? null : null;
+    await modRef.set({ code, updatedAt: FieldValue.serverTimestamp() });
     await db().collection("shiftPlans").doc(planId).update({ updatedAt: FieldValue.serverTimestamp() });
+    if (beforeCode !== code) {
+      await logUpdate(ctxFromReq(req as AuthRequest), {
+        collection: "shiftPlans/modRow",
+        resourceId: planId,
+        subResourceId: date,
+        before: { code: beforeCode },
+        after: { code },
+      });
+    }
     res.json({ ok: true });
   }
 );
@@ -1525,13 +1714,23 @@ shiftsRouter.delete(
   requireRole("admin", "director", "manager"),
   async (req, res) => {
     const { planId, date } = req.params;
-    await db()
+    const modRef = db()
       .collection("shiftPlans")
       .doc(planId)
       .collection("modRow")
-      .doc(date)
-      .delete();
+      .doc(date);
+    const beforeSnap = await modRef.get();
+    const beforeCode = beforeSnap.exists ? ((beforeSnap.data() as Record<string, unknown>).code as string | undefined) ?? null : null;
+    await modRef.delete();
     await db().collection("shiftPlans").doc(planId).update({ updatedAt: FieldValue.serverTimestamp() });
+    if (beforeSnap.exists) {
+      await logDelete(ctxFromReq(req as AuthRequest), {
+        collection: "shiftPlans/modRow",
+        resourceId: planId,
+        subResourceId: date,
+        summary: { code: beforeCode },
+      });
+    }
     res.json({ ok: true });
   }
 );

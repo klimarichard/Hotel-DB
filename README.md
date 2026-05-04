@@ -29,7 +29,7 @@ This file contains implementation details, feature notes, and post-merge fix his
 | 5 | ✅ | Shift planner — `parseShiftExpression()`, monthly grid, availability rules, X-limit overrides |
 | 6 | ✅ | Vacation — request workflow, pendingEdit pattern, auto-X in shift plans, user↔employee linking |
 | 7 | ✅ | Payroll — see local `payroll.md` for implementation notes |
-| 8 | 🚧 | Polish — dashboard (`Přehled` — today's staffing, MOD, absent managers) ✅, stats, audit log UI |
+| 8 | 🚧 | Polish — dashboard (`Přehled` — today's staffing, MOD, absent managers) ✅, stats, audit log UI ✅ |
 
 ---
 
@@ -477,3 +477,44 @@ Managed in Settings → Společnosti tab. Only one card in edit mode at a time.
 **Backend** — `renumberSection(planRef, section, target?)` in `shifts.ts` handles all three cases. Uses ±0.5 tiebreak offsets so the targeted doc always lands at exactly the requested position regardless of move direction. POST/PUT/DELETE all bump `shiftPlans/{id}.updatedAt` so connected clients reload.
 
 **Frontend** — mutations call `loadPlan(true)` (silent reload — no `setPlan(null)` blank flash) immediately after the API responds, giving instant correct feedback. The `onSnapshot` listener also uses silent mode for background changes from other users.
+
+---
+
+## Audit log
+
+**Goal:** every business-data write is recorded so an admin can answer "who changed what, when" — most often "show me every change ever made to employee X."
+
+**Storage** — the existing `auditLog/` collection. Pre-existing actions (`reveal`, `export`) keep their original shapes and are preserved. New per-mutation entries are written by `functions/src/services/auditLog.ts`:
+
+```
+{
+  userId, userEmail, userRole,
+  action: "create" | "update" | "delete" | "reveal" | "export",
+  collection,                 // e.g. "employees", "shiftPlans/shifts", "settings"
+  resourceId, subResourceId?,
+  fieldPath?, oldValue?, newValue?, redacted?,   // for update entries (one entry per changed field)
+  summary?,                                      // for create / delete entries
+  employeeId?,                                   // denormalized for "all changes for X" filtering
+  timestamp                                      // serverTimestamp
+}
+```
+
+**Helper module** — `functions/src/services/auditLog.ts` exposes `logCreate`, `logUpdate`, `logDelete`, and `writeAudit`. `logUpdate` deep-diffs the pre/post snapshots and writes one entry per changed top-level field. Routes capture the pre-write doc, perform their normal write, then call the helper. **Every helper call is wrapped in try/catch internally** — an audit-log write failure must never abort the user's write. `IGNORED_FIELD_SUFFIXES` skips bookkeeping fields (`updatedAt`, `createdAt`, `lastLogin`).
+
+**Sensitive-field handling** — `birthNumber`, `idCardNumber`, `idCardExpiry`, `insuranceNumber`, `bankAccount` are recognized by leaf name. When one of these changes, the entry has `redacted: true` and **no** `oldValue` / `newValue` — never plaintext, never ciphertext. Routes can pass an additional `sensitiveFields` list when the field name doesn't make the redaction rule obvious. Snapshots in `summary` get sensitive keys replaced with the literal `"[redacted]"`.
+
+**Auth context** — `functions/src/middleware/auth.ts` was extended to populate `req.userEmail` from the verified Firebase ID token, so audit writes don't need an extra Firestore lookup per call. Helper consumes `ctxFromReq(req)`.
+
+**Instrumented surface** — every PATCH/PUT/POST/DELETE in: `employees` (root + contact + employment + documents + benefits + delete + the legacy reveal/export, now migrated through the helper), `contracts` (CRUD + signed PDF upload/delete), `shifts` (~22 mutations: plans, planEmployees, per-shift cells, rules, unavailability, overrides, change requests, MOD row), `vacationRequests`, `payroll` (period create/lock/copy, per-entry edits, notes, recalc, **stravenkový paušál at PATCH /payroll/settings**), `auth` (set-role, create-user, deactivate, reactivate, employee link), `contractTemplates` (create + put), `departments`, `jobPositions`, `educationLevels`, `companies`. **Skipped on purpose:** `PUT /api/auth/me/theme` — cosmetic per-user preference, not worth the noise.
+
+**Per-shift edits** — `PUT /shifts/plans/:planId/shifts/:employeeId/:date` only logs when `rawInput` actually changed; re-saves with the same value are silently no-op for the audit log (otherwise a tab-out-tab-in flow would generate spam). The shift entry denormalizes `employeeId`, so per-shift edits are filterable by employee in the same `employeeId` query as employee-doc edits.
+
+**Read endpoint** — `functions/src/routes/auditLog.ts` mounts `GET /api/audit` (admin only). Filters: `employeeId`, `userId`, `collection`, `action`, `from`, `to`. Cursor pagination via `cursor=<lastDocId>`, default page 100, max 500. `GET /api/audit/meta/collections` returns the distinct `collection` values seen in the most recent 5000 entries to populate the filter dropdown without enumerating all docs.
+
+**Composite indexes** — `firestore.indexes.json` declares `(employeeId, timestamp desc)`, `(userId, timestamp desc)`, `(collection, timestamp desc)`, `(action, timestamp desc)`. The combined-filter case (e.g. employee + date range) is served by these indexes plus the inequality on `timestamp`.
+
+**Frontend** — `frontend/src/pages/AuditLogPage.tsx` (admin-only, `/audit`) shows a filterable, paginated table modeled on `EmployeesPage`. Filter state is mirrored to URL query params so deep-links work. Each row shows actor + action + collection + resource (linked to `/zamestnanci/:id` when `employeeId` is present) + field + old → new diff. Sensitive-field updates render as italic "citlivé pole změněno" without values. Clicking a row expands the full JSON entry. `EmployeeDetailPage` gains a "Historie změn" section (admin only) with the 10 most recent entries for that employee plus a "Zobrazit všechny změny →" link to `/audit?employeeId=…`.
+
+**Nav** — added under `adminItems` in `Layout.tsx` with `adminOnly: true` (admin-only despite director seeing other entries — director can't read audit logs because `requireRole("admin")` enforces that on the backend).
+
+**Retention** — none. Entries persist forever per the user's choice. If volume becomes a problem later, add a scheduled prune in `functions/src/index.ts`.

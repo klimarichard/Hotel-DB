@@ -4,6 +4,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { requireAuth, requireRole, AuthRequest } from "../middleware/auth";
 import { renderPdf, RenderMargins } from "../services/pdfRenderer";
 import type { ContractType } from "./contractTemplates";
+import { ctxFromReq, logCreate, logUpdate, logDelete } from "../services/auditLog";
 
 export const contractsRouter = Router();
 
@@ -145,6 +146,19 @@ contractsRouter.post(
     if (displayName) docData.displayName = displayName;
 
     await docRef.set(docData);
+    await logCreate(ctxFromReq(req), {
+      collection: "employees/contracts",
+      resourceId: employeeId,
+      subResourceId: docRef.id,
+      employeeId,
+      summary: {
+        type,
+        status,
+        displayName,
+        employmentRowId,
+        hasUnsignedPdf: !!unsignedStoragePath,
+      },
+    });
     res.status(201).json({ id: docRef.id });
   }
 );
@@ -186,7 +200,16 @@ contractsRouter.patch(
     }
     if (notes !== undefined) update.notes = notes;
 
+    const before = existing.data() as Record<string, unknown>;
     await ref.update(update);
+    await logUpdate(ctxFromReq(req), {
+      collection: "employees/contracts",
+      resourceId: req.params.employeeId,
+      subResourceId: req.params.contractId,
+      employeeId: req.params.employeeId,
+      before,
+      after: { ...before, ...update },
+    });
     res.json({ ok: true });
   }
 );
@@ -299,11 +322,21 @@ contractsRouter.post(
       metadata: { metadata: { uploadedBy: req.uid ?? "unknown" } },
     });
 
-    await ref.update({
+    const before = existing.data() as Record<string, unknown>;
+    const update = {
       status: "signed",
       signedStoragePath,
       signedAt: FieldValue.serverTimestamp(),
       signedUploadedBy: req.uid,
+    } as Record<string, unknown>;
+    await ref.update(update);
+    await logUpdate(ctxFromReq(req), {
+      collection: "employees/contracts",
+      resourceId: employeeId,
+      subResourceId: contractId,
+      employeeId,
+      before,
+      after: { ...before, ...update },
     });
 
     res.json({ ok: true, signedStoragePath });
@@ -338,11 +371,26 @@ contractsRouter.delete(
       await admin.storage().bucket().file(signedPath).delete().catch(() => undefined);
     }
 
+    const before = data;
     await ref.update({
       status: "unsigned",
       signedStoragePath: FieldValue.delete(),
       signedAt: FieldValue.delete(),
       signedUploadedBy: FieldValue.delete(),
+    });
+    await logUpdate(ctxFromReq(req), {
+      collection: "employees/contracts",
+      resourceId: req.params.employeeId,
+      subResourceId: req.params.contractId,
+      employeeId: req.params.employeeId,
+      before,
+      after: {
+        ...before,
+        status: "unsigned",
+        signedStoragePath: null,
+        signedAt: null,
+        signedUploadedBy: null,
+      },
     });
 
     res.json({ ok: true });
@@ -380,6 +428,17 @@ contractsRouter.delete(
     );
 
     await ref.delete();
+    await logDelete(ctxFromReq(req), {
+      collection: "employees/contracts",
+      resourceId: req.params.employeeId,
+      subResourceId: req.params.contractId,
+      employeeId: req.params.employeeId,
+      summary: {
+        type: data.type,
+        status: data.status,
+        displayName: data.displayName,
+      },
+    });
     res.json({ ok: true });
   }
 );

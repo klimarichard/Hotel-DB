@@ -3,6 +3,7 @@ import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireAuth, requireRole, AuthRequest } from "../middleware/auth";
 import { applyVacationXsToPlans, removeVacationXsFromPlans, findShiftCollisions } from "./shifts";
+import { ctxFromReq, logCreate, logUpdate, logDelete } from "../services/auditLog";
 
 export const vacationRouter = Router();
 const db = () => admin.firestore();
@@ -203,6 +204,13 @@ vacationRouter.post("/", requireAuth, async (req: AuthRequest, res) => {
     rejectionReason: null,
   });
 
+  await logCreate(ctxFromReq(req), {
+    collection: "vacationRequests",
+    resourceId: ref.id,
+    employeeId,
+    summary: { startDate, endDate, reason, status: "pending" },
+  });
+
   res.status(201).json({ id: ref.id, firstName, lastName });
 });
 
@@ -268,9 +276,23 @@ vacationRouter.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
     if (data.status === "pending") {
       // Pending request — update dates directly, no approval needed
       await docRef.update({ startDate, endDate, reason });
+      await logUpdate(ctxFromReq(req), {
+        collection: "vacationRequests",
+        resourceId: id,
+        employeeId: data.employeeId as string,
+        before: { startDate: data.startDate, endDate: data.endDate, reason: data.reason },
+        after: { startDate, endDate, reason },
+      });
     } else {
       // Approved request — store as pending edit; original dates stay until approved
       await docRef.update({ pendingEdit: { startDate, endDate, reason } });
+      await logUpdate(ctxFromReq(req), {
+        collection: "vacationRequests",
+        resourceId: id,
+        employeeId: data.employeeId as string,
+        before: { pendingEdit: data.pendingEdit ?? null },
+        after: { pendingEdit: { startDate, endDate, reason } },
+      });
     }
 
     res.json({ ok: true });
@@ -307,6 +329,13 @@ vacationRouter.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
   const excludeDates: string[] = Array.isArray(rawExcluded)
     ? (rawExcluded as unknown[]).filter((x): x is string => typeof x === "string")
     : [];
+
+  const beforeForLog: Record<string, unknown> = {
+    status: data.status,
+    startDate: data.startDate,
+    endDate: data.endDate,
+    pendingEdit: data.pendingEdit ?? null,
+  };
 
   if (pendingEdit) {
     // Acting on a pending edit of an already-approved request
@@ -385,6 +414,23 @@ vacationRouter.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
     }
   }
 
+  // Re-read for the after-snapshot
+  const afterSnap = await docRef.get();
+  const afterData = afterSnap.exists ? (afterSnap.data() as Record<string, unknown>) : {};
+  await logUpdate(ctxFromReq(req), {
+    collection: "vacationRequests",
+    resourceId: id,
+    employeeId: data.employeeId as string,
+    before: beforeForLog,
+    after: {
+      status: afterData.status,
+      startDate: afterData.startDate,
+      endDate: afterData.endDate,
+      pendingEdit: afterData.pendingEdit ?? null,
+      rejectionReason: afterData.rejectionReason ?? null,
+    },
+  });
+
   res.json({ ok: true });
 });
 
@@ -422,6 +468,18 @@ vacationRouter.delete("/:id", requireAuth, async (req: AuthRequest, res) => {
       data.endDate as string
     );
   }
+
+  await logDelete(ctxFromReq(req), {
+    collection: "vacationRequests",
+    resourceId: id,
+    employeeId: data.employeeId as string,
+    summary: {
+      startDate: data.startDate,
+      endDate: data.endDate,
+      reason: data.reason,
+      status: data.status,
+    },
+  });
 
   res.json({ ok: true });
 });
