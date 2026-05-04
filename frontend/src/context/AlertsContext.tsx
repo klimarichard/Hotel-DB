@@ -11,13 +11,16 @@ interface AlertsContextValue {
   unreadCount: number;
   readIds: Set<string>;
   markRead: (ids: string[]) => void;
-  markAllRead: () => void;
+  // Pass the ids of the alerts currently visible on the page; the context
+  // unions them into the existing read set. Falls back to the context's
+  // own fetched list when called with no argument (used by tests/dev).
+  markAllRead: (ids?: string[]) => void;
 
   // Probation-end alerts
   unreadProbationCount: number;
   readProbationIds: Set<string>;
   markProbationRead: (ids: string[]) => void;
-  markAllProbationRead: () => void;
+  markAllProbationRead: (ids?: string[]) => void;
 
   refresh: () => void;
 }
@@ -76,10 +79,13 @@ export function AlertsProvider({ children }: { children: ReactNode }) {
     });
   }
 
-  function markAllRead() {
-    const allIds = alerts.map((a) => a.id);
-    setReadIds(new Set(allIds));
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(allIds));
+  function markAllRead(ids?: string[]) {
+    const idsToAdd = ids ?? alerts.map((a) => a.id);
+    setReadIds((prev) => {
+      const next = new Set([...prev, ...idsToAdd]);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify([...next]));
+      return next;
+    });
   }
 
   function markProbationRead(ids: string[]) {
@@ -90,10 +96,13 @@ export function AlertsProvider({ children }: { children: ReactNode }) {
     });
   }
 
-  function markAllProbationRead() {
-    const allIds = probationAlerts.map((a) => a.id);
-    setReadProbationIds(new Set(allIds));
-    localStorage.setItem(PROBATION_STORAGE_KEY, JSON.stringify(allIds));
+  function markAllProbationRead(ids?: string[]) {
+    const idsToAdd = ids ?? probationAlerts.map((a) => a.id);
+    setReadProbationIds((prev) => {
+      const next = new Set([...prev, ...idsToAdd]);
+      localStorage.setItem(PROBATION_STORAGE_KEY, JSON.stringify([...next]));
+      return next;
+    });
   }
 
   function refresh() {

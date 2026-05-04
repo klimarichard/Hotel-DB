@@ -104,7 +104,10 @@ export default function ProbationTab() {
     <div>
       {unread.length > 0 && (
         <div className={styles.tabHeader}>
-          <Button variant="secondary" onClick={markAllProbationRead}>
+          <Button
+            variant="secondary"
+            onClick={() => markAllProbationRead(alerts.map((a) => a.id))}
+          >
             Označit vše jako přečtené
           </Button>
         </div>

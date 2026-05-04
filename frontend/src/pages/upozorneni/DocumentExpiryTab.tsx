@@ -101,7 +101,10 @@ export default function DocumentExpiryTab() {
     <div>
       {unread.length > 0 && (
         <div className={styles.tabHeader}>
-          <Button variant="secondary" onClick={markAllRead}>
+          <Button
+            variant="secondary"
+            onClick={() => markAllRead(alerts.map((a) => a.id))}
+          >
             Označit vše jako přečtené
           </Button>
         </div>
