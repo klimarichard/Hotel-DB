@@ -150,9 +150,21 @@ export async function logDelete(
 
 // Compares `before` and `after` and writes one audit entry per changed top-level field.
 // For sensitive fields, the entry sets `redacted: true` and omits values.
-// Fields ending in "updatedAt" / "createdAt" / "_timestamp" are ignored — they
-// always change on writes and aren't user-meaningful.
+//
+// Ignored: bookkeeping timestamps (always change) and `id` — the frontend
+// often re-sends the doc id as a body field after reading it back from the
+// API, but the stored doc has no `id` field, so a naive diff flags every
+// save as "id changed from undefined to <docId>". The doc id is the path,
+// not data.
 const IGNORED_FIELD_SUFFIXES = ["updatedAt", "createdAt", "lastLogin"];
+const IGNORED_FIELD_NAMES = new Set<string>(["id"]);
+
+// Treat all "absent-ish" values as equivalent so saving an unchanged form
+// doesn't flag every blank optional field. A user who explicitly clears a
+// previously non-empty value still produces a meaningful diff.
+function isNullish(v: unknown): boolean {
+  return v === null || v === undefined || v === "";
+}
 
 export async function logUpdate(
   ctx: AuditContext,
@@ -172,11 +184,13 @@ export async function logUpdate(
   const keys = new Set<string>([...Object.keys(before), ...Object.keys(after)]);
 
   for (const key of keys) {
+    if (IGNORED_FIELD_NAMES.has(key)) continue;
     if (IGNORED_FIELD_SUFFIXES.some((s) => key === s || key.endsWith(s))) continue;
 
     const oldVal = (before as Record<string, unknown>)[key];
     const newVal = (after as Record<string, unknown>)[key];
 
+    if (isNullish(oldVal) && isNullish(newVal)) continue;
     if (deepEqual(oldVal, newVal)) continue;
 
     const fieldPath = (args.fieldPathPrefix ?? "") + key;
