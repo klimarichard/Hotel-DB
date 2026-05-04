@@ -42,7 +42,7 @@ const staffItems = [
 ];
 
 const adminItems = [
-  { to: "/upozorneni", label: "Neplatné doklady" },
+  { to: "/upozorneni", label: "Upozornění" },
   { to: "/smlouvy", label: "Šablony smluv" },
   { to: "/audit", label: "Log změn" },
   { to: "/nastaveni", label: "Nastavení" },
@@ -50,7 +50,8 @@ const adminItems = [
 
 export default function Layout() {
   const { user, role } = useAuth();
-  const { unreadCount } = useAlertsContext();
+  const { unreadCount, unreadProbationCount } = useAlertsContext();
+  const upozorneniBadge = unreadCount + unreadProbationCount;
   const { pendingCount: pendingOverrideCount } = useShiftOverridesContext();
   const { pendingCount: pendingChangeRequestCount } = useShiftChangeRequestsContext();
   const { pendingCount: pendingVacationCount } = useVacationContext();
@@ -121,8 +122,8 @@ export default function Layout() {
                 >
                   <span className={styles.navLinkInner}>
                     {item.label}
-                    {item.to === "/upozorneni" && unreadCount > 0 && (
-                      <span className={styles.badge}>{unreadCount}</span>
+                    {item.to === "/upozorneni" && upozorneniBadge > 0 && (
+                      <span className={styles.badge}>{upozorneniBadge}</span>
                     )}
                   </span>
                 </NavLink>
