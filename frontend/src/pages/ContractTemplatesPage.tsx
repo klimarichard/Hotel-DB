@@ -417,6 +417,7 @@ const FontSize = Extension.create({
   },
 });
 import { useAuth } from "@/hooks/useAuth";
+import ConfirmModal from "@/components/ConfirmModal";
 import modalStyles from "@/components/ConfirmModal.module.css";
 import {
   ContractType,
@@ -478,6 +479,27 @@ interface TemplateDoc extends TemplateMeta {
   margins?: PageMargins;
 }
 
+function SaveIcon() {
+  // Floppy-disk glyph at 14×14 — matches the Button text size.
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+      <polyline points="17 21 17 13 7 13 7 21" />
+      <polyline points="7 3 7 8 15 8" />
+    </svg>
+  );
+}
+
 export default function ContractTemplatesPage() {
   const { user } = useAuth();
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -502,6 +524,15 @@ export default function ContractTemplatesPage() {
   // (active toolbar buttons, in-table contextual buttons, etc.) reflect
   // selection changes. TipTap React v3 doesn't subscribe to these by default.
   const [, forceRerender] = useReducer((x: number) => x + 1, 0);
+
+  // Unsaved-changes tracking. The loader sets `isLoadingRef` while it
+  // pushes content into the editor so the resulting `update` events don't
+  // get counted as user edits.
+  const [isDirty, setIsDirty] = useState(false);
+  const isLoadingRef = useRef(false);
+  // Target template id remembered while the unsaved-changes confirm modal
+  // is open. null when no switch is pending.
+  const [pendingSwitch, setPendingSwitch] = useState<ContractType | null>(null);
 
   const editor = useEditor({
     extensions: [
@@ -636,10 +667,28 @@ export default function ContractTemplatesPage() {
       });
       if (!resp.ok) return;
       const doc: TemplateDoc = await resp.json();
+      isLoadingRef.current = true;
       editor.commands.setContent(doc.htmlContent || "<p></p>");
       setMargins(doc.margins ?? DEFAULT_MARGINS);
+      // Release the flag on the next tick so any synchronous `update`
+      // events fired by setContent are still counted as load events.
+      setTimeout(() => {
+        isLoadingRef.current = false;
+        setIsDirty(false);
+      }, 0);
     })();
   }, [selectedTemplateId, editor, user]);
+
+  // Mark dirty on any user-driven editor update.
+  useEffect(() => {
+    if (!editor) return;
+    const onUpdate = () => {
+      if (isLoadingRef.current) return;
+      setIsDirty(true);
+    };
+    editor.on("update", onUpdate);
+    return () => { editor.off("update", onUpdate); };
+  }, [editor]);
 
   function insertVariable(key: string, kind?: "if") {
     if (!editor) return;
@@ -683,6 +732,7 @@ export default function ContractTemplatesPage() {
 
       if (!resp.ok) throw new Error("Save failed");
       setSaveMsg("Uloženo");
+      setIsDirty(false);
       await fetchTemplates();
     } catch {
       setSaveMsg("Chyba při ukládání");
@@ -690,6 +740,32 @@ export default function ContractTemplatesPage() {
       setSaving(false);
       setTimeout(() => setSaveMsg(null), 3000);
     }
+  }
+
+  // Wrap the sidebar template switch so unsaved changes prompt the user.
+  function requestTemplateSwitch(id: ContractType) {
+    if (id === selected) return;
+    if (isDirty) {
+      setPendingSwitch(id);
+      return;
+    }
+    setSelected(id);
+  }
+
+  async function handleSaveAndSwitch() {
+    const target = pendingSwitch;
+    if (!target) return;
+    await handleSave();
+    setPendingSwitch(null);
+    setSelected(target);
+  }
+
+  function handleDiscardAndSwitch() {
+    const target = pendingSwitch;
+    if (!target) return;
+    setPendingSwitch(null);
+    setIsDirty(false);
+    setSelected(target);
   }
 
   function applySearch(query: string) {
@@ -804,8 +880,11 @@ export default function ContractTemplatesPage() {
               {saveMsg}
             </span>
           )}
-          <Button variant="primary" onClick={handleSave} disabled={saving}>
-            {saving ? "Ukládám…" : "Uložit šablonu"}
+          <Button variant="primary" onClick={handleSave} disabled={saving || !isDirty}>
+            <span className={styles.saveBtnInner}>
+              <SaveIcon />
+              {saving ? "Ukládám…" : "Uložit šablonu"}
+            </span>
           </Button>
         </div>
       </div>
@@ -826,9 +905,14 @@ export default function ContractTemplatesPage() {
                   <li
                     key={id}
                     className={`${styles.templateItem} ${selected === id ? styles.templateItemActive : ""}`}
-                    onClick={() => setSelected(id)}
+                    onClick={() => requestTemplateSwitch(id)}
                   >
-                    <span className={styles.templateName}>{label}</span>
+                    <span className={styles.templateName}>
+                      {label}
+                      {selected === id && isDirty && (
+                        <span className={styles.dirtyDot} title="Neuložené změny">•</span>
+                      )}
+                    </span>
                     {meta ? (
                       <span className={styles.templateDate}>
                         {formatTimestampCZ(meta.updatedAt)}
@@ -1212,7 +1296,7 @@ export default function ContractTemplatesPage() {
                   <button
                     key={p.key}
                     className={`${styles.marginsPreset} ${active ? styles.marginsPresetActive : ""}`}
-                    onClick={() => setMargins(p.value)}
+                    onClick={() => { setMargins(p.value); setIsDirty(true); }}
                     type="button"
                   >{p.label}</button>
                 );
@@ -1233,6 +1317,7 @@ export default function ContractTemplatesPage() {
                         const n = Number(e.target.value);
                         if (!Number.isFinite(n)) return;
                         setMargins((m) => ({ ...m, [side]: Math.max(0, Math.min(100, n)) }));
+                        setIsDirty(true);
                       }}
                     />
                     mm
@@ -1442,6 +1527,22 @@ export default function ContractTemplatesPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {pendingSwitch && (
+        <ConfirmModal
+          title="Neuložené změny"
+          message="V aktuální šabloně máte neuložené změny. Co s nimi?"
+          confirmLabel="Uložit a pokračovat"
+          tertiary={{
+            label: "Zahodit změny",
+            onClick: handleDiscardAndSwitch,
+            variant: "danger",
+          }}
+          cancelLabel="Zrušit"
+          onConfirm={handleSaveAndSwitch}
+          onCancel={() => setPendingSwitch(null)}
+        />
       )}
     </div>
   );

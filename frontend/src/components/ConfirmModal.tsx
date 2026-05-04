@@ -1,6 +1,12 @@
 import Button from "./Button";
 import styles from "./ConfirmModal.module.css";
 
+interface TertiaryAction {
+  label: string;
+  onClick: () => void;
+  variant?: "primary" | "secondary" | "danger";
+}
+
 interface Props {
   title: string;
   message: string;
@@ -8,6 +14,9 @@ interface Props {
   cancelLabel?: string;
   showCancel?: boolean;
   danger?: boolean;
+  // Optional middle button — used for three-way dialogs like
+  // "Save and continue / Discard / Cancel".
+  tertiary?: TertiaryAction;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -19,6 +28,7 @@ export default function ConfirmModal({
   cancelLabel = "Zrušit",
   showCancel = true,
   danger = false,
+  tertiary,
   onConfirm,
   onCancel,
 }: Props) {
@@ -33,6 +43,11 @@ export default function ConfirmModal({
           {showCancel && (
             <Button variant="secondary" onClick={onCancel}>
               {cancelLabel}
+            </Button>
+          )}
+          {tertiary && (
+            <Button variant={tertiary.variant ?? "danger"} onClick={tertiary.onClick}>
+              {tertiary.label}
             </Button>
           )}
           <Button variant={danger ? "danger" : "primary"} onClick={onConfirm}>
