@@ -12,6 +12,7 @@ import ContractTemplatesPage from "@/pages/ContractTemplatesPage";
 import ShiftPlannerPage from "@/pages/ShiftPlannerPage";
 import VacationPage from "@/pages/VacationPage";
 import OverviewPage from "@/pages/OverviewPage";
+import AuditLogPage from "@/pages/AuditLogPage";
 import { AlertsProvider } from "@/context/AlertsContext";
 import { ShiftOverridesProvider } from "@/context/ShiftOverridesContext";
 import { ShiftChangeRequestsProvider } from "@/context/ShiftChangeRequestsContext";
@@ -72,6 +73,7 @@ export default function App() {
         <Route path="smlouvy" element={<RequireRole allow={["admin", "director"]}><ContractTemplatesPage /></RequireRole>} />
         <Route path="upozorneni" element={<RequireRole allow={["admin", "director"]}><AlertsPage /></RequireRole>} />
         <Route path="nastaveni" element={<RequireRole allow={["admin"]}><SettingsPage /></RequireRole>} />
+        <Route path="audit" element={<RequireRole allow={["admin"]}><AuditLogPage /></RequireRole>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
