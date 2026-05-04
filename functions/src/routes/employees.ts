@@ -10,6 +10,10 @@ import {
   logDelete,
   writeAudit,
 } from "../services/auditLog";
+import {
+  refreshProbationAlertsForEmployee,
+  deleteProbationAlertsForEmployee,
+} from "../services/probationAlerts";
 
 export const employeesRouter = Router();
 
@@ -480,6 +484,11 @@ employeesRouter.post(
       },
     });
 
+    // Reconcile probation alerts (best-effort — never block the response)
+    refreshProbationAlertsForEmployee(req.params.id).catch((e) =>
+      console.error("[probationAlerts] refresh failed:", e)
+    );
+
     res.status(201).json({ id: newRow.id });
   }
 );
@@ -745,6 +754,10 @@ employeesRouter.patch(
       after: { ...before, ...body },
     });
 
+    refreshProbationAlertsForEmployee(req.params.id).catch((e) =>
+      console.error("[probationAlerts] refresh failed:", e)
+    );
+
     res.json({ success: true });
   }
 );
@@ -849,6 +862,9 @@ employeesRouter.delete(
       vacSnap.docs.forEach((d) => batch.delete(d.ref));
       await batch.commit();
     }
+
+    // Cascade-delete probation alerts for this employee
+    await deleteProbationAlertsForEmployee(id);
 
     // Capture summary before delete for the audit log
     const empSnap = await empRef.get();

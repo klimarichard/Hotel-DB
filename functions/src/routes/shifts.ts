@@ -1191,6 +1191,49 @@ shiftsRouter.get(
   }
 );
 
+// GET /shifts/overrides/pending — full list across all plans, denormalized
+// with planId / planMonth / planYear so the upozorneni hub can deep-link.
+shiftsRouter.get(
+  "/overrides/pending",
+  requireAuth,
+  requireRole("admin", "director"),
+  async (_req, res) => {
+    const snap = await db()
+      .collectionGroup("shiftOverrideRequests")
+      .where("status", "==", "pending")
+      .orderBy("requestedAt", "desc")
+      .get();
+    // parent.parent is the shiftPlans/{planId} doc. Resolve plan year/month.
+    const planMetaCache = new Map<string, { year: number; month: number } | null>();
+    async function planMeta(planId: string) {
+      if (planMetaCache.has(planId)) return planMetaCache.get(planId)!;
+      const planDoc = await db().collection("shiftPlans").doc(planId).get();
+      const meta = planDoc.exists
+        ? {
+            year: (planDoc.data() as Record<string, unknown>).year as number,
+            month: (planDoc.data() as Record<string, unknown>).month as number,
+          }
+        : null;
+      planMetaCache.set(planId, meta);
+      return meta;
+    }
+    const out = await Promise.all(
+      snap.docs.map(async (d) => {
+        const planId = d.ref.parent.parent?.id ?? "";
+        const meta = planId ? await planMeta(planId) : null;
+        return {
+          id: d.id,
+          planId,
+          planYear: meta?.year ?? null,
+          planMonth: meta?.month ?? null,
+          ...d.data(),
+        };
+      })
+    );
+    res.json(out);
+  }
+);
+
 // ─── Shift Override Requests ─────────────────────────────────────────────────
 
 // GET /shifts/plans/:planId/shiftOverrides — list override requests
@@ -1407,6 +1450,47 @@ shiftsRouter.get(
       .where("status", "==", "pending")
       .get();
     res.json({ count: snap.size });
+  }
+);
+
+// GET /shifts/changeRequests/pending — full list across all plans
+shiftsRouter.get(
+  "/changeRequests/pending",
+  requireAuth,
+  requireRole("admin", "director"),
+  async (_req, res) => {
+    const snap = await db()
+      .collectionGroup("shiftChangeRequests")
+      .where("status", "==", "pending")
+      .orderBy("requestedAt", "desc")
+      .get();
+    const planMetaCache = new Map<string, { year: number; month: number } | null>();
+    async function planMeta(planId: string) {
+      if (planMetaCache.has(planId)) return planMetaCache.get(planId)!;
+      const planDoc = await db().collection("shiftPlans").doc(planId).get();
+      const meta = planDoc.exists
+        ? {
+            year: (planDoc.data() as Record<string, unknown>).year as number,
+            month: (planDoc.data() as Record<string, unknown>).month as number,
+          }
+        : null;
+      planMetaCache.set(planId, meta);
+      return meta;
+    }
+    const out = await Promise.all(
+      snap.docs.map(async (d) => {
+        const planId = d.ref.parent.parent?.id ?? "";
+        const meta = planId ? await planMeta(planId) : null;
+        return {
+          id: d.id,
+          planId,
+          planYear: meta?.year ?? null,
+          planMonth: meta?.month ?? null,
+          ...d.data(),
+        };
+      })
+    );
+    res.json(out);
   }
 );
 

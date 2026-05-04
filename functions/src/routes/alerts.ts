@@ -23,3 +23,20 @@ alertsRouter.get(
     res.json(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
   }
 );
+
+/**
+ * GET /api/alerts/probation
+ * Returns all active probation-end alerts, ordered by daysUntilEnd asc.
+ */
+alertsRouter.get(
+  "/probation",
+  requireAuth,
+  requireRole("admin", "director"),
+  async (_req: AuthRequest, res) => {
+    const snap = await db()
+      .collection("probationAlerts")
+      .orderBy("daysUntilEnd", "asc")
+      .get();
+    res.json(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+  }
+);
