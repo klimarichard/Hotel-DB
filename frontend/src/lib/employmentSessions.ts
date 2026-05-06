@@ -33,8 +33,8 @@ export interface ContractRecord {
   rowSnapshot?: Record<string, unknown>;
   unsignedStoragePath?: string;
   signedStoragePath?: string;
-  generatedAt?: { _seconds: number; _nanoseconds: number } | null;
-  signedAt?: { _seconds: number; _nanoseconds: number } | null;
+  generatedAt?: { seconds?: number; _seconds?: number } | null;
+  signedAt?: { seconds?: number; _seconds?: number } | null;
   notes?: string;
   displayName?: string;
 }
@@ -191,8 +191,8 @@ export function mapContractsToRows(
     );
     if (matches.length === 0) continue;
     matches.sort((a, b) => {
-      const at = a.generatedAt?._seconds ?? 0;
-      const bt = b.generatedAt?._seconds ?? 0;
+      const at = a.generatedAt?.seconds ?? a.generatedAt?._seconds ?? 0;
+      const bt = b.generatedAt?.seconds ?? b.generatedAt?._seconds ?? 0;
       return bt - at;
     });
     out.set(row.id, matches[0]);
