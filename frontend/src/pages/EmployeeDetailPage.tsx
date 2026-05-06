@@ -562,6 +562,7 @@ function AddEntryModal({
   employee,
   employment,
   initialRow,
+  lockedChangeType,
 }: {
   onClose: () => void;
   onSaved: (row: EmploymentRow) => void;
@@ -569,11 +570,20 @@ function AddEntryModal({
   employee: Employee;
   employment: EmploymentRow[];
   initialRow?: EmploymentRow;
+  /**
+   * When set, the changeType selector is hidden and the form is pre-filled
+   * with this value. Used by the per-session "Přidat dodatek" / "Ukončit
+   * smlouvu" buttons and the page-level "+ Nástup" button so each entry
+   * point produces a single, well-known kind of row.
+   */
+  lockedChangeType?: ChangeType;
 }) {
   const isEdit = !!initialRow;
-  const [form, setForm] = useState<EmploymentForm>(() =>
-    initialRow ? rowToForm(initialRow) : emptyForm
-  );
+  const [form, setForm] = useState<EmploymentForm>(() => {
+    if (initialRow) return rowToForm(initialRow);
+    if (lockedChangeType) return { ...emptyForm, changeType: lockedChangeType };
+    return emptyForm;
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [departments, setDepartments] = useState<DepartmentRec[]>([]);
@@ -742,24 +752,36 @@ function AddEntryModal({
     }
   }
 
+  const title = isEdit
+    ? "Upravit záznam"
+    : lockedChangeType === "nástup"
+      ? "Nový nástup"
+      : lockedChangeType === "změna smlouvy"
+        ? "Nový dodatek"
+        : lockedChangeType === "ukončení"
+          ? "Ukončit smlouvu"
+          : "Přidat záznam do historie";
+
   return (
     <div className={styles.modalOverlay}>
       <div className={styles.modal}>
         <div className={styles.modalHeader}>
-          <span className={styles.modalTitle}>{isEdit ? "Upravit záznam" : "Přidat záznam do historie"}</span>
+          <span className={styles.modalTitle}>{title}</span>
           <button className={styles.modalClose} onClick={onClose}>✕</button>
         </div>
         <form onSubmit={handleSubmit}>
           <div className={styles.modalBody}>
 
-            {/* ── Always visible: typ změny + datum ── */}
+            {/* ── Always visible: typ změny + datum (selector hidden when locked) ── */}
             <div className={styles.modalGrid}>
-              <div className={styles.modalField}>
-                <label className={styles.modalLabel}>Typ změny *</label>
-                <select className={styles.modalInput} value={form.changeType} onChange={(e) => setField("changeType", e.target.value as ChangeType)}>
-                  {CHANGE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-                </select>
-              </div>
+              {!lockedChangeType && (
+                <div className={styles.modalField}>
+                  <label className={styles.modalLabel}>Typ změny *</label>
+                  <select className={styles.modalInput} value={form.changeType} onChange={(e) => setField("changeType", e.target.value as ChangeType)}>
+                    {CHANGE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+              )}
               <div className={styles.modalField}>
                 <label className={styles.modalLabel}>Datum *</label>
                 <input className={styles.modalInput} type="date" value={form.startDate} onChange={(e) => setField("startDate", e.target.value)} required />
