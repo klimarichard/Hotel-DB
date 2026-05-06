@@ -1375,12 +1375,12 @@ export default function EmployeeDetailPage() {
           {employment.length === 0 ? (
             <p className={styles.loading} style={{ padding: "1rem 0" }}>Žádné záznamy.</p>
           ) : (
-            [...groupBySession(employment)].reverse().map((session) => (
+            [...groupBySession(employment)].reverse().map((session, idx) => (
               <EmploymentSessionCard
                 key={session.nastup.id}
                 session={session}
                 contractsByRow={mapContractsToRows(session.rows, contracts)}
-                defaultExpanded={!session.terminated}
+                defaultExpanded={idx === 0}
                 companies={{}}
                 employeeId={id!}
                 canEdit={canDelete}
