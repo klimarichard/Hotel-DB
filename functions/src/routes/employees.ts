@@ -60,7 +60,7 @@ async function recomputeRootFromLatestSession(
   if (!latest || latest.terminated) return null;
 
   let jobTitle = (latest.nastup.jobTitle as string | undefined) ?? "";
-  const contractType = (latest.nastup.contractType as string | undefined) ?? "";
+  let contractType = (latest.nastup.contractType as string | undefined) ?? "";
   const companyId = (latest.nastup.companyId as string | undefined) ?? null;
   const department = (latest.nastup.department as string | undefined) ?? "";
 
@@ -68,6 +68,13 @@ async function recomputeRootFromLatestSession(
     const changes = (dodatek.changes as Array<{ changeKind?: string; value?: string }> | undefined) ?? [];
     for (const ch of changes) {
       if (ch.changeKind === "pracovní pozice" && ch.value) jobTitle = ch.value;
+      else if (ch.changeKind === "úvazek" && ch.value) {
+        // Same mapping as the frontend's uvazekToContractType — keep
+        // the two in sync if either side changes.
+        const v = ch.value.toLowerCase();
+        if (v.includes("polovič") || v.includes("zkrácen") || v.includes("částečn")) contractType = "PPP";
+        else if (v.includes("plný") || v.includes("plny")) contractType = "HPP";
+      }
     }
   }
 

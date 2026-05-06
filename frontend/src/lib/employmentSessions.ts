@@ -142,7 +142,7 @@ export function groupBySession(rows: EmploymentRow[]): EmploymentSession[] {
  * at session end. Change kinds:
  *   - mzda           → salary (or agreedReward for DPP)
  *   - pracovní pozice → jobTitle
- *   - úvazek          → contractText only (no root field today)
+ *   - úvazek          → contractType (HPP ↔ PPP based on the chosen text)
  *   - délka smlouvy   → endDate
  */
 export function computeEffectiveState(
@@ -154,7 +154,7 @@ export function computeEffectiveState(
   let salary = nastup.salary ?? null;
   let agreedReward = nastup.agreedReward ?? null;
   let endDate = nastup.endDate ?? null;
-  const contractType = nastup.contractType ?? "";
+  let contractType = nastup.contractType ?? "";
 
   for (const dod of dodatky) {
     for (const ch of dod.changes ?? []) {
@@ -166,6 +166,9 @@ export function computeEffectiveState(
           if (contractType === "DPP") agreedReward = n;
           else salary = n;
         }
+      } else if (ch.changeKind === "úvazek" && ch.value) {
+        const mapped = uvazekToContractType(ch.value);
+        if (mapped) contractType = mapped;
       } else if (ch.changeKind === "délka smlouvy" && ch.value) {
         endDate = ch.value;
       }
@@ -187,6 +190,19 @@ export function computeEffectiveState(
     salary,
     agreedReward,
   };
+}
+
+/**
+ * Map an úvazek-change value (free text from the Dodatek form, e.g.
+ * "poloviční pracovní úvazek, tj. 20 hod./týdně") to the HPP/PPP
+ * contract-type code. Returns null when the wording isn't recognisable
+ * — in that case the previous contractType is preserved.
+ */
+export function uvazekToContractType(value: string): "HPP" | "PPP" | null {
+  const v = value.toLowerCase();
+  if (v.includes("polovič") || v.includes("zkrácen") || v.includes("částečn")) return "PPP";
+  if (v.includes("plný") || v.includes("plny")) return "HPP";
+  return null;
 }
 
 /**
