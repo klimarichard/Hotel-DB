@@ -24,6 +24,63 @@ const SENSITIVE_FIELDS = ["birthNumber"] as const;
 const DOCUMENT_SENSITIVE_FIELDS = ["idCardNumber", "idCardExpiry"] as const;
 const BENEFITS_SENSITIVE_FIELDS = ["insuranceNumber", "bankAccount"] as const;
 
+/**
+ * Walk an employee's employment rows in chronological order, find the latest
+ * session (last Nástup → Dodatek* → Ukončení? group), fold each Dodatek's
+ * `changes[]` into the Nástup's fields, and write the resulting effective
+ * state to the employee root doc.
+ *
+ * Returns the patched fields (for audit logging) or null if no Nástup row
+ * exists yet, or if the latest session has been terminated (we leave root
+ * fields alone on Ukončení — the employee.status flow handles deactivation).
+ */
+async function recomputeRootFromLatestSession(
+  empRef: admin.firestore.DocumentReference,
+  now: FirebaseFirestore.FieldValue
+): Promise<Record<string, unknown> | null> {
+  const snap = await empRef.collection("employment").orderBy("startDate", "asc").get();
+  type Row = Record<string, unknown> & { id: string };
+  const rows: Row[] = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, unknown>) }));
+
+  type Session = { nastup: Row; dodatky: Row[]; terminated: boolean };
+  let current: Session | null = null;
+  let latest: Session | null = null;
+  for (const r of rows) {
+    const ct = r.changeType as string | undefined;
+    if (ct === "nástup") {
+      if (current) latest = current;
+      current = { nastup: r, dodatky: [], terminated: false };
+    } else if (current && ct === "změna smlouvy") {
+      current.dodatky.push(r);
+    } else if (current && ct === "ukončení") {
+      current.terminated = true;
+    }
+  }
+  if (current) latest = current;
+  if (!latest || latest.terminated) return null;
+
+  let jobTitle = (latest.nastup.jobTitle as string | undefined) ?? "";
+  const contractType = (latest.nastup.contractType as string | undefined) ?? "";
+  const companyId = (latest.nastup.companyId as string | undefined) ?? null;
+  const department = (latest.nastup.department as string | undefined) ?? "";
+
+  for (const dodatek of latest.dodatky) {
+    const changes = (dodatek.changes as Array<{ changeKind?: string; value?: string }> | undefined) ?? [];
+    for (const ch of changes) {
+      if (ch.changeKind === "pracovní pozice" && ch.value) jobTitle = ch.value;
+    }
+  }
+
+  const patch = {
+    currentCompanyId: companyId,
+    currentDepartment: department,
+    currentContractType: contractType,
+    currentJobTitle: jobTitle,
+  };
+  await empRef.update({ ...patch, updatedAt: now });
+  return patch;
+}
+
 // ─── LIST ────────────────────────────────────────────────────────────────────
 
 /**
@@ -455,8 +512,12 @@ employeesRouter.post(
 
     const newRow = await empRef.collection("employment").add(employmentData);
 
-    // Update denormalized fields on the employee root doc
-    if (body.status === "active") {
+    // Update denormalized fields on the employee root doc.
+    //   - Nástup with status="active": straight from the row's own fields.
+    //   - Dodatek (změna smlouvy): walk the latest session, fold its Dodatek
+    //     `changes[]` into a derived effective state (so currentJobTitle reflects
+    //     the most recent `pracovní pozice` change), then write that to the root.
+    if (body.changeType === "nástup" && body.status === "active") {
       await empRef.update({
         currentCompanyId: body.companyId ?? null,
         currentDepartment: body.department ?? "",
@@ -464,6 +525,23 @@ employeesRouter.post(
         currentJobTitle: body.jobTitle ?? "",
         updatedAt: now,
       });
+    } else if (body.changeType === "změna smlouvy") {
+      const before = (await empRef.get()).data() as Record<string, unknown>;
+      const updated = await recomputeRootFromLatestSession(empRef, now);
+      if (updated) {
+        await logUpdate(ctxFromReq(req), {
+          collection: "employees",
+          resourceId: req.params.id,
+          employeeId: req.params.id,
+          before: {
+            currentCompanyId: before.currentCompanyId,
+            currentDepartment: before.currentDepartment,
+            currentContractType: before.currentContractType,
+            currentJobTitle: before.currentJobTitle,
+          },
+          after: updated,
+        });
+      }
     }
 
     await logCreate(ctxFromReq(req), {
@@ -481,6 +559,7 @@ employeesRouter.post(
         companyId: body.companyId,
         salary: body.salary,
         hourlyRate: body.hourlyRate,
+        changes: body.changes,
       },
     });
 
