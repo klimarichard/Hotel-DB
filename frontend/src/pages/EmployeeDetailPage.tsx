@@ -1045,8 +1045,16 @@ export default function EmployeeDetailPage() {
   // Generation flow has two distinct modes — row-tied (employment row contract)
   // and standalone (ad-hoc Multisport / Hmotná odpovědnost / custom). Both
   // feed the same GenerateContractModal but compose `employeeData` differently.
+  // For row-tied generation we also carry the parent Nástup so Dodatek and
+  // Ukončení rows (which don't store their own companyId / jobTitle / salary)
+  // inherit from the session's anchor.
   const [generateModal, setGenerateModal] = useState<
-    | { kind: "row"; row: EmploymentRow; contractType: SmlouvaContractType }
+    | {
+        kind: "row";
+        row: EmploymentRow;
+        parent: EmploymentRow;
+        contractType: SmlouvaContractType;
+      }
     | {
         kind: "adhoc";
         contractType: SmlouvaContractType;
@@ -1416,6 +1424,7 @@ export default function EmployeeDetailPage() {
                     setGenerateModal({
                       kind: "row",
                       row,
+                      parent: session.nastup,
                       contractType: types[0] as SmlouvaContractType,
                     });
                   }
@@ -1697,61 +1706,67 @@ export default function EmployeeDetailPage() {
       </>
       )}
 
-      {generateModal?.kind === "row" && (
-        <GenerateContractModal
-          employeeId={id!}
-          contractType={generateModal.contractType}
-          employmentRowId={generateModal.row.id}
-          companyId={generateModal.row.companyId ?? null}
-          employeeData={{
-            id: employee.id,
-            firstName: employee.firstName,
-            lastName: employee.lastName,
-            currentJobTitle: generateModal.row.jobTitle || employee.currentJobTitle,
-            currentCompanyId: employee.currentCompanyId ?? undefined,
-            address: contact?.contactAddress || contact?.permanentAddress,
-            birthDate: employee.dateOfBirth ?? undefined,
-            nationality: employee.nationality,
-            passportNumber: documents?.passportNumber,
-            visaNumber: documents?.visaNumber,
-            visaType: documents?.visaType,
-            contractType: generateModal.row.contractType,
-            salary: generateModal.row.salary,
-            startDate: generateModal.row.startDate,
-            endDate: generateModal.row.endDate ?? undefined,
-            workLocation: generateModal.row.workLocation,
-            probationPeriod: generateModal.row.probationPeriod,
-            signingDate: generateModal.row.signingDate ?? undefined,
-            originalSigningDate: findOriginalSigningDate(generateModal.row, employment),
-            agreedWorkScope: generateModal.row.agreedWorkScope,
-            agreedReward: generateModal.row.agreedReward ?? undefined,
-            dodatekEffectiveDate:
-              generateModal.row.changeType === "změna smlouvy"
-                ? generateModal.row.startDate
-                : undefined,
-            dodatekChanges: generateModal.row.changes?.map((c) => ({
-              changeKind: c.changeKind,
-              value: c.value,
-            })),
-            oldSalary: findOldSalary(generateModal.row, employment),
-          }}
-          rowSnapshot={buildRowSnapshot(generateModal.row)}
-          displayName={buildContractName(
-            generateModal.contractType,
-            {
-              contractType: generateModal.row.contractType,
-              startDate: generateModal.row.startDate,
-              changes: generateModal.row.changes,
-            },
-            `${employee.firstName ?? ""} ${employee.lastName ?? ""}`.trim()
-          )}
-          onClose={() => setGenerateModal(null)}
-          onGenerated={() => {
-            setGenerateModal(null);
-            refetchContracts();
-          }}
-        />
-      )}
+      {generateModal?.kind === "row" && (() => {
+        // For Dodatek / Ukončení rows, fall back to the parent Nástup for
+        // any field that the form doesn't capture (companyId, contractType,
+        // workLocation, etc.). For a Nástup itself, parent === row so this
+        // is a no-op.
+        const r = generateModal.row;
+        const p = generateModal.parent;
+        return (
+          <GenerateContractModal
+            employeeId={id!}
+            contractType={generateModal.contractType}
+            employmentRowId={r.id}
+            companyId={r.companyId || p.companyId || null}
+            employeeData={{
+              id: employee.id,
+              firstName: employee.firstName,
+              lastName: employee.lastName,
+              currentJobTitle: r.jobTitle || p.jobTitle || employee.currentJobTitle,
+              currentCompanyId: employee.currentCompanyId ?? undefined,
+              address: contact?.contactAddress || contact?.permanentAddress,
+              birthDate: employee.dateOfBirth ?? undefined,
+              nationality: employee.nationality,
+              passportNumber: documents?.passportNumber,
+              visaNumber: documents?.visaNumber,
+              visaType: documents?.visaType,
+              contractType: r.contractType || p.contractType,
+              salary: r.salary ?? p.salary,
+              startDate: r.changeType === "nástup" ? r.startDate : p.startDate,
+              endDate: (r.endDate ?? p.endDate) ?? undefined,
+              workLocation: r.workLocation || p.workLocation,
+              probationPeriod: r.probationPeriod || p.probationPeriod,
+              signingDate: r.signingDate ?? undefined,
+              originalSigningDate: findOriginalSigningDate(r, employment),
+              agreedWorkScope: r.agreedWorkScope || p.agreedWorkScope,
+              agreedReward: (r.agreedReward ?? p.agreedReward) ?? undefined,
+              dodatekEffectiveDate:
+                r.changeType === "změna smlouvy" ? r.startDate : undefined,
+              dodatekChanges: r.changes?.map((c) => ({
+                changeKind: c.changeKind,
+                value: c.value,
+              })),
+              oldSalary: findOldSalary(r, employment),
+            }}
+            rowSnapshot={buildRowSnapshot(r)}
+            displayName={buildContractName(
+              generateModal.contractType,
+              {
+                contractType: r.contractType || p.contractType,
+                startDate: r.startDate,
+                changes: r.changes,
+              },
+              `${employee.firstName ?? ""} ${employee.lastName ?? ""}`.trim()
+            )}
+            onClose={() => setGenerateModal(null)}
+            onGenerated={() => {
+              setGenerateModal(null);
+              refetchContracts();
+            }}
+          />
+        );
+      })()}
 
       {generateModal?.kind === "adhoc" && (
         <GenerateContractModal
