@@ -184,7 +184,7 @@ export default function ContractActionButtons({
         </button>
       )}
 
-      {canEdit && (
+      {canEdit && !hasSigned && (
         <label className={styles.uploadBtn}>
           {busy === "uploading" ? "Nahrávám…" : "Nahrát podepsanou smlouvu"}
           <input
