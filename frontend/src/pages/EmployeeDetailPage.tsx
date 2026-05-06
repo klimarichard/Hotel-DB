@@ -1390,6 +1390,7 @@ export default function EmployeeDetailPage() {
                     });
                   }
                 }}
+                onEditRow={(row) => setEditingRow(row)}
                 onAddDodatek={() =>
                   setNewEntryMode({
                     lockedChangeType: "změna smlouvy",

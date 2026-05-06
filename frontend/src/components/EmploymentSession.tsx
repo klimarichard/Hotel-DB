@@ -24,6 +24,7 @@ interface Props {
   resolveDisplayName: (row: EmploymentRow) => string;
   resolveRowSnapshot: (row: EmploymentRow) => Record<string, unknown>;
   onGenerate: (row: EmploymentRow) => void;
+  onEditRow: (row: EmploymentRow) => void;
   onAddDodatek: () => void;
   onTerminate: () => void;
   onContractsChanged: () => void;
@@ -76,6 +77,7 @@ export default function EmploymentSessionCard({
   resolveDisplayName,
   resolveRowSnapshot,
   onGenerate,
+  onEditRow,
   onAddDodatek,
   onTerminate,
   onContractsChanged,
@@ -129,6 +131,7 @@ export default function EmploymentSessionCard({
               employeeId={employeeId}
               canEdit={canEdit}
               onGenerate={() => onGenerate(row)}
+              onEdit={() => onEditRow(row)}
               onContractsChanged={onContractsChanged}
             />
           ))}

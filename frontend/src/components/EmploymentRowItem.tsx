@@ -13,6 +13,12 @@ interface Props {
   employeeId: string;
   canEdit: boolean;
   onGenerate?: () => void;
+  /**
+   * Open the row in edit mode. Hidden once a signed PDF is on file —
+   * editing the underlying record after that would silently desync from
+   * the legally-binding signed contract.
+   */
+  onEdit?: () => void;
   onContractsChanged: () => void;
 }
 
@@ -50,6 +56,7 @@ export default function EmploymentRowItem({
   employeeId,
   canEdit,
   onGenerate,
+  onEdit,
   onContractsChanged,
 }: Props) {
   const label = ROW_LABEL[row.changeType] ?? row.changeType;
@@ -67,6 +74,8 @@ export default function EmploymentRowItem({
     detail = parts.length ? parts.join(" · ") : null;
   }
 
+  const signedLocked = !!contract?.signedStoragePath;
+
   return (
     <div className={styles.row}>
       <div className={styles.meta}>
@@ -74,17 +83,28 @@ export default function EmploymentRowItem({
         <span className={styles.kind}>{label}</span>
         {detail && <span className={styles.detail}>{detail}</span>}
       </div>
-      <ContractActionButtons
-        contract={contract}
-        defaultType={defaultContractType}
-        employmentRowId={row.id}
-        rowSnapshot={rowSnapshot}
-        defaultDisplayName={defaultDisplayName}
-        employeeId={employeeId}
-        canEdit={canEdit}
-        onGenerate={onGenerate}
-        onChanged={onContractsChanged}
-      />
+      <div className={styles.actions}>
+        {canEdit && onEdit && !signedLocked && (
+          <button
+            type="button"
+            className={styles.editBtn}
+            onClick={onEdit}
+          >
+            Upravit
+          </button>
+        )}
+        <ContractActionButtons
+          contract={contract}
+          defaultType={defaultContractType}
+          employmentRowId={row.id}
+          rowSnapshot={rowSnapshot}
+          defaultDisplayName={defaultDisplayName}
+          employeeId={employeeId}
+          canEdit={canEdit}
+          onGenerate={onGenerate}
+          onChanged={onContractsChanged}
+        />
+      </div>
     </div>
   );
 }
