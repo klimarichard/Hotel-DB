@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { ContractType } from "@/lib/contractVariables";
 import { formatDateCZ } from "@/lib/dateFormat";
+import { Fragment } from "react";
 import type { EmploymentRow, ContractRecord, EmploymentSession } from "@/lib/employmentSessions";
+import { collectFieldChain } from "@/lib/employmentSessions";
 import EmploymentRowItem from "./EmploymentRowItem";
 import Button from "./Button";
 import SalaryReveal from "./SalaryReveal";
@@ -67,6 +69,16 @@ export default function EmploymentSessionCard({
   const companyName = companies[eff.companyId] ?? eff.companyId ?? "—";
   const shownSalary = eff.contractType === "DPP" ? eff.agreedReward : eff.salary;
 
+  // Surface every distinct value the field has held during this session,
+  // not just first → last. So three position changes render
+  // "recepční → senior recepční → Front Office Manager" with the older
+  // entries muted. Single-value chains (no transitions) collapse to the
+  // plain current value.
+  const titleChain = collectFieldChain(session, "jobTitle");
+  const contractTypeChain = collectFieldChain(session, "contractType");
+  const titleChanged = titleChain.length > 1;
+  const contractTypeChanged = contractTypeChain.length > 1;
+
   return (
     <div className={`${styles.card} ${session.terminated ? styles.terminated : ""}`}>
       <div
@@ -80,8 +92,26 @@ export default function EmploymentSessionCard({
       >
         <div className={styles.headerLeft}>
           <span className={styles.chevron}><Chevron open={open} /></span>
-          <span className={styles.title}>{eff.jobTitle || "—"}</span>
-          {eff.contractType && <span className={styles.tag}>{eff.contractType}</span>}
+          <span className={styles.title}>
+            {titleChanged ? (
+              titleChain.map((v, i) => {
+                const isLast = i === titleChain.length - 1;
+                return (
+                  <Fragment key={i}>
+                    <span className={isLast ? undefined : styles.titleFrom}>{v}</span>
+                    {!isLast && <span className={styles.titleArrow}> → </span>}
+                  </Fragment>
+                );
+              })
+            ) : (
+              eff.jobTitle || "—"
+            )}
+          </span>
+          {eff.contractType && (
+            <span className={styles.tag}>
+              {contractTypeChanged ? contractTypeChain.join(" → ") : eff.contractType}
+            </span>
+          )}
           <span className={styles.meta}>{companyName}</span>
           {shownSalary != null && (
             <span className={styles.salaryWrap}>

@@ -3,7 +3,6 @@ import { ContractType, CHANGE_TYPE_TO_CONTRACTS } from "./contractVariables";
 export interface ChangeRow {
   changeKind: string;
   value: string;
-  contractText: string;
 }
 
 export interface EmploymentRow {
@@ -203,6 +202,39 @@ export function uvazekToContractType(value: string): "HPP" | "PPP" | null {
   if (v.includes("polovič") || v.includes("zkrácen") || v.includes("částečn")) return "PPP";
   if (v.includes("plný") || v.includes("plny")) return "HPP";
   return null;
+}
+
+/**
+ * Build the chronological chain of distinct values a session's `field`
+ * has held: the Nástup's initial value, then one entry per Dodatek that
+ * actually changed it (consecutive duplicates collapsed). When the
+ * chain has length ≤ 1 the field never changed during the session.
+ *
+ * For `jobTitle`, "pracovní pozice" Dodatek changes feed the chain.
+ * For `contractType`, "úvazek" Dodatek changes are mapped through
+ * uvazekToContractType — values that don't map (unrecognised wording)
+ * are skipped rather than terminating the chain.
+ */
+export function collectFieldChain(
+  session: EmploymentSession,
+  field: "jobTitle" | "contractType"
+): string[] {
+  const chain: string[] = [];
+  const initial = (session.nastup[field] as string | undefined) ?? "";
+  if (initial) chain.push(initial);
+
+  for (const dod of session.dodatky) {
+    for (const ch of dod.changes ?? []) {
+      let next: string | null = null;
+      if (field === "jobTitle" && ch.changeKind === "pracovní pozice" && ch.value) {
+        next = ch.value;
+      } else if (field === "contractType" && ch.changeKind === "úvazek" && ch.value) {
+        next = uvazekToContractType(ch.value);
+      }
+      if (next && next !== chain[chain.length - 1]) chain.push(next);
+    }
+  }
+  return chain;
 }
 
 /**
