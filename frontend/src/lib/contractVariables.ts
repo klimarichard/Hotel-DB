@@ -1,6 +1,21 @@
 import { formatDateCZ } from "./dateFormat";
 
 /**
+ * Format a salary number with Czech thousands-separator dots, intended to
+ * pair with the templates' fixed `",- Kč"` suffix. 39000 → "39.000". Used
+ * for the `{{salary}}` and `{{newSalary}}` template variables; the literal
+ * ",- Kč" stays in the template HTML so this helper emits the integer
+ * portion only. Non-numeric input is returned as-is so editors typing free
+ * text into the form don't lose their work.
+ */
+export function formatSalaryCZ(value: number | string | null | undefined): string {
+  if (value === undefined || value === null || value === "") return "";
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return String(value);
+  return Math.trunc(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+}
+
+/**
  * `ContractType` was originally a closed union over the 9 built-in template
  * ids. As of 2026-04-30 admin/director users can create their own
  * standalone templates with arbitrary slug ids, so the type is widened to
@@ -254,7 +269,7 @@ export function resolveVariables(
     noPermanentResidence: hasPermanentResidence ? "" : "ano",
     address: str(employee.address),
     contractType: str(employee.contractType),
-    salary: str(employee.salary),
+    salary: formatSalaryCZ(employee.salary),
     startDate: formatDateCZ(employee.startDate),
     endDate: formatDateCZ(employee.endDate),
     workLocation: str(employee.workLocation),
@@ -283,7 +298,7 @@ export function resolveVariables(
           : "";
       return {
         dodatekEffectiveDate: formatDateCZ(employee.dodatekEffectiveDate),
-        newSalary: str(newSalaryStr),
+        newSalary: formatSalaryCZ(newSalaryStr),
         newJobTitle: str(findValue("pracovní pozice")),
         newWorkScope: str(findValue("úvazek")),
         newEndDate: formatDateCZ(findValue("délka smlouvy")),

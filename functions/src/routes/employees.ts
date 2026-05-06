@@ -24,6 +24,70 @@ const SENSITIVE_FIELDS = ["birthNumber"] as const;
 const DOCUMENT_SENSITIVE_FIELDS = ["idCardNumber", "idCardExpiry"] as const;
 const BENEFITS_SENSITIVE_FIELDS = ["insuranceNumber", "bankAccount"] as const;
 
+/**
+ * Walk an employee's employment rows in chronological order, find the latest
+ * session (last Nástup → Dodatek* → Ukončení? group), fold each Dodatek's
+ * `changes[]` into the Nástup's fields, and write the resulting effective
+ * state to the employee root doc.
+ *
+ * Returns the patched fields (for audit logging) or null if no Nástup row
+ * exists yet, or if the latest session has been terminated (we leave root
+ * fields alone on Ukončení — the employee.status flow handles deactivation).
+ */
+async function recomputeRootFromLatestSession(
+  empRef: admin.firestore.DocumentReference,
+  now: FirebaseFirestore.FieldValue
+): Promise<Record<string, unknown> | null> {
+  const snap = await empRef.collection("employment").orderBy("startDate", "asc").get();
+  type Row = Record<string, unknown> & { id: string };
+  const rows: Row[] = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, unknown>) }));
+
+  type Session = { nastup: Row; dodatky: Row[]; terminated: boolean };
+  let current: Session | null = null;
+  let latest: Session | null = null;
+  for (const r of rows) {
+    const ct = r.changeType as string | undefined;
+    if (ct === "nástup") {
+      if (current) latest = current;
+      current = { nastup: r, dodatky: [], terminated: false };
+    } else if (current && ct === "změna smlouvy") {
+      current.dodatky.push(r);
+    } else if (current && ct === "ukončení") {
+      current.terminated = true;
+    }
+  }
+  if (current) latest = current;
+  if (!latest || latest.terminated) return null;
+
+  let jobTitle = (latest.nastup.jobTitle as string | undefined) ?? "";
+  let contractType = (latest.nastup.contractType as string | undefined) ?? "";
+  const companyId = (latest.nastup.companyId as string | undefined) ?? null;
+  const department = (latest.nastup.department as string | undefined) ?? "";
+
+  for (const dodatek of latest.dodatky) {
+    const changes = (dodatek.changes as Array<{ changeKind?: string; value?: string }> | undefined) ?? [];
+    for (const ch of changes) {
+      if (ch.changeKind === "pracovní pozice" && ch.value) jobTitle = ch.value;
+      else if (ch.changeKind === "úvazek" && ch.value) {
+        // Same mapping as the frontend's uvazekToContractType — keep
+        // the two in sync if either side changes.
+        const v = ch.value.toLowerCase();
+        if (v.includes("polovič") || v.includes("zkrácen") || v.includes("částečn")) contractType = "PPP";
+        else if (v.includes("plný") || v.includes("plny")) contractType = "HPP";
+      }
+    }
+  }
+
+  const patch = {
+    currentCompanyId: companyId,
+    currentDepartment: department,
+    currentContractType: contractType,
+    currentJobTitle: jobTitle,
+  };
+  await empRef.update({ ...patch, updatedAt: now });
+  return patch;
+}
+
 // ─── LIST ────────────────────────────────────────────────────────────────────
 
 /**
@@ -455,8 +519,12 @@ employeesRouter.post(
 
     const newRow = await empRef.collection("employment").add(employmentData);
 
-    // Update denormalized fields on the employee root doc
-    if (body.status === "active") {
+    // Update denormalized fields on the employee root doc.
+    //   - Nástup with status="active": straight from the row's own fields.
+    //   - Dodatek (změna smlouvy): walk the latest session, fold its Dodatek
+    //     `changes[]` into a derived effective state (so currentJobTitle reflects
+    //     the most recent `pracovní pozice` change), then write that to the root.
+    if (body.changeType === "nástup" && body.status === "active") {
       await empRef.update({
         currentCompanyId: body.companyId ?? null,
         currentDepartment: body.department ?? "",
@@ -464,6 +532,23 @@ employeesRouter.post(
         currentJobTitle: body.jobTitle ?? "",
         updatedAt: now,
       });
+    } else if (body.changeType === "změna smlouvy") {
+      const before = (await empRef.get()).data() as Record<string, unknown>;
+      const updated = await recomputeRootFromLatestSession(empRef, now);
+      if (updated) {
+        await logUpdate(ctxFromReq(req), {
+          collection: "employees",
+          resourceId: req.params.id,
+          employeeId: req.params.id,
+          before: {
+            currentCompanyId: before.currentCompanyId,
+            currentDepartment: before.currentDepartment,
+            currentContractType: before.currentContractType,
+            currentJobTitle: before.currentJobTitle,
+          },
+          after: updated,
+        });
+      }
     }
 
     await logCreate(ctxFromReq(req), {
@@ -481,6 +566,7 @@ employeesRouter.post(
         companyId: body.companyId,
         salary: body.salary,
         hourlyRate: body.hourlyRate,
+        changes: body.changes,
       },
     });
 
@@ -759,6 +845,175 @@ employeesRouter.patch(
     );
 
     res.json({ success: true });
+  }
+);
+
+/**
+ * DELETE /api/employees/:id/employment/:rowId
+ *
+ * Deletes a single employment row OR — when the row is a Nástup — the
+ * entire session it anchors (Nástup + all subsequent Dodatky + the
+ * Ukončení if any). Any contracts tied to deleted rows are cleaned up
+ * too: Firestore record + unsigned/signed PDFs from Storage. Root-doc
+ * denormalized fields are recomputed afterwards (or cleared if no
+ * active session remains).
+ */
+employeesRouter.delete(
+  "/:id/employment/:rowId",
+  requireAuth,
+  requireRole("admin", "director"),
+  async (req: AuthRequest, res) => {
+    const empRef = db().collection("employees").doc(req.params.id);
+    const rowRef = empRef.collection("employment").doc(req.params.rowId);
+    const rowSnap = await rowRef.get();
+    if (!rowSnap.exists) {
+      res.status(404).json({ error: "Employment record not found" });
+      return;
+    }
+    const target = rowSnap.data() as Record<string, unknown>;
+    const isNastup = target.changeType === "nástup";
+
+    // Decide which rows to delete.
+    let rowsToDelete: Array<{ id: string; data: Record<string, unknown> }>;
+    if (isNastup) {
+      // Cascade to every row from this Nástup forward, up until the next
+      // Nástup (exclusive). That captures Dodatky + Ukončení belonging to
+      // this session.
+      const allSnap = await empRef.collection("employment").orderBy("startDate", "asc").get();
+      const all = allSnap.docs.map((d) => ({ id: d.id, data: d.data() as Record<string, unknown> }));
+      const startIdx = all.findIndex((r) => r.id === req.params.rowId);
+      const session: typeof all = [];
+      if (startIdx >= 0) {
+        for (let i = startIdx; i < all.length; i++) {
+          if (i > startIdx && all[i].data.changeType === "nástup") break;
+          session.push(all[i]);
+        }
+      }
+      rowsToDelete = session;
+    } else {
+      rowsToDelete = [{ id: req.params.rowId, data: target }];
+    }
+
+    const rowIds = rowsToDelete.map((r) => r.id);
+
+    // Find every contract record tied to one of the deleted rows so we
+    // don't leave orphaned PDFs in Storage.
+    const contractsToDelete: Array<{ id: string; data: Record<string, unknown> }> = [];
+    if (rowIds.length > 0) {
+      // Firestore "in" queries cap at 30 items; chunk to be safe even
+      // though sessions of >30 rows would be pathological.
+      const chunkSize = 30;
+      for (let i = 0; i < rowIds.length; i += chunkSize) {
+        const chunk = rowIds.slice(i, i + chunkSize);
+        const cSnap = await empRef
+          .collection("contracts")
+          .where("employmentRowId", "in", chunk)
+          .get();
+        cSnap.docs.forEach((d) =>
+          contractsToDelete.push({ id: d.id, data: d.data() as Record<string, unknown> })
+        );
+      }
+    }
+
+    // Best-effort Storage cleanup — failures here shouldn't block the
+    // Firestore deletes that follow.
+    const bucket = admin.storage().bucket();
+    await Promise.all(
+      contractsToDelete.flatMap((c) => {
+        const paths = [c.data.unsignedStoragePath, c.data.signedStoragePath].filter(
+          (p): p is string => typeof p === "string" && p.length > 0
+        );
+        return paths.map((p) => bucket.file(p).delete().catch(() => undefined));
+      })
+    );
+
+    // Delete contract docs, then employment rows, in one batched write.
+    const batch = db().batch();
+    for (const c of contractsToDelete) {
+      batch.delete(empRef.collection("contracts").doc(c.id));
+    }
+    for (const r of rowsToDelete) {
+      batch.delete(empRef.collection("employment").doc(r.id));
+    }
+    await batch.commit();
+
+    // Audit-log every deletion (one entry per row, one per contract).
+    const ctx = ctxFromReq(req);
+    for (const c of contractsToDelete) {
+      await logDelete(ctx, {
+        collection: "employees/contracts",
+        resourceId: req.params.id,
+        subResourceId: c.id,
+        employeeId: req.params.id,
+        summary: {
+          type: c.data.type,
+          status: c.data.status,
+          displayName: c.data.displayName,
+          deletedDueToEmploymentRowDelete: req.params.rowId,
+        },
+      });
+    }
+    for (const r of rowsToDelete) {
+      await logDelete(ctx, {
+        collection: "employees/employment",
+        resourceId: req.params.id,
+        subResourceId: r.id,
+        employeeId: req.params.id,
+        summary: {
+          changeType: r.data.changeType,
+          startDate: r.data.startDate,
+          contractType: r.data.contractType,
+          jobTitle: r.data.jobTitle,
+          cascadedFromNastup: isNastup && r.id !== req.params.rowId ? req.params.rowId : undefined,
+        },
+      });
+    }
+
+    // Recompute root denormalized fields. If the latest session disappeared,
+    // clear them so the Detail tab no longer claims a current employment.
+    const now = FieldValue.serverTimestamp();
+    const beforeEmp = (await empRef.get()).data() as Record<string, unknown> | undefined;
+    const updated = await recomputeRootFromLatestSession(empRef, now);
+    if (!updated) {
+      // No active session left — wipe the denormalized fields so the UI
+      // stops showing stale "current" values.
+      await empRef.update({
+        currentCompanyId: null,
+        currentDepartment: "",
+        currentContractType: "",
+        currentJobTitle: "",
+        updatedAt: now,
+      });
+    }
+    if (beforeEmp) {
+      await logUpdate(ctx, {
+        collection: "employees",
+        resourceId: req.params.id,
+        employeeId: req.params.id,
+        before: {
+          currentCompanyId: beforeEmp.currentCompanyId,
+          currentDepartment: beforeEmp.currentDepartment,
+          currentContractType: beforeEmp.currentContractType,
+          currentJobTitle: beforeEmp.currentJobTitle,
+        },
+        after: updated ?? {
+          currentCompanyId: null,
+          currentDepartment: "",
+          currentContractType: "",
+          currentJobTitle: "",
+        },
+      });
+    }
+
+    refreshProbationAlertsForEmployee(req.params.id).catch((e) =>
+      console.error("[probationAlerts] refresh failed:", e)
+    );
+
+    res.json({
+      ok: true,
+      deletedRows: rowsToDelete.length,
+      deletedContracts: contractsToDelete.length,
+    });
   }
 );
 

@@ -558,3 +558,65 @@ Settings → **Menu** (admin-only) lets admin configure the sidebar order indepe
 - `GET /api/settings/menu-order` — admin only; returns the full map.
 - `GET /api/settings/menu-order/me` — any authenticated user; returns just their role's order (or `null` for default).
 - `PUT /api/settings/menu-order` — admin only; validated against the registry (ids must exist, must be allowed for the target role); audit-logged.
+
+---
+
+## Employee detail — session-based history (2026-05-06)
+
+The Employee detail page collapses what used to be two tabs ("Historie pracovního poměru" + "Smlouvy") into a single **Historie pracovního poměru** tab where every employment relationship is a self-contained collapsible card. The Smlouvy tab is gone; `frontend/src/components/ContractsTab.tsx` was deleted.
+
+### Layout
+Each card represents one **session** — a Nástup row, the Dodatky that followed, and the Ukončení that closed it (if any). Sessions render newest-first; rows inside read oldest → newest so chronology is top-down. Only the latest session is expanded by default (`idx === 0`); the rest stay collapsed.
+
+The card header shows the session's **effective state** computed by folding every Dodatek's `changes[]` onto the Nástup: `jobTitle`, `contractType`, `salary` (with eye-toggle reveal), `companyId`, `startDate`, `endDate`. Header buttons: `+ Dodatek`, `Ukončit smlouvu`. Both hide once the session is `terminated` — defined as either an explicit Ukončení row OR an effective `endDate` in the past (a fixed-term contract that ran out without anyone filing the termination paperwork).
+
+Each row inside the card carries: `Upravit` (hidden once a signed PDF is on file — editing then would silently desync from the legal document), the three-button contract action set, and `Smazat`. Page-level header buttons: `+ Nástup` (locked-changeType AddEntryModal) and `+ Adhoc dokument ▾` (dropdown with built-in standalone types + custom standalone templates).
+
+A bottom collapsible **Adhoc smlouvy** lists every contract record where `employmentRowId == null` (Multisport, Hmotná odpovědnost, custom standalone). Default-open when at least one record exists.
+
+### Components
+- `frontend/src/components/EmploymentSession.tsx` — collapsible card; computes `idx === 0`-style default-expanded behaviour from a prop, uses `<SalaryReveal>` for the redacted salary display.
+- `frontend/src/components/EmploymentRowItem.tsx` — single row's metadata + action cluster. Owns the per-row delete confirm modal with copy that varies by row type (Nástup → cascade warning with row count; Dodatek/Ukončení → tied-contract warning).
+- `frontend/src/components/ContractActionButtons.tsx` — leaf renderer of the three states: no contract → `Generovat smlouvu` + `Nahrát podepsanou smlouvu`; contract with unsigned PDF → download + `Smazat smlouvu` + upload; contract with signed PDF → "Stáhnout podepsanou" + `Smazat smlouvu` + upload. The upload-without-generate path POSTs `/contracts` with no `pdfBase64` to materialise a record on the fly, then POSTs `/signed-pdf` against it — needed for legacy paper contracts that have no generated unsigned counterpart.
+- `frontend/src/components/AdhocContractsSection.tsx` — bottom collapsible.
+- `frontend/src/components/SalaryReveal.tsx` — shared `••••• [eye]` widget. Click stops propagation so it doesn't toggle the surrounding collapsible.
+
+The existing `GenerateContractModal` is unchanged — only the call sites moved.
+
+### Session derivation
+`frontend/src/lib/employmentSessions.ts`:
+- `groupBySession(rows)` — walks rows in `startDate` ascending order, opens a new session on each `nástup`, appends `změna smlouvy` and the (single) `ukončení`. Orphan rows (no preceding Nástup) are silently dropped — rare in practice, indicates dirty data.
+- `computeEffectiveState(nastup, dodatky, ukonceni)` — folds Dodatek changes:
+  - `mzda` → `salary` (or `agreedReward` for DPP)
+  - `pracovní pozice` → `jobTitle`
+  - `úvazek` → `contractType` via `uvazekToContractType()` ("poloviční"/"zkrácený"/"částečný" → PPP, "plný" → HPP, otherwise unchanged)
+  - `délka smlouvy` → `endDate`
+  - Ukončení's `startDate` overrides `endDate` (the actual end of the session)
+- `mapContractsToRows(rows, contracts)` — `rowId → ContractRecord`, picking the most recent generation per row.
+- `expectedContractTypesForRow(row)` — the template id(s) appropriate for a given row's `changeType` + `contractType`. Used both for matching existing contracts and as the default type for upload-without-generate.
+
+### Backend changes
+`functions/src/routes/employees.ts`:
+- `recomputeRootFromLatestSession(empRef, now)` — walks an employee's rows the same way the frontend does, applies Dodatek `changes[]` (currently `pracovní pozice` → `currentJobTitle`, `úvazek` → `currentContractType`), and patches the root denormalized fields. Called from `POST /employment` when `changeType === "změna smlouvy"` and from the new DELETE endpoint.
+- `DELETE /api/employees/:id/employment/:rowId` — deletes one row, but cascades to the entire session when the row is a Nástup (walks forward to the next Nástup, exclusive). Tied contracts (matched by `employmentRowId`) are deleted alongside, including their unsigned + signed PDFs from Storage. After deletion, root denormalized fields are recomputed; if the last session is gone they're cleared. Each deletion (rows + contracts + root patch) is audit-logged; the contract delete entries carry `deletedDueToEmploymentRowDelete` for traceability.
+
+### Salary formatting in templates
+`{{salary}}` and `{{newSalary}}` template variables now resolve with Czech thousands-dots: `39000` → `"39.000"`. The literal `,- Kč` tail stays in the template HTML (`nastup_hpp`/`nastup_ppp`/`zmena_smlouvy`), so the helper emits only the formatted integer. Implemented via `formatSalaryCZ()` in `frontend/src/lib/contractVariables.ts`.
+
+### Dodatek/Ukončení generation context
+A Dodatek row stores only `changes[]` and `startDate` — `companyId`, `contractType`, `jobTitle`, `salary`, `workLocation` are all empty on the row itself. `EmployeeDetailPage` carries the session's parent Nástup alongside the row in `generateModal` state and falls back to it for every context field the row doesn't supply. Nástup rows are unaffected (parent === row, fallbacks no-op).
+
+### AddEntryModal lock
+`AddEntryModal` accepts `lockedChangeType?: ChangeType`. When set, the changeType selector is hidden and the form is pre-filled with the locked value. Title reflects the action ("Nový nástup" / "Nový dodatek" / "Ukončit smlouvu"). The `+ Nástup` page button, session-header `+ Dodatek`, and session-header `Ukončit smlouvu` all use this lock so each entry point produces exactly one kind of row.
+
+### Per-row action button states
+| State                        | Buttons shown                                               |
+|------------------------------|-------------------------------------------------------------|
+| No contract record           | `Generovat smlouvu`, `Nahrát podepsanou smlouvu`            |
+| Contract record, unsigned    | "Stáhnout", `Smazat smlouvu`, `Nahrát podepsanou smlouvu`   |
+| Contract record, signed      | "Stáhnout podepsanou", `Smazat smlouvu`, `Nahrát podepsanou smlouvu` |
+
+The existing `archived` lifecycle (PATCH `status: "archived"` / `status: "unsigned"`) is no longer surfaced in the UI; the backend endpoint stays in place for backward safety. Legacy archived contracts render as ordinary signed contracts in the new layout.
+
+### Snapshot/seed pair (local)
+`scripts/snapshot-employment-history.js` reads the live emulator's employment + contract metadata for a pinned set of employee IDs and writes `scripts/_employment_history_snapshot.json`. `scripts/seed-employment-history.js` replays it (wired into `seed-all.js` as the last step, fail-soft when the snapshot file is absent). PDFs aren't snapshotted — only metadata. `scripts/` is gitignored, so neither file ships in commits.

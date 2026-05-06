@@ -1,0 +1,86 @@
+.card {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  margin-bottom: var(--space-3);
+  overflow: hidden;
+}
+
+.terminated {
+  background: var(--color-surface-2, var(--color-surface));
+  opacity: 0.92;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  cursor: pointer;
+  flex-wrap: wrap;
+  user-select: none;
+}
+
+.header:hover {
+  background: color-mix(in srgb, var(--color-surface) 92%, var(--color-primary, #3b82f6) 8%);
+}
+
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.chevron {
+  display: inline-flex;
+  color: var(--color-text-secondary);
+  flex: 0 0 auto;
+}
+
+.title {
+  font-size: 0.95rem;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+}
+
+.tag {
+  font-size: 0.6875rem;
+  font-weight: var(--font-weight-medium);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-3);
+  color: var(--color-text-secondary);
+  letter-spacing: 0.04em;
+}
+
+.meta,
+.dates {
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.salaryWrap {
+  font-size: 0.8125rem;
+  color: var(--color-text);
+}
+
+.ongoing {
+  font-style: italic;
+  color: var(--color-text-secondary);
+}
+
+.headerActions {
+  display: flex;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.body {
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface-2, var(--color-surface));
+}
