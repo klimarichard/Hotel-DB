@@ -30,13 +30,14 @@
 }
 
 .generateBtn {
-  background: var(--color-accent);
+  background: var(--color-primary);
   color: #fff;
-  border-color: var(--color-accent);
+  border-color: var(--color-primary);
 }
 
 .generateBtn:hover {
-  filter: brightness(1.05);
+  background: var(--color-primary-dark);
+  border-color: var(--color-primary-dark);
 }
 
 .uploadBtn {
