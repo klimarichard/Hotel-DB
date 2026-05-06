@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { ContractType } from "@/lib/contractVariables";
 import { formatDateCZ } from "@/lib/dateFormat";
 import type { EmploymentRow, ContractRecord } from "@/lib/employmentSessions";
 import ContractActionButtons from "./ContractActionButtons";
+import ConfirmModal from "./ConfirmModal";
 import styles from "./EmploymentRowItem.module.css";
 
 interface Props {
@@ -12,6 +14,10 @@ interface Props {
   rowSnapshot: Record<string, unknown>;
   employeeId: string;
   canEdit: boolean;
+  /** Number of rows in the session this Nástup anchors. Drives the
+   *  cascade-delete confirm copy ("smaže pracovní poměr — N záznamů").
+   *  Ignored for non-Nástup rows. */
+  sessionRowCount?: number;
   onGenerate?: () => void;
   /**
    * Open the row in edit mode. Hidden once a signed PDF is on file —
@@ -19,6 +25,8 @@ interface Props {
    * the legally-binding signed contract.
    */
   onEdit?: () => void;
+  /** Delete this row (the parent recomputes after the API call returns). */
+  onDelete?: () => void;
   onContractsChanged: () => void;
 }
 
@@ -55,8 +63,10 @@ export default function EmploymentRowItem({
   rowSnapshot,
   employeeId,
   canEdit,
+  sessionRowCount,
   onGenerate,
   onEdit,
+  onDelete,
   onContractsChanged,
 }: Props) {
   const label = ROW_LABEL[row.changeType] ?? row.changeType;
@@ -75,6 +85,20 @@ export default function EmploymentRowItem({
   }
 
   const signedLocked = !!contract?.signedStoragePath;
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const isNastup = row.changeType === "nástup";
+  const cascadeCount = sessionRowCount ?? 1;
+  const deleteTitle = isNastup
+    ? "Smazat celý pracovní poměr?"
+    : row.changeType === "změna smlouvy"
+      ? "Smazat dodatek?"
+      : "Smazat ukončení?";
+  const deleteMessage = isNastup
+    ? cascadeCount > 1
+      ? `Tím se smaže celý pracovní poměr — ${cascadeCount} záznamů (Nástup, dodatky a případné Ukončení) včetně všech vygenerovaných i podepsaných smluv. Tato akce je nevratná.`
+      : "Tím se smaže celý pracovní poměr včetně všech vygenerovaných i podepsaných smluv. Tato akce je nevratná."
+    : "Pokud k záznamu existuje smlouva (nepodepsaná i podepsaná), bude také smazána. Tato akce je nevratná.";
 
   return (
     <div className={styles.row}>
@@ -104,7 +128,30 @@ export default function EmploymentRowItem({
           onGenerate={onGenerate}
           onChanged={onContractsChanged}
         />
+        {canEdit && onDelete && (
+          <button
+            type="button"
+            className={styles.deleteBtn}
+            onClick={() => setConfirmDelete(true)}
+          >
+            Smazat
+          </button>
+        )}
       </div>
+
+      {confirmDelete && (
+        <ConfirmModal
+          title={deleteTitle}
+          message={deleteMessage}
+          confirmLabel="Smazat"
+          danger
+          onConfirm={() => {
+            setConfirmDelete(false);
+            onDelete?.();
+          }}
+          onCancel={() => setConfirmDelete(false)}
+        />
+      )}
     </div>
   );
 }

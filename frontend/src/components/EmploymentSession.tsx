@@ -25,6 +25,13 @@ interface Props {
   resolveRowSnapshot: (row: EmploymentRow) => Record<string, unknown>;
   onGenerate: (row: EmploymentRow) => void;
   onEditRow: (row: EmploymentRow) => void;
+  /**
+   * Delete a row. The page is responsible for calling the DELETE
+   * endpoint and refreshing employment + contracts + employee state
+   * afterwards. Cascade behavior (Nástup → whole session) is enforced
+   * server-side; the row's confirm copy reflects this.
+   */
+  onDeleteRow: (row: EmploymentRow) => void;
   onAddDodatek: () => void;
   onTerminate: () => void;
   onContractsChanged: () => void;
@@ -78,6 +85,7 @@ export default function EmploymentSessionCard({
   resolveRowSnapshot,
   onGenerate,
   onEditRow,
+  onDeleteRow,
   onAddDodatek,
   onTerminate,
   onContractsChanged,
@@ -130,8 +138,10 @@ export default function EmploymentSessionCard({
               rowSnapshot={resolveRowSnapshot(row)}
               employeeId={employeeId}
               canEdit={canEdit}
+              sessionRowCount={session.rows.length}
               onGenerate={() => onGenerate(row)}
               onEdit={() => onEditRow(row)}
+              onDelete={() => onDeleteRow(row)}
               onContractsChanged={onContractsChanged}
             />
           ))}

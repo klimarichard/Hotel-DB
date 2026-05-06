@@ -1122,6 +1122,36 @@ export default function EmployeeDetailPage() {
     }
   }
 
+  /**
+   * Delete an employment row. The backend cascades to the whole session
+   * when the row is a Nástup; either way it cleans up tied contracts
+   * and recomputes root denormalized fields. We refetch all three
+   * (employment / contracts / employee root) on success.
+   */
+  async function deleteEmploymentRow(row: EmploymentRow) {
+    if (!id) return;
+    try {
+      await api.delete(`/employees/${id}/employment/${row.id}`);
+    } catch (e) {
+      setConfirmModal({
+        title: "Chyba",
+        message: (e as Error).message || "Nepodařilo se smazat záznam.",
+        confirmLabel: "OK",
+        showCancel: false,
+        onConfirm: () => setConfirmModal(null),
+      });
+      return;
+    }
+    const [empList, contractList, empRoot] = await Promise.all([
+      api.get<EmploymentRow[]>(`/employees/${id}/employment`).catch(() => null),
+      api.get<ContractRecord[]>(`/employees/${id}/contracts`).catch(() => null),
+      api.get<Employee>(`/employees/${id}`).catch(() => null),
+    ]);
+    if (empList) setEmployment(empList);
+    if (contractList) setContracts(contractList);
+    if (empRoot) setEmployee(empRoot);
+  }
+
   // Lazy-load sub-sections when first expanded
   useEffect(() => {
     if (!id) return;
@@ -1391,6 +1421,7 @@ export default function EmployeeDetailPage() {
                   }
                 }}
                 onEditRow={(row) => setEditingRow(row)}
+                onDeleteRow={(row) => deleteEmploymentRow(row)}
                 onAddDodatek={() =>
                   setNewEntryMode({
                     lockedChangeType: "změna smlouvy",
