@@ -1,19 +1,26 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { api } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import ConfirmModal from "@/components/ConfirmModal";
 import { formatDateCZ } from "@/lib/dateFormat";
 import { displayGendered } from "@/lib/genderDisplay";
-import ContractsTab from "@/components/ContractsTab";
 import GenerateContractModal from "@/components/GenerateContractModal";
 import Button from "@/components/Button";
+import EmploymentSessionCard from "@/components/EmploymentSession";
+import AdhocContractsSection from "@/components/AdhocContractsSection";
 import {
   ContractType as SmlouvaContractType,
   CONTRACT_TYPE_LABELS,
-  CHANGE_TYPE_TO_CONTRACTS,
+  STANDALONE_TYPES,
 } from "@/lib/contractVariables";
 import { buildContractName } from "@/lib/contractNaming";
+import {
+  groupBySession,
+  mapContractsToRows,
+  expectedContractTypesForRow,
+} from "@/lib/employmentSessions";
+import modalStyles from "@/components/ConfirmModal.module.css";
 import styles from "./EmployeeDetailPage.module.css";
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
@@ -318,19 +325,6 @@ function buildRowSnapshot(row: EmploymentRow): Record<string, unknown> {
     out[k] = v === undefined ? null : v;
   }
   return out;
-}
-
-function snapshotsEqual(
-  a: Record<string, unknown> | undefined,
-  b: Record<string, unknown> | undefined
-): boolean {
-  if (!a || !b) return false;
-  for (const k of SNAPSHOT_FIELDS) {
-    const av = a[k] ?? null;
-    const bv = b[k] ?? null;
-    if (av !== bv) return false;
-  }
-  return true;
 }
 
 const TODAY = new Date().toISOString().split("T")[0];
@@ -987,25 +981,6 @@ function AddEntryModal({
   );
 }
 
-// ─── SalaryDisplay ───────────────────────────────────────────────────────────
-
-function SalaryDisplay({ value }: { value: number }) {
-  const [visible, setVisible] = useState(false);
-  return (
-    <span className={styles.salaryField}>
-      {" · "}
-      {visible ? `${value.toLocaleString("cs-CZ")} Kč` : "•••••"}
-      <button
-        className={styles.revealBtn}
-        onClick={() => setVisible((v) => !v)}
-        title={visible ? "Skrýt mzdu" : "Zobrazit mzdu"}
-      >
-        {visible ? <EyeOffIcon /> : <EyeIcon />}
-      </button>
-    </span>
-  );
-}
-
 interface ContactData {
   phone?: string;
   email?: string;
@@ -1045,20 +1020,6 @@ interface AlertItem {
   status: "expiring" | "expired";
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function getContractTypesForRow(row: EmploymentRow): SmlouvaContractType[] {
-  if (row.changeType === "nástup") {
-    const map: Record<string, SmlouvaContractType> = {
-      HPP: "nastup_hpp",
-      PPP: "nastup_ppp",
-      DPP: "nastup_dpp",
-    };
-    return row.contractType && map[row.contractType] ? [map[row.contractType]] : [];
-  }
-  return (CHANGE_TYPE_TO_CONTRACTS[row.changeType] ?? []) as SmlouvaContractType[];
-}
-
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function EmployeeDetailPage() {
@@ -1075,18 +1036,36 @@ export default function EmployeeDetailPage() {
   const [additional, setAdditional] = useState<AdditionalData | null>(null);
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState<"detail" | "history" | "smlouvy">("detail");
-  const [showModal, setShowModal] = useState(false);
+  const [page, setPage] = useState<"detail" | "history">("detail");
+  const [newEntryMode, setNewEntryMode] = useState<{
+    lockedChangeType: ChangeType;
+    parentRowId?: string;
+  } | null>(null);
   const [editingRow, setEditingRow] = useState<EmploymentRow | null>(null);
-  const [generateModal, setGenerateModal] = useState<{
-    row: EmploymentRow;
-    contractType: SmlouvaContractType;
-  } | null>(null);
-  const [postSaveBanner, setPostSaveBanner] = useState<{
-    row: EmploymentRow;
-    types: SmlouvaContractType[];
-  } | null>(null);
-  const [generateDropdownRowId, setGenerateDropdownRowId] = useState<string | null>(null);
+  // Generation flow has two distinct modes — row-tied (employment row contract)
+  // and standalone (ad-hoc Multisport / Hmotná odpovědnost / custom). Both
+  // feed the same GenerateContractModal but compose `employeeData` differently.
+  const [generateModal, setGenerateModal] = useState<
+    | { kind: "row"; row: EmploymentRow; contractType: SmlouvaContractType }
+    | {
+        kind: "adhoc";
+        contractType: SmlouvaContractType;
+        signingDate: string;
+        requestedAt?: string;
+        validFrom?: string;
+      }
+    | null
+  >(null);
+  // Adhoc-dropdown state — listing built-in standalone types + custom ones,
+  // and the small signing-date prompt that appears between dropdown click
+  // and GenerateContractModal opening.
+  const [adhocDropdownOpen, setAdhocDropdownOpen] = useState(false);
+  const [signingDatePrompt, setSigningDatePrompt] = useState<SmlouvaContractType | null>(null);
+  const [signingDateDraft, setSigningDateDraft] = useState<string>("");
+  const [requestedAtDraft, setRequestedAtDraft] = useState<string>("");
+  const [validFromDraft, setValidFromDraft] = useState<string>("");
+  const [customStandalone, setCustomStandalone] = useState<{ id: string; name: string }[]>([]);
+  const adhocDropdownRef = useRef<HTMLDivElement | null>(null);
   const [confirmModal, setConfirmModal] = useState<{
     title: string;
     message: string;
@@ -1143,19 +1122,6 @@ export default function EmployeeDetailPage() {
     }
   }
 
-  // For a given (row, type), is there already a contract that matches the
-  // row's current parameters? Used to hide the Generovat button/dropdown
-  // item when no fresh contract is needed for that row + type.
-  function hasMatchingContract(row: EmploymentRow, type: SmlouvaContractType): boolean {
-    const current = buildRowSnapshot(row);
-    return contracts.some(
-      (c) =>
-        c.employmentRowId === row.id &&
-        c.type === type &&
-        snapshotsEqual(c.rowSnapshot, current)
-    );
-  }
-
   // Lazy-load sub-sections when first expanded
   useEffect(() => {
     if (!id) return;
@@ -1174,9 +1140,11 @@ export default function EmployeeDetailPage() {
     }
   }, [expanded, id, loadedSections]);
 
-  // Load contact, documents, and company when smlouvy tab is opened
+  // Load contact + documents when the History tab is opened — they feed
+  // the GenerateContractModal so the user can generate a PDF without
+  // having to first visit the Detail tab to populate the cache.
   useEffect(() => {
-    if (page !== "smlouvy" || !id) return;
+    if (page !== "history" || !id) return;
     if (!loadedSections.has("contact")) {
       setLoadedSections((s) => new Set(s).add("contact"));
       api.get<ContactData | null>(`/employees/${id}/contact`).then(setContact).catch(() => {});
@@ -1186,6 +1154,34 @@ export default function EmployeeDetailPage() {
       api.get<DocumentsData | null>(`/employees/${id}/documents`).then(setDocuments).catch(() => {});
     }
   }, [page, id, loadedSections]);
+
+  // Fetch user-created custom standalone templates for the "+ Adhoc dokument"
+  // dropdown. Built-in standalone types are listed in STANDALONE_TYPES.
+  useEffect(() => {
+    if (!id || (role !== "admin" && role !== "director")) return;
+    api
+      .get<{ id: string; name: string; kind?: string | null }[]>("/contractTemplates")
+      .then((list) =>
+        setCustomStandalone(
+          list.filter((t) => t.kind === "standalone").map((t) => ({ id: t.id, name: t.name }))
+        )
+      )
+      .catch(() => {});
+  }, [id, role]);
+
+  // Close adhoc dropdown on outside click
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (
+        adhocDropdownRef.current &&
+        !adhocDropdownRef.current.contains(e.target as Node)
+      ) {
+        setAdhocDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   async function handleDeleteEmployee() {
     if (!employee || !id) return;
@@ -1295,107 +1291,146 @@ export default function EmployeeDetailPage() {
       <div className={styles.tabs}>
         <button className={page === "detail" ? styles.tabActive : styles.tabBtn} onClick={() => setPage("detail")}>Detail</button>
         <button className={page === "history" ? styles.tabActive : styles.tabBtn} onClick={() => setPage("history")}>Historie pracovního poměru</button>
-        <button className={page === "smlouvy" ? styles.tabActive : styles.tabBtn} onClick={() => setPage("smlouvy")}>Smlouvy</button>
       </div>
 
       {page === "history" && (
         <>
           <div className={styles.historyHeader}>
             <span className={styles.historyTitle}>Historie pracovního poměru</span>
-            <Button variant="primary" size="sm" onClick={() => setShowModal(true)}>+ Přidat záznam</Button>
-          </div>
-          <div className={styles.section}>
-            <div className={styles.sectionBody}>
-              {employment.length === 0 ? (
-                <p className={styles.loading} style={{ padding: "1rem 0" }}>Žádné záznamy.</p>
-              ) : (
-                <div className={styles.timeline} style={{ paddingTop: "1rem" }}>
-                  {employment.map((row) => (
-                    <div key={row.id} className={styles.timelineRow}>
-                      <div className={styles.timelineDot} />
-                      <div className={styles.timelineContent}>
-                        <div className={styles.timelineTitle}>
-                          {row.jobTitle || "—"}{row.contractType ? ` · ${row.contractType}` : ""}
-                        </div>
-                        <div className={styles.timelineMeta}>
-                          {formatDateCZ(row.startDate)} — {row.endDate ? formatDateCZ(row.endDate) : "dosud"}
-                          {row.department ? ` · ${row.department}` : ""}
-                          {(row.salary ?? row.agreedReward) != null && (
-                            <SalaryDisplay value={(row.salary ?? row.agreedReward)!} />
-                          )}
-                        </div>
-                        <div className={styles.timelineBottom}>
-                          <span className={styles.timelineChange}>{row.changeType}</span>
-                          <div className={styles.timelineActions}>
-                            <button className={styles.editRowBtn} onClick={() => setEditingRow(row)}>
-                              Upravit
-                            </button>
-                            {(() => {
-                              const types = getContractTypesForRow(row).filter(
-                                (t) => !hasMatchingContract(row, t)
-                              );
-                              if (types.length === 0) return null;
-                              if (types.length === 1) {
-                                return (
-                                  <Button
-                                    variant="primary"
-                                    size="sm"
-                                    onClick={() => setGenerateModal({ row, contractType: types[0] })}
-                                  >
-                                    Generovat smlouvu
-                                  </Button>
-                                );
-                              }
-                              return (
-                                <div className={styles.generateDropdown}>
-                                  <Button
-                                    variant="primary"
-                                    size="sm"
-                                    onClick={() => setGenerateDropdownRowId(
-                                      generateDropdownRowId === row.id ? null : row.id
-                                    )}
-                                  >
-                                    Generovat smlouvu ▾
-                                  </Button>
-                                  {generateDropdownRowId === row.id && (
-                                    <div className={styles.generateDropdownMenu}>
-                                      {types.map((t) => (
-                                        <button
-                                          key={t}
-                                          className={styles.generateDropdownItem}
-                                          onClick={() => {
-                                            setGenerateDropdownRowId(null);
-                                            setGenerateModal({ row, contractType: t });
-                                          }}
-                                        >
-                                          {CONTRACT_TYPE_LABELS[t]}
-                                        </button>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })()}
-                          </div>
-                        </div>
-                      </div>
+            {canDelete && (
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => setNewEntryMode({ lockedChangeType: "nástup" })}
+                >
+                  + Nástup
+                </Button>
+                <div ref={adhocDropdownRef} style={{ position: "relative" }}>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setAdhocDropdownOpen((v) => !v)}
+                  >
+                    + Adhoc dokument ▾
+                  </Button>
+                  {adhocDropdownOpen && (
+                    <div className={styles.generateDropdownMenu}>
+                      {[
+                        ...STANDALONE_TYPES.map((t) => ({ id: t, label: CONTRACT_TYPE_LABELS[t] })),
+                        ...customStandalone.map((t) => ({ id: t.id, label: t.name })),
+                      ].map((entry) => (
+                        <button
+                          key={entry.id}
+                          className={styles.generateDropdownItem}
+                          onClick={() => {
+                            const today = new Date().toISOString().split("T")[0];
+                            setSigningDatePrompt(entry.id);
+                            setSigningDateDraft(today);
+                            setRequestedAtDraft(today);
+                            setValidFromDraft(today);
+                            setAdhocDropdownOpen(false);
+                          }}
+                        >
+                          {entry.label}
+                        </button>
+                      ))}
                     </div>
-                  ))}
+                  )}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
-          {showModal && (
+
+          {employment.length === 0 ? (
+            <p className={styles.loading} style={{ padding: "1rem 0" }}>Žádné záznamy.</p>
+          ) : (
+            [...groupBySession(employment)].reverse().map((session) => (
+              <EmploymentSessionCard
+                key={session.nastup.id}
+                session={session}
+                contractsByRow={mapContractsToRows(session.rows, contracts)}
+                defaultExpanded={!session.terminated}
+                companies={{}}
+                employeeId={id!}
+                canEdit={canDelete}
+                resolveDefaultType={(row) => {
+                  if (row.changeType === "nástup") {
+                    if (row.contractType === "HPP") return "nastup_hpp";
+                    if (row.contractType === "PPP") return "nastup_ppp";
+                    if (row.contractType === "DPP") return "nastup_dpp";
+                    return "";
+                  }
+                  if (row.changeType === "ukončení") {
+                    return session.effective.contractType === "DPP"
+                      ? "ukonceni_dpp"
+                      : "ukonceni_hpp_ppp";
+                  }
+                  return "zmena_smlouvy";
+                }}
+                resolveDisplayName={(row) =>
+                  buildContractName(
+                    expectedContractTypesForRow(row)[0] ?? "",
+                    {
+                      contractType: row.contractType,
+                      startDate: row.startDate,
+                      changes: row.changes,
+                    },
+                    `${employee.firstName ?? ""} ${employee.lastName ?? ""}`.trim()
+                  )
+                }
+                resolveRowSnapshot={(row) => buildRowSnapshot(row)}
+                onGenerate={(row) => {
+                  const types = expectedContractTypesForRow(row);
+                  if (types.length > 0) {
+                    setGenerateModal({
+                      kind: "row",
+                      row,
+                      contractType: types[0] as SmlouvaContractType,
+                    });
+                  }
+                }}
+                onAddDodatek={() =>
+                  setNewEntryMode({
+                    lockedChangeType: "změna smlouvy",
+                    parentRowId: session.nastup.id,
+                  })
+                }
+                onTerminate={() =>
+                  setNewEntryMode({
+                    lockedChangeType: "ukončení",
+                    parentRowId: session.nastup.id,
+                  })
+                }
+                onContractsChanged={refetchContracts}
+              />
+            ))
+          )}
+
+          <AdhocContractsSection
+            contracts={contracts.filter((c) => !c.employmentRowId)}
+            customTemplates={customStandalone}
+            employeeId={id!}
+            canEdit={canDelete}
+            onContractsChanged={refetchContracts}
+          />
+
+          {newEntryMode && (
             <AddEntryModal
               employeeId={id!}
               employee={employee}
               employment={employment}
-              onClose={() => setShowModal(false)}
+              lockedChangeType={newEntryMode.lockedChangeType}
+              onClose={() => setNewEntryMode(null)}
               onSaved={(row) => {
                 setEmployment((prev) => [row, ...prev]);
-                setShowModal(false);
-                const types = getContractTypesForRow(row);
-                if (types.length > 0) setPostSaveBanner({ row, types });
+                setNewEntryMode(null);
+                // Dodatek may have changed root denormalized fields server-side
+                // (currentJobTitle etc.) — re-fetch the employee to keep the
+                // Detail tab in sync without a full page reload.
+                if (row.changeType === "změna smlouvy" && id) {
+                  api.get<Employee>(`/employees/${id}`).then(setEmployee).catch(() => {});
+                }
               }}
             />
           )}
@@ -1414,27 +1449,98 @@ export default function EmployeeDetailPage() {
               }}
             />
           )}
-        </>
-      )}
 
-      {page === "smlouvy" && (
-        <ContractsTab
-          employeeId={id!}
-          employeeData={{
-            id: employee.id,
-            firstName: employee.firstName,
-            lastName: employee.lastName,
-            currentJobTitle: employee.currentJobTitle,
-            currentCompanyId: employee.currentCompanyId ?? undefined,
-            address: contact?.contactAddress || contact?.permanentAddress,
-            birthDate: employee.dateOfBirth ?? undefined,
-            nationality: employee.nationality,
-            passportNumber: documents?.passportNumber,
-            visaNumber: documents?.visaNumber,
-            visaType: documents?.visaType,
-          }}
-          onContractsChanged={refetchContracts}
-        />
+          {signingDatePrompt && (() => {
+            const isMultisport = signingDatePrompt === "multisport";
+            const promptLabel =
+              CONTRACT_TYPE_LABELS[signingDatePrompt] ??
+              customStandalone.find((t) => t.id === signingDatePrompt)?.name ??
+              signingDatePrompt;
+            const dateInputStyle: React.CSSProperties = {
+              width: "100%",
+              padding: "8px 10px",
+              fontSize: "0.875rem",
+              border: "1px solid var(--color-border)",
+              borderRadius: "6px",
+              background: "var(--color-surface)",
+              color: "var(--color-text)",
+            };
+            const labelStyle: React.CSSProperties = {
+              display: "block",
+              fontSize: "0.8125rem",
+              fontWeight: 500,
+              color: "var(--color-text-secondary)",
+              marginBottom: "4px",
+            };
+            const fieldStyle: React.CSSProperties = { marginBottom: "12px" };
+            const canContinue =
+              !!signingDateDraft && (!isMultisport || (!!requestedAtDraft && !!validFromDraft));
+            return (
+              <div className={modalStyles.overlay}>
+                <div className={modalStyles.modal}>
+                  <div className={modalStyles.header}>
+                    <h2 className={modalStyles.title}>{promptLabel}</h2>
+                  </div>
+                  <div className={modalStyles.body}>
+                    <div style={fieldStyle}>
+                      <label style={labelStyle}>Datum podpisu</label>
+                      <input
+                        type="date"
+                        value={signingDateDraft}
+                        onChange={(e) => setSigningDateDraft(e.target.value)}
+                        autoFocus
+                        style={dateInputStyle}
+                      />
+                    </div>
+                    {isMultisport && (
+                      <>
+                        <div style={fieldStyle}>
+                          <label style={labelStyle}>Datum žádosti</label>
+                          <input
+                            type="date"
+                            value={requestedAtDraft}
+                            onChange={(e) => setRequestedAtDraft(e.target.value)}
+                            style={dateInputStyle}
+                          />
+                        </div>
+                        <div style={{ ...fieldStyle, marginBottom: 0 }}>
+                          <label style={labelStyle}>Platnost od</label>
+                          <input
+                            type="date"
+                            value={validFromDraft}
+                            onChange={(e) => setValidFromDraft(e.target.value)}
+                            style={dateInputStyle}
+                          />
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  <div className={modalStyles.footer}>
+                    <Button variant="secondary" onClick={() => setSigningDatePrompt(null)}>
+                      Zrušit
+                    </Button>
+                    <Button
+                      variant="primary"
+                      disabled={!canContinue}
+                      onClick={() => {
+                        setGenerateModal({
+                          kind: "adhoc",
+                          contractType: signingDatePrompt,
+                          signingDate: signingDateDraft,
+                          requestedAt: isMultisport ? requestedAtDraft : undefined,
+                          validFrom: isMultisport ? validFromDraft : undefined,
+                        });
+                        setSigningDatePrompt(null);
+                      }}
+                    >
+                      Pokračovat
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+        </>
       )}
 
       {page === "detail" && (
@@ -1559,28 +1665,7 @@ export default function EmployeeDetailPage() {
       </>
       )}
 
-      {postSaveBanner && (
-        <div className={styles.postSaveBanner}>
-          <span>Záznam byl uložen. Chcete vygenerovat smlouvu?</span>
-          <div className={styles.postSaveBannerActions}>
-            {postSaveBanner.types.map((t) => (
-              <button
-                key={t}
-                className={styles.postSaveBannerBtn}
-                onClick={() => {
-                  setGenerateModal({ row: postSaveBanner.row, contractType: t });
-                  setPostSaveBanner(null);
-                }}
-              >
-                {CONTRACT_TYPE_LABELS[t]}
-              </button>
-            ))}
-            <button className={styles.postSaveBannerDismiss} onClick={() => setPostSaveBanner(null)}>✕</button>
-          </div>
-        </div>
-      )}
-
-      {generateModal && (
+      {generateModal?.kind === "row" && (
         <GenerateContractModal
           employeeId={id!}
           contractType={generateModal.contractType}
@@ -1632,7 +1717,41 @@ export default function EmployeeDetailPage() {
           onGenerated={() => {
             setGenerateModal(null);
             refetchContracts();
-            setPage("smlouvy");
+          }}
+        />
+      )}
+
+      {generateModal?.kind === "adhoc" && (
+        <GenerateContractModal
+          employeeId={id!}
+          contractType={generateModal.contractType}
+          companyId={employee.currentCompanyId ?? null}
+          employeeData={{
+            id: employee.id,
+            firstName: employee.firstName,
+            lastName: employee.lastName,
+            currentJobTitle: employee.currentJobTitle,
+            currentCompanyId: employee.currentCompanyId ?? undefined,
+            address: contact?.contactAddress || contact?.permanentAddress,
+            birthDate: employee.dateOfBirth ?? undefined,
+            nationality: employee.nationality,
+            passportNumber: documents?.passportNumber,
+            visaNumber: documents?.visaNumber,
+            visaType: documents?.visaType,
+            signingDate: generateModal.signingDate,
+            requestedAt: generateModal.requestedAt,
+            validFrom: generateModal.validFrom,
+          }}
+          displayName={buildContractName(
+            generateModal.contractType,
+            undefined,
+            `${employee.firstName ?? ""} ${employee.lastName ?? ""}`.trim(),
+            customStandalone.find((t) => t.id === generateModal.contractType)?.name
+          )}
+          onClose={() => setGenerateModal(null)}
+          onGenerated={() => {
+            setGenerateModal(null);
+            refetchContracts();
           }}
         />
       )}
