@@ -67,6 +67,15 @@ export default function EmploymentSessionCard({
   const companyName = companies[eff.companyId] ?? eff.companyId ?? "—";
   const shownSalary = eff.contractType === "DPP" ? eff.agreedReward : eff.salary;
 
+  // Surface "original → current" in the header when a Dodatek shifted the
+  // position or contract type during this session, so the user can see at
+  // a glance that there was a transition without expanding the card.
+  const nastupTitle = session.nastup.jobTitle ?? "";
+  const nastupContractType = session.nastup.contractType ?? "";
+  const titleChanged = !!nastupTitle && eff.jobTitle && eff.jobTitle !== nastupTitle;
+  const contractTypeChanged =
+    !!nastupContractType && !!eff.contractType && eff.contractType !== nastupContractType;
+
   return (
     <div className={`${styles.card} ${session.terminated ? styles.terminated : ""}`}>
       <div
@@ -80,8 +89,22 @@ export default function EmploymentSessionCard({
       >
         <div className={styles.headerLeft}>
           <span className={styles.chevron}><Chevron open={open} /></span>
-          <span className={styles.title}>{eff.jobTitle || "—"}</span>
-          {eff.contractType && <span className={styles.tag}>{eff.contractType}</span>}
+          <span className={styles.title}>
+            {titleChanged ? (
+              <>
+                <span className={styles.titleFrom}>{nastupTitle}</span>
+                <span className={styles.titleArrow}> → </span>
+                <span>{eff.jobTitle}</span>
+              </>
+            ) : (
+              eff.jobTitle || "—"
+            )}
+          </span>
+          {eff.contractType && (
+            <span className={styles.tag}>
+              {contractTypeChanged ? `${nastupContractType} → ${eff.contractType}` : eff.contractType}
+            </span>
+          )}
           <span className={styles.meta}>{companyName}</span>
           {shownSalary != null && (
             <span className={styles.salaryWrap}>

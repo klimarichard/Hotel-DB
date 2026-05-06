@@ -47,6 +47,18 @@
   color: var(--color-text);
 }
 
+.titleFrom {
+  color: var(--color-text-secondary);
+  text-decoration: line-through;
+  text-decoration-color: var(--color-text-tertiary, var(--color-text-secondary));
+  font-weight: var(--font-weight-medium);
+}
+
+.titleArrow {
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-regular);
+}
+
 .tag {
   font-size: 0.6875rem;
   font-weight: var(--font-weight-medium);
