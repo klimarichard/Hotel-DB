@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { ContractType } from "@/lib/contractVariables";
 import { formatDateCZ } from "@/lib/dateFormat";
+import { Fragment } from "react";
 import type { EmploymentRow, ContractRecord, EmploymentSession } from "@/lib/employmentSessions";
+import { collectFieldChain } from "@/lib/employmentSessions";
 import EmploymentRowItem from "./EmploymentRowItem";
 import Button from "./Button";
 import SalaryReveal from "./SalaryReveal";
@@ -67,14 +69,15 @@ export default function EmploymentSessionCard({
   const companyName = companies[eff.companyId] ?? eff.companyId ?? "—";
   const shownSalary = eff.contractType === "DPP" ? eff.agreedReward : eff.salary;
 
-  // Surface "original → current" in the header when a Dodatek shifted the
-  // position or contract type during this session, so the user can see at
-  // a glance that there was a transition without expanding the card.
-  const nastupTitle = session.nastup.jobTitle ?? "";
-  const nastupContractType = session.nastup.contractType ?? "";
-  const titleChanged = !!nastupTitle && eff.jobTitle && eff.jobTitle !== nastupTitle;
-  const contractTypeChanged =
-    !!nastupContractType && !!eff.contractType && eff.contractType !== nastupContractType;
+  // Surface every distinct value the field has held during this session,
+  // not just first → last. So three position changes render
+  // "recepční → senior recepční → Front Office Manager" with the older
+  // entries muted. Single-value chains (no transitions) collapse to the
+  // plain current value.
+  const titleChain = collectFieldChain(session, "jobTitle");
+  const contractTypeChain = collectFieldChain(session, "contractType");
+  const titleChanged = titleChain.length > 1;
+  const contractTypeChanged = contractTypeChain.length > 1;
 
   return (
     <div className={`${styles.card} ${session.terminated ? styles.terminated : ""}`}>
@@ -91,18 +94,22 @@ export default function EmploymentSessionCard({
           <span className={styles.chevron}><Chevron open={open} /></span>
           <span className={styles.title}>
             {titleChanged ? (
-              <>
-                <span className={styles.titleFrom}>{nastupTitle}</span>
-                <span className={styles.titleArrow}> → </span>
-                <span>{eff.jobTitle}</span>
-              </>
+              titleChain.map((v, i) => {
+                const isLast = i === titleChain.length - 1;
+                return (
+                  <Fragment key={i}>
+                    <span className={isLast ? undefined : styles.titleFrom}>{v}</span>
+                    {!isLast && <span className={styles.titleArrow}> → </span>}
+                  </Fragment>
+                );
+              })
             ) : (
               eff.jobTitle || "—"
             )}
           </span>
           {eff.contractType && (
             <span className={styles.tag}>
-              {contractTypeChanged ? `${nastupContractType} → ${eff.contractType}` : eff.contractType}
+              {contractTypeChanged ? contractTypeChain.join(" → ") : eff.contractType}
             </span>
           )}
           <span className={styles.meta}>{companyName}</span>
