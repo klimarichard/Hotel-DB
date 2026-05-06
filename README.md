@@ -614,7 +614,7 @@ A Dodatek row stores only `changes[]` and `startDate` — `companyId`, `contract
 |------------------------------|-------------------------------------------------------------|
 | No contract record           | `Generovat smlouvu`, `Nahrát podepsanou smlouvu`            |
 | Contract record, unsigned    | "Stáhnout", `Smazat smlouvu`, `Nahrát podepsanou smlouvu`   |
-| Contract record, signed      | "Stáhnout podepsanou", `Smazat smlouvu`, `Nahrát podepsanou smlouvu` |
+| Contract record, signed      | "Stáhnout podepsanou", `Smazat smlouvu`                     |
 
 The existing `archived` lifecycle (PATCH `status: "archived"` / `status: "unsigned"`) is no longer surfaced in the UI; the backend endpoint stays in place for backward safety. Legacy archived contracts render as ordinary signed contracts in the new layout.
 
