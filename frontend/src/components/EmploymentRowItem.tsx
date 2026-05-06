@@ -4,6 +4,7 @@ import { formatDateCZ } from "@/lib/dateFormat";
 import type { EmploymentRow, ContractRecord } from "@/lib/employmentSessions";
 import ContractActionButtons from "./ContractActionButtons";
 import ConfirmModal from "./ConfirmModal";
+import SalaryReveal from "./SalaryReveal";
 import styles from "./EmploymentRowItem.module.css";
 
 interface Props {
@@ -43,14 +44,14 @@ const CHANGE_KIND_LABEL: Record<string, string> = {
   "délka smlouvy": "Délka smlouvy",
 };
 
-function formatChangeValue(kind: string, value: string): string {
+function renderChangeValue(kind: string, value: string): React.ReactNode {
   if (!value) return "—";
   if (kind === "mzda") {
     const n = Number(value);
-    if (Number.isFinite(n)) return `${n.toLocaleString("cs-CZ")} Kč`;
+    if (Number.isFinite(n)) return <SalaryReveal value={n} />;
   }
   if (kind === "délka smlouvy") {
-    return formatDateCZ(value) ?? value;
+    return formatDateCZ(value) || value;
   }
   return value;
 }
@@ -71,17 +72,27 @@ export default function EmploymentRowItem({
 }: Props) {
   const label = ROW_LABEL[row.changeType] ?? row.changeType;
 
-  let detail: string | null = null;
+  let detail: React.ReactNode = null;
   if (row.changeType === "nástup") {
-    detail = row.contractType ? `${row.contractType}` : null;
+    detail = row.contractType || null;
   } else if (row.changeType === "změna smlouvy") {
     const parts = (row.changes ?? [])
       .filter((c) => c.changeKind)
-      .map((c) => {
+      .map((c, i) => {
         const k = CHANGE_KIND_LABEL[c.changeKind] ?? c.changeKind;
-        return `${k}: ${formatChangeValue(c.changeKind, c.value)}`;
+        return (
+          <span key={i} className={styles.changePart}>
+            {k}: {renderChangeValue(c.changeKind, c.value)}
+          </span>
+        );
       });
-    detail = parts.length ? parts.join(" · ") : null;
+    if (parts.length > 0) {
+      detail = parts.reduce<React.ReactNode[]>((acc, p, i) => {
+        if (i > 0) acc.push(<span key={`sep-${i}`} className={styles.changeSep}> · </span>);
+        acc.push(p);
+        return acc;
+      }, []);
+    }
   }
 
   const signedLocked = !!contract?.signedStoragePath;

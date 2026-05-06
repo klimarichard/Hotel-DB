@@ -64,26 +64,8 @@
   white-space: nowrap;
 }
 
-.salary {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
+.salaryWrap {
   font-size: 0.8125rem;
-  color: var(--color-text);
-  font-variant-numeric: tabular-nums;
-}
-
-.revealBtn {
-  background: none;
-  border: none;
-  padding: 0 2px;
-  cursor: pointer;
-  color: var(--color-text-secondary);
-  display: inline-flex;
-  align-items: center;
-}
-
-.revealBtn:hover {
   color: var(--color-text);
 }
 

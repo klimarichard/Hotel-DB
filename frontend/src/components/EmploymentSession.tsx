@@ -4,6 +4,7 @@ import { formatDateCZ } from "@/lib/dateFormat";
 import type { EmploymentRow, ContractRecord, EmploymentSession } from "@/lib/employmentSessions";
 import EmploymentRowItem from "./EmploymentRowItem";
 import Button from "./Button";
+import SalaryReveal from "./SalaryReveal";
 import styles from "./EmploymentSession.module.css";
 
 interface CompanyMap {
@@ -37,41 +38,12 @@ interface Props {
   onContractsChanged: () => void;
 }
 
-const Eye = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
-  </svg>
-);
-const EyeOff = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
-    <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
-    <line x1="1" y1="1" x2="23" y2="23" />
-  </svg>
-);
 const Chevron = ({ open }: { open: boolean }) => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
     style={{ transform: open ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }}>
     <polyline points="6 9 12 15 18 9" />
   </svg>
 );
-
-function SalaryReveal({ value }: { value: number }) {
-  const [shown, setShown] = useState(false);
-  return (
-    <span className={styles.salary}>
-      {shown ? `${value.toLocaleString("cs-CZ")} Kč` : "•••••"}
-      <button
-        type="button"
-        className={styles.revealBtn}
-        onClick={(e) => { e.stopPropagation(); setShown((v) => !v); }}
-        title={shown ? "Skrýt" : "Zobrazit"}
-      >
-        {shown ? <EyeOff /> : <Eye />}
-      </button>
-    </span>
-  );
-}
 
 export default function EmploymentSessionCard({
   session,
@@ -111,7 +83,11 @@ export default function EmploymentSessionCard({
           <span className={styles.title}>{eff.jobTitle || "—"}</span>
           {eff.contractType && <span className={styles.tag}>{eff.contractType}</span>}
           <span className={styles.meta}>{companyName}</span>
-          {shownSalary != null && <SalaryReveal value={shownSalary} />}
+          {shownSalary != null && (
+            <span className={styles.salaryWrap}>
+              <SalaryReveal value={shownSalary} />
+            </span>
+          )}
           <span className={styles.dates}>
             {formatDateCZ(eff.startDate) ?? eff.startDate}
             {" → "}
