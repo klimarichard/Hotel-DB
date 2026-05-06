@@ -472,12 +472,16 @@ function ChangeRowInput({
   onChange,
   onRemove,
   canRemove,
+  positions,
+  departments,
 }: {
   row: ChangeRow;
   index: number;
   onChange: (i: number, field: keyof ChangeRow, value: string) => void;
   onRemove: (i: number) => void;
   canRemove: boolean;
+  positions: JobPositionRec[];
+  departments: DepartmentRec[];
 }) {
   return (
     <div className={styles.changeEntry}>
@@ -500,14 +504,58 @@ function ChangeRowInput({
             onChange={(e) => onChange(index, "value", e.target.value)}
           />
         )}
-        {row.changeKind === "pracovní pozice" && (
-          <input
-            className={styles.modalInput}
-            placeholder="Nová pozice"
-            value={row.value}
-            onChange={(e) => onChange(index, "value", e.target.value)}
-          />
-        )}
+        {row.changeKind === "pracovní pozice" && (() => {
+          // Group every jobPosition by its department so the user can scan
+          // the full catalogue without being filtered to the employee's
+          // current department. Positions whose department is missing
+          // (deleted or never set) fall into a trailing "ostatní" group.
+          const byDept = new Map<string, JobPositionRec[]>();
+          for (const p of positions) {
+            const arr = byDept.get(p.departmentId) ?? [];
+            arr.push(p);
+            byDept.set(p.departmentId, arr);
+          }
+          for (const arr of byDept.values()) {
+            arr.sort((a, b) => a.name.localeCompare(b.name, "cs"));
+          }
+          const sortedDepts = [...departments]
+            .sort((a, b) => a.name.localeCompare(b.name, "cs"))
+            .filter((d) => byDept.has(d.id));
+          const orphanIds = [...byDept.keys()].filter(
+            (id) => !departments.some((d) => d.id === id)
+          );
+          // Preserve the current value as a fallback option when it
+          // doesn't match any catalogue entry (e.g. a legacy free-text
+          // string from before this dropdown existed) — otherwise the
+          // <select> would silently drop it.
+          const valueInCatalogue = positions.some((p) => p.name === row.value);
+          return (
+            <select
+              className={styles.modalInput}
+              value={row.value}
+              onChange={(e) => onChange(index, "value", e.target.value)}
+            >
+              <option value="">— vyberte pozici —</option>
+              {!valueInCatalogue && row.value && (
+                <option value={row.value}>{row.value} (mimo katalog)</option>
+              )}
+              {sortedDepts.map((d) => (
+                <optgroup key={d.id} label={d.name}>
+                  {(byDept.get(d.id) ?? []).map((p) => (
+                    <option key={p.id} value={p.name}>{p.name}</option>
+                  ))}
+                </optgroup>
+              ))}
+              {orphanIds.length > 0 && (
+                <optgroup label="ostatní">
+                  {orphanIds.flatMap((id) => byDept.get(id) ?? []).map((p) => (
+                    <option key={p.id} value={p.name}>{p.name}</option>
+                  ))}
+                </optgroup>
+              )}
+            </select>
+          );
+        })()}
         {row.changeKind === "úvazek" && (
           <select
             className={styles.modalInput}
@@ -948,6 +996,8 @@ function AddEntryModal({
                       onChange={updateChange}
                       onRemove={removeChange}
                       canRemove={form.changes.length > 1}
+                      positions={positions}
+                      departments={departments}
                     />
                   ))}
                   {form.changes.length < 5 && (
