@@ -67,6 +67,13 @@ export interface EmploymentSession {
   /** All rows in the session in chronological order (for rendering). */
   rows: EmploymentRow[];
   effective: EffectiveState;
+  /**
+   * Session has ended — either an explicit Ukončení row exists, or the
+   * effective endDate is in the past (a fixed-term Nástup that ran out
+   * without anyone filing the termination paperwork). The UI treats the
+   * two cases identically: no "+ Dodatek" / "Ukončit smlouvu" buttons,
+   * dimmed card styling.
+   */
   terminated: boolean;
 }
 
@@ -86,6 +93,14 @@ export function groupBySession(rows: EmploymentRow[]): EmploymentSession[] {
     ukonceni: EmploymentRow | null;
   } | null = null;
 
+  // Today as YYYY-MM-DD in local time — both startDate / endDate are
+  // stored in this same form, so a lex comparison is correct.
+  const today = (() => {
+    const d = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  })();
+
   function flush() {
     if (!current) return;
     const rowsInOrder = [
@@ -93,13 +108,15 @@ export function groupBySession(rows: EmploymentRow[]): EmploymentSession[] {
       ...current.dodatky,
       ...(current.ukonceni ? [current.ukonceni] : []),
     ];
+    const effective = computeEffectiveState(current.nastup, current.dodatky, current.ukonceni);
+    const expired = !!effective.endDate && effective.endDate < today;
     sessions.push({
       nastup: current.nastup,
       dodatky: current.dodatky,
       ukonceni: current.ukonceni,
       rows: rowsInOrder,
-      effective: computeEffectiveState(current.nastup, current.dodatky, current.ukonceni),
-      terminated: !!current.ukonceni,
+      effective,
+      terminated: !!current.ukonceni || expired,
     });
     current = null;
   }
