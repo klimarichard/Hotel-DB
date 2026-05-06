@@ -3,7 +3,6 @@ import { ContractType, CHANGE_TYPE_TO_CONTRACTS } from "./contractVariables";
 export interface ChangeRow {
   changeKind: string;
   value: string;
-  contractText: string;
 }
 
 export interface EmploymentRow {

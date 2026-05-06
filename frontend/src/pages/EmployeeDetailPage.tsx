@@ -269,7 +269,6 @@ interface Employee {
 interface ChangeRow {
   changeKind: string;
   value: string;
-  contractText: string;
 }
 
 interface EmploymentRow {
@@ -389,7 +388,7 @@ const UVAZEK_OPTIONS = [
   "poloviční pracovní úvazek, tj. 20 hod./týdně",
 ] as const;
 
-const emptyChangeRow: ChangeRow = { changeKind: "", value: "", contractText: "" };
+const emptyChangeRow: ChangeRow = { changeKind: "", value: "" };
 
 interface DepartmentRec {
   id: string;
@@ -536,13 +535,6 @@ function ChangeRowInput({
       {row.changeKind === "délka smlouvy" && !row.value && (
         <p className={styles.tenureNote}>Prázdné datum = změna na dobu neurčitou</p>
       )}
-      <input
-        className={styles.modalInput}
-        placeholder="Text pro smlouvu"
-        value={row.contractText}
-        onChange={(e) => onChange(index, "contractText", e.target.value)}
-        style={{ marginTop: "0.5rem" }}
-      />
     </div>
   );
 }
