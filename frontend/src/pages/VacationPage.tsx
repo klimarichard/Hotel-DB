@@ -128,17 +128,17 @@ export default function VacationPage() {
 
   // Admin/director split: anything that still needs attention (pending status
   // or a pendingEdit on an approved request) stays in the main list regardless
-  // of date; otherwise anything starting today or later is "future". Decided
-  // requests whose start date is in the past go into the collapsible
-  // "Starší žádosti".
+  // of date; otherwise anything whose end date hasn't passed yet is "future"
+  // (which includes ongoing vacations). Decided requests whose end date has
+  // passed go into the collapsible "Starší žádosti".
   const needsAttention = (r: VacationRequest) =>
     r.status === "pending" || r.pendingEdit !== null;
   const futureRequests = requests
-    .filter((r) => needsAttention(r) || r.startDate >= todayYMD)
+    .filter((r) => needsAttention(r) || r.endDate >= todayYMD)
     .slice()
     .sort((a, b) => a.startDate.localeCompare(b.startDate));
   const pastRequests = requests
-    .filter((r) => !needsAttention(r) && r.startDate < todayYMD)
+    .filter((r) => !needsAttention(r) && r.endDate < todayYMD)
     .slice()
     .sort((a, b) => b.startDate.localeCompare(a.startDate));
 

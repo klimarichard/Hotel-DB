@@ -56,10 +56,11 @@ vacationRouter.get(
 );
 
 // ─── GET /vacation/approved-upcoming ──────────────────────────────────────────
-// Lightweight list of approved vacations starting today or later, scoped to
-// rank-and-file employees only. Returned to every authenticated user so
-// employees can see where colleagues already have approved vacation without
-// leaking reasons or other metadata. Sorted by startDate ascending.
+// Lightweight list of approved vacations that haven't ended yet (endDate
+// today or later — includes ongoing vacations), scoped to rank-and-file
+// employees only. Returned to every authenticated user so employees can see
+// where colleagues already have approved vacation without leaking reasons
+// or other metadata. Sorted by startDate ascending.
 
 vacationRouter.get("/approved-upcoming", requireAuth, async (_req, res) => {
   // YYYY-MM-DD in the Prague timezone, regardless of Cloud Functions TZ.
@@ -76,7 +77,7 @@ vacationRouter.get("/approved-upcoming", requireAuth, async (_req, res) => {
 
   const rows = vacSnap.docs
     .map((d) => d.data() as Record<string, unknown>)
-    .filter((v) => ((v.startDate as string) ?? "") >= todayYMD)
+    .filter((v) => ((v.endDate as string) ?? "") >= todayYMD)
     .filter((v) => employeeUids.has((v.uid as string) ?? ""))
     .map((v) => ({
       employeeId: (v.employeeId as string) ?? "",
