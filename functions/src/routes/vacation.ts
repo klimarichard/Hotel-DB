@@ -56,8 +56,8 @@ vacationRouter.get(
 );
 
 // ─── GET /vacation/approved-upcoming ──────────────────────────────────────────
-// Lightweight list of approved vacations whose endDate is today or later, for
-// every authenticated user. Only name + date range fields are returned so
+// Lightweight list of approved vacations starting today or later, scoped to
+// rank-and-file employees only. Returned to every authenticated user so
 // employees can see where colleagues already have approved vacation without
 // leaking reasons or other metadata. Sorted by startDate ascending.
 
@@ -67,14 +67,17 @@ vacationRouter.get("/approved-upcoming", requireAuth, async (_req, res) => {
     timeZone: "Europe/Prague",
   }).format(new Date());
 
-  const snap = await db()
-    .collection("vacationRequests")
-    .where("status", "==", "approved")
-    .get();
+  const [vacSnap, employeeUsersSnap] = await Promise.all([
+    db().collection("vacationRequests").where("status", "==", "approved").get(),
+    db().collection("users").where("role", "==", "employee").get(),
+  ]);
 
-  const rows = snap.docs
+  const employeeUids = new Set(employeeUsersSnap.docs.map((d) => d.id));
+
+  const rows = vacSnap.docs
     .map((d) => d.data() as Record<string, unknown>)
-    .filter((v) => ((v.endDate as string) ?? "") >= todayYMD)
+    .filter((v) => ((v.startDate as string) ?? "") >= todayYMD)
+    .filter((v) => employeeUids.has((v.uid as string) ?? ""))
     .map((v) => ({
       employeeId: (v.employeeId as string) ?? "",
       firstName: (v.firstName as string) ?? "",
