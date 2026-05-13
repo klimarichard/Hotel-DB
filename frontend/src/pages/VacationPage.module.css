@@ -308,6 +308,41 @@
   vertical-align: middle;
 }
 
+/* ── Collapsible section header ───────────────────────────────────────────── */
+
+.collapsibleHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.85rem 1.25rem;
+  background: transparent;
+  border: none;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--color-text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.collapsibleHeader:hover {
+  background: var(--color-bg);
+}
+
+.collapsibleChevron {
+  display: inline-block;
+  width: 0.9rem;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  line-height: 1;
+}
+
+.collapsibleCount {
+  font-weight: 500;
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+}
+
 /* ── Pending edit sub-row (admin) ─────────────────────────────────────────── */
 
 .pendingEditRow {
