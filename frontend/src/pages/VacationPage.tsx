@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { api, ApiError } from "../lib/api";
 import { useAuth } from "../hooks/useAuth";
 import { useVacationContext } from "@/context/VacationContext";
@@ -100,6 +100,8 @@ export default function VacationPage() {
     collisions: ShiftCollision[];
   } | null>(null);
 
+  const [showPastRequests, setShowPastRequests] = useState(false);
+
   useEffect(() => {
     api
       .get<VacationRequest[]>("/vacation")
@@ -119,7 +121,26 @@ export default function VacationPage() {
   }, [canApprove]);
 
   const myRequests = requests.filter((r) => r.uid === user?.uid);
-  const allRequests = requests; // admin/director already gets all from backend
+
+  // YYYY-MM-DD in local time (matches what the date inputs and backend produce).
+  const now = new Date();
+  const todayYMD = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+
+  // Admin/director split: anything that still needs attention (pending status
+  // or a pendingEdit on an approved request) stays in the main list regardless
+  // of date; otherwise anything whose end date hasn't passed yet is "future"
+  // (which includes ongoing vacations). Decided requests whose end date has
+  // passed go into the collapsible "Starší žádosti".
+  const needsAttention = (r: VacationRequest) =>
+    r.status === "pending" || r.pendingEdit !== null;
+  const futureRequests = requests
+    .filter((r) => needsAttention(r) || r.endDate >= todayYMD)
+    .slice()
+    .sort((a, b) => a.startDate.localeCompare(b.startDate));
+  const pastRequests = requests
+    .filter((r) => !needsAttention(r) && r.endDate < todayYMD)
+    .slice()
+    .sort((a, b) => b.startDate.localeCompare(a.startDate));
 
   async function handleSubmit() {
     setFormError(null);
@@ -512,135 +533,165 @@ export default function VacationPage() {
       )}
 
       {/* All requests — admin/director only */}
-      {canApprove && (
-        <div className={styles.tableWrapper}>
-          <div className={styles.sectionTitle}>Všechny žádosti</div>
-          {loading ? (
-            <div className={styles.empty}>Načítám…</div>
-          ) : allRequests.length === 0 ? (
-            <div className={styles.empty}>Žádné žádosti.</div>
-          ) : (
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th>Zaměstnanec</th>
-                  <th>Žádáno</th>
-                  <th>Od</th>
-                  <th>Do</th>
-                  <th>Poznámka</th>
-                  <th>Stav</th>
-                  <th>Akce</th>
-                </tr>
-              </thead>
-              <tbody>
-                {allRequests.map((req) => (
-                  <>
-                    <tr
-                      key={req.id}
-                      className={req.status === "approved" && !req.pendingEdit ? styles.rowDone : ""}
+      {canApprove && (() => {
+        const renderRow = (req: VacationRequest) => (
+          <Fragment key={req.id}>
+            <tr
+              className={req.status === "approved" && !req.pendingEdit ? styles.rowDone : ""}
+            >
+              <td>
+                {req.lastName} {req.firstName}
+              </td>
+              <td>{formatDatetimeCZ(req.requestedAt)}</td>
+              <td>{formatDateCZ(req.startDate)}</td>
+              <td>{formatDateCZ(req.endDate)}</td>
+              <td>{req.reason || "—"}</td>
+              <td>
+                <StatusBadge status={req.status} />
+                {req.pendingEdit && (
+                  <span className={styles.badgeEdited}>Upraveno</span>
+                )}
+                {req.status === "rejected" && req.rejectionReason && (
+                  <div className={styles.rejectionNote}>{req.rejectionReason}</div>
+                )}
+              </td>
+              <td>
+                {req.status === "pending" && !req.pendingEdit && (
+                  <div className={styles.actions}>
+                    <button
+                      className={styles.approveBtn}
+                      onClick={() => handleApprove(req.id)}
+                      disabled={actionSaving}
                     >
-                      <td>
-                        {req.lastName} {req.firstName}
-                      </td>
-                      <td>{formatDatetimeCZ(req.requestedAt)}</td>
-                      <td>{formatDateCZ(req.startDate)}</td>
-                      <td>{formatDateCZ(req.endDate)}</td>
-                      <td>{req.reason || "—"}</td>
-                      <td>
-                        <StatusBadge status={req.status} />
-                        {req.pendingEdit && (
-                          <span className={styles.badgeEdited}>Upraveno</span>
-                        )}
-                        {req.status === "rejected" && req.rejectionReason && (
-                          <div className={styles.rejectionNote}>{req.rejectionReason}</div>
-                        )}
-                      </td>
-                      <td>
-                        {req.status === "pending" && !req.pendingEdit && (
-                          <div className={styles.actions}>
-                            <button
-                              className={styles.approveBtn}
-                              onClick={() => handleApprove(req.id)}
-                              disabled={actionSaving}
-                            >
-                              Schválit
-                            </button>
-                            <button
-                              className={styles.rejectBtn}
-                              onClick={() => {
-                                setRejectingId(req.id);
-                                setRejectionReason("");
-                              }}
-                              disabled={actionSaving}
-                            >
-                              Zamítnout
-                            </button>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                    {req.pendingEdit && (
-                      <tr key={`pendingedit-${req.id}`} className={styles.pendingEditRow}>
-                        <td colSpan={7}>
-                          <span className={styles.pendingEditLabel}>Navrhovaná změna:</span>
-                          <span className={styles.pendingEditDates}>
-                            {formatDateCZ(req.pendingEdit.startDate)}
-                            {" – "}
-                            {formatDateCZ(req.pendingEdit.endDate)}
-                            {req.pendingEdit.reason && <> &middot; {req.pendingEdit.reason}</>}
-                          </span>
-                          <button
-                            className={styles.approveBtn}
-                            onClick={() => handleApprove(req.id)}
-                            disabled={actionSaving}
-                          >
-                            Schválit úpravu
-                          </button>
-                          <button
-                            className={styles.rejectBtn}
-                            style={{ marginLeft: "0.5rem" }}
-                            onClick={() => handleReject(req.id)}
-                            disabled={actionSaving}
-                          >
-                            Zamítnout úpravu
-                          </button>
-                        </td>
-                      </tr>
-                    )}
-                    {rejectingId === req.id && (
-                      <tr key={`reject-${req.id}`} className={styles.rejectRow}>
-                        <td colSpan={7}>
-                          <input
-                            className={styles.rejectInput}
-                            placeholder="Důvod zamítnutí (volitelné)…"
-                            value={rejectionReason}
-                            onChange={(e) => setRejectionReason(e.target.value)}
-                          />
-                          <Button
-                            variant="danger"
-                            size="sm"
-                            onClick={() => handleReject(req.id)}
-                            disabled={actionSaving}
-                          >
-                            Potvrdit zamítnutí
-                          </Button>
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => setRejectingId(null)}
-                          >
-                            Zrušit
-                          </Button>
-                        </td>
-                      </tr>
-                    )}
-                  </>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      )}
+                      Schválit
+                    </button>
+                    <button
+                      className={styles.rejectBtn}
+                      onClick={() => {
+                        setRejectingId(req.id);
+                        setRejectionReason("");
+                      }}
+                      disabled={actionSaving}
+                    >
+                      Zamítnout
+                    </button>
+                  </div>
+                )}
+              </td>
+            </tr>
+            {req.pendingEdit && (
+              <tr className={styles.pendingEditRow}>
+                <td colSpan={7}>
+                  <span className={styles.pendingEditLabel}>Navrhovaná změna:</span>
+                  <span className={styles.pendingEditDates}>
+                    {formatDateCZ(req.pendingEdit.startDate)}
+                    {" – "}
+                    {formatDateCZ(req.pendingEdit.endDate)}
+                    {req.pendingEdit.reason && <> &middot; {req.pendingEdit.reason}</>}
+                  </span>
+                  <button
+                    className={styles.approveBtn}
+                    onClick={() => handleApprove(req.id)}
+                    disabled={actionSaving}
+                  >
+                    Schválit úpravu
+                  </button>
+                  <button
+                    className={styles.rejectBtn}
+                    style={{ marginLeft: "0.5rem" }}
+                    onClick={() => handleReject(req.id)}
+                    disabled={actionSaving}
+                  >
+                    Zamítnout úpravu
+                  </button>
+                </td>
+              </tr>
+            )}
+            {rejectingId === req.id && (
+              <tr className={styles.rejectRow}>
+                <td colSpan={7}>
+                  <input
+                    className={styles.rejectInput}
+                    placeholder="Důvod zamítnutí (volitelné)…"
+                    value={rejectionReason}
+                    onChange={(e) => setRejectionReason(e.target.value)}
+                  />
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={() => handleReject(req.id)}
+                    disabled={actionSaving}
+                  >
+                    Potvrdit zamítnutí
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setRejectingId(null)}
+                  >
+                    Zrušit
+                  </Button>
+                </td>
+              </tr>
+            )}
+          </Fragment>
+        );
+
+        const header = (
+          <thead>
+            <tr>
+              <th>Zaměstnanec</th>
+              <th>Žádáno</th>
+              <th>Od</th>
+              <th>Do</th>
+              <th>Poznámka</th>
+              <th>Stav</th>
+              <th>Akce</th>
+            </tr>
+          </thead>
+        );
+
+        return (
+          <>
+            <div className={styles.tableWrapper}>
+              <div className={styles.sectionTitle}>Všechny žádosti</div>
+              {loading ? (
+                <div className={styles.empty}>Načítám…</div>
+              ) : futureRequests.length === 0 ? (
+                <div className={styles.empty}>Žádné žádosti.</div>
+              ) : (
+                <table className={styles.table}>
+                  {header}
+                  <tbody>{futureRequests.map(renderRow)}</tbody>
+                </table>
+              )}
+            </div>
+
+            {!loading && pastRequests.length > 0 && (
+              <div className={styles.tableWrapper}>
+                <button
+                  type="button"
+                  className={styles.collapsibleHeader}
+                  onClick={() => setShowPastRequests((v) => !v)}
+                  aria-expanded={showPastRequests}
+                >
+                  <span className={styles.collapsibleChevron} aria-hidden="true">
+                    {showPastRequests ? "▾" : "▸"}
+                  </span>
+                  <span>Starší žádosti</span>
+                  <span className={styles.collapsibleCount}>({pastRequests.length})</span>
+                </button>
+                {showPastRequests && (
+                  <table className={styles.table}>
+                    {header}
+                    <tbody>{pastRequests.map(renderRow)}</tbody>
+                  </table>
+                )}
+              </div>
+            )}
+          </>
+        );
+      })()}
     </div>
   );
 }
