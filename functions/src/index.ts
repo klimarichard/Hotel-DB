@@ -1,5 +1,6 @@
 import * as functions from "firebase-functions";
 import { onSchedule } from "firebase-functions/v2/scheduler";
+import { setGlobalOptions } from "firebase-functions/v2";
 import * as admin from "firebase-admin";
 import express from "express";
 import cors from "cors";
@@ -24,6 +25,11 @@ import { createOrUpdatePayrollPeriod } from "./services/payrollCalculator";
 import { sweepExpiredMultisport } from "./services/multisportSweep";
 import { updateDocumentAlerts, EXPIRY_FIELDS } from "./routes/employees";
 import { refreshAllProbationAlerts } from "./services/probationAlerts";
+
+// All functions run in europe-west3 to co-locate with the Firestore
+// database — avoids cross-region latency on every read/write.
+const REGION = "europe-west3";
+setGlobalOptions({ region: REGION }); // applies to the v2 onSchedule functions
 
 admin.initializeApp();
 
@@ -97,12 +103,13 @@ app.post("/employees/trigger-alert-refresh", async (_req, res) => {
 // (~500 MB resident, ~3–5s cold start). Other endpoints share the
 // same instance; the cost is amortised.
 export const api = functions
+  .region(REGION)
   .runWith({ memory: "1GB", timeoutSeconds: 60 })
   .https.onRequest(app);
 
 // ─── Scheduled function: auto-transition plans at their deadlines ─────────────
 // Runs every 5 minutes in production. In the emulator, trigger manually via:
-//   curl -X POST http://127.0.0.1:5002/hotel-hr-app-75581/us-central1/api/shifts/trigger-deadlines
+//   curl -X POST http://127.0.0.1:5002/hotel-hr-app-75581/europe-west3/api/shifts/trigger-deadlines
 
 export const checkPlanDeadlines = onSchedule("every 5 minutes", async () => {
   await transitionPlanDeadlines();
