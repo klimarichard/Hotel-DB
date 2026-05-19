@@ -1,4 +1,5 @@
-import puppeteer, { Browser } from "puppeteer";
+import puppeteer, { Browser } from "puppeteer-core";
+import chromium from "@sparticuz/chromium";
 
 export interface RenderMargins {
   top: number;
@@ -65,24 +66,62 @@ const RENDER_CSS = `
 
 let browserPromise: Promise<Browser> | null = null;
 
+/** True when running under the Firebase Functions emulator. */
+const IS_EMULATOR = !!process.env.FUNCTIONS_EMULATOR;
+
+/**
+ * Local Chrome the emulator drives. `puppeteer-core` ships no browser of
+ * its own — that is the whole point: it keeps the deployed bundle small.
+ * Local development therefore relies on a system Chrome install. Override
+ * `LOCAL_CHROME_PATH` in `functions/.env` if Chrome lives elsewhere.
+ */
+const LOCAL_CHROME_PATH =
+  process.env.LOCAL_CHROME_PATH ||
+  "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
+
+// PDF rendering needs no WebGL/graphics stack — skip unpacking those libs.
+chromium.setGraphicsMode = false;
+
+/**
+ * Resolve launch options for the current environment and start Chromium.
+ *
+ * Deployed: the Chromium binary ships *inside* `node_modules` via
+ * `@sparticuz/chromium`, and the GCF buildpack carries `node_modules` into
+ * the runtime image — which is exactly why plain `puppeteer`'s
+ * postinstall-downloaded browser failed ("Could not find Chrome").
+ *
+ * Emulator: drive a locally installed Chrome via `LOCAL_CHROME_PATH`.
+ */
+async function launchBrowser(): Promise<Browser> {
+  if (IS_EMULATOR) {
+    return puppeteer.launch({
+      headless: true,
+      executablePath: LOCAL_CHROME_PATH,
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-gpu",
+      ],
+    });
+  }
+  return puppeteer.launch({
+    headless: chromium.headless,
+    executablePath: await chromium.executablePath(),
+    args: chromium.args,
+  });
+}
+
 /**
  * Lazy, module-level browser singleton — one Chromium per Cloud Function
  * instance, reused across requests so cold-start cost is paid only on
- * the first render. If the browser dies (closed, crashed), null out the
- * promise so the next call relaunches.
+ * the first render. The promise is assigned synchronously so concurrent
+ * callers share a single launch. If the browser dies (closed, crashed),
+ * null out the promise so the next call relaunches.
  */
 async function getBrowser(): Promise<Browser> {
   if (!browserPromise) {
-    browserPromise = puppeteer
-      .launch({
-        headless: true,
-        args: [
-          "--no-sandbox",
-          "--disable-setuid-sandbox",
-          "--disable-dev-shm-usage",
-          "--disable-gpu",
-        ],
-      })
+    browserPromise = launchBrowser()
       .then((b) => {
         b.on("disconnected", () => {
           browserPromise = null;
