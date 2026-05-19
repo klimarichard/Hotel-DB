@@ -99,13 +99,21 @@ app.post("/employees/trigger-alert-refresh", async (_req, res) => {
   res.json({ refreshed });
 });
 
+// Mount the app at both `/api` and `/`. Firebase Hosting rewrites the
+// `/api/**` prefix through to the function verbatim, whereas the direct
+// function URL and the Vite dev proxy deliver paths without it — mounting
+// at both points makes every access path resolve to the same routes.
+const root = express();
+root.use("/api", app);
+root.use("/", app);
+
 // Bumped memory + timeout to fit Puppeteer's Chromium launch
 // (~500 MB resident, ~3–5s cold start). Other endpoints share the
 // same instance; the cost is amortised.
 export const api = functions
   .region(REGION)
   .runWith({ memory: "1GB", timeoutSeconds: 60 })
-  .https.onRequest(app);
+  .https.onRequest(root);
 
 // ─── Scheduled function: auto-transition plans at their deadlines ─────────────
 // Runs every 5 minutes in production. In the emulator, trigger manually via:
