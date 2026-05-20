@@ -10,14 +10,6 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function hasRole(role) {
-      return isAuthenticated() && request.auth.token.role == role;
-    }
-
-    function isAdminOrHR() {
-      return hasRole('admin') || hasRole('hr');
-    }
-
     // Users can read their own notification
     match /notifications/{notificationId} {
       allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
