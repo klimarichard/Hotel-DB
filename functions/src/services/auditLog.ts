@@ -4,7 +4,7 @@ import { UserRole } from "../middleware/auth";
 
 const db = () => admin.firestore();
 
-export type AuditAction = "create" | "update" | "delete" | "reveal" | "export";
+export type AuditAction = "create" | "update" | "delete" | "reveal" | "export" | "manual-trigger";
 
 export interface AuditContext {
   uid: string;

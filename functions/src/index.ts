@@ -20,6 +20,8 @@ import { payrollRouter } from "./routes/payroll";
 import { statsRouter } from "./routes/stats";
 import { auditLogRouter } from "./routes/auditLog";
 import { menuOrderRouter } from "./routes/menuOrder";
+import { requireAuth, requireRole, AuthRequest } from "./middleware/auth";
+import { writeAudit, ctxFromReq } from "./services/auditLog";
 import { transitionPlanDeadlines } from "./services/planTransitions";
 import { createOrUpdatePayrollPeriod } from "./services/payrollCalculator";
 import { sweepExpiredMultisport } from "./services/multisportSweep";
@@ -63,41 +65,80 @@ app.get("/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
-// HTTP trigger for manual/emulator testing of deadline transitions
-app.post("/shifts/trigger-deadlines", async (_req, res) => {
-  const result = await transitionPlanDeadlines();
-  res.json(result);
-});
-
-// HTTP trigger for manual/emulator testing of Multisport auto-untick sweep
-app.post("/benefits/trigger-multisport-sweep", async (_req, res) => {
-  const result = await sweepExpiredMultisport();
-  res.json(result);
-});
-
-// HTTP trigger for manual/emulator testing of probation alert refresh
-app.post("/employees/trigger-probation-refresh", async (_req, res) => {
-  const result = await refreshAllProbationAlerts();
-  res.json(result);
-});
-
-// HTTP trigger for manual/emulator testing of document alert refresh
-app.post("/employees/trigger-alert-refresh", async (_req, res) => {
-  const db = admin.firestore();
-  const employeesSnap = await db.collection("employees").get();
-  let refreshed = 0;
-  for (const empDoc of employeesSnap.docs) {
-    const emp = empDoc.data() as Record<string, unknown>;
-    const docsSnap = await empDoc.ref.collection("documents").limit(1).get();
-    if (docsSnap.empty) continue;
-    const docData = docsSnap.docs[0].data() as Record<string, unknown>;
-    const alertBody: Record<string, unknown> = {};
-    for (const { field } of EXPIRY_FIELDS) alertBody[field] = docData[field] ?? null;
-    await updateDocumentAlerts(empDoc.id, (emp.firstName as string) ?? "", (emp.lastName as string) ?? "", alertBody);
-    refreshed++;
+// HTTP triggers below mirror the scheduled functions and exist for admins to
+// re-run a job after a missed/failed scheduled execution. Admin-only, and
+// every successful call writes a `manual-trigger` audit entry.
+app.post(
+  "/shifts/trigger-deadlines",
+  requireAuth,
+  requireRole("admin"),
+  async (req: AuthRequest, res) => {
+    const result = await transitionPlanDeadlines();
+    await writeAudit(ctxFromReq(req), {
+      action: "manual-trigger",
+      collection: "shiftPlans",
+      extra: { trigger: "transitionPlanDeadlines", result },
+    });
+    res.json(result);
   }
-  res.json({ refreshed });
-});
+);
+
+app.post(
+  "/benefits/trigger-multisport-sweep",
+  requireAuth,
+  requireRole("admin"),
+  async (req: AuthRequest, res) => {
+    const result = await sweepExpiredMultisport();
+    await writeAudit(ctxFromReq(req), {
+      action: "manual-trigger",
+      collection: "benefits",
+      extra: { trigger: "sweepExpiredMultisport", result },
+    });
+    res.json(result);
+  }
+);
+
+app.post(
+  "/employees/trigger-probation-refresh",
+  requireAuth,
+  requireRole("admin"),
+  async (req: AuthRequest, res) => {
+    const result = await refreshAllProbationAlerts();
+    await writeAudit(ctxFromReq(req), {
+      action: "manual-trigger",
+      collection: "probationAlerts",
+      extra: { trigger: "refreshAllProbationAlerts", result },
+    });
+    res.json(result);
+  }
+);
+
+app.post(
+  "/employees/trigger-alert-refresh",
+  requireAuth,
+  requireRole("admin"),
+  async (req: AuthRequest, res) => {
+    const db = admin.firestore();
+    const employeesSnap = await db.collection("employees").get();
+    let refreshed = 0;
+    for (const empDoc of employeesSnap.docs) {
+      const emp = empDoc.data() as Record<string, unknown>;
+      const docsSnap = await empDoc.ref.collection("documents").limit(1).get();
+      if (docsSnap.empty) continue;
+      const docData = docsSnap.docs[0].data() as Record<string, unknown>;
+      const alertBody: Record<string, unknown> = {};
+      for (const { field } of EXPIRY_FIELDS) alertBody[field] = docData[field] ?? null;
+      await updateDocumentAlerts(empDoc.id, (emp.firstName as string) ?? "", (emp.lastName as string) ?? "", alertBody);
+      refreshed++;
+    }
+    await writeAudit(ctxFromReq(req), {
+      action: "manual-trigger",
+      collection: "documentAlerts",
+      extra: { trigger: "refreshDocumentAlerts", result: { refreshed } },
+    });
+    res.json({ refreshed });
+  }
+);
 
 // Mount the app at both `/api` and `/`. Firebase Hosting rewrites the
 // `/api/**` prefix through to the function verbatim, whereas the direct
