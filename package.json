@@ -1,0 +1,13 @@
+{
+  "name": "hpm-intranet",
+  "version": "1.0.0",
+  "private": true,
+  "description": "HPM Intranet — root-level deploy orchestration for the frontend + Cloud Functions across environments.",
+  "scripts": {
+    "build:functions": "cd functions && npm run build",
+    "build:staging": "cd frontend && npm run build -- --mode staging",
+    "build:production": "cd frontend && npm run build -- --mode production",
+    "deploy:staging": "npm run build:functions && npm run build:staging && firebase deploy --project staging",
+    "deploy:prod": "npm run build:functions && npm run build:production && firebase deploy --project production"
+  }
+}

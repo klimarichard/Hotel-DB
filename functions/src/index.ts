@@ -1,5 +1,6 @@
 import * as functions from "firebase-functions";
 import { onSchedule } from "firebase-functions/v2/scheduler";
+import { setGlobalOptions } from "firebase-functions/v2";
 import * as admin from "firebase-admin";
 import express from "express";
 import cors from "cors";
@@ -19,11 +20,18 @@ import { payrollRouter } from "./routes/payroll";
 import { statsRouter } from "./routes/stats";
 import { auditLogRouter } from "./routes/auditLog";
 import { menuOrderRouter } from "./routes/menuOrder";
+import { requireAuth, requireRole, AuthRequest } from "./middleware/auth";
+import { writeAudit, ctxFromReq } from "./services/auditLog";
 import { transitionPlanDeadlines } from "./services/planTransitions";
 import { createOrUpdatePayrollPeriod } from "./services/payrollCalculator";
 import { sweepExpiredMultisport } from "./services/multisportSweep";
 import { updateDocumentAlerts, EXPIRY_FIELDS } from "./routes/employees";
 import { refreshAllProbationAlerts } from "./services/probationAlerts";
+
+// All functions run in europe-west3 to co-locate with the Firestore
+// database — avoids cross-region latency on every read/write.
+const REGION = "europe-west3";
+setGlobalOptions({ region: REGION }); // applies to the v2 onSchedule functions
 
 admin.initializeApp();
 
@@ -57,52 +65,100 @@ app.get("/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
-// HTTP trigger for manual/emulator testing of deadline transitions
-app.post("/shifts/trigger-deadlines", async (_req, res) => {
-  const result = await transitionPlanDeadlines();
-  res.json(result);
-});
-
-// HTTP trigger for manual/emulator testing of Multisport auto-untick sweep
-app.post("/benefits/trigger-multisport-sweep", async (_req, res) => {
-  const result = await sweepExpiredMultisport();
-  res.json(result);
-});
-
-// HTTP trigger for manual/emulator testing of probation alert refresh
-app.post("/employees/trigger-probation-refresh", async (_req, res) => {
-  const result = await refreshAllProbationAlerts();
-  res.json(result);
-});
-
-// HTTP trigger for manual/emulator testing of document alert refresh
-app.post("/employees/trigger-alert-refresh", async (_req, res) => {
-  const db = admin.firestore();
-  const employeesSnap = await db.collection("employees").get();
-  let refreshed = 0;
-  for (const empDoc of employeesSnap.docs) {
-    const emp = empDoc.data() as Record<string, unknown>;
-    const docsSnap = await empDoc.ref.collection("documents").limit(1).get();
-    if (docsSnap.empty) continue;
-    const docData = docsSnap.docs[0].data() as Record<string, unknown>;
-    const alertBody: Record<string, unknown> = {};
-    for (const { field } of EXPIRY_FIELDS) alertBody[field] = docData[field] ?? null;
-    await updateDocumentAlerts(empDoc.id, (emp.firstName as string) ?? "", (emp.lastName as string) ?? "", alertBody);
-    refreshed++;
+// HTTP triggers below mirror the scheduled functions and exist for admins to
+// re-run a job after a missed/failed scheduled execution. Admin-only, and
+// every successful call writes a `manual-trigger` audit entry.
+app.post(
+  "/shifts/trigger-deadlines",
+  requireAuth,
+  requireRole("admin"),
+  async (req: AuthRequest, res) => {
+    const result = await transitionPlanDeadlines();
+    await writeAudit(ctxFromReq(req), {
+      action: "manual-trigger",
+      collection: "shiftPlans",
+      extra: { trigger: "transitionPlanDeadlines", result },
+    });
+    res.json(result);
   }
-  res.json({ refreshed });
-});
+);
+
+app.post(
+  "/benefits/trigger-multisport-sweep",
+  requireAuth,
+  requireRole("admin"),
+  async (req: AuthRequest, res) => {
+    const result = await sweepExpiredMultisport();
+    await writeAudit(ctxFromReq(req), {
+      action: "manual-trigger",
+      collection: "benefits",
+      extra: { trigger: "sweepExpiredMultisport", result },
+    });
+    res.json(result);
+  }
+);
+
+app.post(
+  "/employees/trigger-probation-refresh",
+  requireAuth,
+  requireRole("admin"),
+  async (req: AuthRequest, res) => {
+    const result = await refreshAllProbationAlerts();
+    await writeAudit(ctxFromReq(req), {
+      action: "manual-trigger",
+      collection: "probationAlerts",
+      extra: { trigger: "refreshAllProbationAlerts", result },
+    });
+    res.json(result);
+  }
+);
+
+app.post(
+  "/employees/trigger-alert-refresh",
+  requireAuth,
+  requireRole("admin"),
+  async (req: AuthRequest, res) => {
+    const db = admin.firestore();
+    const employeesSnap = await db.collection("employees").get();
+    let refreshed = 0;
+    for (const empDoc of employeesSnap.docs) {
+      const emp = empDoc.data() as Record<string, unknown>;
+      const docsSnap = await empDoc.ref.collection("documents").limit(1).get();
+      if (docsSnap.empty) continue;
+      const docData = docsSnap.docs[0].data() as Record<string, unknown>;
+      const alertBody: Record<string, unknown> = {};
+      for (const { field } of EXPIRY_FIELDS) alertBody[field] = docData[field] ?? null;
+      await updateDocumentAlerts(empDoc.id, (emp.firstName as string) ?? "", (emp.lastName as string) ?? "", alertBody);
+      refreshed++;
+    }
+    await writeAudit(ctxFromReq(req), {
+      action: "manual-trigger",
+      collection: "documentAlerts",
+      extra: { trigger: "refreshDocumentAlerts", result: { refreshed } },
+    });
+    res.json({ refreshed });
+  }
+);
+
+// Mount the app at both `/api` and `/`. Firebase Hosting rewrites the
+// `/api/**` prefix through to the function verbatim, whereas the direct
+// function URL and the Vite dev proxy deliver paths without it — mounting
+// at both points makes every access path resolve to the same routes.
+const root = express();
+root.use("/api", app);
+root.use("/", app);
 
 // Bumped memory + timeout to fit Puppeteer's Chromium launch
 // (~500 MB resident, ~3–5s cold start). Other endpoints share the
 // same instance; the cost is amortised.
 export const api = functions
+  .region(REGION)
   .runWith({ memory: "1GB", timeoutSeconds: 60 })
-  .https.onRequest(app);
+  .https.onRequest(root);
 
 // ─── Scheduled function: auto-transition plans at their deadlines ─────────────
 // Runs every 5 minutes in production. In the emulator, trigger manually via:
-//   curl -X POST http://127.0.0.1:5002/hotel-hr-app-75581/us-central1/api/shifts/trigger-deadlines
+//   curl -X POST http://127.0.0.1:5002/hotel-hr-app-75581/europe-west3/api/shifts/trigger-deadlines
 
 export const checkPlanDeadlines = onSchedule("every 5 minutes", async () => {
   await transitionPlanDeadlines();

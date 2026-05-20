@@ -5,7 +5,8 @@
     "rewrites": [
       {
         "source": "/api/**",
-        "function": "api"
+        "function": "api",
+        "region": "europe-west3"
       },
       {
         "source": "**",

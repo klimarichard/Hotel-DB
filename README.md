@@ -485,12 +485,12 @@ Managed in Settings → Společnosti tab. Only one card in edit mode at a time.
 
 **Goal:** every business-data write is recorded so an admin can answer "who changed what, when" — most often "show me every change ever made to employee X."
 
-**Storage** — the existing `auditLog/` collection. Pre-existing actions (`reveal`, `export`) keep their original shapes and are preserved. New per-mutation entries are written by `functions/src/services/auditLog.ts`:
+**Storage** — the existing `auditLog/` collection. Pre-existing actions (`reveal`, `export`, `manual-trigger`) keep their original shapes and are preserved. New per-mutation entries are written by `functions/src/services/auditLog.ts`:
 
 ```
 {
   userId, userEmail, userRole,
-  action: "create" | "update" | "delete" | "reveal" | "export",
+  action: "create" | "update" | "delete" | "reveal" | "export" | "manual-trigger",
   collection,                 // e.g. "employees", "shiftPlans/shifts", "settings"
   resourceId, subResourceId?,
   fieldPath?, oldValue?, newValue?, redacted?,   // for update entries (one entry per changed field)
@@ -628,3 +628,66 @@ Three follow-ups on the Dodatek (`změna smlouvy`) form:
 - **"Text pro smlouvu" dropped.** Each change row had a free-text override that pre-dated the `zmena_smlouvy` template's `{{#if isDodatekMzda}}` / `{{#if isDodatekPozice}}` / `{{#if isDodatekUvazek}}` / `{{#if isDodatekZmenaKonce}}` conditional blocks. Those blocks now generate the contract sentence from the `changeKind` + `value`, so the manual override was dead weight. `contractText` is gone from `ChangeRow` in both `frontend/src/pages/EmployeeDetailPage.tsx` and `frontend/src/lib/employmentSessions.ts`; existing Firestore docs that still carry the field load fine (TypeScript ignores extra properties).
 - **`pracovní pozice` change picks from `jobPositions`.** Replaced the free-text "Nová pozice" input with a `<select>` listing every entry from the `/jobPositions` catalogue, sorted alphabetically (`cs` collation) with `<optgroup>` per department. Not filtered to the employee's current department — the workflow is now: register the pozice in Settings → Pracovní pozice first, then add the Dodatek (or Nástup) referencing it. Legacy free-text values that don't match the catalogue surface as a `(mimo katalog)` fallback option so old rows still round-trip through edit. Positions whose `departmentId` no longer resolves to a department doc fall into a trailing **ostatní** optgroup.
 - **Transition chain in the session header.** When a Dodatek shifts the `jobTitle` or `contractType` during a session, the header surfaces the full chronological chain — `recepční → senior recepční → Front Office Manager` for the title, `HPP → PPP → HPP` inside the contract-type tag chip. All entries before the last render with the existing `.titleFrom` strikethrough so they read as history; the trailing entry is the current value. `frontend/src/lib/employmentSessions.ts` exports `collectFieldChain(session, field)` which walks each Dodatek's `changes[]`, maps `úvazek` → HPP/PPP via the existing `uvazekToContractType()`, and collapses consecutive duplicates. Sessions with length-1 chains (no transitions) collapse to the plain current value.
+
+---
+
+## Deployment & environments
+
+Three environments with a strict cutover path:
+
+| Env | Firebase project | Where it runs |
+|---|---|---|
+| Emulator | `hotel-hr-app-75581` (default alias; project ID is cosmetic in the emulator) | `firebase emulators:start` — Auth :9099, Functions :5002, Firestore :8080, Hosting :5000, UI :4000 |
+| Staging | `hote-hr-app-staging` | Real Firebase, separate auth pool, used to dry-run every change before prod |
+| Production | `hotel-hr-app-75581` | Real Firebase |
+
+### Project aliases
+`.firebaserc` declares `default` / `staging` / `production`. Tooling always names the alias explicitly (`--project staging`) so a stray deploy can never land on prod.
+
+### Deploy scripts
+Root `package.json` orchestrates each environment with a build + deploy pair:
+
+```
+npm run deploy:staging   # builds functions, builds frontend with --mode staging, deploys to the staging project
+npm run deploy:prod      # same, against the production project
+```
+
+The frontend picks up its Firebase config from `frontend/.env.staging` / `frontend/.env.production`. The functions env file is `functions/.env.<projectId>` so each environment gets its own `ENCRYPTION_KEY` (staging is local-only; prod uses Secret Manager).
+
+For focused redeploys (e.g. functions-only after a small fix) skip the npm script and run the firebase CLI directly: `firebase deploy --only functions:api --project staging` or `--only firestore:indexes --project staging`.
+
+### Region pinning
+All Cloud Functions run in `europe-west3` to co-locate with Firestore (`eur3` multi-region). `functions/src/index.ts` sets the region two ways because v1 + v2 functions don't share defaults: `setGlobalOptions({ region })` for the v2 `onSchedule` triggers, and `.region(REGION)` on the v1 `https.onRequest` export. Hosting rewrites pin the region explicitly too:
+
+```
+{ "source": "/api/**", "function": "api", "region": "europe-west3" }
+```
+
+### API dual mount
+Express is mounted at both `/api` and `/` in `functions/src/index.ts`. Firebase Hosting forwards `/api/**` verbatim through the rewrite (so the function sees `/api/employees/...`), but the direct function URL and the Vite dev proxy deliver paths without the prefix (`/employees/...`). Mounting at both keeps every entry path resolving to the same routes.
+
+### Server-side PDF rendering
+Contract PDFs are rendered server-side via Puppeteer with `@sparticuz/chromium` — the bundled Chromium binary is too heavy for the default function runtime (~500 MB resident, ~3–5 s cold start). The `api` export bumps memory to 1 GB and timeout to 60 s; the rest of the API rides the same instance and amortizes the cost.
+
+### Firestore indexes
+The emulator ignores Firestore's index requirements — a query that needs an index returns just fine locally and then 500s with `FAILED_PRECONDITION` on real Firestore. The staging cutover surfaced this in two flavours:
+
+- **Composite indexes** — any `where(...).orderBy(...)` across different fields, or chained `orderBy`s, needs a composite index. `firestore.indexes.json` declares them for `shiftPlans`, `payrollPeriods`, `employment`, `jobPositions`, `vacationRequests`, `shiftOverrideRequests`, `shiftChangeRequests`, plus the `auditLog` filter set.
+- **Collection-group single-field exemptions** — collection-group queries on a single field need an explicit `COLLECTION_GROUP` index. `firestore.indexes.json` declares one for `benefits.multisport` so the daily `sweepMultisport` cron (and its manual trigger) can find every employee whose Multisport flag is still on.
+
+When adding any new query that combines filter + orderBy on different fields, or any `collectionGroup(...).where(...)`, extend `firestore.indexes.json` and run `firebase deploy --only firestore:indexes --project staging` to verify on real Firestore *before* the same code reaches prod.
+
+### Manual trigger endpoints
+Four `POST /api/.../trigger-*` endpoints mirror the scheduled jobs that publish shift plans, sweep Multisport, and refresh probation / document alerts. They exist so an admin can re-run a job after a missed scheduled execution:
+
+| Endpoint | Underlying job |
+|---|---|
+| `POST /api/shifts/trigger-deadlines` | `transitionPlanDeadlines()` |
+| `POST /api/benefits/trigger-multisport-sweep` | `sweepExpiredMultisport()` |
+| `POST /api/employees/trigger-probation-refresh` | `refreshAllProbationAlerts()` |
+| `POST /api/employees/trigger-alert-refresh` | document expiry alert refresh |
+
+All four are admin-only (`requireAuth` + `requireRole("admin")`) and write a `manual-trigger` audit entry per successful call (`extra.trigger` names the underlying job, `extra.result` carries the job's return value). The audit-log write happens *after* the job, so a failed re-run leaves no entry — the failure surfaces in `firebase functions:log`.
+
+### Staging credential rotation
+`scripts/rotate-staging-passwords.js` paginates through every staging Auth user, replaces each password with a fresh 16-char random string, and writes `scripts/staging-credentials.txt` (gitignored). Requires Application Default Credentials (`gcloud auth application-default login`); refuses to run without `--allow-staging`; the shared `scripts/_seed-target.js` guard hard-blocks targeting prod.
