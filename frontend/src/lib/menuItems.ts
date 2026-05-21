@@ -30,7 +30,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
 export const MENU_ITEMS: ReadonlyArray<MenuItem> = [
   { id: "prehled",     label: "Přehled",         path: "/prehled",     roles: ["admin", "director", "manager", "employee", "hr"] },
   { id: "smeny",       label: "Směny",           path: "/smeny",       roles: ["admin", "director", "manager", "employee", "hr"] },
-  { id: "dovolena",    label: "Dovolená",        path: "/dovolena",    roles: ["admin", "director", "manager", "employee"] },
+  { id: "dovolena",    label: "Dovolená",        path: "/dovolena",    roles: ["admin", "director", "manager", "employee", "hr"] },
   { id: "zamestnanci", label: "Zaměstnanci",     path: "/zamestnanci", roles: ["admin", "director", "accountant", "hr"] },
   { id: "mzdy",        label: "Mzdy",            path: "/mzdy",        roles: ["admin", "director"] },
   { id: "upozorneni",  label: "Upozornění",      path: "/upozorneni",  roles: ["admin", "director"] },

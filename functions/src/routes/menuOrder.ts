@@ -14,7 +14,7 @@ const db = () => admin.firestore();
 const MENU_ITEMS: { id: string; roles: UserRole[] }[] = [
   { id: "prehled",     roles: ["admin", "director", "manager", "employee", "hr"] },
   { id: "smeny",       roles: ["admin", "director", "manager", "employee", "hr"] },
-  { id: "dovolena",    roles: ["admin", "director", "manager", "employee"] },
+  { id: "dovolena",    roles: ["admin", "director", "manager", "employee", "hr"] },
   { id: "zamestnanci", roles: ["admin", "director", "accountant", "hr"] },
   { id: "mzdy",        roles: ["admin", "director"] },
   { id: "upozorneni",  roles: ["admin", "director"] },

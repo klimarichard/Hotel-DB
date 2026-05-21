@@ -36,11 +36,16 @@ function RequireRole({ allow, children }: { allow: ReadonlyArray<UserRole>; chil
 }
 
 // Role-aware landing: send each role to the first page it can actually see.
-// accountant has no dashboard, so it lands on Zaměstnanci.
+// accountant has no dashboard, so it lands on Zaměstnanci. The fallback must
+// itself be a page the role can open, otherwise the landing → guard → "/"
+// bounce becomes an infinite redirect loop.
 function DefaultRedirect() {
   const { role } = useAuth();
-  const first = role ? resolveOrderForRole(role, null)[0]?.path : null;
-  return <Navigate to={first ?? "/prehled"} replace />;
+  const target =
+    role === "accountant"
+      ? "/zamestnanci"
+      : (role ? resolveOrderForRole(role, null)[0]?.path : null) ?? "/prehled";
+  return <Navigate to={target} replace />;
 }
 
 export default function App() {
@@ -76,7 +81,7 @@ export default function App() {
         <Route index element={<DefaultRedirect />} />
         <Route path="prehled" element={<RequireRole allow={["admin", "director", "manager", "employee", "hr"]}><OverviewPage /></RequireRole>} />
         <Route path="smeny" element={<RequireRole allow={["admin", "director", "manager", "employee", "hr"]}><ShiftPlannerPage /></RequireRole>} />
-        <Route path="dovolena" element={<RequireRole allow={["admin", "director", "manager", "employee"]}><VacationPage /></RequireRole>} />
+        <Route path="dovolena" element={<RequireRole allow={["admin", "director", "manager", "employee", "hr"]}><VacationPage /></RequireRole>} />
         <Route path="zamestnanci" element={<RequireRole allow={["admin", "director", "accountant", "hr"]}><EmployeesPage /></RequireRole>} />
         <Route path="zamestnanci/novy" element={<RequireRole allow={["admin", "director", "hr"]}><EmployeeFormPage /></RequireRole>} />
         <Route path="zamestnanci/:id" element={<RequireRole allow={["admin", "director", "accountant", "hr"]}><EmployeeDetailPage /></RequireRole>} />
