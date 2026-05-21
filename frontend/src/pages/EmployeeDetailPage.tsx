@@ -712,9 +712,12 @@ function AddEntryModal({
     setForm((f) => ({ ...f, changes: f.changes.filter((_, idx) => idx !== i) }));
   }
 
-  const hasActiveRow = employment.some(
-    (r) => r.changeType !== "ukončení" && r.endDate === null
-  );
+  // "Actively employed" = at least one session that isn't over yet. A
+  // fixed-term contract (e.g. DPP) with a future end date counts as active —
+  // the old check (a row with endDate === null) wrongly treated every
+  // fixed-term contract as inactive, firing a misleading warning when ending
+  // one.
+  const hasActiveRow = groupBySession(employment).some((s) => !s.terminated);
   const noActiveContract = employee.status !== "active" || !hasActiveRow;
   const showUkonceniWarning = form.changeType === "ukončení" && noActiveContract;
   const showZmenaWarning = form.changeType === "změna smlouvy" && noActiveContract;
