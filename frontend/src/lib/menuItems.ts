@@ -17,19 +17,21 @@ export interface MenuItem {
   roles: ReadonlyArray<UserRole>;
 }
 
-export const ALL_ROLES: ReadonlyArray<UserRole> = ["admin", "director", "manager", "employee"];
+export const ALL_ROLES: ReadonlyArray<UserRole> = ["admin", "director", "manager", "employee", "accountant", "hr"];
 export const ROLE_LABELS: Record<UserRole, string> = {
   admin: "Admin",
   director: "Director",
   manager: "Manager",
   employee: "Employee",
+  accountant: "Accountant",
+  hr: "HR",
 };
 
 export const MENU_ITEMS: ReadonlyArray<MenuItem> = [
-  { id: "prehled",     label: "Přehled",         path: "/prehled",     roles: ["admin", "director", "manager", "employee"] },
-  { id: "smeny",       label: "Směny",           path: "/smeny",       roles: ["admin", "director", "manager", "employee"] },
+  { id: "prehled",     label: "Přehled",         path: "/prehled",     roles: ["admin", "director", "manager", "employee", "hr"] },
+  { id: "smeny",       label: "Směny",           path: "/smeny",       roles: ["admin", "director", "manager", "employee", "hr"] },
   { id: "dovolena",    label: "Dovolená",        path: "/dovolena",    roles: ["admin", "director", "manager", "employee"] },
-  { id: "zamestnanci", label: "Zaměstnanci",     path: "/zamestnanci", roles: ["admin", "director"] },
+  { id: "zamestnanci", label: "Zaměstnanci",     path: "/zamestnanci", roles: ["admin", "director", "accountant", "hr"] },
   { id: "mzdy",        label: "Mzdy",            path: "/mzdy",        roles: ["admin", "director"] },
   { id: "upozorneni",  label: "Upozornění",      path: "/upozorneni",  roles: ["admin", "director"] },
   { id: "smlouvy",     label: "Šablony smluv",   path: "/smlouvy",     roles: ["admin", "director"] },

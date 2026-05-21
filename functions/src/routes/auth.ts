@@ -17,7 +17,7 @@ authRouter.post(
   requireRole("admin"),
   async (req: AuthRequest, res) => {
     const { uid, role } = req.body as { uid: string; role: UserRole };
-    const validRoles: UserRole[] = ["admin", "director", "manager", "employee"];
+    const validRoles: UserRole[] = ["admin", "director", "manager", "employee", "accountant", "hr"];
 
     if (!uid || !validRoles.includes(role)) {
       res.status(400).json({ error: "uid and a valid role are required" });
@@ -65,7 +65,7 @@ authRouter.post(
       employeeId?: string;
     };
 
-    const validRoles: UserRole[] = ["admin", "director", "manager", "employee"];
+    const validRoles: UserRole[] = ["admin", "director", "manager", "employee", "accountant", "hr"];
     if (!email || !password || !name || !validRoles.includes(role)) {
       res.status(400).json({ error: "email, password, name, and valid role are required" });
       return;

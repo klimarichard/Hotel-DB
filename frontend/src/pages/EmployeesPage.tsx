@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { api } from "@/lib/api";
+import { useAuth } from "@/hooks/useAuth";
+import { canEditEmployees } from "@/lib/permissions";
 import Button from "@/components/Button";
 import ExportEmployeesModal from "@/components/ExportEmployeesModal";
 import styles from "./EmployeesPage.module.css";
@@ -18,6 +20,7 @@ interface Employee {
 }
 
 export default function EmployeesPage() {
+  const { role } = useAuth();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -57,9 +60,11 @@ export default function EmployeesPage() {
           <Button variant="secondary" onClick={() => setShowExport(true)}>
             Exportovat CSV
           </Button>
-          <Link to="/zamestnanci/novy" className={styles.addBtn}>
-            + Přidat zaměstnance
-          </Link>
+          {canEditEmployees(role) && (
+            <Link to="/zamestnanci/novy" className={styles.addBtn}>
+              + Přidat zaměstnance
+            </Link>
+          )}
         </div>
       </div>
 

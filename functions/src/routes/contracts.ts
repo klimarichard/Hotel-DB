@@ -1,12 +1,38 @@
-import { Router, Response } from "express";
+import { Router, Response, NextFunction } from "express";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireAuth, requireRole, AuthRequest } from "../middleware/auth";
 import { renderPdf, RenderMargins } from "../services/pdfRenderer";
 import type { ContractType } from "./contractTemplates";
 import { ctxFromReq, logCreate, logUpdate, logDelete } from "../services/auditLog";
+import { getManagementEmployeeIds } from "./employees";
 
 export const contractsRouter = Router();
+
+// Access refinements for the two new roles (mirrors employees.ts):
+//   • accountant — read-only: only GET (view + download) is allowed.
+//   • hr — blocked from any contract under a management employee's record.
+// requireAuth is router-level so req.role is set before this guard runs.
+async function enforceContractAccess(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  if (req.role === "accountant" && req.method !== "GET") {
+    res.status(403).json({ error: "Účetní má pouze náhledový přístup." });
+    return;
+  }
+  if (req.role === "hr") {
+    const parts = req.path.split("/"); // ["", "employees", "<id>", "contracts", ...]
+    if (parts[1] === "employees" && parts[2]) {
+      const mgmt = await getManagementEmployeeIds();
+      if (mgmt.has(parts[2])) {
+        res.status(403).json({ error: "Tento záznam není pro roli personalista přístupný." });
+        return;
+      }
+    }
+  }
+  next();
+}
+
+contractsRouter.use(requireAuth);
+contractsRouter.use(enforceContractAccess);
 
 /**
  * POST /api/contracts/render-pdf
@@ -23,8 +49,7 @@ export const contractsRouter = Router();
  */
 contractsRouter.post(
   "/contracts/render-pdf",
-  requireAuth,
-  requireRole("admin", "director"),
+  requireRole("admin", "director", "hr"),
   async (req: AuthRequest, res: Response) => {
     const { html, margins } = req.body as {
       html?: string;
@@ -56,8 +81,7 @@ type ContractStatus = "unsigned" | "signed" | "archived";
  */
 contractsRouter.get(
   "/employees/:employeeId/contracts",
-  requireAuth,
-  requireRole("admin", "director", "manager"),
+  requireRole("admin", "director", "manager", "accountant", "hr"),
   async (req: AuthRequest, res: Response) => {
     const snap = await db()
       .collection("employees")
@@ -86,8 +110,7 @@ contractsRouter.get(
  */
 contractsRouter.post(
   "/employees/:employeeId/contracts",
-  requireAuth,
-  requireRole("admin", "director"),
+  requireRole("admin", "director", "hr"),
   async (req: AuthRequest, res: Response) => {
     const {
       type,
@@ -170,8 +193,7 @@ contractsRouter.post(
  */
 contractsRouter.patch(
   "/employees/:employeeId/contracts/:contractId",
-  requireAuth,
-  requireRole("admin", "director"),
+  requireRole("admin", "director", "hr"),
   async (req: AuthRequest, res: Response) => {
     const { status, signedStoragePath, notes } = req.body as {
       status?: ContractStatus;
@@ -221,8 +243,7 @@ contractsRouter.patch(
  */
 contractsRouter.get(
   "/employees/:employeeId/contracts/:contractId/download",
-  requireAuth,
-  requireRole("admin", "director", "manager"),
+  requireRole("admin", "director", "manager", "accountant", "hr"),
   async (req: AuthRequest, res: Response) => {
     const kind = req.query.kind === "signed" ? "signed" : "unsigned";
 
@@ -290,8 +311,7 @@ contractsRouter.get(
  */
 contractsRouter.post(
   "/employees/:employeeId/contracts/:contractId/signed-pdf",
-  requireAuth,
-  requireRole("admin", "director"),
+  requireRole("admin", "director", "hr"),
   async (req: AuthRequest, res: Response) => {
     const { pdfBase64 } = req.body as { pdfBase64?: string };
     if (!pdfBase64) {
@@ -350,8 +370,7 @@ contractsRouter.post(
  */
 contractsRouter.delete(
   "/employees/:employeeId/contracts/:contractId/signed-pdf",
-  requireAuth,
-  requireRole("admin", "director"),
+  requireRole("admin", "director", "hr"),
   async (req: AuthRequest, res: Response) => {
     const ref = db()
       .collection("employees")
@@ -403,8 +422,7 @@ contractsRouter.delete(
  */
 contractsRouter.delete(
   "/employees/:employeeId/contracts/:contractId",
-  requireAuth,
-  requireRole("admin", "director"),
+  requireRole("admin", "director", "hr"),
   async (req: AuthRequest, res: Response) => {
     const ref = db()
       .collection("employees")
