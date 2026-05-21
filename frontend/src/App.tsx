@@ -18,6 +18,7 @@ import { ShiftOverridesProvider } from "@/context/ShiftOverridesContext";
 import { ShiftChangeRequestsProvider } from "@/context/ShiftChangeRequestsContext";
 import { VacationProvider } from "@/context/VacationContext";
 import { ThemeProvider } from "@/context/ThemeContext";
+import { TimeOverrideProvider } from "@/context/TimeOverrideContext";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -49,15 +50,17 @@ export default function App() {
         path="/"
         element={
           <RequireAuth>
-            <AlertsProvider>
-              <ShiftOverridesProvider>
-                <ShiftChangeRequestsProvider>
-                  <VacationProvider>
-                    <Layout />
-                  </VacationProvider>
-                </ShiftChangeRequestsProvider>
-              </ShiftOverridesProvider>
-            </AlertsProvider>
+            <TimeOverrideProvider>
+              <AlertsProvider>
+                <ShiftOverridesProvider>
+                  <ShiftChangeRequestsProvider>
+                    <VacationProvider>
+                      <Layout />
+                    </VacationProvider>
+                  </ShiftChangeRequestsProvider>
+                </ShiftOverridesProvider>
+              </AlertsProvider>
+            </TimeOverrideProvider>
           </RequireAuth>
         }
       >

@@ -32,6 +32,9 @@ functions/lib/
 .firebase/
 .firebaserc.local
 
+# Emulator / debug logs (firebase-debug.log, firestore-debug.log, emulator.log, …)
+*.log
+
 # Claude Code local settings (machine-specific paths)
 .claude/settings.local.json
 

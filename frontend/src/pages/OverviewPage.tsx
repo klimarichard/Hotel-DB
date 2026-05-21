@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { api } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/context/ThemeContext";
+import * as clock from "@/lib/clock";
 import { useAlertsContext } from "@/context/AlertsContext";
 import { useShiftOverridesContext } from "@/context/ShiftOverridesContext";
 import { useShiftChangeRequestsContext } from "@/context/ShiftChangeRequestsContext";
@@ -323,9 +324,9 @@ function ModBlock({ staffing }: { staffing: StaffingResult }) {
 }
 
 export default function OverviewPage() {
-  const today = useMemo(() => hotelDayStart(new Date()), []);
+  const today = useMemo(() => hotelDayStart(clock.now()), []);
   const tomorrow = useMemo(() => addDays(today, 1), [today]);
-  const shiftCode = useMemo(() => currentShiftCode(new Date()), []);
+  const shiftCode = useMemo(() => currentShiftCode(clock.now()), []);
   const next7Days = useMemo(() => {
     return Array.from({ length: 7 }, (_, i) => addDays(today, i));
   }, [today]);

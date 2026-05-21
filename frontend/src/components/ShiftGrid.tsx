@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useState } from "react";
+import * as clock from "../lib/clock";
 import type { PlanDetail, PlanEmployee, ShiftDoc, ModShiftDoc } from "../pages/ShiftPlannerPage";
 import { SECTION_LABELS, SECTIONS, type Section, getCzechHolidays, MOD_PERSONS, parseShiftExpression } from "../lib/shiftConstants";
 import ShiftCell from "./ShiftCell";
@@ -64,7 +65,7 @@ function isWeekend(d: Date): boolean {
 
 /** The "active shift date" — today if it's 07:00 or later, yesterday if before 07:00. */
 function currentShiftDate(): string {
-  const now = new Date();
+  const now = clock.now();
   const d = now.getHours() < 7 ? new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1) : now;
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }

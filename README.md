@@ -714,3 +714,14 @@ All four are admin-only (`requireAuth` + `requireRole("admin")`) and write a `ma
 
 ### Staging credential rotation
 `scripts/rotate-staging-passwords.js` paginates through every staging Auth user, replaces each password with a fresh 16-char random string, and writes `scripts/staging-credentials.txt` (gitignored). Requires Application Default Credentials (`gcloud auth application-default login`); refuses to run without `--allow-staging`; the shared `scripts/_seed-target.js` guard hard-blocks targeting prod.
+
+### Test clock (non-prod time override)
+A settable "current time" for exercising time-dependent behaviour — probation / document-expiry / Multisport sweeps, shift-plan deadline transitions, and any "today"-based UI — without waiting for real calendar time. **Offset mode:** the clock jumps to a chosen instant and keeps ticking from there (`fakeNow = realNow + offsetMs`).
+
+- **State:** a single Firestore doc `settings/timeOverride` holding `{ enabled, offsetMs, targetISO, setAtISO, setBy }`.
+- **Backend** (`functions/src/services/clock.ts`): `now()` / `nowMs()` apply the offset, but are gated by `isOverrideAllowed()`. The four time-decision sites — `planTransitions`, `multisportSweep`, `probationAlerts`, and `updateDocumentAlerts` — read the clock; **record-keeping timestamps (audit, `createdAt`, `serverTimestamp`) stay real.** An Express middleware refreshes the cached offset per request (TTL-cached); each scheduled job refreshes at start.
+- **Endpoints** (`/api/settings/time-override`): `GET` (any authed user — drives the offset + banner), `PUT` / `DELETE` (admin-only **and** non-prod-only).
+- **Frontend:** `lib/clock.ts` mirrors the offset (localStorage-cached for flash-free paint); `TimeOverrideContext` fetches it; **Settings → "Čas (test)"** tab sets/clears it; an amber banner rides every page while active. Every "what is today/now" UI site reads `clock.now()` / `clock.today()`.
+- **Production safety (hard rule):** `overrideAllowed()` returns `true` **only** when `FUNCTIONS_EMULATOR === "true"` (local) or the runtime project id is exactly `hote-hr-app-staging`. In prod — or any environment that can't be positively identified as emulator/staging — it is `false`: `now()` returns real time unconditionally, `PUT`/`DELETE` 403, `GET` reports `allowed:false` so the tab is hidden and the banner never shows. Production business logic can never run on a faked clock. Verified across simulated environments by `scripts/_verify-clock-gate.js`; the emulator end-to-end path (set → trigger reacts → clear) by `scripts/_smoke-clock.js`.
+
+To test a trigger: set the clock, then call the matching `trigger-*` endpoint (or use the Upozornění manual refresh) — the job evaluates against the fake date on demand, no cron wait.

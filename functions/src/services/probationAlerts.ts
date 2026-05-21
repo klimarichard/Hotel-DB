@@ -1,5 +1,6 @@
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
+import * as clock from "./clock";
 
 const db = () => admin.firestore();
 
@@ -142,7 +143,7 @@ export async function updateProbationAlertForEmploymentRow(
   const endDate = computeProbationEndDate(row.startDate, parsed);
 
   // daysUntilEnd in local time
-  const today = new Date();
+  const today = clock.now();
   today.setHours(0, 0, 0, 0);
   const [ey, em, ed] = endDate.split("-").map(Number);
   const endLocal = new Date(ey, em - 1, ed);
@@ -184,7 +185,7 @@ interface SessionFlags {
 }
 
 function todayISO(): string {
-  const d = new Date();
+  const d = clock.now();
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
