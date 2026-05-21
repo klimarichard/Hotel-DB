@@ -105,22 +105,30 @@ interface EmployeeInput {
  * Reconcile the probationAlerts/{employeeId}_{rowId} document for one
  * employment row.
  *
- * - If the row is not "active", or has no startDate, or probationPeriod is
- *   unparseable / zero → delete any existing alert for this row.
+ * - If `options.suppress` is set (caller decided this row's session is
+ *   terminated or already has a salary Dodatek), or the row is not "active",
+ *   or has no startDate, or probationPeriod is unparseable / zero → delete
+ *   any existing alert for this row.
  * - Otherwise compute end-date and:
  *     * if more than PROBATION_ALERT_DAYS days away → delete alert
  *     * if within window or already past → upsert alert with status
  *       "ending" (≥0 days remaining) or "ended" (<0).
+ *
+ * Read-state (read/readAt/readBy) is preserved across refreshes as long as
+ * the computed probationEndDate is unchanged; it resets to unread when the
+ * end-date moves (start-date or probation-length edited), since that's a new
+ * deadline worth re-surfacing.
  */
 export async function updateProbationAlertForEmploymentRow(
   employeeId: string,
   employee: EmployeeInput,
-  row: EmploymentInput
+  row: EmploymentInput,
+  options: { suppress?: boolean } = {}
 ): Promise<void> {
   const docId = `${employeeId}_${row.rowId}`;
   const ref = db().collection("probationAlerts").doc(docId);
 
-  if (row.status !== "active" || !row.startDate) {
+  if (options.suppress || row.status !== "active" || !row.startDate) {
     await ref.delete().catch(() => undefined);
     return;
   }
@@ -147,6 +155,10 @@ export async function updateProbationAlertForEmploymentRow(
     return;
   }
 
+  const existing = await ref.get();
+  const prev = existing.data() as Record<string, unknown> | undefined;
+  const keepRead = !!prev && prev.probationEndDate === endDate && prev.read === true;
+
   await ref.set({
     employeeId,
     employeeFirstName: employee.firstName ?? "",
@@ -157,14 +169,93 @@ export async function updateProbationAlertForEmploymentRow(
     probationPeriodRaw: row.probationPeriod ?? "",
     daysUntilEnd,
     status: daysUntilEnd < 0 ? "ended" : "ending",
+    read: keepRead,
+    readAt: keepRead ? prev!.readAt ?? null : null,
+    readBy: keepRead ? prev!.readBy ?? null : null,
     updatedAt: FieldValue.serverTimestamp(),
   });
 }
 
+interface SessionFlags {
+  /** Session has an Ukončení row or its effective endDate is in the past. */
+  terminated: boolean;
+  /** A Dodatek (změna smlouvy) on the session carries a "mzda" change. */
+  hasSalaryDodatek: boolean;
+}
+
+function todayISO(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 /**
- * Reconcile probationAlerts for a single employee. Looks up the employee's
- * active employment row, runs updateProbationAlertForEmploymentRow on it,
- * and (defensively) removes any stale alert docs for inactive rows.
+ * Server-side mirror of the frontend groupBySession
+ * (frontend/src/lib/employmentSessions.ts) — keep the two in sync if either
+ * changes. Walks employment rows in startDate-asc order and, for each Nástup
+ * row, reports the two flags that drive probation-alert suppression:
+ *   - terminated: an Ukončení row closed the session, or the effective
+ *     endDate (Nástup endDate, overridden by "délka smlouvy" Dodatky, then by
+ *     the Ukončení row's startDate) is already in the past.
+ *   - hasSalaryDodatek: any Dodatek on the session changed "mzda".
+ * Returned map is keyed by the Nástup row id (the row that carries the
+ * probationPeriod and thus owns the alert).
+ */
+function sessionFlagsByNastup(
+  rows: Array<{ id: string; data: Record<string, unknown> }>
+): Map<string, SessionFlags> {
+  const sorted = [...rows].sort((a, b) =>
+    String(a.data.startDate ?? "").localeCompare(String(b.data.startDate ?? ""))
+  );
+  const today = todayISO();
+  const out = new Map<string, SessionFlags>();
+
+  let current: {
+    nastupId: string;
+    endDate: string | null;
+    hasSalaryDodatek: boolean;
+    ukonceni: boolean;
+  } | null = null;
+
+  const flush = () => {
+    if (!current) return;
+    const terminated = current.ukonceni || (!!current.endDate && current.endDate < today);
+    out.set(current.nastupId, { terminated, hasSalaryDodatek: current.hasSalaryDodatek });
+    current = null;
+  };
+
+  for (const r of sorted) {
+    const ct = r.data.changeType as string | undefined;
+    if (ct === "nástup") {
+      flush();
+      current = {
+        nastupId: r.id,
+        endDate: (r.data.endDate as string | null) ?? null,
+        hasSalaryDodatek: false,
+        ukonceni: false,
+      };
+    } else if (ct === "změna smlouvy" && current) {
+      const changes =
+        (r.data.changes as Array<{ changeKind?: string; value?: string }> | undefined) ?? [];
+      for (const ch of changes) {
+        if (ch.changeKind === "mzda" && ch.value) current.hasSalaryDodatek = true;
+        else if (ch.changeKind === "délka smlouvy" && ch.value) current.endDate = ch.value;
+      }
+    } else if (ct === "ukončení" && current) {
+      current.ukonceni = true;
+      if (r.data.startDate) current.endDate = r.data.startDate as string;
+    }
+  }
+  flush();
+  return out;
+}
+
+/**
+ * Reconcile probationAlerts for a single employee. Loads the full employment
+ * history, groups it into sessions, runs updateProbationAlertForEmploymentRow
+ * on each active row (suppressing the alert when the row's session is
+ * terminated or already has a salary Dodatek), and removes stale alert docs
+ * for inactive rows.
  */
 export async function refreshProbationAlertsForEmployee(employeeId: string): Promise<void> {
   const empSnap = await db().collection("employees").doc(employeeId).get();
@@ -182,27 +273,36 @@ export async function refreshProbationAlertsForEmployee(employeeId: string): Pro
     return;
   }
   const empData = empSnap.data() as Record<string, unknown>;
+
+  // Load the full history once (single-field orderBy → no composite index):
+  // needed both to find active rows and to group rows into sessions.
   const employmentSnap = await empSnap.ref
     .collection("employment")
-    .where("status", "==", "active")
-    .orderBy("startDate", "desc")
+    .orderBy("startDate", "asc")
     .get();
+  const allRows = employmentSnap.docs.map((d) => ({
+    id: d.id,
+    data: d.data() as Record<string, unknown>,
+  }));
 
-  const activeRows = employmentSnap.docs;
-  const activeRowIds = new Set(activeRows.map((d) => d.id));
+  const flagsByNastup = sessionFlagsByNastup(allRows);
+  const activeRows = allRows.filter((r) => r.data.status === "active");
+  const activeRowIds = new Set(activeRows.map((r) => r.id));
 
   // Update for each active row (typically one)
   for (const row of activeRows) {
-    const rowData = row.data() as Record<string, unknown>;
+    const flags = flagsByNastup.get(row.id);
+    const suppress = !!flags && (flags.terminated || flags.hasSalaryDodatek);
     await updateProbationAlertForEmploymentRow(
       employeeId,
       { firstName: empData.firstName as string, lastName: empData.lastName as string },
       {
         rowId: row.id,
-        startDate: rowData.startDate as string | null,
-        probationPeriod: rowData.probationPeriod as string | null,
-        status: rowData.status as string | null,
-      }
+        startDate: row.data.startDate as string | null,
+        probationPeriod: row.data.probationPeriod as string | null,
+        status: row.data.status as string | null,
+      },
+      { suppress }
     );
   }
 
