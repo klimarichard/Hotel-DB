@@ -1779,7 +1779,16 @@ export default function EmployeeDetailPage() {
               contractType: r.contractType || p.contractType,
               salary: r.salary ?? p.salary,
               startDate: r.changeType === "nástup" ? r.startDate : p.startDate,
-              endDate: (r.endDate ?? p.endDate) ?? undefined,
+              // An "ukončení" row stores the termination date in its own
+              // startDate (not endDate). The {{endDate}} variable on a
+              // termination template means "Datum ukončení", so map it from
+              // the row's startDate — otherwise it falls back to the parent's
+              // (often empty, or the original fixed end) and the template
+              // reports no end date / the wrong date.
+              endDate:
+                r.changeType === "ukončení"
+                  ? r.startDate
+                  : (r.endDate ?? p.endDate) ?? undefined,
               workLocation: r.workLocation || p.workLocation,
               probationPeriod: r.probationPeriod || p.probationPeriod,
               signingDate: r.signingDate ?? undefined,
