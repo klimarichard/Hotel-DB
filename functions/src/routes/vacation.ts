@@ -187,7 +187,18 @@ vacationRouter.post("/", requireAuth, async (req: AuthRequest, res) => {
   const lastName = (empData.lastName as string) ?? "";
 
   // Hard-block if any non-X shift already exists in the requested date range.
-  const collisions = await findShiftCollisions(employeeId, startDate, endDate);
+  // This collision query needs a composite index on real Firestore; if it
+  // throws (or any transient error occurs), return a visible 500 rather than
+  // letting the async rejection go unhandled — which leaves the request
+  // hanging with no response (the form just spins forever).
+  let collisions: Awaited<ReturnType<typeof findShiftCollisions>>;
+  try {
+    collisions = await findShiftCollisions(employeeId, startDate, endDate);
+  } catch (err) {
+    console.error("[vacation] collision check failed:", err);
+    res.status(500).json({ error: "Kontrolu kolizí se nepodařilo provést. Zkuste to prosím znovu." });
+    return;
+  }
   if (collisions.length > 0) {
     res.status(409).json({ error: "shift_collision", collisions });
     return;
