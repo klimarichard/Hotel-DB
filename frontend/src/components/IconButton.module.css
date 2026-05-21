@@ -27,3 +27,20 @@
 .close:hover:not(:disabled) {
   background: var(--color-surface-4);
 }
+
+/* ── refresh — page-header re-trigger ↻ ─────────────────────────────────── */
+
+.refresh {
+  background: none;
+  border: none;
+  font-size: 1.25rem;
+  line-height: 1;
+  color: var(--color-text-muted);
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+}
+
+.refresh:hover:not(:disabled) {
+  background: var(--color-surface-4);
+  color: var(--color-text-heading);
+}
