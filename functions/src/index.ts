@@ -20,6 +20,8 @@ import { payrollRouter } from "./routes/payroll";
 import { statsRouter } from "./routes/stats";
 import { auditLogRouter } from "./routes/auditLog";
 import { menuOrderRouter } from "./routes/menuOrder";
+import { timeOverrideRouter } from "./routes/timeOverride";
+import * as clock from "./services/clock";
 import { requireAuth, requireRole, AuthRequest } from "./middleware/auth";
 import { writeAudit, ctxFromReq } from "./services/auditLog";
 import { transitionPlanDeadlines } from "./services/planTransitions";
@@ -43,6 +45,13 @@ app.use(cors({ origin: true }));
 // than the raw PDF, so a 3 MB PDF lands around 4 MB of JSON body.
 app.use(express.json({ limit: "10mb" }));
 
+// Pull the latest test-clock override before each request. TTL-cached, so it
+// only re-reads Firestore every ~30s, and it's a no-op in production (the
+// override is never honoured there). Keeps clock.now() current for handlers.
+app.use((_req, _res, next) => {
+  clock.refresh().then(() => next()).catch(() => next());
+});
+
 // Routes
 app.use("/auth", authRouter);
 app.use("/employees", employeesRouter);
@@ -59,6 +68,7 @@ app.use("/payroll", payrollRouter);
 app.use("/stats", statsRouter);
 app.use("/audit", auditLogRouter);
 app.use("/settings/menu-order", menuOrderRouter);
+app.use("/settings/time-override", timeOverrideRouter);
 
 // Health check
 app.get("/health", (_req, res) => {
@@ -168,6 +178,7 @@ export const api = functions
 //   curl -X POST http://127.0.0.1:5002/hotel-hr-app-75581/europe-west3/api/shifts/trigger-deadlines
 
 export const checkPlanDeadlines = onSchedule("every 5 minutes", async () => {
+  await clock.refresh(true);
   await transitionPlanDeadlines();
 });
 
@@ -194,16 +205,19 @@ export const refreshPayroll = onSchedule("every 24 hours", async () => {
 //   curl -X POST http://127.0.0.1:5002/.../api/benefits/trigger-multisport-sweep
 
 export const sweepMultisport = onSchedule("every 24 hours", async () => {
+  await clock.refresh(true);
   await sweepExpiredMultisport();
 });
 
 // ─── Daily: refresh document expiry alerts for all employees ─────────────────
 
 export const refreshProbationAlerts = onSchedule("every 24 hours", async () => {
+  await clock.refresh(true);
   await refreshAllProbationAlerts();
 });
 
 export const refreshDocumentAlerts = onSchedule("every 24 hours", async () => {
+  await clock.refresh(true);
   const db = admin.firestore();
   const employeesSnap = await db.collection("employees").get();
 

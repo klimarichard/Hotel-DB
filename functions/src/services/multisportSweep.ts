@@ -9,11 +9,12 @@
 
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
+import * as clock from "./clock";
 
 const db = () => admin.firestore();
 
 function todayPrague(): string {
-  return new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Prague" }).format(new Date());
+  return new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Prague" }).format(clock.now());
 }
 
 export async function sweepExpiredMultisport(): Promise<{ unticked: number }> {

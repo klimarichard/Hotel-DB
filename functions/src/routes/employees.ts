@@ -14,6 +14,7 @@ import {
   refreshProbationAlertsForEmployee,
   deleteProbationAlertsForEmployee,
 } from "../services/probationAlerts";
+import * as clock from "../services/clock";
 
 export const employeesRouter = Router();
 
@@ -616,7 +617,7 @@ export async function updateDocumentAlerts(
   body: Record<string, unknown>
 ): Promise<void> {
   const alertsCol = db().collection("alerts");
-  const today = new Date();
+  const today = clock.now();
   today.setHours(0, 0, 0, 0);
 
   for (const { field, label } of EXPIRY_FIELDS) {

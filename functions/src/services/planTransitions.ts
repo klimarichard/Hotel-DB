@@ -4,6 +4,7 @@
  */
 
 import * as admin from "firebase-admin";
+import * as clock from "./clock";
 
 const db = () => admin.firestore();
 
@@ -42,7 +43,7 @@ export async function snapshotShifts(
 // ─── Check all plans and apply deadline transitions ───────────────────────────
 
 export async function transitionPlanDeadlines(): Promise<{ transitioned: string[] }> {
-  const now = Date.now();
+  const now = clock.nowMs();
   const transitioned: string[] = [];
 
   // Only query plans that can still transition
