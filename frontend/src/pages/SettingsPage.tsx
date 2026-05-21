@@ -97,13 +97,15 @@ interface PosCascadePreview {
 
 const DEFAULT_COMPANY_IDS = ["HPM", "STP"];
 
-const ROLES: UserRole[] = ["admin", "director", "manager", "employee"];
+const ROLES: UserRole[] = ["admin", "director", "manager", "employee", "accountant", "hr"];
 
 const ROLE_LABELS: Record<UserRole, string> = {
   admin: "Admin",
   director: "Ředitel",
   manager: "Vedoucí",
   employee: "Zaměstnanec",
+  accountant: "Účetní",
+  hr: "Personalista",
 };
 
 const emptyForm = { name: "", email: "", password: "", role: "employee" as UserRole, employeeId: "" };

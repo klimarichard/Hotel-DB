@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import { useAuth, type UserRole } from "@/hooks/useAuth";
+import { resolveOrderForRole } from "@/lib/menuItems";
 import LoginPage from "@/pages/LoginPage";
 import Layout from "@/components/Layout";
 import EmployeesPage from "@/pages/EmployeesPage";
@@ -34,6 +35,19 @@ function RequireRole({ allow, children }: { allow: ReadonlyArray<UserRole>; chil
   return <>{children}</>;
 }
 
+// Role-aware landing: send each role to the first page it can actually see.
+// accountant has no dashboard, so it lands on Zaměstnanci. The fallback must
+// itself be a page the role can open, otherwise the landing → guard → "/"
+// bounce becomes an infinite redirect loop.
+function DefaultRedirect() {
+  const { role } = useAuth();
+  const target =
+    role === "accountant"
+      ? "/zamestnanci"
+      : (role ? resolveOrderForRole(role, null)[0]?.path : null) ?? "/prehled";
+  return <Navigate to={target} replace />;
+}
+
 export default function App() {
   const { user, loading } = useAuth();
 
@@ -64,14 +78,14 @@ export default function App() {
           </RequireAuth>
         }
       >
-        <Route index element={<Navigate to="/prehled" replace />} />
-        <Route path="prehled" element={<OverviewPage />} />
-        <Route path="smeny" element={<ShiftPlannerPage />} />
-        <Route path="dovolena" element={<VacationPage />} />
-        <Route path="zamestnanci" element={<RequireRole allow={["admin", "director"]}><EmployeesPage /></RequireRole>} />
-        <Route path="zamestnanci/novy" element={<RequireRole allow={["admin", "director"]}><EmployeeFormPage /></RequireRole>} />
-        <Route path="zamestnanci/:id" element={<RequireRole allow={["admin", "director"]}><EmployeeDetailPage /></RequireRole>} />
-        <Route path="zamestnanci/:id/upravit" element={<RequireRole allow={["admin", "director"]}><EmployeeFormPage /></RequireRole>} />
+        <Route index element={<DefaultRedirect />} />
+        <Route path="prehled" element={<RequireRole allow={["admin", "director", "manager", "employee", "hr"]}><OverviewPage /></RequireRole>} />
+        <Route path="smeny" element={<RequireRole allow={["admin", "director", "manager", "employee", "hr"]}><ShiftPlannerPage /></RequireRole>} />
+        <Route path="dovolena" element={<RequireRole allow={["admin", "director", "manager", "employee", "hr"]}><VacationPage /></RequireRole>} />
+        <Route path="zamestnanci" element={<RequireRole allow={["admin", "director", "accountant", "hr"]}><EmployeesPage /></RequireRole>} />
+        <Route path="zamestnanci/novy" element={<RequireRole allow={["admin", "director", "hr"]}><EmployeeFormPage /></RequireRole>} />
+        <Route path="zamestnanci/:id" element={<RequireRole allow={["admin", "director", "accountant", "hr"]}><EmployeeDetailPage /></RequireRole>} />
+        <Route path="zamestnanci/:id/upravit" element={<RequireRole allow={["admin", "director", "hr"]}><EmployeeFormPage /></RequireRole>} />
         <Route path="mzdy" element={<RequireRole allow={["admin", "director"]}><PayrollPage /></RequireRole>} />
         <Route path="smlouvy" element={<RequireRole allow={["admin", "director"]}><ContractTemplatesPage /></RequireRole>} />
         <Route path="upozorneni" element={<RequireRole allow={["admin", "director"]}><AlertsPage /></RequireRole>} />

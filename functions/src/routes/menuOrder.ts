@@ -12,10 +12,10 @@ const db = () => admin.firestore();
 // validate PUT payloads — admin can't sneak in an item id that doesn't
 // exist or assign one to a role that can't access it.
 const MENU_ITEMS: { id: string; roles: UserRole[] }[] = [
-  { id: "prehled",     roles: ["admin", "director", "manager", "employee"] },
-  { id: "smeny",       roles: ["admin", "director", "manager", "employee"] },
-  { id: "dovolena",    roles: ["admin", "director", "manager", "employee"] },
-  { id: "zamestnanci", roles: ["admin", "director"] },
+  { id: "prehled",     roles: ["admin", "director", "manager", "employee", "hr"] },
+  { id: "smeny",       roles: ["admin", "director", "manager", "employee", "hr"] },
+  { id: "dovolena",    roles: ["admin", "director", "manager", "employee", "hr"] },
+  { id: "zamestnanci", roles: ["admin", "director", "accountant", "hr"] },
   { id: "mzdy",        roles: ["admin", "director"] },
   { id: "upozorneni",  roles: ["admin", "director"] },
   { id: "smlouvy",     roles: ["admin", "director"] },
@@ -23,13 +23,15 @@ const MENU_ITEMS: { id: string; roles: UserRole[] }[] = [
   { id: "nastaveni",   roles: ["admin"] },
 ];
 
-const ALL_ROLES: UserRole[] = ["admin", "director", "manager", "employee"];
+const ALL_ROLES: UserRole[] = ["admin", "director", "manager", "employee", "accountant", "hr"];
 const VALID_IDS = new Set(MENU_ITEMS.map((m) => m.id));
 const ROLE_TO_ALLOWED_IDS: Record<UserRole, Set<string>> = {
   admin: new Set(MENU_ITEMS.filter((m) => m.roles.includes("admin")).map((m) => m.id)),
   director: new Set(MENU_ITEMS.filter((m) => m.roles.includes("director")).map((m) => m.id)),
   manager: new Set(MENU_ITEMS.filter((m) => m.roles.includes("manager")).map((m) => m.id)),
   employee: new Set(MENU_ITEMS.filter((m) => m.roles.includes("employee")).map((m) => m.id)),
+  accountant: new Set(MENU_ITEMS.filter((m) => m.roles.includes("accountant")).map((m) => m.id)),
+  hr: new Set(MENU_ITEMS.filter((m) => m.roles.includes("hr")).map((m) => m.id)),
 };
 
 const docRef = () => db().collection("settings").doc("menuOrder");

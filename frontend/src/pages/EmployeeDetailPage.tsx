@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { api } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
+import { canEditEmployees } from "@/lib/permissions";
 import * as clock from "@/lib/clock";
 import ConfirmModal from "@/components/ConfirmModal";
 import { formatDateCZ } from "@/lib/dateFormat";
@@ -1072,7 +1073,9 @@ export default function EmployeeDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { role } = useAuth();
-  const canDelete = role === "admin" || role === "director";
+  // Edit/delete/contract-management capability. admin/director/hr; accountant
+  // is read-only (sees data + reveal + contract download only).
+  const canDelete = canEditEmployees(role);
 
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [employment, setEmployment] = useState<EmploymentRow[]>([]);
@@ -1242,7 +1245,7 @@ export default function EmployeeDetailPage() {
   // Fetch user-created custom standalone templates for the "+ Adhoc dokument"
   // dropdown. Built-in standalone types are listed in STANDALONE_TYPES.
   useEffect(() => {
-    if (!id || (role !== "admin" && role !== "director")) return;
+    if (!id || !canEditEmployees(role)) return;
     api
       .get<{ id: string; name: string; kind?: string | null }[]>("/contractTemplates")
       .then((list) =>
@@ -1341,9 +1344,11 @@ export default function EmployeeDetailPage() {
           </div>
         </div>
         <div style={{ display: "flex", gap: "0.5rem" }}>
-          <Button variant="secondary" onClick={() => navigate(`/zamestnanci/${id}/upravit`)}>
-            Upravit
-          </Button>
+          {canDelete && (
+            <Button variant="secondary" onClick={() => navigate(`/zamestnanci/${id}/upravit`)}>
+              Upravit
+            </Button>
+          )}
           {canDelete && (
             <Button
               variant="danger"

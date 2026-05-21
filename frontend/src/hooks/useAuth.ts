@@ -3,7 +3,7 @@ import { User, onAuthStateChanged } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { api } from "@/lib/api";
 
-export type UserRole = "admin" | "director" | "manager" | "employee";
+export type UserRole = "admin" | "director" | "manager" | "employee" | "accountant" | "hr";
 
 interface AuthState {
   user: User | null;

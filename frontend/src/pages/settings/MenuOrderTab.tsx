@@ -19,6 +19,8 @@ export default function MenuOrderTab() {
     director: [],
     manager: [],
     employee: [],
+    accountant: [],
+    hr: [],
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -31,6 +33,8 @@ export default function MenuOrderTab() {
     director: [],
     manager: [],
     employee: [],
+    accountant: [],
+    hr: [],
   });
 
   useEffect(() => {
@@ -43,6 +47,8 @@ export default function MenuOrderTab() {
           director: [],
           manager: [],
           employee: [],
+          accountant: [],
+          hr: [],
         };
         for (const role of ALL_ROLES) {
           // resolveOrderForRole produces the same view Layout renders, so
