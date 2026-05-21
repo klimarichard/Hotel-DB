@@ -151,9 +151,16 @@ root.use("/", app);
 // Bumped memory + timeout to fit Puppeteer's Chromium launch
 // (~500 MB resident, ~3–5s cold start). Other endpoints share the
 // same instance; the cost is amortised.
+//
+// ENCRYPTION_KEY is sourced from Google Secret Manager (not a .env file):
+// declaring it here makes the secret a hard deploy requirement and injects
+// it as process.env.ENCRYPTION_KEY at runtime. Only the `api` function
+// decrypts (services/encryption.ts, used solely by routes/employees.ts);
+// the scheduled functions never touch encrypted fields, so they don't need
+// it. Local emulator still reads functions/.env unchanged.
 export const api = functions
   .region(REGION)
-  .runWith({ memory: "1GB", timeoutSeconds: 60 })
+  .runWith({ memory: "1GB", timeoutSeconds: 60, secrets: ["ENCRYPTION_KEY"] })
   .https.onRequest(root);
 
 // ─── Scheduled function: auto-transition plans at their deadlines ─────────────

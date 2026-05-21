@@ -658,9 +658,25 @@ npm run deploy:staging   # builds functions, builds frontend with --mode staging
 npm run deploy:prod      # same, against the production project
 ```
 
-The frontend picks up its Firebase config from `frontend/.env.staging` / `frontend/.env.production`. The functions env file is `functions/.env.<projectId>` so each environment gets its own `ENCRYPTION_KEY` (staging is local-only; prod uses Secret Manager).
+The frontend picks up its Firebase config from `frontend/.env.staging` / `frontend/.env.production`. The local emulator reads `functions/.env`; deployed staging **and** prod read `ENCRYPTION_KEY` from Secret Manager (see "Encryption key via Secret Manager" below).
 
 For focused redeploys (e.g. functions-only after a small fix) skip the npm script and run the firebase CLI directly: `firebase deploy --only functions:api --project staging` or `--only firestore:indexes --project staging`.
+
+### Encryption key via Secret Manager
+Deployed functions source `ENCRYPTION_KEY` from Google Secret Manager, not from a `.env` file. `functions/src/index.ts` declares `secrets: ["ENCRYPTION_KEY"]` on the `api` export — the only function that decrypts (`services/encryption.ts`, used solely by `routes/employees.ts`; the scheduled functions never touch encrypted fields, so the secret is scoped to `api` alone). The declaration makes the secret a **hard deploy requirement for both staging and prod**, so each project must have:
+
+- an `ENCRYPTION_KEY` secret (with an enabled version) in Secret Manager, and
+- a `roles/secretmanager.secretAccessor` binding for the function's runtime service account — the App Engine default SA `<projectId>@appspot.gserviceaccount.com`, which 1st-gen functions run as. `firebase deploy` grants this automatically; it can also be set with `gcloud secrets add-iam-policy-binding`.
+
+A `functions/.env.<prodId>` file could **not** isolate the prod key: the emulator also runs as project `hotel-hr-app-75581` and would load it. Secret Manager is the only safe production source. The local emulator is unaffected — it still reads `functions/.env`.
+
+**The prod `ENCRYPTION_KEY` is irrecoverable.** Once employee data is encrypted with it, losing the Secret Manager value bricks every encrypted field (`birthNumber`, `idCardNumber`, `insuranceNumber`, `bankAccount`). Keep the value in a password manager / offline safe and never rotate it.
+
+### First deploy to a fresh project
+A project that has never run a Cloud Function needs two one-time steps before/after its first deploy:
+
+1. **Provision the App Engine default SA** — `gcloud app create --region=europe-west3 --project=<projectId>`. 1st-gen functions run as `<projectId>@appspot.gserviceaccount.com`, which doesn't exist until the App Engine app is created. Without it, the secret IAM binding fails with "service account ... does not exist". The region is **permanent**; use `europe-west3` to match Firestore/Storage.
+2. **Grant the `api` function public invoker access** — after the first deploy, `gcloud functions add-iam-policy-binding api --region=europe-west3 --member=allUsers --role=roles/cloudfunctions.invoker --project=<projectId>`. firebase-tools does not always set this on a fresh function, leaving `api` returning 403 to everyone. The binding survives later redeploys.
 
 ### Region pinning
 All Cloud Functions run in `europe-west3` to co-locate with Firestore (`eur3` multi-region). `functions/src/index.ts` sets the region two ways because v1 + v2 functions don't share defaults: `setGlobalOptions({ region })` for the v2 `onSchedule` triggers, and `.region(REGION)` on the v1 `https.onRequest` export. Hosting rewrites pin the region explicitly too:
