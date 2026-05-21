@@ -712,9 +712,12 @@ function AddEntryModal({
     setForm((f) => ({ ...f, changes: f.changes.filter((_, idx) => idx !== i) }));
   }
 
-  const hasActiveRow = employment.some(
-    (r) => r.changeType !== "ukončení" && r.endDate === null
-  );
+  // "Actively employed" = at least one session that isn't over yet. A
+  // fixed-term contract (e.g. DPP) with a future end date counts as active —
+  // the old check (a row with endDate === null) wrongly treated every
+  // fixed-term contract as inactive, firing a misleading warning when ending
+  // one.
+  const hasActiveRow = groupBySession(employment).some((s) => !s.terminated);
   const noActiveContract = employee.status !== "active" || !hasActiveRow;
   const showUkonceniWarning = form.changeType === "ukončení" && noActiveContract;
   const showZmenaWarning = form.changeType === "změna smlouvy" && noActiveContract;
@@ -1776,7 +1779,16 @@ export default function EmployeeDetailPage() {
               contractType: r.contractType || p.contractType,
               salary: r.salary ?? p.salary,
               startDate: r.changeType === "nástup" ? r.startDate : p.startDate,
-              endDate: (r.endDate ?? p.endDate) ?? undefined,
+              // An "ukončení" row stores the termination date in its own
+              // startDate (not endDate). The {{endDate}} variable on a
+              // termination template means "Datum ukončení", so map it from
+              // the row's startDate — otherwise it falls back to the parent's
+              // (often empty, or the original fixed end) and the template
+              // reports no end date / the wrong date.
+              endDate:
+                r.changeType === "ukončení"
+                  ? r.startDate
+                  : (r.endDate ?? p.endDate) ?? undefined,
               workLocation: r.workLocation || p.workLocation,
               probationPeriod: r.probationPeriod || p.probationPeriod,
               signingDate: r.signingDate ?? undefined,

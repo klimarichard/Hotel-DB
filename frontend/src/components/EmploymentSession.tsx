@@ -124,9 +124,16 @@ export default function EmploymentSessionCard({
             {eff.endDate ? formatDateCZ(eff.endDate) : <span className={styles.ongoing}>trvá</span>}
           </span>
         </div>
-        {canEdit && !session.terminated && (
+        {/* "Ukončit smlouvu" stays available for any session without a formal
+            Ukončení row — including fixed-term contracts (e.g. DPP) whose end
+            date is set or has already passed, so they can always be ended
+            (early or retroactively). "+ Dodatek" remains hidden once the
+            session is over (terminated = Ukončení row or endDate in the past). */}
+        {canEdit && !session.ukonceni && (
           <div className={styles.headerActions} onClick={(e) => e.stopPropagation()}>
-            <Button variant="secondary" size="sm" onClick={onAddDodatek}>+ Dodatek</Button>
+            {!session.terminated && (
+              <Button variant="secondary" size="sm" onClick={onAddDodatek}>+ Dodatek</Button>
+            )}
             <Button variant="secondary" size="sm" onClick={onTerminate}>Ukončit smlouvu</Button>
           </div>
         )}
