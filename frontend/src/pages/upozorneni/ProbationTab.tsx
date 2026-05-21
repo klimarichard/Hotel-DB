@@ -4,6 +4,7 @@ import { api } from "@/lib/api";
 import { useAlertsContext } from "@/context/AlertsContext";
 import { formatDateCZ } from "@/lib/dateFormat";
 import Button from "@/components/Button";
+import ConfirmModal from "@/components/ConfirmModal";
 import styles from "../AlertsPage.module.css";
 
 interface ProbationAlert {
@@ -16,6 +17,7 @@ interface ProbationAlert {
   probationPeriodRaw: string;
   daysUntilEnd: number;
   status: "ending" | "ended";
+  read?: boolean;
 }
 
 function DaysBadge({ days }: { days: number }) {
@@ -26,12 +28,12 @@ function DaysBadge({ days }: { days: number }) {
 
 interface ProbationTableProps {
   alerts: ProbationAlert[];
-  showAction?: boolean;
-  onMarkRead?: (id: string) => void;
+  actionLabel?: string;
+  onAction?: (id: string) => void;
   muted?: boolean;
 }
 
-function ProbationTable({ alerts, showAction, onMarkRead, muted }: ProbationTableProps) {
+function ProbationTable({ alerts, actionLabel, onAction, muted }: ProbationTableProps) {
   return (
     <div className={styles.tableWrapper}>
       <table className={styles.table}>
@@ -42,7 +44,7 @@ function ProbationTable({ alerts, showAction, onMarkRead, muted }: ProbationTabl
             <th>Konec zkušební</th>
             <th>Délka</th>
             <th>Zbývá</th>
-            {showAction && <th></th>}
+            {actionLabel && <th></th>}
           </tr>
         </thead>
         <tbody>
@@ -66,13 +68,13 @@ function ProbationTable({ alerts, showAction, onMarkRead, muted }: ProbationTabl
               <td>{formatDateCZ(alert.probationEndDate)}</td>
               <td>{alert.probationPeriodRaw}</td>
               <td><DaysBadge days={alert.daysUntilEnd} /></td>
-              {showAction && (
+              {actionLabel && (
                 <td>
                   <button
                     className={styles.markReadBtn}
-                    onClick={() => onMarkRead?.(alert.id)}
+                    onClick={() => onAction?.(alert.id)}
                   >
-                    Přečteno
+                    {actionLabel}
                   </button>
                 </td>
               )}
@@ -87,7 +89,8 @@ function ProbationTable({ alerts, showAction, onMarkRead, muted }: ProbationTabl
 export default function ProbationTab() {
   const [alerts, setAlerts] = useState<ProbationAlert[]>([]);
   const [loading, setLoading] = useState(true);
-  const { readProbationIds, markProbationRead, markAllProbationRead } = useAlertsContext();
+  const [error, setError] = useState<string | null>(null);
+  const { markProbationRead } = useAlertsContext();
 
   useEffect(() => {
     api.get<ProbationAlert[]>("/alerts/probation")
@@ -95,10 +98,23 @@ export default function ProbationTab() {
       .finally(() => setLoading(false));
   }, []);
 
+  // Optimistically flip read-state, persist server-side, and on failure
+  // re-sync from the server and surface the error (no native dialogs).
+  async function setRead(ids: string[], read: boolean) {
+    if (ids.length === 0) return;
+    setAlerts((prev) => prev.map((a) => (ids.includes(a.id) ? { ...a, read } : a)));
+    try {
+      await markProbationRead(ids, read);
+    } catch {
+      api.get<ProbationAlert[]>("/alerts/probation").then(setAlerts).catch(() => {});
+      setError("Změnu se nepodařilo uložit. Zkuste to prosím znovu.");
+    }
+  }
+
   if (loading) return <div className={styles.state}>Načítám…</div>;
 
-  const unread = alerts.filter((a) => !readProbationIds.has(a.id));
-  const read   = alerts.filter((a) =>  readProbationIds.has(a.id));
+  const unread = alerts.filter((a) => !a.read);
+  const read   = alerts.filter((a) =>  a.read);
 
   return (
     <div>
@@ -106,7 +122,7 @@ export default function ProbationTab() {
         <div className={styles.tabHeader}>
           <Button
             variant="secondary"
-            onClick={() => markAllProbationRead(alerts.map((a) => a.id))}
+            onClick={() => setRead(unread.map((a) => a.id), true)}
           >
             Označit vše jako přečtené
           </Button>
@@ -121,19 +137,39 @@ export default function ProbationTab() {
         {unread.length === 0 ? (
           <div className={styles.empty}>Žádné nepřečtené konce zkušební doby.</div>
         ) : (
-          <ProbationTable alerts={unread} showAction onMarkRead={(id) => markProbationRead([id])} />
+          <ProbationTable
+            alerts={unread}
+            actionLabel="Přečteno"
+            onAction={(id) => setRead([id], true)}
+          />
         )}
       </div>
 
       {read.length > 0 && (
         <div className={styles.section}>
           <div className={styles.sectionLabel}>Přečtené</div>
-          <ProbationTable alerts={read} muted />
+          <ProbationTable
+            alerts={read}
+            muted
+            actionLabel="Označit jako nepřečtené"
+            onAction={(id) => setRead([id], false)}
+          />
         </div>
       )}
 
       {alerts.length === 0 && (
         <div className={styles.empty}>Žádné nadcházející konce zkušební doby.</div>
+      )}
+
+      {error && (
+        <ConfirmModal
+          title="Chyba"
+          message={error}
+          confirmLabel="OK"
+          showCancel={false}
+          onConfirm={() => setError(null)}
+          onCancel={() => setError(null)}
+        />
       )}
     </div>
   );

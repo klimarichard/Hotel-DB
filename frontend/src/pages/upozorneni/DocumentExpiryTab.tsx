@@ -4,6 +4,7 @@ import { api } from "@/lib/api";
 import { useAlertsContext } from "@/context/AlertsContext";
 import { formatDateCZ } from "@/lib/dateFormat";
 import Button from "@/components/Button";
+import ConfirmModal from "@/components/ConfirmModal";
 import styles from "../AlertsPage.module.css";
 
 interface Alert {
@@ -15,6 +16,7 @@ interface Alert {
   expiryDate: string;
   daysUntilExpiry: number;
   status: "expiring" | "expired";
+  read?: boolean;
 }
 
 function DaysBadge({ days }: { days: number }) {
@@ -25,12 +27,12 @@ function DaysBadge({ days }: { days: number }) {
 
 interface AlertTableProps {
   alerts: Alert[];
-  showAction?: boolean;
-  onMarkRead?: (id: string) => void;
+  actionLabel?: string;
+  onAction?: (id: string) => void;
   muted?: boolean;
 }
 
-function AlertTable({ alerts, showAction, onMarkRead, muted }: AlertTableProps) {
+function AlertTable({ alerts, actionLabel, onAction, muted }: AlertTableProps) {
   return (
     <div className={styles.tableWrapper}>
       <table className={styles.table}>
@@ -40,7 +42,7 @@ function AlertTable({ alerts, showAction, onMarkRead, muted }: AlertTableProps) 
             <th>Doklad</th>
             <th>Datum expirace</th>
             <th>Zbývá</th>
-            {showAction && <th></th>}
+            {actionLabel && <th></th>}
           </tr>
         </thead>
         <tbody>
@@ -63,13 +65,13 @@ function AlertTable({ alerts, showAction, onMarkRead, muted }: AlertTableProps) 
               <td>{alert.fieldLabel}</td>
               <td>{formatDateCZ(alert.expiryDate)}</td>
               <td><DaysBadge days={alert.daysUntilExpiry} /></td>
-              {showAction && (
+              {actionLabel && (
                 <td>
                   <button
                     className={styles.markReadBtn}
-                    onClick={() => onMarkRead?.(alert.id)}
+                    onClick={() => onAction?.(alert.id)}
                   >
-                    Přečteno
+                    {actionLabel}
                   </button>
                 </td>
               )}
@@ -84,7 +86,8 @@ function AlertTable({ alerts, showAction, onMarkRead, muted }: AlertTableProps) 
 export default function DocumentExpiryTab() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
-  const { readIds, markRead, markAllRead } = useAlertsContext();
+  const [error, setError] = useState<string | null>(null);
+  const { markRead } = useAlertsContext();
 
   useEffect(() => {
     api.get<Alert[]>("/alerts")
@@ -92,10 +95,23 @@ export default function DocumentExpiryTab() {
       .finally(() => setLoading(false));
   }, []);
 
+  // Optimistically flip read-state, persist server-side, and on failure
+  // re-sync from the server and surface the error (no native dialogs).
+  async function setRead(ids: string[], read: boolean) {
+    if (ids.length === 0) return;
+    setAlerts((prev) => prev.map((a) => (ids.includes(a.id) ? { ...a, read } : a)));
+    try {
+      await markRead(ids, read);
+    } catch {
+      api.get<Alert[]>("/alerts").then(setAlerts).catch(() => {});
+      setError("Změnu se nepodařilo uložit. Zkuste to prosím znovu.");
+    }
+  }
+
   if (loading) return <div className={styles.state}>Načítám…</div>;
 
-  const unread = alerts.filter((a) => !readIds.has(a.id));
-  const read   = alerts.filter((a) =>  readIds.has(a.id));
+  const unread = alerts.filter((a) => !a.read);
+  const read   = alerts.filter((a) =>  a.read);
 
   return (
     <div>
@@ -103,7 +119,7 @@ export default function DocumentExpiryTab() {
         <div className={styles.tabHeader}>
           <Button
             variant="secondary"
-            onClick={() => markAllRead(alerts.map((a) => a.id))}
+            onClick={() => setRead(unread.map((a) => a.id), true)}
           >
             Označit vše jako přečtené
           </Button>
@@ -118,19 +134,39 @@ export default function DocumentExpiryTab() {
         {unread.length === 0 ? (
           <div className={styles.empty}>Žádná nepřečtená upozornění.</div>
         ) : (
-          <AlertTable alerts={unread} showAction onMarkRead={(id) => markRead([id])} />
+          <AlertTable
+            alerts={unread}
+            actionLabel="Přečteno"
+            onAction={(id) => setRead([id], true)}
+          />
         )}
       </div>
 
       {read.length > 0 && (
         <div className={styles.section}>
           <div className={styles.sectionLabel}>Přečtené</div>
-          <AlertTable alerts={read} muted />
+          <AlertTable
+            alerts={read}
+            muted
+            actionLabel="Označit jako nepřečtené"
+            onAction={(id) => setRead([id], false)}
+          />
         </div>
       )}
 
       {alerts.length === 0 && (
         <div className={styles.empty}>Žádná upozornění. Všechny doklady jsou platné.</div>
+      )}
+
+      {error && (
+        <ConfirmModal
+          title="Chyba"
+          message={error}
+          confirmLabel="OK"
+          showCancel={false}
+          onConfirm={() => setError(null)}
+          onCancel={() => setError(null)}
+        />
       )}
     </div>
   );

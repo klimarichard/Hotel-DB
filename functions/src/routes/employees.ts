@@ -638,8 +638,17 @@ export async function updateDocumentAlerts(
       // Not expiring soon — remove any existing alert
       await alertsCol.doc(docId).delete();
     } else {
-      // Expiring soon or already expired — upsert alert
-      await alertsCol.doc(docId).set({
+      // Expiring soon or already expired — upsert alert. Preserve the
+      // read-state across refreshes: an alert the user already dismissed
+      // must stay read when this daily/manual refresh rewrites the doc.
+      // It only resets to unread when the underlying expiryDate changes
+      // (i.e. the document was renewed to a new date) — that's a genuinely
+      // new deadline worth re-surfacing.
+      const ref = alertsCol.doc(docId);
+      const existing = await ref.get();
+      const prev = existing.data() as Record<string, unknown> | undefined;
+      const keepRead = !!prev && prev.expiryDate === value && prev.read === true;
+      await ref.set({
         employeeId,
         employeeFirstName: firstName,
         employeeLastName: lastName,
@@ -648,6 +657,9 @@ export async function updateDocumentAlerts(
         expiryDate: value,
         daysUntilExpiry,
         status: daysUntilExpiry < 0 ? "expired" : "expiring",
+        read: keepRead,
+        readAt: keepRead ? prev!.readAt ?? null : null,
+        readBy: keepRead ? prev!.readBy ?? null : null,
         updatedAt: FieldValue.serverTimestamp(),
       });
     }
