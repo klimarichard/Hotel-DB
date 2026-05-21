@@ -1,4 +1,5 @@
 import { formatDateCZ } from "./dateFormat";
+import * as clock from "./clock";
 
 /**
  * Format a salary number with Czech thousands-separator dots, intended to
@@ -313,7 +314,7 @@ export function resolveVariables(
     companyAddress: str(company.address),
     ic: str(company.ic),
     companyFileNo: str(company.fileNo),
-    today: formatDateCZ(new Date()),
+    today: formatDateCZ(clock.now()),
     requestedAt: formatDateCZ(employee.requestedAt),
     validFrom: formatDateCZ(employee.validFrom),
     validFromMonth: czechMonthYear(employee.validFrom),

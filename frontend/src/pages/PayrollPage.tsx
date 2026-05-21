@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
+import * as clock from "@/lib/clock";
 import { Navigate } from "react-router-dom";
 import PayrollNotesModal from "./PayrollNotesModal";
 import Button from "@/components/Button";
@@ -420,7 +421,7 @@ function SickLeaveModal({
 export default function PayrollPage() {
   const { role, loading: authLoading } = useAuth();
 
-  const now = new Date();
+  const now = clock.now();
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
 

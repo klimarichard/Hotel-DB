@@ -10,6 +10,7 @@ import { useVacationContext } from "@/context/VacationContext";
 import { useTheme } from "@/context/ThemeContext";
 import { api } from "@/lib/api";
 import { resolveOrderForRole } from "@/lib/menuItems";
+import TimeOverrideBanner from "@/components/TimeOverrideBanner";
 import logoMark from "@/assets/logo.svg";
 import styles from "./Layout.module.css";
 
@@ -119,6 +120,7 @@ export default function Layout() {
         </div>
       </nav>
       <main className={styles.main}>
+        <TimeOverrideBanner />
         <Outlet />
       </main>
     </div>

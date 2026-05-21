@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { api } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
+import * as clock from "@/lib/clock";
 import ConfirmModal from "@/components/ConfirmModal";
 import { formatDateCZ } from "@/lib/dateFormat";
 import { displayGendered } from "@/lib/genderDisplay";
@@ -326,7 +327,7 @@ function buildRowSnapshot(row: EmploymentRow): Record<string, unknown> {
   return out;
 }
 
-const TODAY = new Date().toISOString().split("T")[0];
+const TODAY = clock.today();
 
 /**
  * Signing date of the most recent prior "nástup" row that the given row
@@ -1407,7 +1408,7 @@ export default function EmployeeDetailPage() {
                           key={entry.id}
                           className={styles.generateDropdownItem}
                           onClick={() => {
-                            const today = new Date().toISOString().split("T")[0];
+                            const today = clock.today();
                             setSigningDatePrompt(entry.id);
                             setSigningDateDraft(today);
                             setRequestedAtDraft(today);

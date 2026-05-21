@@ -1,4 +1,5 @@
 import { ContractType, CHANGE_TYPE_TO_CONTRACTS } from "./contractVariables";
+import * as clock from "./clock";
 
 export interface ChangeRow {
   changeKind: string;
@@ -94,11 +95,7 @@ export function groupBySession(rows: EmploymentRow[]): EmploymentSession[] {
 
   // Today as YYYY-MM-DD in local time — both startDate / endDate are
   // stored in this same form, so a lex comparison is correct.
-  const today = (() => {
-    const d = new Date();
-    const pad = (n: number) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-  })();
+  const today = clock.today();
 
   function flush() {
     if (!current) return;

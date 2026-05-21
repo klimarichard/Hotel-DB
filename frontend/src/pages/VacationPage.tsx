@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useState } from "react";
 import { api, ApiError } from "../lib/api";
+import * as clock from "../lib/clock";
 import { useAuth } from "../hooks/useAuth";
 import { useVacationContext } from "@/context/VacationContext";
 import { formatDateCZ, formatDatetimeCZ } from "../lib/dateFormat";
@@ -123,7 +124,7 @@ export default function VacationPage() {
   const myRequests = requests.filter((r) => r.uid === user?.uid);
 
   // YYYY-MM-DD in local time (matches what the date inputs and backend produce).
-  const now = new Date();
+  const now = clock.now();
   const todayYMD = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 
   // Admin/director split: anything that still needs attention (pending status

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { api } from "../lib/api";
+import * as clock from "../lib/clock";
 import { useAuth } from "../hooks/useAuth";
 import { parseShiftExpression, getCellColor, SECTIONS, SECTION_LABELS, getCzechHolidays, MOD_PERSONS } from "../lib/shiftConstants";
 import ShiftGrid from "../components/ShiftGrid";
@@ -141,7 +142,7 @@ function StatusBadge({ status }: { status: PlanStatus }) {
 
 export default function ShiftPlannerPage() {
   const { role, employeeId: currentEmployeeId } = useAuth();
-  const now = new Date();
+  const now = clock.now();
 
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
