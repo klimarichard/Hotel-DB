@@ -15,6 +15,21 @@ import styles from "./EmployeeSelfPage.module.css";
 
 const MASK = "••••••••";
 
+const EyeIcon = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+    <circle cx="12" cy="12" r="3" />
+  </svg>
+);
+
+const EyeOffIcon = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+    <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+    <line x1="1" y1="1" x2="23" y2="23" />
+  </svg>
+);
+
 interface EmployeeRoot {
   id: string;
   firstName?: string;
@@ -113,6 +128,15 @@ export default function EmployeeSelfPage() {
   }, [authLoading, employeeId]);
 
   async function handleReveal(field: string) {
+    // Toggle: if already revealed, hide it again.
+    if (revealed[field] !== undefined) {
+      setRevealed((p) => {
+        const next = { ...p };
+        delete next[field];
+        return next;
+      });
+      return;
+    }
     try {
       const res = await api.post<{ value: string }>("/me/employee/reveal", { field });
       setRevealed((p) => ({ ...p, [field]: res.value }));
@@ -192,18 +216,22 @@ export default function EmployeeSelfPage() {
     const obj = sectionObj(f.section);
     const raw = obj ? obj[f.key] : undefined;
     if (f.sensitive) {
-      if (revealed[f.key] !== undefined) return <span>{revealed[f.key]}</span>;
-      if (raw === MASK) {
-        return (
-          <span>
-            {MASK}
-            <button type="button" className={styles.revealBtn} onClick={() => handleReveal(f.key)}>
-              Zobrazit
-            </button>
-          </span>
-        );
-      }
-      return <span className={styles.muted}>—</span>;
+      const isRevealed = revealed[f.key] !== undefined;
+      if (raw !== MASK && !isRevealed) return <span className={styles.muted}>—</span>;
+      return (
+        <span>
+          {isRevealed ? revealed[f.key] : MASK}
+          <button
+            type="button"
+            className={styles.revealBtn}
+            onClick={() => handleReveal(f.key)}
+            title={isRevealed ? "Skrýt" : "Zobrazit"}
+            aria-label={isRevealed ? "Skrýt" : "Zobrazit"}
+          >
+            {isRevealed ? <EyeOffIcon /> : <EyeIcon />}
+          </button>
+        </span>
+      );
     }
     if (raw == null || raw === "") return <span className={styles.muted}>—</span>;
     if (f.kind === "date") return <span>{formatDateCZ(String(raw))}</span>;
@@ -254,7 +282,7 @@ export default function EmployeeSelfPage() {
           {SELF_EDIT_SECTIONS.map((section) => (
             <div className={styles.section} key={section}>
               <div className={styles.sectionTitle}>{SELF_EDIT_SECTION_LABELS[section]}</div>
-              <div className={styles.grid}>
+              <div className={styles.editGrid}>
                 {SELF_EDIT_FIELDS.filter((f) => f.section === section).map((f) => (
                   <div className={styles.field} key={f.key}>
                     <label className={styles.fieldLabel}>{f.label}</label>
@@ -306,7 +334,7 @@ export default function EmployeeSelfPage() {
                   </>
                 )}
                 {SELF_EDIT_FIELDS.filter((f) => f.section === section).map((f) => (
-                  <div className={f.key === "permanentAddress" || f.key === "contactAddress" ? styles.fieldFull : styles.field} key={f.key}>
+                  <div className={`${styles.field}${f.key === "permanentAddress" || f.key === "contactAddress" ? ` ${styles.fieldFull}` : ""}`} key={f.key}>
                     <span className={styles.fieldLabel}>{f.label}</span>
                     <span className={styles.fieldValue}>{renderReadValue(f)}</span>
                   </div>
