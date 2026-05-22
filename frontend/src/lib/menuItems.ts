@@ -28,7 +28,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
 };
 
 export const MENU_ITEMS: ReadonlyArray<MenuItem> = [
-  { id: "prehled",     label: "Přehled",         path: "/prehled",     roles: ["admin", "director", "manager", "employee", "hr"] },
+  { id: "prehled",     label: "Přehled",         path: "/prehled",     roles: ["admin", "director", "manager", "employee", "hr", "accountant"] },
   { id: "smeny",       label: "Směny",           path: "/smeny",       roles: ["admin", "director", "manager", "employee", "hr"] },
   { id: "dovolena",    label: "Dovolená",        path: "/dovolena",    roles: ["admin", "director", "manager", "employee", "hr"] },
   { id: "zamestnanci", label: "Zaměstnanci",     path: "/zamestnanci", roles: ["admin", "director", "accountant", "hr"] },
@@ -37,7 +37,7 @@ export const MENU_ITEMS: ReadonlyArray<MenuItem> = [
   { id: "smlouvy",     label: "Šablony smluv",   path: "/smlouvy",     roles: ["admin", "director"] },
   { id: "audit",       label: "Log změn",        path: "/audit",       roles: ["admin", "director"] },
   { id: "nastaveni",   label: "Nastavení",       path: "/nastaveni",   roles: ["admin"] },
-  { id: "mujProfil",   label: "Můj profil",      path: "/muj-profil",  roles: ["admin", "director", "manager", "employee", "accountant", "hr"] },
+  { id: "mujProfil",   label: "Můj profil",      path: "/muj-profil",  roles: ["admin", "director", "manager", "employee", "hr"] },
 ];
 
 /**

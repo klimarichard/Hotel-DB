@@ -12,7 +12,7 @@ const db = () => admin.firestore();
 // validate PUT payloads — admin can't sneak in an item id that doesn't
 // exist or assign one to a role that can't access it.
 const MENU_ITEMS: { id: string; roles: UserRole[] }[] = [
-  { id: "prehled",     roles: ["admin", "director", "manager", "employee", "hr"] },
+  { id: "prehled",     roles: ["admin", "director", "manager", "employee", "hr", "accountant"] },
   { id: "smeny",       roles: ["admin", "director", "manager", "employee", "hr"] },
   { id: "dovolena",    roles: ["admin", "director", "manager", "employee", "hr"] },
   { id: "zamestnanci", roles: ["admin", "director", "accountant", "hr"] },
@@ -21,7 +21,7 @@ const MENU_ITEMS: { id: string; roles: UserRole[] }[] = [
   { id: "smlouvy",     roles: ["admin", "director"] },
   { id: "audit",       roles: ["admin", "director"] },
   { id: "nastaveni",   roles: ["admin"] },
-  { id: "mujProfil",   roles: ["admin", "director", "manager", "employee", "accountant", "hr"] },
+  { id: "mujProfil",   roles: ["admin", "director", "manager", "employee", "hr"] },
 ];
 
 const ALL_ROLES: UserRole[] = ["admin", "director", "manager", "employee", "accountant", "hr"];

@@ -335,6 +335,9 @@ export default function OverviewPage() {
   const isDark = theme === "dark";
   const { employeeId, role } = useAuth();
   const showTasks = role === "admin" || role === "director";
+  // Accountant gets a stats-only dashboard: the HR headcount graphs, none of
+  // the shift-staffing sections (they have no shifts access — /shifts/plans 403s).
+  const isAccountant = role === "accountant";
 
   const { unreadCount: alertsCount } = useAlertsContext();
   const { pendingCount: overridesCount } = useShiftOverridesContext();
@@ -361,6 +364,7 @@ export default function OverviewPage() {
   }, [employeeId]);
 
   useEffect(() => {
+    if (isAccountant) { setLoading(false); return; }
     let cancelled = false;
     (async () => {
       setLoading(true);
@@ -391,7 +395,7 @@ export default function OverviewPage() {
       }
     })();
     return () => { cancelled = true; };
-  }, [next7Days]);
+  }, [next7Days, isAccountant]);
 
   const plansByYM = useMemo(() => {
     const map = new Map<string, PlanDetail>();
@@ -427,6 +431,18 @@ export default function OverviewPage() {
     if (!employeeId || !plans) return null;
     return buildMyShifts(next7Days, plansByYM, employeeId);
   }, [employeeId, plans, plansByYM, next7Days]);
+
+  // Accountant: HR stats dashboard only (no shift staffing, no personal tiles).
+  if (isAccountant) {
+    return (
+      <div className={styles.page}>
+        <div className={styles.dateHeaderRow}>
+          <h1 className={styles.dateHeader}>{formatLongHeader(today)}</h1>
+        </div>
+        <HeadcountStats />
+      </div>
+    );
+  }
 
   return (
     <div className={styles.page}>

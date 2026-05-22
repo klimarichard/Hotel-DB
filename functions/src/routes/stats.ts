@@ -20,7 +20,7 @@ const TENURE_ORDER: TenureBucket[] = ["<1m", "1-3m", "3-6m", "6-12m", "1-2y", "2
 statsRouter.get(
   "/headcount",
   requireAuth,
-  requireRole("admin", "director"),
+  requireRole("admin", "director", "accountant"),
   async (_req: AuthRequest, res) => {
     const [empSnap, historySnap] = await Promise.all([
       db().collection("employees").where("status", "==", "active").get(),
