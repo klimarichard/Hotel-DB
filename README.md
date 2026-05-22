@@ -648,6 +648,22 @@ Three follow-ups on the Dodatek (`změna smlouvy`) form:
 
 ---
 
+## Employee self-service — Můj profil (2026-05-22)
+
+Every linked user gets `/muj-profil` ("Můj profil", menu item for all six roles, appended last so no role's landing page changes). It shows the caller's **own** employee record (personal / contact / documents / insurance + employment history) and lets them propose edits that an **admin or director must approve** before they touch the live record.
+
+- **Self-scoped read API** (mounted at `/me`, any authenticated user): `GET /me/employee[/contact|/documents|/benefits|/employment]` and `POST /me/employee/reveal`. The employee id is resolved server-side from `users/{uid}.employeeId` — never from the URL — so a caller can only ever read their own record. Backend in `functions/src/routes/selfService.ts`.
+- **Edit-by-approval workflow** — new top-level collection `employeeChangeRequests/{id}` (Admin-SDK only; no `firestore.rules`/index changes, queries are single-field). Employee submits a diff via `POST /me/change-requests` (sensitive proposed values are **encrypted on submit** so plaintext never rests on the request doc); they can list/cancel their own pending requests. Admin/director review in a new Upozornění tab **"Žádosti o úpravu údajů"** (`GET /employee-change-requests/pending` + `/pending-count`, `POST /:id/reveal`, `PATCH /:id`). **Approve** applies the diff to the live record (encrypting sensitive fields, refreshing document-expiry alerts, audit-logging every applied field) via `functions/src/services/employeeChangeRequests.ts`; **reject** takes an optional reason.
+- **Editable-field whitelist** lives in two mirrored places — backend `EDITABLE_FIELDS` (`functions/src/services/employeeChangeRequests.ts`) and frontend `frontend/src/lib/selfEditFields.ts` — covering root/contact/documents/benefits incl. sensitive fields (rodné číslo, OP, pojištěnec, účet). Employment/contract terms are excluded (those stay in the Nástup/Dodatek flow). Read display reuses `displayGendered` (Pohlaví/Rodinný stav); edit mode uses the same dropdowns as the employee form for Rodinný stav + Vzdělání.
+- Page: `frontend/src/pages/EmployeeSelfPage.tsx`; admin tab: `frontend/src/pages/upozorneni/EmployeeDataChangeRequestsTab.tsx`; badge context: `frontend/src/context/EmployeeChangeRequestsContext.tsx`.
+
+### Promotion-batch fixes (2026-05-22)
+- **create-user** (`functions/src/routes/auth.ts`): the handler had no try/catch and the Express app had no error middleware, so a rejected `admin.auth().createUser` (e.g. duplicate email, or the project's password policy) left the request hanging. Now wrapped in try/catch with mapped Firebase error codes → clean Czech messages, incl. translating `PASSWORD_DOES_NOT_MEET_REQUIREMENTS`; a global error-handler middleware was added in `index.ts` as a safety net. The create-user form also shows a password-policy hint (≥8 chars, upper+lower+digit).
+- **MOD row** (`frontend/src/components/ModCell.tsx` + `ShiftGrid.tsx`): the MOD row validated typed letters against a hardcoded `MOD_PERSONS` list; it now accepts the letters actually assigned to managers in the current plan.
+- **Vacation pending-count** (`functions/src/routes/vacation.ts`): `GET /vacation/pending-count` combined `status == "approved"` with `pendingEdit != null`, which needs a composite index that isn't in `firestore.indexes.json` — on real Firestore the query 500'd and the frontend swallowed it, so the "Dovolená" badge stayed 0 everywhere. Rewritten to two single-field equality queries + a JS filter (no composite index).
+
+---
+
 ## Deployment & environments
 
 Three environments with a strict cutover path:
