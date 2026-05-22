@@ -7,6 +7,34 @@ import { ctxFromReq, logCreate, logUpdate } from "../services/auditLog";
 export const authRouter = Router();
 
 /**
+ * Turn a Firebase password-policy failure into a clear, actionable Czech
+ * message. The project enforces a password policy; an unmet rule comes back
+ * from createUser wrapped as `auth/internal-error`, with the failing rules
+ * embedded in the message, e.g.:
+ *   "Missing password requirements: [Password must contain an upper case character]"
+ * We extract and translate the known rules, with a sensible fallback.
+ */
+function passwordPolicyMessage(message: string): string {
+  const bracket = message.match(/\[(.*?)\]/);
+  const reqs = bracket ? bracket[1].split(",").map((s) => s.trim()).filter(Boolean) : [];
+  const translations: { test: RegExp; cz: string }[] = [
+    { test: /upper.?case/i, cz: "velké písmeno" },
+    { test: /lower.?case/i, cz: "malé písmeno" },
+    { test: /numeric|number|digit/i, cz: "číslici" },
+    { test: /non.?alphanumeric|special/i, cz: "speciální znak" },
+  ];
+  const bits: string[] = [];
+  for (const r of reqs) {
+    const lenMatch = r.match(/at least (\d+)/i);
+    if (lenMatch) { bits.push(`alespoň ${lenMatch[1]} znaků`); continue; }
+    const t = translations.find((x) => x.test.test(r));
+    if (t) bits.push(t.cz);
+  }
+  if (bits.length) return `Heslo nesplňuje požadavky — musí obsahovat ${bits.join(", ")}.`;
+  return "Heslo nesplňuje bezpečnostní požadavky. Použijte delší heslo s velkými i malými písmeny a číslicí.";
+}
+
+/**
  * POST /api/auth/set-role
  * Admin-only: set a custom role claim on a user.
  * Body: { uid: string, role: UserRole }
@@ -103,6 +131,15 @@ authRouter.post(
       // `.errorInfo.code`. Read both so we always get the real code.
       const e = err as { code?: string; message?: string; errorInfo?: { code?: string } };
       const code = e?.code ?? e?.errorInfo?.code ?? "";
+      const message = e?.message ?? "";
+
+      // Password-policy violations come back wrapped as auth/internal-error
+      // with the failing rules in the message — present them cleanly.
+      if (/PASSWORD_DOES_NOT_MEET_REQUIREMENTS|Missing password requirements/i.test(message)) {
+        res.status(400).json({ error: passwordPolicyMessage(message) });
+        return;
+      }
+
       const errorMap: Record<string, { status: number; message: string }> = {
         "auth/email-already-exists": { status: 409, message: "Uživatel s tímto e-mailem již existuje." },
         "auth/uid-already-exists": { status: 409, message: "Uživatel s tímto ID již existuje." },
@@ -114,14 +151,13 @@ authRouter.post(
       const mapped = errorMap[code];
       if (mapped) {
         res.status(mapped.status).json({ error: mapped.message });
-      } else {
-        // Unknown failure — surface code AND message. For wrapper codes like
-        // auth/internal-error the real cause sits in the message (the Admin SDK
-        // appends "Raw server response: {...}" with the underlying error).
-        const detail = [code, e?.message].filter(Boolean).join(" · ") || "neznámá chyba";
-        console.error("create-user failed:", err);
-        res.status(500).json({ error: `Nepodařilo se vytvořit uživatele: ${detail}` });
+        return;
       }
+
+      // Truly unexpected — log the full error server-side; keep the user-facing
+      // message clean (the raw blob was only a temporary diagnostic).
+      console.error("create-user failed:", err);
+      res.status(500).json({ error: "Nepodařilo se vytvořit uživatele. Zkuste to prosím znovu." });
     }
   }
 );
