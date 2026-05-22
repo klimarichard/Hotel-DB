@@ -4,6 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import Button from "@/components/Button";
 import ConfirmModal from "@/components/ConfirmModal";
 import { formatDateCZ, formatDatetimeCZ } from "@/lib/dateFormat";
+import { displayGendered } from "@/lib/genderDisplay";
 import {
   SELF_EDIT_FIELDS,
   SELF_EDIT_SECTIONS,
@@ -235,6 +236,10 @@ export default function EmployeeSelfPage() {
     }
     if (raw == null || raw === "") return <span className={styles.muted}>—</span>;
     if (f.kind === "date") return <span>{formatDateCZ(String(raw))}</span>;
+    // maritalStatus is stored combined ("ženatý/vdaná"); show the gender variant.
+    if (f.key === "maritalStatus") {
+      return <span>{displayGendered(String(raw), (emp?.gender as "m" | "f" | null) ?? null)}</span>;
+    }
     return <span>{String(raw)}</span>;
   }
 
@@ -329,7 +334,7 @@ export default function EmployeeSelfPage() {
                     </div>
                     <div className={styles.field}>
                       <span className={styles.fieldLabel}>Pohlaví</span>
-                      <span className={styles.fieldValue}>{emp?.gender || "—"}</span>
+                      <span className={styles.fieldValue}>{emp?.gender === "m" ? "Muž" : emp?.gender === "f" ? "Žena" : "—"}</span>
                     </div>
                   </>
                 )}
