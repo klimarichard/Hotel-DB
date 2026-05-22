@@ -16,7 +16,10 @@ const db = () => admin.firestore();
 jobPositionsRouter.get(
   "/",
   requireAuth,
-  requireRole("admin", "director"),
+  // Read access for everyone who works with employee records — hr needs the
+  // list to pick a position when adding a contract; accountant reads it on the
+  // employee detail view. Mutations below stay admin/director.
+  requireRole("admin", "director", "hr", "accountant"),
   async (req: AuthRequest, res: Response) => {
     const { departmentId } = req.query as { departmentId?: string };
     let query: FirebaseFirestore.Query = db().collection("jobPositions");
