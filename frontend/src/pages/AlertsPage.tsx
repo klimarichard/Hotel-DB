@@ -5,6 +5,7 @@ import { useAlertsContext } from "@/context/AlertsContext";
 import { useVacationContext } from "@/context/VacationContext";
 import { useShiftOverridesContext } from "@/context/ShiftOverridesContext";
 import { useShiftChangeRequestsContext } from "@/context/ShiftChangeRequestsContext";
+import { useEmployeeChangeRequestsContext } from "@/context/EmployeeChangeRequestsContext";
 import IconButton from "@/components/IconButton";
 import ConfirmModal from "@/components/ConfirmModal";
 import DocumentExpiryTab from "./upozorneni/DocumentExpiryTab";
@@ -12,9 +13,10 @@ import ProbationTab from "./upozorneni/ProbationTab";
 import PendingVacationTab from "./upozorneni/PendingVacationTab";
 import PendingShiftOverridesTab from "./upozorneni/PendingShiftOverridesTab";
 import PendingShiftChangeRequestsTab from "./upozorneni/PendingShiftChangeRequestsTab";
+import EmployeeDataChangeRequestsTab from "./upozorneni/EmployeeDataChangeRequestsTab";
 import styles from "./AlertsPage.module.css";
 
-type Tab = "doklady" | "zkusebni" | "dovolena" | "vyjimky" | "zmeny";
+type Tab = "doklady" | "zkusebni" | "dovolena" | "vyjimky" | "zmeny" | "uprava";
 
 export default function AlertsPage() {
   const [tab, setTab] = useState<Tab>("doklady");
@@ -23,6 +25,7 @@ export default function AlertsPage() {
   const { pendingCount: vacationCount } = useVacationContext();
   const { pendingCount: overridesCount } = useShiftOverridesContext();
   const { pendingCount: changesCount } = useShiftChangeRequestsContext();
+  const { pendingCount: dataChangesCount } = useEmployeeChangeRequestsContext();
 
   // Manual re-trigger of the document + probation alert refreshers. Admin-only
   // (the trigger endpoints require the admin role and write a manual-trigger
@@ -110,6 +113,12 @@ export default function AlertsPage() {
         >
           {tabLabel("Žádosti o změny", changesCount)}
         </button>
+        <button
+          className={tab === "uprava" ? styles.tabActive : styles.tabBtn}
+          onClick={() => setTab("uprava")}
+        >
+          {tabLabel("Žádosti o úpravu údajů", dataChangesCount)}
+        </button>
       </div>
 
       {tab === "doklady" && <DocumentExpiryTab key={refreshKey} />}
@@ -117,6 +126,7 @@ export default function AlertsPage() {
       {tab === "dovolena" && <PendingVacationTab />}
       {tab === "vyjimky" && <PendingShiftOverridesTab />}
       {tab === "zmeny" && <PendingShiftChangeRequestsTab />}
+      {tab === "uprava" && <EmployeeDataChangeRequestsTab />}
 
       {error && (
         <ConfirmModal

@@ -37,6 +37,7 @@ export const MENU_ITEMS: ReadonlyArray<MenuItem> = [
   { id: "smlouvy",     label: "Šablony smluv",   path: "/smlouvy",     roles: ["admin", "director"] },
   { id: "audit",       label: "Log změn",        path: "/audit",       roles: ["admin", "director"] },
   { id: "nastaveni",   label: "Nastavení",       path: "/nastaveni",   roles: ["admin"] },
+  { id: "mujProfil",   label: "Můj profil",      path: "/muj-profil",  roles: ["admin", "director", "manager", "employee", "accountant", "hr"] },
 ];
 
 /**

@@ -5,6 +5,7 @@ import LoginPage from "@/pages/LoginPage";
 import Layout from "@/components/Layout";
 import EmployeesPage from "@/pages/EmployeesPage";
 import EmployeeDetailPage from "@/pages/EmployeeDetailPage";
+import EmployeeSelfPage from "@/pages/EmployeeSelfPage";
 import EmployeeFormPage from "@/pages/EmployeeFormPage";
 import SettingsPage from "@/pages/SettingsPage";
 import PayrollPage from "@/pages/PayrollPage";
@@ -17,6 +18,7 @@ import AuditLogPage from "@/pages/AuditLogPage";
 import { AlertsProvider } from "@/context/AlertsContext";
 import { ShiftOverridesProvider } from "@/context/ShiftOverridesContext";
 import { ShiftChangeRequestsProvider } from "@/context/ShiftChangeRequestsContext";
+import { EmployeeChangeRequestsProvider } from "@/context/EmployeeChangeRequestsContext";
 import { VacationProvider } from "@/context/VacationContext";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { TimeOverrideProvider } from "@/context/TimeOverrideContext";
@@ -68,9 +70,11 @@ export default function App() {
               <AlertsProvider>
                 <ShiftOverridesProvider>
                   <ShiftChangeRequestsProvider>
-                    <VacationProvider>
-                      <Layout />
-                    </VacationProvider>
+                    <EmployeeChangeRequestsProvider>
+                      <VacationProvider>
+                        <Layout />
+                      </VacationProvider>
+                    </EmployeeChangeRequestsProvider>
                   </ShiftChangeRequestsProvider>
                 </ShiftOverridesProvider>
               </AlertsProvider>
@@ -86,6 +90,7 @@ export default function App() {
         <Route path="zamestnanci/novy" element={<RequireRole allow={["admin", "director", "hr"]}><EmployeeFormPage /></RequireRole>} />
         <Route path="zamestnanci/:id" element={<RequireRole allow={["admin", "director", "accountant", "hr"]}><EmployeeDetailPage /></RequireRole>} />
         <Route path="zamestnanci/:id/upravit" element={<RequireRole allow={["admin", "director", "hr"]}><EmployeeFormPage /></RequireRole>} />
+        <Route path="muj-profil" element={<RequireRole allow={["admin", "director", "manager", "employee", "accountant", "hr"]}><EmployeeSelfPage /></RequireRole>} />
         <Route path="mzdy" element={<RequireRole allow={["admin", "director"]}><PayrollPage /></RequireRole>} />
         <Route path="smlouvy" element={<RequireRole allow={["admin", "director"]}><ContractTemplatesPage /></RequireRole>} />
         <Route path="upozorneni" element={<RequireRole allow={["admin", "director"]}><AlertsPage /></RequireRole>} />
