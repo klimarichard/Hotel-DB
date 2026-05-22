@@ -21,6 +21,8 @@ import { statsRouter } from "./routes/stats";
 import { auditLogRouter } from "./routes/auditLog";
 import { menuOrderRouter } from "./routes/menuOrder";
 import { timeOverrideRouter } from "./routes/timeOverride";
+import { selfServiceRouter } from "./routes/selfService";
+import { employeeChangeRequestsRouter } from "./routes/employeeChangeRequests";
 import * as clock from "./services/clock";
 import { requireAuth, requireRole, AuthRequest } from "./middleware/auth";
 import { writeAudit, ctxFromReq } from "./services/auditLog";
@@ -69,6 +71,8 @@ app.use("/stats", statsRouter);
 app.use("/audit", auditLogRouter);
 app.use("/settings/menu-order", menuOrderRouter);
 app.use("/settings/time-override", timeOverrideRouter);
+app.use("/me", selfServiceRouter);
+app.use("/employee-change-requests", employeeChangeRequestsRouter);
 
 // Health check
 app.get("/health", (_req, res) => {
@@ -149,6 +153,17 @@ app.post(
     res.json({ refreshed });
   }
 );
+
+// Catch-all error handler — turns a thrown error (or an explicit next(err))
+// into a JSON 500 instead of letting the request hang with no response. Async
+// handlers in Express 4 must still try/catch their own rejections to reach
+// this (an un-awaited rejection won't); this is the safety net for synchronous
+// throws and any handler that forwards via next(err).
+app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error("Unhandled route error:", err);
+  if (res.headersSent) return;
+  res.status(500).json({ error: (err as Error)?.message ?? "Internal server error" });
+});
 
 // Mount the app at both `/api` and `/`. Firebase Hosting rewrites the
 // `/api/**` prefix through to the function verbatim, whereas the direct

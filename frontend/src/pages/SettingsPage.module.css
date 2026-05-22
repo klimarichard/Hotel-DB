@@ -78,6 +78,12 @@
   border-radius: 6px;
 }
 
+.fieldHint {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  margin: 0.3rem 0 0;
+}
+
 .formActions {
   display: flex;
   justify-content: flex-end;

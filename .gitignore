@@ -13,6 +13,9 @@ payroll.md
 # Claude working instructions — kept local
 CLAUDE.md
 
+# Staging→prod promotion runbook — kept local
+DEPLOY_RUNBOOK.md
+
 # Legacy — seed CSVs are now under scripts/seeds/ (already excluded by scripts/)
 
 # Dependencies

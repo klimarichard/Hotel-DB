@@ -21,6 +21,7 @@ const MENU_ITEMS: { id: string; roles: UserRole[] }[] = [
   { id: "smlouvy",     roles: ["admin", "director"] },
   { id: "audit",       roles: ["admin", "director"] },
   { id: "nastaveni",   roles: ["admin"] },
+  { id: "mujProfil",   roles: ["admin", "director", "manager", "employee", "accountant", "hr"] },
 ];
 
 const ALL_ROLES: UserRole[] = ["admin", "director", "manager", "employee", "accountant", "hr"];

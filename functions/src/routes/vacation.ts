@@ -40,7 +40,13 @@ vacationRouter.get(
   requireAuth,
   requireRole("admin", "director"),
   async (_req, res) => {
-    const [pendingSnap, editSnap] = await Promise.all([
+    // Two single-field equality queries (status) — both served by Firestore's
+    // automatic index. We deliberately do NOT combine status == "approved" with
+    // a `pendingEdit != null` filter: that needs a composite index that isn't in
+    // firestore.indexes.json, so on real Firestore the query throws
+    // FAILED_PRECONDITION, the endpoint 500s, and the frontend (which swallows
+    // the error) shows a stale 0 — no badge anywhere. Filter the edits in JS.
+    const [pendingSnap, approvedSnap] = await Promise.all([
       db()
         .collection("vacationRequests")
         .where("status", "==", "pending")
@@ -48,10 +54,12 @@ vacationRouter.get(
       db()
         .collection("vacationRequests")
         .where("status", "==", "approved")
-        .where("pendingEdit", "!=", null)
         .get(),
     ]);
-    res.json({ count: pendingSnap.size + editSnap.size });
+    const editCount = approvedSnap.docs.filter(
+      (d) => (d.data() as Record<string, unknown>).pendingEdit != null
+    ).length;
+    res.json({ count: pendingSnap.size + editCount });
   }
 );
 

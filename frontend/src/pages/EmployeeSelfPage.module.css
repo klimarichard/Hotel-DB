@@ -1,0 +1,248 @@
+.state {
+  padding: 2rem;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.headerRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-text-heading);
+}
+
+.subtitle {
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  margin-bottom: 1.25rem;
+}
+
+.notLinked {
+  padding: 1rem 1.25rem;
+  background: var(--color-warning-bg);
+  color: var(--color-warning-text);
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+
+.pendingHint {
+  padding: 0.6rem 1rem;
+  background: var(--color-warning-bg);
+  color: var(--color-warning-text);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  margin-bottom: 1.25rem;
+}
+
+/* ── Sections ──────────────────────────────────────────────────────────────── */
+
+.section {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.sectionTitle {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-text-heading);
+  margin-bottom: 1rem;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem 1.5rem;
+}
+
+/* Edit mode: one field per row for readability while proposing changes. */
+.editGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.85rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.fieldFull {
+  grid-column: 1 / -1;
+}
+
+.fieldLabel {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.fieldValue {
+  font-size: 0.9rem;
+  color: var(--color-text-heading);
+  word-break: break-word;
+}
+
+.muted {
+  color: var(--color-text-muted);
+}
+
+.input {
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  font-size: 0.9rem;
+  background: var(--color-input-bg);
+  color: var(--color-text-heading);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  box-sizing: border-box;
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.revealBtn {
+  margin-left: 0.4rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0 0.2rem;
+  opacity: 0.5;
+  color: var(--color-text-muted);
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  transition: opacity 0.15s;
+}
+
+.revealBtn:hover {
+  opacity: 1;
+}
+
+.readOnlyNote {
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.actionsRow {
+  display: flex;
+  gap: 0.6rem;
+  margin: 0.5rem 0 1.5rem;
+}
+
+/* ── Employment history ────────────────────────────────────────────────────── */
+
+.histList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.histRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--color-bg);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: var(--color-text-heading);
+}
+
+.histDates {
+  font-weight: 600;
+  min-width: 11rem;
+}
+
+/* ── Change requests ───────────────────────────────────────────────────────── */
+
+.requestCard {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  margin-bottom: 0.75rem;
+  background: var(--color-bg);
+}
+
+.reqHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.reqMeta {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.15rem 0.55rem;
+  border-radius: 9999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.badge_pending {
+  background: var(--color-warning-bg);
+  color: var(--color-warning-text);
+}
+
+.badge_approved {
+  background: var(--color-active-bg);
+  color: var(--color-active-text);
+}
+
+.badge_rejected {
+  background: var(--color-danger-bg);
+  color: var(--color-danger-text);
+}
+
+.changeList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.changeItem {
+  font-size: 0.85rem;
+  color: var(--color-text-heading);
+}
+
+.changeFieldLabel {
+  color: var(--color-text-muted);
+  margin-right: 0.4rem;
+}
+
+.changeArrow {
+  color: var(--color-text-muted);
+  margin: 0 0.35rem;
+}
+
+.rejectionNote {
+  margin-top: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--color-danger-text);
+}
+
+.empty {
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
