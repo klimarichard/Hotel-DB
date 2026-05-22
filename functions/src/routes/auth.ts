@@ -71,27 +71,49 @@ authRouter.post(
       return;
     }
 
-    const userRecord = await admin.auth().createUser({ email, password, displayName: name });
-    await admin.auth().setCustomUserClaims(userRecord.uid, { role });
+    // Wrap the Firebase Auth/Firestore calls: without this, a rejection (most
+    // commonly auth/email-already-exists — Auth accounts survive a Firestore
+    // wipe) would bubble out of the async handler with no response sent, and
+    // Express 4 would let the request hang ("Vytvořit" spins forever). Map the
+    // known Firebase error codes to actionable Czech messages instead.
+    try {
+      const userRecord = await admin.auth().createUser({ email, password, displayName: name });
+      await admin.auth().setCustomUserClaims(userRecord.uid, { role });
 
-    await admin.firestore().collection("users").doc(userRecord.uid).set({
-      name,
-      email,
-      role,
-      employeeId: employeeId ?? null,
-      active: true,
-      createdAt: FieldValue.serverTimestamp(),
-      lastLogin: null,
-    });
+      await admin.firestore().collection("users").doc(userRecord.uid).set({
+        name,
+        email,
+        role,
+        employeeId: employeeId ?? null,
+        active: true,
+        createdAt: FieldValue.serverTimestamp(),
+        lastLogin: null,
+      });
 
-    await logCreate(ctxFromReq(req), {
-      collection: "users",
-      resourceId: userRecord.uid,
-      employeeId: employeeId ?? undefined,
-      summary: { name, email, role, employeeId: employeeId ?? null },
-    });
+      await logCreate(ctxFromReq(req), {
+        collection: "users",
+        resourceId: userRecord.uid,
+        employeeId: employeeId ?? undefined,
+        summary: { name, email, role, employeeId: employeeId ?? null },
+      });
 
-    res.status(201).json({ uid: userRecord.uid });
+      res.status(201).json({ uid: userRecord.uid });
+    } catch (err) {
+      const code = (err as { code?: string })?.code ?? "";
+      const errorMap: Record<string, { status: number; message: string }> = {
+        "auth/email-already-exists": { status: 409, message: "Uživatel s tímto e-mailem již existuje." },
+        "auth/invalid-email": { status: 400, message: "Neplatný formát e-mailu." },
+        "auth/invalid-password": { status: 400, message: "Heslo musí mít alespoň 6 znaků." },
+        "auth/invalid-display-name": { status: 400, message: "Neplatné jméno." },
+      };
+      const mapped = errorMap[code];
+      if (mapped) {
+        res.status(mapped.status).json({ error: mapped.message });
+      } else {
+        console.error("create-user failed:", err);
+        res.status(500).json({ error: "Nepodařilo se vytvořit uživatele." });
+      }
+    }
   }
 );
 

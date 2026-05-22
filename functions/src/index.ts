@@ -150,6 +150,17 @@ app.post(
   }
 );
 
+// Catch-all error handler — turns a thrown error (or an explicit next(err))
+// into a JSON 500 instead of letting the request hang with no response. Async
+// handlers in Express 4 must still try/catch their own rejections to reach
+// this (an un-awaited rejection won't); this is the safety net for synchronous
+// throws and any handler that forwards via next(err).
+app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error("Unhandled route error:", err);
+  if (res.headersSent) return;
+  res.status(500).json({ error: (err as Error)?.message ?? "Internal server error" });
+});
+
 // Mount the app at both `/api` and `/`. Firebase Hosting rewrites the
 // `/api/**` prefix through to the function verbatim, whereas the direct
 // function URL and the Vite dev proxy deliver paths without it — mounting
