@@ -115,9 +115,10 @@ authRouter.post(
       if (mapped) {
         res.status(mapped.status).json({ error: mapped.message });
       } else {
-        // Unknown failure — surface the real code/message so the admin (and the
-        // logs) can see what actually went wrong, instead of a generic dead end.
-        const detail = code || e?.message || "neznámá chyba";
+        // Unknown failure — surface code AND message. For wrapper codes like
+        // auth/internal-error the real cause sits in the message (the Admin SDK
+        // appends "Raw server response: {...}" with the underlying error).
+        const detail = [code, e?.message].filter(Boolean).join(" · ") || "neznámá chyba";
         console.error("create-user failed:", err);
         res.status(500).json({ error: `Nepodařilo se vytvořit uživatele: ${detail}` });
       }
