@@ -16,6 +16,10 @@ import styles from "./EmployeeSelfPage.module.css";
 
 const MASK = "••••••••";
 
+// Mirrors EmployeeFormPage — combined gendered forms; displayGendered() picks
+// the variant on read.
+const MARITAL_STATUSES = ["svobodný/á", "ženatý/vdaná", "rozvedený/á", "vdovec/vdova"];
+
 const EyeIcon = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
@@ -89,6 +93,7 @@ export default function EmployeeSelfPage() {
   const [submitting, setSubmitting] = useState(false);
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [cancelId, setCancelId] = useState<string | null>(null);
+  const [educationOptions, setEducationOptions] = useState<string[]>([]);
 
   function sectionObj(section: SelfEditSection): Record<string, unknown> | null {
     if (section === "root") return emp;
@@ -115,13 +120,15 @@ export default function EmployeeSelfPage() {
       api.get<SubDoc>("/me/employee/benefits"),
       api.get<EmploymentRow[]>("/me/employee/employment"),
       api.get<ChangeRequest[]>("/me/change-requests"),
+      api.get<Array<{ name: string; code: string }>>("/educationLevels").catch(() => []),
     ])
-      .then(([e, c, d, b, hist, reqs]) => {
+      .then(([e, c, d, b, hist, reqs, edu]) => {
         setEmp(e);
         setContact(c);
         setDocuments(d);
         setBenefits(b);
         setEmployment(hist);
+        setEducationOptions(edu.map((l) => (l.code ? `${l.code} - ${l.name}` : l.name)));
         setRequests(reqs);
       })
       .catch(() => {})
@@ -243,6 +250,40 @@ export default function EmployeeSelfPage() {
     return <span>{String(raw)}</span>;
   }
 
+  // Edit control per field. Rodinný stav and Vzdělání use the same dropdowns as
+  // the employee form (maritalStatus a fixed list, education from the catalogue).
+  function renderEditControl(f: SelfEditField) {
+    const value = editValues[f.key] ?? "";
+    const set = (v: string) => setEditValues((p) => ({ ...p, [f.key]: v }));
+
+    if (f.key === "maritalStatus") {
+      return (
+        <select className={styles.input} value={value} onChange={(e) => set(e.target.value)}>
+          <option value="">— vyberte —</option>
+          {MARITAL_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+      );
+    }
+    if (f.key === "education") {
+      return (
+        <select className={styles.input} value={value} onChange={(e) => set(e.target.value)}>
+          <option value="">— vyberte —</option>
+          {educationOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+          {value && !educationOptions.includes(value) && <option value={value}>{value}</option>}
+        </select>
+      );
+    }
+    return (
+      <input
+        className={styles.input}
+        type={f.kind === "date" ? "date" : "text"}
+        value={value}
+        onChange={(e) => set(e.target.value)}
+        placeholder={f.sensitive ? "Nová hodnota — prázdné = beze změny" : undefined}
+      />
+    );
+  }
+
   function statusLabel(s: ChangeRequest["status"]) {
     return s === "pending" ? "Čeká na schválení" : s === "approved" ? "Schváleno" : "Zamítnuto";
   }
@@ -291,13 +332,7 @@ export default function EmployeeSelfPage() {
                 {SELF_EDIT_FIELDS.filter((f) => f.section === section).map((f) => (
                   <div className={styles.field} key={f.key}>
                     <label className={styles.fieldLabel}>{f.label}</label>
-                    <input
-                      className={styles.input}
-                      type={f.kind === "date" ? "date" : "text"}
-                      value={editValues[f.key] ?? ""}
-                      onChange={(e) => setEditValues((p) => ({ ...p, [f.key]: e.target.value }))}
-                      placeholder={f.sensitive ? "Nová hodnota — prázdné = beze změny" : undefined}
-                    />
+                    {renderEditControl(f)}
                   </div>
                 ))}
               </div>
