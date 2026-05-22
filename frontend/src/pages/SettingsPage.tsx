@@ -657,8 +657,11 @@ export default function SettingsPage() {
                   value={form.password}
                   onChange={(e) => setForm({ ...form, password: e.target.value })}
                   required
-                  minLength={6}
+                  minLength={8}
                 />
+                <p className={styles.fieldHint}>
+                  Alespoň 8 znaků, malé i velké písmeno a číslici.
+                </p>
               </div>
               <div className={styles.field}>
                 <label className={styles.label}>Role</label>
