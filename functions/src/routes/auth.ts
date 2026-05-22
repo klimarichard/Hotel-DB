@@ -99,19 +99,27 @@ authRouter.post(
 
       res.status(201).json({ uid: userRecord.uid });
     } catch (err) {
-      const code = (err as { code?: string })?.code ?? "";
+      // Firebase Admin errors expose the code as `.code`; some wrap it under
+      // `.errorInfo.code`. Read both so we always get the real code.
+      const e = err as { code?: string; message?: string; errorInfo?: { code?: string } };
+      const code = e?.code ?? e?.errorInfo?.code ?? "";
       const errorMap: Record<string, { status: number; message: string }> = {
         "auth/email-already-exists": { status: 409, message: "Uživatel s tímto e-mailem již existuje." },
+        "auth/uid-already-exists": { status: 409, message: "Uživatel s tímto ID již existuje." },
         "auth/invalid-email": { status: 400, message: "Neplatný formát e-mailu." },
         "auth/invalid-password": { status: 400, message: "Heslo musí mít alespoň 6 znaků." },
         "auth/invalid-display-name": { status: 400, message: "Neplatné jméno." },
+        "auth/insufficient-permission": { status: 403, message: "Server nemá oprávnění vytvářet uživatele." },
       };
       const mapped = errorMap[code];
       if (mapped) {
         res.status(mapped.status).json({ error: mapped.message });
       } else {
+        // Unknown failure — surface the real code/message so the admin (and the
+        // logs) can see what actually went wrong, instead of a generic dead end.
+        const detail = code || e?.message || "neznámá chyba";
         console.error("create-user failed:", err);
-        res.status(500).json({ error: "Nepodařilo se vytvořit uživatele." });
+        res.status(500).json({ error: `Nepodařilo se vytvořit uživatele: ${detail}` });
       }
     }
   }
