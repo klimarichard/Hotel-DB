@@ -294,6 +294,25 @@ export default function ShiftGrid({
     return m;
   }, [effectiveLetterByEmployeeId]);
 
+  // Valid MOD codes are the letters actually assigned to managers (vedoucí) in
+  // THIS plan — not a hardcoded list. Assigning a new letter to a manager via
+  // the badge editor immediately makes it acceptable in the MOD row. Also build
+  // a letter → name map so the MOD cell tooltip shows who the letter belongs to.
+  const { modValidCodes, modLetterNames } = useMemo(() => {
+    const codes: string[] = [];
+    const names: Record<string, string> = {};
+    for (const emp of plan.employees) {
+      if (emp.section !== "vedoucí") continue;
+      const letter = effectiveLetterByEmployeeId.get(emp.employeeId);
+      if (letter && !names[letter]) {
+        codes.push(letter);
+        names[letter] = `${emp.firstName} ${emp.lastName}`;
+      }
+    }
+    codes.sort();
+    return { modValidCodes: codes, modLetterNames: names };
+  }, [plan.employees, effectiveLetterByEmployeeId]);
+
   const [editingModEmployee, setEditingModEmployee] = useState<string | null>(null);
 
   return (
@@ -502,6 +521,8 @@ export default function ShiftGrid({
                       >
                         <ModCell
                           code={modDoc?.code ?? ""}
+                          validCodes={modValidCodes}
+                          letterNames={modLetterNames}
                           readOnly={readOnly}
                           onSave={(code) => onModSave(dateStr, code)}
                           focused={focusedModCol === colIdx}
