@@ -64,6 +64,13 @@
   gap: 0.85rem 1.5rem;
 }
 
+/* Edit mode: one field per row for readability while proposing changes. */
+.editGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.85rem;
+}
+
 .field {
   display: flex;
   flex-direction: column;
@@ -109,14 +116,21 @@
 }
 
 .revealBtn {
-  margin-left: 0.5rem;
-  font-size: 0.75rem;
-  color: var(--color-primary);
+  margin-left: 0.4rem;
   background: none;
   border: none;
   cursor: pointer;
-  padding: 0;
-  text-decoration: underline;
+  padding: 0 0.2rem;
+  opacity: 0.5;
+  color: var(--color-text-muted);
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  transition: opacity 0.15s;
+}
+
+.revealBtn:hover {
+  opacity: 1;
 }
 
 .readOnlyNote {
