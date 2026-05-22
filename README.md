@@ -143,9 +143,11 @@ Two password-reset flows using Firebase Auth built-in email:
 Six roles: `admin` → `director` → `manager` → `employee`, plus `accountant` (Účetní) and `hr` (Personalista) added 2026-05-21. Visibility is enforced in three layers; the backend is the real gate:
 
 - **Menu** — `frontend/src/lib/menuItems.ts` is the single registry; each item lists the roles that see it, and `Layout.tsx` renders the per-role (optionally reordered) list.
-- **Routes (`frontend/src/App.tsx`)** — `RequireRole allow={[…]}` wraps each route; unauthorized roles redirect to `/`. A role-aware `DefaultRedirect` lands each role on its first accessible page (accountant has no dashboard → `/zamestnanci`; the fallback must be a page the role can open, or the redirect loops). Allow lists:
-  - `/prehled`, `/smeny`: admin, director, manager, employee, hr
+- **Routes (`frontend/src/App.tsx`)** — `RequireRole allow={[…]}` wraps each route; unauthorized roles redirect to `/`. A role-aware `DefaultRedirect` lands each role on its first accessible page (the fallback must be a page the role can open, or the redirect loops). Allow lists:
+  - `/prehled`: admin, director, manager, employee, hr, accountant (accountant sees a **stats-only** dashboard — see below)
+  - `/smeny`: admin, director, manager, employee, hr
   - `/dovolena`: admin, director, manager, employee, hr (hr in employee-mode — request own + see others' approved, no approve/reject)
+  - `/muj-profil`: admin, director, manager, employee, hr (NOT accountant — no own record to manage)
   - `/zamestnanci`, `/zamestnanci/:id`: admin, director, accountant, hr
   - `/zamestnanci/novy`, `/zamestnanci/:id/upravit`: admin, director, hr (accountant is read-only)
   - `/mzdy`, `/smlouvy`, `/upozorneni`, `/audit`: admin, director
@@ -156,10 +158,12 @@ The route guard is the source of truth — the menu is just for discoverability.
 #### accountant + hr roles (2026-05-21)
 
 Two function-only roles (no per-hotel scoping; access is code-set):
-- **accountant (Účetní)** — read-only viewer of ALL employees incl. sensitive-field reveal, per-employee contract download, and bulk CSV export. No editing, no dashboard.
+- **accountant (Účetní)** — read-only viewer of ALL employees incl. sensitive-field reveal, per-employee contract download, and bulk CSV export. No editing. Lands on a read-only **Přehled** HR-stats dashboard (headcount / ages / nationalities / positions via `/stats/headcount`; the shift-staffing sections are hidden — accountant has no shifts access). No `Můj profil`.
 - **hr (Personalista)** — full employee + per-employee contract management, full shifts, dashboard, and employee-mode vacation, **except** records whose linked login is admin/director/manager (hidden from the list; detail/sub-resource/contract endpoints 403).
 
 Backend enforcement is **centralised, not per-route**: `employees.ts` and `contracts.ts` apply `requireAuth` at the router level plus an `enforceEmpAccess` / `enforceContractAccess` guard — accountant is blocked from any mutation; hr is blocked from any record in `getManagementEmployeeIds()` (employees linked to an admin/director/manager user). The list + export handlers filter management records out for hr; `shifts.ts` grants hr full access. Frontend capability helpers live in `frontend/src/lib/permissions.ts`.
+
+The config-catalogue list GETs `/departments`, `/jobPositions`, `/educationLevels`, and `/stats/headcount` are open to the employee-viewing roles (admin/director/hr/accountant — `/stats/headcount` excludes hr) so hr can pick a department/position when adding a contract and accountant can render the stats dashboard; catalogue **mutations** stay admin/director.
 
 ---
 
