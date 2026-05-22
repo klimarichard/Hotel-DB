@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { MOD_PERSONS } from "../lib/shiftConstants";
 import { useTheme } from "../context/ThemeContext";
-
-const VALID_CODES = Object.keys(MOD_PERSONS);
 
 interface Props {
   code: string;
+  /** Letters currently assigned to managers in this plan — the only codes the MOD row accepts. */
+  validCodes: string[];
+  /** letter → manager full name, for the cell tooltip. */
+  letterNames?: Record<string, string>;
   readOnly: boolean;
   onSave: (code: string) => Promise<void>;
   focused: boolean;
@@ -13,7 +14,7 @@ interface Props {
   onFocus: () => void;
 }
 
-export default function ModCell({ code, readOnly, onSave, focused, onNavigate, onFocus }: Props) {
+export default function ModCell({ code, validCodes, letterNames, readOnly, onSave, focused, onNavigate, onFocus }: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
@@ -47,7 +48,7 @@ export default function ModCell({ code, readOnly, onSave, focused, onNavigate, o
   }
 
   function isValidDraft(d: string) {
-    return d.trim() === "" || VALID_CODES.includes(d.trim().toUpperCase());
+    return d.trim() === "" || validCodes.includes(d.trim().toUpperCase());
   }
 
   async function commit(value: string) {
@@ -129,7 +130,7 @@ export default function ModCell({ code, readOnly, onSave, focused, onNavigate, o
         onChange={(e) => setDraft(e.target.value.toUpperCase())}
         onKeyDown={handleEditKeyDown}
         onBlur={() => commit(draft)}
-        title={isInvalid ? `Platné kódy: ${VALID_CODES.join(", ")}` : undefined}
+        title={isInvalid ? (validCodes.length ? `Platná písmena: ${validCodes.join(", ")}` : "Nejprve přiřaďte písmeno některému vedoucímu") : undefined}
         maxLength={1}
         disabled={saving}
       />
@@ -157,7 +158,7 @@ export default function ModCell({ code, readOnly, onSave, focused, onNavigate, o
         outline: saveError ? "2px solid #dc2626" : focused ? "2px solid #3b82f6" : "none",
         outlineOffset: "-2px",
       }}
-      title={saveError ?? (code ? `${code} — ${MOD_PERSONS[code] ?? ""}` : undefined)}
+      title={saveError ?? (code ? `${code} — ${letterNames?.[code] ?? ""}` : undefined)}
       onClick={() => { setSaveError(null); startEdit(); }}
       onFocus={onFocus}
       onKeyDown={handleDisplayKeyDown}
