@@ -153,11 +153,17 @@ export default function PayrollNotesModal({
                           {editedDate && <> · upraveno {editedDate}{n.editedByName ? ` (${n.editedByName})` : ""}</>}
                         </div>
                         <div className={styles.noteFooter}>
-                          <span className={styles.carryLabel}>
-                            <input type="checkbox" checked={n.carryForward} readOnly disabled />
-                            {n.carryForward ? "V budoucích výplatách" : "Pouze toto období"}
-                          </span>
-                          {canEdit && (
+                          {n.auto ? (
+                            <span className={styles.carryLabel}>
+                              Automatická poznámka (jen toto období)
+                            </span>
+                          ) : (
+                            <span className={styles.carryLabel}>
+                              <input type="checkbox" checked={n.carryForward} readOnly disabled />
+                              {n.carryForward ? "V budoucích výplatách" : "Pouze toto období"}
+                            </span>
+                          )}
+                          {canEdit && !n.auto && (
                             <span className={styles.noteActions}>
                               <button
                                 className={styles.iconBtn}

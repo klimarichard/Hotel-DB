@@ -33,6 +33,10 @@ export interface PayrollNote {
   editedBy?: string;
   editedByName?: string;
   editedAt?: { seconds?: number; _seconds?: number } | null;
+  // System-generated notes (mid-month Nástup/Ukončení) — regenerated on every
+  // recalc, so they're read-only in the UI.
+  auto?: boolean;
+  kind?: "nastup" | "ukonceni" | string;
 }
 
 interface PayrollEntry {
