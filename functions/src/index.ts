@@ -6,7 +6,7 @@ import express from "express";
 import cors from "cors";
 
 import { authRouter } from "./routes/auth";
-import { employeesRouter } from "./routes/employees";
+import { employeesRouter, refreshEffectiveRootForAllActive } from "./routes/employees";
 import { alertsRouter } from "./routes/alerts";
 import { companiesRouter } from "./routes/companies";
 import { departmentsRouter } from "./routes/departments";
@@ -229,6 +229,17 @@ export const sweepMultisport = onSchedule("every 24 hours", async () => {
 export const refreshProbationAlerts = onSchedule("every 24 hours", async () => {
   await clock.refresh(true);
   await refreshAllProbationAlerts();
+});
+
+// ─── Daily: refresh employees' effective root fields (date-aware Dodatky) ────
+// A future-dated Dodatek flips position / úvazek (and thus the Zaměstnanci list
+// and payroll contract type) on its validity date — recompute otherwise only
+// runs on employment writes. Mirrors the frontend's as-of-today effective state
+// (TODO lines 16/18).
+export const refreshEmployeeEffective = onSchedule("every 24 hours", async () => {
+  await clock.refresh(true);
+  const res = await refreshEffectiveRootForAllActive();
+  console.log(`[refreshEmployeeEffective] scanned ${res.scanned}, updated ${res.updated}`);
 });
 
 export const refreshDocumentAlerts = onSchedule("every 24 hours", async () => {

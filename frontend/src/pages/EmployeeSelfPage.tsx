@@ -5,6 +5,10 @@ import Button from "@/components/Button";
 import ConfirmModal from "@/components/ConfirmModal";
 import { formatDateCZ, formatDatetimeCZ } from "@/lib/dateFormat";
 import { displayGendered } from "@/lib/genderDisplay";
+import { nationalityName } from "@/lib/nationalities";
+import { isCzechNationality } from "@/lib/contractVariables";
+import { groupBySession } from "@/lib/employmentSessions";
+import EmploymentSessionCard from "@/components/EmploymentSession";
 import {
   SELF_EDIT_FIELDS,
   SELF_EDIT_SECTIONS,
@@ -90,6 +94,10 @@ export default function EmployeeSelfPage() {
   const [revealed, setRevealed] = useState<Record<string, string>>({});
   const [editMode, setEditMode] = useState(false);
   const [editValues, setEditValues] = useState<Record<string, string>>({});
+  // Decrypted values of sensitive fields pre-loaded on entering edit (TODO 41),
+  // so buildChanges() only submits a sensitive field that the user actually changed.
+  const [sensitiveOriginals, setSensitiveOriginals] = useState<Record<string, string>>({});
+  const [contactSameAsPermanent, setContactSameAsPermanent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [cancelId, setCancelId] = useState<string | null>(null);
@@ -100,6 +108,31 @@ export default function EmployeeSelfPage() {
     if (section === "contact") return contact;
     if (section === "documents") return documents;
     return benefits;
+  }
+
+  // Document fields shown only for the matching nationality branch (TODO 14):
+  // Czech → OP fields, foreign → passport + Povolení k pobytu (visa), empty → all.
+  const OP_FIELDS = ["idCardNumber", "idCardExpiry"];
+  const FOREIGN_DOC_FIELDS = [
+    "passportNumber", "passportIssueDate", "passportExpiry", "passportAuthority",
+    "visaNumber", "visaType", "visaIssueDate", "visaExpiry",
+  ];
+  function isDocFieldVisible(key: string, nationality: string): boolean {
+    const nat = (nationality ?? "").trim();
+    if (nat === "") return true; // unknown nationality → show all
+    const czech = isCzechNationality(nat);
+    if (OP_FIELDS.includes(key)) return czech;
+    if (FOREIGN_DOC_FIELDS.includes(key)) return !czech;
+    return true;
+  }
+  // In edit mode the nationality the user is currently proposing drives the
+  // gating; on read it's the stored value.
+  function activeNationality(): string {
+    return editMode ? (editValues.nationality ?? "") : ((emp?.nationality as string) ?? "");
+  }
+  function isFieldVisible(f: SelfEditField): boolean {
+    if (f.section !== "documents") return true;
+    return isDocFieldVisible(f.key, activeNationality());
   }
 
   async function loadRequests() {
@@ -153,28 +186,70 @@ export default function EmployeeSelfPage() {
     }
   }
 
-  function enterEdit() {
+  async function enterEdit() {
     const init: Record<string, string> = {};
+    const sensitiveKeys: string[] = [];
     for (const f of SELF_EDIT_FIELDS) {
       if (f.sensitive) {
         init[f.key] = "";
+        sensitiveKeys.push(f.key);
         continue;
       }
       const obj = sectionObj(f.section);
       const v = obj ? obj[f.key] : undefined;
       init[f.key] = v == null ? "" : String(v);
     }
+    // Initialise the "kontaktní adresa = trvalá" checkbox from the stored flag.
+    setContactSameAsPermanent(Boolean(contact?.contactAddressSameAsPermanent));
     setEditValues(init);
     setEditMode(true);
+
+    // Auto-reveal editable sensitive fields so the employee sees what they're
+    // changing (TODO 41). Each reveal hits POST /me/employee/reveal, which logs
+    // a "reveal" audit action. Done in parallel; failures leave the input blank.
+    const revealedValues = await Promise.all(
+      sensitiveKeys.map(async (key) => {
+        try {
+          const res = await api.post<{ value: string }>("/me/employee/reveal", { field: key });
+          return [key, res.value] as const;
+        } catch {
+          return [key, ""] as const;
+        }
+      })
+    );
+    setEditValues((prev) => {
+      const next = { ...prev };
+      for (const [key, value] of revealedValues) {
+        if (value) next[key] = value;
+      }
+      return next;
+    });
+    const origs: Record<string, string> = {};
+    for (const [key, value] of revealedValues) origs[key] = value;
+    setSensitiveOriginals(origs);
   }
 
   function buildChanges() {
     const changes: { field: string; label: string; newValue: string; oldValue?: string }[] = [];
     for (const f of SELF_EDIT_FIELDS) {
-      const next = (editValues[f.key] ?? "").trim();
+      // Document fields hidden for the current nationality are never submitted —
+      // their inputs aren't shown, so any leftover value is irrelevant (TODO 14).
+      if (!isFieldVisible(f)) continue;
+
+      // Kontaktní adresa = trvalá (TODO 39): when ticked the field is hidden and
+      // the proposed contact address mirrors the (edited) permanent address. The
+      // backend whitelist has no same-as-permanent flag, so we submit the value.
+      let raw = editValues[f.key] ?? "";
+      if (f.key === "contactAddress" && contactSameAsPermanent) {
+        raw = editValues.permanentAddress ?? "";
+      }
+      const next = raw.trim();
+
       if (f.sensitive) {
-        // Current value is masked, so any entered value is a proposed change.
-        if (next !== "") changes.push({ field: f.key, label: f.label, newValue: next });
+        // Sensitive fields are pre-loaded with the decrypted current value on
+        // entering edit (TODO 41); only submit when the user actually changed it.
+        const orig = (sensitiveOriginals[f.key] ?? "").trim();
+        if (next !== orig) changes.push({ field: f.key, label: f.label, newValue: next });
       } else {
         const obj = sectionObj(f.section);
         const cur = obj && obj[f.key] != null ? String(obj[f.key]) : "";
@@ -195,6 +270,8 @@ export default function EmployeeSelfPage() {
       await api.post("/me/change-requests", { changes });
       setEditMode(false);
       setRevealed({});
+      setSensitiveOriginals({});
+      setContactSameAsPermanent(false);
       await loadRequests();
       setDialog({
         title: "Odesláno",
@@ -246,6 +323,10 @@ export default function EmployeeSelfPage() {
     // maritalStatus is stored combined ("ženatý/vdaná"); show the gender variant.
     if (f.key === "maritalStatus") {
       return <span>{displayGendered(String(raw), (emp?.gender as "m" | "f" | null) ?? null)}</span>;
+    }
+    // nationality is stored as an ISO code; show the Czech country name (TODO 63).
+    if (f.key === "nationality") {
+      return <span>{nationalityName(String(raw)) || String(raw)}</span>;
     }
     return <span>{String(raw)}</span>;
   }
@@ -329,12 +410,28 @@ export default function EmployeeSelfPage() {
             <div className={styles.section} key={section}>
               <div className={styles.sectionTitle}>{SELF_EDIT_SECTION_LABELS[section]}</div>
               <div className={styles.editGrid}>
-                {SELF_EDIT_FIELDS.filter((f) => f.section === section).map((f) => (
-                  <div className={styles.field} key={f.key}>
-                    <label className={styles.fieldLabel}>{f.label}</label>
-                    {renderEditControl(f)}
-                  </div>
-                ))}
+                {SELF_EDIT_FIELDS.filter((f) => f.section === section).map((f) => {
+                  // Document fields gated by nationality (TODO 14).
+                  if (!isFieldVisible(f)) return null;
+                  // Kontaktní adresa hidden when "stejná jako trvalá" is ticked (TODO 39).
+                  if (f.key === "contactAddress" && contactSameAsPermanent) return null;
+                  return (
+                    <div className={styles.field} key={f.key}>
+                      <label className={styles.fieldLabel}>{f.label}</label>
+                      {renderEditControl(f)}
+                      {f.key === "permanentAddress" && (
+                        <label className={styles.fieldLabel} style={{ marginTop: "0.5rem", flexDirection: "row", alignItems: "center", gap: "0.5rem", cursor: "pointer" }}>
+                          <input
+                            type="checkbox"
+                            checked={contactSameAsPermanent}
+                            onChange={(e) => setContactSameAsPermanent(e.target.checked)}
+                          />
+                          Kontaktní adresa je stejná jako trvalá
+                        </label>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           ))}
@@ -342,7 +439,7 @@ export default function EmployeeSelfPage() {
             <Button variant="primary" onClick={handleSubmit} disabled={submitting}>
               {submitting ? "Odesílám…" : "Odeslat ke schválení"}
             </Button>
-            <Button variant="secondary" onClick={() => setEditMode(false)} disabled={submitting}>
+            <Button variant="secondary" onClick={() => { setEditMode(false); setRevealed({}); setSensitiveOriginals({}); setContactSameAsPermanent(false); }} disabled={submitting}>
               Zrušit
             </Button>
           </div>
@@ -373,7 +470,7 @@ export default function EmployeeSelfPage() {
                     </div>
                   </>
                 )}
-                {SELF_EDIT_FIELDS.filter((f) => f.section === section).map((f) => (
+                {SELF_EDIT_FIELDS.filter((f) => f.section === section && isFieldVisible(f)).map((f) => (
                   <div className={`${styles.field}${f.key === "permanentAddress" || f.key === "contactAddress" ? ` ${styles.fieldFull}` : ""}`} key={f.key}>
                     <span className={styles.fieldLabel}>{f.label}</span>
                     <span className={styles.fieldValue}>{renderReadValue(f)}</span>
@@ -400,18 +497,32 @@ export default function EmployeeSelfPage() {
               </div>
             </div>
             {employment.length > 0 && (
-              <div className={styles.histList} style={{ marginTop: "1rem" }}>
-                {employment.map((row) => (
-                  <div className={styles.histRow} key={row.id}>
-                    <span className={styles.histDates}>
-                      {formatDateCZ(row.startDate) || "—"}
-                      {row.endDate ? ` – ${formatDateCZ(row.endDate)}` : ""}
-                    </span>
-                    <span>{row.jobTitle || "—"}</span>
-                    <span className={styles.muted}>{row.contractType || ""}</span>
-                    <span className={styles.muted}>{row.changeType || ""}</span>
-                  </div>
-                ))}
+              <div style={{ marginTop: "1rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                {/* Read-only session-card view, identical format to the detail
+                    page (TODO 43). The employee can't fetch companies or edit,
+                    so companies is empty and all action callbacks are no-ops. */}
+                {[...groupBySession(employment as unknown as Parameters<typeof groupBySession>[0])]
+                  .reverse()
+                  .map((session, idx) => (
+                    <EmploymentSessionCard
+                      key={session.nastup.id}
+                      session={session}
+                      contractsByRow={new Map()}
+                      defaultExpanded={idx === 0}
+                      companies={{}}
+                      employeeId={employeeId}
+                      canEdit={false}
+                      resolveDefaultType={() => "nastup_hpp"}
+                      resolveDisplayName={() => ""}
+                      resolveRowSnapshot={() => ({})}
+                      onGenerate={() => {}}
+                      onEditRow={() => {}}
+                      onDeleteRow={() => {}}
+                      onAddDodatek={() => {}}
+                      onTerminate={() => {}}
+                      onContractsChanged={() => {}}
+                    />
+                  ))}
               </div>
             )}
           </div>

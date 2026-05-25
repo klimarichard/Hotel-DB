@@ -35,9 +35,8 @@ const BENEFITS_SENSITIVE_FIELDS = ["insuranceNumber", "bankAccount"] as const;
  * exists yet, or if the latest session has been terminated (we leave root
  * fields alone on Ukončení — the employee.status flow handles deactivation).
  */
-async function recomputeRootFromLatestSession(
-  empRef: admin.firestore.DocumentReference,
-  now: FirebaseFirestore.FieldValue
+async function computeEffectiveRootFields(
+  empRef: admin.firestore.DocumentReference
 ): Promise<Record<string, unknown> | null> {
   const snap = await empRef.collection("employment").orderBy("startDate", "asc").get();
   type Row = Record<string, unknown> & { id: string };
@@ -65,7 +64,12 @@ async function recomputeRootFromLatestSession(
   const companyId = (latest.nastup.companyId as string | undefined) ?? null;
   const department = (latest.nastup.department as string | undefined) ?? "";
 
+  // Only fold Dodatky whose validity (startDate) has arrived — mirrors the
+  // frontend computeEffectiveState so the Zaměstnanci list and the employee
+  // detail header agree. clock.today() honours the non-prod test clock.
+  const today = clock.today();
   for (const dodatek of latest.dodatky) {
+    if (((dodatek.startDate as string | undefined) ?? "") > today) continue;
     const changes = (dodatek.changes as Array<{ changeKind?: string; value?: string }> | undefined) ?? [];
     for (const ch of changes) {
       if (ch.changeKind === "pracovní pozice" && ch.value) jobTitle = ch.value;
@@ -79,14 +83,49 @@ async function recomputeRootFromLatestSession(
     }
   }
 
-  const patch = {
+  return {
     currentCompanyId: companyId,
     currentDepartment: department,
     currentContractType: contractType,
     currentJobTitle: jobTitle,
   };
+}
+
+async function recomputeRootFromLatestSession(
+  empRef: admin.firestore.DocumentReference,
+  now: FirebaseFirestore.FieldValue
+): Promise<Record<string, unknown> | null> {
+  const patch = await computeEffectiveRootFields(empRef);
+  if (!patch) return null;
   await empRef.update({ ...patch, updatedAt: now });
   return patch;
+}
+
+/**
+ * Daily refresh: re-fold every active employee's effective root fields so a
+ * future-dated Dodatek flips position/úvazek (and thus the Zaměstnanci list
+ * and payroll contract type) on its validity date — recompute otherwise only
+ * runs on employment writes. Writes only when a field actually changed, to
+ * avoid churning updatedAt across the whole collection.
+ */
+export async function refreshEffectiveRootForAllActive(): Promise<{ scanned: number; updated: number }> {
+  const snap = await db().collection("employees").where("status", "==", "active").get();
+  let updated = 0;
+  for (const doc of snap.docs) {
+    const patch = await computeEffectiveRootFields(doc.ref);
+    if (!patch) continue;
+    const before = doc.data() as Record<string, unknown>;
+    const changed =
+      patch.currentJobTitle !== (before.currentJobTitle ?? "") ||
+      patch.currentContractType !== (before.currentContractType ?? "") ||
+      patch.currentDepartment !== (before.currentDepartment ?? "") ||
+      patch.currentCompanyId !== (before.currentCompanyId ?? null);
+    if (changed) {
+      await doc.ref.update({ ...patch, updatedAt: FieldValue.serverTimestamp() });
+      updated++;
+    }
+  }
+  return { scanned: snap.size, updated };
 }
 
 // ─── LIST ────────────────────────────────────────────────────────────────────

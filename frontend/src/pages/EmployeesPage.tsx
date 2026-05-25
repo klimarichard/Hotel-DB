@@ -4,6 +4,7 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { canEditEmployees } from "@/lib/permissions";
 import { employeeDisplayName, employeeSurnameFirst } from "@/lib/employeeName";
+import { nationalityName } from "@/lib/nationalities";
 import Button from "@/components/Button";
 import ExportEmployeesModal from "@/components/ExportEmployeesModal";
 import styles from "./EmployeesPage.module.css";
@@ -47,7 +48,9 @@ export default function EmployeesPage() {
         (e.firstName ?? "").toLowerCase().includes(q) ||
         (e.lastName ?? "").toLowerCase().includes(q) ||
         employeeDisplayName(e).toLowerCase().includes(q) ||
-        (e.currentJobTitle ?? "").toLowerCase().includes(q)
+        (e.currentJobTitle ?? "").toLowerCase().includes(q) ||
+        (e.nationality ?? "").toLowerCase().includes(q) ||
+        (e.nationality ? nationalityName(e.nationality) : "").toLowerCase().includes(q)
       );
     })
     .sort((a, b) => {
@@ -121,7 +124,16 @@ export default function EmployeesPage() {
               </tr>
             ) : (
               filtered.map((emp) => (
-                <tr key={emp.id}>
+                <tr
+                  key={emp.id}
+                  className={
+                    emp.currentContractType === "DPP"
+                      ? styles.dppRow
+                      : emp.currentContractType === "PPP"
+                        ? styles.pppRow
+                        : ""
+                  }
+                >
                   <td>
                     <Link to={`/zamestnanci/${emp.id}`} className={styles.nameLink}>
                       {employeeSurnameFirst(emp)}
@@ -130,7 +142,7 @@ export default function EmployeesPage() {
                   <td>{emp.currentJobTitle || "—"}</td>
                   <td>{emp.currentDepartment || "—"}</td>
                   <td>{emp.currentContractType || "—"}</td>
-                  <td>{emp.nationality || "—"}</td>
+                  <td>{emp.nationality ? nationalityName(emp.nationality) : "—"}</td>
                   <td>
                     <span
                       className={

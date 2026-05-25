@@ -202,7 +202,7 @@ export interface EmployeeData {
  * needed. Empty / unknown is treated as foreign — safer default since
  * the foreign branch typically adds legally required fields.
  */
-function isCzechNationality(nat: string): boolean {
+export function isCzechNationality(nat: string): boolean {
   return nat.trim() === "CZE";
 }
 
