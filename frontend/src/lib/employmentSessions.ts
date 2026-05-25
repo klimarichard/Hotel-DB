@@ -144,7 +144,8 @@ export function groupBySession(rows: EmploymentRow[]): EmploymentSession[] {
 export function computeEffectiveState(
   nastup: EmploymentRow,
   dodatky: EmploymentRow[],
-  ukonceni: EmploymentRow | null
+  ukonceni: EmploymentRow | null,
+  asOfDate: string = clock.today()
 ): EffectiveState {
   let jobTitle = nastup.jobTitle ?? "";
   let salary = nastup.salary ?? null;
@@ -152,7 +153,10 @@ export function computeEffectiveState(
   let endDate = nastup.endDate ?? null;
   let contractType = nastup.contractType ?? "";
 
-  for (const dod of dodatky) {
+  // Only fold Dodatky whose validity (startDate) has arrived — a future-dated
+  // Dodatek must not change the effective salary/position/úvazek until its day.
+  const applicable = dodatky.filter((d) => (d.startDate ?? "") <= asOfDate);
+  for (const dod of applicable) {
     for (const ch of dod.changes ?? []) {
       if (ch.changeKind === "pracovní pozice" && ch.value) {
         jobTitle = ch.value;
@@ -214,13 +218,15 @@ export function uvazekToContractType(value: string): "HPP" | "PPP" | null {
  */
 export function collectFieldChain(
   session: EmploymentSession,
-  field: "jobTitle" | "contractType"
+  field: "jobTitle" | "contractType",
+  asOfDate: string = clock.today()
 ): string[] {
   const chain: string[] = [];
   const initial = (session.nastup[field] as string | undefined) ?? "";
   if (initial) chain.push(initial);
 
-  for (const dod of session.dodatky) {
+  const applicable = session.dodatky.filter((d) => (d.startDate ?? "") <= asOfDate);
+  for (const dod of applicable) {
     for (const ch of dod.changes ?? []) {
       let next: string | null = null;
       if (field === "jobTitle" && ch.changeKind === "pracovní pozice" && ch.value) {
