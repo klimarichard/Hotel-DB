@@ -2,9 +2,25 @@ import { useState, useEffect, FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "@/lib/api";
 import Button from "@/components/Button";
-import { NATIONALITIES } from "@/lib/nationalities";
+import { NATIONALITIES, nationalityName } from "@/lib/nationalities";
 import { isCzechNationality } from "@/lib/contractVariables";
 import styles from "./EmployeeFormPage.module.css";
+
+// Nationality is a free-text searchable field (datalist) storing the alpha-3 code.
+function natLabel(code: string): string {
+  return NATIONALITIES.some((n) => n.code === code) ? `${code} — ${nationalityName(code)}` : code;
+}
+function resolveNationalityCode(v: string): string {
+  const t = v.trim();
+  if (!t) return "";
+  const byLabel = NATIONALITIES.find((n) => `${n.code} — ${n.name}` === t);
+  if (byLabel) return byLabel.code;
+  const byCode = NATIONALITIES.find((n) => n.code === t.toUpperCase());
+  if (byCode) return byCode.code;
+  const byName = NATIONALITIES.find((n) => n.name.toLowerCase() === t.toLowerCase());
+  if (byName) return byName.code;
+  return "";
+}
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -147,6 +163,8 @@ export default function EmployeeFormPage() {
   const [additional, setAdditional] = useState<AdditionalForm>(emptyAdditional);
 
   const [educationOptions, setEducationOptions] = useState<string[]>([]);
+  // Display text for the searchable nationality field (the code lives in personal.nationality).
+  const [natQuery, setNatQuery] = useState("");
 
   useEffect(() => {
     api.get<Array<{ id: string; name: string; code: string }>>("/educationLevels")
@@ -176,6 +194,7 @@ export default function EmployeeFormPage() {
     ]).then(([emp, cont, docs, bens]) => {
       const p = { ...emptyPersonal, ...emp, birthNumber: "" } as PersonalForm;
       setPersonal(p);
+      setNatQuery(emp.nationality ? natLabel(emp.nationality as string) : "");
       setEmployeeName(`${emp.lastName ?? ""} ${emp.firstName ?? ""}`.trim());
       setContact({ ...emptyContact, ...(cont ?? {}) } as ContactForm);
       // Sensitive fields start blank in edit mode (blank = keep existing encrypted value)
@@ -358,15 +377,22 @@ export default function EmployeeFormPage() {
               </select>
             </Field>
             <Field label="Státní příslušnost">
-              <select className={styles.input} value={personal.nationality} onChange={(e) => setP("nationality", e.target.value)}>
-                <option value="">— vyberte —</option>
-                {personal.nationality && !NATIONALITIES.some((n) => n.code === personal.nationality) && (
-                  <option value={personal.nationality}>{personal.nationality}</option>
-                )}
+              <input
+                className={styles.input}
+                list="nationalityOptions"
+                value={natQuery}
+                placeholder="Začněte psát kód nebo název (např. CZE, Slovensko)…"
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setNatQuery(v);
+                  setP("nationality", resolveNationalityCode(v));
+                }}
+              />
+              <datalist id="nationalityOptions">
                 {NATIONALITIES.map((n) => (
-                  <option key={n.code} value={n.code}>{n.code} — {n.name}</option>
+                  <option key={n.code} value={`${n.code} — ${n.name}`} />
                 ))}
-              </select>
+              </datalist>
             </Field>
             <Field label="Místo narození">
               <input className={styles.input} value={personal.placeOfBirth} onChange={(e) => setP("placeOfBirth", e.target.value)} />
