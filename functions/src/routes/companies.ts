@@ -19,7 +19,10 @@ const db = () => admin.firestore();
 companiesRouter.get(
   "/",
   requireAuth,
-  requireRole("admin", "director"),
+  // Read access for everyone who works with employee/contract records — hr needs
+  // the list to pick a company on a Nástup, accountant reads it on employee views.
+  // Mutations below stay admin/director.
+  requireRole("admin", "director", "hr", "accountant"),
   async (_req: AuthRequest, res: Response) => {
     const snap = await db().collection("companies").get();
     const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -40,7 +43,7 @@ companiesRouter.get(
 companiesRouter.get(
   "/:id",
   requireAuth,
-  requireRole("admin", "director"),
+  requireRole("admin", "director", "hr", "accountant"),
   async (req: AuthRequest, res: Response) => {
     const doc = await db().collection("companies").doc(req.params.id).get();
     if (!doc.exists) {
