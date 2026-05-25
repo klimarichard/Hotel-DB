@@ -4,14 +4,15 @@ import { useAuth } from "@/hooks/useAuth";
 import * as clock from "@/lib/clock";
 import { Navigate } from "react-router-dom";
 import PayrollNotesModal from "./PayrollNotesModal";
-import Button from "@/components/Button";
+import PayrollBalanceModal, { type BalanceSavePayload } from "./PayrollBalanceModal";
+import { computeBalance } from "@/lib/payrollBalance";
 import ConfirmModal from "@/components/ConfirmModal";
 import { employeeDisplayName, employeeSurnameFirst } from "@/lib/employeeName";
 import styles from "./PayrollPage.module.css";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type OverrideField =
+export type OverrideField =
   | "totalHours"
   | "reportHours"
   | "vacationHours"
@@ -20,31 +21,39 @@ type OverrideField =
   | "weekendHours"
   | "extraPay"
   | "foodVouchers"
-  | "dppAmount";
+  | "dppAmount"
+  | "baseHours";
 
 export interface PayrollNote {
   id: string;
   sourceNoteId: string;
   text: string;
   carryForward: boolean;
+  sourceYear?: number;
+  sourceMonth?: number;
   createdBy: string;
   createdByName: string;
   createdAt: { seconds?: number; _seconds?: number } | null;
   editedBy?: string;
   editedByName?: string;
   editedAt?: { seconds?: number; _seconds?: number } | null;
+  // Read-state (carried-forward notes): struck through in the month marked read.
+  read?: boolean;
+  readAt?: { seconds?: number; _seconds?: number } | null;
+  readByName?: string;
   // System-generated notes (mid-month Nástup/Ukončení) — regenerated on every
   // recalc, so they're read-only in the UI.
   auto?: boolean;
   kind?: "nastup" | "ukonceni" | string;
 }
 
-interface PayrollEntry {
+export interface PayrollEntry {
   id: string; // employeeId
   firstName: string;
   lastName: string;
   displayName?: string;
-  baseHours?: number; // per-employee norm (prorated mid-month); falls back to period.baseHours
+  baseHours?: number; // effective per-employee norm (override ?? prorated mid-month); falls back to period.baseHours
+  baseHoursNorm?: number; // prorated/full norm before any per-employee override
   contractType: "HPP" | "PPP" | "DPP" | string;
   salary: number | null;
   hourlyRate: number | null;
@@ -109,107 +118,10 @@ const EyeOffIcon = () => (
   </svg>
 );
 
-// ─── Cascade computation ──────────────────────────────────────────────────────
-// MIRROR: keep in sync with cascade block in functions/src/services/payrollCalculator.ts
-
-function computeCascades(
-  entry: PayrollEntry,
-  baseHours: number,
-  maxHolidayHours: number,
-  trigger: "reportHours" | "sickLeaveHours",
-  newValue: number
-): Partial<Record<OverrideField, number>> {
-  const userOv = entry.overrides ?? {};
-  const newAutoOv: Partial<Record<OverrideField, number>> = { ...(entry.autoOverrides ?? {}) };
-  const isDpp = entry.contractType === "DPP";
-
-  // Resolve effective values before this change
-  let effReport = userOv.reportHours ?? entry.autoOverrides?.reportHours ?? entry.reportHours;
-  let effVacation = userOv.vacationHours ?? entry.autoOverrides?.vacationHours ?? entry.vacationHours;
-  let effExtraPay = userOv.extraPay ?? entry.autoOverrides?.extraPay ?? entry.extraPay;
-  // Track extra hours directly to avoid rounding errors in NAVÍC→SVÁTEK transfer.
-  // entry.extraHours already includes manager-bonus overflow (rawReportHours - baseHours).
-  let effExtraHours = entry.extraHours;
-  // Raw manager-credit hours = capped Výkaz + overflow = totalHours + managerBonus.
-  // Used as the upper bound when the user manually lowers Výkaz so the cascade
-  // routes the freed hours into NAVÍC/SVÁTEK.
-  const rawReport = entry.reportHours + entry.extraHours;
-
-  if (trigger === "reportHours" && !isDpp) {
-    effReport = newValue;
-    // Cascade Výkaz → Dovolená
-    if (userOv.vacationHours === undefined) {
-      const cv = entry.contractType === "HPP"
-        ? Math.max(0, baseHours - effReport)
-        : Math.max(0, baseHours / 2 - effReport);
-      newAutoOv.vacationHours = cv;
-      effVacation = cv;
-    }
-    // Cascade Výkaz → NAVÍC (when raw report > new Výkaz)
-    if (rawReport > effReport && entry.hourlyRate && entry.hourlyRate > 0
-      && userOv.extraPay === undefined) {
-      effExtraHours = rawReport - effReport;
-      const cp = entry.hourlyRate * effExtraHours;
-      newAutoOv.extraPay = cp;
-      effExtraPay = cp;
-    } else if (userOv.extraPay === undefined) {
-      // Výkaz raised above raw credit — clear any cascaded NAVÍC
-      effExtraHours = 0;
-      delete newAutoOv.extraPay;
-      effExtraPay = entry.extraPay;
-    }
-  }
-
-  if (trigger === "sickLeaveHours" && !isDpp) {
-    const nemoc = newValue;
-    const ded = Math.min(nemoc, effVacation);
-    // Cascade Nemoc → Dovolená
-    if (userOv.vacationHours === undefined) {
-      newAutoOv.vacationHours = effVacation - ded;
-      effVacation -= ded;
-    }
-    const rem = nemoc - ded;
-    // Cascade excess Nemoc → Výkaz → NAVÍC
-    if (rem > 0 && userOv.reportHours === undefined) {
-      newAutoOv.reportHours = Math.max(0, effReport - rem);
-      effReport = newAutoOv.reportHours;
-      if (entry.hourlyRate && entry.hourlyRate > 0 && userOv.extraPay === undefined) {
-        effExtraHours += rem;
-        newAutoOv.extraPay = ((newAutoOv.extraPay as number | undefined) ?? effExtraPay)
-          + entry.hourlyRate * rem;
-        effExtraPay = newAutoOv.extraPay as number;
-      }
-    } else if (userOv.reportHours === undefined) {
-      // Nemoc fully covered by Dovolená — clear any cascaded Výkaz deduction
-      delete newAutoOv.reportHours;
-    }
-  }
-
-  // NAVÍC → SVÁTEK transfer (runs after both triggers)
-  // Use effExtraHours (exact) not effExtraPay/hourlyRate (rounded) to avoid over-transfer.
-  if (
-    effExtraHours > 0 &&
-    entry.holidayHours < maxHolidayHours &&
-    entry.hourlyRate && entry.hourlyRate > 0 &&
-    userOv.holidayHours === undefined
-  ) {
-    const availableHolHours = maxHolidayHours - entry.holidayHours;
-    const transferH = Math.min(effExtraHours, availableHolHours);
-    if (transferH > 0) {
-      newAutoOv.holidayHours = entry.holidayHours + transferH;
-      if (userOv.extraPay === undefined) {
-        const remainingExtraHours = effExtraHours - transferH;
-        newAutoOv.extraPay = remainingExtraHours > 0
-          ? entry.hourlyRate * remainingExtraHours
-          : 0;
-      }
-    }
-  } else if (userOv.holidayHours === undefined) {
-    delete newAutoOv.holidayHours;
-  }
-
-  return newAutoOv;
-}
+// Výkaz / Dovolená / Nemoc / Základ are balanced together in PayrollBalanceModal
+// via computeBalance() (lib/payrollBalance.ts), which mirrors the backend's
+// calculateEntry. The old incremental computeCascades was removed — it broke the
+// invariant on re-edit (lowering Nemoc left Dovolená stuck).
 
 // ─── NAVÍC tiered display ─────────────────────────────────────────────────────
 
@@ -242,6 +154,7 @@ function EditableCell({
   masked = false,
   forceVisible = false,
   renderValue,
+  onEditClick,
 }: {
   computed: number;
   override: number | undefined;
@@ -251,6 +164,9 @@ function EditableCell({
   masked?: boolean;
   forceVisible?: boolean;
   renderValue?: (value: number) => React.ReactNode;
+  // When set, double-click delegates to this (e.g. open the balance dialog)
+  // instead of inline editing. The cell still shows override/auto markers.
+  onEditClick?: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
@@ -313,6 +229,13 @@ function EditableCell({
   else if (isAutoOverridden) classes.push(styles.autoOverridden);
   if (editable) classes.push(styles.editable);
 
+  const handleDoubleClick = () => {
+    if (!editable) return;
+    if (onEditClick) { onEditClick(); return; }
+    setDraft(String(displayValue));
+    setEditing(true);
+  };
+
   const title = isUserOverridden
     ? `Ručně upraveno (vypočteno: ${computed})${editable ? " · dvojklik pro úpravu" : ""}`
     : isAutoOverridden
@@ -327,11 +250,7 @@ function EditableCell({
     return (
       <span
         className={classes.join(" ") + " " + styles.maskedCell}
-        onDoubleClick={() => {
-          if (!editable) return;
-          setDraft(String(displayValue));
-          setEditing(true);
-        }}
+        onDoubleClick={handleDoubleClick}
         title={title}
       >
         {effectivelyVisible ? renderedValue : "•••••"}
@@ -351,11 +270,7 @@ function EditableCell({
   return (
     <span
       className={classes.join(" ")}
-      onDoubleClick={() => {
-        if (!editable) return;
-        setDraft(String(displayValue));
-        setEditing(true);
-      }}
+      onDoubleClick={handleDoubleClick}
       title={title}
     >
       {renderedValue}
@@ -363,65 +278,6 @@ function EditableCell({
   );
 }
 
-// ─── Sick leave modal ────────────────────────────────────────────────────────
-
-function SickLeaveModal({
-  entry,
-  onClose,
-  onSave,
-}: {
-  entry: PayrollEntry;
-  onClose: () => void;
-  onSave: (hours: number) => Promise<void>;
-}) {
-  const [hours, setHours] = useState(String(entry.sickLeaveHours ?? 0));
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function handleSave() {
-    const h = Number(hours.trim().replace(",", "."));
-    if (isNaN(h) || h < 0) { setError("Neplatný počet hodin."); return; }
-    setSaving(true);
-    setError(null);
-    try {
-      await onSave(h);
-      onClose();
-    } catch (e) {
-      setError((e as Error).message ?? "Chyba při ukládání.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className={styles.modalOverlay}>
-      <div className={styles.modal}>
-        <div className={styles.modalHeader}>
-          <span className={styles.modalTitle}>Nemoc — {employeeDisplayName(entry)}</span>
-          <button className={styles.modalClose} onClick={onClose}>✕</button>
-        </div>
-        <div className={styles.modalBody}>
-          <label className={styles.modalLabel}>Hodiny nemoci (NEMOC)</label>
-          <input
-            className={styles.modalInput}
-            type="text"
-            inputMode="decimal"
-            value={hours}
-            onChange={(e) => setHours(e.target.value)}
-            autoFocus
-          />
-          {error && <div className={styles.modalError}>{error}</div>}
-        </div>
-        <div className={styles.modalActions}>
-          <Button variant="secondary" onClick={onClose} disabled={saving}>Zrušit</Button>
-          <Button variant="primary" onClick={handleSave} disabled={saving}>
-            {saving ? "Ukládám…" : "Uložit"}
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
@@ -436,7 +292,7 @@ export default function PayrollPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [sickModal, setSickModal] = useState<PayrollEntry | null>(null);
+  const [balanceModal, setBalanceModal] = useState<PayrollEntry | null>(null);
   const [notesModal, setNotesModal] = useState<PayrollEntry | null>(null);
   const [showAllNavic, setShowAllNavic] = useState(false);
   const [recalculating, setRecalculating] = useState(false);
@@ -679,6 +535,9 @@ export default function PayrollPage() {
     else setSelectedMonth((m) => m + 1);
   }
 
+  // Direct per-cell override (HODINY, NOČNÍ, SVÁTEK, SO+NE, NAVÍC, STRAVENKY,
+  // DPP). Výkaz / Dovolená / Nemoc / Základ are NOT edited here — they go through
+  // the balance dialog (saveBalance) so the invariant is always maintained.
   async function saveOverride(entryId: string, field: OverrideField, value: number | null) {
     if (!period) return;
     const entry = period.entries.find((e) => e.id === entryId);
@@ -688,40 +547,57 @@ export default function PayrollPage() {
     if (value === null) delete newOverrides[field];
     else newOverrides[field] = value;
 
-    // Compute cascades when Výkaz is changed
-    let newAutoOverrides: Partial<Record<OverrideField, number>> = entry.autoOverrides ?? {};
-    if (field === "reportHours") {
-      if (value !== null) {
-        newAutoOverrides = computeCascades(entry, entry.baseHours ?? period.baseHours, period.maxHolidayHours, "reportHours", value);
-      } else {
-        // User cleared the Výkaz override — clear all cascade autoOverrides
-        newAutoOverrides = {};
-      }
-    }
-
     await api.patch(`/payroll/periods/${period.id}/entries/${entryId}`, {
       overrides: newOverrides,
-      autoOverrides: newAutoOverrides,
+      autoOverrides: entry.autoOverrides ?? {},
     });
     setPeriod((prev) => prev ? {
       ...prev,
       entries: prev.entries.map((e) =>
-        e.id === entryId ? { ...e, overrides: newOverrides, autoOverrides: newAutoOverrides } : e
+        e.id === entryId ? { ...e, overrides: newOverrides } : e
       ),
     } : prev);
   }
 
-  async function saveSickLeave(entry: PayrollEntry, hours: number) {
+  // Balance dialog save: Nemoc + (optional) Výkaz/Základ overrides → recomputed
+  // autoOverrides. Local clean fields are refreshed so display + later edits stay
+  // consistent until the next server recalc.
+  async function saveBalance(entry: PayrollEntry, payload: BalanceSavePayload) {
     if (!period) return;
-    const newAutoOverrides = computeCascades(entry, entry.baseHours ?? period.baseHours, period.maxHolidayHours, "sickLeaveHours", hours);
+    const norm = entry.baseHoursNorm ?? entry.baseHours ?? period.baseHours;
+    const effBase = payload.overrides.baseHours ?? norm;
+    const bal = computeBalance({
+      workedTotal: entry.reportHours + entry.extraHours,
+      cleanHoliday: entry.holidayHours,
+      contractType: entry.contractType,
+      hourlyRate: entry.hourlyRate,
+      base: effBase,
+      nemoc: payload.sickLeaveHours,
+      maxHolidayHours: period.maxHolidayHours,
+      reportOverride: payload.overrides.reportHours,
+      holidayOverride: payload.overrides.holidayHours,
+      extraPayOverride: payload.overrides.extraPay,
+    });
     await api.patch(`/payroll/periods/${period.id}/entries/${entry.id}`, {
-      sickLeaveHours: hours,
-      autoOverrides: newAutoOverrides,
+      sickLeaveHours: payload.sickLeaveHours,
+      overrides: payload.overrides,
+      autoOverrides: payload.autoOverrides,
     });
     setPeriod((prev) => prev ? {
       ...prev,
       entries: prev.entries.map((e) =>
-        e.id === entry.id ? { ...e, sickLeaveHours: hours, autoOverrides: newAutoOverrides } : e
+        e.id === entry.id
+          ? {
+              ...e,
+              sickLeaveHours: payload.sickLeaveHours,
+              overrides: payload.overrides,
+              autoOverrides: payload.autoOverrides,
+              baseHours: effBase,
+              reportHours: bal.cleanReport,
+              vacationHours: bal.cleanVacation,
+              extraHours: bal.cleanExtra,
+            }
+          : e
       ),
     } : prev);
   }
@@ -768,7 +644,8 @@ export default function PayrollPage() {
                     override={ov.reportHours}
                     autoOverride={ao.reportHours}
                     editable={canEdit}
-                    onSave={(v) => saveOverride(entry.id, "reportHours", v)}
+                    onSave={async () => {}}
+                    onEditClick={() => setBalanceModal(entry)}
                   />
                 )}
               </td>
@@ -781,14 +658,15 @@ export default function PayrollPage() {
                         override={ov.vacationHours}
                         autoOverride={ao.vacationHours}
                         editable={canEdit}
-                        onSave={(v) => saveOverride(entry.id, "vacationHours", v)}
+                        onSave={async () => {}}
+                        onEditClick={() => setBalanceModal(entry)}
                       />
                       {canEdit && (
                         <button
                           type="button"
                           className={styles.nemocBtn}
-                          onClick={() => setSickModal(entry)}
-                          title="Upravit hodiny nemoci"
+                          onClick={() => setBalanceModal(entry)}
+                          title="Upravit mzdové složky (Výkaz / Dovolená / Nemoc / Základ)"
                         >
                           ✎
                         </button>
@@ -1026,17 +904,21 @@ export default function PayrollPage() {
         </>
       )}
 
-      {sickModal && period && (
-        <SickLeaveModal
-          entry={sickModal}
-          onClose={() => setSickModal(null)}
-          onSave={(h) => saveSickLeave(sickModal, h)}
+      {balanceModal && period && (
+        <PayrollBalanceModal
+          entry={balanceModal}
+          baseHoursNorm={balanceModal.baseHoursNorm ?? balanceModal.baseHours ?? period.baseHours}
+          maxHolidayHours={period.maxHolidayHours}
+          onClose={() => setBalanceModal(null)}
+          onSave={(payload) => saveBalance(balanceModal, payload)}
         />
       )}
 
       {notesModal && period && (
         <PayrollNotesModal
           periodId={period.id}
+          periodYear={period.year}
+          periodMonth={period.month}
           employeeId={notesModal.id}
           employeeLabel={employeeDisplayName(notesModal)}
           notes={period.entries.find((e) => e.id === notesModal.id)?.notes ?? []}

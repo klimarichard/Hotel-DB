@@ -76,6 +76,11 @@
   line-height: 1.4;
 }
 
+.noteRead {
+  text-decoration: line-through;
+  color: var(--color-text-muted);
+}
+
 .noteMeta {
   font-size: 0.75rem;
   color: var(--color-text-muted);

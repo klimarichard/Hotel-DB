@@ -514,6 +514,86 @@
   border-top: 1px solid var(--color-border);
 }
 
+/* ── Balance dialog (Výkaz / Dovolená / Nemoc / Základ) ───────────────────── */
+
+.balRow {
+  display: grid;
+  grid-template-columns: 1fr 7rem;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.4rem 0;
+}
+
+.balRowLabel {
+  font-size: 0.875rem;
+  color: var(--color-text);
+}
+
+.balRowSub {
+  display: block;
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+}
+
+.balInput {
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--color-input-border);
+  border-radius: 6px;
+  font-size: 0.9rem;
+  text-align: right;
+  background: var(--color-input-bg);
+  color: var(--color-text);
+  outline: none;
+}
+
+.balInput:focus {
+  border-color: var(--color-input-focus);
+}
+
+.balReadonly {
+  text-align: right;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color-text-heading);
+  padding-right: 0.6rem;
+}
+
+.balReset {
+  background: none;
+  border: none;
+  color: var(--color-input-focus);
+  font-size: 0.7rem;
+  cursor: pointer;
+  padding: 0;
+  margin-left: 0.4rem;
+  text-decoration: underline;
+}
+
+.balDivider {
+  height: 1px;
+  background: var(--color-border);
+  margin: 0.6rem 0;
+}
+
+.balSum {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.9rem;
+  font-weight: 600;
+  padding: 0.3rem 0;
+}
+
+.balSumOk { color: var(--color-success-text, #15803d); }
+.balSumWarn { color: var(--color-danger-text-strong); }
+
+.balSpill {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  padding-top: 0.3rem;
+}
+
 /* ── Poznámky badge + add-note trigger ────────────────────────────────────── */
 
 .notesBadge {
