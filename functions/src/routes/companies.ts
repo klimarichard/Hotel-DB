@@ -2,7 +2,7 @@ import { Router, Response } from "express";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireAuth, requireRole, AuthRequest } from "../middleware/auth";
-import { ctxFromReq, logUpdate } from "../services/auditLog";
+import { ctxFromReq, logCreate, logUpdate, logDelete } from "../services/auditLog";
 
 export const companiesRouter = Router();
 
@@ -11,14 +11,28 @@ const db = () => admin.firestore();
 /**
  * GET /api/companies
  * List all companies. Admin + director only.
+ *
+ * Sorted by displayOrder ascending in memory (not via orderBy) so that
+ * legacy docs created before displayOrder existed are never silently
+ * dropped from the result by Firestore's missing-field exclusion.
  */
 companiesRouter.get(
   "/",
   requireAuth,
-  requireRole("admin", "director"),
+  // Read access for everyone who works with employee/contract records — hr needs
+  // the list to pick a company on a Nástup, accountant reads it on employee views.
+  // Mutations below stay admin/director.
+  requireRole("admin", "director", "hr", "accountant"),
   async (_req: AuthRequest, res: Response) => {
     const snap = await db().collection("companies").get();
-    res.json(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    list.sort((a, b) => {
+      const oa = (a as { displayOrder?: number }).displayOrder ?? 0;
+      const ob = (b as { displayOrder?: number }).displayOrder ?? 0;
+      if (oa !== ob) return oa - ob;
+      return a.id.localeCompare(b.id);
+    });
+    res.json(list);
   }
 );
 
@@ -29,7 +43,7 @@ companiesRouter.get(
 companiesRouter.get(
   "/:id",
   requireAuth,
-  requireRole("admin", "director"),
+  requireRole("admin", "director", "hr", "accountant"),
   async (req: AuthRequest, res: Response) => {
     const doc = await db().collection("companies").doc(req.params.id).get();
     if (!doc.exists) {
@@ -40,34 +54,82 @@ companiesRouter.get(
   }
 );
 
+interface CompanyBody {
+  abbreviation?: string;
+  name?: string;
+  address?: string;
+  ic?: string;
+  dic?: string;
+  fileNo?: string;
+  displayOrder?: number;
+}
+
+/**
+ * POST /api/companies
+ * Create a new company with an auto-generated doc id. Admin + director only.
+ * Body: { abbreviation, name, address, ic, dic, fileNo, displayOrder? }
+ */
+companiesRouter.post(
+  "/",
+  requireAuth,
+  requireRole("admin", "director"),
+  async (req: AuthRequest, res: Response) => {
+    const { abbreviation, name, address, ic, dic, fileNo, displayOrder } = req.body as CompanyBody;
+    if (!abbreviation || !abbreviation.trim()) {
+      res.status(400).json({ error: "Zkratka je povinná." });
+      return;
+    }
+    const data = {
+      abbreviation: abbreviation.trim(),
+      name: name ?? "",
+      address: address ?? "",
+      ic: ic ?? "",
+      dic: dic ?? "",
+      fileNo: fileNo ?? "",
+      displayOrder: typeof displayOrder === "number" ? displayOrder : 0,
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+      createdBy: req.uid,
+    };
+    const ref = await db().collection("companies").add(data);
+    await logCreate(ctxFromReq(req), {
+      collection: "companies",
+      resourceId: ref.id,
+      summary: { abbreviation: data.abbreviation, name: data.name },
+    });
+    res.json({ id: ref.id });
+  }
+);
+
 /**
  * PUT /api/companies/:id
- * Upsert a company. Admin + director only.
- * Body: { name, address, ic, dic, fileNo }
+ * Upsert a company by id. Admin + director only.
+ * Body: { abbreviation, name, address, ic, dic, fileNo, displayOrder? }
+ *
+ * Kept as an upsert (rather than a strict update) so the two seeded
+ * companies — keyed by code "HPM"/"STP" — keep their stable ids while still
+ * being fully editable, including their abbreviation.
  */
 companiesRouter.put(
   "/:id",
   requireAuth,
   requireRole("admin", "director"),
   async (req: AuthRequest, res: Response) => {
-    const { name, address, ic, dic, fileNo } = req.body as {
-      name: string;
-      address: string;
-      ic: string;
-      dic: string;
-      fileNo?: string;
-    };
+    const { abbreviation, name, address, ic, dic, fileNo, displayOrder } = req.body as CompanyBody;
 
     const ref = db().collection("companies").doc(req.params.id);
     const beforeSnap = await ref.get();
     const before = beforeSnap.exists ? (beforeSnap.data() as Record<string, unknown>) : {};
-    const after = {
+    const after: Record<string, unknown> = {
+      // Default the abbreviation to the doc id for legacy docs that never had one.
+      abbreviation: (abbreviation ?? (before.abbreviation as string) ?? req.params.id) || req.params.id,
       name: name ?? "",
       address: address ?? "",
       ic: ic ?? "",
       dic: dic ?? "",
       fileNo: fileNo ?? "",
     };
+    if (typeof displayOrder === "number") after.displayOrder = displayOrder;
     await ref.set(
       {
         ...after,
@@ -85,5 +147,29 @@ companiesRouter.put(
     });
 
     res.json({ id: req.params.id });
+  }
+);
+
+/**
+ * DELETE /api/companies/:id
+ * Remove a company. Admin + director only. Generated contracts already store
+ * their company values inline, so deleting a company never alters past
+ * documents — it only removes it from the picker going forward.
+ */
+companiesRouter.delete(
+  "/:id",
+  requireAuth,
+  requireRole("admin", "director"),
+  async (req: AuthRequest, res: Response) => {
+    const ref = db().collection("companies").doc(req.params.id);
+    const beforeSnap = await ref.get();
+    const beforeData = beforeSnap.exists ? (beforeSnap.data() as Record<string, unknown>) : {};
+    await ref.delete();
+    await logDelete(ctxFromReq(req), {
+      collection: "companies",
+      resourceId: req.params.id,
+      summary: { abbreviation: beforeData.abbreviation, name: beforeData.name },
+    });
+    res.json({ ok: true });
   }
 );

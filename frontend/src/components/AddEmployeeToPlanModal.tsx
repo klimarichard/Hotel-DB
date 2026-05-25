@@ -11,12 +11,14 @@ import {
   type ShiftType,
 } from "../lib/shiftConstants";
 import type { PlanEmployee } from "../pages/ShiftPlannerPage";
+import { employeeDisplayName, employeeSurnameFirst } from "../lib/employeeName";
 import styles from "./AddEmployeeToPlanModal.module.css";
 
 interface Employee {
   id: string;
   firstName: string;
   lastName: string;
+  displayName?: string;
 }
 
 interface Props {
@@ -59,8 +61,11 @@ export default function AddEmployeeToPlanModal({ planId, existingEmployees, onCl
   }, []);
 
   const filtered = employees.filter((e) => {
-    const full = `${e.lastName} ${e.firstName}`.toLowerCase();
-    return full.includes(search.toLowerCase());
+    const q = search.toLowerCase();
+    return (
+      `${e.lastName} ${e.firstName}`.toLowerCase().includes(q) ||
+      employeeDisplayName(e).toLowerCase().includes(q)
+    );
   });
 
   async function handleSubmit() {
@@ -75,6 +80,7 @@ export default function AddEmployeeToPlanModal({ planId, existingEmployees, onCl
         employeeId: selected.id,
         firstName: selected.firstName,
         lastName: selected.lastName,
+        displayName: selected.displayName ?? "",
         section,
         primaryShiftType: primaryShiftType || null,
         primaryHotel: primaryHotel || null,
@@ -121,11 +127,11 @@ export default function AddEmployeeToPlanModal({ planId, existingEmployees, onCl
                     onMouseDown={(e) => {
                       e.preventDefault();
                       setSelected(emp);
-                      setSearch(`${emp.lastName} ${emp.firstName}`);
+                      setSearch(employeeSurnameFirst(emp));
                       setShowDropdown(false);
                     }}
                   >
-                    {emp.lastName} {emp.firstName}
+                    {employeeSurnameFirst(emp)}
                   </li>
                 ))}
                 {filtered.length === 0 && (

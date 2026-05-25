@@ -10,6 +10,7 @@ import {
   type HotelCode,
 } from "../lib/shiftConstants";
 import type { PlanEmployee } from "../pages/ShiftPlannerPage";
+import { employeeDisplayName } from "../lib/employeeName";
 import styles from "./AddEmployeeToPlanModal.module.css";
 
 interface Props {
@@ -52,7 +53,7 @@ export default function EditEmployeeInPlanModal({ planId, employee, onClose, onS
       <div className={styles.modal}>
         <div className={styles.header}>
           <h2 className={styles.title}>
-            Upravit: {employee.lastName} {employee.firstName}
+            Upravit: {employeeDisplayName(employee)}
           </h2>
           <IconButton onClick={onClose} aria-label="Zavřít">✕</IconButton>
         </div>

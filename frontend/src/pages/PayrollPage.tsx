@@ -6,6 +6,7 @@ import { Navigate } from "react-router-dom";
 import PayrollNotesModal from "./PayrollNotesModal";
 import Button from "@/components/Button";
 import ConfirmModal from "@/components/ConfirmModal";
+import { employeeDisplayName, employeeSurnameFirst } from "@/lib/employeeName";
 import styles from "./PayrollPage.module.css";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -38,6 +39,7 @@ interface PayrollEntry {
   id: string; // employeeId
   firstName: string;
   lastName: string;
+  displayName?: string;
   contractType: "HPP" | "PPP" | "DPP" | string;
   salary: number | null;
   hourlyRate: number | null;
@@ -390,7 +392,7 @@ function SickLeaveModal({
     <div className={styles.modalOverlay}>
       <div className={styles.modal}>
         <div className={styles.modalHeader}>
-          <span className={styles.modalTitle}>Nemoc — {entry.lastName} {entry.firstName}</span>
+          <span className={styles.modalTitle}>Nemoc — {employeeDisplayName(entry)}</span>
           <button className={styles.modalClose} onClick={onClose}>✕</button>
         </div>
         <div className={styles.modalBody}>
@@ -574,8 +576,8 @@ export default function PayrollPage() {
         for (const entry of entries) {
           const isDpp = entry.contractType === "DPP";
           const nameHtml = entry.contractType
-            ? `${entry.lastName} ${entry.firstName}<span style="${cs.badge}">${entry.contractType}</span>`
-            : `${entry.lastName} ${entry.firstName}`;
+            ? `${employeeSurnameFirst(entry)}<span style="${cs.badge}">${entry.contractType}</span>`
+            : `${employeeSurnameFirst(entry)}`;
           const hours = effNum(entry, "totalHours");
           const report = effNum(entry, "reportHours");
           const vacation = effNum(entry, "vacationHours");
@@ -741,7 +743,7 @@ export default function PayrollPage() {
           return (
             <tr key={entry.id} className={rowClass}>
               <td className={styles.nameCell}>
-                {entry.lastName} {entry.firstName}
+                {employeeDisplayName(entry)}
                 {entry.contractType && (
                   <span className={styles.contractBadge}>{entry.contractType}</span>
                 )}
@@ -1031,7 +1033,7 @@ export default function PayrollPage() {
         <PayrollNotesModal
           periodId={period.id}
           employeeId={notesModal.id}
-          employeeLabel={`${notesModal.lastName} ${notesModal.firstName}`}
+          employeeLabel={employeeDisplayName(notesModal)}
           notes={period.entries.find((e) => e.id === notesModal.id)?.notes ?? []}
           canEdit={canEdit}
           onClose={() => setNotesModal(null)}

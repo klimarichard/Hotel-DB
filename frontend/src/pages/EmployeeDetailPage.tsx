@@ -7,6 +7,7 @@ import * as clock from "@/lib/clock";
 import ConfirmModal from "@/components/ConfirmModal";
 import { formatDateCZ } from "@/lib/dateFormat";
 import { displayGendered } from "@/lib/genderDisplay";
+import { employeeDisplayName } from "@/lib/employeeName";
 import GenerateContractModal from "@/components/GenerateContractModal";
 import Button from "@/components/Button";
 import EmploymentSessionCard from "@/components/EmploymentSession";
@@ -253,6 +254,7 @@ interface Employee {
   id: string;
   firstName: string;
   lastName: string;
+  displayName?: string;
   dateOfBirth: string;
   gender: string;
   birthSurname: string;
@@ -395,6 +397,20 @@ const emptyChangeRow: ChangeRow = { changeKind: "", value: "" };
 interface DepartmentRec {
   id: string;
   name: string;
+}
+
+interface CompanyRec {
+  id: string;
+  abbreviation?: string;
+  name?: string;
+}
+
+/** Readable company label: "ABBR - Full Name" (falls back gracefully). */
+function companyLabel(c: { id: string; abbreviation?: string; name?: string }): string {
+  const abbr = (c.abbreviation || c.id || "").trim();
+  const name = (c.name || "").trim();
+  if (abbr && name) return `${abbr} - ${name}`;
+  return abbr || name || c.id;
 }
 
 interface JobPositionRec {
@@ -624,6 +640,7 @@ function AddEntryModal({
   const [error, setError] = useState<string | null>(null);
   const [departments, setDepartments] = useState<DepartmentRec[]>([]);
   const [positions, setPositions] = useState<JobPositionRec[]>([]);
+  const [companies, setCompanies] = useState<CompanyRec[]>([]);
   const [dppMaxMonthlyReward, setDppMaxMonthlyReward] = useState<number | null>(null);
   // Manual override for DPP "Sjednaná odměna" — when true, auto-compute is suppressed.
   // Pre-existing rows start in manual mode so saved values aren't overwritten on edit.
@@ -663,10 +680,12 @@ function AddEntryModal({
     Promise.all([
       api.get<DepartmentRec[]>("/departments").catch(() => [] as DepartmentRec[]),
       api.get<JobPositionRec[]>("/jobPositions").catch(() => [] as JobPositionRec[]),
-    ]).then(([deps, poss]) => {
+      api.get<CompanyRec[]>("/companies").catch(() => [] as CompanyRec[]),
+    ]).then(([deps, poss, comps]) => {
       if (cancelled) return;
       setDepartments(deps);
       setPositions(poss);
+      setCompanies(comps);
       // Pre-select dropdowns from existing row on edit
       if (initialRow) {
         const depByName = deps.find(
@@ -906,7 +925,14 @@ function AddEntryModal({
                     </div>
                     <div className={styles.modalField}>
                       <label className={styles.modalLabel}>Firma</label>
-                      <input className={styles.modalInput} value={form.companyId} onChange={(e) => setField("companyId", e.target.value)} />
+                      <select className={styles.modalInput} value={form.companyId} onChange={(e) => setField("companyId", e.target.value)}>
+                        {form.companyId && !companies.some((c) => c.id === form.companyId) && (
+                          <option value={form.companyId}>{form.companyId}</option>
+                        )}
+                        {companies.map((c) => (
+                          <option key={c.id} value={c.id}>{companyLabel(c)}</option>
+                        ))}
+                      </select>
                     </div>
                   </div>
                 )}
@@ -950,7 +976,14 @@ function AddEntryModal({
                     </div>
                     <div className={styles.modalField}>
                       <label className={styles.modalLabel}>Firma</label>
-                      <input className={styles.modalInput} value={form.companyId} onChange={(e) => setField("companyId", e.target.value)} />
+                      <select className={styles.modalInput} value={form.companyId} onChange={(e) => setField("companyId", e.target.value)}>
+                        {form.companyId && !companies.some((c) => c.id === form.companyId) && (
+                          <option value={form.companyId}>{form.companyId}</option>
+                        )}
+                        {companies.map((c) => (
+                          <option key={c.id} value={c.id}>{companyLabel(c)}</option>
+                        ))}
+                      </select>
                     </div>
                   </div>
                 )}
@@ -1084,6 +1117,7 @@ export default function EmployeeDetailPage() {
   const [documents, setDocuments] = useState<DocumentsData | null>(null);
   const [additional, setAdditional] = useState<AdditionalData | null>(null);
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
+  const [companies, setCompanies] = useState<CompanyRec[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState<"detail" | "history">("detail");
   const [newEntryMode, setNewEntryMode] = useState<{
@@ -1159,12 +1193,14 @@ export default function EmployeeDetailPage() {
       api.get<EmploymentRow[]>(`/employees/${id}/employment`),
       api.get<AlertItem[]>(`/employees/${id}/alerts`),
       api.get<ContractRecord[]>(`/employees/${id}/contracts`).catch(() => [] as ContractRecord[]),
+      api.get<CompanyRec[]>("/companies").catch(() => [] as CompanyRec[]),
     ])
-      .then(([emp, history, empAlerts, contractsList]) => {
+      .then(([emp, history, empAlerts, contractsList, comps]) => {
         setEmployee(emp);
         setEmployment(history);
         setAlerts(empAlerts);
         setContracts(contractsList);
+        setCompanies(comps);
       })
       .finally(() => setLoading(false));
   }, [id]);
@@ -1330,12 +1366,12 @@ export default function EmployeeDetailPage() {
       <div className={styles.breadcrumb}>
         <Link to="/zamestnanci">Zaměstnanci</Link>
         <span> / </span>
-        <span>{employee.lastName} {employee.firstName}</span>
+        <span>{employeeDisplayName(employee)}</span>
       </div>
 
       <div className={styles.hero}>
         <div className={styles.heroLeft}>
-          <div className={styles.heroName}>{employee.lastName} {employee.firstName}</div>
+          <div className={styles.heroName}>{employeeDisplayName(employee)}</div>
           <div className={styles.heroMeta}>
             {employee.currentJobTitle || "—"} · {employee.currentDepartment || "—"} ·{" "}
             <span className={employee.status === "active" ? styles.badgeActive : styles.badgeTerminated}>
@@ -1440,7 +1476,7 @@ export default function EmployeeDetailPage() {
                 session={session}
                 contractsByRow={mapContractsToRows(session.rows, contracts)}
                 defaultExpanded={idx === 0}
-                companies={{}}
+                companies={Object.fromEntries(companies.map((c) => [c.id, companyLabel(c)]))}
                 employeeId={id!}
                 canEdit={canDelete}
                 resolveDefaultType={(row) => {
@@ -1641,6 +1677,7 @@ export default function EmployeeDetailPage() {
       <Section title="Osobní údaje" sectionKey="personal" expanded={expanded.has("personal")} onToggle={toggle}>
         <div className={styles.fields}>
           <div className={styles.field}><span className={styles.fieldLabel}>Jméno</span><span className={styles.fieldValue}>{employee.firstName} {employee.lastName}</span></div>
+          <div className={styles.field}><span className={styles.fieldLabel}>Zobrazované jméno</span><span className={styles.fieldValue}>{employee.displayName?.trim() ? employee.displayName : `${employeeDisplayName(employee)} (výchozí)`}</span></div>
           <div className={styles.field}><span className={styles.fieldLabel}>Datum narození</span><span className={styles.fieldValue}>{val(formatDateCZ(employee.dateOfBirth))}</span></div>
           <div className={styles.field}><span className={styles.fieldLabel}>Pohlaví</span><span className={styles.fieldValue}>{employee.gender === "m" ? "Muž" : employee.gender === "f" ? "Žena" : "—"}</span></div>
           <div className={styles.field}><span className={styles.fieldLabel}>Rodné příjmení</span><span className={styles.fieldValue}>{val(employee.birthSurname)}</span></div>
@@ -1658,7 +1695,7 @@ export default function EmployeeDetailPage() {
           <div className={styles.field}><span className={styles.fieldLabel}>Pracovní pozice</span><span className={styles.fieldValue}>{val(employee.currentJobTitle)}</span></div>
           <div className={styles.field}><span className={styles.fieldLabel}>Oddělení</span><span className={styles.fieldValue}>{val(employee.currentDepartment)}</span></div>
           <div className={styles.field}><span className={styles.fieldLabel}>Typ smlouvy</span><span className={styles.fieldValue}>{val(employee.currentContractType)}</span></div>
-          <div className={styles.field}><span className={styles.fieldLabel}>Společnost</span><span className={styles.fieldValue}>{val(employee.currentCompanyId)}</span></div>
+          <div className={styles.field}><span className={styles.fieldLabel}>Společnost</span><span className={styles.fieldValue}>{val(employee.currentCompanyId ? companyLabel(companies.find((c) => c.id === employee.currentCompanyId) ?? { id: employee.currentCompanyId }) : null)}</span></div>
         </div>
       </Section>
 
