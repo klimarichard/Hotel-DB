@@ -2,6 +2,8 @@ import { useState, useEffect, FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "@/lib/api";
 import Button from "@/components/Button";
+import { NATIONALITIES } from "@/lib/nationalities";
+import { isCzechNationality } from "@/lib/contractVariables";
 import styles from "./EmployeeFormPage.module.css";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -272,6 +274,11 @@ export default function EmployeeFormPage() {
 
   const sensitiveHint = isEdit ? "Ponechte prázdné pro zachování stávající hodnoty" : "";
 
+  // Nationality drives which document subsections show (TODO 14):
+  // Czech → only OP; foreign (set) → only passport + visa; empty → all.
+  const isCz = isCzechNationality(personal.nationality);
+  const hasNat = !!personal.nationality;
+
   return (
     <div className={styles.page}>
       <div className={styles.breadcrumb}>
@@ -351,7 +358,15 @@ export default function EmployeeFormPage() {
               </select>
             </Field>
             <Field label="Státní příslušnost">
-              <input className={styles.input} value={personal.nationality} onChange={(e) => setP("nationality", e.target.value)} />
+              <select className={styles.input} value={personal.nationality} onChange={(e) => setP("nationality", e.target.value)}>
+                <option value="">— vyberte —</option>
+                {personal.nationality && !NATIONALITIES.some((n) => n.code === personal.nationality) && (
+                  <option value={personal.nationality}>{personal.nationality}</option>
+                )}
+                {NATIONALITIES.map((n) => (
+                  <option key={n.code} value={n.code}>{n.code} — {n.name}</option>
+                ))}
+              </select>
             </Field>
             <Field label="Místo narození">
               <input className={styles.input} value={personal.placeOfBirth} onChange={(e) => setP("placeOfBirth", e.target.value)} />
@@ -398,52 +413,60 @@ export default function EmployeeFormPage() {
         <section className={styles.section}>
           <h2 className={styles.sectionTitle}>Doklady</h2>
 
-          <p className={styles.subsectionLabel}>Občanský průkaz</p>
-          <div className={styles.grid}>
-            <Field label="Číslo OP">
-              <SensitiveInput
-                value={documents.idCardNumber}
-                onChange={(v) => setD("idCardNumber", v)}
-                isEdit={isEdit}
-                isCleared={cleared.has("idCardNumber")}
-                onClear={() => markCleared("idCardNumber")}
-                onUnclear={() => unmarkCleared("idCardNumber")}
-                placeholder={sensitiveHint}
-              />
-            </Field>
-          </div>
+          {(isCz || !hasNat) && (
+            <>
+              <p className={styles.subsectionLabel}>Občanský průkaz</p>
+              <div className={styles.grid}>
+                <Field label="Číslo OP">
+                  <SensitiveInput
+                    value={documents.idCardNumber}
+                    onChange={(v) => setD("idCardNumber", v)}
+                    isEdit={isEdit}
+                    isCleared={cleared.has("idCardNumber")}
+                    onClear={() => markCleared("idCardNumber")}
+                    onUnclear={() => unmarkCleared("idCardNumber")}
+                    placeholder={sensitiveHint}
+                  />
+                </Field>
+              </div>
+            </>
+          )}
 
-          <p className={styles.subsectionLabel}>Cestovní pas</p>
-          <div className={styles.grid}>
-            <Field label="Číslo pasu">
-              <input className={styles.input} value={documents.passportNumber} onChange={(e) => setD("passportNumber", e.target.value)} />
-            </Field>
-            <Field label="Datum vydání pasu">
-              <input className={styles.input} type="date" value={documents.passportIssueDate} onChange={(e) => setD("passportIssueDate", e.target.value)} />
-            </Field>
-            <Field label="Platnost pasu">
-              <input className={styles.input} type="date" value={documents.passportExpiry} onChange={(e) => setD("passportExpiry", e.target.value)} />
-            </Field>
-            <Field label="Vydal">
-              <input className={styles.input} value={documents.passportAuthority} onChange={(e) => setD("passportAuthority", e.target.value)} />
-            </Field>
-          </div>
+          {!isCz && (
+            <>
+              <p className={styles.subsectionLabel}>Cestovní pas</p>
+              <div className={styles.grid}>
+                <Field label="Číslo pasu">
+                  <input className={styles.input} value={documents.passportNumber} onChange={(e) => setD("passportNumber", e.target.value)} />
+                </Field>
+                <Field label="Datum vydání pasu">
+                  <input className={styles.input} type="date" value={documents.passportIssueDate} onChange={(e) => setD("passportIssueDate", e.target.value)} />
+                </Field>
+                <Field label="Platnost pasu">
+                  <input className={styles.input} type="date" value={documents.passportExpiry} onChange={(e) => setD("passportExpiry", e.target.value)} />
+                </Field>
+                <Field label="Vydal">
+                  <input className={styles.input} value={documents.passportAuthority} onChange={(e) => setD("passportAuthority", e.target.value)} />
+                </Field>
+              </div>
 
-          <p className={styles.subsectionLabel}>Povolení k pobytu</p>
-          <div className={styles.grid}>
-            <Field label="Číslo povolení k pobytu">
-              <input className={styles.input} value={documents.visaNumber} onChange={(e) => setD("visaNumber", e.target.value)} />
-            </Field>
-            <Field label="Typ povolení k pobytu">
-              <input className={styles.input} value={documents.visaType} onChange={(e) => setD("visaType", e.target.value)} />
-            </Field>
-            <Field label="Datum vydání povolení">
-              <input className={styles.input} type="date" value={documents.visaIssueDate} onChange={(e) => setD("visaIssueDate", e.target.value)} />
-            </Field>
-            <Field label="Platnost povolení">
-              <input className={styles.input} type="date" value={documents.visaExpiry} onChange={(e) => setD("visaExpiry", e.target.value)} />
-            </Field>
-          </div>
+              <p className={styles.subsectionLabel}>Povolení k pobytu</p>
+              <div className={styles.grid}>
+                <Field label="Číslo povolení k pobytu">
+                  <input className={styles.input} value={documents.visaNumber} onChange={(e) => setD("visaNumber", e.target.value)} />
+                </Field>
+                <Field label="Typ povolení k pobytu">
+                  <input className={styles.input} value={documents.visaType} onChange={(e) => setD("visaType", e.target.value)} />
+                </Field>
+                <Field label="Datum vydání povolení">
+                  <input className={styles.input} type="date" value={documents.visaIssueDate} onChange={(e) => setD("visaIssueDate", e.target.value)} />
+                </Field>
+                <Field label="Platnost povolení">
+                  <input className={styles.input} type="date" value={documents.visaExpiry} onChange={(e) => setD("visaExpiry", e.target.value)} />
+                </Field>
+              </div>
+            </>
+          )}
         </section>
 
         {/* ── Doplňující informace ─────────────────────────────────────────── */}

@@ -118,6 +118,28 @@
   background: var(--color-surface-2);
 }
 
+/* Row tints per contract type — distinguishable in both light and dark modes */
+.pppRow {
+  background: #eff6ff;
+}
+
+.dppRow {
+  background: #fffbeb;
+}
+
+[data-theme="dark"] .pppRow {
+  background: #1a2a4a;
+}
+
+[data-theme="dark"] .dppRow {
+  background: #2a1f0a;
+}
+
+.pppRow td,
+.dppRow td {
+  background: inherit;
+}
+
 .nameLink {
   font-weight: 500;
   color: var(--color-primary);

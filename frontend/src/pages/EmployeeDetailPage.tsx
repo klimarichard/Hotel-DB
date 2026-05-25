@@ -16,7 +16,9 @@ import {
   ContractType as SmlouvaContractType,
   CONTRACT_TYPE_LABELS,
   STANDALONE_TYPES,
+  isCzechNationality,
 } from "@/lib/contractVariables";
+import { nationalityName } from "@/lib/nationalities";
 import { buildContractName } from "@/lib/contractNaming";
 import {
   groupBySession,
@@ -157,15 +159,22 @@ function compactValue(v: unknown): string {
 function EmployeeAuditHistory({ employeeId }: { employeeId: string }) {
   const [entries, setEntries] = useState<AuditEntryMini[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [limit, setLimit] = useState(10);
+  // True while there may be more rows than currently fetched (last fetch
+  // returned a full page). Cleared once a fetch returns fewer than requested.
+  const [hasMore, setHasMore] = useState(false);
 
   useEffect(() => {
     api
       .get<{ entries: AuditEntryMini[] }>(
-        `/audit?employeeId=${encodeURIComponent(employeeId)}&limit=10`
+        `/audit?employeeId=${encodeURIComponent(employeeId)}&limit=${limit}`
       )
-      .then((res) => setEntries(res.entries))
+      .then((res) => {
+        setEntries(res.entries);
+        setHasMore(res.entries.length >= limit);
+      })
       .catch((e: Error) => setError(e.message));
-  }, [employeeId]);
+  }, [employeeId, limit]);
 
   if (error) return <div className={styles.loading}>{error}</div>;
   if (!entries) return <div className={styles.loading}>Načítám…</div>;
@@ -213,7 +222,12 @@ function EmployeeAuditHistory({ employeeId }: { employeeId: string }) {
           </tbody>
         </table>
       </div>
-      <div style={{ marginTop: "0.75rem" }}>
+      <div style={{ marginTop: "0.75rem", display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
+        {hasMore && (
+          <Button variant="secondary" size="sm" onClick={() => setLimit((l) => l + 50)}>
+            Načíst další
+          </Button>
+        )}
         <Link to={`/audit?employeeId=${encodeURIComponent(employeeId)}`}>
           Zobrazit všechny změny →
         </Link>
@@ -1684,7 +1698,7 @@ export default function EmployeeDetailPage() {
           <SensitiveField employeeId={id!} field="birthNumber" label="Rodné číslo" apiValue={employee.birthNumber} />
           <div className={styles.field}><span className={styles.fieldLabel}>Rodinný stav</span><span className={styles.fieldValue}>{val(displayGendered(employee.maritalStatus, employee.gender as "m" | "f"))}</span></div>
           <div className={styles.field}><span className={styles.fieldLabel}>Vzdělání</span><span className={styles.fieldValue}>{val(employee.education)}</span></div>
-          <div className={styles.field}><span className={styles.fieldLabel}>Státní příslušnost</span><span className={styles.fieldValue}>{val(employee.nationality)}</span></div>
+          <div className={styles.field}><span className={styles.fieldLabel}>Státní příslušnost</span><span className={styles.fieldValue}>{val(employee.nationality ? nationalityName(employee.nationality) : "")}</span></div>
           <div className={styles.field}><span className={styles.fieldLabel}>Místo narození</span><span className={styles.fieldValue}>{val(employee.placeOfBirth)}</span></div>
         </div>
       </Section>
@@ -1708,7 +1722,12 @@ export default function EmployeeDetailPage() {
             <div className={styles.field}><span className={styles.fieldLabel}>Telefon</span><span className={styles.fieldValue}>{val(contact?.phone)}</span></div>
             <div className={styles.field}><span className={styles.fieldLabel}>E-mail</span><span className={styles.fieldValue}>{val(contact?.email)}</span></div>
             <div className={styles.fieldFull}><span className={styles.fieldLabel}>Trvalá adresa</span><span className={styles.fieldValue}>{val(contact?.permanentAddress)}</span></div>
-            {!contact?.contactAddressSameAsPermanent && (
+            {contact?.contactAddressSameAsPermanent ? (
+              <div className={styles.fieldFull}>
+                <span className={styles.fieldLabel}>Kontaktní adresa</span>
+                <span className={styles.fieldValue}>Shodná s trvalou adresou</span>
+              </div>
+            ) : (
               <div className={styles.fieldFull}>
                 <span className={styles.fieldLabel}>Kontaktní adresa</span>
                 <span className={styles.fieldValue}>{val(contact?.contactAddress)}</span>
@@ -1723,32 +1742,48 @@ export default function EmployeeDetailPage() {
         {!loadedSections.has("documents") ? (
           <div className={styles.loading}>Načítám…</div>
         ) : (
-          <>
-            <div className={styles.docGroup}>
-              <p className={styles.docGroupLabel}>Občanský průkaz</p>
-              <div className={styles.fields}>
-                <SensitiveField employeeId={id!} field="idCardNumber" label="Číslo OP" apiValue={documents?.idCardNumber} />
-              </div>
-            </div>
-            <div className={styles.docGroup}>
-              <p className={styles.docGroupLabel}>Cestovní pas</p>
-              <div className={styles.fields}>
-                <div className={styles.field}><span className={styles.fieldLabel}>Číslo pasu</span><span className={styles.fieldValue}>{val(documents?.passportNumber)}</span></div>
-                <div className={styles.field}><span className={styles.fieldLabel}>Datum vydání</span><span className={styles.fieldValue}>{val(formatDateCZ(documents?.passportIssueDate))}</span></div>
-                <div className={styles.field}><span className={styles.fieldLabel}>Platnost pasu</span><span className={styles.fieldValue}>{val(formatDateCZ(documents?.passportExpiry))}</span></div>
-                <div className={styles.field}><span className={styles.fieldLabel}>Vydal</span><span className={styles.fieldValue}>{val(documents?.passportAuthority)}</span></div>
-              </div>
-            </div>
-            <div className={styles.docGroup}>
-              <p className={styles.docGroupLabel}>Povolení k pobytu</p>
-              <div className={styles.fields}>
-                <div className={styles.field}><span className={styles.fieldLabel}>Číslo povolení</span><span className={styles.fieldValue}>{val(documents?.visaNumber)}</span></div>
-                <div className={styles.field}><span className={styles.fieldLabel}>Typ povolení</span><span className={styles.fieldValue}>{val(documents?.visaType)}</span></div>
-                <div className={styles.field}><span className={styles.fieldLabel}>Datum vydání</span><span className={styles.fieldValue}>{val(formatDateCZ(documents?.visaIssueDate))}</span></div>
-                <div className={styles.field}><span className={styles.fieldLabel}>Platnost povolení</span><span className={styles.fieldValue}>{val(formatDateCZ(documents?.visaExpiry))}</span></div>
-              </div>
-            </div>
-          </>
+          (() => {
+            // Nationality drives which document subsections show (TODO 14):
+            // Czech → only OP; foreign (set) → only passport + visa; empty → all.
+            const nat = employee.nationality ?? "";
+            const isCz = isCzechNationality(nat);
+            const showOp = !nat || isCz;
+            const showForeign = !nat || !isCz;
+            return (
+              <>
+                {showOp && (
+                  <div className={styles.docGroup}>
+                    <p className={styles.docGroupLabel}>Občanský průkaz</p>
+                    <div className={styles.fields}>
+                      <SensitiveField employeeId={id!} field="idCardNumber" label="Číslo OP" apiValue={documents?.idCardNumber} />
+                    </div>
+                  </div>
+                )}
+                {showForeign && (
+                  <div className={styles.docGroup}>
+                    <p className={styles.docGroupLabel}>Cestovní pas</p>
+                    <div className={styles.fields}>
+                      <div className={styles.field}><span className={styles.fieldLabel}>Číslo pasu</span><span className={styles.fieldValue}>{val(documents?.passportNumber)}</span></div>
+                      <div className={styles.field}><span className={styles.fieldLabel}>Datum vydání</span><span className={styles.fieldValue}>{val(formatDateCZ(documents?.passportIssueDate))}</span></div>
+                      <div className={styles.field}><span className={styles.fieldLabel}>Platnost pasu</span><span className={styles.fieldValue}>{val(formatDateCZ(documents?.passportExpiry))}</span></div>
+                      <div className={styles.field}><span className={styles.fieldLabel}>Vydal</span><span className={styles.fieldValue}>{val(documents?.passportAuthority)}</span></div>
+                    </div>
+                  </div>
+                )}
+                {showForeign && (
+                  <div className={styles.docGroup}>
+                    <p className={styles.docGroupLabel}>Povolení k pobytu</p>
+                    <div className={styles.fields}>
+                      <div className={styles.field}><span className={styles.fieldLabel}>Číslo povolení</span><span className={styles.fieldValue}>{val(documents?.visaNumber)}</span></div>
+                      <div className={styles.field}><span className={styles.fieldLabel}>Typ povolení</span><span className={styles.fieldValue}>{val(documents?.visaType)}</span></div>
+                      <div className={styles.field}><span className={styles.fieldLabel}>Datum vydání</span><span className={styles.fieldValue}>{val(formatDateCZ(documents?.visaIssueDate))}</span></div>
+                      <div className={styles.field}><span className={styles.fieldLabel}>Platnost povolení</span><span className={styles.fieldValue}>{val(formatDateCZ(documents?.visaExpiry))}</span></div>
+                    </div>
+                  </div>
+                )}
+              </>
+            );
+          })()
         )}
       </Section>
 
