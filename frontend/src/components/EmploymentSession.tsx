@@ -67,7 +67,9 @@ export default function EmploymentSessionCard({
   const [open, setOpen] = useState(defaultExpanded);
   const eff = session.effective;
   const companyName = companies[eff.companyId] ?? eff.companyId ?? "—";
-  const shownSalary = eff.contractType === "DPP" ? eff.agreedReward : eff.salary;
+  // DPP headers show no monetary value — DPP has no monthly salary, and the
+  // agreed reward is not shown in the session header (per TODO line 59).
+  const shownSalary = eff.contractType === "DPP" ? null : eff.salary;
 
   // Surface every distinct value the field has held during this session,
   // not just first → last. So three position changes render

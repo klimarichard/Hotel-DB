@@ -40,6 +40,7 @@ interface PayrollEntry {
   firstName: string;
   lastName: string;
   displayName?: string;
+  baseHours?: number; // per-employee norm (prorated mid-month); falls back to period.baseHours
   contractType: "HPP" | "PPP" | "DPP" | string;
   salary: number | null;
   hourlyRate: number | null;
@@ -687,7 +688,7 @@ export default function PayrollPage() {
     let newAutoOverrides: Partial<Record<OverrideField, number>> = entry.autoOverrides ?? {};
     if (field === "reportHours") {
       if (value !== null) {
-        newAutoOverrides = computeCascades(entry, period.baseHours, period.maxHolidayHours, "reportHours", value);
+        newAutoOverrides = computeCascades(entry, entry.baseHours ?? period.baseHours, period.maxHolidayHours, "reportHours", value);
       } else {
         // User cleared the Výkaz override — clear all cascade autoOverrides
         newAutoOverrides = {};
@@ -708,7 +709,7 @@ export default function PayrollPage() {
 
   async function saveSickLeave(entry: PayrollEntry, hours: number) {
     if (!period) return;
-    const newAutoOverrides = computeCascades(entry, period.baseHours, period.maxHolidayHours, "sickLeaveHours", hours);
+    const newAutoOverrides = computeCascades(entry, entry.baseHours ?? period.baseHours, period.maxHolidayHours, "sickLeaveHours", hours);
     await api.patch(`/payroll/periods/${period.id}/entries/${entry.id}`, {
       sickLeaveHours: hours,
       autoOverrides: newAutoOverrides,
