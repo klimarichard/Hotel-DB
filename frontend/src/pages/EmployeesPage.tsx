@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { api } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { canEditEmployees } from "@/lib/permissions";
-import { employeeDisplayName } from "@/lib/employeeName";
+import { employeeDisplayName, employeeSurnameFirst } from "@/lib/employeeName";
 import Button from "@/components/Button";
 import ExportEmployeesModal from "@/components/ExportEmployeesModal";
 import styles from "./EmployeesPage.module.css";
@@ -124,7 +124,7 @@ export default function EmployeesPage() {
                 <tr key={emp.id}>
                   <td>
                     <Link to={`/zamestnanci/${emp.id}`} className={styles.nameLink}>
-                      {employeeDisplayName(emp)}
+                      {employeeSurnameFirst(emp)}
                     </Link>
                   </td>
                   <td>{emp.currentJobTitle || "—"}</td>

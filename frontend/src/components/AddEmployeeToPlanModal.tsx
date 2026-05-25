@@ -11,7 +11,7 @@ import {
   type ShiftType,
 } from "../lib/shiftConstants";
 import type { PlanEmployee } from "../pages/ShiftPlannerPage";
-import { employeeDisplayName } from "../lib/employeeName";
+import { employeeDisplayName, employeeSurnameFirst } from "../lib/employeeName";
 import styles from "./AddEmployeeToPlanModal.module.css";
 
 interface Employee {
@@ -127,11 +127,11 @@ export default function AddEmployeeToPlanModal({ planId, existingEmployees, onCl
                     onMouseDown={(e) => {
                       e.preventDefault();
                       setSelected(emp);
-                      setSearch(employeeDisplayName(emp));
+                      setSearch(employeeSurnameFirst(emp));
                       setShowDropdown(false);
                     }}
                   >
-                    {employeeDisplayName(emp)}
+                    {employeeSurnameFirst(emp)}
                   </li>
                 ))}
                 {filtered.length === 0 && (

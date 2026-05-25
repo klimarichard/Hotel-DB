@@ -4,7 +4,7 @@ import { sendPasswordResetEmail } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useAuth, UserRole } from "@/hooks/useAuth";
 import { authApi, UserProfile, api, ApiError } from "@/lib/api";
-import { employeeDisplayName } from "@/lib/employeeName";
+import { employeeSurnameFirst } from "@/lib/employeeName";
 import Button from "@/components/Button";
 import ConfirmModal from "@/components/ConfirmModal";
 import MenuOrderTab from "./settings/MenuOrderTab";
@@ -735,7 +735,7 @@ export default function SettingsPage() {
                   <option value="">— Nepropojovat —</option>
                   {employees.map((emp) => (
                     <option key={emp.id} value={emp.id}>
-                      {employeeDisplayName(emp)}
+                      {employeeSurnameFirst(emp)}
                     </option>
                   ))}
                 </select>
@@ -771,7 +771,7 @@ export default function SettingsPage() {
                 <option value="">— Zrušit propojení —</option>
                 {employees.map((emp) => (
                   <option key={emp.id} value={emp.id}>
-                    {employeeDisplayName(emp)}
+                    {employeeSurnameFirst(emp)}
                   </option>
                 ))}
               </select>
@@ -830,7 +830,7 @@ export default function SettingsPage() {
                       </td>
                       <td>
                         <span className={linkedEmp ? styles.employeeLinked : styles.employeeUnlinked}>
-                          {linkedEmp ? employeeDisplayName(linkedEmp) : "—"}
+                          {linkedEmp ? employeeSurnameFirst(linkedEmp) : "—"}
                         </span>
                         {linkedEmp ? (
                           <button
@@ -1181,7 +1181,7 @@ export default function SettingsPage() {
                     <tbody>
                       {posCascade.affectedEmployees.map((e) => (
                         <tr key={e.id}>
-                          <td>{employeeDisplayName(e)}</td>
+                          <td>{employeeSurnameFirst(e)}</td>
                           <td>{e.currentHourlyRate ?? "—"}</td>
                           <td>
                             {e.isManualOverride && (

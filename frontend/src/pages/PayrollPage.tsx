@@ -6,7 +6,7 @@ import { Navigate } from "react-router-dom";
 import PayrollNotesModal from "./PayrollNotesModal";
 import Button from "@/components/Button";
 import ConfirmModal from "@/components/ConfirmModal";
-import { employeeDisplayName } from "@/lib/employeeName";
+import { employeeDisplayName, employeeSurnameFirst } from "@/lib/employeeName";
 import styles from "./PayrollPage.module.css";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -576,8 +576,8 @@ export default function PayrollPage() {
         for (const entry of entries) {
           const isDpp = entry.contractType === "DPP";
           const nameHtml = entry.contractType
-            ? `${employeeDisplayName(entry)}<span style="${cs.badge}">${entry.contractType}</span>`
-            : `${employeeDisplayName(entry)}`;
+            ? `${employeeSurnameFirst(entry)}<span style="${cs.badge}">${entry.contractType}</span>`
+            : `${employeeSurnameFirst(entry)}`;
           const hours = effNum(entry, "totalHours");
           const report = effNum(entry, "reportHours");
           const vacation = effNum(entry, "vacationHours");

@@ -405,6 +405,14 @@ interface CompanyRec {
   name?: string;
 }
 
+/** Readable company label: "ABBR - Full Name" (falls back gracefully). */
+function companyLabel(c: { id: string; abbreviation?: string; name?: string }): string {
+  const abbr = (c.abbreviation || c.id || "").trim();
+  const name = (c.name || "").trim();
+  if (abbr && name) return `${abbr} - ${name}`;
+  return abbr || name || c.id;
+}
+
 interface JobPositionRec {
   id: string;
   name: string;
@@ -922,7 +930,7 @@ function AddEntryModal({
                           <option value={form.companyId}>{form.companyId}</option>
                         )}
                         {companies.map((c) => (
-                          <option key={c.id} value={c.id}>{c.abbreviation || c.name || c.id}</option>
+                          <option key={c.id} value={c.id}>{companyLabel(c)}</option>
                         ))}
                       </select>
                     </div>
@@ -973,7 +981,7 @@ function AddEntryModal({
                           <option value={form.companyId}>{form.companyId}</option>
                         )}
                         {companies.map((c) => (
-                          <option key={c.id} value={c.id}>{c.abbreviation || c.name || c.id}</option>
+                          <option key={c.id} value={c.id}>{companyLabel(c)}</option>
                         ))}
                       </select>
                     </div>
@@ -1468,7 +1476,7 @@ export default function EmployeeDetailPage() {
                 session={session}
                 contractsByRow={mapContractsToRows(session.rows, contracts)}
                 defaultExpanded={idx === 0}
-                companies={Object.fromEntries(companies.map((c) => [c.id, c.abbreviation || c.name || c.id]))}
+                companies={Object.fromEntries(companies.map((c) => [c.id, companyLabel(c)]))}
                 employeeId={id!}
                 canEdit={canDelete}
                 resolveDefaultType={(row) => {
@@ -1687,7 +1695,7 @@ export default function EmployeeDetailPage() {
           <div className={styles.field}><span className={styles.fieldLabel}>Pracovní pozice</span><span className={styles.fieldValue}>{val(employee.currentJobTitle)}</span></div>
           <div className={styles.field}><span className={styles.fieldLabel}>Oddělení</span><span className={styles.fieldValue}>{val(employee.currentDepartment)}</span></div>
           <div className={styles.field}><span className={styles.fieldLabel}>Typ smlouvy</span><span className={styles.fieldValue}>{val(employee.currentContractType)}</span></div>
-          <div className={styles.field}><span className={styles.fieldLabel}>Společnost</span><span className={styles.fieldValue}>{val(companies.find((c) => c.id === employee.currentCompanyId)?.abbreviation ?? employee.currentCompanyId)}</span></div>
+          <div className={styles.field}><span className={styles.fieldLabel}>Společnost</span><span className={styles.fieldValue}>{val(employee.currentCompanyId ? companyLabel(companies.find((c) => c.id === employee.currentCompanyId) ?? { id: employee.currentCompanyId }) : null)}</span></div>
         </div>
       </Section>
 

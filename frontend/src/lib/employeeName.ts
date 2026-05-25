@@ -16,3 +16,15 @@ export function employeeDisplayName(e: {
   if (custom) return custom;
   return `${e.firstName ?? ""} ${e.lastName ?? ""}`.trim();
 }
+
+/**
+ * Surname-first legal name ("Příjmení Jméno"), ignoring any custom display
+ * name. Used where scanning or sorting by surname matters: the Zaměstnanci
+ * list, employee-picker dropdowns, and the payroll PDF export.
+ */
+export function employeeSurnameFirst(e: {
+  firstName?: string | null;
+  lastName?: string | null;
+}): string {
+  return `${(e.lastName ?? "").trim()} ${(e.firstName ?? "").trim()}`.trim();
+}
