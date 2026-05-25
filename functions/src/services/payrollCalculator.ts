@@ -88,28 +88,51 @@ function countMonFriDaysInRange(year: number, month: number, startDay: number, e
   return n;
 }
 
+interface ChangeLite {
+  changeKind?: string;
+  value?: string;
+}
+
 interface EmploymentRowLite {
   changeType?: string;
   startDate?: string;
   endDate?: string | null;
-  changes?: Array<{ changeKind?: string; value?: string }>;
+  contractType?: string;
+  jobTitle?: string;
+  salary?: number | null;
+  hourlyRate?: number | null;
+  changes?: ChangeLite[];
+}
+
+interface SessionLite {
+  nastup: EmploymentRowLite;
+  dodatky: EmploymentRowLite[];
+  ukonceni: EmploymentRowLite | null;
+  start: string;        // Nástup startDate
+  end: string | null;   // effective end: Ukončení startDate / "délka smlouvy" / Nástup endDate
 }
 
 /**
- * Prorate base hours for an employee who started or was terminated mid-month.
- * Mirrors the session model in frontend/src/lib/employmentSessions.ts: a session
- * runs from its Nástup startDate to its effective end — the Ukončení row's
- * startDate, else a "délka smlouvy" Dodatek value, else the Nástup endDate. Both
- * ends are inclusive (the employee works on their first and last day).
- *
- * Returns the prorated base (8 × Mon–Fri days, weekday holidays included, within
- * the employed span), or `null` when the employee was employed the WHOLE month
- * (caller then uses the full-month base), or `0` if not employed that month.
- * Pure + exported for unit testing.
+ * Map an úvazek-change free-text value (e.g. "poloviční pracovní úvazek…") to
+ * the HPP/PPP contract-type code. Mirrors uvazekToContractType in
+ * frontend/src/lib/employmentSessions.ts — keep in sync.
  */
-export function proratedBaseFromRows(rows: EmploymentRowLite[], year: number, month: number): number | null {
-  type Sess = { start: string; end: string | null };
-  const sessions: Sess[] = [];
+function uvazekToContractType(value: string): "HPP" | "PPP" | null {
+  const v = value.toLowerCase();
+  if (v.includes("polovič") || v.includes("zkrácen") || v.includes("částečn")) return "PPP";
+  if (v.includes("plný") || v.includes("plny")) return "HPP";
+  return null;
+}
+
+/**
+ * Group employment rows into sessions — Nástup opens one, "změna smlouvy" rows
+ * append, "ukončení" closes it. Mirrors groupBySession in
+ * frontend/src/lib/employmentSessions.ts. A session's effective end is the
+ * Ukončení startDate, else a "délka smlouvy" Dodatek value, else the Nástup
+ * endDate (both ends inclusive).
+ */
+function buildSessions(rows: EmploymentRowLite[]): SessionLite[] {
+  const sessions: SessionLite[] = [];
   let cur: { nastup: EmploymentRowLite; dodatky: EmploymentRowLite[]; ukonceni: EmploymentRowLite | null } | null = null;
   const flush = () => {
     if (!cur || !cur.nastup.startDate) { cur = null; return; }
@@ -120,7 +143,7 @@ export function proratedBaseFromRows(rows: EmploymentRowLite[], year: number, mo
       }
     }
     if (cur.ukonceni && cur.ukonceni.startDate) end = cur.ukonceni.startDate;
-    sessions.push({ start: cur.nastup.startDate, end });
+    sessions.push({ nastup: cur.nastup, dodatky: cur.dodatky, ukonceni: cur.ukonceni, start: cur.nastup.startDate, end });
     cur = null;
   };
   const sorted = [...rows].sort((a, b) => (a.startDate ?? "").localeCompare(b.startDate ?? ""));
@@ -130,19 +153,44 @@ export function proratedBaseFromRows(rows: EmploymentRowLite[], year: number, mo
     else if (r.changeType === "ukončení" && cur) cur.ukonceni = r;
   }
   flush();
+  return sessions;
+}
 
+function monthBounds(year: number, month: number): { daysInMonth: number; monthStart: string; monthEnd: string } {
   const pad = (n: number) => String(n).padStart(2, "0");
   const daysInMonth = new Date(year, month, 0).getDate();
-  const monthStart = `${year}-${pad(month)}-01`;
-  const monthEnd = `${year}-${pad(month)}-${pad(daysInMonth)}`;
+  return {
+    daysInMonth,
+    monthStart: `${year}-${pad(month)}-01`,
+    monthEnd: `${year}-${pad(month)}-${pad(daysInMonth)}`,
+  };
+}
 
-  // Latest session that overlaps the month wins.
-  let relevant: Sess | null = null;
+/** The latest session overlapping the given month, or null when none does. */
+function relevantSessionForMonth(sessions: SessionLite[], year: number, month: number): SessionLite | null {
+  const { monthStart, monthEnd } = monthBounds(year, month);
+  let relevant: SessionLite | null = null;
   for (const s of sessions) {
     if (s.start <= monthEnd && (s.end == null || s.end >= monthStart)) relevant = s;
   }
-  if (!relevant) return 0;
+  return relevant;
+}
 
+/**
+ * Prorate base hours for an employee who started or was terminated mid-month.
+ * Mirrors the session model in frontend/src/lib/employmentSessions.ts: a session
+ * runs from its Nástup startDate to its effective end. Both ends are inclusive
+ * (the employee works on their first and last day).
+ *
+ * Returns the prorated base (8 × Mon–Fri days, weekday holidays included, within
+ * the employed span), or `null` when the employee was employed the WHOLE month
+ * (caller then uses the full-month base), or `0` if not employed that month.
+ * Pure + exported for unit testing.
+ */
+export function proratedBaseFromRows(rows: EmploymentRowLite[], year: number, month: number): number | null {
+  const relevant = relevantSessionForMonth(buildSessions(rows), year, month);
+  if (!relevant) return 0;
+  const { daysInMonth, monthStart, monthEnd } = monthBounds(year, month);
   const startDay = relevant.start > monthStart ? Number(relevant.start.slice(8, 10)) : 1;
   const endDay = (relevant.end != null && relevant.end < monthEnd) ? Number(relevant.end.slice(8, 10)) : daysInMonth;
   if (endDay < startDay) return 0;
@@ -150,14 +198,83 @@ export function proratedBaseFromRows(rows: EmploymentRowLite[], year: number, mo
   return countMonFriDaysInRange(year, month, startDay, endDay) * 8;
 }
 
-/** Read an employee's employment rows and prorate their base hours for the month. */
-async function getProratedBaseHours(employeeId: string, year: number, month: number): Promise<number | null> {
-  const snap = await db()
-    .collection("employees").doc(employeeId)
-    .collection("employment").orderBy("startDate", "asc").get();
-  if (snap.empty) return null;
-  const rows = snap.docs.map((d) => d.data() as EmploymentRowLite);
-  return proratedBaseFromRows(rows, year, month);
+/**
+ * Resolve effective compensation for the payroll month by folding the relevant
+ * session's Nástup row + applicable Dodatek `changes[]`, mirroring
+ * computeEffectiveState in frontend/src/lib/employmentSessions.ts.
+ *
+ * This is the NAVÍC fix: the old getActiveEmployment read salary/hourlyRate
+ * straight off the most-recent ACTIVE employment row, which for an employee
+ * with a Dodatek is the "změna smlouvy" row. Those rows store the amendment
+ * inside changes[] and carry no salary/hourlyRate of their own, so both came
+ * back null and extraPay (= hourlyRate × extraHours) collapsed to 0. Folding
+ * the session keeps the Nástup's hourlyRate and applies the mzda amendment.
+ * Pure + exported for unit testing.
+ */
+export function effectiveCompFromRows(
+  rows: EmploymentRowLite[],
+  year: number,
+  month: number
+): { salary: number | null; hourlyRate: number | null; contractType: string; jobTitle: string } | null {
+  const relevant = relevantSessionForMonth(buildSessions(rows), year, month);
+  if (!relevant) return null;
+  const { monthEnd } = monthBounds(year, month);
+
+  let salary: number | null = null;
+  let hourlyRate: number | null = null;
+  let contractType = "";
+  let jobTitle = "";
+
+  // Nástup first, then Dodatky whose validity (startDate) has arrived by the
+  // month's end. A future-dated Dodatek must not change comp until its day.
+  const applicable = [relevant.nastup, ...relevant.dodatky.filter((d) => (d.startDate ?? "") <= monthEnd)];
+  for (const row of applicable) {
+    if (row.salary != null) salary = row.salary;
+    if (row.hourlyRate != null) hourlyRate = row.hourlyRate;
+    if (row.contractType) contractType = row.contractType;
+    if (row.jobTitle) jobTitle = row.jobTitle;
+    for (const ch of row.changes ?? []) {
+      if (ch.changeKind === "mzda" && ch.value) {
+        const n = Number(ch.value);
+        if (Number.isFinite(n)) salary = n;
+      } else if (ch.changeKind === "pracovní pozice" && ch.value) {
+        jobTitle = ch.value;
+      } else if (ch.changeKind === "úvazek" && ch.value) {
+        const m = uvazekToContractType(ch.value);
+        if (m) contractType = m;
+      }
+    }
+  }
+  return { salary, hourlyRate, contractType, jobTitle };
+}
+
+/**
+ * Auto-generated payroll notes for a mid-month start/termination, matched to the
+ * proration window: a "Nástup" note when the session begins after the 1st, an
+ * "Ukončení" note when it ends before the last day. Returns note texts only —
+ * the orchestrator wraps them into note docs. These are month-specific
+ * (carryForward is always false). Pure + exported for unit testing.
+ */
+export function autoNotesFromRows(
+  rows: EmploymentRowLite[],
+  year: number,
+  month: number
+): Array<{ kind: "nastup" | "ukonceni"; text: string }> {
+  const relevant = relevantSessionForMonth(buildSessions(rows), year, month);
+  if (!relevant) return [];
+  const { monthStart, monthEnd } = monthBounds(year, month);
+  const fmt = (iso: string) => {
+    const p = iso.split("-");
+    return p.length === 3 ? `${p[2]}. ${p[1]}. ${p[0]}` : iso; // DD. MM. YYYY — app convention
+  };
+  const notes: Array<{ kind: "nastup" | "ukonceni"; text: string }> = [];
+  if (relevant.start > monthStart) {
+    notes.push({ kind: "nastup", text: `Nástup ${fmt(relevant.start)}` });
+  }
+  if (relevant.end != null && relevant.end < monthEnd) {
+    notes.push({ kind: "ukonceni", text: `Ukončení ${fmt(relevant.end)}` });
+  }
+  return notes;
 }
 
 /** Count holidays in the given month that fall on Mon–Fri (used for manager holiday credit). */
@@ -485,34 +602,6 @@ async function getPriorEntryData(
 }
 
 /**
- * Get the most recent active employment record for an employee.
- * Returns salary, hourlyRate, contractType, jobTitle.
- */
-async function getActiveEmployment(employeeId: string): Promise<{
-  salary: number | null;
-  hourlyRate: number | null;
-  contractType: string;
-  jobTitle: string;
-} | null> {
-  const snap = await db()
-    .collection("employees")
-    .doc(employeeId)
-    .collection("employment")
-    .where("status", "==", "active")
-    .orderBy("startDate", "desc")
-    .limit(1)
-    .get();
-  if (snap.empty) return null;
-  const d = snap.docs[0].data() as Record<string, unknown>;
-  return {
-    salary: (d.salary as number) ?? null,
-    hourlyRate: (d.hourlyRate as number) ?? null,
-    contractType: (d.contractType as string) ?? "",
-    jobTitle: (d.jobTitle as string) ?? "",
-  };
-}
-
-/**
  * Create or update a payrollPeriod for a given published shift plan.
  * Preserves manually entered sickLeaveHours and overrides on existing entries.
  * autoOverrides are always recomputed — never preserved.
@@ -620,11 +709,17 @@ export async function createOrUpdatePayrollPeriod(
     const planEmp = empDoc.data() as Record<string, unknown>;
     const employeeId = planEmp.employeeId as string;
 
-    const employment = await getActiveEmployment(employeeId);
-    // Contract type comes from the employee root doc's currentContractType, which
-    // recomputeRootFromLatestSession keeps folded with the latest Dodatek (e.g. an
-    // úvazek change HPP↔PPP). The Nástup employment row alone would miss amendments,
-    // which is why the badge was blank for employees with a Dodatek.
+    // Read this employee's employment rows once, then derive everything from
+    // the relevant session (mirrors frontend/src/lib/employmentSessions.ts).
+    const empRowsSnap = await db()
+      .collection("employees").doc(employeeId)
+      .collection("employment").orderBy("startDate", "asc").get();
+    const empRows = empRowsSnap.docs.map((d) => d.data() as EmploymentRowLite);
+    const eff = effectiveCompFromRows(empRows, year, month);
+
+    // Contract type still prefers the employee root's currentContractType (kept
+    // folded with the latest Dodatek by recomputeRootFromLatestSession). The
+    // session-folded value is the fallback; both beat the Nástup-only planEmp.
     const rootSnap = await db().collection("employees").doc(employeeId).get();
     const currentContractType = rootSnap.exists
       ? ((rootSnap.data() as Record<string, unknown>).currentContractType as string | undefined)
@@ -635,10 +730,10 @@ export async function createOrUpdatePayrollPeriod(
       firstName: planEmp.firstName as string ?? "",
       lastName: planEmp.lastName as string ?? "",
       displayName: planEmp.displayName as string ?? "",
-      contractType: currentContractType || employment?.contractType || (planEmp.contractType as string) || "",
-      salary: employment?.salary ?? null,
-      hourlyRate: employment?.hourlyRate ?? null,
-      jobTitle: employment?.jobTitle ?? planEmp.jobTitle as string ?? "",
+      contractType: currentContractType || eff?.contractType || (planEmp.contractType as string) || "",
+      salary: eff?.salary ?? null,
+      hourlyRate: eff?.hourlyRate ?? null,
+      jobTitle: eff?.jobTitle || (planEmp.jobTitle as string) || "",
       section: planEmp.section as string ?? "",
       sickLeaveHours: sickLeaveMap.get(employeeId) ?? 0,
       overrides: overridesMap.get(employeeId) ?? {},
@@ -646,7 +741,7 @@ export async function createOrUpdatePayrollPeriod(
 
     // Prorate the norm for employees who started or were terminated mid-month;
     // null → employed the whole month, so use the standard full-month base.
-    const proratedBase = await getProratedBaseHours(employeeId, year, month);
+    const proratedBase = proratedBaseFromRows(empRows, year, month);
     const empBaseHours = proratedBase ?? baseHours;
 
     const entry = calculateEntry(employee, allShifts, holidays, empBaseHours, foodVoucherRate, year, month);
@@ -655,13 +750,14 @@ export async function createOrUpdatePayrollPeriod(
     let notes = notesMap.get(employeeId);
     if (!notes) {
       // Brand-new entry in a brand-new period — seed carry-forward notes from
-      // the most recent prior period, if any.
+      // the most recent prior period, if any (never auto/system notes — those
+      // are month-specific and regenerated below).
       if (existing.empty) {
         const priorEntry = await getPriorEntryData(employeeId, year, month);
         const priorNotes = (priorEntry?.notes as Record<string, unknown>[] | undefined) ?? [];
         const now = Timestamp.now();
         notes = priorNotes
-          .filter((n) => n.carryForward === true)
+          .filter((n) => n.carryForward === true && n.auto !== true)
           .map((n) => ({
             ...n,
             id: randomUUID(),
@@ -672,6 +768,23 @@ export async function createOrUpdatePayrollPeriod(
         notes = [];
       }
     }
+
+    // System notes for a mid-month start/termination are regenerated on every
+    // run: drop any previous auto note, then prepend this month's. carryForward
+    // stays false so they never leak into other periods.
+    const autoStamp = Timestamp.now();
+    const autoNotes = autoNotesFromRows(empRows, year, month).map((n) => ({
+      id: randomUUID(),
+      sourceNoteId: randomUUID(),
+      text: n.text,
+      kind: n.kind,
+      auto: true,
+      carryForward: false,
+      createdBy: "system",
+      createdByName: "Systém",
+      createdAt: autoStamp,
+    }));
+    notes = [...autoNotes, ...notes.filter((n) => (n as Record<string, unknown>).auto !== true)];
 
     const entryRef = periodRef.collection("entries").doc(employeeId);
     batch.set(entryRef, { ...entry, multisportActive, notes });
