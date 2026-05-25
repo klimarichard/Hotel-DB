@@ -325,7 +325,8 @@ export interface EmployeeEntry {
   jobTitle: string;
   section: string;
   sickLeaveHours: number;
-  baseHours: number; // per-employee norm (prorated for mid-month start/termination)
+  baseHours: number; // effective norm used in the calc (override ?? prorated/full)
+  baseHoursNorm: number; // prorated/full-month norm BEFORE any per-employee override
   // calculated:
   totalHours: number;
   reportHours: number;
@@ -399,112 +400,73 @@ export function calculateEntry(
   totalHours = Math.ceil(totalHours);
   weekendHours = Math.ceil(weekendHours);
 
+  // Effective base — a per-employee override (overrides.baseHours, set in the
+  // payroll balance dialog) wins over the prorated / full-month norm passed in.
+  const userOv = employee.overrides ?? {};
+  const effBase = userOv.baseHours !== undefined ? userOv.baseHours : baseHours;
+
   // ── Manager holiday credit (vedoucí section) ──────────────────────────────
   // Managers get Mon–Fri holidays counted toward VÝKAZ regardless of whether worked.
-  // VÝKAZ is hard-capped at baseHours (the monthly norm). Any excess from manager
-  // bonus or actual overtime spills into `extraHours`, which the cascades below
-  // route into SVÁTEK first (capped at maxHolidayHours) and the remainder into NAVÍC.
   const isVeduci = employee.section === "vedoucí";
   const managerBonus = isVeduci ? countMonFriHolidays(year, month, holidays) * 8 : 0;
   const rawReportHours = totalHours + managerBonus;
-  const reportHours = Math.min(baseHours, rawReportHours);
 
-  const extraHours = Math.max(0, rawReportHours - baseHours);
-  const maxNightHours = Math.floor(baseHours / 12) * 8;
+  // Clean (pre-Nemoc, pre-override) values. Výkaz is capped at the base norm;
+  // worked hours over the norm are always overtime. Vacation accrues toward the
+  // full base for HPP, toward half the base for PPP.
+  const isPpp = employee.contractType === "PPP";
+  const cleanReport = Math.min(effBase, rawReportHours);
+  const cleanExtra = Math.max(0, rawReportHours - effBase);
+  const vacTarget = isDpp ? 0 : (isPpp ? effBase / 2 : effBase);
+  const cleanVacation = Math.max(0, vacTarget - cleanReport);
+  const cleanExtraPay = (!isDpp && cleanExtra > 0 && employee.hourlyRate != null && employee.hourlyRate > 0)
+    ? employee.hourlyRate * cleanExtra : 0;
+
+  const maxNightHours = Math.floor(effBase / 12) * 8;
   const nightCapped = Math.min(maxNightHours, nightHours);
-
-  let vacationHours = 0;
-  if (!isDpp) {
-    if (employee.contractType === "HPP") {
-      vacationHours = Math.max(0, baseHours - reportHours);
-    } else if (employee.contractType === "PPP") {
-      vacationHours = Math.max(0, baseHours / 2 - reportHours);
-    }
-  }
-
-  // NAVÍC: raw net (hourlyRate × extraHours). Display rounding happens in the UI.
-  let extraPay = 0;
-  if (!isDpp && extraHours > 0 && employee.hourlyRate != null && employee.hourlyRate > 0) {
-    extraPay = employee.hourlyRate * extraHours;
-  }
-
   const foodVouchers = isDpp ? 0 : workingDays * foodVoucherRate;
 
-  // ── Cascade computation ───────────────────────────────────────────────────
-  // MIRROR: keep in sync with computeCascades() in frontend/src/pages/PayrollPage.tsx
-  const userOv = employee.overrides ?? {};
-  const newAutoOv: Record<string, number> = {};
-
-  let effReport = userOv.reportHours !== undefined ? userOv.reportHours : reportHours;
-  let effVacation = userOv.vacationHours !== undefined ? userOv.vacationHours : vacationHours;
-  let effExtraPay = userOv.extraPay !== undefined ? userOv.extraPay : extraPay;
-  // Track extra hours directly to avoid rounding errors in NAVÍC→SVÁTEK transfer
-  let effExtraHours = extraHours;
-
-  // Req 1: Výkaz user override cascades Dovolená + NAVÍC
-  if (userOv.reportHours !== undefined && !isDpp) {
-    if (userOv.vacationHours === undefined) {
-      const cv = employee.contractType === "HPP"
-        ? Math.max(0, baseHours - effReport)
-        : Math.max(0, baseHours / 2 - effReport);
-      newAutoOv.vacationHours = cv;
-      effVacation = cv;
-    }
-    if (rawReportHours > effReport && employee.hourlyRate != null && employee.hourlyRate > 0
-      && userOv.extraPay === undefined) {
-      effExtraHours = rawReportHours - effReport;
-      const cp = employee.hourlyRate * effExtraHours;
-      newAutoOv.extraPay = cp;
-      effExtraPay = cp;
-    } else if (userOv.extraPay === undefined) {
-      effExtraHours = 0;
-    }
-  }
-
-  // Req 2: Nemoc cascades Dovolená → Výkaz → NAVÍC
+  // ── Balance: Výkaz + Dovolená + Nemoc = target (HPP base, PPP base/2) ───────
+  // MIRROR: keep in sync with computeBalance() in frontend/src/pages/PayrollPage.tsx.
+  // Recomputed from CLEAN values on every call (idempotent), so re-editing Nemoc
+  // never compounds. Nemoc fills Dovolená first, then pushes worked hours out of
+  // Výkaz; any worked hours not in Výkaz (overtime + Nemoc-displaced) spill to
+  // SVÁTEK first (up to maxHolidayHours), the remainder to NAVÍC.
+  const rate = employee.hourlyRate ?? 0;
   const nemoc = employee.sickLeaveHours ?? 0;
-  if (nemoc > 0 && !isDpp) {
-    const ded = Math.min(nemoc, effVacation);
-    if (userOv.vacationHours === undefined) {
-      newAutoOv.vacationHours = effVacation - ded;
-      effVacation -= ded;
-    }
-    const rem = nemoc - ded;
-    if (rem > 0 && userOv.reportHours === undefined) {
-      newAutoOv.reportHours = Math.max(0, effReport - rem);
-      effReport = newAutoOv.reportHours;
-      if (employee.hourlyRate != null && employee.hourlyRate > 0 && userOv.extraPay === undefined) {
-        effExtraHours += rem;
-        newAutoOv.extraPay = (newAutoOv.extraPay ?? effExtraPay) + employee.hourlyRate * rem;
-        effExtraPay = newAutoOv.extraPay;
-      }
-    }
-  }
-
-  // Req 3: NAVÍC → SVÁTEK transfer
-  // Use effExtraHours (exact) not effExtraPay/hourlyRate (rounded) to avoid over-transfer.
   const allHolsInMonth = [...holidays].filter(
     (h) => h.startsWith(`${year}-${String(month).padStart(2, "0")}-`)
   ).length;
   const maxHolHours = allHolsInMonth * 12;
-  if (
-    effExtraHours > 0 &&
-    holidayHours < maxHolHours &&
-    employee.hourlyRate != null && employee.hourlyRate > 0 &&
-    userOv.holidayHours === undefined
-  ) {
-    const availableHolHours = maxHolHours - holidayHours;
-    const transferH = Math.min(effExtraHours, availableHolHours);
-    if (transferH > 0) {
-      newAutoOv.holidayHours = holidayHours + transferH;
-      if (userOv.extraPay === undefined) {
-        const remainingExtraHours = effExtraHours - transferH;
-        newAutoOv.extraPay = remainingExtraHours > 0
-          ? employee.hourlyRate * remainingExtraHours
-          : 0;
-      }
-    }
+
+  const newAutoOv: Record<string, number> = {};
+  if (!isDpp) {
+    const hasVykazOv = userOv.reportHours !== undefined;
+    const V0 = hasVykazOv ? userOv.reportHours : cleanReport;
+    const vacAtV0 = Math.max(0, vacTarget - V0);
+    const nemocIntoVykaz = hasVykazOv ? 0 : Math.max(0, nemoc - vacAtV0);
+    const V = Math.max(0, V0 - nemocIntoVykaz);             // effective Výkaz
+    const D = Math.max(0, vacTarget - V - nemoc);           // effective Dovolená
+    const spill = Math.max(0, rawReportHours - V);          // worked hours not in Výkaz
+
+    const availHol = Math.max(0, maxHolHours - holidayHours);
+    const transferH = Math.min(spill, availHol);
+    const holiday = holidayHours + transferH;
+    const navicHours = spill - transferH;
+    const navicPay = rate > 0 ? rate * navicHours : 0;
+
+    // Auto-overrides only where the balanced value differs from clean and the
+    // user hasn't pinned that field manually (overrides win over autoOverrides).
+    if (!hasVykazOv && V !== cleanReport) newAutoOv.reportHours = V;
+    if (userOv.vacationHours === undefined && D !== cleanVacation) newAutoOv.vacationHours = D;
+    if (userOv.holidayHours === undefined && holiday !== holidayHours) newAutoOv.holidayHours = holiday;
+    if (userOv.extraPay === undefined && navicPay !== cleanExtraPay) newAutoOv.extraPay = navicPay;
   }
+
+  const reportHours = cleanReport;
+  const vacationHours = cleanVacation;
+  const extraHours = cleanExtra;
+  const extraPay = cleanExtraPay;
 
   return {
     employeeId: employee.employeeId,
@@ -517,7 +479,8 @@ export function calculateEntry(
     jobTitle: employee.jobTitle,
     section: employee.section,
     sickLeaveHours: employee.sickLeaveHours ?? 0,
-    baseHours,
+    baseHours: effBase,
+    baseHoursNorm: baseHours,
     totalHours,
     reportHours,
     vacationHours,
@@ -757,7 +720,10 @@ export async function createOrUpdatePayrollPeriod(
         const priorNotes = (priorEntry?.notes as Record<string, unknown>[] | undefined) ?? [];
         const now = Timestamp.now();
         notes = priorNotes
-          .filter((n) => n.carryForward === true && n.auto !== true)
+          // Carry forward unread user notes only — a note read in an earlier
+          // month must not reappear in later periods, and auto/system notes are
+          // month-specific (regenerated below).
+          .filter((n) => n.carryForward === true && n.auto !== true && n.read !== true)
           .map((n) => ({
             ...n,
             id: randomUUID(),
