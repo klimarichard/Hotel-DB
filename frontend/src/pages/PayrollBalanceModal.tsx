@@ -55,7 +55,10 @@ export default function PayrollBalanceModal({ entry, baseHoursNorm, maxHolidayHo
 
   const vykazShown = vykazPinned ? vykaz : fmt(res.vykaz);
   const baseOverridden = B !== baseHoursNorm;
-  const sumOk = res.sum === res.vacTarget;
+  // HPP invariant: Výkaz + Dovolená + Nemoc must equal the full base. PPP has no
+  // single target — Dovolená fills only to ½ základu, Výkaz can run up to the
+  // full base, and Navíc starts only above it — so we show thresholds, not a sum-check.
+  const sumOk = !isPpp && res.sum === B;
 
   async function handleSave() {
     const finalReportOverride =
@@ -166,10 +169,22 @@ export default function PayrollBalanceModal({ entry, baseHoursNorm, maxHolidayHo
 
           <div className={styles.balDivider} />
 
-          <div className={`${styles.balSum} ${sumOk ? styles.balSumOk : styles.balSumWarn}`}>
-            <span>Součet (Výkaz + Dovolená + Nemoc)</span>
-            <span>{fmt(res.sum)} / {fmt(res.vacTarget)}{isPpp ? " (½)" : ""}</span>
-          </div>
+          {isPpp ? (
+            <>
+              <div className={styles.balSum}>
+                <span>Výkaz + Dovolená + Nemoc</span>
+                <span>{fmt(res.sum)}</span>
+              </div>
+              <div className={styles.balSpill}>
+                Dovolená se počítá do ½ základu ({fmt(B / 2)}); Navíc až nad celý základ ({fmt(B)}).
+              </div>
+            </>
+          ) : (
+            <div className={`${styles.balSum} ${sumOk ? styles.balSumOk : styles.balSumWarn}`}>
+              <span>Součet (Výkaz + Dovolená + Nemoc)</span>
+              <span>{fmt(res.sum)} / {fmt(B)}</span>
+            </div>
+          )}
           {(res.navicHours > 0 || res.transferToSvatek > 0) && (
             <div className={styles.balSpill}>
               Odpracované hodiny mimo Výkaz: Svátek +{fmt(res.transferToSvatek)} h · Navíc {fmt(res.navicHours)} h
