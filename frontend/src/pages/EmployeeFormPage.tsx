@@ -13,6 +13,7 @@ const MARITAL_STATUSES = ["svobodný/á", "ženatý/vdaná", "rozvedený/á", "v
 interface PersonalForm {
   firstName: string;
   lastName: string;
+  displayName: string;
   dateOfBirth: string;
   gender: string;
   birthSurname: string;
@@ -55,7 +56,7 @@ interface AdditionalForm {
 }
 
 const emptyPersonal: PersonalForm = {
-  firstName: "", lastName: "", dateOfBirth: "", gender: "", birthSurname: "",
+  firstName: "", lastName: "", displayName: "", dateOfBirth: "", gender: "", birthSurname: "",
   birthNumber: "", maritalStatus: "", education: "", nationality: "",
   placeOfBirth: "",
 };
@@ -300,6 +301,15 @@ export default function EmployeeFormPage() {
             </Field>
             <Field label="Příjmení *">
               <input className={styles.input} value={personal.lastName} onChange={(e) => setP("lastName", e.target.value)} required />
+            </Field>
+            <Field label="Zobrazované jméno">
+              <input
+                className={styles.input}
+                value={personal.displayName}
+                onChange={(e) => setP("displayName", e.target.value)}
+                placeholder={`${personal.firstName} ${personal.lastName}`.trim() || "Jméno Příjmení"}
+                title="Zkrácené jméno zobrazené v plánu směn, mzdách a přehledech. Necháte-li prázdné, použije se „Jméno Příjmení“."
+              />
             </Field>
             <Field label="Datum narození">
               <input className={styles.input} type="date" value={personal.dateOfBirth} onChange={(e) => setP("dateOfBirth", e.target.value)} />

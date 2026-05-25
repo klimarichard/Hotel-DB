@@ -4,6 +4,7 @@ import { sendPasswordResetEmail } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useAuth, UserRole } from "@/hooks/useAuth";
 import { authApi, UserProfile, api, ApiError } from "@/lib/api";
+import { employeeDisplayName } from "@/lib/employeeName";
 import Button from "@/components/Button";
 import ConfirmModal from "@/components/ConfirmModal";
 import MenuOrderTab from "./settings/MenuOrderTab";
@@ -48,6 +49,7 @@ interface EmployeeSummary {
   id: string;
   firstName: string;
   lastName: string;
+  displayName?: string;
 }
 
 interface CompanyRecord {
@@ -91,6 +93,7 @@ interface PosCascadePreview {
     id: string;
     firstName: string;
     lastName: string;
+    displayName?: string;
     currentHourlyRate: number | null;
     isManualOverride: boolean;
   }>;
@@ -732,7 +735,7 @@ export default function SettingsPage() {
                   <option value="">— Nepropojovat —</option>
                   {employees.map((emp) => (
                     <option key={emp.id} value={emp.id}>
-                      {emp.lastName} {emp.firstName}
+                      {employeeDisplayName(emp)}
                     </option>
                   ))}
                 </select>
@@ -768,7 +771,7 @@ export default function SettingsPage() {
                 <option value="">— Zrušit propojení —</option>
                 {employees.map((emp) => (
                   <option key={emp.id} value={emp.id}>
-                    {emp.lastName} {emp.firstName}
+                    {employeeDisplayName(emp)}
                   </option>
                 ))}
               </select>
@@ -827,7 +830,7 @@ export default function SettingsPage() {
                       </td>
                       <td>
                         <span className={linkedEmp ? styles.employeeLinked : styles.employeeUnlinked}>
-                          {linkedEmp ? `${linkedEmp.lastName} ${linkedEmp.firstName}` : "—"}
+                          {linkedEmp ? employeeDisplayName(linkedEmp) : "—"}
                         </span>
                         {linkedEmp ? (
                           <button
@@ -1178,7 +1181,7 @@ export default function SettingsPage() {
                     <tbody>
                       {posCascade.affectedEmployees.map((e) => (
                         <tr key={e.id}>
-                          <td>{e.lastName} {e.firstName}</td>
+                          <td>{employeeDisplayName(e)}</td>
                           <td>{e.currentHourlyRate ?? "—"}</td>
                           <td>
                             {e.isManualOverride && (

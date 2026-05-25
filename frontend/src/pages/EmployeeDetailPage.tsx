@@ -7,6 +7,7 @@ import * as clock from "@/lib/clock";
 import ConfirmModal from "@/components/ConfirmModal";
 import { formatDateCZ } from "@/lib/dateFormat";
 import { displayGendered } from "@/lib/genderDisplay";
+import { employeeDisplayName } from "@/lib/employeeName";
 import GenerateContractModal from "@/components/GenerateContractModal";
 import Button from "@/components/Button";
 import EmploymentSessionCard from "@/components/EmploymentSession";
@@ -253,6 +254,7 @@ interface Employee {
   id: string;
   firstName: string;
   lastName: string;
+  displayName?: string;
   dateOfBirth: string;
   gender: string;
   birthSurname: string;
@@ -1330,12 +1332,12 @@ export default function EmployeeDetailPage() {
       <div className={styles.breadcrumb}>
         <Link to="/zamestnanci">Zaměstnanci</Link>
         <span> / </span>
-        <span>{employee.lastName} {employee.firstName}</span>
+        <span>{employeeDisplayName(employee)}</span>
       </div>
 
       <div className={styles.hero}>
         <div className={styles.heroLeft}>
-          <div className={styles.heroName}>{employee.lastName} {employee.firstName}</div>
+          <div className={styles.heroName}>{employeeDisplayName(employee)}</div>
           <div className={styles.heroMeta}>
             {employee.currentJobTitle || "—"} · {employee.currentDepartment || "—"} ·{" "}
             <span className={employee.status === "active" ? styles.badgeActive : styles.badgeTerminated}>
@@ -1641,6 +1643,7 @@ export default function EmployeeDetailPage() {
       <Section title="Osobní údaje" sectionKey="personal" expanded={expanded.has("personal")} onToggle={toggle}>
         <div className={styles.fields}>
           <div className={styles.field}><span className={styles.fieldLabel}>Jméno</span><span className={styles.fieldValue}>{employee.firstName} {employee.lastName}</span></div>
+          <div className={styles.field}><span className={styles.fieldLabel}>Zobrazované jméno</span><span className={styles.fieldValue}>{employee.displayName?.trim() ? employee.displayName : `${employeeDisplayName(employee)} (výchozí)`}</span></div>
           <div className={styles.field}><span className={styles.fieldLabel}>Datum narození</span><span className={styles.fieldValue}>{val(formatDateCZ(employee.dateOfBirth))}</span></div>
           <div className={styles.field}><span className={styles.fieldLabel}>Pohlaví</span><span className={styles.fieldValue}>{employee.gender === "m" ? "Muž" : employee.gender === "f" ? "Žena" : "—"}</span></div>
           <div className={styles.field}><span className={styles.fieldLabel}>Rodné příjmení</span><span className={styles.fieldValue}>{val(employee.birthSurname)}</span></div>

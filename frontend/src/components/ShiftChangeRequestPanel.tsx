@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../lib/api";
 import type { PlanEmployee } from "../pages/ShiftPlannerPage";
 import { formatDateCZ, formatDatetimeCZ } from "../lib/dateFormat";
+import { employeeDisplayName } from "../lib/employeeName";
 import Button from "./Button";
 import styles from "./ShiftOverridePanel.module.css";
 
@@ -49,7 +50,7 @@ export default function ShiftChangeRequestPanel({ planId, employees, onResolved,
 
   function resolveEmployeeName(employeeId: string): string {
     const emp = employees.find((e) => e.employeeId === employeeId);
-    return emp ? `${emp.lastName} ${emp.firstName}` : employeeId;
+    return emp ? employeeDisplayName(emp) : employeeId;
   }
 
   async function handleApprove(req: ChangeRequest) {

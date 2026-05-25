@@ -2,6 +2,7 @@ import React, { useCallback, useMemo, useState } from "react";
 import * as clock from "../lib/clock";
 import type { PlanDetail, PlanEmployee, ShiftDoc, ModShiftDoc } from "../pages/ShiftPlannerPage";
 import { SECTION_LABELS, SECTIONS, type Section, getCzechHolidays, MOD_PERSONS, parseShiftExpression } from "../lib/shiftConstants";
+import { employeeDisplayName } from "../lib/employeeName";
 import ShiftCell from "./ShiftCell";
 import ModCell from "./ModCell";
 import styles from "./ShiftGrid.module.css";
@@ -368,7 +369,7 @@ export default function ShiftGrid({
                         {/* Left: name line + MOD count line */}
                         <div className={styles.nameLines}>
                           <span className={styles.empNameText}>
-                            {emp.lastName} {emp.firstName}
+                            {employeeDisplayName(emp)}
                             {canSeeInactiveFlag && !emp.active && (
                               <span className={styles.inactiveBadge} title="Neaktivní — nepočítá se jako dostupný">–</span>
                             )}

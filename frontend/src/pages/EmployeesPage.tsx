@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { api } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { canEditEmployees } from "@/lib/permissions";
+import { employeeDisplayName } from "@/lib/employeeName";
 import Button from "@/components/Button";
 import ExportEmployeesModal from "@/components/ExportEmployeesModal";
 import styles from "./EmployeesPage.module.css";
@@ -11,6 +12,7 @@ interface Employee {
   id: string;
   firstName: string;
   lastName: string;
+  displayName?: string;
   nationality: string;
   status: "active" | "terminated";
   currentCompanyId: string | null;
@@ -44,6 +46,7 @@ export default function EmployeesPage() {
         !q ||
         (e.firstName ?? "").toLowerCase().includes(q) ||
         (e.lastName ?? "").toLowerCase().includes(q) ||
+        employeeDisplayName(e).toLowerCase().includes(q) ||
         (e.currentJobTitle ?? "").toLowerCase().includes(q)
       );
     })
@@ -121,7 +124,7 @@ export default function EmployeesPage() {
                 <tr key={emp.id}>
                   <td>
                     <Link to={`/zamestnanci/${emp.id}`} className={styles.nameLink}>
-                      {emp.lastName} {emp.firstName}
+                      {employeeDisplayName(emp)}
                     </Link>
                   </td>
                   <td>{emp.currentJobTitle || "—"}</td>

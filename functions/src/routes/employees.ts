@@ -323,6 +323,7 @@ employeesRouter.post(
       {
         firstName: body.firstName ?? "",
         lastName: body.lastName ?? "",
+        displayName: body.displayName ?? "",
         dateOfBirth: body.dateOfBirth ?? null,
         gender: body.gender ?? null,
         birthSurname: body.birthSurname ?? "",

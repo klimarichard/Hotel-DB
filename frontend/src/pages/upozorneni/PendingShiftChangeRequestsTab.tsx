@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "@/lib/api";
 import { formatDateCZ } from "@/lib/dateFormat";
+import { employeeDisplayName } from "@/lib/employeeName";
 import styles from "../AlertsPage.module.css";
 
 interface ChangeRequest {
@@ -19,6 +20,7 @@ interface EmployeeMini {
   id: string;
   firstName: string;
   lastName: string;
+  displayName?: string;
 }
 
 function fmtMonth(year: number | null, month: number | null): string {
@@ -72,7 +74,7 @@ export default function PendingShiftChangeRequestsTab() {
                 <td>
                   {e ? (
                     <Link to={`/zamestnanci/${r.employeeId}`} className={styles.empLink}>
-                      {e.lastName} {e.firstName}
+                      {employeeDisplayName(e)}
                     </Link>
                   ) : (
                     r.employeeId

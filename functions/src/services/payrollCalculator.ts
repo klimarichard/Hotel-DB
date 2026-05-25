@@ -119,6 +119,7 @@ export interface EmployeeEntry {
   employeeId: string;
   firstName: string;
   lastName: string;
+  displayName: string;
   contractType: "HPP" | "PPP" | "DPP" | string;
   salary: number | null;
   hourlyRate: number | null;
@@ -151,6 +152,7 @@ export function calculateEntry(
     employeeId: string;
     firstName: string;
     lastName: string;
+    displayName?: string;
     contractType: string;
     salary: number | null;
     hourlyRate: number | null;
@@ -308,6 +310,7 @@ export function calculateEntry(
     employeeId: employee.employeeId,
     firstName: employee.firstName,
     lastName: employee.lastName,
+    displayName: employee.displayName ?? "",
     contractType: employee.contractType,
     salary: employee.salary,
     hourlyRate: employee.hourlyRate,
@@ -539,6 +542,7 @@ export async function createOrUpdatePayrollPeriod(
       employeeId,
       firstName: planEmp.firstName as string ?? "",
       lastName: planEmp.lastName as string ?? "",
+      displayName: planEmp.displayName as string ?? "",
       contractType: employment?.contractType ?? planEmp.contractType as string ?? "",
       salary: employment?.salary ?? null,
       hourlyRate: employment?.hourlyRate ?? null,
