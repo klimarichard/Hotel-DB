@@ -78,6 +78,88 @@ export function getBaseHours(year: number, month: number): number {
   return workdays * 8;
 }
 
+/** Count Mon–Fri days in [startDay, endDay] (inclusive) of the given month. */
+function countMonFriDaysInRange(year: number, month: number, startDay: number, endDay: number): number {
+  let n = 0;
+  for (let d = startDay; d <= endDay; d++) {
+    const dow = new Date(year, month - 1, d).getDay();
+    if (dow !== 0 && dow !== 6) n++;
+  }
+  return n;
+}
+
+interface EmploymentRowLite {
+  changeType?: string;
+  startDate?: string;
+  endDate?: string | null;
+  changes?: Array<{ changeKind?: string; value?: string }>;
+}
+
+/**
+ * Prorate base hours for an employee who started or was terminated mid-month.
+ * Mirrors the session model in frontend/src/lib/employmentSessions.ts: a session
+ * runs from its Nástup startDate to its effective end — the Ukončení row's
+ * startDate, else a "délka smlouvy" Dodatek value, else the Nástup endDate. Both
+ * ends are inclusive (the employee works on their first and last day).
+ *
+ * Returns the prorated base (8 × Mon–Fri days, weekday holidays included, within
+ * the employed span), or `null` when the employee was employed the WHOLE month
+ * (caller then uses the full-month base), or `0` if not employed that month.
+ * Pure + exported for unit testing.
+ */
+export function proratedBaseFromRows(rows: EmploymentRowLite[], year: number, month: number): number | null {
+  type Sess = { start: string; end: string | null };
+  const sessions: Sess[] = [];
+  let cur: { nastup: EmploymentRowLite; dodatky: EmploymentRowLite[]; ukonceni: EmploymentRowLite | null } | null = null;
+  const flush = () => {
+    if (!cur || !cur.nastup.startDate) { cur = null; return; }
+    let end = cur.nastup.endDate ?? null;
+    for (const dod of cur.dodatky) {
+      for (const ch of dod.changes ?? []) {
+        if (ch.changeKind === "délka smlouvy" && ch.value) end = ch.value;
+      }
+    }
+    if (cur.ukonceni && cur.ukonceni.startDate) end = cur.ukonceni.startDate;
+    sessions.push({ start: cur.nastup.startDate, end });
+    cur = null;
+  };
+  const sorted = [...rows].sort((a, b) => (a.startDate ?? "").localeCompare(b.startDate ?? ""));
+  for (const r of sorted) {
+    if (r.changeType === "nástup") { flush(); cur = { nastup: r, dodatky: [], ukonceni: null }; }
+    else if (r.changeType === "změna smlouvy" && cur) cur.dodatky.push(r);
+    else if (r.changeType === "ukončení" && cur) cur.ukonceni = r;
+  }
+  flush();
+
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const monthStart = `${year}-${pad(month)}-01`;
+  const monthEnd = `${year}-${pad(month)}-${pad(daysInMonth)}`;
+
+  // Latest session that overlaps the month wins.
+  let relevant: Sess | null = null;
+  for (const s of sessions) {
+    if (s.start <= monthEnd && (s.end == null || s.end >= monthStart)) relevant = s;
+  }
+  if (!relevant) return 0;
+
+  const startDay = relevant.start > monthStart ? Number(relevant.start.slice(8, 10)) : 1;
+  const endDay = (relevant.end != null && relevant.end < monthEnd) ? Number(relevant.end.slice(8, 10)) : daysInMonth;
+  if (endDay < startDay) return 0;
+  if (startDay === 1 && endDay === daysInMonth) return null; // full month → use standard base
+  return countMonFriDaysInRange(year, month, startDay, endDay) * 8;
+}
+
+/** Read an employee's employment rows and prorate their base hours for the month. */
+async function getProratedBaseHours(employeeId: string, year: number, month: number): Promise<number | null> {
+  const snap = await db()
+    .collection("employees").doc(employeeId)
+    .collection("employment").orderBy("startDate", "asc").get();
+  if (snap.empty) return null;
+  const rows = snap.docs.map((d) => d.data() as EmploymentRowLite);
+  return proratedBaseFromRows(rows, year, month);
+}
+
 /** Count holidays in the given month that fall on Mon–Fri (used for manager holiday credit). */
 function countMonFriHolidays(year: number, month: number, holidays: Set<string>): number {
   const prefix = `${year}-${String(month).padStart(2, "0")}-`;
@@ -126,6 +208,7 @@ export interface EmployeeEntry {
   jobTitle: string;
   section: string;
   sickLeaveHours: number;
+  baseHours: number; // per-employee norm (prorated for mid-month start/termination)
   // calculated:
   totalHours: number;
   reportHours: number;
@@ -317,6 +400,7 @@ export function calculateEntry(
     jobTitle: employee.jobTitle,
     section: employee.section,
     sickLeaveHours: employee.sickLeaveHours ?? 0,
+    baseHours,
     totalHours,
     reportHours,
     vacationHours,
@@ -537,13 +621,21 @@ export async function createOrUpdatePayrollPeriod(
     const employeeId = planEmp.employeeId as string;
 
     const employment = await getActiveEmployment(employeeId);
+    // Contract type comes from the employee root doc's currentContractType, which
+    // recomputeRootFromLatestSession keeps folded with the latest Dodatek (e.g. an
+    // úvazek change HPP↔PPP). The Nástup employment row alone would miss amendments,
+    // which is why the badge was blank for employees with a Dodatek.
+    const rootSnap = await db().collection("employees").doc(employeeId).get();
+    const currentContractType = rootSnap.exists
+      ? ((rootSnap.data() as Record<string, unknown>).currentContractType as string | undefined)
+      : undefined;
 
     const employee = {
       employeeId,
       firstName: planEmp.firstName as string ?? "",
       lastName: planEmp.lastName as string ?? "",
       displayName: planEmp.displayName as string ?? "",
-      contractType: employment?.contractType ?? planEmp.contractType as string ?? "",
+      contractType: currentContractType || employment?.contractType || (planEmp.contractType as string) || "",
       salary: employment?.salary ?? null,
       hourlyRate: employment?.hourlyRate ?? null,
       jobTitle: employment?.jobTitle ?? planEmp.jobTitle as string ?? "",
@@ -552,7 +644,12 @@ export async function createOrUpdatePayrollPeriod(
       overrides: overridesMap.get(employeeId) ?? {},
     };
 
-    const entry = calculateEntry(employee, allShifts, holidays, baseHours, foodVoucherRate, year, month);
+    // Prorate the norm for employees who started or were terminated mid-month;
+    // null → employed the whole month, so use the standard full-month base.
+    const proratedBase = await getProratedBaseHours(employeeId, year, month);
+    const empBaseHours = proratedBase ?? baseHours;
+
+    const entry = calculateEntry(employee, allShifts, holidays, empBaseHours, foodVoucherRate, year, month);
     const multisportActive = await getMultisportActive(employeeId, year, month);
 
     let notes = notesMap.get(employeeId);
