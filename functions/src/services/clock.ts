@@ -94,6 +94,13 @@ export function nowMs(): number {
   return Date.now() + (overrideAllowed() ? cachedOffsetMs : 0);
 }
 
+/** Today's date as YYYY-MM-DD in Europe/Prague, honouring a non-prod override. */
+export function today(): string {
+  // en-CA formats as YYYY-MM-DD; the timeZone keeps it aligned with how
+  // startDate/endDate are stored (Prague-local calendar dates).
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Prague" }).format(now());
+}
+
 /** Full override state for the API/UI. Reads live (bypasses the cache). */
 export async function getState(): Promise<TimeOverrideState> {
   if (!overrideAllowed()) return { ...REAL_STATE };

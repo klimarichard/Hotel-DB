@@ -8,6 +8,8 @@ import type { PayrollNote } from "./PayrollPage";
 
 interface Props {
   periodId: string;
+  periodYear: number;
+  periodMonth: number;
   employeeId: string;
   employeeLabel: string;
   notes: PayrollNote[];
@@ -18,6 +20,8 @@ interface Props {
 
 export default function PayrollNotesModal({
   periodId,
+  periodYear,
+  periodMonth,
   employeeId,
   employeeLabel,
   notes,
@@ -26,13 +30,18 @@ export default function PayrollNotesModal({
   onChanged,
 }: Props) {
   const [newText, setNewText] = useState("");
-  const [newCarry, setNewCarry] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
-  const [editCarry, setEditCarry] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<PayrollNote | null>(null);
+  const [readTarget, setReadTarget] = useState<PayrollNote | null>(null);
+
+  // A note can be marked read only in months strictly after its origin month.
+  function afterOrigin(n: PayrollNote): boolean {
+    if (n.sourceYear == null || n.sourceMonth == null) return false;
+    return periodYear > n.sourceYear || (periodYear === n.sourceYear && periodMonth > n.sourceMonth);
+  }
 
   async function addNote() {
     if (!newText.trim()) return;
@@ -41,10 +50,8 @@ export default function PayrollNotesModal({
     try {
       await api.post(`/payroll/periods/${periodId}/entries/${employeeId}/notes`, {
         text: newText.trim(),
-        carryForward: newCarry,
       });
       setNewText("");
-      setNewCarry(false);
       onChanged();
     } catch (e) {
       setError((e as Error).message ?? "Chyba při ukládání.");
@@ -56,7 +63,6 @@ export default function PayrollNotesModal({
   function startEdit(n: PayrollNote) {
     setEditingId(n.id);
     setEditText(n.text);
-    setEditCarry(n.carryForward);
   }
 
   async function saveEdit(noteId: string) {
@@ -66,7 +72,7 @@ export default function PayrollNotesModal({
     try {
       await api.patch(
         `/payroll/periods/${periodId}/entries/${employeeId}/notes/${noteId}`,
-        { text: editText.trim(), carryForward: editCarry }
+        { text: editText.trim() }
       );
       setEditingId(null);
       onChanged();
@@ -94,6 +100,24 @@ export default function PayrollNotesModal({
     }
   }
 
+  async function confirmRead() {
+    if (!readTarget) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.post(
+        `/payroll/periods/${periodId}/entries/${employeeId}/notes/${readTarget.id}/read`,
+        {}
+      );
+      setReadTarget(null);
+      onChanged();
+    } catch (e) {
+      setError((e as Error).message ?? "Chyba při označování.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className={styles.overlay}>
       <div className={styles.modal}>
@@ -110,6 +134,7 @@ export default function PayrollNotesModal({
                 const isEditing = editingId === n.id;
                 const metaDate = formatDatetimeCZ(n.createdAt);
                 const editedDate = n.editedAt ? formatDatetimeCZ(n.editedAt) : null;
+                const readDate = n.read && n.readAt ? formatDatetimeCZ(n.readAt) : null;
                 return (
                   <div key={n.id} className={styles.noteItem}>
                     {isEditing ? (
@@ -120,14 +145,6 @@ export default function PayrollNotesModal({
                           onChange={(e) => setEditText(e.target.value)}
                           autoFocus
                         />
-                        <label className={styles.checkRow}>
-                          <input
-                            type="checkbox"
-                            checked={editCarry}
-                            onChange={(e) => setEditCarry(e.target.checked)}
-                          />
-                          Zobrazit i v budoucích výplatách
-                        </label>
                         <div className={styles.noteActions}>
                           <button
                             className={styles.iconBtn}
@@ -147,18 +164,32 @@ export default function PayrollNotesModal({
                       </div>
                     ) : (
                       <>
-                        <p className={styles.noteText}>{n.text}</p>
+                        <p className={`${styles.noteText} ${n.read ? styles.noteRead : ""}`}>{n.text}</p>
                         <div className={styles.noteMeta}>
                           — {n.createdByName || "?"}, {metaDate}
                           {editedDate && <> · upraveno {editedDate}{n.editedByName ? ` (${n.editedByName})` : ""}</>}
+                          {readDate && <> · přečteno {readDate}{n.readByName ? ` (${n.readByName})` : ""}</>}
                         </div>
                         <div className={styles.noteFooter}>
-                          <span className={styles.carryLabel}>
-                            <input type="checkbox" checked={n.carryForward} readOnly disabled />
-                            {n.carryForward ? "V budoucích výplatách" : "Pouze toto období"}
-                          </span>
-                          {canEdit && (
+                          {n.auto ? (
+                            <span className={styles.carryLabel}>Automatická poznámka (jen toto období)</span>
+                          ) : n.read ? (
+                            <span className={styles.carryLabel}>Přečteno — skryto v dalších měsících</span>
+                          ) : (
+                            <span className={styles.carryLabel}>Zobrazuje se i v budoucích výplatách</span>
+                          )}
+                          {canEdit && !n.auto && (
                             <span className={styles.noteActions}>
+                              {!n.read && afterOrigin(n) && (
+                                <button
+                                  className={styles.iconBtn}
+                                  onClick={() => setReadTarget(n)}
+                                  disabled={busy}
+                                  title="Označit jako přečteno — zmizí z dalších měsíců"
+                                >
+                                  Označit přečteno
+                                </button>
+                              )}
                               <button
                                 className={styles.iconBtn}
                                 onClick={() => startEdit(n)}
@@ -188,18 +219,10 @@ export default function PayrollNotesModal({
             <div className={styles.addSection}>
               <textarea
                 className={styles.textarea}
-                placeholder="Nová poznámka…"
+                placeholder="Nová poznámka… (zobrazí se i v dalších měsících)"
                 value={newText}
                 onChange={(e) => setNewText(e.target.value)}
               />
-              <label className={styles.checkRow}>
-                <input
-                  type="checkbox"
-                  checked={newCarry}
-                  onChange={(e) => setNewCarry(e.target.checked)}
-                />
-                Zobrazit i v budoucích výplatách
-              </label>
               {error && <div className={styles.error}>{error}</div>}
             </div>
           )}
@@ -229,6 +252,16 @@ export default function PayrollNotesModal({
           danger
           onConfirm={confirmDelete}
           onCancel={() => setDeleteTarget(null)}
+        />
+      )}
+
+      {readTarget && (
+        <ConfirmModal
+          title="Označit jako přečteno?"
+          message="Poznámka bude v tomto měsíci přeškrtnutá a zmizí ze všech následujících měsíců. V dřívějších měsících zůstane beze změny."
+          confirmLabel="Označit přečteno"
+          onConfirm={confirmRead}
+          onCancel={() => setReadTarget(null)}
         />
       )}
     </div>

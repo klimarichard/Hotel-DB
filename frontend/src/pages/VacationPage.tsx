@@ -4,6 +4,7 @@ import * as clock from "../lib/clock";
 import { useAuth } from "../hooks/useAuth";
 import { useVacationContext } from "@/context/VacationContext";
 import { formatDateCZ, formatDatetimeCZ } from "../lib/dateFormat";
+import { employeeDisplayName } from "../lib/employeeName";
 import styles from "./VacationPage.module.css";
 import VacationCollisionInfoModal, {
   type ShiftCollision,
@@ -39,6 +40,7 @@ interface VacationRequest {
   employeeId: string;
   firstName: string;
   lastName: string;
+  displayName?: string;
   uid: string;
   startDate: string;
   endDate: string;
@@ -53,6 +55,7 @@ interface ApprovedUpcoming {
   employeeId: string;
   firstName: string;
   lastName: string;
+  displayName?: string;
   startDate: string;
   endDate: string;
 }
@@ -237,7 +240,7 @@ export default function VacationPage() {
       } else {
         setResolution({
           requestId: id,
-          employeeName: `${req.lastName} ${req.firstName}`.trim(),
+          employeeName: employeeDisplayName(req),
           collisions,
         });
       }
@@ -503,7 +506,7 @@ export default function VacationPage() {
               <tbody>
                 {approvedUpcoming.map((v, i) => (
                   <tr key={`${v.employeeId}-${v.startDate}-${i}`}>
-                    <td>{v.lastName} {v.firstName}</td>
+                    <td>{employeeDisplayName(v)}</td>
                     <td>{formatDateCZ(v.startDate)}</td>
                     <td>{formatDateCZ(v.endDate)}</td>
                   </tr>
@@ -541,7 +544,7 @@ export default function VacationPage() {
               className={req.status === "approved" && !req.pendingEdit ? styles.rowDone : ""}
             >
               <td>
-                {req.lastName} {req.firstName}
+                {employeeDisplayName(req)}
               </td>
               <td>{formatDatetimeCZ(req.requestedAt)}</td>
               <td>{formatDateCZ(req.startDate)}</td>

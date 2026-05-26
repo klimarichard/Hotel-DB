@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "@/lib/api";
 import { formatDatetimeCZ } from "@/lib/dateFormat";
+import { employeeDisplayName } from "@/lib/employeeName";
 import { useEmployeeChangeRequestsContext } from "@/context/EmployeeChangeRequestsContext";
 import Button from "@/components/Button";
 import card from "../EmployeeSelfPage.module.css";
@@ -97,7 +98,7 @@ export default function EmployeeDataChangeRequestsTab() {
         <div className={card.requestCard} key={req.id}>
           <div className={card.reqHeader}>
             <Link to={`/zamestnanci/${req.employeeId}`} className={styles.empLink}>
-              {req.employeeLastName} {req.employeeFirstName}
+              {employeeDisplayName({ firstName: req.employeeFirstName, lastName: req.employeeLastName })}
             </Link>
             <span className={card.reqMeta}>
               {req.requestedByName ? `${req.requestedByName} · ` : ""}

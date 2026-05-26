@@ -7,6 +7,7 @@ import * as clock from "@/lib/clock";
 import ConfirmModal from "@/components/ConfirmModal";
 import { formatDateCZ } from "@/lib/dateFormat";
 import { displayGendered } from "@/lib/genderDisplay";
+import { employeeDisplayName } from "@/lib/employeeName";
 import GenerateContractModal from "@/components/GenerateContractModal";
 import Button from "@/components/Button";
 import EmploymentSessionCard from "@/components/EmploymentSession";
@@ -15,7 +16,9 @@ import {
   ContractType as SmlouvaContractType,
   CONTRACT_TYPE_LABELS,
   STANDALONE_TYPES,
+  isCzechNationality,
 } from "@/lib/contractVariables";
+import { nationalityName } from "@/lib/nationalities";
 import { buildContractName } from "@/lib/contractNaming";
 import {
   groupBySession,
@@ -156,15 +159,22 @@ function compactValue(v: unknown): string {
 function EmployeeAuditHistory({ employeeId }: { employeeId: string }) {
   const [entries, setEntries] = useState<AuditEntryMini[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [limit, setLimit] = useState(10);
+  // True while there may be more rows than currently fetched (last fetch
+  // returned a full page). Cleared once a fetch returns fewer than requested.
+  const [hasMore, setHasMore] = useState(false);
 
   useEffect(() => {
     api
       .get<{ entries: AuditEntryMini[] }>(
-        `/audit?employeeId=${encodeURIComponent(employeeId)}&limit=10`
+        `/audit?employeeId=${encodeURIComponent(employeeId)}&limit=${limit}`
       )
-      .then((res) => setEntries(res.entries))
+      .then((res) => {
+        setEntries(res.entries);
+        setHasMore(res.entries.length >= limit);
+      })
       .catch((e: Error) => setError(e.message));
-  }, [employeeId]);
+  }, [employeeId, limit]);
 
   if (error) return <div className={styles.loading}>{error}</div>;
   if (!entries) return <div className={styles.loading}>Načítám…</div>;
@@ -212,7 +222,12 @@ function EmployeeAuditHistory({ employeeId }: { employeeId: string }) {
           </tbody>
         </table>
       </div>
-      <div style={{ marginTop: "0.75rem" }}>
+      <div style={{ marginTop: "0.75rem", display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
+        {hasMore && (
+          <Button variant="secondary" size="sm" onClick={() => setLimit((l) => l + 50)}>
+            Načíst další
+          </Button>
+        )}
         <Link to={`/audit?employeeId=${encodeURIComponent(employeeId)}`}>
           Zobrazit všechny změny →
         </Link>
@@ -253,6 +268,7 @@ interface Employee {
   id: string;
   firstName: string;
   lastName: string;
+  displayName?: string;
   dateOfBirth: string;
   gender: string;
   birthSurname: string;
@@ -395,6 +411,20 @@ const emptyChangeRow: ChangeRow = { changeKind: "", value: "" };
 interface DepartmentRec {
   id: string;
   name: string;
+}
+
+interface CompanyRec {
+  id: string;
+  abbreviation?: string;
+  name?: string;
+}
+
+/** Readable company label: "ABBR - Full Name" (falls back gracefully). */
+function companyLabel(c: { id: string; abbreviation?: string; name?: string }): string {
+  const abbr = (c.abbreviation || c.id || "").trim();
+  const name = (c.name || "").trim();
+  if (abbr && name) return `${abbr} - ${name}`;
+  return abbr || name || c.id;
 }
 
 interface JobPositionRec {
@@ -624,6 +654,7 @@ function AddEntryModal({
   const [error, setError] = useState<string | null>(null);
   const [departments, setDepartments] = useState<DepartmentRec[]>([]);
   const [positions, setPositions] = useState<JobPositionRec[]>([]);
+  const [companies, setCompanies] = useState<CompanyRec[]>([]);
   const [dppMaxMonthlyReward, setDppMaxMonthlyReward] = useState<number | null>(null);
   // Manual override for DPP "Sjednaná odměna" — when true, auto-compute is suppressed.
   // Pre-existing rows start in manual mode so saved values aren't overwritten on edit.
@@ -663,10 +694,12 @@ function AddEntryModal({
     Promise.all([
       api.get<DepartmentRec[]>("/departments").catch(() => [] as DepartmentRec[]),
       api.get<JobPositionRec[]>("/jobPositions").catch(() => [] as JobPositionRec[]),
-    ]).then(([deps, poss]) => {
+      api.get<CompanyRec[]>("/companies").catch(() => [] as CompanyRec[]),
+    ]).then(([deps, poss, comps]) => {
       if (cancelled) return;
       setDepartments(deps);
       setPositions(poss);
+      setCompanies(comps);
       // Pre-select dropdowns from existing row on edit
       if (initialRow) {
         const depByName = deps.find(
@@ -906,7 +939,14 @@ function AddEntryModal({
                     </div>
                     <div className={styles.modalField}>
                       <label className={styles.modalLabel}>Firma</label>
-                      <input className={styles.modalInput} value={form.companyId} onChange={(e) => setField("companyId", e.target.value)} />
+                      <select className={styles.modalInput} value={form.companyId} onChange={(e) => setField("companyId", e.target.value)}>
+                        {form.companyId && !companies.some((c) => c.id === form.companyId) && (
+                          <option value={form.companyId}>{form.companyId}</option>
+                        )}
+                        {companies.map((c) => (
+                          <option key={c.id} value={c.id}>{companyLabel(c)}</option>
+                        ))}
+                      </select>
                     </div>
                   </div>
                 )}
@@ -950,7 +990,14 @@ function AddEntryModal({
                     </div>
                     <div className={styles.modalField}>
                       <label className={styles.modalLabel}>Firma</label>
-                      <input className={styles.modalInput} value={form.companyId} onChange={(e) => setField("companyId", e.target.value)} />
+                      <select className={styles.modalInput} value={form.companyId} onChange={(e) => setField("companyId", e.target.value)}>
+                        {form.companyId && !companies.some((c) => c.id === form.companyId) && (
+                          <option value={form.companyId}>{form.companyId}</option>
+                        )}
+                        {companies.map((c) => (
+                          <option key={c.id} value={c.id}>{companyLabel(c)}</option>
+                        ))}
+                      </select>
                     </div>
                   </div>
                 )}
@@ -1084,6 +1131,7 @@ export default function EmployeeDetailPage() {
   const [documents, setDocuments] = useState<DocumentsData | null>(null);
   const [additional, setAdditional] = useState<AdditionalData | null>(null);
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
+  const [companies, setCompanies] = useState<CompanyRec[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState<"detail" | "history">("detail");
   const [newEntryMode, setNewEntryMode] = useState<{
@@ -1159,12 +1207,14 @@ export default function EmployeeDetailPage() {
       api.get<EmploymentRow[]>(`/employees/${id}/employment`),
       api.get<AlertItem[]>(`/employees/${id}/alerts`),
       api.get<ContractRecord[]>(`/employees/${id}/contracts`).catch(() => [] as ContractRecord[]),
+      api.get<CompanyRec[]>("/companies").catch(() => [] as CompanyRec[]),
     ])
-      .then(([emp, history, empAlerts, contractsList]) => {
+      .then(([emp, history, empAlerts, contractsList, comps]) => {
         setEmployee(emp);
         setEmployment(history);
         setAlerts(empAlerts);
         setContracts(contractsList);
+        setCompanies(comps);
       })
       .finally(() => setLoading(false));
   }, [id]);
@@ -1330,12 +1380,12 @@ export default function EmployeeDetailPage() {
       <div className={styles.breadcrumb}>
         <Link to="/zamestnanci">Zaměstnanci</Link>
         <span> / </span>
-        <span>{employee.lastName} {employee.firstName}</span>
+        <span>{employeeDisplayName(employee)}</span>
       </div>
 
       <div className={styles.hero}>
         <div className={styles.heroLeft}>
-          <div className={styles.heroName}>{employee.lastName} {employee.firstName}</div>
+          <div className={styles.heroName}>{employeeDisplayName(employee)}</div>
           <div className={styles.heroMeta}>
             {employee.currentJobTitle || "—"} · {employee.currentDepartment || "—"} ·{" "}
             <span className={employee.status === "active" ? styles.badgeActive : styles.badgeTerminated}>
@@ -1440,7 +1490,7 @@ export default function EmployeeDetailPage() {
                 session={session}
                 contractsByRow={mapContractsToRows(session.rows, contracts)}
                 defaultExpanded={idx === 0}
-                companies={{}}
+                companies={Object.fromEntries(companies.map((c) => [c.id, companyLabel(c)]))}
                 employeeId={id!}
                 canEdit={canDelete}
                 resolveDefaultType={(row) => {
@@ -1641,13 +1691,14 @@ export default function EmployeeDetailPage() {
       <Section title="Osobní údaje" sectionKey="personal" expanded={expanded.has("personal")} onToggle={toggle}>
         <div className={styles.fields}>
           <div className={styles.field}><span className={styles.fieldLabel}>Jméno</span><span className={styles.fieldValue}>{employee.firstName} {employee.lastName}</span></div>
+          <div className={styles.field}><span className={styles.fieldLabel}>Zobrazované jméno</span><span className={styles.fieldValue}>{employee.displayName?.trim() ? employee.displayName : `${employeeDisplayName(employee)} (výchozí)`}</span></div>
           <div className={styles.field}><span className={styles.fieldLabel}>Datum narození</span><span className={styles.fieldValue}>{val(formatDateCZ(employee.dateOfBirth))}</span></div>
           <div className={styles.field}><span className={styles.fieldLabel}>Pohlaví</span><span className={styles.fieldValue}>{employee.gender === "m" ? "Muž" : employee.gender === "f" ? "Žena" : "—"}</span></div>
           <div className={styles.field}><span className={styles.fieldLabel}>Rodné příjmení</span><span className={styles.fieldValue}>{val(employee.birthSurname)}</span></div>
           <SensitiveField employeeId={id!} field="birthNumber" label="Rodné číslo" apiValue={employee.birthNumber} />
           <div className={styles.field}><span className={styles.fieldLabel}>Rodinný stav</span><span className={styles.fieldValue}>{val(displayGendered(employee.maritalStatus, employee.gender as "m" | "f"))}</span></div>
           <div className={styles.field}><span className={styles.fieldLabel}>Vzdělání</span><span className={styles.fieldValue}>{val(employee.education)}</span></div>
-          <div className={styles.field}><span className={styles.fieldLabel}>Státní příslušnost</span><span className={styles.fieldValue}>{val(employee.nationality)}</span></div>
+          <div className={styles.field}><span className={styles.fieldLabel}>Státní příslušnost</span><span className={styles.fieldValue}>{val(employee.nationality ? nationalityName(employee.nationality) : "")}</span></div>
           <div className={styles.field}><span className={styles.fieldLabel}>Místo narození</span><span className={styles.fieldValue}>{val(employee.placeOfBirth)}</span></div>
         </div>
       </Section>
@@ -1658,7 +1709,7 @@ export default function EmployeeDetailPage() {
           <div className={styles.field}><span className={styles.fieldLabel}>Pracovní pozice</span><span className={styles.fieldValue}>{val(employee.currentJobTitle)}</span></div>
           <div className={styles.field}><span className={styles.fieldLabel}>Oddělení</span><span className={styles.fieldValue}>{val(employee.currentDepartment)}</span></div>
           <div className={styles.field}><span className={styles.fieldLabel}>Typ smlouvy</span><span className={styles.fieldValue}>{val(employee.currentContractType)}</span></div>
-          <div className={styles.field}><span className={styles.fieldLabel}>Společnost</span><span className={styles.fieldValue}>{val(employee.currentCompanyId)}</span></div>
+          <div className={styles.field}><span className={styles.fieldLabel}>Společnost</span><span className={styles.fieldValue}>{val(employee.currentCompanyId ? companyLabel(companies.find((c) => c.id === employee.currentCompanyId) ?? { id: employee.currentCompanyId }) : null)}</span></div>
         </div>
       </Section>
 
@@ -1671,7 +1722,12 @@ export default function EmployeeDetailPage() {
             <div className={styles.field}><span className={styles.fieldLabel}>Telefon</span><span className={styles.fieldValue}>{val(contact?.phone)}</span></div>
             <div className={styles.field}><span className={styles.fieldLabel}>E-mail</span><span className={styles.fieldValue}>{val(contact?.email)}</span></div>
             <div className={styles.fieldFull}><span className={styles.fieldLabel}>Trvalá adresa</span><span className={styles.fieldValue}>{val(contact?.permanentAddress)}</span></div>
-            {!contact?.contactAddressSameAsPermanent && (
+            {contact?.contactAddressSameAsPermanent ? (
+              <div className={styles.fieldFull}>
+                <span className={styles.fieldLabel}>Kontaktní adresa</span>
+                <span className={styles.fieldValue}>Shodná s trvalou adresou</span>
+              </div>
+            ) : (
               <div className={styles.fieldFull}>
                 <span className={styles.fieldLabel}>Kontaktní adresa</span>
                 <span className={styles.fieldValue}>{val(contact?.contactAddress)}</span>
@@ -1686,32 +1742,48 @@ export default function EmployeeDetailPage() {
         {!loadedSections.has("documents") ? (
           <div className={styles.loading}>Načítám…</div>
         ) : (
-          <>
-            <div className={styles.docGroup}>
-              <p className={styles.docGroupLabel}>Občanský průkaz</p>
-              <div className={styles.fields}>
-                <SensitiveField employeeId={id!} field="idCardNumber" label="Číslo OP" apiValue={documents?.idCardNumber} />
-              </div>
-            </div>
-            <div className={styles.docGroup}>
-              <p className={styles.docGroupLabel}>Cestovní pas</p>
-              <div className={styles.fields}>
-                <div className={styles.field}><span className={styles.fieldLabel}>Číslo pasu</span><span className={styles.fieldValue}>{val(documents?.passportNumber)}</span></div>
-                <div className={styles.field}><span className={styles.fieldLabel}>Datum vydání</span><span className={styles.fieldValue}>{val(formatDateCZ(documents?.passportIssueDate))}</span></div>
-                <div className={styles.field}><span className={styles.fieldLabel}>Platnost pasu</span><span className={styles.fieldValue}>{val(formatDateCZ(documents?.passportExpiry))}</span></div>
-                <div className={styles.field}><span className={styles.fieldLabel}>Vydal</span><span className={styles.fieldValue}>{val(documents?.passportAuthority)}</span></div>
-              </div>
-            </div>
-            <div className={styles.docGroup}>
-              <p className={styles.docGroupLabel}>Povolení k pobytu</p>
-              <div className={styles.fields}>
-                <div className={styles.field}><span className={styles.fieldLabel}>Číslo povolení</span><span className={styles.fieldValue}>{val(documents?.visaNumber)}</span></div>
-                <div className={styles.field}><span className={styles.fieldLabel}>Typ povolení</span><span className={styles.fieldValue}>{val(documents?.visaType)}</span></div>
-                <div className={styles.field}><span className={styles.fieldLabel}>Datum vydání</span><span className={styles.fieldValue}>{val(formatDateCZ(documents?.visaIssueDate))}</span></div>
-                <div className={styles.field}><span className={styles.fieldLabel}>Platnost povolení</span><span className={styles.fieldValue}>{val(formatDateCZ(documents?.visaExpiry))}</span></div>
-              </div>
-            </div>
-          </>
+          (() => {
+            // Nationality drives which document subsections show (TODO 14):
+            // Czech → only OP; foreign (set) → only passport + visa; empty → all.
+            const nat = employee.nationality ?? "";
+            const isCz = isCzechNationality(nat);
+            const showOp = !nat || isCz;
+            const showForeign = !nat || !isCz;
+            return (
+              <>
+                {showOp && (
+                  <div className={styles.docGroup}>
+                    <p className={styles.docGroupLabel}>Občanský průkaz</p>
+                    <div className={styles.fields}>
+                      <SensitiveField employeeId={id!} field="idCardNumber" label="Číslo OP" apiValue={documents?.idCardNumber} />
+                    </div>
+                  </div>
+                )}
+                {showForeign && (
+                  <div className={styles.docGroup}>
+                    <p className={styles.docGroupLabel}>Cestovní pas</p>
+                    <div className={styles.fields}>
+                      <div className={styles.field}><span className={styles.fieldLabel}>Číslo pasu</span><span className={styles.fieldValue}>{val(documents?.passportNumber)}</span></div>
+                      <div className={styles.field}><span className={styles.fieldLabel}>Datum vydání</span><span className={styles.fieldValue}>{val(formatDateCZ(documents?.passportIssueDate))}</span></div>
+                      <div className={styles.field}><span className={styles.fieldLabel}>Platnost pasu</span><span className={styles.fieldValue}>{val(formatDateCZ(documents?.passportExpiry))}</span></div>
+                      <div className={styles.field}><span className={styles.fieldLabel}>Vydal</span><span className={styles.fieldValue}>{val(documents?.passportAuthority)}</span></div>
+                    </div>
+                  </div>
+                )}
+                {showForeign && (
+                  <div className={styles.docGroup}>
+                    <p className={styles.docGroupLabel}>Povolení k pobytu</p>
+                    <div className={styles.fields}>
+                      <div className={styles.field}><span className={styles.fieldLabel}>Číslo povolení</span><span className={styles.fieldValue}>{val(documents?.visaNumber)}</span></div>
+                      <div className={styles.field}><span className={styles.fieldLabel}>Typ povolení</span><span className={styles.fieldValue}>{val(documents?.visaType)}</span></div>
+                      <div className={styles.field}><span className={styles.fieldLabel}>Datum vydání</span><span className={styles.fieldValue}>{val(formatDateCZ(documents?.visaIssueDate))}</span></div>
+                      <div className={styles.field}><span className={styles.fieldLabel}>Platnost povolení</span><span className={styles.fieldValue}>{val(formatDateCZ(documents?.visaExpiry))}</span></div>
+                    </div>
+                  </div>
+                )}
+              </>
+            );
+          })()
         )}
       </Section>
 

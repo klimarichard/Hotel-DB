@@ -5,6 +5,7 @@ import { api } from "../lib/api";
 import * as clock from "../lib/clock";
 import { useAuth } from "../hooks/useAuth";
 import { parseShiftExpression, getCellColor, SECTIONS, SECTION_LABELS, getCzechHolidays, MOD_PERSONS } from "../lib/shiftConstants";
+import { employeeDisplayName } from "../lib/employeeName";
 import ShiftGrid from "../components/ShiftGrid";
 import AddEmployeeToPlanModal from "../components/AddEmployeeToPlanModal";
 import EditEmployeeInPlanModal from "../components/EditEmployeeInPlanModal";
@@ -28,6 +29,7 @@ export interface PlanEmployee {
   employeeId: string;
   firstName: string;
   lastName: string;
+  displayName?: string;
   section: "vedoucí" | "recepce" | "portýři";
   primaryShiftType: "D" | "N" | "R" | "DP" | "NP" | null;
   primaryHotel: string | null;
@@ -472,7 +474,7 @@ export default function ShiftPlannerPage() {
     if (!plan) return;
     setConfirmModal({
       title: "Odebrat zaměstnance",
-      message: `Odebrat ${emp.lastName} ${emp.firstName} z plánu?`,
+      message: `Odebrat ${employeeDisplayName(emp)} z plánu?`,
       confirmLabel: "Odebrat",
       danger: true,
       onConfirm: async () => {
@@ -640,8 +642,8 @@ export default function ShiftPlannerPage() {
           html += "<tr>";
           const modBadge = section === "vedouc\u00ed" ? modLetterByEmpId.get(emp.employeeId) : undefined;
           const nameHtml = modBadge
-            ? `${emp.lastName} ${emp.firstName} <span style="display:inline-block;background:#e5e7eb;border-radius:3px;padding:0 2px;font-weight:700;font-size:5.5pt;margin-left:2px;">${modBadge}</span>`
-            : `${emp.lastName} ${emp.firstName}`;
+            ? `${employeeDisplayName(emp)} <span style="display:inline-block;background:#e5e7eb;border-radius:3px;padding:0 2px;font-weight:700;font-size:5.5pt;margin-left:2px;">${modBadge}</span>`
+            : `${employeeDisplayName(emp)}`;
           html += `<td style="${cs.nameCell}">${nameHtml}</td>`;
           let shiftCount = 0;
           for (const day of daysInMonth) {
@@ -790,7 +792,7 @@ export default function ShiftPlannerPage() {
           return escape(raw);
         });
         const modLetter = section === "vedoucí" ? (effectiveModPersons.get(emp.employeeId) ?? "") : "";
-        const name = `${emp.lastName} ${emp.firstName}${modLetter ? ` (${modLetter})` : ""}`;
+        const name = `${employeeDisplayName(emp)}${modLetter ? ` (${modLetter})` : ""}`;
         rows.push([escape(name), ...cells, escape(String(shiftCount))].join(";"));
       }
 
@@ -1522,7 +1524,7 @@ export default function ShiftPlannerPage() {
         <XOverrideModal
           employeeName={(() => {
             const emp = plan.employees.find((e) => e.employeeId === pendingX.employeeId);
-            return emp ? `${emp.lastName} ${emp.firstName}` : pendingX.employeeId;
+            return emp ? employeeDisplayName(emp) : pendingX.employeeId;
           })()}
           date={pendingX.date}
           violations={pendingX.violations}
@@ -1545,7 +1547,7 @@ export default function ShiftPlannerPage() {
         <ShiftChangeRequestModal
           employeeName={(() => {
             const emp = plan.employees.find((e) => e.employeeId === pendingChangeRequest.employeeId);
-            return emp ? `${emp.lastName} ${emp.firstName}` : pendingChangeRequest.employeeId;
+            return emp ? employeeDisplayName(emp) : pendingChangeRequest.employeeId;
           })()}
           date={pendingChangeRequest.date}
           currentShift={pendingChangeRequest.currentRawInput}

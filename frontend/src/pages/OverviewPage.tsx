@@ -18,6 +18,7 @@ import {
   parseShiftExpression,
   type HotelCode,
 } from "@/lib/shiftConstants";
+import { employeeDisplayName } from "@/lib/employeeName";
 import type {
   PlanDetail,
   PlanEmployee,
@@ -236,7 +237,7 @@ function StaffingTable({
   isDark: boolean;
 }) {
   const renderName = (item: StaffItem) => {
-    const name = `${item.emp.firstName} ${item.emp.lastName}`;
+    const name = employeeDisplayName(item.emp);
     return (
       <span key={item.emp.employeeId}>
         {name}
@@ -305,7 +306,7 @@ function ModBlock({ staffing }: { staffing: StaffingResult }) {
       <div className={styles.modRow}>
         <span className={styles.modLetter}>{staffing.modLetter}</span>
         <span>
-          {staffing.modEmployee.firstName} {staffing.modEmployee.lastName}
+          {employeeDisplayName(staffing.modEmployee)}
         </span>
       </div>
     );
@@ -490,7 +491,7 @@ export default function OverviewPage() {
                 <h3 className={styles.subTitle}>Manažeři mimo (X)</h3>
                 <ul className={styles.absentList}>
                   {todayStaffing.absentManagers.map((e) => (
-                    <li key={e.employeeId}>{e.firstName} {e.lastName}</li>
+                    <li key={e.employeeId}>{employeeDisplayName(e)}</li>
                   ))}
                 </ul>
               </div>
@@ -538,7 +539,7 @@ export default function OverviewPage() {
                     <h3 className={styles.subTitle}>Manažeři mimo (X)</h3>
                     <ul className={styles.absentList}>
                       {tomorrowStaffing.absentManagers.map((e) => (
-                        <li key={e.employeeId}>{e.firstName} {e.lastName}</li>
+                        <li key={e.employeeId}>{employeeDisplayName(e)}</li>
                       ))}
                     </ul>
                   </div>

@@ -4,11 +4,10 @@ import { sendPasswordResetEmail } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useAuth, UserRole } from "@/hooks/useAuth";
 import { authApi, UserProfile, api, ApiError } from "@/lib/api";
+import { employeeSurnameFirst } from "@/lib/employeeName";
 import Button from "@/components/Button";
 import ConfirmModal from "@/components/ConfirmModal";
 import MenuOrderTab from "./settings/MenuOrderTab";
-import TimeOverrideTab from "./settings/TimeOverrideTab";
-import { useTimeOverride } from "@/context/TimeOverrideContext";
 import styles from "./SettingsPage.module.css";
 
 const EyeIcon = () => (
@@ -48,15 +47,18 @@ interface EmployeeSummary {
   id: string;
   firstName: string;
   lastName: string;
+  displayName?: string;
 }
 
 interface CompanyRecord {
   id: string;
+  abbreviation: string;
   name: string;
   address: string;
   ic: string;
   dic: string;
   fileNo: string;
+  displayOrder?: number;
 }
 
 interface DepartmentRecord {
@@ -89,6 +91,7 @@ interface PosCascadePreview {
     id: string;
     firstName: string;
     lastName: string;
+    displayName?: string;
     currentHourlyRate: number | null;
     isManualOverride: boolean;
   }>;
@@ -139,11 +142,7 @@ export default function SettingsPage() {
   const [linkEmployeeId, setLinkEmployeeId] = useState<string>("");
   const [linkSaving, setLinkSaving] = useState(false);
 
-  const [settingsTab, setSettingsTab] = useState<"users" | "companies" | "departments" | "jobPositions" | "education" | "payroll" | "menu" | "time">("users");
-
-  // Test-clock override — the "Čas" tab only appears where the backend allows
-  // faking time (staging / emulator), never in production.
-  const { allowed: timeOverrideAllowed } = useTimeOverride();
+  const [settingsTab, setSettingsTab] = useState<"users" | "companies" | "departments" | "jobPositions" | "education" | "payroll" | "menu">("users");
 
   // Departments
   const [departments, setDepartments] = useState<DepartmentRecord[]>([]);
@@ -192,6 +191,10 @@ export default function SettingsPage() {
   const [companyEditId, setCompanyEditId] = useState<string | null>(null);
   const [companySaving, setCompanySaving] = useState<Record<string, boolean>>({});
   const [companySaveMsg, setCompanySaveMsg] = useState<Record<string, string>>({});
+  const [companyCreateOpen, setCompanyCreateOpen] = useState(false);
+  const [companyCreateForm, setCompanyCreateForm] = useState<{ abbreviation: string; name: string; address: string; ic: string; dic: string; fileNo: string }>({ abbreviation: "", name: "", address: "", ic: "", dic: "", fileNo: "" });
+  const [companyDeleteId, setCompanyDeleteId] = useState<string | null>(null);
+  const [companyError, setCompanyError] = useState<string | null>(null);
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
@@ -214,21 +217,27 @@ export default function SettingsPage() {
       .catch(() => setEmployees([]));
   }, []);
 
-  useEffect(() => {
-    api.get<CompanyRecord[]>("/companies").then((list) => {
+  const loadCompanies = useCallback(async () => {
+    const fallback = () => {
       const map: Record<string, CompanyRecord> = {};
-      for (const c of list) map[c.id] = c;
-      // Ensure default company IDs are always shown
-      for (const id of DEFAULT_COMPANY_IDS) {
-        if (!map[id]) map[id] = { id, name: "", address: "", ic: "", dic: "", fileNo: "" };
-      }
+      for (const id of DEFAULT_COMPANY_IDS) map[id] = { id, abbreviation: id, name: "", address: "", ic: "", dic: "", fileNo: "" };
       setCompanyForms(map);
-    }).catch(() => {
+    };
+    try {
+      const list = await api.get<CompanyRecord[]>("/companies");
+      // Seed safety net: only when the collection is completely empty do we show
+      // the two default companies as unsaved placeholders, so a fresh DB isn't
+      // blank. When companies exist, deletes stick — we never resurrect them.
+      if (list.length === 0) { fallback(); return; }
       const map: Record<string, CompanyRecord> = {};
-      for (const id of DEFAULT_COMPANY_IDS) map[id] = { id, name: "", address: "", ic: "", dic: "", fileNo: "" };
+      for (const c of list) map[c.id] = { ...c, abbreviation: c.abbreviation || c.id };
       setCompanyForms(map);
-    });
+    } catch {
+      fallback();
+    }
   }, []);
+
+  useEffect(() => { loadCompanies(); }, [loadCompanies]);
 
   const loadDepartments = useCallback(async () => {
     try {
@@ -430,9 +439,14 @@ export default function SettingsPage() {
     setCompanySaving((p) => ({ ...p, [id]: true }));
     setCompanySaveMsg((p) => ({ ...p, [id]: "" }));
     try {
-      const { name, address, ic, dic, fileNo } = companyForms[id];
-      await api.put(`/companies/${id}`, { name, address, ic, dic, fileNo });
+      const { abbreviation, name, address, ic, dic, fileNo } = companyForms[id];
+      if (!abbreviation || !abbreviation.trim()) {
+        setCompanySaveMsg((p) => ({ ...p, [id]: "Zkratka je povinná" }));
+        return;
+      }
+      await api.put(`/companies/${id}`, { abbreviation: abbreviation.trim(), name, address, ic, dic, fileNo });
       setCompanyEditId(null);
+      await loadCompanies();
     } catch {
       setCompanySaveMsg((p) => ({ ...p, [id]: "Chyba při ukládání" }));
       setTimeout(() => setCompanySaveMsg((p) => ({ ...p, [id]: "" })), 3000);
@@ -443,6 +457,36 @@ export default function SettingsPage() {
 
   function setCompanyField(id: string, field: keyof CompanyRecord, value: string) {
     setCompanyForms((p) => ({ ...p, [id]: { ...p[id], [field]: value } }));
+  }
+
+  async function handleCreateCompany() {
+    const abbreviation = companyCreateForm.abbreviation.trim();
+    if (!abbreviation) { setCompanyError("Zkratka je povinná."); return; }
+    setCompanyError(null);
+    try {
+      await api.post("/companies", {
+        ...companyCreateForm,
+        abbreviation,
+        displayOrder: Object.keys(companyForms).length,
+      });
+      setCompanyCreateOpen(false);
+      setCompanyCreateForm({ abbreviation: "", name: "", address: "", ic: "", dic: "", fileNo: "" });
+      await loadCompanies();
+    } catch (e: unknown) {
+      setCompanyError((e as Error).message ?? "Chyba při vytváření.");
+    }
+  }
+
+  async function confirmDeleteCompany() {
+    if (!companyDeleteId) return;
+    const id = companyDeleteId;
+    setCompanyDeleteId(null);
+    try {
+      await api.delete(`/companies/${id}`);
+      await loadCompanies();
+    } catch (e: unknown) {
+      setCompanyError((e as Error).message ?? "Nelze smazat společnost.");
+    }
   }
 
   if (authLoading) return null;
@@ -619,9 +663,6 @@ export default function SettingsPage() {
         <button className={settingsTab === "education" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("education")}>Vzdělání</button>
         <button className={settingsTab === "payroll" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("payroll")}>Mzdy</button>
         <button className={settingsTab === "menu" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("menu")}>Menu</button>
-        {timeOverrideAllowed && (
-          <button className={settingsTab === "time" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("time")}>Čas (test)</button>
-        )}
       </div>
 
       {showCreate && settingsTab === "users" && (
@@ -685,7 +726,7 @@ export default function SettingsPage() {
                   <option value="">— Nepropojovat —</option>
                   {employees.map((emp) => (
                     <option key={emp.id} value={emp.id}>
-                      {emp.lastName} {emp.firstName}
+                      {employeeSurnameFirst(emp)}
                     </option>
                   ))}
                 </select>
@@ -721,7 +762,7 @@ export default function SettingsPage() {
                 <option value="">— Zrušit propojení —</option>
                 {employees.map((emp) => (
                   <option key={emp.id} value={emp.id}>
-                    {emp.lastName} {emp.firstName}
+                    {employeeSurnameFirst(emp)}
                   </option>
                 ))}
               </select>
@@ -780,7 +821,7 @@ export default function SettingsPage() {
                       </td>
                       <td>
                         <span className={linkedEmp ? styles.employeeLinked : styles.employeeUnlinked}>
-                          {linkedEmp ? `${linkedEmp.lastName} ${linkedEmp.firstName}` : "—"}
+                          {linkedEmp ? employeeSurnameFirst(linkedEmp) : "—"}
                         </span>
                         {linkedEmp ? (
                           <button
@@ -836,12 +877,30 @@ export default function SettingsPage() {
       )}
 
       {settingsTab === "companies" && (
-        <div className={styles.companyList}>
+        <>
+          {companyError && <p className={styles.errorState}>{companyError}</p>}
+          <div style={{ marginBottom: "1rem" }}>
+            <Button
+              variant="primary"
+              onClick={() => {
+                setCompanyError(null);
+                setCompanyCreateForm({ abbreviation: "", name: "", address: "", ic: "", dic: "", fileNo: "" });
+                setCompanyCreateOpen(true);
+              }}
+            >
+              + Nová společnost
+            </Button>
+          </div>
+          <div className={styles.companyList}>
           {Object.values(companyForms).map((c) => {
             const isEditing = companyEditId === c.id;
             return (
               <div key={c.id} className={styles.companyCard}>
-                <div className={styles.companyId}>{c.id}</div>
+                <div className={styles.companyId}>
+                  {isEditing
+                    ? <input className={styles.input} value={c.abbreviation} onChange={(e) => setCompanyField(c.id, "abbreviation", e.target.value)} placeholder="Zkratka" />
+                    : (c.abbreviation || c.id)}
+                </div>
                 <div className={styles.companyGrid}>
                   <div className={styles.field}>
                     <label className={styles.label}>Název</label>
@@ -880,7 +939,7 @@ export default function SettingsPage() {
                   )}
                   {isEditing ? (
                     <>
-                      <Button variant="secondary" onClick={() => setCompanyEditId(null)} disabled={companySaving[c.id]}>
+                      <Button variant="secondary" onClick={() => { setCompanyEditId(null); loadCompanies(); }} disabled={companySaving[c.id]}>
                         Zrušit
                       </Button>
                       <Button variant="primary" onClick={() => handleSaveCompany(c.id)} disabled={companySaving[c.id]}>
@@ -888,15 +947,56 @@ export default function SettingsPage() {
                       </Button>
                     </>
                   ) : (
-                    <button className={styles.editBtn} onClick={() => setCompanyEditId(c.id)}>
-                      Upravit
-                    </button>
+                    <>
+                      <button className={styles.editBtn} onClick={() => setCompanyEditId(c.id)}>
+                        Upravit
+                      </button>
+                      <button className={styles.deactivateBtn} onClick={() => setCompanyDeleteId(c.id)}>
+                        Smazat
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
             );
           })}
-        </div>
+          </div>
+          {companyCreateOpen && (
+            <div className={styles.modal}>
+              <div className={styles.modalBox}>
+                <h2 className={styles.modalTitle}>Nová společnost</h2>
+                <div className={styles.field}>
+                  <label className={styles.label}>Zkratka</label>
+                  <input className={styles.input} value={companyCreateForm.abbreviation} onChange={(e) => setCompanyCreateForm({ ...companyCreateForm, abbreviation: e.target.value })} autoFocus />
+                </div>
+                <div className={styles.field}>
+                  <label className={styles.label}>Název</label>
+                  <input className={styles.input} value={companyCreateForm.name} onChange={(e) => setCompanyCreateForm({ ...companyCreateForm, name: e.target.value })} />
+                </div>
+                <div className={styles.field}>
+                  <label className={styles.label}>Adresa</label>
+                  <input className={styles.input} value={companyCreateForm.address} onChange={(e) => setCompanyCreateForm({ ...companyCreateForm, address: e.target.value })} />
+                </div>
+                <div className={styles.field}>
+                  <label className={styles.label}>IČO</label>
+                  <input className={styles.input} value={companyCreateForm.ic} onChange={(e) => setCompanyCreateForm({ ...companyCreateForm, ic: e.target.value })} />
+                </div>
+                <div className={styles.field}>
+                  <label className={styles.label}>DIČ</label>
+                  <input className={styles.input} value={companyCreateForm.dic} onChange={(e) => setCompanyCreateForm({ ...companyCreateForm, dic: e.target.value })} />
+                </div>
+                <div className={styles.field}>
+                  <label className={styles.label}>Spisová značka</label>
+                  <input className={styles.input} value={companyCreateForm.fileNo} onChange={(e) => setCompanyCreateForm({ ...companyCreateForm, fileNo: e.target.value })} placeholder="např. C 12345 vedená u MS v Praze" />
+                </div>
+                <div className={styles.formActions}>
+                  <Button variant="secondary" onClick={() => setCompanyCreateOpen(false)}>Zrušit</Button>
+                  <Button variant="primary" onClick={handleCreateCompany}>Vytvořit</Button>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {settingsTab === "departments" && (
@@ -1072,7 +1172,7 @@ export default function SettingsPage() {
                     <tbody>
                       {posCascade.affectedEmployees.map((e) => (
                         <tr key={e.id}>
-                          <td>{e.lastName} {e.firstName}</td>
+                          <td>{employeeSurnameFirst(e)}</td>
                           <td>{e.currentHourlyRate ?? "—"}</td>
                           <td>
                             {e.isManualOverride && (
@@ -1372,8 +1472,6 @@ export default function SettingsPage() {
 
       {settingsTab === "menu" && <MenuOrderTab />}
 
-      {settingsTab === "time" && timeOverrideAllowed && <TimeOverrideTab />}
-
       {depDeleteId && (
         <ConfirmModal
           title="Smazat oddělení"
@@ -1404,6 +1502,17 @@ export default function SettingsPage() {
           danger
           onConfirm={confirmDeleteEducation}
           onCancel={() => setEduDeleteId(null)}
+        />
+      )}
+
+      {companyDeleteId && (
+        <ConfirmModal
+          title="Smazat společnost"
+          message="Opravdu smazat tuto společnost? Tato akce je nevratná. Již vygenerované smlouvy zůstanou nezměněné."
+          confirmLabel="Smazat"
+          danger
+          onConfirm={confirmDeleteCompany}
+          onCancel={() => setCompanyDeleteId(null)}
         />
       )}
     </div>

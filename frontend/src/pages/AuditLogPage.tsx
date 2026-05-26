@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "@/lib/api";
+import { employeeDisplayName } from "@/lib/employeeName";
 import Button from "@/components/Button";
 import type { UserProfile } from "@/lib/api";
 import styles from "./AuditLogPage.module.css";
@@ -28,6 +29,7 @@ interface EmployeeMini {
   id: string;
   firstName: string;
   lastName: string;
+  displayName?: string;
 }
 
 const ACTIONS: AuditEntry["action"][] = ["create", "update", "delete", "reveal", "export"];
@@ -127,7 +129,7 @@ export default function AuditLogPage() {
 
   const employeeNameMap = useMemo(() => {
     const m = new Map<string, string>();
-    employees.forEach((e) => m.set(e.id, `${e.lastName} ${e.firstName}`.trim()));
+    employees.forEach((e) => m.set(e.id, employeeDisplayName(e)));
     return m;
   }, [employees]);
 
@@ -209,7 +211,7 @@ export default function AuditLogPage() {
             <option value="">Všichni</option>
             {employees.map((e) => (
               <option key={e.id} value={e.id}>
-                {e.lastName} {e.firstName}
+                {employeeDisplayName(e)}
               </option>
             ))}
           </select>

@@ -6,7 +6,7 @@ import express from "express";
 import cors from "cors";
 
 import { authRouter } from "./routes/auth";
-import { employeesRouter } from "./routes/employees";
+import { employeesRouter, refreshEffectiveRootForAllActive } from "./routes/employees";
 import { alertsRouter } from "./routes/alerts";
 import { companiesRouter } from "./routes/companies";
 import { departmentsRouter } from "./routes/departments";
@@ -154,6 +154,25 @@ app.post(
   }
 );
 
+app.post(
+  "/employees/trigger-effective-refresh",
+  requireAuth,
+  requireRole("admin"),
+  async (req: AuthRequest, res) => {
+    // Backfill the denormalized current* root fields by re-folding every active
+    // employee's latest session. Mirrors the daily refreshEmployeeEffective job;
+    // also repairs any record whose cache drifted (e.g. blanked by the old
+    // raw-copy bug in PATCH/POST /employment).
+    const result = await refreshEffectiveRootForAllActive();
+    await writeAudit(ctxFromReq(req), {
+      action: "manual-trigger",
+      collection: "employees",
+      extra: { trigger: "refreshEffectiveRootForAllActive", result },
+    });
+    res.json(result);
+  }
+);
+
 // Catch-all error handler — turns a thrown error (or an explicit next(err))
 // into a JSON 500 instead of letting the request hang with no response. Async
 // handlers in Express 4 must still try/catch their own rejections to reach
@@ -230,6 +249,22 @@ export const refreshProbationAlerts = onSchedule("every 24 hours", async () => {
   await clock.refresh(true);
   await refreshAllProbationAlerts();
 });
+
+// ─── Daily at midnight (Europe/Prague): refresh employees' effective root ────
+// fields (date-aware Dodatky). A future-dated Dodatek flips position / úvazek /
+// department (and thus the Zaměstnanci list + payroll contract type) on its
+// validity date — recompute otherwise only runs on employment writes. Runs at
+// 00:00 Prague time so the change shows from midnight, matching the frontend's
+// live as-of-today effective state (TODO lines 16/18). The detail header is
+// always live; this keeps the cached list/root in step at the day boundary.
+export const refreshEmployeeEffective = onSchedule(
+  { schedule: "0 0 * * *", timeZone: "Europe/Prague" },
+  async () => {
+    await clock.refresh(true);
+    const res = await refreshEffectiveRootForAllActive();
+    console.log(`[refreshEmployeeEffective] scanned ${res.scanned}, updated ${res.updated}`);
+  }
+);
 
 export const refreshDocumentAlerts = onSchedule("every 24 hours", async () => {
   await clock.refresh(true);

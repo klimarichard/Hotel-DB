@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import { api } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { canEditEmployees } from "@/lib/permissions";
+import { employeeDisplayName, employeeSurnameFirst } from "@/lib/employeeName";
+import { nationalityName } from "@/lib/nationalities";
 import Button from "@/components/Button";
 import ExportEmployeesModal from "@/components/ExportEmployeesModal";
 import styles from "./EmployeesPage.module.css";
@@ -11,6 +13,7 @@ interface Employee {
   id: string;
   firstName: string;
   lastName: string;
+  displayName?: string;
   nationality: string;
   status: "active" | "terminated";
   currentCompanyId: string | null;
@@ -44,7 +47,10 @@ export default function EmployeesPage() {
         !q ||
         (e.firstName ?? "").toLowerCase().includes(q) ||
         (e.lastName ?? "").toLowerCase().includes(q) ||
-        (e.currentJobTitle ?? "").toLowerCase().includes(q)
+        employeeDisplayName(e).toLowerCase().includes(q) ||
+        (e.currentJobTitle ?? "").toLowerCase().includes(q) ||
+        (e.nationality ?? "").toLowerCase().includes(q) ||
+        (e.nationality ? nationalityName(e.nationality) : "").toLowerCase().includes(q)
       );
     })
     .sort((a, b) => {
@@ -118,16 +124,25 @@ export default function EmployeesPage() {
               </tr>
             ) : (
               filtered.map((emp) => (
-                <tr key={emp.id}>
+                <tr
+                  key={emp.id}
+                  className={
+                    emp.currentContractType === "DPP"
+                      ? styles.dppRow
+                      : emp.currentContractType === "PPP"
+                        ? styles.pppRow
+                        : ""
+                  }
+                >
                   <td>
                     <Link to={`/zamestnanci/${emp.id}`} className={styles.nameLink}>
-                      {emp.lastName} {emp.firstName}
+                      {employeeSurnameFirst(emp)}
                     </Link>
                   </td>
                   <td>{emp.currentJobTitle || "—"}</td>
                   <td>{emp.currentDepartment || "—"}</td>
                   <td>{emp.currentContractType || "—"}</td>
-                  <td>{emp.nationality || "—"}</td>
+                  <td>{emp.nationality ? nationalityName(emp.nationality) : "—"}</td>
                   <td>
                     <span
                       className={

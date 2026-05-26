@@ -118,6 +118,29 @@
   background: var(--color-surface-2);
 }
 
+/* Row tints per contract type — clearly distinguishable in both light and dark.
+   PPP = blue, DPP = amber. Kept identical to PayrollPage.module.css. */
+.pppRow {
+  background: #dbeafe;
+}
+
+.dppRow {
+  background: #fef3c7;
+}
+
+[data-theme="dark"] .pppRow {
+  background: #1e3a5f;
+}
+
+[data-theme="dark"] .dppRow {
+  background: #3a2c10;
+}
+
+.pppRow td,
+.dppRow td {
+  background: inherit;
+}
+
 .nameLink {
   font-weight: 500;
   color: var(--color-primary);

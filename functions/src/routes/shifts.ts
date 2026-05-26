@@ -627,6 +627,7 @@ shiftsRouter.post(
     const employeeId = body.employeeId as string;
     const firstName = body.firstName as string;
     const lastName = body.lastName as string;
+    const displayName = (body.displayName as string | undefined) ?? "";
     const section = body.section as string;
     const primaryShiftType = (body.primaryShiftType as string | null) ?? null;
     const primaryHotel = (body.primaryHotel as string | null) ?? null;
@@ -675,6 +676,7 @@ shiftsRouter.post(
       employeeId,
       firstName,
       lastName,
+      displayName,
       section,
       primaryShiftType,
       primaryHotel,

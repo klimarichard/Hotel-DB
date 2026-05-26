@@ -3,6 +3,7 @@ import { api } from "../lib/api";
 import { parseShiftExpression } from "../lib/shiftConstants";
 import { formatDateCZ } from "../lib/dateFormat";
 import type { PlanEmployee } from "../pages/ShiftPlannerPage";
+import { employeeDisplayName } from "../lib/employeeName";
 import Button from "./Button";
 import styles from "./ShiftOverridePanel.module.css";
 
@@ -49,7 +50,7 @@ function StatusBadge({ status }: { status: OverrideRequest["status"] }) {
 export default function ShiftOverridePanel({ planId, employees, onOverrideResolved, onShiftApproved }: Props) {
   function resolveEmployeeName(employeeId: string): string {
     const emp = employees.find((e) => e.employeeId === employeeId);
-    return emp ? `${emp.lastName} ${emp.firstName}` : employeeId;
+    return emp ? employeeDisplayName(emp) : employeeId;
   }
   const [requests, setRequests] = useState<OverrideRequest[]>([]);
   const [loading, setLoading] = useState(true);

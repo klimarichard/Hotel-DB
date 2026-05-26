@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { api } from "@/lib/api";
 import { useAlertsContext } from "@/context/AlertsContext";
 import { formatDateCZ } from "@/lib/dateFormat";
+import { employeeDisplayName } from "@/lib/employeeName";
 import Button from "@/components/Button";
 import ConfirmModal from "@/components/ConfirmModal";
 import styles from "../AlertsPage.module.css";
@@ -61,7 +62,7 @@ function ProbationTable({ alerts, actionLabel, onAction, muted }: ProbationTable
             >
               <td>
                 <Link to={`/zamestnanci/${alert.employeeId}`} className={styles.empLink}>
-                  {alert.employeeLastName} {alert.employeeFirstName}
+                  {employeeDisplayName({ firstName: alert.employeeFirstName, lastName: alert.employeeLastName })}
                 </Link>
               </td>
               <td>{formatDateCZ(alert.probationStartDate)}</td>

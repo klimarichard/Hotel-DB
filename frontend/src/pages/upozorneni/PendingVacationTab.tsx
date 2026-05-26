@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "@/lib/api";
 import { formatDateCZ } from "@/lib/dateFormat";
+import { employeeDisplayName } from "@/lib/employeeName";
 import styles from "../AlertsPage.module.css";
 
 interface VacationRequest {
@@ -9,6 +10,7 @@ interface VacationRequest {
   employeeId: string;
   firstName: string;
   lastName: string;
+  displayName?: string;
   startDate: string;
   endDate: string;
   reason: string;
@@ -59,7 +61,7 @@ export default function PendingVacationTab() {
               <tr key={v.id}>
                 <td>
                   <Link to={`/zamestnanci/${v.employeeId}`} className={styles.empLink}>
-                    {v.lastName} {v.firstName}
+                    {employeeDisplayName(v)}
                   </Link>
                 </td>
                 <td>{formatDateCZ(start)}</td>
