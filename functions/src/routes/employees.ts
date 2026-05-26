@@ -101,6 +101,55 @@ async function recomputeRootFromLatestSession(
   return patch;
 }
 
+const EMPTY_ROOT_FIELDS = {
+  currentCompanyId: null,
+  currentDepartment: "",
+  currentContractType: "",
+  currentJobTitle: "",
+} as const;
+
+/**
+ * Re-sync the denormalized current* root fields after ANY employment-row write
+ * (add / edit / delete) by folding the employee's latest session — NEVER by
+ * copying a single row's own fields. A Dodatek (`změna smlouvy`) row carries its
+ * change inside `changes[]` and has no jobTitle/department/contractType/companyId,
+ * so copying them onto the root would wipe the employee's "current" values (the
+ * exact bug that blanked the Zaměstnanci list). Clears the fields when no active
+ * session remains, and writes an audit entry only when something actually changed.
+ */
+async function resyncRootFields(
+  empRef: admin.firestore.DocumentReference,
+  req: AuthRequest,
+  now: FirebaseFirestore.FieldValue
+): Promise<void> {
+  const before = (await empRef.get()).data() as Record<string, unknown> | undefined;
+  // recomputeRootFromLatestSession already writes the folded patch when non-null.
+  const patch = await recomputeRootFromLatestSession(empRef, now);
+  const after = patch ?? { ...EMPTY_ROOT_FIELDS };
+  if (!patch) {
+    await empRef.update({ ...after, updatedAt: now });
+  }
+  if (!before) return;
+  const changed =
+    after.currentJobTitle !== (before.currentJobTitle ?? "") ||
+    after.currentContractType !== (before.currentContractType ?? "") ||
+    after.currentDepartment !== (before.currentDepartment ?? "") ||
+    after.currentCompanyId !== (before.currentCompanyId ?? null);
+  if (!changed) return;
+  await logUpdate(ctxFromReq(req), {
+    collection: "employees",
+    resourceId: empRef.id,
+    employeeId: empRef.id,
+    before: {
+      currentCompanyId: before.currentCompanyId ?? null,
+      currentDepartment: before.currentDepartment ?? "",
+      currentContractType: before.currentContractType ?? "",
+      currentJobTitle: before.currentJobTitle ?? "",
+    },
+    after,
+  });
+}
+
 /**
  * Daily refresh: re-fold every active employee's effective root fields so a
  * future-dated Dodatek flips position/úvazek (and thus the Zaměstnanci list
@@ -614,36 +663,12 @@ employeesRouter.post(
 
     const newRow = await empRef.collection("employment").add(employmentData);
 
-    // Update denormalized fields on the employee root doc.
-    //   - Nástup with status="active": straight from the row's own fields.
-    //   - Dodatek (změna smlouvy): walk the latest session, fold its Dodatek
-    //     `changes[]` into a derived effective state (so currentJobTitle reflects
-    //     the most recent `pracovní pozice` change), then write that to the root.
-    if (body.changeType === "nástup" && body.status === "active") {
-      await empRef.update({
-        currentCompanyId: body.companyId ?? null,
-        currentDepartment: body.department ?? "",
-        currentContractType: body.contractType ?? "",
-        currentJobTitle: body.jobTitle ?? "",
-        updatedAt: now,
-      });
-    } else if (body.changeType === "změna smlouvy") {
-      const before = (await empRef.get()).data() as Record<string, unknown>;
-      const updated = await recomputeRootFromLatestSession(empRef, now);
-      if (updated) {
-        await logUpdate(ctxFromReq(req), {
-          collection: "employees",
-          resourceId: req.params.id,
-          employeeId: req.params.id,
-          before: {
-            currentCompanyId: before.currentCompanyId,
-            currentDepartment: before.currentDepartment,
-            currentContractType: before.currentContractType,
-            currentJobTitle: before.currentJobTitle,
-          },
-          after: updated,
-        });
-      }
+    // Re-sync denormalized root fields by folding the latest employment session
+    // (Nástup + applicable Dodatky), never by copying this single row's fields —
+    // a Dodatek row has no jobTitle/department/contractType, so a raw copy would
+    // wipe the root. Applies to both new Nástup and new Dodatek rows.
+    if (body.changeType === "nástup" || body.changeType === "změna smlouvy") {
+      await resyncRootFields(empRef, req, now);
     }
 
     await logCreate(ctxFromReq(req), {
@@ -923,15 +948,11 @@ employeesRouter.patch(
     const before = rowSnap.data() as Record<string, unknown>;
     await rowRef.update({ ...body, updatedAt: now });
 
-    if (body.status === "active") {
-      await empRef.update({
-        currentCompanyId: body.companyId ?? null,
-        currentDepartment: body.department ?? "",
-        currentContractType: body.contractType ?? "",
-        currentJobTitle: body.jobTitle ?? "",
-        updatedAt: now,
-      });
-    }
+    // Re-sync the denormalized root fields by folding the whole session — NOT by
+    // copying this row's own fields. Editing a Dodatek (which has no
+    // jobTitle/department/contractType/companyId) used to blank the root and wipe
+    // the employee's position/department/contract type from the Zaměstnanci list.
+    await resyncRootFields(empRef, req, now);
 
     await logUpdate(ctxFromReq(req), {
       collection: "employees/employment",

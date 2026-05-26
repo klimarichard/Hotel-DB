@@ -154,6 +154,25 @@ app.post(
   }
 );
 
+app.post(
+  "/employees/trigger-effective-refresh",
+  requireAuth,
+  requireRole("admin"),
+  async (req: AuthRequest, res) => {
+    // Backfill the denormalized current* root fields by re-folding every active
+    // employee's latest session. Mirrors the daily refreshEmployeeEffective job;
+    // also repairs any record whose cache drifted (e.g. blanked by the old
+    // raw-copy bug in PATCH/POST /employment).
+    const result = await refreshEffectiveRootForAllActive();
+    await writeAudit(ctxFromReq(req), {
+      action: "manual-trigger",
+      collection: "employees",
+      extra: { trigger: "refreshEffectiveRootForAllActive", result },
+    });
+    res.json(result);
+  }
+);
+
 // Catch-all error handler — turns a thrown error (or an explicit next(err))
 // into a JSON 500 instead of letting the request hang with no response. Async
 // handlers in Express 4 must still try/catch their own rejections to reach
