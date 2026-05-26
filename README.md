@@ -617,7 +617,8 @@ The existing `GenerateContractModal` is unchanged — only the call sites moved.
 
 ### Backend changes
 `functions/src/routes/employees.ts`:
-- `recomputeRootFromLatestSession(empRef, now)` — walks an employee's rows the same way the frontend does, applies Dodatek `changes[]` (currently `pracovní pozice` → `currentJobTitle`, `úvazek` → `currentContractType`), and patches the root denormalized fields. Called from `POST /employment` when `changeType === "změna smlouvy"` and from the new DELETE endpoint.
+- `recomputeRootFromLatestSession(empRef, now)` — walks an employee's rows the same way the frontend does, applies Dodatek `changes[]` (currently `pracovní pozice` → `currentJobTitle`, `úvazek` → `currentContractType`), and patches the root denormalized fields.
+- `resyncRootFields(empRef, req, now)` — the single chokepoint for keeping the denormalized `current*` fields correct after **any** employment-row write. Folds the latest session via `recomputeRootFromLatestSession` (clearing the fields when no active session remains) and audit-logs the change. Called from `POST /employment` (both `nástup` and `změna smlouvy`), `PATCH /employment/:rowId`, and the DELETE endpoint. **Never copy a single row's own fields onto the root**: a Dodatek row holds its change in `changes[]` and has no `jobTitle`/`department`/`contractType`/`companyId`, so a raw copy blanks the list's Pozice/Oddělení/Typ columns. (This was a real bug — editing any Dodatek wiped `current*` — fixed by routing every write path through this helper.)
 - `DELETE /api/employees/:id/employment/:rowId` — deletes one row, but cascades to the entire session when the row is a Nástup (walks forward to the next Nástup, exclusive). Tied contracts (matched by `employmentRowId`) are deleted alongside, including their unsigned + signed PDFs from Storage. After deletion, root denormalized fields are recomputed; if the last session is gone they're cleared. Each deletion (rows + contracts + root patch) is audit-logged; the contract delete entries carry `deletedDueToEmploymentRowDelete` for traceability.
 
 ### Salary formatting in templates
@@ -732,7 +733,7 @@ The emulator ignores Firestore's index requirements — a query that needs an in
 When adding any new query that combines filter + orderBy on different fields, or any `collectionGroup(...).where(...)`, extend `firestore.indexes.json` and run `firebase deploy --only firestore:indexes --project staging` to verify on real Firestore *before* the same code reaches prod.
 
 ### Manual trigger endpoints
-Four `POST /api/.../trigger-*` endpoints mirror the scheduled jobs that publish shift plans, sweep Multisport, and refresh probation / document alerts. They exist so an admin can re-run a job after a missed scheduled execution:
+Five `POST /api/.../trigger-*` endpoints mirror the scheduled jobs that publish shift plans, sweep Multisport, refresh probation / document alerts, and re-fold employees' effective root fields. They exist so an admin can re-run a job after a missed scheduled execution (and to backfill data after a fix):
 
 | Endpoint | Underlying job |
 |---|---|
@@ -740,8 +741,9 @@ Four `POST /api/.../trigger-*` endpoints mirror the scheduled jobs that publish 
 | `POST /api/benefits/trigger-multisport-sweep` | `sweepExpiredMultisport()` |
 | `POST /api/employees/trigger-probation-refresh` | `refreshAllProbationAlerts()` |
 | `POST /api/employees/trigger-alert-refresh` | document expiry alert refresh |
+| `POST /api/employees/trigger-effective-refresh` | `refreshEffectiveRootForAllActive()` (re-folds `current*` for every active employee; repairs any drifted cache) |
 
-All four are admin-only (`requireAuth` + `requireRole("admin")`) and write a `manual-trigger` audit entry per successful call (`extra.trigger` names the underlying job, `extra.result` carries the job's return value). The audit-log write happens *after* the job, so a failed re-run leaves no entry — the failure surfaces in `firebase functions:log`.
+All five are admin-only (`requireAuth` + `requireRole("admin")`) and write a `manual-trigger` audit entry per successful call (`extra.trigger` names the underlying job, `extra.result` carries the job's return value). The audit-log write happens *after* the job, so a failed re-run leaves no entry — the failure surfaces in `firebase functions:log`.
 
 ### Staging credential rotation
 `scripts/rotate-staging-passwords.js` paginates through every staging Auth user, replaces each password with a fresh 16-char random string, and writes `scripts/staging-credentials.txt` (gitignored). Requires Application Default Credentials (`gcloud auth application-default login`); refuses to run without `--allow-staging`; the shared `scripts/_seed-target.js` guard hard-blocks targeting prod.
