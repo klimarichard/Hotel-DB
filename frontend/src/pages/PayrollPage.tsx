@@ -173,7 +173,14 @@ function EditableCell({
   const [visible, setVisible] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const isUserOverridden = override !== undefined;
+  // The "natural" value a cell shows with NO user override = the auto-balanced
+  // value if present, else the raw computed value. Edits are compared against
+  // THIS (not raw `computed`) so you can set a field to a value the balancer
+  // wouldn't pick (e.g. Svátek → 0 when it was auto-filled to 14), and so
+  // editing a field back to its shown value reliably clears the override.
+  const hasOverride = override !== undefined;
+  const naturalValue = autoOverride ?? computed;
+  const isUserOverridden = hasOverride && override !== naturalValue;
   const isAutoOverridden = !isUserOverridden && autoOverride !== undefined;
   const displayValue = override ?? autoOverride ?? computed;
   const effectivelyVisible = visible || forceVisible;
@@ -185,7 +192,8 @@ function EditableCell({
   async function commit() {
     const trimmed = draft.trim().replace(",", ".");
     if (trimmed === "") {
-      if (isUserOverridden) await onSave(null);
+      // Clearing the field restores the natural value.
+      if (hasOverride) await onSave(null);
       setEditing(false);
       return;
     }
@@ -194,9 +202,11 @@ function EditableCell({
       setEditing(false);
       return;
     }
-    if (num === computed) {
-      if (isUserOverridden) await onSave(null);
-    } else if (num !== displayValue) {
+    if (num === naturalValue) {
+      // Typing the natural (auto/computed) value clears any override — including
+      // a stale one that already equals it — so the cell reads as non-edited.
+      if (hasOverride) await onSave(null);
+    } else if (num !== override) {
       await onSave(num);
     }
     setEditing(false);
@@ -237,10 +247,25 @@ function EditableCell({
   };
 
   const title = isUserOverridden
-    ? `Ručně upraveno (vypočteno: ${computed})${editable ? " · dvojklik pro úpravu" : ""}`
+    ? `Ručně upraveno (původně ${naturalValue})${editable ? " · dvojklik upraví, ↺ vrátí původní" : ""}`
     : isAutoOverridden
       ? `Automaticky dopočítáno (vypočteno: ${computed})${editable ? " · dvojklik pro úpravu" : ""}`
       : editable ? "Dvojklik pro úpravu" : "";
+
+  // Explicit "restore original" — only for truly inline cells (onEditClick cells
+  // delegate to the balance modal, whose own onSave is a no-op, so a reset glyph
+  // there would do nothing).
+  const showReset = editable && isUserOverridden && !onEditClick;
+  const resetButton = showReset ? (
+    <button
+      type="button"
+      className={styles.resetBtn}
+      title="Vrátit původní hodnotu"
+      onClick={(e) => { e.stopPropagation(); void onSave(null); }}
+    >
+      ↺
+    </button>
+  ) : null;
 
   const renderedValue = renderValue
     ? renderValue(displayValue)
@@ -254,6 +279,7 @@ function EditableCell({
         title={title}
       >
         {effectivelyVisible ? renderedValue : "•••••"}
+        {effectivelyVisible && resetButton}
         {!forceVisible && (
           <button
             type="button"
@@ -274,6 +300,7 @@ function EditableCell({
       title={title}
     >
       {renderedValue}
+      {resetButton}
     </span>
   );
 }
@@ -431,7 +458,7 @@ export default function PayrollPage() {
 
       let rowsHtml = "";
       for (const section of SECTIONS) {
-        const entries = period.entries.filter((e) => e.section === section);
+        const entries = entriesBySection(section);
         if (entries.length === 0) continue;
         rowsHtml += `<tr><td colspan="11" style="${cs.sectionRow}">${SECTION_LABELS[section] ?? section}</td></tr>`;
         for (const entry of entries) {
@@ -602,9 +629,14 @@ export default function PayrollPage() {
     } : prev);
   }
 
-  // Group entries by section (matching shift plan order)
+  // Group entries by section, sorted by surname (Příjmení Jméno, Czech locale).
+  // Entries are stored keyed by employeeId and come back in document-id order,
+  // which is meaningless for display (e.g. an auto-id employee jumps to the top),
+  // so sort them here.
   const entriesBySection = (section: string) =>
-    period?.entries.filter((e) => e.section === section) ?? [];
+    (period?.entries.filter((e) => e.section === section) ?? [])
+      .slice()
+      .sort((a, b) => employeeSurnameFirst(a).localeCompare(employeeSurnameFirst(b), "cs"));
 
   function renderSection(section: string) {
     const entries = entriesBySection(section);
