@@ -8,8 +8,6 @@ import { employeeSurnameFirst } from "@/lib/employeeName";
 import Button from "@/components/Button";
 import ConfirmModal from "@/components/ConfirmModal";
 import MenuOrderTab from "./settings/MenuOrderTab";
-import TimeOverrideTab from "./settings/TimeOverrideTab";
-import { useTimeOverride } from "@/context/TimeOverrideContext";
 import styles from "./SettingsPage.module.css";
 
 const EyeIcon = () => (
@@ -144,11 +142,7 @@ export default function SettingsPage() {
   const [linkEmployeeId, setLinkEmployeeId] = useState<string>("");
   const [linkSaving, setLinkSaving] = useState(false);
 
-  const [settingsTab, setSettingsTab] = useState<"users" | "companies" | "departments" | "jobPositions" | "education" | "payroll" | "menu" | "time">("users");
-
-  // Test-clock override — the "Čas" tab only appears where the backend allows
-  // faking time (staging / emulator), never in production.
-  const { allowed: timeOverrideAllowed } = useTimeOverride();
+  const [settingsTab, setSettingsTab] = useState<"users" | "companies" | "departments" | "jobPositions" | "education" | "payroll" | "menu">("users");
 
   // Departments
   const [departments, setDepartments] = useState<DepartmentRecord[]>([]);
@@ -669,9 +663,6 @@ export default function SettingsPage() {
         <button className={settingsTab === "education" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("education")}>Vzdělání</button>
         <button className={settingsTab === "payroll" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("payroll")}>Mzdy</button>
         <button className={settingsTab === "menu" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("menu")}>Menu</button>
-        {timeOverrideAllowed && (
-          <button className={settingsTab === "time" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("time")}>Čas (test)</button>
-        )}
       </div>
 
       {showCreate && settingsTab === "users" && (
@@ -1480,8 +1471,6 @@ export default function SettingsPage() {
       )}
 
       {settingsTab === "menu" && <MenuOrderTab />}
-
-      {settingsTab === "time" && timeOverrideAllowed && <TimeOverrideTab />}
 
       {depDeleteId && (
         <ConfirmModal
