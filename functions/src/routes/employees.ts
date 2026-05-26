@@ -36,7 +36,8 @@ const BENEFITS_SENSITIVE_FIELDS = ["insuranceNumber", "bankAccount"] as const;
  * fields alone on Ukončení — the employee.status flow handles deactivation).
  */
 async function computeEffectiveRootFields(
-  empRef: admin.firestore.DocumentReference
+  empRef: admin.firestore.DocumentReference,
+  positionDeptMap?: Map<string, string>
 ): Promise<Record<string, unknown> | null> {
   const snap = await empRef.collection("employment").orderBy("startDate", "asc").get();
   type Row = Record<string, unknown> & { id: string };
@@ -62,7 +63,20 @@ async function computeEffectiveRootFields(
   let jobTitle = (latest.nastup.jobTitle as string | undefined) ?? "";
   let contractType = (latest.nastup.contractType as string | undefined) ?? "";
   const companyId = (latest.nastup.companyId as string | undefined) ?? null;
-  const department = (latest.nastup.department as string | undefined) ?? "";
+  let department = (latest.nastup.department as string | undefined) ?? "";
+
+  // A position-change Dodatek can move the employee to a position that belongs
+  // to a DIFFERENT department, so currentDepartment (→ Oddělení column + detail
+  // header) must follow the effective position. Resolve position name → dept
+  // name via the jobPositions catalogue, built lazily only when a position
+  // actually changes (the bulk refresh passes a shared map in). An unresolvable
+  // (free-text / legacy) position leaves the department on its last known value,
+  // and a session with no position-change Dodatek keeps the Nástup's department.
+  let lazyMap: Map<string, string> | null = positionDeptMap ?? null;
+  const resolveDept = async (positionName: string): Promise<string | undefined> => {
+    if (!lazyMap) lazyMap = await buildPositionDeptMap();
+    return lazyMap.get(positionName);
+  };
 
   // Only fold Dodatky whose validity (startDate) has arrived — mirrors the
   // frontend computeEffectiveState so the Zaměstnanci list and the employee
@@ -72,8 +86,11 @@ async function computeEffectiveRootFields(
     if (((dodatek.startDate as string | undefined) ?? "") > today) continue;
     const changes = (dodatek.changes as Array<{ changeKind?: string; value?: string }> | undefined) ?? [];
     for (const ch of changes) {
-      if (ch.changeKind === "pracovní pozice" && ch.value) jobTitle = ch.value;
-      else if (ch.changeKind === "úvazek" && ch.value) {
+      if (ch.changeKind === "pracovní pozice" && ch.value) {
+        jobTitle = ch.value;
+        const resolved = await resolveDept(ch.value);
+        if (resolved) department = resolved;
+      } else if (ch.changeKind === "úvazek" && ch.value) {
         // Same mapping as the frontend's uvazekToContractType — keep
         // the two in sync if either side changes.
         const v = ch.value.toLowerCase();
@@ -89,6 +106,31 @@ async function computeEffectiveRootFields(
     currentContractType: contractType,
     currentJobTitle: jobTitle,
   };
+}
+
+/**
+ * Build a map of job-position NAME → its department NAME (resolved via the
+ * position's departmentId). Used to keep currentDepartment in step with a
+ * Dodatek that moves the employee to a position in another department. Position
+ * names are treated as unique; if two positions share a name across departments
+ * the last one wins (rare — the position picker is department-scoped).
+ */
+async function buildPositionDeptMap(): Promise<Map<string, string>> {
+  const [posSnap, depSnap] = await Promise.all([
+    db().collection("jobPositions").get(),
+    db().collection("departments").get(),
+  ]);
+  const depNameById = new Map<string, string>();
+  for (const d of depSnap.docs) {
+    depNameById.set(d.id, ((d.data() as { name?: string }).name) ?? "");
+  }
+  const map = new Map<string, string>();
+  for (const p of posSnap.docs) {
+    const data = p.data() as { name?: string; departmentId?: string };
+    const depName = depNameById.get(data.departmentId ?? "") ?? "";
+    if (data.name && depName) map.set(data.name, depName);
+  }
+  return map;
 }
 
 async function recomputeRootFromLatestSession(
@@ -159,9 +201,12 @@ async function resyncRootFields(
  */
 export async function refreshEffectiveRootForAllActive(): Promise<{ scanned: number; updated: number }> {
   const snap = await db().collection("employees").where("status", "==", "active").get();
+  // Build the position→department map once for the whole sweep instead of per
+  // employee (the per-write paths build their own on demand).
+  const positionDeptMap = await buildPositionDeptMap();
   let updated = 0;
   for (const doc of snap.docs) {
-    const patch = await computeEffectiveRootFields(doc.ref);
+    const patch = await computeEffectiveRootFields(doc.ref, positionDeptMap);
     if (!patch) continue;
     const before = doc.data() as Record<string, unknown>;
     const changed =
