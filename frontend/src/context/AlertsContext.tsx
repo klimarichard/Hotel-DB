@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, ReactNode, Dispatch, SetStateAction } from "react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -56,16 +56,37 @@ export function AlertsProvider({ children }: { children: ReactNode }) {
   const unreadCount = alerts.filter((a) => !a.read).length;
   const unreadProbationCount = probationAlerts.filter((a) => !a.read).length;
 
+  // Flip the `read` flag on the matching cached alerts so the derived counts
+  // (and the sidebar badge that reads them) update immediately — without
+  // waiting for the persist + refetch round-trip. fetchAll() then reconciles
+  // with the server, and a rejected POST re-syncs back to the true state.
+  function applyRead(
+    setter: Dispatch<SetStateAction<AlertFlag[]>>,
+    ids: string[],
+    read: boolean
+  ) {
+    const idSet = new Set(ids);
+    setter((prev) => prev.map((a) => (idSet.has(a.id) ? { ...a, read } : a)));
+  }
+
   async function markRead(ids: string[], read = true) {
     if (ids.length === 0) return;
-    await api.post("/alerts/read", { ids, read });
-    fetchAll();
+    applyRead(setAlerts, ids, read);
+    try {
+      await api.post("/alerts/read", { ids, read });
+    } finally {
+      fetchAll();
+    }
   }
 
   async function markProbationRead(ids: string[], read = true) {
     if (ids.length === 0) return;
-    await api.post("/alerts/probation/read", { ids, read });
-    fetchAll();
+    applyRead(setProbationAlerts, ids, read);
+    try {
+      await api.post("/alerts/probation/read", { ids, read });
+    } finally {
+      fetchAll();
+    }
   }
 
   function refresh() {

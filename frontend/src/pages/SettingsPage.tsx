@@ -136,6 +136,20 @@ export default function SettingsPage() {
   const [resetingUid, setResetingUid] = useState<string | null>(null);
   const [resetMsg, setResetMsg] = useState<{ uid: string; msg: string; isError: boolean } | null>(null);
 
+  // Edit-user (name/email) state
+  const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
+  const [editForm, setEditForm] = useState({ name: "", email: "" });
+  const [editError, setEditError] = useState<string | null>(null);
+  const [editSaving, setEditSaving] = useState(false);
+  const [confirmEmailChange, setConfirmEmailChange] = useState(false);
+
+  // Create-without-password: reset link to surface after creation
+  const [resetLinkInfo, setResetLinkInfo] = useState<{ email: string; link: string | null } | null>(null);
+  const [copiedLink, setCopiedLink] = useState(false);
+
+  // Reactivation prompt when a new user's email belongs to an inactive account
+  const [reactivatePrompt, setReactivatePrompt] = useState<UserProfile | null>(null);
+
   // Employee link state
   const [employees, setEmployees] = useState<EmployeeSummary[]>([]);
   const [linkingUid, setLinkingUid] = useState<string | null>(null);
@@ -562,19 +576,104 @@ export default function SettingsPage() {
   async function handleCreateUser(e: React.FormEvent) {
     e.preventDefault();
     setFormError(null);
+
+    // If the e-mail belongs to an existing INACTIVE account, offer to reactivate
+    // it instead of failing on the (Auth-level) duplicate-email conflict.
+    const emailLc = form.email.trim().toLowerCase();
+    const inactiveMatch = users.find(
+      (u) => !u.active && (u.email ?? "").toLowerCase() === emailLc
+    );
+    if (inactiveMatch) {
+      setReactivatePrompt(inactiveMatch);
+      return;
+    }
+
     setSaving(true);
     try {
-      await authApi.createUser({
-        ...form,
+      const createdWithoutPassword = !form.password;
+      const email = form.email.trim();
+      const res = await authApi.createUser({
+        name: form.name,
+        email,
+        password: form.password || undefined,
+        role: form.role,
         employeeId: form.employeeId || undefined,
       });
       setShowCreate(false);
       setForm(emptyForm);
       await loadUsers();
+      if (createdWithoutPassword) {
+        // Also e-mail the reset link (reusing the existing client mechanism), and
+        // surface the link so the admin can copy/send it manually too.
+        try { await sendPasswordResetEmail(auth, email); } catch { /* still show link */ }
+        setResetLinkInfo({ email, link: res.resetLink });
+        setCopiedLink(false);
+      }
     } catch (e: unknown) {
       setFormError((e as Error).message ?? "Chyba při vytváření uživatele.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  // Reactivate an inactive account whose e-mail the admin just re-entered, and
+  // apply the name/role/employee they typed into the create form.
+  async function handleReactivateExisting() {
+    if (!reactivatePrompt) return;
+    const target = reactivatePrompt;
+    setReactivatePrompt(null);
+    setSaving(true);
+    setFormError(null);
+    try {
+      await authApi.reactivateUser(target.uid);
+      const ops: Promise<unknown>[] = [];
+      if (form.name && form.name !== target.name) ops.push(authApi.updateUser(target.uid, { name: form.name }));
+      if (form.role && form.role !== target.role) ops.push(authApi.setRole(target.uid, form.role));
+      const newEmp = form.employeeId || null;
+      if (newEmp !== (target.employeeId ?? null)) ops.push(authApi.linkEmployee(target.uid, newEmp));
+      await Promise.all(ops);
+      setShowCreate(false);
+      setForm(emptyForm);
+      await loadUsers();
+    } catch (e: unknown) {
+      setFormError((e as Error).message ?? "Chyba při reaktivaci uživatele.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function openEditUser(u: UserProfile) {
+    setEditingUser(u);
+    setEditForm({ name: u.name ?? "", email: u.email ?? "" });
+    setEditError(null);
+    setConfirmEmailChange(false);
+  }
+
+  // "Uložit" in the edit modal: if the e-mail changed, route through a warning
+  // ConfirmModal first (it changes the user's login); otherwise save directly.
+  function attemptSaveEdit() {
+    if (!editingUser) return;
+    const emailChanged = !!editForm.email.trim() && editForm.email.trim() !== editingUser.email;
+    if (emailChanged) { setConfirmEmailChange(true); return; }
+    void doSaveEdit();
+  }
+
+  async function doSaveEdit() {
+    if (!editingUser) return;
+    setConfirmEmailChange(false);
+    setEditSaving(true);
+    setEditError(null);
+    try {
+      await authApi.updateUser(editingUser.uid, {
+        name: editForm.name.trim() || undefined,
+        email: editForm.email.trim() || undefined,
+      });
+      setEditingUser(null);
+      await loadUsers();
+    } catch (e: unknown) {
+      setEditError((e as Error).message ?? "Chyba při ukládání.");
+    } finally {
+      setEditSaving(false);
     }
   }
 
@@ -628,6 +727,12 @@ export default function SettingsPage() {
       setTimeout(() => setResetMsg(null), 4000);
     }
   }
+
+  // Active users first (by name), then inactive ones at the bottom (#22).
+  const sortedUsers = [...users].sort((a, b) => {
+    if (!!a.active !== !!b.active) return a.active ? -1 : 1;
+    return (a.name ?? "").localeCompare(b.name ?? "", "cs");
+  });
 
   return (
     <div>
@@ -691,17 +796,18 @@ export default function SettingsPage() {
                 />
               </div>
               <div className={styles.field}>
-                <label className={styles.label}>Heslo</label>
+                <label className={styles.label}>Heslo (volitelné)</label>
                 <input
                   className={styles.input}
                   type="password"
                   value={form.password}
                   onChange={(e) => setForm({ ...form, password: e.target.value })}
-                  required
                   minLength={8}
+                  autoComplete="new-password"
                 />
                 <p className={styles.fieldHint}>
-                  Alespoň 8 znaků, malé i velké písmeno a číslici.
+                  Alespoň 8 znaků, malé i velké písmeno a číslici. Nechte prázdné —
+                  uživateli se odešle odkaz pro nastavení vlastního hesla.
                 </p>
               </div>
               <div className={styles.field}>
@@ -796,10 +902,10 @@ export default function SettingsPage() {
                 </tr>
               </thead>
               <tbody>
-                {users.length === 0 && (
+                {sortedUsers.length === 0 && (
                   <tr><td colSpan={6} className={styles.empty}>Žádní uživatelé</td></tr>
                 )}
-                {users.map((u) => {
+                {sortedUsers.map((u) => {
                   const linkedEmp = u.employeeId
                     ? employees.find((e) => e.id === u.employeeId)
                     : null;
@@ -845,6 +951,14 @@ export default function SettingsPage() {
                         </span>
                       </td>
                       <td>
+                        <button
+                          className={styles.linkBtn}
+                          onClick={() => openEditUser(u)}
+                          title="Upravit jméno a e-mail"
+                        >
+                          Upravit
+                        </button>
+                        {" "}
                         <button
                           className={u.active ? styles.deactivateBtn : styles.activateBtn}
                           disabled={togglingUid === u.uid}
@@ -1513,6 +1627,104 @@ export default function SettingsPage() {
           danger
           onConfirm={confirmDeleteCompany}
           onCancel={() => setCompanyDeleteId(null)}
+        />
+      )}
+
+      {editingUser && (
+        <div className={styles.modal}>
+          <div className={styles.modalBox}>
+            <h2 className={styles.modalTitle}>Upravit uživatele</h2>
+            <div className={styles.field}>
+              <label className={styles.label}>Jméno</label>
+              <input
+                className={styles.input}
+                value={editForm.name}
+                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                autoFocus
+              />
+            </div>
+            <div className={styles.field}>
+              <label className={styles.label}>E-mail</label>
+              <input
+                className={styles.input}
+                type="email"
+                value={editForm.email}
+                onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+              />
+              {!!editForm.email.trim() && editForm.email.trim() !== editingUser.email && (
+                <p className={styles.fieldHint}>
+                  ⚠ Změna e-mailu změní přihlašovací údaje uživatele — bude se přihlašovat novým e-mailem.
+                </p>
+              )}
+            </div>
+            {editError && <p className={styles.formError}>{editError}</p>}
+            <div className={styles.formActions}>
+              <Button variant="secondary" onClick={() => setEditingUser(null)} disabled={editSaving}>
+                Zrušit
+              </Button>
+              <Button
+                variant="primary"
+                onClick={attemptSaveEdit}
+                disabled={editSaving || (!editForm.name.trim() && !editForm.email.trim())}
+              >
+                {editSaving ? "Ukládám…" : "Uložit"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {resetLinkInfo && (
+        <div className={styles.modal}>
+          <div className={styles.modalBox}>
+            <h2 className={styles.modalTitle}>Uživatel vytvořen bez hesla</h2>
+            <p className={styles.fieldHint}>
+              Uživateli {resetLinkInfo.email} byl odeslán e-mail s odkazem pro nastavení hesla.
+              {resetLinkInfo.link ? " Odkaz můžete také zkopírovat a poslat ručně:" : ""}
+            </p>
+            {resetLinkInfo.link && (
+              <div className={styles.field}>
+                <input
+                  className={styles.input}
+                  readOnly
+                  value={resetLinkInfo.link}
+                  onFocus={(e) => e.currentTarget.select()}
+                />
+                <Button
+                  variant="secondary"
+                  onClick={async () => {
+                    try { await navigator.clipboard.writeText(resetLinkInfo.link!); setCopiedLink(true); } catch { /* clipboard unavailable */ }
+                  }}
+                >
+                  {copiedLink ? "Zkopírováno ✓" : "Kopírovat odkaz"}
+                </Button>
+              </div>
+            )}
+            <div className={styles.formActions}>
+              <Button variant="primary" onClick={() => setResetLinkInfo(null)}>Zavřít</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {reactivatePrompt && (
+        <ConfirmModal
+          title="Reaktivovat uživatele?"
+          message={`E-mail ${reactivatePrompt.email} patří deaktivovanému uživateli „${reactivatePrompt.name}". Chcete tento účet znovu aktivovat a použít zadané jméno, roli a propojení se zaměstnancem?`}
+          confirmLabel="Reaktivovat"
+          onConfirm={handleReactivateExisting}
+          onCancel={() => setReactivatePrompt(null)}
+        />
+      )}
+
+      {confirmEmailChange && (
+        <ConfirmModal
+          title="Změnit e-mail?"
+          message="Změnou e-mailu se změní přihlašovací údaje uživatele — od této chvíle se přihlašuje novým e-mailem. Pokračovat?"
+          confirmLabel="Změnit e-mail"
+          danger
+          onConfirm={doSaveEdit}
+          onCancel={() => setConfirmEmailChange(false)}
         />
       )}
     </div>

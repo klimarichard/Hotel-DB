@@ -190,6 +190,23 @@ contractTemplatesRouter.put(
       return;
     }
 
+    // Firestore caps a single document at 1 MiB. The htmlContent is by far the
+    // largest field and balloons when the editor inlines base64 images, so a
+    // too-large template is the usual cause of a silent write failure. Reject
+    // it up front with a clear Czech message rather than letting the Firestore
+    // error bubble up as an opaque 500.
+    const FIRESTORE_DOC_LIMIT = 1_048_576; // 1 MiB
+    // Leave headroom for the other fields + Firestore's own per-field overhead.
+    const HTML_LIMIT = FIRESTORE_DOC_LIMIT - 64 * 1024;
+    const htmlBytes = Buffer.byteLength(htmlContent, "utf8");
+    if (htmlBytes > HTML_LIMIT) {
+      res.status(413).json({
+        error:
+          "Šablona je příliš velká (přesahuje limit 1 MB). Nejčastější příčinou jsou vložené obrázky uložené přímo v textu (base64). Zmenšete nebo odstraňte obrázky a uložte znovu.",
+      });
+      return;
+    }
+
     const variables = extractVariables(htmlContent);
 
     const payload: Record<string, unknown> = {
@@ -205,7 +222,24 @@ contractTemplatesRouter.put(
     const ref = db().collection("contractTemplates").doc(req.params.id);
     const beforeSnap = await ref.get();
     const before = beforeSnap.exists ? (beforeSnap.data() as Record<string, unknown>) : {};
-    await ref.set(payload, { merge: true });
+    try {
+      await ref.set(payload, { merge: true });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      // Firestore rejects oversized writes (e.g. exceeds the maximum allowed
+      // size) — surface a clear Czech message instead of a generic 500.
+      if (/maximum|too large|exceeds|size/i.test(message)) {
+        res.status(413).json({
+          error:
+            "Šablonu se nepodařilo uložit — je příliš velká (limit 1 MB). Pravděpodobně obsahuje vložené obrázky (base64). Zmenšete nebo odstraňte obrázky a uložte znovu.",
+        });
+        return;
+      }
+      res.status(500).json({
+        error: `Šablonu se nepodařilo uložit: ${message}`,
+      });
+      return;
+    }
 
     // The htmlContent is verbose; record only what changed semantically by
     // logging a compact diff on type/name/variables/margins, plus a flag

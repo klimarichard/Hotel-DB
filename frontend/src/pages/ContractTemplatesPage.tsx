@@ -724,21 +724,41 @@ export default function ContractTemplatesPage() {
         },
         body: JSON.stringify({
           type: selected,
-          name: CONTRACT_TYPE_LABELS[selected],
+          // Built-in types resolve via the label map; custom (standalone)
+          // templates aren't in it, so fall back to their stored name —
+          // otherwise the backend rejects with "type, name, and htmlContent
+          // are required" because name comes through undefined.
+          name:
+            CONTRACT_TYPE_LABELS[selected] ??
+            customTypes.find((t) => t.id === selected)?.name ??
+            templates[selected]?.name ??
+            selected,
           htmlContent,
           margins,
         }),
       });
 
-      if (!resp.ok) throw new Error("Save failed");
+      if (!resp.ok) {
+        // Surface the backend's Czech error (e.g. "Šablona je příliš velká…")
+        // instead of a generic message, so the user knows the real cause.
+        let detail = "";
+        try {
+          const body = (await resp.json()) as { error?: string };
+          detail = body?.error ?? "";
+        } catch { /* non-JSON body — fall through to generic */ }
+        throw new Error(detail || `Chyba při ukládání (${resp.status})`);
+      }
       setSaveMsg("Uloženo");
       setIsDirty(false);
       await fetchTemplates();
-    } catch {
-      setSaveMsg("Chyba při ukládání");
+      setTimeout(() => setSaveMsg(null), 3000);
+    } catch (err) {
+      // Detailed errors (e.g. the 1 MB size message) need longer to read than
+      // the brief success toast.
+      setSaveMsg(err instanceof Error ? err.message : "Chyba při ukládání");
+      setTimeout(() => setSaveMsg(null), 10000);
     } finally {
       setSaving(false);
-      setTimeout(() => setSaveMsg(null), 3000);
     }
   }
 

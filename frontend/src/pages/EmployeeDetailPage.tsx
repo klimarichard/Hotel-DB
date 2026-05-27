@@ -344,7 +344,18 @@ function buildRowSnapshot(row: EmploymentRow): Record<string, unknown> {
   return out;
 }
 
-const TODAY = clock.today();
+/**
+ * Compare two YYYY-MM-DD strings as calendar dates. Returns true when
+ * `a` is strictly after `b`. Built with local `new Date(y, m-1, d)` to
+ * avoid the `new Date("YYYY-MM-DD").toISOString()` UTC off-by-one.
+ */
+function isDateAfter(a: string | undefined, b: string | undefined): boolean {
+  if (!a || !b) return false;
+  const [ay, am, ad] = a.split("-").map(Number);
+  const [by, bm, bd] = b.split("-").map(Number);
+  if (!ay || !am || !ad || !by || !bm || !bd) return false;
+  return new Date(ay, am - 1, ad).getTime() > new Date(by, bm - 1, bd).getTime();
+}
 
 /**
  * Signing date of the most recent prior "nástup" row that the given row
@@ -467,7 +478,9 @@ const emptyForm: EmploymentForm = {
   hourlyRate: "",
   probationPeriod: "2 měsíce",
   endDate: "",
-  signingDate: TODAY,
+  // Signing date defaults to the row's start-of-validity (form.startDate);
+  // see the setField cascade and the signingDateTouched flag in AddEntryModal.
+  signingDate: "",
   companyId: "HPM",
   agreedWorkScope: "max. 300 hodin ročně",
   agreedReward: "",
@@ -488,7 +501,7 @@ function rowToForm(row: EmploymentRow): EmploymentForm {
     hourlyRate: row.hourlyRate != null ? String(row.hourlyRate) : "",
     probationPeriod: row.probationPeriod ?? "2 měsíce",
     endDate: row.endDate ?? "",
-    signingDate: row.signingDate ?? TODAY,
+    signingDate: row.signingDate ?? row.startDate ?? "",
     companyId: row.companyId ?? "HPM",
     agreedWorkScope: row.agreedWorkScope ?? "max. 300 hodin ročně",
     agreedReward: row.agreedReward?.toString() ?? "",
@@ -652,6 +665,10 @@ function AddEntryModal({
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Until the user edits the "Datum podpisu" field, the signing date follows
+  // the row's start-of-validity (form.startDate). On edit we treat the saved
+  // value as already chosen so a startDate change doesn't clobber it.
+  const [signingDateTouched, setSigningDateTouched] = useState<boolean>(isEdit);
   const [departments, setDepartments] = useState<DepartmentRec[]>([]);
   const [positions, setPositions] = useState<JobPositionRec[]>([]);
   const [companies, setCompanies] = useState<CompanyRec[]>([]);
@@ -717,13 +734,21 @@ function AddEntryModal({
   }, [initialRow]);
 
   function setField<K extends keyof EmploymentForm>(field: K, value: EmploymentForm[K]) {
+    if (field === "signingDate") setSigningDateTouched(true);
+    if (field === "changeType") setSigningDateTouched(false);
     setForm((f) => {
       const next = { ...f, [field]: value };
       if (field === "changeType") {
         next.contractType = "";
         next.startDate = "";
-        next.signingDate = TODAY;
+        // Signing date follows start-of-validity again until edited.
+        next.signingDate = "";
         next.changes = [{ ...emptyChangeRow }];
+      }
+      // Mirror start-of-validity into the (untouched) signing date so the
+      // generated contract defaults its podpis date to the row's start.
+      if (field === "startDate" && !signingDateTouched) {
+        next.signingDate = value as string;
       }
       if (field === "contractType") {
         next.endDate = "";
@@ -756,6 +781,17 @@ function AddEntryModal({
   const noActiveContract = employee.status !== "active" || !hasActiveRow;
   const showUkonceniWarning = form.changeType === "ukončení" && noActiveContract;
   const showZmenaWarning = form.changeType === "změna smlouvy" && noActiveContract;
+  // Warn when the chosen signing date is after the row's start-of-validity:
+  // a contract signed after it takes effect is usually a data-entry slip.
+  const showSigningAfterStartWarning = isDateAfter(form.signingDate, form.startDate);
+  const signingAfterStartNote = (
+    <div className={styles.modalFieldFull}>
+      <div className={styles.modalWarning}>
+        Upozornění: datum podpisu je pozdější než datum platnosti
+        ({formatDateCZ(form.startDate)}). Zkontrolujte prosím správnost.
+      </div>
+    </div>
+  );
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -948,6 +984,7 @@ function AddEntryModal({
                         ))}
                       </select>
                     </div>
+                    {showSigningAfterStartWarning && signingAfterStartNote}
                   </div>
                 )}
 
@@ -999,6 +1036,7 @@ function AddEntryModal({
                         ))}
                       </select>
                     </div>
+                    {showSigningAfterStartWarning && signingAfterStartNote}
                   </div>
                 )}
               </>
@@ -1018,6 +1056,7 @@ function AddEntryModal({
                     </div>
                   </div>
                 )}
+                {showSigningAfterStartWarning && signingAfterStartNote}
               </div>
             )}
 
@@ -1036,6 +1075,7 @@ function AddEntryModal({
                       </div>
                     </div>
                   )}
+                  {showSigningAfterStartWarning && signingAfterStartNote}
                 </div>
 
                 <div style={{ marginTop: "0.875rem" }}>
@@ -1655,6 +1695,12 @@ export default function EmployeeDetailPage() {
                           />
                         </div>
                       </>
+                    )}
+                    {isMultisport && isDateAfter(signingDateDraft, validFromDraft) && (
+                      <div className={styles.modalWarning} style={{ marginTop: "12px" }}>
+                        Upozornění: datum podpisu je pozdější než datum platnosti
+                        ({formatDateCZ(validFromDraft)}). Zkontrolujte prosím správnost.
+                      </div>
                     )}
                   </div>
                   <div className={modalStyles.footer}>
