@@ -42,7 +42,7 @@ export default function ContractActionButtons({
   const [busy, setBusy] = useState<null | "uploading" | "deleting">(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleDownload(kind: "unsigned" | "signed") {
+  async function handlePreview(kind: "unsigned" | "signed") {
     if (!user || !contract) return;
     const token = await user.getIdToken();
     const resp = await fetch(
@@ -50,27 +50,15 @@ export default function ContractActionButtons({
       { headers: { Authorization: `Bearer ${token}` } }
     );
     if (!resp.ok) {
-      setError("Nepodařilo se stáhnout PDF.");
+      setError("Nepodařilo se otevřít PDF.");
       return;
     }
-    const cd = resp.headers.get("Content-Disposition") ?? "";
-    let filename = `${defaultDisplayName}.pdf`;
-    const utf8 = cd.match(/filename\*\s*=\s*UTF-8''([^;]+)/i);
-    if (utf8) {
-      try { filename = decodeURIComponent(utf8[1]); } catch { /* fall through */ }
-    }
-    if (!utf8) {
-      const ascii = cd.match(/filename\s*=\s*"?([^";]+)"?/i);
-      if (ascii) filename = ascii[1];
-    }
+    // Backend sends Content-Disposition: inline, so open the blob in a new
+    // browser tab for preview. The user can download from the PDF viewer.
     const blob = await resp.blob();
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    window.open(url, "_blank", "noopener,noreferrer");
+    // Revoke after a delay so the new tab has time to load the blob.
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
   }
 
@@ -149,27 +137,27 @@ export default function ContractActionButtons({
 
   const hasSigned = !!contract?.signedStoragePath;
   const hasUnsigned = !!contract?.unsignedStoragePath;
-  const downloadKind: "signed" | "unsigned" | null = hasSigned
+  const previewKind: "signed" | "unsigned" | null = hasSigned
     ? "signed"
     : hasUnsigned
       ? "unsigned"
       : null;
-  const downloadLabel = hasSigned
-    ? "Stáhnout podepsanou"
+  const previewLabel = hasSigned
+    ? "Zobrazit podepsanou"
     : hasUnsigned
-      ? "Stáhnout"
+      ? "Zobrazit"
       : null;
 
   return (
     <div className={styles.actions}>
-      {downloadKind && downloadLabel && (
+      {previewKind && previewLabel && (
         <button
           type="button"
           className={styles.downloadBtn}
-          onClick={() => handleDownload(downloadKind)}
+          onClick={() => handlePreview(previewKind)}
           disabled={busy !== null}
         >
-          {downloadLabel}
+          {previewLabel}
         </button>
       )}
 
