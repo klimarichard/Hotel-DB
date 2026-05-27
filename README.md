@@ -775,6 +775,6 @@ Post-launch round covering user management, contract UX, and several bug fixes.
 - **Template save** surfaces the real backend error and guards the Firestore ~1 MB document limit (inlined base64 images); saving a custom (standalone) template now sends its real name.
 
 **Fixes:**
-- **Vacation "Moje žádosti"** no longer drops approved/legacy requests — `GET /vacation` sorts by `requestedAt` in memory instead of a Firestore `orderBy` (which silently excludes documents missing that field).
+- **Vacation "Moje žádosti"** no longer drops approved/legacy requests — `GET /vacation` sorts by `requestedAt` in memory instead of a Firestore `orderBy` (which silently excludes documents missing that field). It also identifies a user's own requests (list filter, edit/cancel ownership, `approved-upcoming`) by the stable **`employeeId`** rather than the auth `uid`: prod data was migrated from staging while accounts were recreated, so migrated requests carry stale staging uids — matching by `employeeId` (the shift plan's key) keeps them visible and editable (`requesterEmployeeId()` in `functions/src/routes/vacation.ts`).
 - Sidebar footer shows the user's **name** instead of their e-mail.
 - The **Upozornění** badge updates immediately when an alert is dismissed (optimistic read-state in `AlertsContext`, reconciled with the server).
