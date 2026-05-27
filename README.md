@@ -758,3 +758,23 @@ A settable "current time" for exercising time-dependent behaviour — probation 
 - **Production safety (hard rule):** `overrideAllowed()` returns `true` **only** when `FUNCTIONS_EMULATOR === "true"` (local) or the runtime project id is exactly `hote-hr-app-staging`. In prod — or any environment that can't be positively identified as emulator/staging — it is `false`: `now()` returns real time unconditionally, `PUT`/`DELETE` 403, `GET` reports `allowed:false` so the footer control is hidden and the banner never shows. Production business logic can never run on a faked clock. Verified across simulated environments by `scripts/_verify-clock-gate.js`; the emulator end-to-end path (set → trigger reacts → clear) by `scripts/_smoke-clock.js`.
 
 To test a trigger: set the clock, then call the matching `trigger-*` endpoint (or use the Upozornění manual refresh) — the job evaluates against the fake date on demand, no cron wait.
+
+### Batch 5 — user management, contracts, fixes (2026-05-27)
+Post-launch round covering user management, contract UX, and several bug fixes.
+
+**User management (Settings → Uživatelé):**
+- **Edit user** — a row "Upravit" action edits name + e-mail via `PATCH /api/auth/users/:uid`, updating both the Firestore profile and the Firebase Auth account. Changing the e-mail changes the user's login, so the UI warns first (ConfirmModal). Role / employee link / active state keep their existing per-row controls.
+- **Create without password** — the password field is optional; left blank, the Auth account is created with no password and the backend returns a `generatePasswordResetLink`. The app also sends the reset e-mail (client `sendPasswordResetEmail`) and shows a copyable reset-link modal.
+- **Inactive users** — listed active-first (inactive sink to the bottom). Creating a user with an e-mail that belongs to an existing inactive account offers to reactivate it (applying the entered name/role/employee) instead of failing on the duplicate-e-mail conflict.
+
+**Contracts:**
+- Generated PDFs **open in a browser tab** ("Zobrazit") for preview; a separate **"Stáhnout"** button downloads with the correct convention filename (read from the backend `Content-Disposition`, incl. the `- podepsaná` suffix for signed copies).
+- **Stale detection** — a generated (unsigned) contract whose employment row has since changed shows **"Znovu generovat smlouvu"** instead of "Zobrazit"; regenerating discards the stale PDF (DELETE) and reopens the generator (compares the stored `rowSnapshot` against the current one, key-sorted).
+- **Dodatek filename** — `DODATEK<YEAR> <all change labels> Příjmení Jméno` (e.g. `DODATEK2026 navýšení, změna pozice Klíma Richard`).
+- **Signing date** defaults to the row's start-of-validity, with an inline warning when it is later than the validity start.
+- **Template save** surfaces the real backend error and guards the Firestore ~1 MB document limit (inlined base64 images); saving a custom (standalone) template now sends its real name.
+
+**Fixes:**
+- **Vacation "Moje žádosti"** no longer drops approved/legacy requests — `GET /vacation` sorts by `requestedAt` in memory instead of a Firestore `orderBy` (which silently excludes documents missing that field).
+- Sidebar footer shows the user's **name** instead of their e-mail.
+- The **Upozornění** badge updates immediately when an alert is dismissed (optimistic read-state in `AlertsContext`, reconciled with the server).
