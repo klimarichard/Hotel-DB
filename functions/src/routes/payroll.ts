@@ -3,7 +3,7 @@ import { randomUUID } from "crypto";
 import * as admin from "firebase-admin";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { requireAuth, requireRole, AuthRequest } from "../middleware/auth";
-import { createOrUpdatePayrollPeriod, getMultisportActive } from "../services/payrollCalculator";
+import { createOrUpdatePayrollPeriod, getMultisportActive, recomputeEntryForEmployee } from "../services/payrollCalculator";
 import { ctxFromReq, logCreate, logUpdate, logDelete, writeAudit } from "../services/auditLog";
 
 export const payrollRouter = Router();
@@ -573,6 +573,75 @@ payrollRouter.patch(
         overrides: update.overrides ?? before.overrides,
         autoOverrides: update.autoOverrides ?? before.autoOverrides,
       },
+    });
+    res.json({ ok: true });
+  }
+);
+
+// ─── POST /payroll/periods/:id/entries/:employeeId/recalculate ───────────────
+// Per-employee, per-field hard recompute (admin only, destructive). The body
+// lists the fields to recalculate; each one's manual override is DISCARDED so it
+// recomputes cleanly from the shift plan (Nemoc has no shift-plan source, so
+// recalculating it resets sickLeaveHours to 0). Fields NOT listed keep their
+// manual override pinned. The whole entry's computed values still refresh from
+// the current shifts. Locked periods rejected (409).
+
+const RECALC_OVERRIDE_KEYS = new Set([
+  "totalHours", "reportHours", "vacationHours",
+  "nightHours", "holidayHours", "weekendHours", "extraPay", "foodVouchers",
+]);
+
+payrollRouter.post(
+  "/periods/:id/entries/:employeeId/recalculate",
+  requireAuth,
+  requireRole("admin"),
+  async (req: AuthRequest, res: Response) => {
+    const { id: periodId, employeeId } = req.params;
+    const fields = Array.isArray((req.body as { fields?: unknown }).fields)
+      ? ((req.body as { fields: unknown[] }).fields.filter((f) => typeof f === "string") as string[])
+      : [];
+    if (fields.length === 0) {
+      res.status(400).json({ error: "Nebyla vybrána žádná složka k přepočtu." });
+      return;
+    }
+
+    const periodRef = db().collection("payrollPeriods").doc(periodId);
+    if (!(await ensurePeriodUnlocked(periodRef, res))) return;
+
+    const entryRef = periodRef.collection("entries").doc(employeeId);
+    const entrySnap = await entryRef.get();
+    if (!entrySnap.exists) {
+      res.status(404).json({ error: "Záznam zaměstnance nenalezen." });
+      return;
+    }
+    const entry = entrySnap.data() as Record<string, unknown>;
+    const prevOverrides = (entry.overrides as Record<string, number> | undefined) ?? {};
+    const prevSick = (entry.sickLeaveHours as number | undefined) ?? 0;
+
+    // Drop the selected fields' manual overrides; keep the rest pinned.
+    const checked = new Set(fields);
+    const survivingOverrides: Record<string, number> = {};
+    for (const [k, v] of Object.entries(prevOverrides)) {
+      if (!(checked.has(k) && RECALC_OVERRIDE_KEYS.has(k))) survivingOverrides[k] = v;
+    }
+    const newSick = checked.has("sickLeaveHours") ? 0 : prevSick;
+
+    const ok = await recomputeEntryForEmployee(periodId, employeeId, {
+      overrides: survivingOverrides,
+      sickLeaveHours: newSick,
+    });
+    if (!ok) {
+      res.status(400).json({ error: "Přepočet se nezdařil — období nemá platný směnný plán." });
+      return;
+    }
+
+    await logUpdate(ctxFromReq(req), {
+      collection: "payrollPeriods/entries",
+      resourceId: periodId,
+      subResourceId: employeeId,
+      employeeId,
+      before: { overrides: prevOverrides, sickLeaveHours: prevSick },
+      after: { overrides: survivingOverrides, sickLeaveHours: newSick, recalculatedFields: fields },
     });
     res.json({ ok: true });
   }
