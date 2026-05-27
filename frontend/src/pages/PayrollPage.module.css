@@ -133,6 +133,27 @@
   border-color: var(--color-text-subtle);
 }
 
+/* Destructive toolbar action (delete period) — red-outline, mirrors lockBtn sizing. */
+.dangerBtn {
+  background: none;
+  border: 1px solid var(--color-danger-border);
+  border-radius: 6px;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--color-danger-text-strong);
+  cursor: pointer;
+}
+
+.dangerBtn:hover:not(:disabled) {
+  background: var(--color-danger-bg);
+  border-color: var(--color-danger-text-strong);
+}
+
+.dangerBtn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 .tableWrapper {
   background: var(--color-surface);
   border-radius: 8px;
@@ -240,6 +261,84 @@
   opacity: 1;
   background: var(--color-surface-3);
   color: var(--color-text);
+}
+
+/* Per-employee recalc — row trigger (↻), mirrors nemocBtn sizing. */
+.recalcRowBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.3rem;
+  font-size: 0.85rem;
+  color: var(--color-text-subtle);
+  border-radius: 3px;
+  line-height: 1;
+  opacity: 0.55;
+}
+
+.recalcRowBtn:hover {
+  opacity: 1;
+  background: var(--color-surface-3);
+  color: var(--color-text);
+}
+
+/* Per-employee recalc modal */
+.recalcHint {
+  margin: 0 0 0.9rem;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+  line-height: 1.45;
+}
+
+.recalcToolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.4rem;
+}
+
+.recalcSelectAll {
+  background: none;
+  border: none;
+  color: var(--color-input-focus);
+  font-size: 0.75rem;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.recalcList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.recalcItem {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.recalcItem:hover {
+  background: var(--color-surface-3);
+}
+
+.recalcItemLabel {
+  flex: 1;
+}
+
+.recalcEditedTag {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--color-danger-text-strong);
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger-border);
+  border-radius: 9999px;
+  padding: 0.05rem 0.45rem;
 }
 
 .contractBadge {
@@ -352,6 +451,25 @@
   margin-left: 0.15rem;
   font-size: 0.8em;
   opacity: 0.65;
+}
+
+/* Per-cell "restore original" — shown only on manually-overridden (amber) cells */
+.resetBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0 0.15rem;
+  margin-left: 0.2rem;
+  font-size: 0.8em;
+  line-height: 1;
+  color: var(--color-text-subtle);
+  opacity: 0.6;
+  transition: opacity 0.15s, color 0.15s;
+}
+
+.resetBtn:hover {
+  opacity: 1;
+  color: var(--color-danger-text, #b91c1c);
 }
 
 /* Two-line NAVÍC display — column wrapper keeps numbers stacked
