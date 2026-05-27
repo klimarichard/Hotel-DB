@@ -5,6 +5,7 @@ import * as clock from "@/lib/clock";
 import { Navigate } from "react-router-dom";
 import PayrollNotesModal from "./PayrollNotesModal";
 import PayrollBalanceModal, { type BalanceSavePayload } from "./PayrollBalanceModal";
+import PayrollRecalcModal from "./PayrollRecalcModal";
 import { computeBalance } from "@/lib/payrollBalance";
 import ConfirmModal from "@/components/ConfirmModal";
 import { employeeDisplayName, employeeSurnameFirst } from "@/lib/employeeName";
@@ -321,6 +322,7 @@ export default function PayrollPage() {
 
   const [balanceModal, setBalanceModal] = useState<PayrollEntry | null>(null);
   const [notesModal, setNotesModal] = useState<PayrollEntry | null>(null);
+  const [recalcModal, setRecalcModal] = useState<PayrollEntry | null>(null);
   const [showAllNavic, setShowAllNavic] = useState(false);
   const [recalculating, setRecalculating] = useState(false);
   const [resetting, setResetting] = useState(false);
@@ -641,6 +643,14 @@ export default function PayrollPage() {
     } : prev);
   }
 
+  // Per-employee recalc: discard the selected fields' manual edits and recompute
+  // that one row from the shift plan (Nemoc-checked → reset to 0). Admin-only.
+  async function recalcEmployee(entry: PayrollEntry, fields: string[]) {
+    if (!period) return;
+    await api.post(`/payroll/periods/${period.id}/entries/${entry.id}/recalculate`, { fields });
+    await loadPeriod();
+  }
+
   // Balance dialog save: Nemoc + (optional) Výkaz/Základ overrides → recomputed
   // autoOverrides. Local clean fields are refreshed so display + later edits stay
   // consistent until the next server recalc.
@@ -714,6 +724,16 @@ export default function PayrollPage() {
                 {employeeDisplayName(entry)}
                 {entry.contractType && (
                   <span className={styles.contractBadge}>{entry.contractType}</span>
+                )}
+                {canToggleLock && !isLocked && (
+                  <button
+                    type="button"
+                    className={styles.recalcRowBtn}
+                    onClick={() => setRecalcModal(entry)}
+                    title="Přepočítat vybrané složky tohoto zaměstnance"
+                  >
+                    ↻
+                  </button>
                 )}
               </td>
               <td className={styles.numCell}>
@@ -1020,6 +1040,14 @@ export default function PayrollPage() {
           maxHolidayHours={period.maxHolidayHours}
           onClose={() => setBalanceModal(null)}
           onSave={(payload) => saveBalance(balanceModal, payload)}
+        />
+      )}
+
+      {recalcModal && period && (
+        <PayrollRecalcModal
+          entry={period.entries.find((e) => e.id === recalcModal.id) ?? recalcModal}
+          onClose={() => setRecalcModal(null)}
+          onConfirm={(fields) => recalcEmployee(recalcModal, fields)}
         />
       )}
 
