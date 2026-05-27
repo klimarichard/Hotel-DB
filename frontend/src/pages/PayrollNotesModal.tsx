@@ -33,6 +33,7 @@ export default function PayrollNotesModal({
   const [oneMonthOnly, setOneMonthOnly] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
+  const [editOneMonth, setEditOneMonth] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<PayrollNote | null>(null);
@@ -42,6 +43,12 @@ export default function PayrollNotesModal({
   function afterOrigin(n: PayrollNote): boolean {
     if (n.sourceYear == null || n.sourceMonth == null) return false;
     return periodYear > n.sourceYear || (periodYear === n.sourceYear && periodMonth > n.sourceMonth);
+  }
+
+  // The carry-forward / one-month toggle is offered only in the note's origin
+  // month (where flipping it cleanly adds/removes its copies across months).
+  function isOrigin(n: PayrollNote): boolean {
+    return n.sourceYear === periodYear && n.sourceMonth === periodMonth;
   }
 
   async function addNote() {
@@ -66,6 +73,7 @@ export default function PayrollNotesModal({
   function startEdit(n: PayrollNote) {
     setEditingId(n.id);
     setEditText(n.text);
+    setEditOneMonth(n.carryForward === false);
   }
 
   async function saveEdit(noteId: string) {
@@ -73,9 +81,13 @@ export default function PayrollNotesModal({
     setBusy(true);
     setError(null);
     try {
+      const n = notes.find((x) => x.id === noteId);
+      const payload: { text: string; carryForward?: boolean } = { text: editText.trim() };
+      // The toggle is meaningful only in the origin month; elsewhere edit text only.
+      if (n && isOrigin(n)) payload.carryForward = !editOneMonth;
       await api.patch(
         `/payroll/periods/${periodId}/entries/${employeeId}/notes/${noteId}`,
-        { text: editText.trim() }
+        payload
       );
       setEditingId(null);
       onChanged();
@@ -148,6 +160,16 @@ export default function PayrollNotesModal({
                           onChange={(e) => setEditText(e.target.value)}
                           autoFocus
                         />
+                        {isOrigin(n) && (
+                          <label className={styles.checkRow}>
+                            <input
+                              type="checkbox"
+                              checked={editOneMonth}
+                              onChange={(e) => setEditOneMonth(e.target.checked)}
+                            />
+                            Poznámka pouze pro tento měsíc (nepřenášet dál)
+                          </label>
+                        )}
                         <div className={styles.noteActions}>
                           <button
                             className={styles.iconBtn}
