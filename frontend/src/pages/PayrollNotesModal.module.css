@@ -166,6 +166,8 @@
   gap: 0.4rem;
   font-size: 0.8rem;
   color: var(--color-text-secondary);
+  cursor: pointer;
+  align-self: flex-start;
 }
 
 .actions {

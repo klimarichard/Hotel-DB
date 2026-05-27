@@ -74,12 +74,17 @@ payrollRouter.post(
   requireRole("admin", "director"),
   async (req: AuthRequest, res: Response) => {
     const { id: periodId, employeeId } = req.params;
-    const body = req.body as { text?: unknown };
+    const body = req.body as { text?: unknown; carryForward?: unknown };
     const text = typeof body.text === "string" ? body.text.trim() : "";
     if (!text) {
       res.status(400).json({ error: "Text poznámky nesmí být prázdný." });
       return;
     }
+    // Default: notes carry forward (sticky until marked read). A one-month note
+    // (carryForward:false) lives only in the period it was entered in — it is
+    // never copied to other periods and createOrUpdatePayrollPeriod's seeding
+    // filter (carryForward === true) already skips it for newly-created periods.
+    const carryForward = body.carryForward !== false;
 
     const periodRef = db().collection("payrollPeriods").doc(periodId);
     if (!(await ensurePeriodUnlocked(periodRef, res))) return;
@@ -95,7 +100,7 @@ payrollRouter.post(
       id: noteId,
       sourceNoteId: noteId,
       text,
-      carryForward: true,
+      carryForward,
       sourceYear: year,
       sourceMonth: month,
       createdBy: req.uid!,
@@ -114,34 +119,37 @@ payrollRouter.post(
       resourceId: periodId,
       subResourceId: noteId,
       employeeId,
-      summary: { text, period: `${year}-${String(month).padStart(2, "0")}` },
+      summary: { text, carryForward, period: `${year}-${String(month).padStart(2, "0")}` },
     });
 
-    // Seed into every existing future period (notes always carry forward now).
-    const futureSnap = await db()
-      .collection("payrollPeriods")
-      .where("year", ">=", year)
-      .get();
-    for (const p of futureSnap.docs) {
-      const d = p.data() as Record<string, unknown>;
-      const py = d.year as number;
-      const pm = d.month as number;
-      const isFuture = py > year || (py === year && pm > month);
-      if (!isFuture) continue;
-      if (d.locked === true) continue;
-      const futureEntryRef = p.ref.collection("entries").doc(employeeId);
-      const futureEntrySnap = await futureEntryRef.get();
-      if (!futureEntrySnap.exists) continue;
-      const copy: PayrollNoteDoc = {
-        ...note,
-        id: randomUUID(),
-        sourceNoteId: noteId,
-        createdAt: now,
-      };
-      await futureEntryRef.update({
-        notes: FieldValue.arrayUnion(copy),
-        updatedAt: FieldValue.serverTimestamp(),
-      });
+    // Seed into every existing future period — only for carry-forward notes.
+    // A one-month note (carryForward:false) stays in its own period only.
+    if (carryForward) {
+      const futureSnap = await db()
+        .collection("payrollPeriods")
+        .where("year", ">=", year)
+        .get();
+      for (const p of futureSnap.docs) {
+        const d = p.data() as Record<string, unknown>;
+        const py = d.year as number;
+        const pm = d.month as number;
+        const isFuture = py > year || (py === year && pm > month);
+        if (!isFuture) continue;
+        if (d.locked === true) continue;
+        const futureEntryRef = p.ref.collection("entries").doc(employeeId);
+        const futureEntrySnap = await futureEntryRef.get();
+        if (!futureEntrySnap.exists) continue;
+        const copy: PayrollNoteDoc = {
+          ...note,
+          id: randomUUID(),
+          sourceNoteId: noteId,
+          createdAt: now,
+        };
+        await futureEntryRef.update({
+          notes: FieldValue.arrayUnion(copy),
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+      }
     }
 
     res.status(201).json({ id: noteId });
