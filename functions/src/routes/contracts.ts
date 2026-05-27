@@ -303,6 +303,63 @@ contractsRouter.get(
 );
 
 /**
+ * GET /api/employees/:employeeId/contracts/:contractId/view-url?kind=unsigned|signed
+ * Returns a short-lived signed Storage URL that previews the PDF inline with the
+ * correct human-readable filename (so the browser PDF viewer offers the proper
+ * name on download). Returns { url: null } when signing isn't available (e.g.
+ * emulator, or the service account lacks signBlob) — the client then falls back
+ * to streaming the blob via /download (which previews but with a generic name).
+ */
+contractsRouter.get(
+  "/employees/:employeeId/contracts/:contractId/view-url",
+  requireRole("admin", "director", "manager", "accountant", "hr"),
+  async (req: AuthRequest, res: Response) => {
+    const kind = req.query.kind === "signed" ? "signed" : "unsigned";
+    const ref = db()
+      .collection("employees")
+      .doc(req.params.employeeId)
+      .collection("contracts")
+      .doc(req.params.contractId);
+    const snap = await ref.get();
+    if (!snap.exists) {
+      res.status(404).json({ error: "Contract not found" });
+      return;
+    }
+    const data = snap.data() as Record<string, unknown>;
+    const path = kind === "signed" ? data.signedStoragePath : data.unsignedStoragePath;
+    if (typeof path !== "string" || !path) {
+      res.status(404).json({ error: `No ${kind} PDF for this contract` });
+      return;
+    }
+
+    const displayBase = typeof data.displayName === "string" && data.displayName
+      ? data.displayName
+      : `${req.params.contractId}_${kind}`;
+    const filenameBase = kind === "signed" ? `${displayBase} - podepsaná` : displayBase;
+    const asciiFallback = filenameBase
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .replace(/[^\x20-\x7e]/g, "_");
+    const disposition =
+      `inline; filename="${asciiFallback}.pdf"; filename*=UTF-8''${encodeURIComponent(filenameBase)}.pdf`;
+
+    try {
+      const [url] = await admin.storage().bucket().file(path).getSignedUrl({
+        version: "v4",
+        action: "read",
+        expires: Date.now() + 10 * 60 * 1000,
+        responseDisposition: disposition,
+        responseType: "application/pdf",
+      });
+      res.json({ url });
+    } catch (e) {
+      console.error("view-url signing failed (client falls back to blob stream):", e);
+      res.json({ url: null });
+    }
+  }
+);
+
+/**
  * POST /api/employees/:employeeId/contracts/:contractId/signed-pdf
  * Upload a signed PDF (base64 in body) via Admin SDK and update the
  * contract record. storage.rules deny client uploads.
