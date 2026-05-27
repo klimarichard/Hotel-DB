@@ -3,7 +3,7 @@ import { randomUUID } from "crypto";
 import * as admin from "firebase-admin";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { requireAuth, requireRole, AuthRequest } from "../middleware/auth";
-import { createOrUpdatePayrollPeriod, getMultisportActive } from "../services/payrollCalculator";
+import { createOrUpdatePayrollPeriod, getMultisportActive, recomputeEntryForEmployee } from "../services/payrollCalculator";
 import { ctxFromReq, logCreate, logUpdate, logDelete, writeAudit } from "../services/auditLog";
 
 export const payrollRouter = Router();
@@ -578,6 +578,75 @@ payrollRouter.patch(
   }
 );
 
+// ─── POST /payroll/periods/:id/entries/:employeeId/recalculate ───────────────
+// Per-employee, per-field hard recompute (admin only, destructive). The body
+// lists the fields to recalculate; each one's manual override is DISCARDED so it
+// recomputes cleanly from the shift plan (Nemoc has no shift-plan source, so
+// recalculating it resets sickLeaveHours to 0). Fields NOT listed keep their
+// manual override pinned. The whole entry's computed values still refresh from
+// the current shifts. Locked periods rejected (409).
+
+const RECALC_OVERRIDE_KEYS = new Set([
+  "totalHours", "reportHours", "vacationHours",
+  "nightHours", "holidayHours", "weekendHours", "extraPay", "foodVouchers",
+]);
+
+payrollRouter.post(
+  "/periods/:id/entries/:employeeId/recalculate",
+  requireAuth,
+  requireRole("admin"),
+  async (req: AuthRequest, res: Response) => {
+    const { id: periodId, employeeId } = req.params;
+    const fields = Array.isArray((req.body as { fields?: unknown }).fields)
+      ? ((req.body as { fields: unknown[] }).fields.filter((f) => typeof f === "string") as string[])
+      : [];
+    if (fields.length === 0) {
+      res.status(400).json({ error: "Nebyla vybrána žádná složka k přepočtu." });
+      return;
+    }
+
+    const periodRef = db().collection("payrollPeriods").doc(periodId);
+    if (!(await ensurePeriodUnlocked(periodRef, res))) return;
+
+    const entryRef = periodRef.collection("entries").doc(employeeId);
+    const entrySnap = await entryRef.get();
+    if (!entrySnap.exists) {
+      res.status(404).json({ error: "Záznam zaměstnance nenalezen." });
+      return;
+    }
+    const entry = entrySnap.data() as Record<string, unknown>;
+    const prevOverrides = (entry.overrides as Record<string, number> | undefined) ?? {};
+    const prevSick = (entry.sickLeaveHours as number | undefined) ?? 0;
+
+    // Drop the selected fields' manual overrides; keep the rest pinned.
+    const checked = new Set(fields);
+    const survivingOverrides: Record<string, number> = {};
+    for (const [k, v] of Object.entries(prevOverrides)) {
+      if (!(checked.has(k) && RECALC_OVERRIDE_KEYS.has(k))) survivingOverrides[k] = v;
+    }
+    const newSick = checked.has("sickLeaveHours") ? 0 : prevSick;
+
+    const ok = await recomputeEntryForEmployee(periodId, employeeId, {
+      overrides: survivingOverrides,
+      sickLeaveHours: newSick,
+    });
+    if (!ok) {
+      res.status(400).json({ error: "Přepočet se nezdařil — období nemá platný směnný plán." });
+      return;
+    }
+
+    await logUpdate(ctxFromReq(req), {
+      collection: "payrollPeriods/entries",
+      resourceId: periodId,
+      subResourceId: employeeId,
+      employeeId,
+      before: { overrides: prevOverrides, sickLeaveHours: prevSick },
+      after: { overrides: survivingOverrides, sickLeaveHours: newSick, recalculatedFields: fields },
+    });
+    res.json({ ok: true });
+  }
+);
+
 // ─── POST /payroll/periods/:id/recalculate ────────────────────────────────────
 // Manual re-run of the payroll calculation for a single period. Locked periods
 // are rejected explicitly; createOrUpdatePayrollPeriod also skips them defensively.
@@ -611,6 +680,90 @@ payrollRouter.post(
       collection: "payrollPeriods",
       resourceId: req.params.id,
       extra: { kind: "recalculate", year, month },
+    });
+    res.json({ ok: true });
+  }
+);
+
+// ─── POST /payroll/periods/:id/reset ──────────────────────────────────────────
+// Hard recompute (admin only, destructive): re-run the calculation but DISCARD
+// every per-field manual override so all cells recompute cleanly from the shift
+// plan. sickLeaveHours (Nemoc) and notes are preserved. Locked periods rejected.
+
+payrollRouter.post(
+  "/periods/:id/reset",
+  requireAuth,
+  requireRole("admin"),
+  async (req: AuthRequest, res: Response) => {
+    const periodRef = db().collection("payrollPeriods").doc(req.params.id);
+    const snap = await periodRef.get();
+    if (!snap.exists) {
+      res.status(404).json({ error: "Mzdové období nebylo nalezeno." });
+      return;
+    }
+    const data = snap.data() as Record<string, unknown>;
+    if (data.locked === true) {
+      res.status(409).json({ error: "Mzdové období je uzamčeno — přepočet není povolen." });
+      return;
+    }
+    const planId = data.shiftPlanId as string | undefined;
+    const year = data.year as number | undefined;
+    const month = data.month as number | undefined;
+    if (!planId || year == null || month == null) {
+      res.status(400).json({ error: "Období nemá odkaz na směnný plán." });
+      return;
+    }
+    await createOrUpdatePayrollPeriod(planId, year, month, { discardOverrides: true });
+    await writeAudit(ctxFromReq(req), {
+      action: "update",
+      collection: "payrollPeriods",
+      resourceId: req.params.id,
+      extra: { kind: "hard-recalculate", year, month },
+    });
+    res.json({ ok: true });
+  }
+);
+
+// ─── DELETE /payroll/periods/:id ──────────────────────────────────────────────
+// Delete an entire payroll period and all its entries (admin only, destructive).
+// All manual data on the period (overrides, Nemoc, notes) is permanently lost;
+// the computed figures can be regenerated from the published plan via the
+// "Vytvořit mzdy ručně" / by-month create. Locked periods are rejected (409) —
+// the admin must unlock first, mirroring recalc/edit.
+
+payrollRouter.delete(
+  "/periods/:id",
+  requireAuth,
+  requireRole("admin"),
+  async (req: AuthRequest, res: Response) => {
+    const periodRef = db().collection("payrollPeriods").doc(req.params.id);
+    const snap = await periodRef.get();
+    if (!snap.exists) {
+      res.status(404).json({ error: "Mzdové období nebylo nalezeno." });
+      return;
+    }
+    const data = snap.data() as Record<string, unknown>;
+    if (data.locked === true) {
+      res.status(409).json({ error: "Mzdové období je uzamčeno — nejprve ho odemkněte." });
+      return;
+    }
+
+    // Delete all entry docs, then the period doc, in a single batch. Entry counts
+    // are small (one per planned employee, ~35) — well under the 500-op batch cap.
+    const entriesSnap = await periodRef.collection("entries").get();
+    const batch = db().batch();
+    for (const d of entriesSnap.docs) batch.delete(d.ref);
+    batch.delete(periodRef);
+    await batch.commit();
+
+    await logDelete(ctxFromReq(req), {
+      collection: "payrollPeriods",
+      resourceId: req.params.id,
+      summary: {
+        year: data.year,
+        month: data.month,
+        entryCount: entriesSnap.size,
+      },
     });
     res.json({ ok: true });
   }

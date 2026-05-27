@@ -568,11 +568,17 @@ async function getPriorEntryData(
  * Create or update a payrollPeriod for a given published shift plan.
  * Preserves manually entered sickLeaveHours and overrides on existing entries.
  * autoOverrides are always recomputed — never preserved.
+ *
+ * `opts.discardOverrides` (hard recompute, admin-only): drop the per-field manual
+ * overrides (Výkaz pin, Svátek=0, Základ override, …) so every cell recomputes
+ * cleanly from the shift plan. sickLeaveHours (Nemoc) and notes are still
+ * preserved — those are real data, not fudged numbers.
  */
 export async function createOrUpdatePayrollPeriod(
   planId: string,
   year: number,
-  month: number
+  month: number,
+  opts: { discardOverrides?: boolean } = {}
 ): Promise<void> {
   const holidays = getCzechHolidays(year);
   const baseHours = getBaseHours(year, month);
@@ -658,7 +664,9 @@ export async function createOrUpdatePayrollPeriod(
   for (const d of existingEntriesSnap.docs) {
     const data = d.data();
     sickLeaveMap.set(d.id, (data.sickLeaveHours as number) ?? 0);
-    if (data.overrides && typeof data.overrides === "object") {
+    // Hard recompute (discardOverrides) skips preserving manual overrides so the
+    // cascade recomputes clean; Nemoc + notes below are still carried over.
+    if (!opts.discardOverrides && data.overrides && typeof data.overrides === "object") {
       overridesMap.set(d.id, data.overrides as Record<string, number>);
     }
     if (Array.isArray(data.notes)) {
@@ -757,4 +765,108 @@ export async function createOrUpdatePayrollPeriod(
   }
 
   await batch.commit();
+}
+
+/**
+ * Recompute a SINGLE employee's entry in an existing, unlocked period, honoring
+ * the supplied `overrides` + `sickLeaveHours`. Scoped to one entry so a
+ * per-person recalc never disturbs anyone else's row. Computed values refresh
+ * from the current shift plan; user notes are preserved and the auto
+ * Nástup/Ukončení notes are regenerated.
+ *
+ * MIRRORS the per-employee block of createOrUpdatePayrollPeriod above — keep the
+ * comp/proration/notes resolution in sync if that block changes.
+ *
+ * Returns false if the period is missing/locked or has no shiftPlan link.
+ */
+export async function recomputeEntryForEmployee(
+  periodId: string,
+  employeeId: string,
+  next: { overrides: Record<string, number>; sickLeaveHours: number }
+): Promise<boolean> {
+  const periodRef = db().collection("payrollPeriods").doc(periodId);
+  const periodSnap = await periodRef.get();
+  if (!periodSnap.exists) return false;
+  const pdata = periodSnap.data() as Record<string, unknown>;
+  if (pdata.locked === true) return false;
+  const planId = pdata.shiftPlanId as string | undefined;
+  const year = pdata.year as number | undefined;
+  const month = pdata.month as number | undefined;
+  if (!planId || year == null || month == null) return false;
+  const foodVoucherRate = (pdata.foodVoucherRate as number | undefined) ?? (await getFoodVoucherRate());
+
+  const holidays = getCzechHolidays(year);
+
+  // Only this employee's shifts are needed (calculateEntry filters by id anyway).
+  const planRef = db().collection("shiftPlans").doc(planId);
+  const [shiftsSnap, planEmpSnap, empRowsSnap, rootSnap] = await Promise.all([
+    planRef.collection("shifts").where("employeeId", "==", employeeId).get(),
+    planRef.collection("planEmployees").where("employeeId", "==", employeeId).limit(1).get(),
+    db().collection("employees").doc(employeeId).collection("employment").orderBy("startDate", "asc").get(),
+    db().collection("employees").doc(employeeId).get(),
+  ]);
+
+  const shifts: ShiftDoc[] = shiftsSnap.docs.map((d) => {
+    const data = d.data() as Record<string, unknown>;
+    return {
+      employeeId: data.employeeId as string,
+      date: data.date as string,
+      rawInput: data.rawInput as string,
+      segments: (data.segments as ShiftDoc["segments"]) ?? [],
+      hoursComputed: (data.hoursComputed as number) ?? 0,
+      isDouble: (data.isDouble as boolean) ?? false,
+      status: (data.status as string) ?? "unassigned",
+    };
+  });
+
+  const planEmp = planEmpSnap.empty ? {} : (planEmpSnap.docs[0].data() as Record<string, unknown>);
+  const empRows = empRowsSnap.docs.map((d) => d.data() as EmploymentRowLite);
+  const eff = effectiveCompFromRows(empRows, year, month);
+  const currentContractType = rootSnap.exists
+    ? ((rootSnap.data() as Record<string, unknown>).currentContractType as string | undefined)
+    : undefined;
+
+  const employee = {
+    employeeId,
+    firstName: (planEmp.firstName as string) ?? "",
+    lastName: (planEmp.lastName as string) ?? "",
+    displayName: (planEmp.displayName as string) ?? "",
+    contractType: currentContractType || eff?.contractType || (planEmp.contractType as string) || "",
+    salary: eff?.salary ?? null,
+    hourlyRate: eff?.hourlyRate ?? null,
+    jobTitle: eff?.jobTitle || (planEmp.jobTitle as string) || "",
+    section: (planEmp.section as string) ?? "",
+    sickLeaveHours: next.sickLeaveHours,
+    overrides: next.overrides,
+  };
+
+  const proratedBase = proratedBaseFromRows(empRows, year, month);
+  const empBaseHours = proratedBase ?? getBaseHours(year, month);
+
+  const entry = calculateEntry(employee, shifts, holidays, empBaseHours, foodVoucherRate, year, month);
+  const multisportActive = await getMultisportActive(employeeId, year, month);
+
+  // Preserve user notes; regenerate the month-specific auto notes.
+  const entryRef = periodRef.collection("entries").doc(employeeId);
+  const existingSnap = await entryRef.get();
+  const prevNotes = existingSnap.exists && Array.isArray((existingSnap.data() as Record<string, unknown>).notes)
+    ? ((existingSnap.data() as Record<string, unknown>).notes as Record<string, unknown>[])
+    : [];
+  const userNotes = prevNotes.filter((n) => (n as Record<string, unknown>).auto !== true);
+  const autoStamp = Timestamp.now();
+  const autoNotes = autoNotesFromRows(empRows, year, month).map((n) => ({
+    id: randomUUID(),
+    sourceNoteId: randomUUID(),
+    text: n.text,
+    kind: n.kind,
+    auto: true,
+    carryForward: false,
+    createdBy: "system",
+    createdByName: "Systém",
+    createdAt: autoStamp,
+  }));
+  const notes = [...autoNotes, ...userNotes];
+
+  await entryRef.set({ ...entry, multisportActive, notes });
+  return true;
 }
