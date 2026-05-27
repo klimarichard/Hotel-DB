@@ -49,13 +49,13 @@ function yearOf(iso: string | undefined): string {
  *     → "HPP 2026 Klíma Richard"
  *   ukonceni_hpp_ppp + row(contractType=HPP) + "Klíma Richard"
  *     → "Ukončení HPP Klíma Richard"
- *   zmena_smlouvy + row(changes=[{kind:"mzda"}], 2026-04-01) + "Klíma Richard"
- *     → "Dodatek navýšení 2026 Klíma Richard"
+ *   zmena_smlouvy + row(changes=[{kind:"mzda"},{kind:"pracovní pozice"}], 2026-04-01) + "Klíma Richard"
+ *     → "DODATEK2026 navýšení, změna pozice Klíma Richard"
  *   multisport + "Klíma Richard"
  *     → "Multisport Klíma Richard"
  *
- * For "change-of-many" dodatek rows (multiple entries in row.changes)
- * the first change drives the label — keeping filenames short.
+ * Dodatek names list EVERY change's label (joined by ", ") after the
+ * year-suffixed "DODATEK<YEAR>" prefix.
  */
 export function buildContractName(
   type: ContractType,
@@ -82,10 +82,9 @@ export function buildContractName(
       return `Ukončení DPP ${name}`;
 
     case "zmena_smlouvy": {
-      const change = row?.changes?.[0];
-      const label = change ? changeLabel(change) : "";
       const year = yearOf(row?.startDate);
-      return `Dodatek ${label} ${year} ${name}`.replace(/\s+/g, " ").trim();
+      const labels = (row?.changes ?? []).map(changeLabel).filter(Boolean).join(", ");
+      return `DODATEK${year} ${labels} ${name}`.replace(/\s+/g, " ").trim();
     }
 
     case "hmotna_odpovednost":
