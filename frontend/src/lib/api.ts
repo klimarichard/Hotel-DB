@@ -76,8 +76,12 @@ export interface UserProfile {
 
 export const authApi = {
   listUsers: () => api.get<UserProfile[]>("/auth/users"),
-  createUser: (body: { email: string; password: string; name: string; role: UserRole; employeeId?: string }) =>
-    api.post<{ uid: string }>("/auth/create-user", body),
+  // password optional: omit to create the account without one and get back a
+  // reset link the admin can send (resetLink is null only if link generation failed).
+  createUser: (body: { email: string; password?: string; name: string; role: UserRole; employeeId?: string }) =>
+    api.post<{ uid: string; resetLink: string | null }>("/auth/create-user", body),
+  updateUser: (uid: string, body: { name?: string; email?: string }) =>
+    api.patch<{ success: boolean }>(`/auth/users/${uid}`, body),
   setRole: (uid: string, role: UserRole) =>
     api.post<{ success: boolean }>("/auth/set-role", { uid, role }),
   deactivateUser: (uid: string) =>

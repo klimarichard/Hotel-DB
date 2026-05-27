@@ -87,17 +87,20 @@ authRouter.post(
   async (req: AuthRequest, res) => {
     const { email, password, name, role, employeeId } = req.body as {
       email: string;
-      password: string;
+      password?: string;
       name: string;
       role: UserRole;
       employeeId?: string;
     };
 
     const validRoles: UserRole[] = ["admin", "director", "manager", "employee", "accountant", "hr"];
-    if (!email || !password || !name || !validRoles.includes(role)) {
-      res.status(400).json({ error: "email, password, name, and valid role are required" });
+    if (!email || !name || !validRoles.includes(role)) {
+      res.status(400).json({ error: "email, name, and valid role are required" });
       return;
     }
+    // Password is optional. When omitted the account is created WITHOUT a password
+    // and we hand back a reset link so the user can set their own (see below).
+    const hasPassword = typeof password === "string" && password.length > 0;
 
     // Wrap the Firebase Auth/Firestore calls: without this, a rejection (most
     // commonly auth/email-already-exists — Auth accounts survive a Firestore
@@ -105,7 +108,9 @@ authRouter.post(
     // Express 4 would let the request hang ("Vytvořit" spins forever). Map the
     // known Firebase error codes to actionable Czech messages instead.
     try {
-      const userRecord = await admin.auth().createUser({ email, password, displayName: name });
+      const userRecord = await admin.auth().createUser(
+        hasPassword ? { email, password, displayName: name } : { email, displayName: name }
+      );
       await admin.auth().setCustomUserClaims(userRecord.uid, { role });
 
       await admin.firestore().collection("users").doc(userRecord.uid).set({
@@ -125,7 +130,18 @@ authRouter.post(
         summary: { name, email, role, employeeId: employeeId ?? null },
       });
 
-      res.status(201).json({ uid: userRecord.uid });
+      // No password set → return a reset link the admin can send (there is no
+      // server-side email service; the frontend also offers the email path).
+      let resetLink: string | null = null;
+      if (!hasPassword) {
+        try {
+          resetLink = await admin.auth().generatePasswordResetLink(email);
+        } catch (linkErr) {
+          console.error("generatePasswordResetLink failed:", linkErr);
+        }
+      }
+
+      res.status(201).json({ uid: userRecord.uid, resetLink });
     } catch (err) {
       // Firebase Admin errors expose the code as `.code`; some wrap it under
       // `.errorInfo.code`. Read both so we always get the real code.
@@ -253,6 +269,74 @@ authRouter.patch(
     });
 
     res.json({ success: true });
+  }
+);
+
+/**
+ * PATCH /api/auth/users/:uid
+ * Admin-only: edit a user's name and/or email. Email changes update BOTH the
+ * Firebase Auth account (the login identity) and the Firestore profile — the
+ * frontend warns that this changes how the user signs in. Role / employee link /
+ * active state have their own endpoints; password is never edited here (reset
+ * link only).
+ * Body: { name?: string, email?: string }
+ */
+authRouter.patch(
+  "/users/:uid",
+  requireAuth,
+  requireRole("admin"),
+  async (req: AuthRequest, res) => {
+    const { uid } = req.params;
+    const { name, email } = req.body as { name?: string; email?: string };
+    const wantName = typeof name === "string" && name.trim().length > 0;
+    const wantEmail = typeof email === "string" && email.trim().length > 0;
+    if (!wantName && !wantEmail) {
+      res.status(400).json({ error: "Není co uložit (jméno ani e-mail)." });
+      return;
+    }
+
+    const userRef = admin.firestore().collection("users").doc(uid);
+    const beforeSnap = await userRef.get();
+    if (!beforeSnap.exists) {
+      res.status(404).json({ error: "Uživatel nenalezen." });
+      return;
+    }
+    const before = beforeSnap.data() as Record<string, unknown>;
+
+    try {
+      const authUpdate: { displayName?: string; email?: string } = {};
+      const fsUpdate: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp() };
+      if (wantName) { authUpdate.displayName = name!.trim(); fsUpdate.name = name!.trim(); }
+      if (wantEmail) { authUpdate.email = email!.trim(); fsUpdate.email = email!.trim(); }
+
+      // Update the Auth record first (it's the one that can fail on a duplicate
+      // email); only then mirror into Firestore.
+      await admin.auth().updateUser(uid, authUpdate);
+      await userRef.update(fsUpdate);
+
+      await logUpdate(ctxFromReq(req), {
+        collection: "users",
+        resourceId: uid,
+        before: { name: before.name, email: before.email },
+        after: { name: fsUpdate.name ?? before.name, email: fsUpdate.email ?? before.email },
+      });
+      res.json({ success: true });
+    } catch (err) {
+      const e = err as { code?: string; errorInfo?: { code?: string } };
+      const code = e?.code ?? e?.errorInfo?.code ?? "";
+      const errorMap: Record<string, { status: number; message: string }> = {
+        "auth/email-already-exists": { status: 409, message: "Uživatel s tímto e-mailem již existuje." },
+        "auth/invalid-email": { status: 400, message: "Neplatný formát e-mailu." },
+        "auth/user-not-found": { status: 404, message: "Uživatel nenalezen." },
+      };
+      const mapped = errorMap[code];
+      if (mapped) {
+        res.status(mapped.status).json({ error: mapped.message });
+        return;
+      }
+      console.error("update-user failed:", err);
+      res.status(500).json({ error: "Nepodařilo se uložit změny uživatele." });
+    }
   }
 );
 
