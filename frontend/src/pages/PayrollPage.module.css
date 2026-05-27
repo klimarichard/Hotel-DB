@@ -133,6 +133,27 @@
   border-color: var(--color-text-subtle);
 }
 
+/* Destructive toolbar action (delete period) — red-outline, mirrors lockBtn sizing. */
+.dangerBtn {
+  background: none;
+  border: 1px solid var(--color-danger-border);
+  border-radius: 6px;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--color-danger-text-strong);
+  cursor: pointer;
+}
+
+.dangerBtn:hover:not(:disabled) {
+  background: var(--color-danger-bg);
+  border-color: var(--color-danger-text-strong);
+}
+
+.dangerBtn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 .tableWrapper {
   background: var(--color-surface);
   border-radius: 8px;

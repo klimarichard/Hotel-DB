@@ -323,6 +323,8 @@ export default function PayrollPage() {
   const [notesModal, setNotesModal] = useState<PayrollEntry | null>(null);
   const [showAllNavic, setShowAllNavic] = useState(false);
   const [recalculating, setRecalculating] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [creating, setCreating] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [confirmModal, setConfirmModal] = useState<{
@@ -419,6 +421,59 @@ export default function PayrollPage() {
           setError((e as Error).message ?? "Chyba při přepočtu.");
         } finally {
           setRecalculating(false);
+        }
+      },
+    });
+  }
+
+  function hardRecalculate() {
+    if (!period || resetting) return;
+    setConfirmModal({
+      title: "Tvrdý přepočet",
+      message:
+        "Přepočítat mzdy a ZAHODIT všechny ruční úpravy (overrides)? " +
+        "Každá buňka se přepočítá načisto ze směnného plánu. " +
+        "Nemoc a poznámky zůstanou zachovány. Tuto akci nelze vrátit zpět.",
+      confirmLabel: "Zahodit úpravy a přepočítat",
+      danger: true,
+      onConfirm: async () => {
+        setConfirmModal(null);
+        setResetting(true);
+        setError(null);
+        try {
+          await api.post(`/payroll/periods/${period.id}/reset`, {});
+          await loadPeriod();
+        } catch (e) {
+          setError((e as Error).message ?? "Chyba při přepočtu.");
+        } finally {
+          setResetting(false);
+        }
+      },
+    });
+  }
+
+  function deletePeriod() {
+    if (!period || deleting) return;
+    setConfirmModal({
+      title: "Smazat mzdové období",
+      message:
+        `Nenávratně smazat mzdové období ${MONTH_NAMES[selectedMonth - 1]} ${selectedYear} ` +
+        "včetně všech záznamů, ručních úprav, Nemoci a poznámek? " +
+        "Vypočtené hodnoty lze znovu vygenerovat z publikovaného směnného plánu, " +
+        "ruční úpravy ale budou ztraceny.",
+      confirmLabel: "Smazat období",
+      danger: true,
+      onConfirm: async () => {
+        setConfirmModal(null);
+        setDeleting(true);
+        setError(null);
+        try {
+          await api.delete(`/payroll/periods/${period.id}`);
+          await loadPeriod();
+        } catch (e) {
+          setError((e as Error).message ?? "Chyba při mazání mzdového období.");
+        } finally {
+          setDeleting(false);
         }
       },
     });
@@ -895,6 +950,28 @@ export default function PayrollPage() {
                 >
                   {isLocked ? "Odemknout" : "Uzamknout"}
                 </button>
+              )}
+              {canToggleLock && !isLocked && (
+                <>
+                  <button
+                    type="button"
+                    className={styles.lockBtn}
+                    onClick={hardRecalculate}
+                    disabled={resetting}
+                    title="Přepočítat a zahodit všechny ruční úpravy (Nemoc a poznámky zůstanou zachovány)"
+                  >
+                    {resetting ? "Přepočítávám…" : "Tvrdý přepočet"}
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.dangerBtn}
+                    onClick={deletePeriod}
+                    disabled={deleting}
+                    title="Nenávratně smazat celé mzdové období (lze znovu vygenerovat z publikovaného plánu)"
+                  >
+                    {deleting ? "Mažu…" : "Smazat období"}
+                  </button>
+                </>
               )}
             </span>
           </div>
