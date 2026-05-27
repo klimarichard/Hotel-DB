@@ -8,6 +8,16 @@ import { ctxFromReq, logCreate, logUpdate, logDelete } from "../services/auditLo
 export const vacationRouter = Router();
 const db = () => admin.firestore();
 
+// Resolve the requesting user's linked employeeId. Vacation "ownership" keys off
+// this STABLE id rather than the auth uid: prod accounts were recreated after the
+// staging→prod data migration, so migrated requests carry stale staging uids
+// while their employeeId stays correct (the shift plan already uses employeeId).
+async function requesterEmployeeId(uid: string | undefined): Promise<string | null> {
+  if (!uid) return null;
+  const snap = await db().collection("users").doc(uid).get();
+  return snap.exists ? (((snap.data() as Record<string, unknown>).employeeId as string | null) ?? null) : null;
+}
+
 // ─── GET /vacation/check — does an approved vacation cover a specific date? ────
 // Used before deleting an X shift to warn the user.
 
@@ -81,12 +91,18 @@ vacationRouter.get("/approved-upcoming", requireAuth, async (_req, res) => {
     db().collection("users").where("role", "==", "employee").get(),
   ]);
 
-  const employeeUids = new Set(employeeUsersSnap.docs.map((d) => d.id));
+  // Match employee-role users by their stable employeeId, not auth uid —
+  // migrated requests carry stale uids (see requesterEmployeeId).
+  const employeeIds = new Set(
+    employeeUsersSnap.docs
+      .map((d) => ((d.data() as Record<string, unknown>).employeeId as string) ?? "")
+      .filter(Boolean)
+  );
 
   const rows = vacSnap.docs
     .map((d) => d.data() as Record<string, unknown>)
     .filter((v) => ((v.endDate as string) ?? "") >= todayYMD)
-    .filter((v) => employeeUids.has((v.uid as string) ?? ""))
+    .filter((v) => employeeIds.has((v.employeeId as string) ?? ""))
     .map((v) => ({
       employeeId: (v.employeeId as string) ?? "",
       firstName: (v.firstName as string) ?? "",
@@ -148,7 +164,12 @@ vacationRouter.get("/", requireAuth, async (req: AuthRequest, res) => {
   let query: admin.firestore.Query = db().collection("vacationRequests");
 
   if (role !== "admin" && role !== "director") {
-    query = query.where("uid", "==", req.uid!);
+    // Own requests by stable employeeId (migrated requests carry stale uids);
+    // fall back to uid for users without an employee link.
+    const empId = await requesterEmployeeId(req.uid);
+    query = empId
+      ? query.where("employeeId", "==", empId)
+      : query.where("uid", "==", req.uid!);
   }
 
   const snap = await query.get();
@@ -272,7 +293,8 @@ vacationRouter.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
 
   // ── Employee edit ──────────────────────────────────────────────────────────
   if ("startDate" in body) {
-    const isOwn = data.uid === req.uid;
+    const myEmpId = await requesterEmployeeId(req.uid);
+    const isOwn = data.uid === req.uid || (!!myEmpId && data.employeeId === myEmpId);
     if (!isOwn && !isAdminOrDirector) {
       res.status(403).json({ error: "Nemáte oprávnění upravit tuto žádost" });
       return;
@@ -486,7 +508,8 @@ vacationRouter.delete("/:id", requireAuth, async (req: AuthRequest, res) => {
   }
 
   const data = doc.data() as Record<string, unknown>;
-  const isOwn = data.uid === req.uid;
+  const myEmpId = await requesterEmployeeId(req.uid);
+  const isOwn = data.uid === req.uid || (!!myEmpId && data.employeeId === myEmpId);
   const isAdmin = role === "admin" || role === "director";
 
   if (!isOwn && !isAdmin) {
