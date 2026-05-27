@@ -145,16 +145,30 @@ vacationRouter.get(
 
 vacationRouter.get("/", requireAuth, async (req: AuthRequest, res) => {
   const role = req.role;
-  let query: admin.firestore.Query = db()
-    .collection("vacationRequests")
-    .orderBy("requestedAt", "desc");
+  let query: admin.firestore.Query = db().collection("vacationRequests");
 
   if (role !== "admin" && role !== "director") {
     query = query.where("uid", "==", req.uid!);
   }
 
   const snap = await query.get();
-  res.json(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+  // Sort by requestedAt desc IN MEMORY rather than via a Firestore
+  // orderBy("requestedAt"): an orderBy silently EXCLUDES any document missing
+  // the ordered field, which dropped legacy requests (created before
+  // requestedAt existed — often already approved) from the employee's
+  // "Moje žádosti" (#45). In-memory sort returns every request and also drops
+  // the (uid, requestedAt) composite-index dependency for the employee query.
+  const tsMs = (t: unknown): number => {
+    const o = t as { toMillis?: () => number; _seconds?: number; seconds?: number } | null;
+    if (!o) return 0;
+    if (typeof o.toMillis === "function") return o.toMillis();
+    if (typeof o._seconds === "number") return o._seconds * 1000;
+    if (typeof o.seconds === "number") return o.seconds * 1000;
+    return 0;
+  };
+  const items: Record<string, unknown>[] = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  items.sort((a, b) => tsMs(b.requestedAt) - tsMs(a.requestedAt));
+  res.json(items);
 });
 
 // ─── POST /vacation ───────────────────────────────────────────────────────────
