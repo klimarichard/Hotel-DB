@@ -6,6 +6,16 @@ import { blobToBase64 } from "@/lib/blobToBase64";
 import type { ContractRecord } from "@/lib/employmentSessions";
 import styles from "./ContractActionButtons.module.css";
 
+// Key-sorted JSON so a row snapshot stored in Firestore (which may return keys
+// in a different order) compares equal to a freshly-built one when unchanged.
+function stableStringify(o: unknown): string {
+  if (o === null || typeof o !== "object") return JSON.stringify(o ?? null);
+  const obj = o as Record<string, unknown>;
+  const sorted: Record<string, unknown> = {};
+  for (const k of Object.keys(obj).sort()) sorted[k] = obj[k];
+  return JSON.stringify(sorted);
+}
+
 interface Props {
   /** The existing contract record for this slot, or null when nothing has been generated yet. */
   contract: ContractRecord | null;
@@ -45,6 +55,25 @@ export default function ContractActionButtons({
   async function handlePreview(kind: "unsigned" | "signed") {
     if (!user || !contract) return;
     const token = await user.getIdToken();
+
+    // Prefer a signed Storage URL — it previews in a tab AND carries the correct
+    // human-readable filename (so the viewer's download offers the right name).
+    try {
+      const r = await fetch(
+        `/api/employees/${employeeId}/contracts/${contract.id}/view-url?kind=${kind}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (r.ok) {
+        const { url } = (await r.json()) as { url: string | null };
+        if (url) {
+          window.open(url, "_blank", "noopener,noreferrer");
+          return;
+        }
+      }
+    } catch { /* fall through to the blob stream below */ }
+
+    // Fallback (no signed URL available): stream the blob and open it. Still
+    // previews inline, but the download name is the generic blob id.
     const resp = await fetch(
       `/api/employees/${employeeId}/contracts/${contract.id}/download?kind=${kind}`,
       { headers: { Authorization: `Bearer ${token}` } }
@@ -53,13 +82,32 @@ export default function ContractActionButtons({
       setError("Nepodařilo se otevřít PDF.");
       return;
     }
-    // Backend sends Content-Disposition: inline, so open the blob in a new
-    // browser tab for preview. The user can download from the PDF viewer.
     const blob = await resp.blob();
     const url = URL.createObjectURL(blob);
     window.open(url, "_blank", "noopener,noreferrer");
-    // Revoke after a delay so the new tab has time to load the blob.
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  }
+
+  // Discard a stale (row-changed) generated contract and reopen the generator.
+  async function handleRegenerate() {
+    if (!user || !contract) return;
+    setBusy("deleting");
+    setError(null);
+    try {
+      const token = await user.getIdToken();
+      const resp = await fetch(`/api/employees/${employeeId}/contracts/${contract.id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!resp.ok) {
+        setError("Nepodařilo se zahodit neaktuální smlouvu.");
+        return;
+      }
+      onChanged();
+      onGenerate?.();
+    } finally {
+      setBusy(null);
+    }
   }
 
   async function ensureContractId(): Promise<string | null> {
@@ -148,17 +196,43 @@ export default function ContractActionButtons({
       ? "Zobrazit"
       : null;
 
+  // A generated (unsigned) contract goes stale once the employment row it was
+  // generated from changes: the stored snapshot no longer matches the current
+  // row. Signed (user-uploaded) contracts are never auto-invalidated. Only
+  // editors get the regenerate path; read-only roles still see the preview.
+  const storedSnap = contract?.rowSnapshot;
+  const isStale =
+    canEdit &&
+    !!onGenerate &&
+    !!rowSnapshot &&
+    !!storedSnap &&
+    hasUnsigned &&
+    !hasSigned &&
+    stableStringify(storedSnap) !== stableStringify(rowSnapshot);
+
   return (
     <div className={styles.actions}>
-      {previewKind && previewLabel && (
+      {isStale ? (
         <button
           type="button"
-          className={styles.downloadBtn}
-          onClick={() => handlePreview(previewKind)}
+          className={styles.generateBtn}
+          onClick={handleRegenerate}
           disabled={busy !== null}
+          title="Parametry řádku se změnily — vygenerovaná smlouva je neaktuální"
         >
-          {previewLabel}
+          {busy === "deleting" ? "Zahazuji…" : "Znovu generovat smlouvu"}
         </button>
+      ) : (
+        previewKind && previewLabel && (
+          <button
+            type="button"
+            className={styles.downloadBtn}
+            onClick={() => handlePreview(previewKind)}
+            disabled={busy !== null}
+          >
+            {previewLabel}
+          </button>
+        )
       )}
 
       {!contract && canEdit && onGenerate && (

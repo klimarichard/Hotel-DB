@@ -724,7 +724,15 @@ export default function ContractTemplatesPage() {
         },
         body: JSON.stringify({
           type: selected,
-          name: CONTRACT_TYPE_LABELS[selected],
+          // Built-in types resolve via the label map; custom (standalone)
+          // templates aren't in it, so fall back to their stored name —
+          // otherwise the backend rejects with "type, name, and htmlContent
+          // are required" because name comes through undefined.
+          name:
+            CONTRACT_TYPE_LABELS[selected] ??
+            customTypes.find((t) => t.id === selected)?.name ??
+            templates[selected]?.name ??
+            selected,
           htmlContent,
           margins,
         }),
