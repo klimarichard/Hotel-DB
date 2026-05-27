@@ -124,7 +124,12 @@ export default function VacationPage() {
     return () => { cancelled = true; };
   }, [canApprove]);
 
-  const myRequests = requests.filter((r) => r.uid === user?.uid);
+  // Match my requests by my stable employeeId (migrated requests carry stale
+  // staging uids; the auth uid only matches requests created in prod). Fall back
+  // to uid for users without an employee link.
+  const myRequests = requests.filter(
+    (r) => (!!employeeId && r.employeeId === employeeId) || r.uid === user?.uid
+  );
 
   // YYYY-MM-DD in local time (matches what the date inputs and backend produce).
   const now = clock.now();
