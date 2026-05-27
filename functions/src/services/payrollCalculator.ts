@@ -568,11 +568,17 @@ async function getPriorEntryData(
  * Create or update a payrollPeriod for a given published shift plan.
  * Preserves manually entered sickLeaveHours and overrides on existing entries.
  * autoOverrides are always recomputed — never preserved.
+ *
+ * `opts.discardOverrides` (hard recompute, admin-only): drop the per-field manual
+ * overrides (Výkaz pin, Svátek=0, Základ override, …) so every cell recomputes
+ * cleanly from the shift plan. sickLeaveHours (Nemoc) and notes are still
+ * preserved — those are real data, not fudged numbers.
  */
 export async function createOrUpdatePayrollPeriod(
   planId: string,
   year: number,
-  month: number
+  month: number,
+  opts: { discardOverrides?: boolean } = {}
 ): Promise<void> {
   const holidays = getCzechHolidays(year);
   const baseHours = getBaseHours(year, month);
@@ -658,7 +664,9 @@ export async function createOrUpdatePayrollPeriod(
   for (const d of existingEntriesSnap.docs) {
     const data = d.data();
     sickLeaveMap.set(d.id, (data.sickLeaveHours as number) ?? 0);
-    if (data.overrides && typeof data.overrides === "object") {
+    // Hard recompute (discardOverrides) skips preserving manual overrides so the
+    // cascade recomputes clean; Nemoc + notes below are still carried over.
+    if (!opts.discardOverrides && data.overrides && typeof data.overrides === "object") {
       overridesMap.set(d.id, data.overrides as Record<string, number>);
     }
     if (Array.isArray(data.notes)) {

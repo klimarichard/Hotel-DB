@@ -616,6 +616,90 @@ payrollRouter.post(
   }
 );
 
+// ─── POST /payroll/periods/:id/reset ──────────────────────────────────────────
+// Hard recompute (admin only, destructive): re-run the calculation but DISCARD
+// every per-field manual override so all cells recompute cleanly from the shift
+// plan. sickLeaveHours (Nemoc) and notes are preserved. Locked periods rejected.
+
+payrollRouter.post(
+  "/periods/:id/reset",
+  requireAuth,
+  requireRole("admin"),
+  async (req: AuthRequest, res: Response) => {
+    const periodRef = db().collection("payrollPeriods").doc(req.params.id);
+    const snap = await periodRef.get();
+    if (!snap.exists) {
+      res.status(404).json({ error: "Mzdové období nebylo nalezeno." });
+      return;
+    }
+    const data = snap.data() as Record<string, unknown>;
+    if (data.locked === true) {
+      res.status(409).json({ error: "Mzdové období je uzamčeno — přepočet není povolen." });
+      return;
+    }
+    const planId = data.shiftPlanId as string | undefined;
+    const year = data.year as number | undefined;
+    const month = data.month as number | undefined;
+    if (!planId || year == null || month == null) {
+      res.status(400).json({ error: "Období nemá odkaz na směnný plán." });
+      return;
+    }
+    await createOrUpdatePayrollPeriod(planId, year, month, { discardOverrides: true });
+    await writeAudit(ctxFromReq(req), {
+      action: "update",
+      collection: "payrollPeriods",
+      resourceId: req.params.id,
+      extra: { kind: "hard-recalculate", year, month },
+    });
+    res.json({ ok: true });
+  }
+);
+
+// ─── DELETE /payroll/periods/:id ──────────────────────────────────────────────
+// Delete an entire payroll period and all its entries (admin only, destructive).
+// All manual data on the period (overrides, Nemoc, notes) is permanently lost;
+// the computed figures can be regenerated from the published plan via the
+// "Vytvořit mzdy ručně" / by-month create. Locked periods are rejected (409) —
+// the admin must unlock first, mirroring recalc/edit.
+
+payrollRouter.delete(
+  "/periods/:id",
+  requireAuth,
+  requireRole("admin"),
+  async (req: AuthRequest, res: Response) => {
+    const periodRef = db().collection("payrollPeriods").doc(req.params.id);
+    const snap = await periodRef.get();
+    if (!snap.exists) {
+      res.status(404).json({ error: "Mzdové období nebylo nalezeno." });
+      return;
+    }
+    const data = snap.data() as Record<string, unknown>;
+    if (data.locked === true) {
+      res.status(409).json({ error: "Mzdové období je uzamčeno — nejprve ho odemkněte." });
+      return;
+    }
+
+    // Delete all entry docs, then the period doc, in a single batch. Entry counts
+    // are small (one per planned employee, ~35) — well under the 500-op batch cap.
+    const entriesSnap = await periodRef.collection("entries").get();
+    const batch = db().batch();
+    for (const d of entriesSnap.docs) batch.delete(d.ref);
+    batch.delete(periodRef);
+    await batch.commit();
+
+    await logDelete(ctxFromReq(req), {
+      collection: "payrollPeriods",
+      resourceId: req.params.id,
+      summary: {
+        year: data.year,
+        month: data.month,
+        entryCount: entriesSnap.size,
+      },
+    });
+    res.json({ ok: true });
+  }
+);
+
 // ─── POST /payroll/periods/by-month/:year/:month ──────────────────────────────
 // Manually create a payrollPeriod for an already-published plan. Useful for
 // seeded plans that bypassed the publish trigger. Refuses to overwrite an
