@@ -16,6 +16,17 @@ function stableStringify(o: unknown): string {
   return JSON.stringify(sorted);
 }
 
+// Pull the filename out of a Content-Disposition header, preferring the UTF-8
+// (filename*=) form so diacritics survive; fall back to the plain filename= or
+// a supplied default.
+function filenameFromDisposition(cd: string | null, fallback: string): string {
+  if (!cd) return fallback;
+  const star = cd.match(/filename\*=UTF-8''([^;]+)/i);
+  if (star) { try { return decodeURIComponent(star[1]); } catch { /* malformed */ } }
+  const plain = cd.match(/filename="([^"]+)"/i);
+  return plain ? plain[1] : fallback;
+}
+
 interface Props {
   /** The existing contract record for this slot, or null when nothing has been generated yet. */
   contract: ContractRecord | null;
@@ -49,31 +60,15 @@ export default function ContractActionButtons({
   const { user } = useAuth();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
-  const [busy, setBusy] = useState<null | "uploading" | "deleting">(null);
+  const [busy, setBusy] = useState<null | "uploading" | "deleting" | "downloading">(null);
   const [error, setError] = useState<string | null>(null);
 
   async function handlePreview(kind: "unsigned" | "signed") {
     if (!user || !contract) return;
     const token = await user.getIdToken();
-
-    // Prefer a signed Storage URL — it previews in a tab AND carries the correct
-    // human-readable filename (so the viewer's download offers the right name).
-    try {
-      const r = await fetch(
-        `/api/employees/${employeeId}/contracts/${contract.id}/view-url?kind=${kind}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      if (r.ok) {
-        const { url } = (await r.json()) as { url: string | null };
-        if (url) {
-          window.open(url, "_blank", "noopener,noreferrer");
-          return;
-        }
-      }
-    } catch { /* fall through to the blob stream below */ }
-
-    // Fallback (no signed URL available): stream the blob and open it. Still
-    // previews inline, but the download name is the generic blob id.
+    // Backend sends Content-Disposition: inline — open the blob in a new tab to
+    // preview. (A blob URL can't carry a filename, so the tab title is generic;
+    // use "Stáhnout" for a correctly-named download.)
     const resp = await fetch(
       `/api/employees/${employeeId}/contracts/${contract.id}/download?kind=${kind}`,
       { headers: { Authorization: `Bearer ${token}` } }
@@ -86,6 +81,41 @@ export default function ContractActionButtons({
     const url = URL.createObjectURL(blob);
     window.open(url, "_blank", "noopener,noreferrer");
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  }
+
+  // Download with the correct convention filename. The backend already puts it
+  // in Content-Disposition; read it back and name the saved file accordingly
+  // (a blob preview can't, so this is the path that yields the right name).
+  async function handleDownload(kind: "unsigned" | "signed") {
+    if (!user || !contract) return;
+    setBusy("downloading");
+    setError(null);
+    try {
+      const token = await user.getIdToken();
+      const resp = await fetch(
+        `/api/employees/${employeeId}/contracts/${contract.id}/download?kind=${kind}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (!resp.ok) {
+        setError("Nepodařilo se stáhnout PDF.");
+        return;
+      }
+      const filename = filenameFromDisposition(
+        resp.headers.get("Content-Disposition"),
+        `${defaultDisplayName || "smlouva"}.pdf`
+      );
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5_000);
+    } finally {
+      setBusy(null);
+    }
   }
 
   // Discard a stale (row-changed) generated contract and reopen the generator.
@@ -224,14 +254,25 @@ export default function ContractActionButtons({
         </button>
       ) : (
         previewKind && previewLabel && (
-          <button
-            type="button"
-            className={styles.downloadBtn}
-            onClick={() => handlePreview(previewKind)}
-            disabled={busy !== null}
-          >
-            {previewLabel}
-          </button>
+          <>
+            <button
+              type="button"
+              className={styles.downloadBtn}
+              onClick={() => handlePreview(previewKind)}
+              disabled={busy !== null}
+            >
+              {previewLabel}
+            </button>
+            <button
+              type="button"
+              className={styles.downloadBtn}
+              onClick={() => handleDownload(previewKind)}
+              disabled={busy !== null}
+              title="Stáhnout PDF se správným názvem podle konvence"
+            >
+              {busy === "downloading" ? "Stahuji…" : "Stáhnout"}
+            </button>
+          </>
         )
       )}
 
