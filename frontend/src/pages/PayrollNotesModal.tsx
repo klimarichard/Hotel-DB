@@ -30,6 +30,7 @@ export default function PayrollNotesModal({
   onChanged,
 }: Props) {
   const [newText, setNewText] = useState("");
+  const [oneMonthOnly, setOneMonthOnly] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -50,8 +51,10 @@ export default function PayrollNotesModal({
     try {
       await api.post(`/payroll/periods/${periodId}/entries/${employeeId}/notes`, {
         text: newText.trim(),
+        carryForward: !oneMonthOnly,
       });
       setNewText("");
+      setOneMonthOnly(false);
       onChanged();
     } catch (e) {
       setError((e as Error).message ?? "Chyba při ukládání.");
@@ -175,6 +178,8 @@ export default function PayrollNotesModal({
                             <span className={styles.carryLabel}>Automatická poznámka (jen toto období)</span>
                           ) : n.read ? (
                             <span className={styles.carryLabel}>Přečteno — skryto v dalších měsících</span>
+                          ) : n.carryForward === false ? (
+                            <span className={styles.carryLabel}>Jen pro tento měsíc</span>
                           ) : (
                             <span className={styles.carryLabel}>Zobrazuje se i v budoucích výplatách</span>
                           )}
@@ -219,10 +224,20 @@ export default function PayrollNotesModal({
             <div className={styles.addSection}>
               <textarea
                 className={styles.textarea}
-                placeholder="Nová poznámka… (zobrazí se i v dalších měsících)"
+                placeholder={oneMonthOnly
+                  ? "Nová poznámka… (jen pro tento měsíc)"
+                  : "Nová poznámka… (zobrazí se i v dalších měsících)"}
                 value={newText}
                 onChange={(e) => setNewText(e.target.value)}
               />
+              <label className={styles.checkRow}>
+                <input
+                  type="checkbox"
+                  checked={oneMonthOnly}
+                  onChange={(e) => setOneMonthOnly(e.target.checked)}
+                />
+                Poznámka pouze pro tento měsíc (nepřenášet dál)
+              </label>
               {error && <div className={styles.error}>{error}</div>}
             </div>
           )}
