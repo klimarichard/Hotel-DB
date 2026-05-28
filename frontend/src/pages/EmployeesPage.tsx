@@ -14,6 +14,7 @@ interface Employee {
   firstName: string;
   lastName: string;
   displayName?: string;
+  birthSurname?: string;
   nationality: string;
   status: "active" | "terminated";
   currentCompanyId: string | null;
@@ -47,6 +48,7 @@ export default function EmployeesPage() {
         !q ||
         (e.firstName ?? "").toLowerCase().includes(q) ||
         (e.lastName ?? "").toLowerCase().includes(q) ||
+        (e.birthSurname ?? "").toLowerCase().includes(q) ||
         employeeDisplayName(e).toLowerCase().includes(q) ||
         (e.currentJobTitle ?? "").toLowerCase().includes(q) ||
         (e.nationality ?? "").toLowerCase().includes(q) ||
