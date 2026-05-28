@@ -43,6 +43,8 @@ async function computeEffectiveRootFields(
   type Row = Record<string, unknown> & { id: string };
   const rows: Row[] = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, unknown>) }));
 
+  // clock.today() honours the non-prod test clock.
+  const today = clock.today();
   type Session = { nastup: Row; dodatky: Row[]; terminated: boolean };
   let current: Session | null = null;
   let latest: Session | null = null;
@@ -54,7 +56,9 @@ async function computeEffectiveRootFields(
     } else if (current && ct === "změna smlouvy") {
       current.dodatky.push(r);
     } else if (current && ct === "ukončení") {
-      current.terminated = true;
+      // Date-based: a future-dated Ukončení leaves the employee active (and
+      // still showing their current position) until the day after the end date.
+      if (((r.startDate as string | undefined) ?? "") < today) current.terminated = true;
     }
   }
   if (current) latest = current;
@@ -80,8 +84,7 @@ async function computeEffectiveRootFields(
 
   // Only fold Dodatky whose validity (startDate) has arrived — mirrors the
   // frontend computeEffectiveState so the Zaměstnanci list and the employee
-  // detail header agree. clock.today() honours the non-prod test clock.
-  const today = clock.today();
+  // detail header agree.
   for (const dodatek of latest.dodatky) {
     if (((dodatek.startDate as string | undefined) ?? "") > today) continue;
     const changes = (dodatek.changes as Array<{ changeKind?: string; value?: string }> | undefined) ?? [];
@@ -151,19 +154,26 @@ const EMPTY_ROOT_FIELDS = {
 } as const;
 
 /**
- * Derive an employee's lifecycle status from their employment sessions:
- * "terminated" when NO session is still active (each session has an Ukončení
- * row OR its effective end date has passed), otherwise "active". Returns null
- * when the employee has no employment rows yet (freshly created, awaiting their
- * Nástup) so callers leave the existing status untouched — a new hire must not
- * be shown as terminated before onboarding. Mirrors the frontend hasActiveRow /
- * groupBySession(...).some(s => !s.terminated).
+ * Derive an employee's lifecycle status from their employment sessions —
+ * strictly DATE-BASED, with deliberately asymmetric boundaries:
+ *   • A session has STARTED only once its Nástup startDate is on/before today
+ *     (`startDate <= today`). A future-dated Nástup does NOT count as active
+ *     until the day it arrives — so reinstating with a future start shows the
+ *     employee as active ON that day, not before.
+ *   • A session has ENDED only once its effective end date is strictly before
+ *     today (`endDate < today`). The end date itself (the Ukončení row's
+ *     startDate, or a fixed-term endDate) is the last ACTIVE day — so a
+ *     termination dated today or in the future leaves the employee active.
+ * Status is "active" when at least one started-and-not-yet-ended session
+ * exists, else "terminated". Returns null when there are no employment rows yet
+ * (freshly created, awaiting Nástup) so callers leave the existing status alone
+ * — a new hire must not show as terminated before onboarding.
  */
 export function computeEffectiveStatus(
   rows: Array<Record<string, unknown>>,
   today: string
 ): "active" | "terminated" | null {
-  type S = { nastup: Record<string, unknown>; dodatky: Record<string, unknown>[]; ukonceni: boolean };
+  type S = { nastup: Record<string, unknown>; dodatky: Record<string, unknown>[]; ukonceniDate: string | null };
   const sorted = [...rows].sort((a, b) =>
     String(a.startDate ?? "").localeCompare(String(b.startDate ?? ""))
   );
@@ -173,20 +183,22 @@ export function computeEffectiveStatus(
     const ct = r.changeType as string | undefined;
     if (ct === "nástup") {
       if (cur) sessions.push(cur);
-      cur = { nastup: r, dodatky: [], ukonceni: false };
+      cur = { nastup: r, dodatky: [], ukonceniDate: null };
     } else if (cur && ct === "změna smlouvy") {
       cur.dodatky.push(r);
     } else if (cur && ct === "ukončení") {
-      cur.ukonceni = true;
+      cur.ukonceniDate = (r.startDate as string | undefined) ?? null;
     }
   }
   if (cur) sessions.push(cur);
   if (sessions.length === 0) return null;
 
-  const isTerminated = (s: S): boolean => {
-    if (s.ukonceni) return true;
+  const isActive = (s: S): boolean => {
+    // Not started yet — a future Nástup only activates ON its day.
+    const start = (s.nastup.startDate as string | undefined) ?? "";
+    if (start > today) return false;
     // Effective end date: the Nástup's endDate, overridden by any "délka
-    // smlouvy" Dodatek whose validity has arrived. A past end date = expired.
+    // smlouvy" Dodatek already in effect, then by the Ukončení row's startDate.
     let endDate = (s.nastup.endDate as string | null | undefined) ?? null;
     for (const d of s.dodatky) {
       if (((d.startDate as string | undefined) ?? "") > today) continue;
@@ -195,10 +207,12 @@ export function computeEffectiveStatus(
         if (ch.changeKind === "délka smlouvy" && ch.value) endDate = ch.value;
       }
     }
-    return !!endDate && endDate < today;
+    if (s.ukonceniDate) endDate = s.ukonceniDate;
+    // The end date is the last active day; only the day AFTER is terminated.
+    return !(endDate && endDate < today);
   };
 
-  return sessions.some((s) => !isTerminated(s)) ? "active" : "terminated";
+  return sessions.some(isActive) ? "active" : "terminated";
 }
 
 /**
@@ -279,22 +293,24 @@ async function resyncRootFields(
 }
 
 /**
- * Daily refresh: re-fold every active employee's effective root fields so a
- * future-dated Dodatek flips position/úvazek (and thus the Zaměstnanci list
- * and payroll contract type) on its validity date — recompute otherwise only
- * runs on employment writes. Writes only when a field actually changed, to
- * avoid churning updatedAt across the whole collection.
+ * Daily refresh over EVERY employee: (1) re-derive active/terminated status so
+ * date transitions flip on their day in BOTH directions with no employment
+ * write — active→terminated when a termination/fixed-term date has passed, and
+ * terminated→active when a future-dated Nástup (e.g. a future reinstatement)
+ * arrives; (2) re-fold each active employee's effective root fields so a
+ * future-dated Dodatek flips position/úvazek (Zaměstnanci list + payroll
+ * contract type) on its validity date. Writes only when a field actually
+ * changed, to avoid churning updatedAt across the collection.
  */
 export async function refreshEffectiveRootForAllActive(): Promise<{ scanned: number; updated: number }> {
-  const snap = await db().collection("employees").where("status", "==", "active").get();
+  const snap = await db().collection("employees").get();
   // Build the position→department map once for the whole sweep instead of per
   // employee (the per-write paths build their own on demand).
   const positionDeptMap = await buildPositionDeptMap();
   let updated = 0;
   for (const doc of snap.docs) {
-    // Flip active → terminated when a fixed-term contract has simply expired
-    // (no employment write fires on the date passing). Scoped to currently
-    // active employees, so it only ever moves people INTO the Ukončení tab.
+    // Re-derive status from the sessions (date-based) — moves people into OR
+    // out of the Ukončení tab as termination / future-Nástup dates pass.
     await applyDerivedStatus(doc.ref, FieldValue.serverTimestamp());
     const patch = await computeEffectiveRootFields(doc.ref, positionDeptMap);
     if (!patch) continue;
