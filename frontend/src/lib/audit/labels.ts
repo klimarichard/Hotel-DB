@@ -177,6 +177,45 @@ export function actionVerb(action: AuditAction): string {
   }
 }
 
+/**
+ * The thing an action acted on, in Czech ACCUSATIVE (reads after the verb:
+ * "Vytvořil dokument", "Upravil kontaktní údaje", "Smazal dokument").
+ * Keyed by collection — sub-area wins over root (so employees/contracts is a
+ * "dokument", not a "zaměstnanec"). Lower-cased: common noun mid-phrase.
+ */
+const SUBJECT_ACC: Record<string, string> = {
+  employees: "zaměstnance",
+  "employees/contact": "kontaktní údaje",
+  "employees/documents": "doklady",
+  "employees/benefits": "benefity",
+  "employees/employment": "pracovní poměr",
+  "employees/contracts": "dokument",
+  payrollPeriods: "mzdy",
+  "payrollPeriods/entries": "mzdový záznam",
+  "payrollPeriods/entries/notes": "poznámku ke mzdě",
+  shiftPlans: "plán směn",
+  vacationRequests: "žádost o dovolenou",
+  employeeChangeRequests: "žádost o změnu údajů",
+  contractTemplates: "šablonu smlouvy",
+  companies: "společnost",
+  users: "uživatele",
+  jobPositions: "pracovní pozici",
+  departments: "oddělení",
+  educationLevels: "stupeň vzdělání",
+  settings: "nastavení",
+  alerts: "upozornění",
+  documentAlerts: "upozornění",
+  probationAlerts: "upozornění",
+};
+
+/** Accusative noun for the "<verb> <noun>" header phrase. */
+export function subjectNoun(collection: string): string {
+  if (SUBJECT_ACC[collection]) return SUBJECT_ACC[collection];
+  const root = rootCollection(collection);
+  if (SUBJECT_ACC[root]) return SUBJECT_ACC[root];
+  return (COLLECTION_LABELS[root] ?? humanizeKey(root)).toLowerCase();
+}
+
 /** Icon glyph for the card header, by action. */
 export function actionGlyph(action: AuditAction): string {
   switch (action) {
