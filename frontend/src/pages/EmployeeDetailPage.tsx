@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { api } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
@@ -111,7 +111,29 @@ function SensitiveField({
 
 // ─── Employee history (audit log) ─────────────────────────────────────────────
 
-function EmployeeAuditHistory({ employeeId }: { employeeId: string }) {
+/** Human header for an employment row id — mirrors the employment-history
+ *  entry header so the audit log's "Vazba na pracovní poměr" reads naturally. */
+function employmentRowHeader(row: EmploymentRow): string {
+  const typeLabel =
+    row.changeType === "nástup"
+      ? "Nástup"
+      : row.changeType === "změna smlouvy"
+        ? "Dodatek"
+        : row.changeType === "ukončení"
+          ? "Ukončení"
+          : row.changeType;
+  const extras = [row.contractType, row.jobTitle].filter(Boolean).join(", ");
+  const date = row.startDate ? formatDateCZ(row.startDate) : "";
+  return `${typeLabel}${extras ? ` – ${extras}` : ""}${date ? ` (${date})` : ""}`;
+}
+
+function EmployeeAuditHistory({
+  employeeId,
+  employmentRows,
+}: {
+  employeeId: string;
+  employmentRows: EmploymentRow[];
+}) {
   const [entries, setEntries] = useState<AuditEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [limit, setLimit] = useState(10);
@@ -130,6 +152,17 @@ function EmployeeAuditHistory({ employeeId }: { employeeId: string }) {
       })
       .catch((e: Error) => setError(e.message));
   }, [employeeId, limit]);
+
+  const rowHeaderMap = useMemo(() => {
+    const m = new Map<string, string>();
+    employmentRows.forEach((r) => m.set(r.id, employmentRowHeader(r)));
+    return m;
+  }, [employmentRows]);
+
+  const resolveRef = (leaf: string, value: unknown): string | null =>
+    leaf === "employmentRowId" && typeof value === "string"
+      ? rowHeaderMap.get(value) ?? null
+      : null;
 
   if (error) return <div className={styles.loading}>{error}</div>;
   if (!entries) return <div className={styles.loading}>Načítám…</div>;
@@ -150,6 +183,7 @@ function EmployeeAuditHistory({ employeeId }: { employeeId: string }) {
             title=""
             hideTitle
             compact
+            resolveRef={resolveRef}
           />
         ))}
       </div>
@@ -1800,7 +1834,7 @@ export default function EmployeeDetailPage() {
 
       {(role === "admin" || role === "director") && id && (
         <Section title="Historie změn" sectionKey="audit" expanded={expanded.has("audit")} onToggle={toggle}>
-          {expanded.has("audit") ? <EmployeeAuditHistory employeeId={id} /> : null}
+          {expanded.has("audit") ? <EmployeeAuditHistory employeeId={id} employmentRows={employment} /> : null}
         </Section>
       )}
       </>

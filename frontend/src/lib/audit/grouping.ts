@@ -13,9 +13,7 @@
 
 import {
   type AuditAction,
-  COLLECTION_LABELS,
   fieldLabel,
-  humanizeKey,
   rootCollection,
   sectionLabel,
 } from "./labels";
@@ -235,7 +233,13 @@ export interface EventTitle {
   href?: string;
 }
 
-/** Human title for the record an event acted on. */
+/**
+ * Specific identifier for the record an event acted on — the employee name,
+ * the payroll month, or a name pulled from a create/delete snapshot. Returns
+ * an empty string when only a generic collection label would apply, since the
+ * header's subject noun already conveys that (avoids "Vytvořil společnost —
+ * Společnost").
+ */
 export function eventTitle(ev: AuditEvent, employeeName?: string): EventTitle {
   if (ev.employeeId && employeeName) {
     return { text: employeeName, href: `/zamestnanci/${ev.employeeId}` };
@@ -245,7 +249,12 @@ export function eventTitle(ev: AuditEvent, employeeName?: string): EventTitle {
     const [y, m] = ev.resourceId.split("-");
     return { text: `Mzdy ${Number(m)}/${y}` };
   }
-  return { text: COLLECTION_LABELS[root] ?? humanizeKey(root) };
+  const s = ev.summary;
+  if (s) {
+    const name = s.name ?? s.displayName ?? s.abbreviation ?? s.title;
+    if (typeof name === "string" && name.trim()) return { text: name.trim() };
+  }
+  return { text: "" };
 }
 
 function dateLabel(dayStart: number, today: number, dayMs: number): string {
