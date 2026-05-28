@@ -71,6 +71,13 @@ Managed in Settings → Společnosti tab. Only one card in edit mode at a time.
 
 **Retention** — none. Entries persist forever per the user's choice. If volume becomes a problem later, add a scheduled prune in `functions/src/index.ts`.
 
+### Log změn — human-readable redesign (2026-05-28)
+
+The `/audit` page ("Log změn") was reworked from a flat one-row-per-changed-field table (the "Frontend" paragraph above describes the old layout) into a **date-sectioned timeline of grouped event cards**. The backend stream is unchanged — still one doc per changed field — so the grouping is done **client-side**, making this a frontend-only change with no schema or data impact.
+
+- **Label layer** (`frontend/src/lib/audit/`): `labels.ts` (collection + field labels, action verbs/glyphs, section derivation, and the `fieldLabel`/`collectionLabel`/`subjectNoun` resolvers — `fieldLabel` walks the collection path most-specific-first so `employees/contracts` resolves the contract field map, not the employee one); `fields.employee/payroll/shifts/misc.ts` (Czech field-label maps per collection family, ~255 fields total); `format.ts` (value formatters — ISO dates, Ano/Ne, enums, generic, with sensitive values kept redacted); `grouping.ts` (`groupEntries` folds the flat per-field stream into one event per author + record + action within a ~20s window, sub-grouped by area; `bucketByDate` → Dnes / Včera / explicit date; `eventTitle`).
+- **`AuditEventCard`** (`frontend/src/components/AuditEventCard.tsx`): one collapsed-by-default line per event (chevron, verb + accusative subject noun e.g. "Vytvořil dokument", record title/link, change count, author, time); expands to the changed fields as `popisek: old → new` grouped by area, plus a "Technický detail" raw-JSON escape hatch. The filter bar (now with Czech collection labels) and cursor pagination are retained. `EmployeeDetailPage`'s "Historie změn" reuses the same card (compact); there a `resolveRef` prop turns the contract's `employmentRowId` into the human employment-session header.
+
 ---
 
 ## Upozornění hub
