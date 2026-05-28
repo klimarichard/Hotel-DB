@@ -2,6 +2,7 @@ import { useState, useEffect, FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "@/lib/api";
 import Button from "@/components/Button";
+import ConfirmModal from "@/components/ConfirmModal";
 import { NATIONALITIES, nationalityName } from "@/lib/nationalities";
 import { isCzechNationality } from "@/lib/contractVariables";
 import styles from "./EmployeeFormPage.module.css";
@@ -156,6 +157,11 @@ export default function EmployeeFormPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [employeeName, setEmployeeName] = useState("");
+  // Terminated employee matching the new hire (name + birthdate) — drives the
+  // reactivate-vs-create-duplicate prompt.
+  const [dupMatch, setDupMatch] = useState<
+    { id: string; firstName: string; lastName: string; dobMatched: boolean } | null
+  >(null);
 
   const [personal, setPersonal] = useState<PersonalForm>(emptyPersonal);
   const [contact, setContact] = useState<ContactForm>(emptyContact);
@@ -228,8 +234,58 @@ export default function EmployeeFormPage() {
     setAdditional((f) => ({ ...f, [field]: value }));
   }
 
+  // Best-effort lookup of a terminated employee matching the new hire by name
+  // (+ birthdate when provided). Never blocks creation if it fails.
+  async function findTerminatedMatch(): Promise<
+    { id: string; firstName: string; lastName: string; dobMatched: boolean } | null
+  > {
+    const f = personal.firstName.trim().toLowerCase();
+    const l = personal.lastName.trim().toLowerCase();
+    if (!f || !l) return null;
+    const dob = personal.dateOfBirth;
+    try {
+      const list = await api.get<
+        Array<{ id: string; firstName: string; lastName: string; dateOfBirth?: string }>
+      >("/employees?status=terminated");
+      for (const emp of list) {
+        const nameEq =
+          (emp.firstName ?? "").trim().toLowerCase() === f &&
+          (emp.lastName ?? "").trim().toLowerCase() === l;
+        if (!nameEq) continue;
+        // With a birthdate, require it to match (distinguishes namesakes).
+        // Without one, match on name alone (a softer "possible match").
+        if (dob) {
+          if ((emp.dateOfBirth ?? "") === dob) {
+            return { id: emp.id, firstName: emp.firstName, lastName: emp.lastName, dobMatched: true };
+          }
+        } else {
+          return { id: emp.id, firstName: emp.firstName, lastName: emp.lastName, dobMatched: false };
+        }
+      }
+    } catch {
+      // Ignore — the match check must never prevent creating an employee.
+    }
+    return null;
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    // For a brand-new employee, offer to reactivate a matching terminated one
+    // instead of creating a duplicate.
+    if (!isEdit) {
+      setSaving(true);
+      setError(null);
+      const match = await findTerminatedMatch();
+      if (match) {
+        setSaving(false);
+        setDupMatch(match);
+        return;
+      }
+    }
+    await doSave();
+  }
+
+  async function doSave() {
     setSaving(true);
     setError(null);
 
@@ -300,6 +356,32 @@ export default function EmployeeFormPage() {
 
   return (
     <div className={styles.page}>
+      {dupMatch && (
+        <ConfirmModal
+          title={dupMatch.dobMatched ? "Nalezen ukončený zaměstnanec" : "Možná shoda se zaměstnancem"}
+          message={
+            `${dupMatch.firstName} ${dupMatch.lastName} je již v systému jako ukončený zaměstnanec` +
+            (dupMatch.dobMatched ? " (shoduje se jméno i datum narození)." : " (shoduje se jméno).") +
+            " Chcete reaktivovat existujícího zaměstnance, nebo přesto vytvořit nového?"
+          }
+          confirmLabel="Reaktivovat existujícího"
+          tertiary={{
+            label: "Přesto vytvořit nového",
+            variant: "secondary",
+            onClick: () => {
+              setDupMatch(null);
+              void doSave();
+            },
+          }}
+          cancelLabel="Zrušit"
+          onConfirm={() => {
+            const targetId = dupMatch.id;
+            setDupMatch(null);
+            navigate(`/zamestnanci/${targetId}?nastup=1`);
+          }}
+          onCancel={() => setDupMatch(null)}
+        />
+      )}
       <div className={styles.breadcrumb}>
         <Link to="/zamestnanci">Zaměstnanci</Link>
         {isEdit && (
