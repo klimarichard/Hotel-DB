@@ -362,9 +362,9 @@ export default function EmployeeFormPage() {
           message={
             `${dupMatch.firstName} ${dupMatch.lastName} je již v systému jako ukončený zaměstnanec` +
             (dupMatch.dobMatched ? " (shoduje se jméno i datum narození)." : " (shoduje se jméno).") +
-            " Chcete reaktivovat existujícího zaměstnance, nebo přesto vytvořit nového?"
+            " Můžete otevřít jeho profil a upravit údaje — nový pracovní poměr (Nástup) pak přidáte ručně v historii. Nebo přesto vytvořit nového."
           }
-          confirmLabel="Reaktivovat existujícího"
+          confirmLabel="Reaktivovat a upravit údaje"
           tertiary={{
             label: "Přesto vytvořit nového",
             variant: "secondary",
@@ -377,7 +377,7 @@ export default function EmployeeFormPage() {
           onConfirm={() => {
             const targetId = dupMatch.id;
             setDupMatch(null);
-            navigate(`/zamestnanci/${targetId}?nastup=1`);
+            navigate(`/zamestnanci/${targetId}/upravit`);
           }}
           onCancel={() => setDupMatch(null)}
         />

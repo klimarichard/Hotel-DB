@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { useParams, Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { api } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { canEditEmployees } from "@/lib/permissions";
@@ -1124,8 +1124,6 @@ interface AlertItem {
 export default function EmployeeDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const nastupAutoOpened = useRef(false);
   const { role } = useAuth();
   // Edit/delete/contract-management capability. admin/director/hr; accountant
   // is read-only (sees data + reveal + contract download only).
@@ -1147,18 +1145,6 @@ export default function EmployeeDetailPage() {
   } | null>(null);
   const [editingRow, setEditingRow] = useState<EmploymentRow | null>(null);
 
-  // Arriving with ?nastup=1 (from the reactivate-a-terminated-employee flow on
-  // the new-employee form) auto-opens the Nástup dialog once the employee loads.
-  useEffect(() => {
-    if (nastupAutoOpened.current) return;
-    if (employee && searchParams.get("nastup") === "1") {
-      nastupAutoOpened.current = true;
-      setNewEntryMode({ lockedChangeType: "nástup" });
-      const next = new URLSearchParams(searchParams);
-      next.delete("nastup");
-      setSearchParams(next, { replace: true });
-    }
-  }, [employee, searchParams, setSearchParams]);
   // Generation flow has two distinct modes — row-tied (employment row contract)
   // and standalone (ad-hoc Multisport / Hmotná odpovědnost / custom). Both
   // feed the same GenerateContractModal but compose `employeeData` differently.
