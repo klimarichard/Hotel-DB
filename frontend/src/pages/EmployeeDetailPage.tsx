@@ -12,6 +12,8 @@ import GenerateContractModal from "@/components/GenerateContractModal";
 import Button from "@/components/Button";
 import EmploymentSessionCard from "@/components/EmploymentSession";
 import AdhocContractsSection from "@/components/AdhocContractsSection";
+import AuditEventCard from "@/components/AuditEventCard";
+import { type AuditEntry, groupEntries } from "@/lib/audit/grouping";
 import {
   ContractType as SmlouvaContractType,
   CONTRACT_TYPE_LABELS,
@@ -109,55 +111,8 @@ function SensitiveField({
 
 // ─── Employee history (audit log) ─────────────────────────────────────────────
 
-interface AuditEntryMini {
-  id: string;
-  action: string;
-  collection: string;
-  fieldPath?: string;
-  redacted?: boolean;
-  oldValue?: unknown;
-  newValue?: unknown;
-  userEmail?: string;
-  timestamp?: { _seconds?: number; seconds?: number } | string | null;
-}
-
-function tsToDate(ts: AuditEntryMini["timestamp"]): Date | null {
-  if (!ts) return null;
-  if (typeof ts === "string") {
-    const d = new Date(ts);
-    return isNaN(d.getTime()) ? null : d;
-  }
-  const seconds = ts._seconds ?? ts.seconds;
-  if (typeof seconds === "number") return new Date(seconds * 1000);
-  return null;
-}
-
-function formatAuditTs(ts: AuditEntryMini["timestamp"]): string {
-  const d = tsToDate(ts);
-  if (!d) return "—";
-  return d.toLocaleString("cs-CZ", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function compactValue(v: unknown): string {
-  if (v === null || v === undefined) return "—";
-  if (typeof v === "string") return v.length > 40 ? v.slice(0, 37) + "…" : v;
-  if (typeof v === "number" || typeof v === "boolean") return String(v);
-  try {
-    const s = JSON.stringify(v);
-    return s.length > 40 ? s.slice(0, 37) + "…" : s;
-  } catch {
-    return "[object]";
-  }
-}
-
 function EmployeeAuditHistory({ employeeId }: { employeeId: string }) {
-  const [entries, setEntries] = useState<AuditEntryMini[] | null>(null);
+  const [entries, setEntries] = useState<AuditEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [limit, setLimit] = useState(10);
   // True while there may be more rows than currently fetched (last fetch
@@ -166,7 +121,7 @@ function EmployeeAuditHistory({ employeeId }: { employeeId: string }) {
 
   useEffect(() => {
     api
-      .get<{ entries: AuditEntryMini[] }>(
+      .get<{ entries: AuditEntry[] }>(
         `/audit?employeeId=${encodeURIComponent(employeeId)}&limit=${limit}`
       )
       .then((res) => {
@@ -182,45 +137,21 @@ function EmployeeAuditHistory({ employeeId }: { employeeId: string }) {
     return <div className={styles.loading}>Žádné zaznamenané změny.</div>;
   }
 
+  const events = groupEntries(entries);
+
   return (
     <div>
-      <div style={{ overflowX: "auto" }}>
-        <table className={styles.fields} style={{ display: "table", width: "100%" }}>
-          <thead>
-            <tr>
-              <th style={{ textAlign: "left", padding: "0.4rem 0.6rem", fontSize: "0.72rem", textTransform: "uppercase", color: "var(--color-text-muted)" }}>Čas</th>
-              <th style={{ textAlign: "left", padding: "0.4rem 0.6rem", fontSize: "0.72rem", textTransform: "uppercase", color: "var(--color-text-muted)" }}>Autor</th>
-              <th style={{ textAlign: "left", padding: "0.4rem 0.6rem", fontSize: "0.72rem", textTransform: "uppercase", color: "var(--color-text-muted)" }}>Akce</th>
-              <th style={{ textAlign: "left", padding: "0.4rem 0.6rem", fontSize: "0.72rem", textTransform: "uppercase", color: "var(--color-text-muted)" }}>Pole</th>
-              <th style={{ textAlign: "left", padding: "0.4rem 0.6rem", fontSize: "0.72rem", textTransform: "uppercase", color: "var(--color-text-muted)" }}>Změna</th>
-            </tr>
-          </thead>
-          <tbody>
-            {entries.map((e) => (
-              <tr key={e.id}>
-                <td style={{ padding: "0.4rem 0.6rem", fontSize: "0.8rem", whiteSpace: "nowrap", color: "var(--color-text-muted)" }}>{formatAuditTs(e.timestamp)}</td>
-                <td style={{ padding: "0.4rem 0.6rem", fontSize: "0.8rem" }}>{e.userEmail ?? "—"}</td>
-                <td style={{ padding: "0.4rem 0.6rem", fontSize: "0.8rem" }}>{e.action}</td>
-                <td style={{ padding: "0.4rem 0.6rem", fontSize: "0.8rem" }}>
-                  {e.fieldPath ? <code>{e.fieldPath}</code> : "—"}
-                </td>
-                <td style={{ padding: "0.4rem 0.6rem", fontSize: "0.8rem" }}>
-                  {e.redacted ? (
-                    <span style={{ fontStyle: "italic", color: "var(--color-text-muted)" }}>citlivé pole změněno</span>
-                  ) : e.action === "update" ? (
-                    <>
-                      <span style={{ textDecoration: "line-through", color: "var(--color-danger-text)" }}>{compactValue(e.oldValue)}</span>
-                      <span style={{ color: "var(--color-text-muted)" }}> → </span>
-                      <span style={{ color: "var(--color-active-text)" }}>{compactValue(e.newValue)}</span>
-                    </>
-                  ) : (
-                    "—"
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+        {events.map((ev) => (
+          <AuditEventCard
+            key={ev.id}
+            event={ev}
+            authorName={ev.userEmail || ev.userId}
+            title=""
+            hideTitle
+            compact
+          />
+        ))}
       </div>
       <div style={{ marginTop: "0.75rem", display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
         {hasMore && (
