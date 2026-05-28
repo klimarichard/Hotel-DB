@@ -248,6 +248,49 @@ export function effectiveCompFromRows(
   return { salary, hourlyRate, contractType, jobTitle };
 }
 
+function normalizePositionName(name: string): string {
+  return (name ?? "").trim().toLowerCase();
+}
+
+/**
+ * Load jobPositions into a name → hourly-rate map. DPP pay is hours × the
+ * position's hourly rate (DPP employment rows carry no own rate), so the
+ * payroll engine resolves it from the position set in Settings.
+ */
+async function loadPositionHourlyRates(): Promise<Map<string, number>> {
+  const snap = await db().collection("jobPositions").get();
+  const map = new Map<string, number>();
+  for (const d of snap.docs) {
+    const data = d.data() as Record<string, unknown>;
+    const name = data.name as string | undefined;
+    const rate = data.hourlyRate;
+    if (name && typeof rate === "number" && Number.isFinite(rate)) {
+      map.set(normalizePositionName(name), rate);
+    }
+  }
+  return map;
+}
+
+/**
+ * Effective hourly rate for the payroll entry. DPP is paid totalHours × the
+ * position's hourly rate, so when the employment session carries no rate (DPP
+ * rows never do) we fall back to the rate on the matching jobPosition. Non-DPP
+ * contracts keep the rate folded from the employment row — unchanged behaviour.
+ * Pure + exported for unit testing.
+ */
+export function resolveHourlyRate(
+  contractType: string,
+  jobTitle: string,
+  effHourlyRate: number | null | undefined,
+  positionRates: Map<string, number>
+): number | null {
+  if (effHourlyRate != null) return effHourlyRate;
+  if (contractType === "DPP") {
+    return positionRates.get(normalizePositionName(jobTitle)) ?? null;
+  }
+  return null;
+}
+
 /**
  * Auto-generated payroll notes for a mid-month start/termination, matched to the
  * proration window: a "Nástup" note when the session begins after the 1st, an
@@ -674,6 +717,9 @@ export async function createOrUpdatePayrollPeriod(
     }
   }
 
+  // jobPositions hourly rates — DPP pay = hours × the position's rate.
+  const positionRates = await loadPositionHourlyRates();
+
   // Calculate and write each employee's entry
   const batch = db().batch();
   for (const empDoc of empSnap.docs) {
@@ -696,15 +742,17 @@ export async function createOrUpdatePayrollPeriod(
       ? ((rootSnap.data() as Record<string, unknown>).currentContractType as string | undefined)
       : undefined;
 
+    const contractType = currentContractType || eff?.contractType || (planEmp.contractType as string) || "";
+    const jobTitle = eff?.jobTitle || (planEmp.jobTitle as string) || "";
     const employee = {
       employeeId,
       firstName: planEmp.firstName as string ?? "",
       lastName: planEmp.lastName as string ?? "",
       displayName: planEmp.displayName as string ?? "",
-      contractType: currentContractType || eff?.contractType || (planEmp.contractType as string) || "",
+      contractType,
       salary: eff?.salary ?? null,
-      hourlyRate: eff?.hourlyRate ?? null,
-      jobTitle: eff?.jobTitle || (planEmp.jobTitle as string) || "",
+      hourlyRate: resolveHourlyRate(contractType, jobTitle, eff?.hourlyRate, positionRates),
+      jobTitle,
       section: planEmp.section as string ?? "",
       sickLeaveHours: sickLeaveMap.get(employeeId) ?? 0,
       overrides: overridesMap.get(employeeId) ?? {},
@@ -822,19 +870,22 @@ export async function recomputeEntryForEmployee(
   const planEmp = planEmpSnap.empty ? {} : (planEmpSnap.docs[0].data() as Record<string, unknown>);
   const empRows = empRowsSnap.docs.map((d) => d.data() as EmploymentRowLite);
   const eff = effectiveCompFromRows(empRows, year, month);
+  const positionRates = await loadPositionHourlyRates();
   const currentContractType = rootSnap.exists
     ? ((rootSnap.data() as Record<string, unknown>).currentContractType as string | undefined)
     : undefined;
 
+  const contractType = currentContractType || eff?.contractType || (planEmp.contractType as string) || "";
+  const jobTitle = eff?.jobTitle || (planEmp.jobTitle as string) || "";
   const employee = {
     employeeId,
     firstName: (planEmp.firstName as string) ?? "",
     lastName: (planEmp.lastName as string) ?? "",
     displayName: (planEmp.displayName as string) ?? "",
-    contractType: currentContractType || eff?.contractType || (planEmp.contractType as string) || "",
+    contractType,
     salary: eff?.salary ?? null,
-    hourlyRate: eff?.hourlyRate ?? null,
-    jobTitle: eff?.jobTitle || (planEmp.jobTitle as string) || "",
+    hourlyRate: resolveHourlyRate(contractType, jobTitle, eff?.hourlyRate, positionRates),
+    jobTitle,
     section: (planEmp.section as string) ?? "",
     sickLeaveHours: next.sickLeaveHours,
     overrides: next.overrides,
