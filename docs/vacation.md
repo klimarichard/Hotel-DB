@@ -1,0 +1,20 @@
+# Vacation (Dovolená)
+
+Implementation notes for the vacation request and approval feature (Phase 6). Covers the `vacationRequests` collection, the pendingEdit edit workflow, shift-collision handling, and how approved vacations surface to employees and admins.
+
+## Phase 6 — Vacation
+- `vacationRequests` is a top-level collection (not a sub-collection).
+- **pendingEdit pattern**: approved vacation edits store `pendingEdit: { startDate, endDate, reason }` on the doc; original dates stay until admin approves/rejects.
+- `PATCH /vacation/:id` detects mode by body shape: `{ startDate }` → employee edit; `{ status }` → admin approve/reject.
+- `removeVacationXsFromPlans(employeeId, startDate, endDate)` in `shifts.ts` — called on deletion and approved-edit transitions.
+- User↔employee link: `employeeId` field on `users/{uid}`. Set via `PATCH /auth/users/:uid/employee`.
+- Notifications on plan publish intentionally skipped.
+- `GET /vacation/approved-upcoming` — all authenticated users, returns name + date fields for approved vacations whose `endDate >= today` (Prague TZ), **scoped to requesters whose `users/{uid}.role === "employee"`** (admin/director/manager vacations don't appear in colleagues' shared list). Powers the `Schválené dovolené (všichni zaměstnanci)` section on `VacationPage`, shown to employees and managers only — admin/director already see every request in `Všechny žádosti`.
+- **Admin/director list split (`Všechny žádosti` + `Starší žádosti`):** the admin section on `VacationPage` partitions requests by `endDate >= today` (Prague semantics, computed client-side). The main list holds future + still-actionable requests (anything `pending`, or with a `pendingEdit`, or whose `endDate` hasn't passed) sorted ascending by `startDate`. Decided rows whose `endDate` is in the past move to a collapsible `Starší žádosti` section below, closed by default, sorted descending. Backend returns everything; the split is purely a frontend concern.
+- **Shift-collision check:** vacation requests/approvals can't silently overwrite pre-scheduled work.
+  - `findShiftCollisions(employeeId, startDate, endDate)` in `shifts.ts` returns every shift cell whose `status === "assigned"` in the range (X / blank cells are not collisions).
+  - `POST /vacation` and the employee-edit branch of `PATCH /vacation/:id` return `409 { error: "shift_collision", collisions }` if any assigned shift sits in the range — hard block, surfaced as a read-only `VacationCollisionInfoModal`.
+  - `PATCH /vacation/:id` on admin approval accepts optional `excludeDates: string[]` in the body. If the field is **absent**, the endpoint re-checks collisions and 409s to force the UI to open the resolution dialog. If **present** (even empty), the user's picks are trusted — `excludedDates` is persisted on the request doc, and `applyVacationXs` skips those days when repainting X cells on every overlapping plan.
+  - `GET /vacation/check-collisions` is the UI pre-check used by `handleApprove` in `VacationPage.tsx` before opening `VacationCollisionResolutionModal`. Employees are scoped to their own `employeeId`; admin/director can check anyone.
+  - `api.ts` throws `ApiError { status, body, message }` so the page can extract the structured 409 payload instead of relying on the message string.
+- **Optimistic insert on self-request:** `POST /vacation` returns `{ id, firstName, lastName }`. `handleSubmit` in `VacationPage.tsx` uses those values when prepending the new row — otherwise admin/director self-requests appeared nameless in `Všechny žádosti` until the next refetch.
