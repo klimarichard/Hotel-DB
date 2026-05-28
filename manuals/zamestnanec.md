@@ -18,15 +18,14 @@ HPM Intranet je interní HR systém společností Special Tours Prague (STP) a H
 
 ## Přihlášení
 
-Aplikace je dostupná v prohlížeči. Přihlašujete se **uživatelským jménem a heslem**.
+Aplikace je dostupná v prohlížeči. Přihlašujete se **e-mailem a heslem**.
 
-- Stačí zadat samotné uživatelské jméno (např. `vondra`) — doména `@hotel.local` se doplní automaticky. Funguje i zadání celého e-mailu.
 - **Zapomenuté heslo:** na přihlašovací obrazovce klikněte na *„Zapomenuté heslo?"* a na váš e-mail přijde odkaz pro nastavení nového hesla.
-- Administrátor vám může poslat odkaz pro reset hesla, případně vytvořit účet bez hesla — pak si při prvním přihlášení heslo zvolíte sami.
+- Administrátor vám může poslat odkaz pro reset hesla.
 
 > 📷 *(Místo pro snímek obrazovky: přihlašovací formulář)*
 
-Vlevo dole je vždy vidět **jméno přihlášeného uživatele**; tlačítkem *Odhlásit* se odhlásíte. Vedle je přepínač **světlého/tmavého režimu**.
+Vlevo dole v přihlášené aplikaci je vždy vidět **jméno přihlášeného uživatele**; tlačítkem *Odhlásit* se odhlásíte. Vedle je přepínač **světlého/tmavého režimu**.
 
 ---
 
@@ -34,9 +33,8 @@ Vlevo dole je vždy vidět **jméno přihlášeného uživatele**; tlačítkem *
 
 Úvodní stránka po přihlášení. Ukazuje aktuální provozní situaci pro dnešní den:
 
-- kdo má dnes směnu (recepce i portýři), kdo je MOD (vedoucí směny),
-- kteří vedoucí jsou nepřítomní,
-- rychlé statistiky personálu (počty, věkové složení, národnosti, pozice).
+- kdo má dnes směnu (recepce i portýři), kdo je MOD,
+- kteří manažeři mají dovolenou.
 
 > 📷 *(Místo pro snímek obrazovky: Přehled)*
 
@@ -44,14 +42,7 @@ Vlevo dole je vždy vidět **jméno přihlášeného uživatele**; tlačítkem *
 
 ## Směny
 
-Měsíční plán směn (recepce, portýři, vedoucí). Vidíte **publikovaný plán svých směn**.
-
-### Co vidíte
-
-- Plán ve stavu *Vytvořený* se nezobrazuje; objeví se až po otevření.
-- Do buňky se zapisuje **kód směny** — např. `DA`, `NS` (denní/noční + hotel), `R`, `X` (volno), `ZDA`/`ZN…`, `HO` (home office).
-- Pod plánem je **legenda** s vysvětlením typů směn, kódů hotelů a pravidel přestávek.
-- **MOD (vedoucí směny):** u jména vedoucího se zobrazuje písmeno MOD a počty směn.
+Měsíční plán směn (recepce, portýři, manažeři). Vidíte **publikovaný plán směn**.
 
 > 📷 *(Místo pro snímek obrazovky: měsíční plán směn)*
 
@@ -63,7 +54,7 @@ Do plánu můžete sami zadávat a mazat **pouze „X" (volno)**.
 
 ### Žádosti o změnu směny
 
-V **publikovaném** plánu podáte **dvojklikem na buňku** žádost o změnu směny. Žádost schvaluje administrátor — schválení samo o sobě směnu nezmění, úpravu provede administrátor ručně.
+V **hotovém** plánu podáte **dvojklikem na buňku** žádost o změnu směny. Žádost schvaluje administrátor.
 
 ### Export
 
@@ -89,7 +80,6 @@ Tlačítko **Exportovat ▾** nabízí **PDF** (plán na jednu stránku A4). Tla
 Vlastní karta zaměstnance.
 
 - Vidíte své osobní údaje, kontakt, doklady a **historii pracovního poměru**.
-- **Citlivé údaje** (rodné číslo, číslo OP, číslo pojištěnce, bankovní účet) se při úpravě zobrazí, abyste viděli, co měníte; **každé zobrazení se zaznamenává**.
 - **Navrhnout úpravu** — změny se odešlou ke schválení administrátorovi/řediteli.
 
 > 📷 *(Místo pro snímek obrazovky: Můj profil)*
