@@ -97,12 +97,13 @@ const MONTH_NAMES = [
   "Červenec", "Srpen", "Září", "Říjen", "Listopad", "Prosinec",
 ];
 
-const SECTIONS = ["vedoucí", "recepce", "portýři"] as const;
-const SECTION_LABELS: Record<string, string> = {
-  vedoucí: "Vedoucí",
-  recepce: "Recepce",
-  portýři: "Portýři",
-};
+// Display groups for the payroll table: managers stay in their own section on
+// top; reception + porters are shown together as one section. The stored
+// `section` value on each entry is unchanged — this is a display-only merge.
+const SECTION_GROUPS: { label: string; sections: string[] }[] = [
+  { label: "Vedoucí", sections: ["vedoucí"] },
+  { label: "Recepce a portýři", sections: ["recepce", "portýři"] },
+];
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
 
@@ -514,10 +515,10 @@ export default function PayrollPage() {
       };
 
       let rowsHtml = "";
-      for (const section of SECTIONS) {
-        const entries = entriesBySection(section);
+      for (const group of SECTION_GROUPS) {
+        const entries = entriesForGroup(group.sections);
         if (entries.length === 0) continue;
-        rowsHtml += `<tr><td colspan="11" style="${cs.sectionRow}">${SECTION_LABELS[section] ?? section}</td></tr>`;
+        rowsHtml += `<tr><td colspan="11" style="${cs.sectionRow}">${group.label}</td></tr>`;
         for (const entry of entries) {
           const isDpp = entry.contractType === "DPP";
           const nameHtml = entry.contractType
@@ -698,18 +699,18 @@ export default function PayrollPage() {
   // Entries are stored keyed by employeeId and come back in document-id order,
   // which is meaningless for display (e.g. an auto-id employee jumps to the top),
   // so sort them here.
-  const entriesBySection = (section: string) =>
-    (period?.entries.filter((e) => e.section === section) ?? [])
+  const entriesForGroup = (sections: string[]) =>
+    (period?.entries.filter((e) => sections.includes(e.section)) ?? [])
       .slice()
       .sort((a, b) => employeeSurnameFirst(a).localeCompare(employeeSurnameFirst(b), "cs"));
 
-  function renderSection(section: string) {
-    const entries = entriesBySection(section);
+  function renderGroup(group: { label: string; sections: string[] }) {
+    const entries = entriesForGroup(group.sections);
     if (entries.length === 0) return null;
     return (
       <>
-        <tr key={`section-${section}`} className={styles.sectionRow}>
-          <td colSpan={12}>{SECTION_LABELS[section] ?? section}</td>
+        <tr key={`section-${group.label}`} className={styles.sectionRow}>
+          <td colSpan={12}>{group.label}</td>
         </tr>
         {entries.map((entry) => {
           const isDpp = entry.contractType === "DPP";
@@ -1026,7 +1027,7 @@ export default function PayrollPage() {
                 </tr>
               </thead>
               <tbody>
-                {SECTIONS.map((s) => renderSection(s))}
+                {SECTION_GROUPS.map((g) => renderGroup(g))}
               </tbody>
             </table>
           </div>
