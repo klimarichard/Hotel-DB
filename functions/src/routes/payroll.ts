@@ -412,7 +412,8 @@ payrollRouter.get(
     const data = snap.exists ? snap.data() : undefined;
     const foodVoucherRate = (data?.foodVoucherRate as number | undefined) ?? 129.5;
     const dppMaxMonthlyReward = (data?.dppMaxMonthlyReward as number | undefined) ?? 11999;
-    res.json({ foodVoucherRate, dppMaxMonthlyReward });
+    const minimumWage = (data?.minimumWage as number | undefined) ?? 22400;
+    res.json({ foodVoucherRate, dppMaxMonthlyReward, minimumWage });
   }
 );
 
@@ -423,9 +424,10 @@ payrollRouter.patch(
   requireAuth,
   requireRole("admin"),
   async (req: AuthRequest, res: Response) => {
-    const { foodVoucherRate, dppMaxMonthlyReward } = req.body as {
+    const { foodVoucherRate, dppMaxMonthlyReward, minimumWage } = req.body as {
       foodVoucherRate?: number;
       dppMaxMonthlyReward?: number;
+      minimumWage?: number;
     };
     const update: Record<string, unknown> = {
       updatedAt: FieldValue.serverTimestamp(),
@@ -444,6 +446,13 @@ payrollRouter.patch(
         return;
       }
       update.dppMaxMonthlyReward = dppMaxMonthlyReward;
+    }
+    if (minimumWage !== undefined) {
+      if (typeof minimumWage !== "number" || minimumWage <= 0) {
+        res.status(400).json({ error: "Neplatná minimální mzda." });
+        return;
+      }
+      update.minimumWage = minimumWage;
     }
     const settingsRef = db().collection("settings").doc("payroll");
     const beforeSnap = await settingsRef.get();
