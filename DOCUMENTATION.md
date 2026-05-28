@@ -2,7 +2,7 @@
 
 Master index of the developer / implementation documentation for the **HPM Intranet** (formerly "Hotel HR App") — a cloud HR platform for Special Tours Prague (STP) / Hotel Property Management (HPM).
 
-Looking for how to *use* the app? See the end-user manual in **[README.md](README.md)**.
+Looking for how to *use* the app? See the per-role Czech user manuals in **[`manuals/`](manuals/)** (also linked from the [README](README.md)).
 
 ## Technology stack
 
