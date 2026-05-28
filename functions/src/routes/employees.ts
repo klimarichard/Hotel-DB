@@ -151,6 +151,88 @@ const EMPTY_ROOT_FIELDS = {
 } as const;
 
 /**
+ * Derive an employee's lifecycle status from their employment sessions:
+ * "terminated" when NO session is still active (each session has an Ukončení
+ * row OR its effective end date has passed), otherwise "active". Returns null
+ * when the employee has no employment rows yet (freshly created, awaiting their
+ * Nástup) so callers leave the existing status untouched — a new hire must not
+ * be shown as terminated before onboarding. Mirrors the frontend hasActiveRow /
+ * groupBySession(...).some(s => !s.terminated).
+ */
+export function computeEffectiveStatus(
+  rows: Array<Record<string, unknown>>,
+  today: string
+): "active" | "terminated" | null {
+  type S = { nastup: Record<string, unknown>; dodatky: Record<string, unknown>[]; ukonceni: boolean };
+  const sorted = [...rows].sort((a, b) =>
+    String(a.startDate ?? "").localeCompare(String(b.startDate ?? ""))
+  );
+  const sessions: S[] = [];
+  let cur: S | null = null;
+  for (const r of sorted) {
+    const ct = r.changeType as string | undefined;
+    if (ct === "nástup") {
+      if (cur) sessions.push(cur);
+      cur = { nastup: r, dodatky: [], ukonceni: false };
+    } else if (cur && ct === "změna smlouvy") {
+      cur.dodatky.push(r);
+    } else if (cur && ct === "ukončení") {
+      cur.ukonceni = true;
+    }
+  }
+  if (cur) sessions.push(cur);
+  if (sessions.length === 0) return null;
+
+  const isTerminated = (s: S): boolean => {
+    if (s.ukonceni) return true;
+    // Effective end date: the Nástup's endDate, overridden by any "délka
+    // smlouvy" Dodatek whose validity has arrived. A past end date = expired.
+    let endDate = (s.nastup.endDate as string | null | undefined) ?? null;
+    for (const d of s.dodatky) {
+      if (((d.startDate as string | undefined) ?? "") > today) continue;
+      const changes = (d.changes as Array<{ changeKind?: string; value?: string }> | undefined) ?? [];
+      for (const ch of changes) {
+        if (ch.changeKind === "délka smlouvy" && ch.value) endDate = ch.value;
+      }
+    }
+    return !!endDate && endDate < today;
+  };
+
+  return sessions.some((s) => !isTerminated(s)) ? "active" : "terminated";
+}
+
+/**
+ * Recompute + persist the employee's active/terminated status from their
+ * employment sessions, so terminating (Ukončení row or a fixed-term contract
+ * expiring) auto-moves them to the Ukončení tab, and a fresh Nástup brings them
+ * back. Orthogonal to the current* denormalized fields — only ever writes
+ * `status`. Audits the change when a req context is supplied (the nightly sweep
+ * passes none).
+ */
+async function applyDerivedStatus(
+  empRef: admin.firestore.DocumentReference,
+  now: FirebaseFirestore.FieldValue,
+  req?: AuthRequest
+): Promise<void> {
+  const snap = await empRef.collection("employment").orderBy("startDate", "asc").get();
+  const rows = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, unknown>) }));
+  const status = computeEffectiveStatus(rows, clock.today());
+  if (!status) return;
+  const before = (await empRef.get()).data() as Record<string, unknown> | undefined;
+  if (!before || before.status === status) return;
+  await empRef.update({ status, updatedAt: now });
+  if (req) {
+    await logUpdate(ctxFromReq(req), {
+      collection: "employees",
+      resourceId: empRef.id,
+      employeeId: empRef.id,
+      before: { status: before.status ?? null },
+      after: { status },
+    });
+  }
+}
+
+/**
  * Re-sync the denormalized current* root fields after ANY employment-row write
  * (add / edit / delete) by folding the employee's latest session — NEVER by
  * copying a single row's own fields. A Dodatek (`změna smlouvy`) row carries its
@@ -171,6 +253,10 @@ async function resyncRootFields(
   if (!patch) {
     await empRef.update({ ...after, updatedAt: now });
   }
+  // Auto-move to / from the Ukončení tab based on whether an active session
+  // remains (orthogonal to the current* fields). Must run regardless of whether
+  // the current* fields changed, so it sits before the early returns below.
+  await applyDerivedStatus(empRef, now, req);
   if (!before) return;
   const changed =
     after.currentJobTitle !== (before.currentJobTitle ?? "") ||
@@ -206,6 +292,10 @@ export async function refreshEffectiveRootForAllActive(): Promise<{ scanned: num
   const positionDeptMap = await buildPositionDeptMap();
   let updated = 0;
   for (const doc of snap.docs) {
+    // Flip active → terminated when a fixed-term contract has simply expired
+    // (no employment write fires on the date passing). Scoped to currently
+    // active employees, so it only ever moves people INTO the Ukončení tab.
+    await applyDerivedStatus(doc.ref, FieldValue.serverTimestamp());
     const patch = await computeEffectiveRootFields(doc.ref, positionDeptMap);
     if (!patch) continue;
     const before = doc.data() as Record<string, unknown>;
@@ -1152,6 +1242,10 @@ employeesRouter.delete(
         updatedAt: now,
       });
     }
+    // Auto-move to / from the Ukončení tab after the session change (e.g.
+    // deleting an Ukončení row reactivates the employee, deleting the whole
+    // session leaves no active contract).
+    await applyDerivedStatus(empRef, now, req);
     if (beforeEmp) {
       await logUpdate(ctx, {
         collection: "employees",
