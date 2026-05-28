@@ -198,6 +198,10 @@ export default function SettingsPage() {
   const [dppMaxMonthlyRewardDraft, setDppMaxMonthlyRewardDraft] = useState<string>("");
   const [showDppMaxConfirm, setShowDppMaxConfirm] = useState(false);
   const [dppMaxSaving, setDppMaxSaving] = useState(false);
+  const [minimumWage, setMinimumWage] = useState<number>(22400);
+  const [minimumWageDraft, setMinimumWageDraft] = useState<string>("");
+  const [showMinWageConfirm, setShowMinWageConfirm] = useState(false);
+  const [minWageSaving, setMinWageSaving] = useState(false);
   const [showPosCreate, setShowPosCreate] = useState(false);
 
   // Companies
@@ -283,12 +287,14 @@ export default function SettingsPage() {
   useEffect(() => { loadDepartments(); loadPositions(); loadEducationLevels(); }, [loadDepartments, loadPositions, loadEducationLevels]);
 
   useEffect(() => {
-    api.get<{ foodVoucherRate: number; dppMaxMonthlyReward: number }>("/payroll/settings")
+    api.get<{ foodVoucherRate: number; dppMaxMonthlyReward: number; minimumWage: number }>("/payroll/settings")
       .then((s) => {
         setFoodVoucherRate(s.foodVoucherRate);
         setFoodVoucherRateDraft(String(s.foodVoucherRate));
         setDppMaxMonthlyReward(s.dppMaxMonthlyReward);
         setDppMaxMonthlyRewardDraft(String(s.dppMaxMonthlyReward));
+        setMinimumWage(s.minimumWage);
+        setMinimumWageDraft(String(s.minimumWage));
       })
       .catch(() => {});
   }, []);
@@ -1494,6 +1500,63 @@ export default function SettingsPage() {
           <p style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
             Limit pro automatický výpočet sjednané odměny u DPP smluv. Výchozí hodnota: 11 999 Kč/měsíc.
           </p>
+
+          <h2 style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--color-text-heading)", marginTop: "2rem", marginBottom: "1rem" }}>
+            Minimální mzda
+          </h2>
+          <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "0.5rem" }}>
+            <span style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--color-text)" }}>
+              {minimumWage.toLocaleString("cs-CZ")} Kč / měsíc
+            </span>
+            <button className={styles.linkBtn} onClick={() => { setMinimumWageDraft(String(minimumWage)); setShowMinWageConfirm(true); }}>
+              Upravit
+            </button>
+          </div>
+          <p style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
+            Aktuální zákonná minimální měsíční mzda. Výchozí hodnota: 22 400 Kč/měsíc.
+          </p>
+
+          {showMinWageConfirm && (
+            <div className={styles.modal}>
+              <div className={styles.modalBox} style={{ maxWidth: 400 }}>
+                <h2 className={styles.modalTitle}>Změnit minimální mzdu</h2>
+                <div className={styles.field}>
+                  <label className={styles.label}>Nová hodnota (Kč/měsíc)</label>
+                  <input
+                    className={styles.input}
+                    type="number"
+                    step="100"
+                    value={minimumWageDraft}
+                    onChange={(e) => setMinimumWageDraft(e.target.value)}
+                    autoFocus
+                  />
+                </div>
+                <div className={styles.formActions}>
+                  <Button variant="secondary" onClick={() => setShowMinWageConfirm(false)} disabled={minWageSaving}>
+                    Zrušit
+                  </Button>
+                  <Button
+                    variant="primary"
+                    disabled={minWageSaving || !minimumWageDraft || Number(minimumWageDraft) <= 0}
+                    onClick={async () => {
+                      setMinWageSaving(true);
+                      try {
+                        await api.patch("/payroll/settings", { minimumWage: Number(minimumWageDraft) });
+                        setMinimumWage(Number(minimumWageDraft));
+                        setShowMinWageConfirm(false);
+                      } catch {
+                        // silent
+                      } finally {
+                        setMinWageSaving(false);
+                      }
+                    }}
+                  >
+                    {minWageSaving ? "Ukládám…" : "Uložit"}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {showDppMaxConfirm && (
             <div className={styles.modal}>
