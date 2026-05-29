@@ -75,6 +75,7 @@ export interface PayrollEntry {
   overrides?: Partial<Record<OverrideField, number>>;
   autoOverrides?: Partial<Record<OverrideField, number>>;
   multisportActive?: boolean;
+  multisportPrice?: number;
   notes?: PayrollNote[];
 }
 
@@ -552,7 +553,13 @@ export default function PayrollPage() {
           rowsHtml += `<td style="${cs.cell}">${isDpp ? fmt(dppAmount) : "—"}</td>`;
           rowsHtml += `<td style="${cs.cell}">${isDpp ? "—" : navicText(extraPay)}</td>`;
           rowsHtml += `<td style="${cs.cell}">${isDpp ? "—" : fmt(foodVouchers)}</td>`;
-          rowsHtml += `<td style="${cs.cell}">${entry.multisportActive ? "ANO" : "—"}</td>`;
+          const multisportCell =
+            typeof entry.multisportPrice === "number"
+              ? entry.multisportPrice > 0
+                ? `${entry.multisportPrice.toLocaleString("cs-CZ")} Kč`
+                : "—"
+              : entry.multisportActive ? "ANO" : "—";
+          rowsHtml += `<td style="${cs.cell}">${multisportCell}</td>`;
           rowsHtml += "</tr>";
         }
       }
@@ -855,7 +862,17 @@ export default function PayrollPage() {
                 )}
               </td>
               <td className={styles.numCell}>
-                {entry.multisportActive ? "ANO" : <span className={styles.dash}>—</span>}
+                {typeof entry.multisportPrice === "number" ? (
+                  entry.multisportPrice > 0 ? (
+                    `${entry.multisportPrice.toLocaleString("cs-CZ")} Kč`
+                  ) : (
+                    <span className={styles.dash}>—</span>
+                  )
+                ) : entry.multisportActive ? (
+                  "ANO"
+                ) : (
+                  <span className={styles.dash}>—</span>
+                )}
               </td>
               <td className={styles.numCell}>
                 {(entry.notes?.length ?? 0) > 0 ? (

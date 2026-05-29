@@ -13,6 +13,7 @@ import Button from "@/components/Button";
 import EmploymentSessionCard from "@/components/EmploymentSession";
 import AdhocContractsSection from "@/components/AdhocContractsSection";
 import OtherDocumentsTab from "@/components/OtherDocumentsTab";
+import MultisportEditor from "@/components/MultisportEditor";
 import AuditEventCard from "@/components/AuditEventCard";
 import { type AuditEntry, groupEntries } from "@/lib/audit/grouping";
 import {
@@ -1633,6 +1634,19 @@ export default function EmployeeDetailPage() {
                 if (row.changeType === "změna smlouvy" && id) {
                   api.get<Employee>(`/employees/${id}`).then(setEmployee).catch(() => {});
                 }
+                // Terminating someone with an active Multisport: the backend has
+                // auto-ended it at the termination month-end; remind the admin to
+                // cancel it in the Multisport extranet.
+                if (row.changeType === "ukončení" && additional?.multisport === true) {
+                  setConfirmModal({
+                    title: "Zrušit Multisport v extranetu",
+                    message:
+                      "Zaměstnanec měl aktivní Multisport. Konec byl automaticky nastaven na konec měsíce ukončení — nezapomeňte členství zrušit i v Multisport extranetu.",
+                    confirmLabel: "Rozumím",
+                    showCancel: false,
+                    onConfirm: () => setConfirmModal(null),
+                  });
+                }
               }}
             />
           )}
@@ -1875,19 +1889,13 @@ export default function EmployeeDetailPage() {
         {!loadedSections.has("additional") ? (
           <div className={styles.loading}>Načítám…</div>
         ) : (
-          <div className={styles.fields}>
-            <div className={styles.field}><span className={styles.fieldLabel}>Multisport</span><span className={styles.fieldValue}>{(() => {
-              const base = additional?.multisport === true ? "Ano" : additional?.multisport === false ? "Ne" : "—";
-              if (additional?.multisport !== true) return base;
-              const from = additional?.multisportFrom;
-              const to = additional?.multisportTo;
-              if (!from && !to) return base;
-              const range = `${from ? formatDateCZ(from) : "…"} – ${to ? formatDateCZ(to) : "…"}`;
-              return `${base} · ${range}`;
-            })()}</span></div>
-            <div className={styles.field}><span className={styles.fieldLabel}>Home office</span><span className={styles.fieldValue}>{additional?.homeOffice != null ? String(additional.homeOffice) : "—"}</span></div>
-            <div className={styles.field}><span className={styles.fieldLabel}>Náhrady</span><span className={styles.fieldValue}>{additional?.allowances === true ? "Ano" : additional?.allowances === false ? "Ne" : "—"}</span></div>
-          </div>
+          <>
+            <MultisportEditor employeeId={id!} canEdit={canDelete} />
+            <div className={styles.fields}>
+              <div className={styles.field}><span className={styles.fieldLabel}>Home office</span><span className={styles.fieldValue}>{additional?.homeOffice != null ? String(additional.homeOffice) : "—"}</span></div>
+              <div className={styles.field}><span className={styles.fieldLabel}>Náhrady</span><span className={styles.fieldValue}>{additional?.allowances === true ? "Ano" : additional?.allowances === false ? "Ne" : "—"}</span></div>
+            </div>
+          </>
         )}
       </Section>
 

@@ -67,9 +67,6 @@ interface AdditionalForm {
   insuranceNumber: string;
   insuranceCompany: string;
   bankAccount: string;
-  multisport: boolean;
-  multisportFrom: string;
-  multisportTo: string;
   homeOffice: string;
   allowances: boolean;
 }
@@ -91,7 +88,6 @@ const emptyDocuments: DocumentsForm = {
 
 const emptyAdditional: AdditionalForm = {
   insuranceNumber: "", insuranceCompany: "", bankAccount: "",
-  multisport: false, multisportFrom: "", multisportTo: "",
   homeOffice: "", allowances: false,
 };
 
@@ -215,8 +211,6 @@ export default function EmployeeFormPage() {
         insuranceNumber: "",
         bankAccount: "",
         homeOffice: bens?.homeOffice != null ? String(bens.homeOffice) : "",
-        multisportFrom: (bens?.multisportFrom as string | null | undefined) ?? "",
-        multisportTo: (bens?.multisportTo as string | null | undefined) ?? "",
       } as AdditionalForm);
     }).finally(() => setLoadingData(false));
   }, [id, isEdit]);
@@ -322,12 +316,14 @@ export default function EmployeeFormPage() {
       if (!addPayload.insuranceNumber) delete addPayload.insuranceNumber;
       if (!addPayload.bankAccount) delete addPayload.bankAccount;
       addPayload.homeOffice = additional.homeOffice !== "" ? Number(additional.homeOffice) : null;
-      addPayload.multisportFrom = additional.multisportFrom || null;
-      addPayload.multisportTo = additional.multisportTo || null;
-      if (additional.multisportFrom && additional.multisportTo &&
-          additional.multisportFrom > additional.multisportTo) {
-        throw new Error("Multisport: datum 'Od' musí být před datem 'Do'.");
-      }
+      // Multisport is managed by the dedicated editor on the employee detail page
+      // (PUT /multisport). Strip any multisport fields the loaded benefits doc may
+      // have spread into the form state so this benefits save never overwrites them.
+      delete addPayload.multisport;
+      delete addPayload.multisportFrom;
+      delete addPayload.multisportTo;
+      delete addPayload.multisportPeriods;
+      delete addPayload.multisportCompanions;
       const addClearFields = ["insuranceNumber", "bankAccount"].filter((f) => cleared.has(f));
       if (addClearFields.length) addPayload.clearFields = addClearFields;
 
@@ -622,32 +618,6 @@ export default function EmployeeFormPage() {
               />
             </Field>
           </div>
-          <div className={styles.checkboxRow}>
-            <label className={styles.checkboxLabel}>
-              <input type="checkbox" checked={additional.multisport} onChange={(e) => setA("multisport", e.target.checked)} />
-              Multisport
-            </label>
-          </div>
-          {additional.multisport && (
-            <div className={styles.grid}>
-              <Field label="Multisport od">
-                <input
-                  className={styles.input}
-                  type="date"
-                  value={additional.multisportFrom}
-                  onChange={(e) => setA("multisportFrom", e.target.value)}
-                />
-              </Field>
-              <Field label="Multisport do">
-                <input
-                  className={styles.input}
-                  type="date"
-                  value={additional.multisportTo}
-                  onChange={(e) => setA("multisportTo", e.target.value)}
-                />
-              </Field>
-            </div>
-          )}
           <div className={styles.checkboxRow}>
             <label className={styles.checkboxLabel}>
               <input type="checkbox" checked={additional.allowances} onChange={(e) => setA("allowances", e.target.checked)} />
