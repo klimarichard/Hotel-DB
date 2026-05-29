@@ -40,6 +40,12 @@ interface Props {
    * can serve it via Content-Disposition.
    */
   displayName?: string;
+  /**
+   * When set, the generated PDF is ATTACHED to this existing contract
+   * record (ad-hoc "row-first" flow) instead of creating a new one — the
+   * record's signingDate / displayName are preserved.
+   */
+  existingContractId?: string;
   onClose: () => void;
   onGenerated: (contractId: string) => void;
 }
@@ -54,11 +60,12 @@ export default function GenerateContractModal({
   employeeData,
   rowSnapshot,
   displayName,
+  existingContractId,
   onClose,
   onGenerated,
 }: Props) {
   const { user } = useAuth();
-  const { generatePdf, uploadContract } = useContractGeneration();
+  const { generatePdf, uploadContract, attachUnsignedPdf } = useContractGeneration();
   const [step, setStep] = useState<Step>("confirm");
   const [errorMsg, setErrorMsg] = useState("");
   const [template, setTemplate] = useState<string | null>(null);
@@ -126,12 +133,20 @@ export default function GenerateContractModal({
     try {
       const filled = fillTemplate(template, vars);
       const blob = await generatePdf(filled, margins);
-      const id = await uploadContract(employeeId, blob, {
-        type: contractType,
-        employmentRowId,
-        rowSnapshot,
-        displayName,
-      });
+      let id: string;
+      if (existingContractId) {
+        // Ad-hoc row-first flow: attach the PDF to the record that already
+        // holds the signingDate, rather than creating a new one.
+        await attachUnsignedPdf(employeeId, existingContractId, blob);
+        id = existingContractId;
+      } else {
+        id = await uploadContract(employeeId, blob, {
+          type: contractType,
+          employmentRowId,
+          rowSnapshot,
+          displayName,
+        });
+      }
       setStep("done");
       onGenerated(id);
     } catch (e) {

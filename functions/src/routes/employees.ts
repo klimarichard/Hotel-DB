@@ -1007,6 +1007,191 @@ employeesRouter.put(
   }
 );
 
+// ─── DALŠÍ DOKUMENTY (additional documents) ──────────────────────────────────
+// Arbitrary admin-uploaded PDFs per employee, each with a human display name.
+// Stored separately from the identity `documents` subcollection and from
+// `contracts`: new subcollection `employees/{id}/otherDocuments` + new Storage
+// prefix `other-documents/{employeeId}/...` so it never collides with either.
+
+/**
+ * GET /api/employees/:id/other-documents
+ * List all additional documents for an employee, newest first.
+ * Mirrors the role list of GET /:id/documents.
+ */
+employeesRouter.get(
+  "/:id/other-documents",
+  requireRole("admin", "director", "accountant", "hr"),
+  async (req: AuthRequest, res) => {
+    const snap = await db()
+      .collection("employees")
+      .doc(req.params.id)
+      .collection("otherDocuments")
+      .orderBy("uploadedAt", "desc")
+      .get();
+    res.json(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+  }
+);
+
+/**
+ * POST /api/employees/:id/other-documents
+ * Upload a PDF (base64 in body) via Admin SDK and create the metadata record.
+ * storage.rules deny direct client access, so the upload happens server-side.
+ * Mirrors the role list of PUT /:id/documents.
+ *
+ * Body: { name, pdfBase64 }
+ */
+employeesRouter.post(
+  "/:id/other-documents",
+  requireRole("admin", "director", "accountant", "hr"),
+  async (req: AuthRequest, res) => {
+    const { name, pdfBase64 } = req.body as {
+      name?: string;
+      pdfBase64?: string;
+    };
+
+    if (typeof name !== "string" || !name.trim() || !pdfBase64) {
+      res.status(400).json({ error: "name a pdfBase64 jsou povinné." });
+      return;
+    }
+
+    const employeeId = req.params.id;
+
+    // Reserve a doc id up-front so the storage path lines up with the
+    // metadata record (`other-documents/{employeeId}/{docId}.pdf`).
+    const docRef = db()
+      .collection("employees")
+      .doc(employeeId)
+      .collection("otherDocuments")
+      .doc();
+
+    const buffer = Buffer.from(pdfBase64, "base64");
+    const storagePath = `other-documents/${employeeId}/${docRef.id}.pdf`;
+    const file = admin.storage().bucket().file(storagePath);
+    await file.save(buffer, {
+      contentType: "application/pdf",
+      metadata: { metadata: { uploadedBy: req.uid ?? "unknown" } },
+    });
+
+    await docRef.set({
+      name: name.trim(),
+      storagePath,
+      contentType: "application/pdf",
+      uploadedAt: FieldValue.serverTimestamp(),
+      uploadedBy: req.uid,
+    });
+    await logCreate(ctxFromReq(req), {
+      collection: "employees/otherDocuments",
+      resourceId: employeeId,
+      subResourceId: docRef.id,
+      employeeId,
+      summary: { name: name.trim() },
+    });
+    res.status(201).json({ id: docRef.id });
+  }
+);
+
+/**
+ * GET /api/employees/:id/other-documents/:docId/download
+ * Streams the PDF back to the client (inline). storage.rules deny direct
+ * client access, so reads must go through the Admin SDK here.
+ * Mirrors the role list of the list endpoint.
+ */
+employeesRouter.get(
+  "/:id/other-documents/:docId/download",
+  requireRole("admin", "director", "accountant", "hr"),
+  async (req: AuthRequest, res) => {
+    const ref = db()
+      .collection("employees")
+      .doc(req.params.id)
+      .collection("otherDocuments")
+      .doc(req.params.docId);
+
+    const snap = await ref.get();
+    if (!snap.exists) {
+      res.status(404).json({ error: "Dokument nenalezen." });
+      return;
+    }
+
+    const data = snap.data() as Record<string, unknown>;
+    const storagePath = data.storagePath;
+    if (typeof storagePath !== "string" || !storagePath) {
+      res.status(404).json({ error: "Soubor nenalezen." });
+      return;
+    }
+
+    const file = admin.storage().bucket().file(storagePath);
+    const [exists] = await file.exists();
+    if (!exists) {
+      res.status(404).json({ error: "Soubor chybí v úložišti." });
+      return;
+    }
+
+    // Use the document's human display name as the filename base.
+    // Browsers accept UTF-8 filenames via filename*=UTF-8''<percent-encoded>;
+    // include a plain-ASCII fallback for legacy clients via the standard
+    // `filename=` parameter (diacritics replaced).
+    const filenameBase =
+      typeof data.name === "string" && data.name ? data.name : req.params.docId;
+    const asciiFallback = filenameBase
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .replace(/[^\x20-\x7e]/g, "_");
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `inline; filename="${asciiFallback}.pdf"; filename*=UTF-8''${encodeURIComponent(filenameBase)}.pdf`
+    );
+    file.createReadStream()
+      .on("error", (e) => {
+        if (!res.headersSent) res.status(500).json({ error: e.message });
+        else res.end();
+      })
+      .pipe(res);
+  }
+);
+
+/**
+ * DELETE /api/employees/:id/other-documents/:docId
+ * Deletes the Firestore record and the associated Storage file (best-effort).
+ * Mirrors the role list of PUT /:id/documents.
+ */
+employeesRouter.delete(
+  "/:id/other-documents/:docId",
+  requireRole("admin", "director", "accountant", "hr"),
+  async (req: AuthRequest, res) => {
+    const employeeId = req.params.id;
+    const docId = req.params.docId;
+
+    const ref = db()
+      .collection("employees")
+      .doc(employeeId)
+      .collection("otherDocuments")
+      .doc(docId);
+
+    const snap = await ref.get();
+    if (!snap.exists) {
+      res.status(404).json({ error: "Dokument nenalezen." });
+      return;
+    }
+
+    const data = snap.data() as Record<string, unknown>;
+    const storagePath = data.storagePath;
+    if (typeof storagePath === "string" && storagePath) {
+      await admin.storage().bucket().file(storagePath).delete().catch(() => undefined);
+    }
+
+    await ref.delete();
+    await logDelete(ctxFromReq(req), {
+      collection: "employees/otherDocuments",
+      resourceId: employeeId,
+      subResourceId: docId,
+      employeeId,
+      summary: { name: data.name },
+    });
+    res.json({ ok: true });
+  }
+);
+
 /**
  * GET /api/employees/:id/benefits
  */

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { CONTRACT_TYPE_LABELS } from "@/lib/contractVariables";
-import { formatTimestampCZ } from "@/lib/dateFormat";
+import { formatTimestampCZ, formatDateCZ } from "@/lib/dateFormat";
 import type { ContractRecord } from "@/lib/employmentSessions";
 import ContractActionButtons from "./ContractActionButtons";
 import styles from "./AdhocContractsSection.module.css";
@@ -13,6 +13,8 @@ interface Props {
   employeeId: string;
   canEdit: boolean;
   onContractsChanged: () => void;
+  /** Open the generation modal for an ad-hoc row that has no PDF yet. */
+  onGenerate: (contract: ContractRecord) => void;
 }
 
 const Chevron = ({ open }: { open: boolean }) => (
@@ -28,6 +30,7 @@ export default function AdhocContractsSection({
   employeeId,
   canEdit,
   onContractsChanged,
+  onGenerate,
 }: Props) {
   const [open, setOpen] = useState(contracts.length > 0);
 
@@ -64,7 +67,14 @@ export default function AdhocContractsSection({
               <div key={c.id} className={styles.row}>
                 <div className={styles.meta}>
                   <span className={styles.type}>{labelFor(c.type)}</span>
-                  <span className={styles.date}>{formatTimestampCZ(c.generatedAt) ?? "—"}</span>
+                  <span
+                    className={styles.date}
+                    title={c.signingDate ? "Datum podpisu" : "Datum vytvoření"}
+                  >
+                    {c.signingDate
+                      ? formatDateCZ(c.signingDate)
+                      : (formatTimestampCZ(c.generatedAt) ?? "—")}
+                  </span>
                 </div>
                 <ContractActionButtons
                   contract={c}
@@ -72,6 +82,7 @@ export default function AdhocContractsSection({
                   defaultDisplayName={labelFor(c.type)}
                   employeeId={employeeId}
                   canEdit={canEdit}
+                  onGenerate={() => onGenerate(c)}
                   onChanged={onContractsChanged}
                 />
               </div>

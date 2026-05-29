@@ -68,7 +68,7 @@ Tlačítko **+ Přidat zaměstnance**. Vyplníte osobní údaje, kontakt, doklad
 
 ### Detail zaměstnance
 
-Detail má dvě hlavní části — **Detail** (osobní a kontaktní údaje) a **Historie pracovního poměru**.
+Detail má tři záložky — **Detail** (osobní a kontaktní údaje), **Historie pracovního poměru** a **Další dokumenty**.
 
 - **Citlivé údaje** (rodné číslo, číslo OP, číslo pojištěnce, bankovní účet) jsou skryté; zobrazíte je kliknutím na ikonu oka. **Každé zobrazení se zaznamenává do Logu změn.**
 - **Upravit** otevře editaci údajů.
@@ -83,6 +83,17 @@ Pracovní poměr je členěn na **sezení (sessions)** — každé začíná **N
 - Mzda a pozice v záhlaví poměru se mění až **k datu platnosti Dodatku**.
 - **Automatický přesun do „Ukončení":** zaměstnanec se do záložky *Ukončení* přesune sám, jakmile **uplyne datum ukončení** (smlouva na dobu určitou nebo zadané ukončení). Den ukončení je ještě aktivní — přesun proběhne až následující den. Naopak **budoucí Nástup** zaměstnance aktivuje **až v den nástupu**.
 - U každého řádku lze podle stavu **vygenerovat smlouvu**, zobrazit ji, nebo nahrát podepsanou kopii.
+- **Ad hoc dokumenty** (Multisport, Hmotná odpovědnost, vlastní šablony) se přidávají tlačítkem **+ Adhoc dokument**: zadáte datum podpisu a tlačítkem **Přidat** vznikne řádek dokumentu (zatím bez PDF). Řádek pak ukazuje **datum podpisu**, ne datum vytvoření. PDF se vygeneruje až dodatečně tlačítkem **Generovat smlouvu** — stejný postup jako u záznamů pracovního poměru.
+
+#### Další dokumenty
+
+Záložka **Další dokumenty** slouží k nahrávání libovolných PDF souborů k zaměstnanci (skeny, přílohy), které nejsou generovanými smlouvami.
+
+- Tlačítkem **Nahrát dokument** zadáte **název dokumentu** a vyberete **PDF soubor** (max. 15 MB).
+- U každého dokumentu lze soubor **Zobrazit**, **Stáhnout** nebo **Smazat**.
+- Nahrávat a mazat mohou administrátor, ředitel a personalista; vedoucí a účetní dokumenty pouze prohlížejí.
+
+> 📷 *(Místo pro snímek obrazovky: záložka Další dokumenty)*
 
 ### Export CSV
 

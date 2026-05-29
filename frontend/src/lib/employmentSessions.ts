@@ -37,6 +37,12 @@ export interface ContractRecord {
   signedAt?: { seconds?: number; _seconds?: number } | null;
   notes?: string;
   displayName?: string;
+  // Ad-hoc rows are created PDF-less; the signing date entered up-front is
+  // displayed on the row (instead of the generation date) and reused when
+  // the PDF is generated later. requestedAt/validFrom are Multisport-only.
+  signingDate?: string;
+  requestedAt?: string;
+  validFrom?: string;
 }
 
 /**
