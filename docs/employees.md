@@ -133,3 +133,20 @@ A third tab on the Employee detail page — **Další dokumenty** (alongside *De
   - `DELETE /:id/other-documents/:docId` — deletes the doc + Storage file, `logDelete`.
 - **Permissions** match contracts: write (POST/DELETE) and read (GET) are guarded by `requireRole("admin","director","accountant","hr")`, but the router-level `enforceEmpAccess` middleware blocks `accountant` on any non-GET write and blocks `hr` from management-employee records — so effectively admin/director/hr upload+delete, manager/accountant view only. Not surfaced on `Můj profil`.
 - **UI**: `frontend/src/components/OtherDocumentsTab.tsx` — list rows (name + `formatTimestampCZ(uploadedAt)` + Zobrazit / Stáhnout / Smazat), a *Nahrát dokument* upload modal (name input + `accept="application/pdf"`, ≤ 15 MB guard, base64 upload). Delete + errors go through `ConfirmModal` (no native dialogs); the modal doesn't close on backdrop click.
+
+## Multisport — periods + companions (2026-05-29)
+
+The Multisport benefit moved from a single window to multiple periods + companion cards on the benefits doc:
+- `multisportPeriods: { from, to|null }[]` — basic enrollment windows (whole-month by convention; `to: null` = ongoing).
+- `multisportCompanions: { id, name, from, to|null, price }[]` — "Doprovodná" cards (several allowed).
+- `multisport` (bool) is now a **derived "active today" flag**, maintained on write and re-derived nightly by `sweepMultisport`. The legacy `multisportFrom`/`multisportTo` are dropped on write/migration; `readMultisport` (`functions/src/services/multisport.ts`) falls back to synthesising one period from them so unmigrated docs keep working. Pure helpers (`multisportPriceForMonth`, `multisportStartNotes`, `overlapsMonth`, `endOfMonth`, `anyPeriodActiveOn`, `readMultisport`) live in that module and are unit-tested by `scripts/_smoke-multisport-calc.js`.
+
+**Endpoint:** `PUT /api/employees/:id/multisport` (admin/director/hr; accountant blocked by `enforceEmpAccess`) — body `{ periods, companions }`; validates dates + companion name/price, recomputes the derived flag, audit-logs to `employees/benefits`. The standard `GET /:id/benefits` returns the arrays (Multisport fields are not encrypted).
+
+**UI:** dedicated `frontend/src/components/MultisportEditor.tsx` on the Employee detail **Benefity** section — add/remove basic periods + companion cards in a modal (no native dialogs, no backdrop close). The Multisport checkbox+dates were removed from `EmployeeFormPage`, and that form's benefits save now strips any `multisport*` keys so it can never overwrite the editor-owned fields.
+
+**Termination:** `endMultisportOnTermination` (`functions/src/routes/employees.ts`) caps every basic period + companion `to` at the end of the termination month when an Ukončení row is added; the frontend shows a `ConfirmModal` reminding the admin to cancel it in the Multisport extranet.
+
+**Sweep:** `sweepMultisport` now scans **all** benefits docs and re-derives `multisport` from `multisportPeriods` **bidirectionally** (a started period flips it on, an ended one off). Manual trigger `POST /benefits/trigger-multisport-sweep`.
+
+Payroll shows the monthly Multisport **price** (basic + active companions) instead of "ANO" — full computation is in the local `payroll.md`. Basic price = Settings → Mzdy → `multisportBasePrice` (init 470). One-time migration: `scripts/_migrate-multisport.js` (currently-enrolled only, local).
