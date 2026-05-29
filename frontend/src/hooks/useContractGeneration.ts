@@ -102,5 +102,36 @@ export function useContractGeneration() {
     return id;
   }
 
-  return { generatePdf, uploadContract };
+  /**
+   * Attach a freshly generated (unsigned) PDF to an EXISTING contract
+   * record (the ad-hoc "row-first" flow). The record was created PDF-less
+   * with its signingDate; generating later attaches the PDF here instead
+   * of creating a new record, preserving that signing date.
+   */
+  async function attachUnsignedPdf(
+    employeeId: string,
+    contractId: string,
+    blob: Blob
+  ): Promise<void> {
+    if (!user) throw new Error("Not authenticated");
+    const token = await user.getIdToken();
+    const pdfBase64 = await blobToBase64(blob);
+    const resp = await fetch(
+      `/api/employees/${employeeId}/contracts/${contractId}/unsigned-pdf`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ pdfBase64 }),
+      }
+    );
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => "");
+      throw new Error(`Failed to attach contract PDF${text ? `: ${text}` : ""}`);
+    }
+  }
+
+  return { generatePdf, uploadContract, attachUnsignedPdf };
 }

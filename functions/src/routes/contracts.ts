@@ -120,6 +120,9 @@ contractsRouter.post(
       notes,
       rowSnapshot,
       displayName,
+      signingDate,
+      requestedAt,
+      validFrom,
     } = req.body as {
       type: ContractType;
       pdfBase64?: string;
@@ -128,6 +131,13 @@ contractsRouter.post(
       notes?: string;
       rowSnapshot?: Record<string, unknown>;
       displayName?: string;
+      // Ad-hoc rows are created PDF-less and generated later; the signing
+      // date (and, for Multisport, the request/validity dates) are captured
+      // up-front so the row can display the signing date and so a later
+      // "Generovat" can fill the template. Plain ISO date strings.
+      signingDate?: string;
+      requestedAt?: string;
+      validFrom?: string;
     };
 
     if (!type) {
@@ -167,6 +177,9 @@ contractsRouter.post(
     if (notes) docData.notes = notes;
     if (rowSnapshot) docData.rowSnapshot = rowSnapshot;
     if (displayName) docData.displayName = displayName;
+    if (signingDate) docData.signingDate = signingDate;
+    if (requestedAt) docData.requestedAt = requestedAt;
+    if (validFrom) docData.validFrom = validFrom;
 
     await docRef.set(docData);
     await logCreate(ctxFromReq(req), {
@@ -179,6 +192,7 @@ contractsRouter.post(
         status,
         displayName,
         employmentRowId,
+        signingDate,
         hasUnsignedPdf: !!unsignedStoragePath,
       },
     });
@@ -195,10 +209,13 @@ contractsRouter.patch(
   "/employees/:employeeId/contracts/:contractId",
   requireRole("admin", "director", "hr"),
   async (req: AuthRequest, res: Response) => {
-    const { status, signedStoragePath, notes } = req.body as {
+    const { status, signedStoragePath, notes, signingDate, requestedAt, validFrom } = req.body as {
       status?: ContractStatus;
       signedStoragePath?: string;
       notes?: string;
+      signingDate?: string;
+      requestedAt?: string;
+      validFrom?: string;
     };
 
     const ref = db()
@@ -221,6 +238,9 @@ contractsRouter.patch(
       update.signedUploadedBy = req.uid;
     }
     if (notes !== undefined) update.notes = notes;
+    if (signingDate !== undefined) update.signingDate = signingDate;
+    if (requestedAt !== undefined) update.requestedAt = requestedAt;
+    if (validFrom !== undefined) update.validFrom = validFrom;
 
     const before = existing.data() as Record<string, unknown>;
     await ref.update(update);
@@ -360,6 +380,70 @@ contractsRouter.post(
     });
 
     res.json({ ok: true, signedStoragePath });
+  }
+);
+
+/**
+ * POST /api/employees/:employeeId/contracts/:contractId/unsigned-pdf
+ * Attach a freshly generated (unsigned) PDF to an EXISTING contract
+ * record. Used by the ad-hoc "row-first" flow: the row is created
+ * PDF-less, then "Generovat" generates the PDF and attaches it here,
+ * preserving the row's signingDate / displayName instead of creating a
+ * new record. storage.rules deny client uploads, so the base64 blob is
+ * written server-side via the Admin SDK.
+ *
+ * Body: { pdfBase64 }
+ */
+contractsRouter.post(
+  "/employees/:employeeId/contracts/:contractId/unsigned-pdf",
+  requireRole("admin", "director", "hr"),
+  async (req: AuthRequest, res: Response) => {
+    const { pdfBase64 } = req.body as { pdfBase64?: string };
+    if (!pdfBase64) {
+      res.status(400).json({ error: "pdfBase64 is required" });
+      return;
+    }
+
+    const employeeId = req.params.employeeId;
+    const contractId = req.params.contractId;
+
+    const ref = db()
+      .collection("employees")
+      .doc(employeeId)
+      .collection("contracts")
+      .doc(contractId);
+
+    const existing = await ref.get();
+    if (!existing.exists) {
+      res.status(404).json({ error: "Contract not found" });
+      return;
+    }
+
+    const buffer = Buffer.from(pdfBase64, "base64");
+    const unsignedStoragePath = `contracts/${employeeId}/${contractId}.pdf`;
+    const file = admin.storage().bucket().file(unsignedStoragePath);
+    await file.save(buffer, {
+      contentType: "application/pdf",
+      metadata: { metadata: { uploadedBy: req.uid ?? "unknown" } },
+    });
+
+    const before = existing.data() as Record<string, unknown>;
+    const update = {
+      unsignedStoragePath,
+      generatedAt: FieldValue.serverTimestamp(),
+      generatedBy: req.uid,
+    } as Record<string, unknown>;
+    await ref.update(update);
+    await logUpdate(ctxFromReq(req), {
+      collection: "employees/contracts",
+      resourceId: employeeId,
+      subResourceId: contractId,
+      employeeId,
+      before,
+      after: { ...before, ...update },
+    });
+
+    res.json({ ok: true, unsignedStoragePath });
   }
 );
 

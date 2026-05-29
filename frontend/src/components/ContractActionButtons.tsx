@@ -276,7 +276,7 @@ export default function ContractActionButtons({
         )
       )}
 
-      {!contract && canEdit && onGenerate && (
+      {canEdit && onGenerate && !hasUnsigned && !hasSigned && !isStale && (
         <button
           type="button"
           className={styles.generateBtn}
