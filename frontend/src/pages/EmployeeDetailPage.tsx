@@ -12,6 +12,7 @@ import GenerateContractModal from "@/components/GenerateContractModal";
 import Button from "@/components/Button";
 import EmploymentSessionCard from "@/components/EmploymentSession";
 import AdhocContractsSection from "@/components/AdhocContractsSection";
+import OtherDocumentsTab from "@/components/OtherDocumentsTab";
 import AuditEventCard from "@/components/AuditEventCard";
 import { type AuditEntry, groupEntries } from "@/lib/audit/grouping";
 import {
@@ -1138,7 +1139,7 @@ export default function EmployeeDetailPage() {
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [companies, setCompanies] = useState<CompanyRec[]>([]);
   const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState<"detail" | "history">("detail");
+  const [page, setPage] = useState<"detail" | "history" | "other-docs">("detail");
   const [newEntryMode, setNewEntryMode] = useState<{
     lockedChangeType: ChangeType;
     parentRowId?: string;
@@ -1160,6 +1161,7 @@ export default function EmployeeDetailPage() {
       }
     | {
         kind: "adhoc";
+        contractId: string;
         contractType: SmlouvaContractType;
         signingDate: string;
         requestedAt?: string;
@@ -1232,6 +1234,47 @@ export default function EmployeeDetailPage() {
       setContracts(list);
     } catch {
       // ignore — list stays as-is until next refetch
+    }
+  }
+
+  /**
+   * Create an ad-hoc document ROW (no PDF). Mirrors how employment-history
+   * entries work: add the row first, generate the contract later. The
+   * signing date (and Multisport request/validity dates) are persisted so
+   * the row displays the signing date and a later "Generovat" can fill the
+   * template. See TODO_BIG #6.
+   */
+  async function addAdhocRow(
+    type: SmlouvaContractType,
+    signingDate: string,
+    requestedAt?: string,
+    validFrom?: string
+  ) {
+    if (!id || !employee) return;
+    const displayName = buildContractName(
+      type,
+      undefined,
+      `${employee.firstName ?? ""} ${employee.lastName ?? ""}`.trim(),
+      customStandalone.find((t) => t.id === type)?.name
+    );
+    try {
+      await api.post(`/employees/${id}/contracts`, {
+        type,
+        status: "unsigned",
+        displayName,
+        signingDate,
+        ...(requestedAt ? { requestedAt } : {}),
+        ...(validFrom ? { validFrom } : {}),
+      });
+      await refetchContracts();
+    } catch {
+      setConfirmModal({
+        title: "Chyba",
+        message: "Nepodařilo se přidat dokument.",
+        confirmLabel: "OK",
+        showCancel: false,
+        onConfirm: () => setConfirmModal(null),
+      });
     }
   }
 
@@ -1436,6 +1479,7 @@ export default function EmployeeDetailPage() {
       <div className={styles.tabs}>
         <button className={page === "detail" ? styles.tabActive : styles.tabBtn} onClick={() => setPage("detail")}>Detail</button>
         <button className={page === "history" ? styles.tabActive : styles.tabBtn} onClick={() => setPage("history")}>Historie pracovního poměru</button>
+        <button className={page === "other-docs" ? styles.tabActive : styles.tabBtn} onClick={() => setPage("other-docs")}>Další dokumenty</button>
       </div>
 
       {page === "history" && (
@@ -1561,6 +1605,16 @@ export default function EmployeeDetailPage() {
             employeeId={id!}
             canEdit={canDelete}
             onContractsChanged={refetchContracts}
+            onGenerate={(c) =>
+              setGenerateModal({
+                kind: "adhoc",
+                contractId: c.id,
+                contractType: c.type as SmlouvaContractType,
+                signingDate: c.signingDate ?? "",
+                requestedAt: c.requestedAt,
+                validFrom: c.validFrom,
+              })
+            }
           />
 
           {newEntryMode && (
@@ -1677,17 +1731,17 @@ export default function EmployeeDetailPage() {
                       variant="primary"
                       disabled={!canContinue}
                       onClick={() => {
-                        setGenerateModal({
-                          kind: "adhoc",
-                          contractType: signingDatePrompt,
-                          signingDate: signingDateDraft,
-                          requestedAt: isMultisport ? requestedAtDraft : undefined,
-                          validFrom: isMultisport ? validFromDraft : undefined,
-                        });
+                        const t = signingDatePrompt;
+                        const sd = signingDateDraft;
+                        const ra = isMultisport ? requestedAtDraft : undefined;
+                        const vf = isMultisport ? validFromDraft : undefined;
                         setSigningDatePrompt(null);
+                        // Row-first: create the ad-hoc document row now; the PDF
+                        // is generated later from the row (see addAdhocRow / #6).
+                        addAdhocRow(t, sd, ra, vf);
                       }}
                     >
-                      Pokračovat
+                      Přidat
                     </Button>
                   </div>
                 </div>
@@ -1695,6 +1749,10 @@ export default function EmployeeDetailPage() {
             );
           })()}
         </>
+      )}
+
+      {page === "other-docs" && (
+        <OtherDocumentsTab employeeId={id!} canEdit={canDelete} />
       )}
 
       {page === "detail" && (
@@ -1916,6 +1974,7 @@ export default function EmployeeDetailPage() {
         <GenerateContractModal
           employeeId={id!}
           contractType={generateModal.contractType}
+          existingContractId={generateModal.contractId}
           companyId={employee.currentCompanyId ?? null}
           employeeData={{
             id: employee.id,
