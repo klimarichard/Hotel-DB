@@ -73,6 +73,13 @@ Detail má tři záložky — **Detail** (osobní a kontaktní údaje), **Histor
 
 > 📷 *(Místo pro snímek obrazovky: detail zaměstnance)*
 
+##### Benefity — Multisport
+
+Multisport se spravuje přímo na detailu zaměstnance v sekci **Benefity** tlačítkem **„Spravovat"** (dřívější zaškrtávátko Multisport se dvěma daty ve formuláři zaměstnance už není — správa se přesunula sem).
+
+- Lze zadat **více období Multisport** (datum *od* / *do*; pole *do* můžete nechat prázdné = členství trvá).
+- Lze přidat i **doprovodné Multisport karty** (parametry: **jméno, od, do, cena**), klidně více najednou.
+
 #### Historie pracovního poměru
 
 Pracovní poměr je členěn na **sezení (sessions)** — každé začíná **Nástupem**, může obsahovat **Dodatky** (změna mzdy, pozice, úvazku, délky smlouvy) a končí **Ukončením**.
@@ -80,6 +87,7 @@ Pracovní poměr je členěn na **sezení (sessions)** — každé začíná **N
 - **+ Přidat změnu** (Nástup / Dodatek / Ukončení).
 - Mzda a pozice v záhlaví poměru se mění až **k datu platnosti Dodatku**.
 - **Automatický přesun do „Ukončení":** zaměstnanec se do záložky *Ukončení* přesune sám, jakmile **uplyne datum ukončení** (smlouva na dobu určitou nebo zadané ukončení). Den ukončení je ještě aktivní — přesun proběhne až následující den. Naopak **budoucí Nástup** zaměstnance aktivuje **až v den nástupu**.
+- **Ukončení a Multisport:** má-li ukončovaný zaměstnanec aktivní Multisport, aplikace automaticky nastaví konec Multisportu na **konec měsíce ukončení** a upozorní, že je potřeba Multisport zrušit i v **extranetu Multisport**.
 - U každého řádku lze podle stavu **vygenerovat smlouvu**, zobrazit ji, nebo nahrát podepsanou kopii.
 - **Ad hoc dokumenty** (Multisport, Hmotná odpovědnost, vlastní šablony) se přidávají tlačítkem **+ Adhoc dokument**: zadáte datum podpisu a tlačítkem **Přidat** vznikne řádek dokumentu (zatím bez PDF). Řádek ukazuje **datum podpisu**, ne datum vytvoření. PDF se vygeneruje až dodatečně tlačítkem **Generovat smlouvu**.
 
