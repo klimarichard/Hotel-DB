@@ -15,6 +15,14 @@ import {
   deleteProbationAlertsForEmployee,
 } from "../services/probationAlerts";
 import * as clock from "../services/clock";
+import { randomUUID } from "crypto";
+import {
+  anyPeriodActiveOn,
+  readMultisport,
+  endOfMonth,
+  type MultisportPeriod,
+  type MultisportCompanion,
+} from "../services/multisport";
 
 export const employeesRouter = Router();
 
@@ -795,6 +803,57 @@ employeesRouter.get(
 );
 
 /**
+ * On termination, cap the employee's Multisport at the end of the termination
+ * month: every basic period and companion card that is still open (or ends
+ * after that month) gets its `to` set to the month-end; periods/companions that
+ * would only start after the termination month are dropped. Refreshes the
+ * derived `multisport` flag + audit-logs. No-op when there is no Multisport.
+ */
+async function endMultisportOnTermination(
+  empRef: admin.firestore.DocumentReference,
+  terminationDate: string,
+  req: AuthRequest
+): Promise<void> {
+  if (!terminationDate || !/^\d{4}-\d{2}-\d{2}$/.test(terminationDate)) return;
+  const eom = endOfMonth(terminationDate);
+  const colRef = empRef.collection("benefits");
+  const snap = await colRef.limit(1).get();
+  if (snap.empty) return;
+  const data = snap.docs[0].data() as Record<string, unknown>;
+  const { periods, companions } = readMultisport(data);
+  if (periods.length === 0 && companions.length === 0) return;
+
+  const capPeriods: MultisportPeriod[] = periods
+    .filter((p) => p.from <= eom)
+    .map((p) => (p.to == null || p.to > eom ? { ...p, to: eom } : p));
+  const capCompanions: MultisportCompanion[] = companions
+    .filter((c) => c.from <= eom)
+    .map((c) => (c.to == null || c.to > eom ? { ...c, to: eom } : c));
+
+  const activeToday = anyPeriodActiveOn(capPeriods, clock.today());
+  const before = {
+    multisportPeriods: (data.multisportPeriods as unknown) ?? null,
+    multisportCompanions: (data.multisportCompanions as unknown) ?? null,
+    multisport: (data.multisport as unknown) ?? null,
+  };
+  await snap.docs[0].ref.update({
+    multisportPeriods: capPeriods,
+    multisportCompanions: capCompanions,
+    multisport: activeToday,
+    multisportFrom: FieldValue.delete(),
+    multisportTo: FieldValue.delete(),
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+  await logUpdate(ctxFromReq(req), {
+    collection: "employees/benefits",
+    resourceId: empRef.id,
+    employeeId: empRef.id,
+    before,
+    after: { multisportPeriods: capPeriods, multisportCompanions: capCompanions, multisport: activeToday },
+  });
+}
+
+/**
  * POST /api/employees/:id/employment
  * Adds a new employment history row and updates denormalized fields on the employee doc.
  */
@@ -820,6 +879,13 @@ employeesRouter.post(
     // wipe the root. Applies to both new Nástup and new Dodatek rows.
     if (body.changeType === "nástup" || body.changeType === "změna smlouvy") {
       await resyncRootFields(empRef, req, now);
+    }
+
+    // Terminating an employee ends their Multisport: cap every basic period and
+    // companion card at the end of the termination month (a frontend warning
+    // separately reminds the admin to cancel it in the Multisport extranet).
+    if (body.changeType === "ukončení") {
+      await endMultisportOnTermination(empRef, body.startDate as string, req);
     }
 
     await logCreate(ctxFromReq(req), {
@@ -1258,6 +1324,106 @@ employeesRouter.put(
       sensitiveFields: [...BENEFITS_SENSITIVE_FIELDS],
     });
     res.json({ success: true });
+  }
+);
+
+/**
+ * PUT /api/employees/:id/multisport
+ * Source of truth for the Multisport benefit: multiple basic enrollment
+ * periods + "Doprovodná" companion cards (name/from/to/price). Periods are
+ * whole-month by convention. The `multisport` boolean on the benefits doc is
+ * kept as a DERIVED "active today" flag (also refreshed by the daily sweep),
+ * so CSV/quick-display/sweep keep working. Supersedes multisportFrom/To.
+ *
+ * Body: { periods: {from, to|null}[], companions: {id?, name, from, to|null, price}[] }
+ */
+employeesRouter.put(
+  "/:id/multisport",
+  requireRole("admin", "director", "hr"),
+  async (req: AuthRequest, res) => {
+    const body = req.body as {
+      periods?: Array<{ from?: string; to?: string | null }>;
+      companions?: Array<{ id?: string; name?: string; from?: string; to?: string | null; price?: number }>;
+    };
+    const isDate = (s: unknown): s is string =>
+      typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s);
+    const normEnd = (v: string | null | undefined): string | null =>
+      v == null || v === "" ? null : v;
+
+    const periods: MultisportPeriod[] = [];
+    for (const p of body.periods ?? []) {
+      if (!isDate(p.from)) {
+        res.status(400).json({ error: "Multisport: neplatné datum začátku období." });
+        return;
+      }
+      const to = normEnd(p.to);
+      if (to != null && (!isDate(to) || to < p.from)) {
+        res.status(400).json({ error: "Multisport: neplatné datum konce období." });
+        return;
+      }
+      periods.push({ from: p.from, to });
+    }
+
+    const companions: MultisportCompanion[] = [];
+    for (const c of body.companions ?? []) {
+      const name = typeof c.name === "string" ? c.name.trim() : "";
+      if (!name) {
+        res.status(400).json({ error: "Doprovodná Multisport: vyplňte jméno." });
+        return;
+      }
+      if (!isDate(c.from)) {
+        res.status(400).json({ error: "Doprovodná Multisport: neplatné datum začátku." });
+        return;
+      }
+      const to = normEnd(c.to);
+      if (to != null && (!isDate(to) || to < c.from)) {
+        res.status(400).json({ error: "Doprovodná Multisport: neplatné datum konce." });
+        return;
+      }
+      const price = Number(c.price);
+      if (!Number.isFinite(price) || price < 0) {
+        res.status(400).json({ error: "Doprovodná Multisport: neplatná cena." });
+        return;
+      }
+      companions.push({ id: c.id || randomUUID(), name, from: c.from, to, price });
+    }
+
+    const activeToday = anyPeriodActiveOn(periods, clock.today());
+
+    const colRef = db().collection("employees").doc(req.params.id).collection("benefits");
+    const snap = await colRef.limit(1).get();
+    const before = snap.empty ? {} : (snap.docs[0].data() as Record<string, unknown>);
+    if (snap.empty) {
+      await colRef.add({
+        multisportPeriods: periods,
+        multisportCompanions: companions,
+        multisport: activeToday,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    } else {
+      await snap.docs[0].ref.update({
+        multisportPeriods: periods,
+        multisportCompanions: companions,
+        multisport: activeToday,
+        // legacy single-window fields are superseded by multisportPeriods
+        multisportFrom: FieldValue.delete(),
+        multisportTo: FieldValue.delete(),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    }
+
+    await logUpdate(ctxFromReq(req), {
+      collection: "employees/benefits",
+      resourceId: req.params.id,
+      employeeId: req.params.id,
+      before: {
+        multisportPeriods: (before.multisportPeriods as unknown) ?? null,
+        multisportCompanions: (before.multisportCompanions as unknown) ?? null,
+        multisport: (before.multisport as unknown) ?? null,
+      },
+      after: { multisportPeriods: periods, multisportCompanions: companions, multisport: activeToday },
+    });
+    res.json({ success: true, multisport: activeToday });
   }
 );
 
