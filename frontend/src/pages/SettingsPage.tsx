@@ -202,6 +202,10 @@ export default function SettingsPage() {
   const [minimumWageDraft, setMinimumWageDraft] = useState<string>("");
   const [showMinWageConfirm, setShowMinWageConfirm] = useState(false);
   const [minWageSaving, setMinWageSaving] = useState(false);
+  const [multisportBasePrice, setMultisportBasePrice] = useState<number>(470);
+  const [multisportBasePriceDraft, setMultisportBasePriceDraft] = useState<string>("");
+  const [showMultisportConfirm, setShowMultisportConfirm] = useState(false);
+  const [multisportSaving, setMultisportSaving] = useState(false);
   const [showPosCreate, setShowPosCreate] = useState(false);
 
   // Companies
@@ -287,7 +291,7 @@ export default function SettingsPage() {
   useEffect(() => { loadDepartments(); loadPositions(); loadEducationLevels(); }, [loadDepartments, loadPositions, loadEducationLevels]);
 
   useEffect(() => {
-    api.get<{ foodVoucherRate: number; dppMaxMonthlyReward: number; minimumWage: number }>("/payroll/settings")
+    api.get<{ foodVoucherRate: number; dppMaxMonthlyReward: number; minimumWage: number; multisportBasePrice: number }>("/payroll/settings")
       .then((s) => {
         setFoodVoucherRate(s.foodVoucherRate);
         setFoodVoucherRateDraft(String(s.foodVoucherRate));
@@ -295,6 +299,8 @@ export default function SettingsPage() {
         setDppMaxMonthlyRewardDraft(String(s.dppMaxMonthlyReward));
         setMinimumWage(s.minimumWage);
         setMinimumWageDraft(String(s.minimumWage));
+        setMultisportBasePrice(s.multisportBasePrice);
+        setMultisportBasePriceDraft(String(s.multisportBasePrice));
       })
       .catch(() => {});
   }, []);
@@ -1552,6 +1558,63 @@ export default function SettingsPage() {
                     }}
                   >
                     {minWageSaving ? "Ukládám…" : "Uložit"}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <h2 style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--color-text-heading)", marginTop: "2rem", marginBottom: "1rem" }}>
+            Základní cena Multisport
+          </h2>
+          <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "0.5rem" }}>
+            <span style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--color-text)" }}>
+              {multisportBasePrice.toLocaleString("cs-CZ")} Kč / měsíc
+            </span>
+            <button className={styles.linkBtn} onClick={() => { setMultisportBasePriceDraft(String(multisportBasePrice)); setShowMultisportConfirm(true); }}>
+              Upravit
+            </button>
+          </div>
+          <p style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
+            Základní měsíční cena Multisport karty. Výchozí hodnota: 470 Kč/měsíc.
+          </p>
+
+          {showMultisportConfirm && (
+            <div className={styles.modal}>
+              <div className={styles.modalBox} style={{ maxWidth: 400 }}>
+                <h2 className={styles.modalTitle}>Změnit základní cenu Multisport</h2>
+                <div className={styles.field}>
+                  <label className={styles.label}>Základní cena Multisport (Kč/měsíc)</label>
+                  <input
+                    className={styles.input}
+                    type="number"
+                    step="10"
+                    value={multisportBasePriceDraft}
+                    onChange={(e) => setMultisportBasePriceDraft(e.target.value)}
+                    autoFocus
+                  />
+                </div>
+                <div className={styles.formActions}>
+                  <Button variant="secondary" onClick={() => setShowMultisportConfirm(false)} disabled={multisportSaving}>
+                    Zrušit
+                  </Button>
+                  <Button
+                    variant="primary"
+                    disabled={multisportSaving || !multisportBasePriceDraft || Number(multisportBasePriceDraft) <= 0}
+                    onClick={async () => {
+                      setMultisportSaving(true);
+                      try {
+                        await api.patch("/payroll/settings", { multisportBasePrice: Number(multisportBasePriceDraft) });
+                        setMultisportBasePrice(Number(multisportBasePriceDraft));
+                        setShowMultisportConfirm(false);
+                      } catch {
+                        // silent
+                      } finally {
+                        setMultisportSaving(false);
+                      }
+                    }}
+                  >
+                    {multisportSaving ? "Ukládám…" : "Uložit"}
                   </Button>
                 </div>
               </div>

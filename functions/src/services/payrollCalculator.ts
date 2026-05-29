@@ -20,6 +20,7 @@
 import * as admin from "firebase-admin";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { randomUUID } from "crypto";
+import { multisportPriceForMonth, multisportStartNotes, readMultisport } from "./multisport";
 
 const db = () => admin.firestore();
 
@@ -551,33 +552,55 @@ async function getFoodVoucherRate(): Promise<number> {
   return snap.exists ? (snap.data()?.foodVoucherRate as number ?? 129.5) : 129.5;
 }
 
-/**
- * Read the one benefits doc for an employee and decide whether the Multisport
- * benefit is active for the payroll month. The month window is
- * [YYYY-MM-01, YYYY-MM-<lastDay>]; either date field may be null (open ended).
- */
-export async function getMultisportActive(
-  employeeId: string,
-  year: number,
-  month: number
-): Promise<boolean> {
+/** Read multisportBasePrice from settings/payroll, fallback to 470 if not set. */
+export async function getMultisportBasePrice(): Promise<number> {
+  const snap = await db().collection("settings").doc("payroll").get();
+  return snap.exists ? ((snap.data()?.multisportBasePrice as number) ?? 470) : 470;
+}
+
+/** Load an employee's Multisport periods + companions (legacy single-window aware). */
+async function loadMultisport(
+  employeeId: string
+): Promise<ReturnType<typeof readMultisport>> {
   const snap = await db()
     .collection("employees")
     .doc(employeeId)
     .collection("benefits")
     .limit(1)
     .get();
-  if (snap.empty) return false;
-  const data = snap.docs[0].data() as Record<string, unknown>;
-  if (data.multisport !== true) return false;
-  const from = (data.multisportFrom as string | null | undefined) ?? null;
-  const to = (data.multisportTo as string | null | undefined) ?? null;
-  const first = `${year}-${String(month).padStart(2, "0")}-01`;
-  const lastDay = new Date(year, month, 0).getDate();
-  const last = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
-  if (from && from > last) return false;
-  if (to && to < first) return false;
-  return true;
+  return readMultisport(snap.empty ? null : (snap.docs[0].data() as Record<string, unknown>));
+}
+
+/**
+ * The monthly Multisport price an employee should pay: the basic price (if any
+ * basic period overlaps the month) plus every companion card whose window
+ * overlaps the month. Whole-month periods → no proration.
+ */
+export async function getMultisportPrice(
+  employeeId: string,
+  year: number,
+  month: number,
+  basePrice: number
+): Promise<number> {
+  const { periods, companions } = await loadMultisport(employeeId);
+  return multisportPriceForMonth(periods, companions, basePrice, year, month);
+}
+
+/**
+ * Combined month read for the payroll engine: the price plus any "period
+ * started this month" auto-note texts (basic + companion). One benefits read.
+ */
+export async function getMultisportForMonth(
+  employeeId: string,
+  year: number,
+  month: number,
+  basePrice: number
+): Promise<{ price: number; startNotes: Array<{ kind: "multisport"; text: string }> }> {
+  const { periods, companions } = await loadMultisport(employeeId);
+  return {
+    price: multisportPriceForMonth(periods, companions, basePrice, year, month),
+    startNotes: multisportStartNotes(periods, companions, year, month),
+  };
 }
 
 /**
@@ -653,6 +676,11 @@ export async function createOrUpdatePayrollPeriod(
   const foodVoucherRate = existing.empty
     ? await getFoodVoucherRate()
     : ((existing.docs[0].data().foodVoucherRate as number | undefined) ?? await getFoodVoucherRate());
+  // Same locked-rate semantics as foodVoucherRate: freeze the basic Multisport
+  // price on the period at creation so a later settings change can't alter it.
+  const multisportBasePrice = existing.empty
+    ? await getMultisportBasePrice()
+    : ((existing.docs[0].data().multisportBasePrice as number | undefined) ?? await getMultisportBasePrice());
 
   let periodRef: admin.firestore.DocumentReference;
   const periodData = {
@@ -663,6 +691,7 @@ export async function createOrUpdatePayrollPeriod(
     maxNightHours,
     maxHolidayHours,
     foodVoucherRate,
+    multisportBasePrice,
     updatedAt: FieldValue.serverTimestamp(),
   };
 
@@ -764,7 +793,9 @@ export async function createOrUpdatePayrollPeriod(
     const empBaseHours = proratedBase ?? baseHours;
 
     const entry = calculateEntry(employee, allShifts, holidays, empBaseHours, foodVoucherRate, year, month);
-    const multisportActive = await getMultisportActive(employeeId, year, month);
+    const { price: multisportPrice, startNotes: multisportStart } =
+      await getMultisportForMonth(employeeId, year, month, multisportBasePrice);
+    const multisportActive = multisportPrice > 0;
 
     let notes = notesMap.get(employeeId);
     if (!notes) {
@@ -795,7 +826,7 @@ export async function createOrUpdatePayrollPeriod(
     // run: drop any previous auto note, then prepend this month's. carryForward
     // stays false so they never leak into other periods.
     const autoStamp = Timestamp.now();
-    const autoNotes = autoNotesFromRows(empRows, year, month).map((n) => ({
+    const autoNotes = [...autoNotesFromRows(empRows, year, month), ...multisportStart].map((n) => ({
       id: randomUUID(),
       sourceNoteId: randomUUID(),
       text: n.text,
@@ -809,7 +840,7 @@ export async function createOrUpdatePayrollPeriod(
     notes = [...autoNotes, ...notes.filter((n) => (n as Record<string, unknown>).auto !== true)];
 
     const entryRef = periodRef.collection("entries").doc(employeeId);
-    batch.set(entryRef, { ...entry, multisportActive, notes });
+    batch.set(entryRef, { ...entry, multisportActive, multisportPrice, notes });
   }
 
   await batch.commit();
@@ -842,6 +873,7 @@ export async function recomputeEntryForEmployee(
   const month = pdata.month as number | undefined;
   if (!planId || year == null || month == null) return false;
   const foodVoucherRate = (pdata.foodVoucherRate as number | undefined) ?? (await getFoodVoucherRate());
+  const multisportBasePrice = (pdata.multisportBasePrice as number | undefined) ?? (await getMultisportBasePrice());
 
   const holidays = getCzechHolidays(year);
 
@@ -895,7 +927,9 @@ export async function recomputeEntryForEmployee(
   const empBaseHours = proratedBase ?? getBaseHours(year, month);
 
   const entry = calculateEntry(employee, shifts, holidays, empBaseHours, foodVoucherRate, year, month);
-  const multisportActive = await getMultisportActive(employeeId, year, month);
+  const { price: multisportPrice, startNotes: multisportStart } =
+    await getMultisportForMonth(employeeId, year, month, multisportBasePrice);
+  const multisportActive = multisportPrice > 0;
 
   // Preserve user notes; regenerate the month-specific auto notes.
   const entryRef = periodRef.collection("entries").doc(employeeId);
@@ -905,7 +939,7 @@ export async function recomputeEntryForEmployee(
     : [];
   const userNotes = prevNotes.filter((n) => (n as Record<string, unknown>).auto !== true);
   const autoStamp = Timestamp.now();
-  const autoNotes = autoNotesFromRows(empRows, year, month).map((n) => ({
+  const autoNotes = [...autoNotesFromRows(empRows, year, month), ...multisportStart].map((n) => ({
     id: randomUUID(),
     sourceNoteId: randomUUID(),
     text: n.text,
@@ -918,6 +952,6 @@ export async function recomputeEntryForEmployee(
   }));
   const notes = [...autoNotes, ...userNotes];
 
-  await entryRef.set({ ...entry, multisportActive, notes });
+  await entryRef.set({ ...entry, multisportActive, multisportPrice, notes });
   return true;
 }
