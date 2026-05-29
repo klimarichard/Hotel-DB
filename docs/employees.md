@@ -120,3 +120,16 @@ The employee root `status` (`"active"` | `"terminated"`, which drives the Aktivn
 ## Employees list — search by birth name (2026-05-28)
 
 The Zaměstnanci search predicate (`EmployeesPage`) also matches `birthSurname` (rodné příjmení), so someone who changed their surname after marriage is findable by their original name. The list API already returns `birthSurname` (only `birthNumber` is redacted), so this is a client-side-only change.
+
+## Další dokumenty tab (2026-05-29)
+
+A third tab on the Employee detail page — **Další dokumenty** (alongside *Detail* and *Historie pracovního poměru*) — holds arbitrary uploaded PDF files (scans, attachments) that aren't generated contracts. Each document is just a display name + a PDF.
+
+- **Storage is deliberately separate** from both the identity `documents` sub-collection (a single doc holding OP/passport data incl. encrypted `idCardNumber`) and from `contracts`: new sub-collection `employees/{id}/otherDocuments/{docId}` + new Storage prefix `other-documents/{employeeId}/{docId}.pdf`. Firestore fields: `{ name, storagePath, contentType: "application/pdf", uploadedAt, uploadedBy }`. No encrypted fields.
+- **Endpoints** (`functions/src/routes/employees.ts`, router mounted at `/api/employees`), mirroring the contracts storage/audit pattern (base64-in/Admin-SDK-save, `Content-Disposition` UTF-8 + ASCII-fallback download, best-effort Storage delete on remove):
+  - `GET /:id/other-documents` — list (newest first).
+  - `POST /:id/other-documents` — body `{ name, pdfBase64 }` (validates non-empty name + present base64), `logCreate`, returns `{ id }`.
+  - `GET /:id/other-documents/:docId/download` — streams the PDF inline.
+  - `DELETE /:id/other-documents/:docId` — deletes the doc + Storage file, `logDelete`.
+- **Permissions** match contracts: write (POST/DELETE) and read (GET) are guarded by `requireRole("admin","director","accountant","hr")`, but the router-level `enforceEmpAccess` middleware blocks `accountant` on any non-GET write and blocks `hr` from management-employee records — so effectively admin/director/hr upload+delete, manager/accountant view only. Not surfaced on `Můj profil`.
+- **UI**: `frontend/src/components/OtherDocumentsTab.tsx` — list rows (name + `formatTimestampCZ(uploadedAt)` + Zobrazit / Stáhnout / Smazat), a *Nahrát dokument* upload modal (name input + `accept="application/pdf"`, ≤ 15 MB guard, base64 upload). Delete + errors go through `ConfirmModal` (no native dialogs); the modal doesn't close on backdrop click.
