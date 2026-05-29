@@ -3,7 +3,7 @@ import { randomUUID } from "crypto";
 import * as admin from "firebase-admin";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { requireAuth, requireRole, AuthRequest } from "../middleware/auth";
-import { createOrUpdatePayrollPeriod, getMultisportActive, recomputeEntryForEmployee } from "../services/payrollCalculator";
+import { createOrUpdatePayrollPeriod, getMultisportPrice, recomputeEntryForEmployee } from "../services/payrollCalculator";
 import { ctxFromReq, logCreate, logUpdate, logDelete, writeAudit } from "../services/auditLog";
 
 export const payrollRouter = Router();
@@ -413,7 +413,8 @@ payrollRouter.get(
     const foodVoucherRate = (data?.foodVoucherRate as number | undefined) ?? 129.5;
     const dppMaxMonthlyReward = (data?.dppMaxMonthlyReward as number | undefined) ?? 11999;
     const minimumWage = (data?.minimumWage as number | undefined) ?? 22400;
-    res.json({ foodVoucherRate, dppMaxMonthlyReward, minimumWage });
+    const multisportBasePrice = (data?.multisportBasePrice as number | undefined) ?? 470;
+    res.json({ foodVoucherRate, dppMaxMonthlyReward, minimumWage, multisportBasePrice });
   }
 );
 
@@ -424,10 +425,11 @@ payrollRouter.patch(
   requireAuth,
   requireRole("admin"),
   async (req: AuthRequest, res: Response) => {
-    const { foodVoucherRate, dppMaxMonthlyReward, minimumWage } = req.body as {
+    const { foodVoucherRate, dppMaxMonthlyReward, minimumWage, multisportBasePrice } = req.body as {
       foodVoucherRate?: number;
       dppMaxMonthlyReward?: number;
       minimumWage?: number;
+      multisportBasePrice?: number;
     };
     const update: Record<string, unknown> = {
       updatedAt: FieldValue.serverTimestamp(),
@@ -453,6 +455,13 @@ payrollRouter.patch(
         return;
       }
       update.minimumWage = minimumWage;
+    }
+    if (multisportBasePrice !== undefined) {
+      if (typeof multisportBasePrice !== "number" || multisportBasePrice <= 0) {
+        res.status(400).json({ error: "Neplatná základní cena Multisport." });
+        return;
+      }
+      update.multisportBasePrice = multisportBasePrice;
     }
     const settingsRef = db().collection("settings").doc("payroll");
     const beforeSnap = await settingsRef.get();
@@ -486,16 +495,22 @@ payrollRouter.get(
 
 // ─── GET /payroll/periods/:id ─────────────────────────────────────────────────
 
+// Multisport reflects the employee's CURRENT enrollment, so for an unlocked
+// period we recompute the price live on read (benefits change without a payroll
+// recount). A LOCKED period is finalized — keep its stored price/flag frozen.
 async function hydrateMultisport(
   entries: Record<string, unknown>[],
   year: number,
-  month: number
+  month: number,
+  basePrice: number,
+  locked: boolean
 ): Promise<Record<string, unknown>[]> {
+  if (locked) return entries;
   return Promise.all(
-    entries.map(async (e) => ({
-      ...e,
-      multisportActive: await getMultisportActive(e.id as string, year, month),
-    }))
+    entries.map(async (e) => {
+      const multisportPrice = await getMultisportPrice(e.id as string, year, month, basePrice);
+      return { ...e, multisportPrice, multisportActive: multisportPrice > 0 };
+    })
   );
 }
 
@@ -518,7 +533,9 @@ payrollRouter.get(
     const entries = await hydrateMultisport(
       rawEntries,
       periodData.year as number,
-      periodData.month as number
+      periodData.month as number,
+      (periodData.multisportBasePrice as number | undefined) ?? 470,
+      periodData.locked === true
     );
     res.json({ id: periodSnap.id, ...periodData, entries });
   }
@@ -544,10 +561,17 @@ payrollRouter.get(
       return;
     }
     const periodRef = snap.docs[0].ref;
+    const periodData = snap.docs[0].data() as Record<string, unknown>;
     const entriesSnap = await periodRef.collection("entries").get();
     const rawEntries = entriesSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    const entries = await hydrateMultisport(rawEntries, year, month);
-    res.json({ id: snap.docs[0].id, ...snap.docs[0].data(), entries });
+    const entries = await hydrateMultisport(
+      rawEntries,
+      year,
+      month,
+      (periodData.multisportBasePrice as number | undefined) ?? 470,
+      periodData.locked === true
+    );
+    res.json({ id: snap.docs[0].id, ...periodData, entries });
   }
 );
 
