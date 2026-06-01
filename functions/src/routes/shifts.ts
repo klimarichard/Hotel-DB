@@ -1,6 +1,6 @@
 import { Router } from "express";
 import * as admin from "firebase-admin";
-import { FieldValue } from "firebase-admin/firestore";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { requireAuth, requireRole, AuthRequest } from "../middleware/auth";
 import { parseShiftExpression, HOTEL_CODES } from "../services/shiftParser";
 import { snapshotShifts, deleteCollection } from "../services/planTransitions";
@@ -18,6 +18,26 @@ const db = () => admin.firestore();
 
 const VALID_SECTIONS = ["vedoucí", "recepce", "portýři"] as const;
 const VALID_SHIFT_TYPES = ["D", "N", "R", "DP", "NP"] as const;
+
+/**
+ * #32 — Use a client-supplied ISO timestamp (the moment the user initiated the
+ * action) when it is present and valid; otherwise fall back to the server clock.
+ * Guards against garbage / future-dated / pre-2000 values to stop a bad client
+ * from back- or forward-dating a request arbitrarily.
+ */
+function clientTimestampOrServer(iso: string | undefined): Timestamp | FieldValue {
+  if (typeof iso === "string") {
+    const ms = Date.parse(iso);
+    if (!Number.isNaN(ms)) {
+      const now = Date.now();
+      // accept only the last 24h up to ~1min of clock skew into the future
+      if (ms <= now + 60_000 && ms >= now - 86_400_000) {
+        return Timestamp.fromMillis(ms);
+      }
+    }
+  }
+  return FieldValue.serverTimestamp();
+}
 
 // ─── Section ordering helper ─────────────────────────────────────────────────
 
@@ -566,7 +586,7 @@ shiftsRouter.patch(
   }
 );
 
-// DELETE /shifts/plans/:planId — delete plan (admin only, any status)
+// DELETE /shifts/plans/:planId — delete plan (admin only, ONLY while "created")
 shiftsRouter.delete(
   "/plans/:planId",
   requireAuth,
@@ -581,7 +601,17 @@ shiftsRouter.delete(
       return;
     }
 
-    const subCols = ["planEmployees", "shifts", "shiftsSnapshot", "modRow", "rules", "unavailabilityRequests"];
+    // #49 — a plan can only be deleted while still in the "created" state.
+    // Once opened (employees may have filed Xs / change requests), deletion is
+    // blocked; revert to "created" first if it really must go.
+    if ((planDoc.data() as Record<string, unknown>).status !== "created") {
+      res.status(409).json({
+        error: "Plán lze smazat pouze ve stavu „Vytvořený“. Nejprve jej vraťte zpět do tohoto stavu.",
+      });
+      return;
+    }
+
+    const subCols = ["planEmployees", "shifts", "shiftsSnapshot", "modRow", "rules", "unavailabilityRequests", "shiftOverrideRequests", "shiftChangeRequests"];
     for (const col of subCols) {
       await deleteCollection(planRef.collection(col));
     }
@@ -1535,6 +1565,10 @@ shiftsRouter.post(
     const date = body.date as string;
     const currentRawInput = (body.currentRawInput as string) ?? "";
     const reason = (body.reason as string) ?? "";
+    // #32 — the request time is the moment the employee STARTED the request
+    // (double-clicked the cell), captured client-side and passed here, not the
+    // moment they finished typing a reason + submitted. Fall back to server time.
+    const requestedAtClient = body.requestedAtClient as string | undefined;
 
     if (!employeeId || !date) {
       res.status(400).json({ error: "employeeId a date jsou povinné" });
@@ -1572,7 +1606,7 @@ shiftsRouter.post(
         reason,
         status: "pending",
         requestedBy: req.uid ?? null,
-        requestedAt: FieldValue.serverTimestamp(),
+        requestedAt: clientTimestampOrServer(requestedAtClient),
         reviewedBy: null,
         reviewedAt: null,
         rejectionReason: null,

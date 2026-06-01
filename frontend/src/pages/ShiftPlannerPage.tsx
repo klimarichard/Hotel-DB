@@ -156,7 +156,7 @@ export default function ShiftPlannerPage() {
   const [showChangeRequests, setShowChangeRequests] = useState(false);
   const [showMyRequests, setShowMyRequests] = useState(false);
   const [pendingChangeRequest, setPendingChangeRequest] = useState<{
-    employeeId: string; date: string; currentRawInput: string;
+    employeeId: string; date: string; currentRawInput: string; clickedAt: string;
   } | null>(null);
   const [pendingX, setPendingX] = useState<PendingXRequest | null>(null);
   const [editingEmployee, setEditingEmployee] = useState<PlanEmployee | null>(null);
@@ -340,6 +340,15 @@ export default function ShiftPlannerPage() {
     } else {
       setSelectedMonth((m) => m + 1);
     }
+  }
+
+  // Whether we're viewing a month other than the current one (#53)
+  const isCurrentMonth =
+    selectedMonth === now.getMonth() + 1 && selectedYear === now.getFullYear();
+
+  function goToday() {
+    setSelectedMonth(now.getMonth() + 1);
+    setSelectedYear(now.getFullYear());
   }
 
   // ── Plan actions ───────────────────────────────────────────────────────────
@@ -1018,6 +1027,9 @@ export default function ShiftPlannerPage() {
             {MONTH_NAMES[selectedMonth - 1]} {selectedYear}
           </span>
           <button className={styles.navBtn} onClick={nextMonth}>›</button>
+          {!isCurrentMonth && (
+            <button className={styles.todayBtn} onClick={goToday}>DNES</button>
+          )}
         </div>
         <div />
       </div>
@@ -1251,7 +1263,7 @@ export default function ShiftPlannerPage() {
             )}
 
             {/* Delete plan (admin, any status) */}
-            {plan && role === "admin" && (
+            {plan && role === "admin" && plan.status === "created" && (
               <Button
                 variant="danger"
                 onClick={confirmDeletePlan}
@@ -1452,6 +1464,11 @@ export default function ShiftPlannerPage() {
           )}
           {plan && plan.employees.length > 0 && (
             <ShiftGrid
+              // Remount when plan membership changes so removing a row triggers a
+              // clean re-layout — the sticky + table-layout:fixed grid mis-renders
+              // when a row is dropped in place (fixed on refresh otherwise). #35.
+              // Sorted ids → changes on add/remove only, not on reorder.
+              key={[...plan.employees].map((e) => e.id).sort().join(",")}
               plan={plan}
               onCellSave={handleCellSave}
               onModSave={handleModSave}
@@ -1464,13 +1481,17 @@ export default function ShiftPlannerPage() {
               readOnly={role === "employee" ? plan.status !== "opened" : !canEdit}
               alwaysReadOnlySections={role === "employee" ? ["vedoucí"] : []}
               currentEmployeeId={currentEmployeeId}
-              showCounterTable={plan.status === "closed" && role === "admin"}
+              showCounterTable={role === "admin"}
               showModCounts={role === "admin" || role === "director"}
               onModPersonChange={role === "admin" || role === "director" ? handleModPersonChange : undefined}
               onCellRequestChange={
                 role === "employee" && plan.status === "published"
                   ? (employeeId, date, currentRawInput) => {
-                      setPendingChangeRequest({ employeeId, date, currentRawInput });
+                      // #32 — stamp the moment of the click, carried through to the POST
+                      setPendingChangeRequest({
+                        employeeId, date, currentRawInput,
+                        clickedAt: clock.now().toISOString(),
+                      });
                     }
                   : undefined
               }
@@ -1557,6 +1578,7 @@ export default function ShiftPlannerPage() {
               date: pendingChangeRequest.date,
               currentRawInput: pendingChangeRequest.currentRawInput,
               reason,
+              requestedAtClient: pendingChangeRequest.clickedAt,
             });
             setPendingChangeRequest(null);
             setPlanChangeRequestCount((c) => c + 1);
