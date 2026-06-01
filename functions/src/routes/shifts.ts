@@ -19,6 +19,38 @@ const db = () => admin.firestore();
 const VALID_SECTIONS = ["vedoucí", "recepce", "portýři"] as const;
 const VALID_SHIFT_TYPES = ["D", "N", "R", "DP", "NP"] as const;
 
+// ─── Volné směny (free shifts) ───────────────────────────────────────────────
+// Standing daily porter coverage requirements surfaced on a PUBLISHED plan.
+// DPQ/NPQ/NPA are needed every day; DPA only on admin-marked days
+// (plan.freeShiftDpaDays). A slot is "free" when no employee covers it that day.
+const FREE_SHIFT_SLOTS = [
+  { code: "DP", hotel: "Q" }, // DPQ — day porter, Amigo
+  { code: "NP", hotel: "Q" }, // NPQ — night porter, Amigo
+  { code: "NP", hotel: "A" }, // NPA — night porter, Ambiance
+] as const;
+const FREE_SHIFT_DPA = { code: "DP", hotel: "A" } as const; // day porter, Ambiance — marked days only
+
+function isValidFreeSlot(code: string, hotel: string): boolean {
+  if (code === FREE_SHIFT_DPA.code && hotel === FREE_SHIFT_DPA.hotel) return true;
+  return FREE_SHIFT_SLOTS.some((s) => s.code === code && s.hotel === hotel);
+}
+
+/** True when some employee in the plan already covers {code, hotel} on `date`. */
+async function isSlotCovered(
+  planRef: admin.firestore.DocumentReference,
+  date: string,
+  code: string,
+  hotel: string
+): Promise<boolean> {
+  const snap = await planRef.collection("shifts").where("date", "==", date).get();
+  for (const d of snap.docs) {
+    const raw = (d.data().rawInput as string) ?? "";
+    const parsed = parseShiftExpression(raw);
+    if (parsed.isValid && parsed.segments.some((s) => s.code === code && s.hotel === hotel)) return true;
+  }
+  return false;
+}
+
 /**
  * #32 — Use a client-supplied ISO timestamp (the moment the user initiated the
  * action) when it is present and valid; otherwise fall back to the server clock.
@@ -586,6 +618,41 @@ shiftsRouter.patch(
       },
     });
     res.json({ ok: true });
+  }
+);
+
+// PATCH /shifts/plans/:planId/free-dpa-day — toggle a day where the DPA free-shift
+// row appears (admin/director). DPQ/NPQ/NPA rows are automatic; DPA is opt-in per day.
+shiftsRouter.patch(
+  "/plans/:planId/free-dpa-day",
+  requireAuth,
+  requireRole("admin", "director"),
+  async (req, res) => {
+    const { planId } = req.params;
+    const body = req.body as Record<string, unknown>;
+    const date = body.date as string;
+    const enabled = body.enabled === true;
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      res.status(400).json({ error: "Neplatný formát data" });
+      return;
+    }
+
+    const planRef = db().collection("shiftPlans").doc(planId);
+    const planDoc = await planRef.get();
+    if (!planDoc.exists) {
+      res.status(404).json({ error: "Plán nenalezen" });
+      return;
+    }
+    const cur = Array.isArray(planDoc.data()?.freeShiftDpaDays)
+      ? (planDoc.data()!.freeShiftDpaDays as string[])
+      : [];
+    const set = new Set(cur);
+    if (enabled) set.add(date); else set.delete(date);
+    const next = [...set].sort();
+
+    await planRef.update({ freeShiftDpaDays: next, updatedAt: FieldValue.serverTimestamp() });
+    res.json({ ok: true, freeShiftDpaDays: next });
   }
 );
 
@@ -1612,6 +1679,12 @@ shiftsRouter.post(
     // (double-clicked the cell), captured client-side and passed here, not the
     // moment they finished typing a reason + submitted. Fall back to server time.
     const requestedAtClient = body.requestedAtClient as string | undefined;
+    // Volné směny: kind "free-claim" claims an unassigned porter slot {code, hotel}
+    // for `date`; on approval the shift is written to this employee. Default is the
+    // existing "change" flow (request to change one's own already-assigned shift).
+    const kind = body.kind === "free-claim" ? "free-claim" : "change";
+    const code = (body.code as string) ?? "";
+    const hotel = (body.hotel as string) ?? "";
 
     if (!employeeId || !date) {
       res.status(400).json({ error: "employeeId a date jsou povinné" });
@@ -1621,13 +1694,14 @@ shiftsRouter.post(
       res.status(400).json({ error: "Neplatný formát data" });
       return;
     }
-    if (!reason.trim()) {
+    if (kind === "change" && !reason.trim()) {
       res.status(400).json({ error: "Důvod je povinný" });
       return;
     }
 
     // Plan must exist and be published
-    const planDoc = await db().collection("shiftPlans").doc(planId).get();
+    const planRef = db().collection("shiftPlans").doc(planId);
+    const planDoc = await planRef.get();
     if (!planDoc.exists) {
       res.status(404).json({ error: "Plán nenalezen" });
       return;
@@ -1638,29 +1712,55 @@ shiftsRouter.post(
       return;
     }
 
-    const ref = await db()
-      .collection("shiftPlans")
-      .doc(planId)
-      .collection("shiftChangeRequests")
-      .add({
-        employeeId,
-        date,
-        currentRawInput,
-        reason,
-        status: "pending",
-        requestedBy: req.uid ?? null,
-        requestedAt: clientTimestampOrServer(requestedAtClient),
-        reviewedBy: null,
-        reviewedAt: null,
-        rejectionReason: null,
+    const docData: Record<string, unknown> = {
+      employeeId,
+      date,
+      kind,
+      currentRawInput,
+      reason,
+      status: "pending",
+      requestedBy: req.uid ?? null,
+      requestedAt: clientTimestampOrServer(requestedAtClient),
+      reviewedBy: null,
+      reviewedAt: null,
+      rejectionReason: null,
+    };
+
+    if (kind === "free-claim") {
+      if (!isValidFreeSlot(code, hotel)) {
+        res.status(400).json({ error: "Neplatná volná směna" });
+        return;
+      }
+      // Slot must still be free
+      if (await isSlotCovered(planRef, date, code, hotel)) {
+        res.status(409).json({ error: "Tato směna je již obsazená" });
+        return;
+      }
+      // Reject a duplicate pending claim by the same employee for the same slot
+      const sameDay = await planRef.collection("shiftChangeRequests").where("date", "==", date).get();
+      const dup = sameDay.docs.some((d) => {
+        const x = d.data();
+        return x.kind === "free-claim" && x.status === "pending" &&
+          x.employeeId === employeeId && x.code === code && x.hotel === hotel;
       });
-    await db().collection("shiftPlans").doc(planId).update({ updatedAt: FieldValue.serverTimestamp() });
+      if (dup) {
+        res.status(409).json({ error: "Tuto směnu jste si již zarezervoval/a" });
+        return;
+      }
+      docData.code = code;
+      docData.hotel = hotel;
+    }
+
+    const ref = await planRef.collection("shiftChangeRequests").add(docData);
+    await planRef.update({ updatedAt: FieldValue.serverTimestamp() });
     await logCreate(ctxFromReq(req), {
       collection: "shiftPlans/shiftChangeRequests",
       resourceId: planId,
       subResourceId: ref.id,
       employeeId,
-      summary: { date, currentRawInput, reason },
+      summary: kind === "free-claim"
+        ? { kind, date, code, hotel }
+        : { date, currentRawInput, reason },
     });
     res.status(201).json({ id: ref.id });
   }
@@ -1694,13 +1794,67 @@ shiftsRouter.patch(
     }
 
     const beforeData = changeReqDoc.data() as Record<string, unknown>;
+    const planRef = db().collection("shiftPlans").doc(planId);
+
+    // Volné směny: approving a free-claim ASSIGNS the porter shift to the employee
+    // and auto-rejects any other pending claims competing for the same slot.
+    if (status === "approved" && beforeData.kind === "free-claim") {
+      const claimDate = beforeData.date as string;
+      const claimCode = beforeData.code as string;
+      const claimHotel = beforeData.hotel as string;
+      const claimEmployeeId = beforeData.employeeId as string;
+
+      if (await isSlotCovered(planRef, claimDate, claimCode, claimHotel)) {
+        res.status(409).json({ error: "Tato směna už byla mezitím obsazena." });
+        return;
+      }
+
+      const parsed = parseShiftExpression(`${claimCode}${claimHotel}`);
+      const shiftDocId = `${claimEmployeeId}_${claimDate}`;
+      await planRef.collection("shifts").doc(shiftDocId).set({
+        employeeId: claimEmployeeId,
+        date: claimDate,
+        rawInput: parsed.rawInput,
+        segments: parsed.segments,
+        hoursComputed: parsed.hoursComputed,
+        isDouble: parsed.isDouble,
+        status: "assigned",
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+      await logUpdate(ctxFromReq(req), {
+        collection: "shiftPlans/shifts",
+        resourceId: planId,
+        subResourceId: shiftDocId,
+        employeeId: claimEmployeeId,
+        before: { rawInput: "" },
+        after: { rawInput: parsed.rawInput },
+      });
+
+      // Auto-reject sibling pending claims for the same slot.
+      const sameDay = await planRef.collection("shiftChangeRequests").where("date", "==", claimDate).get();
+      const batch = db().batch();
+      for (const d of sameDay.docs) {
+        if (d.id === reqId) continue;
+        const x = d.data();
+        if (x.kind === "free-claim" && x.status === "pending" && x.code === claimCode && x.hotel === claimHotel) {
+          batch.update(d.ref, {
+            status: "rejected",
+            reviewedBy: req.uid ?? null,
+            reviewedAt: FieldValue.serverTimestamp(),
+            rejectionReason: "Směnu převzal jiný zaměstnanec.",
+          });
+        }
+      }
+      await batch.commit();
+    }
+
     await changeReqRef.update({
       status,
       reviewedBy: req.uid ?? null,
       reviewedAt: FieldValue.serverTimestamp(),
       rejectionReason: status === "rejected" ? ((body.rejectionReason as string) ?? null) : null,
     });
-    await db().collection("shiftPlans").doc(planId).update({ updatedAt: FieldValue.serverTimestamp() });
+    await planRef.update({ updatedAt: FieldValue.serverTimestamp() });
     await logUpdate(ctxFromReq(req), {
       collection: "shiftPlans/shiftChangeRequests",
       resourceId: planId,

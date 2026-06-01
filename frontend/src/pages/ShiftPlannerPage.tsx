@@ -80,6 +80,7 @@ export interface PlanDetail {
   closedAt: string | null;
   publishedAt: string | null;
   modPersons: Record<string, string>; // letter → employeeId, per-plan overrides
+  freeShiftDpaDays?: string[]; // days where the optional DPA free-shift row is active
   employees: PlanEmployee[];
   shifts: ShiftDoc[];
   modShifts: ModShiftDoc[];
@@ -161,6 +162,7 @@ export default function ShiftPlannerPage() {
     employeeId: string; date: string; currentRawInput: string; clickedAt: string;
   } | null>(null);
   const [pendingX, setPendingX] = useState<PendingXRequest | null>(null);
+  const [pendingFreeClaim, setPendingFreeClaim] = useState<{ date: string; code: string; hotel: string } | null>(null);
   const [editingEmployee, setEditingEmployee] = useState<PlanEmployee | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [confirmModal, setConfirmModal] = useState<{
@@ -460,6 +462,42 @@ export default function ShiftPlannerPage() {
       setPlan((prev) => (prev ? { ...prev, [field]: iso } : prev));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Chyba při nastavení termínu");
+    }
+  }
+
+  // ── Volné směny (free shifts) ──────────────────────────────────────────────
+
+  async function handleToggleDpaDay(date: string, enabled: boolean) {
+    if (!plan) return;
+    try {
+      const { freeShiftDpaDays } = await api.patch<{ ok: boolean; freeShiftDpaDays: string[] }>(
+        `/shifts/plans/${plan.id}/free-dpa-day`,
+        { date, enabled }
+      );
+      setPlan((prev) => (prev ? { ...prev, freeShiftDpaDays } : prev));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Chyba při úpravě volných směn");
+    }
+  }
+
+  async function submitFreeClaim() {
+    if (!plan || !pendingFreeClaim || !currentEmployeeId) return;
+    const { date, code, hotel } = pendingFreeClaim;
+    try {
+      await api.post(`/shifts/plans/${plan.id}/shiftChangeRequests`, {
+        employeeId: currentEmployeeId,
+        date,
+        kind: "free-claim",
+        code,
+        hotel,
+        requestedAtClient: clock.now().toISOString(),
+      });
+      setPendingFreeClaim(null);
+      setPlanChangeRequestCount((c) => c + 1);
+      refreshChangeRequestCount();
+    } catch (e) {
+      setPendingFreeClaim(null);
+      setError(e instanceof Error ? e.message : "Chyba při žádosti o volnou směnu");
     }
   }
 
@@ -1535,6 +1573,14 @@ export default function ShiftPlannerPage() {
                     }
                   : undefined
               }
+              showFreeShifts={plan.status === "published"}
+              freeShiftDpaDays={plan.freeShiftDpaDays ?? []}
+              onClaimFreeShift={
+                role === "employee" && plan.status === "published"
+                  ? (date, code, hotel) => setPendingFreeClaim({ date, code, hotel })
+                  : undefined
+              }
+              onToggleDpaDay={canPublish && plan.status === "published" ? handleToggleDpaDay : undefined}
               stickyTop={stickyTop}
             />
           )}
@@ -1625,6 +1671,18 @@ export default function ShiftPlannerPage() {
             refreshChangeRequestCount();
           }}
           onClose={() => setPendingChangeRequest(null)}
+        />
+      )}
+      {pendingFreeClaim && (
+        <ConfirmModal
+          title="Zažádat o volnou směnu"
+          message={(() => {
+            const [y, m, d] = pendingFreeClaim.date.split("-").map(Number);
+            return `Zažádat o volnou směnu ${pendingFreeClaim.code}${pendingFreeClaim.hotel} dne ${d}. ${m}. ${y}? Žádost posoudí vedoucí.`;
+          })()}
+          confirmLabel="Zažádat"
+          onConfirm={submitFreeClaim}
+          onCancel={() => setPendingFreeClaim(null)}
         />
       )}
       {editingEmployee && plan && (

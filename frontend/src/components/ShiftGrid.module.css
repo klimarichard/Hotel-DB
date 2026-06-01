@@ -321,6 +321,85 @@
 [data-theme="dark"] .counterCell1 { background: #15803d; color: #dcfce7; }
 [data-theme="dark"] .counterCell2 { background: #1d4ed8; color: #dbeafe; }
 
+/* ── Volné směny (free-shift) rows ─────────────────────────────────────── */
+.freeSeparatorRow {
+  border-top: 2px solid var(--color-border);
+}
+
+.freeSeparatorCell {
+  background: var(--color-surface-3);
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-secondary);
+  padding: 0.3rem 0.65rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.freeRow {
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.freeLabelCell {
+  position: sticky;
+  left: 0;
+  background: var(--color-surface-2);
+  z-index: 1;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--color-text-secondary);
+  padding: 2px 0.65rem;
+  white-space: nowrap;
+  border-right: 1px solid var(--color-border);
+}
+
+/* Claimable free-shift chip (uncovered slot) */
+.freeChip {
+  display: inline-block;
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-align: center;
+  padding: 1px 3px;
+  border-radius: 4px;
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.freeChipClaimable {
+  cursor: pointer;
+}
+
+.freeChipClaimable:hover {
+  background: #fde68a;
+}
+
+[data-theme="dark"] .freeChip { background: #b45309; color: #fef3c7; }
+[data-theme="dark"] .freeChipClaimable:hover { background: #92400e; }
+
+/* Covered slot marker */
+.freeCovered {
+  font-size: 0.7rem;
+  color: var(--color-text-subtle);
+  opacity: 0.45;
+}
+
+/* DPA day toggle affordances (admin/director) */
+.freeDpaCell {
+  cursor: pointer;
+  text-align: center;
+}
+
+.freeDpaAdd {
+  font-size: 0.7rem;
+  color: var(--color-text-subtle);
+  opacity: 0.25;
+}
+
+.freeDpaCell:hover .freeDpaAdd {
+  opacity: 0.7;
+}
+
 /* Keep MOD row uniform in dark mode — weekend/holiday tints don't apply */
 [data-theme="dark"] .modRow .weekend,
 [data-theme="dark"] .modRow .holiday { background: var(--color-mod-bg); }
