@@ -214,6 +214,9 @@ export async function applyVacationXs(
           hoursComputed: 0,
           isDouble: false,
           status: "day_off",
+          // Tag vacation-origin Xs so the planner can exclude them from the
+          // voluntary X-limit count (8 HPP / 13 PPP). Manual Xs have no source.
+          source: "vacation",
           updatedAt: FieldValue.serverTimestamp(),
         });
       }
@@ -809,6 +812,46 @@ shiftsRouter.put(
       after: { section, primaryShiftType, primaryHotel, displayOrder, active },
     });
     res.json({ ok: true });
+  }
+);
+
+// PATCH /shifts/plans/:planId/employees/:docId/x-allowance — set the per-employee,
+// per-month extra X allowance (admin/director). Stored on the planEmployee so it is
+// naturally scoped to the plan's month. Effective limit = base(8/13) + extra.
+shiftsRouter.patch(
+  "/plans/:planId/employees/:docId/x-allowance",
+  requireAuth,
+  requireRole("admin", "director"),
+  async (req, res) => {
+    const { planId, docId } = req.params;
+    const body = req.body as Record<string, unknown>;
+    const extra = Number(body.extra);
+
+    if (!Number.isInteger(extra) || extra < 0 || extra > 31) {
+      res.status(400).json({ error: "Navýšení musí být celé číslo 0–31" });
+      return;
+    }
+
+    const planRef = db().collection("shiftPlans").doc(planId);
+    const empRef = planRef.collection("planEmployees").doc(docId);
+    const prevSnap = await empRef.get();
+    if (!prevSnap.exists) {
+      res.status(404).json({ error: "Zaměstnanec v plánu nenalezen" });
+      return;
+    }
+    const prevExtra = Number((prevSnap.data() as Record<string, unknown>).xAllowanceExtra ?? 0);
+
+    await empRef.update({ xAllowanceExtra: extra, updatedAt: FieldValue.serverTimestamp() });
+    await planRef.update({ updatedAt: FieldValue.serverTimestamp() });
+    await logUpdate(ctxFromReq(req as AuthRequest), {
+      collection: "shiftPlans/planEmployees",
+      resourceId: planId,
+      subResourceId: docId,
+      employeeId: (prevSnap.data() as Record<string, unknown>).employeeId as string | undefined,
+      before: { xAllowanceExtra: prevExtra },
+      after: { xAllowanceExtra: extra },
+    });
+    res.json({ ok: true, xAllowanceExtra: extra });
   }
 );
 

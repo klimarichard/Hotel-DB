@@ -35,6 +35,10 @@ interface Props {
   showModCounts?: boolean;
   onModPersonChange?: (employeeId: string, oldLetter: string | null, newLetter: string | null) => Promise<void>;
   onCellRequestChange?: (employeeId: string, date: string, currentRawInput: string) => void;
+  /** Per-employee X usage + limit info for the inline badge; null = no limit (DPP/unknown). */
+  xInfoFor?: (emp: PlanEmployee) => { used: number; base: number; extra: number; limit: number } | null;
+  /** Save the per-employee extra X allowance (admin/director). When set, the badge is editable. */
+  onSetXAllowance?: (emp: PlanEmployee, extra: number) => Promise<void>;
   alwaysReadOnlySections?: string[];
   currentEmployeeId?: string | null;
   stickyTop?: number;
@@ -84,6 +88,8 @@ export default function ShiftGrid({
   showModCounts = false,
   onModPersonChange,
   onCellRequestChange,
+  xInfoFor,
+  onSetXAllowance,
   alwaysReadOnlySections = [],
   currentEmployeeId,
   stickyTop = 0,
@@ -315,6 +321,7 @@ export default function ShiftGrid({
   }, [plan.employees, effectiveLetterByEmployeeId]);
 
   const [editingModEmployee, setEditingModEmployee] = useState<string | null>(null);
+  const [editingXEmployee, setEditingXEmployee] = useState<string | null>(null);
 
   return (
     <div className={styles.wrapper} style={{ "--sticky-top": `${stickyTop}px` } as React.CSSProperties}>
@@ -380,6 +387,48 @@ export default function ShiftGrid({
                             return (
                               <span className={styles.modCountBadge}>
                                 MOD: {total} ({c.pd} PD, {c.vs} V+S)
+                              </span>
+                            );
+                          })()}
+                          {/* X-limit badge: voluntary-X usage / effective limit (+ extra). #34 */}
+                          {xInfoFor && (() => {
+                            const info = xInfoFor(emp);
+                            if (!info) return null;
+                            const over = info.used > info.limit;
+                            if (editingXEmployee === emp.employeeId && onSetXAllowance) {
+                              return (
+                                <span className={styles.xBadge}>
+                                  X: {info.used} / {info.base}+
+                                  <input
+                                    type="number"
+                                    className={styles.xBadgeInput}
+                                    defaultValue={info.extra}
+                                    min={0}
+                                    max={31}
+                                    autoFocus
+                                    title="Mimořádné navýšení limitu X pro tento měsíc — Enter uložit, Esc zrušit"
+                                    onFocus={(e) => e.target.select()}
+                                    onBlur={() => setEditingXEmployee(null)}
+                                    onKeyDown={async (e) => {
+                                      if (e.key === "Escape") { setEditingXEmployee(null); return; }
+                                      if (e.key === "Enter") {
+                                        const v = Math.max(0, Math.min(31, Math.floor(Number(e.currentTarget.value) || 0)));
+                                        setEditingXEmployee(null);
+                                        if (v !== info.extra) await onSetXAllowance(emp, v);
+                                      }
+                                    }}
+                                  />
+                                </span>
+                              );
+                            }
+                            return (
+                              <span
+                                className={`${styles.xBadge}${over ? ` ${styles.xBadgeOver}` : ""}${onSetXAllowance ? ` ${styles.xBadgeEditable}` : ""}`}
+                                onClick={onSetXAllowance ? () => setEditingXEmployee(emp.employeeId) : undefined}
+                                title={onSetXAllowance ? "Kliknutím upravíte mimořádné navýšení limitu X" : undefined}
+                              >
+                                X: {info.used} / {info.limit}{info.extra > 0 ? ` (+${info.extra})` : ""}
+                                {onSetXAllowance && <span className={styles.xBadgeEdit}>✎</span>}
                               </span>
                             );
                           })()}

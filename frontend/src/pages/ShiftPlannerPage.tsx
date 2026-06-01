@@ -36,6 +36,7 @@ export interface PlanEmployee {
   displayOrder: number;
   active: boolean;
   contractType: string | null;
+  xAllowanceExtra?: number; // admin-set per-month bump on top of the base X limit
 }
 
 export interface ViolationInfo {
@@ -60,6 +61,7 @@ export interface ShiftDoc {
   hoursComputed: number;
   isDouble: boolean;
   status: "assigned" | "day_off" | "unassigned";
+  source?: string | null; // "vacation" for auto-applied vacation Xs; absent for manual
 }
 
 export interface ModShiftDoc {
@@ -827,22 +829,37 @@ export default function ShiftPlannerPage() {
 
   // ── X limit helpers ────────────────────────────────────────────────────────
 
-  function getXLimit(contractType: string | null): number | null {
+  /** Base monthly X limit by contract type (8 HPP / 13 PPP); null = no limit. */
+  function getXBase(contractType: string | null): number | null {
     const ct = (contractType ?? "").toUpperCase();
     if (ct.includes("HPP")) return 8;
     if (ct.includes("PPP")) return 13;
     return null; // DPP or unknown = no limit
   }
 
-  function countXShifts(shifts: ShiftDoc[], employeeId: string): number {
-    return shifts.filter((s) => s.employeeId === employeeId && s.status === "day_off").length;
+  /** Effective limit = base + admin-set extra allowance; null when no base applies. */
+  function getEffectiveXLimit(emp: PlanEmployee | undefined): number | null {
+    if (!emp) return null;
+    const base = getXBase(emp.contractType);
+    if (base === null) return null;
+    return base + (emp.xAllowanceExtra ?? 0);
   }
 
-  /** Returns the length of the consecutive X run that would include newDate. */
+  // A day counts toward the voluntary X limit only when it's an employee-entered
+  // X — vacation-origin Xs (source:"vacation") are tracked separately and excluded.
+  function isVoluntaryX(s: ShiftDoc): boolean {
+    return s.status === "day_off" && s.source !== "vacation";
+  }
+
+  function countXShifts(shifts: ShiftDoc[], employeeId: string): number {
+    return shifts.filter((s) => s.employeeId === employeeId && isVoluntaryX(s)).length;
+  }
+
+  /** Returns the length of the consecutive (voluntary) X run that would include newDate. */
   function consecutiveXRun(shifts: ShiftDoc[], employeeId: string, newDate: string): number {
     const xDates = new Set(
       shifts
-        .filter((s) => s.employeeId === employeeId && s.status === "day_off")
+        .filter((s) => s.employeeId === employeeId && isVoluntaryX(s))
         .map((s) => s.date)
     );
     xDates.add(newDate);
@@ -967,8 +984,8 @@ export default function ShiftPlannerPage() {
       const emp = plan.employees.find((e) => e.employeeId === employeeId);
       const violations: ViolationInfo[] = [];
 
-      // Per-employee X limit check
-      const limit = getXLimit(emp?.contractType ?? null);
+      // Per-employee X limit check (base + admin extra allowance)
+      const limit = getEffectiveXLimit(emp);
       if (limit !== null) {
         const current = countXShifts(plan.shifts, employeeId);
         if (current >= limit) {
@@ -1492,6 +1509,29 @@ export default function ShiftPlannerPage() {
                         employeeId, date, currentRawInput,
                         clickedAt: clock.now().toISOString(),
                       });
+                    }
+                  : undefined
+              }
+              xInfoFor={
+                canEdit
+                  ? (emp) => {
+                      const limit = getEffectiveXLimit(emp);
+                      if (limit === null) return null;
+                      const base = getXBase(emp.contractType) ?? 0;
+                      return {
+                        used: countXShifts(plan.shifts, emp.employeeId),
+                        base,
+                        extra: emp.xAllowanceExtra ?? 0,
+                        limit,
+                      };
+                    }
+                  : undefined
+              }
+              onSetXAllowance={
+                canPublish
+                  ? async (emp, extra) => {
+                      await api.patch(`/shifts/plans/${plan.id}/employees/${emp.id}/x-allowance`, { extra });
+                      loadPlan(true);
                     }
                   : undefined
               }

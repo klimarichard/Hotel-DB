@@ -438,3 +438,48 @@
   margin-top: 1px;
   white-space: nowrap;
 }
+
+/* X-limit badge under the employee name (voluntary-X usage / effective limit) */
+.xBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  margin-top: 1px;
+  white-space: nowrap;
+}
+
+.xBadgeEditable {
+  cursor: pointer;
+}
+
+.xBadgeEditable:hover {
+  color: var(--color-text-secondary);
+}
+
+/* Over the effective limit — flag it red */
+.xBadgeOver {
+  color: var(--color-danger);
+}
+
+.xBadgeEdit {
+  opacity: 0.55;
+  font-size: 0.6rem;
+}
+
+.xBadgeEditable:hover .xBadgeEdit {
+  opacity: 1;
+}
+
+.xBadgeInput {
+  width: 2.2rem;
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-align: center;
+  border: 1px solid var(--color-primary);
+  border-radius: 5px;
+  background: var(--color-surface);
+  color: var(--color-text);
+}
