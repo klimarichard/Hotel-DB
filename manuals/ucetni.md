@@ -34,7 +34,7 @@ Vlevo dole je vždy vidět **jméno přihlášeného uživatele**; tlačítkem *
 
 - rychlé statistiky personálu — počty, věkové složení, národnosti a pozice.
 
-Směnové informace (kdo má dnes směnu, kdo je vedoucí směny, nepřítomní vedoucí) se vám nezobrazují.
+Směnové informace (kdo má dnes směnu, kdo je vedoucí směny, nepřítomní FOM) se vám nezobrazují.
 
 > 📷 *(Místo pro snímek obrazovky: Přehled)*
 
