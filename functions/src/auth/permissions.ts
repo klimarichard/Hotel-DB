@@ -245,10 +245,11 @@ export const BUILTIN_ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     "benefits.view", "benefits.edit",
     "payroll.view", "payroll.create", "payroll.edit", "payroll.recalculate",
     "payroll.export", "payroll.notes.manage",
-    "shifts.view.all", "shifts.plan.create", "shifts.plan.edit", "shifts.plan.delete",
+    // plan.delete + counterTable are admin-only in the UI today; revert is too.
+    "shifts.view.all", "shifts.plan.create", "shifts.plan.edit",
     "shifts.plan.transition", "shifts.cells.edit", "shifts.planEmployees.manage",
     "shifts.mod.manage", "shifts.xAllowance.manage", "shifts.freeShift.manage",
-    "shifts.changeRequest.review", "shifts.override.review", "shifts.export", "shifts.counterTable.view",
+    "shifts.changeRequest.review", "shifts.override.review", "shifts.export",
     "vacation.view.all", "vacation.review",
     "alerts.view", "alerts.read",
     "changeRequests.review",
@@ -277,8 +278,10 @@ export const BUILTIN_ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   ],
 
   // Read-only finance viewer: sees everyone (incl. reveal/export), no edits.
+  // No Můj profil / self-service in the UI today (route excludes accountant), so
+  // it deliberately does NOT use BASE_SELF.
   accountant: [
-    ...BASE_SELF.filter((p) => p !== "vacation.request.self"),
+    "nav.dashboard.view", "dashboard.view", "dashboard.stats.view",
     "nav.employees.view",
     "employees.view.all", "employees.export", "employees.export.sensitive",
     "sensitive.reveal",
@@ -286,7 +289,6 @@ export const BUILTIN_ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     "contracts.view",
     "documents.view",
     "benefits.view",
-    "dashboard.stats.view",
     "masterData.view",
   ],
 
@@ -301,8 +303,9 @@ export const BUILTIN_ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     "contracts.view", "contracts.generate", "contracts.edit", "contracts.delete", "contracts.sign",
     "documents.view", "documents.upload", "documents.delete",
     "benefits.view", "benefits.edit",
-    "shifts.view.all", "shifts.plan.create", "shifts.plan.transition", "shifts.planEmployees.manage",
-    "vacation.view.all",
+    // hr sees the shift plan read-only in the UI (no edit/create/publish controls).
+    "shifts.view.all",
+    "vacation.view.approvedUpcoming",
     "masterData.view",
   ],
 };
