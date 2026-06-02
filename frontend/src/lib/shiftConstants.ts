@@ -36,6 +36,31 @@ export const SECTION_LABELS: Record<Section, string> = {
 export const SHIFT_TYPES = ["D", "N", "R"] as const;
 export type ShiftType = typeof SHIFT_TYPES[number];
 
+/** Night-shift roles (recepce N, portýři NP) — they sort below the day ones (D / DP). */
+export function isNightShiftType(t: string | null | undefined): boolean {
+  return t === "N" || t === "NP";
+}
+
+/**
+ * Order employees within a section for display/export. In recepce & portýři, day-shift
+ * employees (D / DP) always come before night-shift (N / NP); displayOrder orders within
+ * each group. Other sections sort by displayOrder only. Returns a new array.
+ */
+export function sortSectionEmployees<T extends { primaryShiftType: string | null; displayOrder: number }>(
+  section: string,
+  emps: T[]
+): T[] {
+  const byOrder = (a: T, b: T) => a.displayOrder - b.displayOrder;
+  if (section === "recepce" || section === "portýři") {
+    return [...emps].sort((a, b) => {
+      const na = isNightShiftType(a.primaryShiftType) ? 1 : 0;
+      const nb = isNightShiftType(b.primaryShiftType) ? 1 : 0;
+      return na - nb || byOrder(a, b);
+    });
+  }
+  return [...emps].sort(byOrder);
+}
+
 export const SHIFT_COLORS: Record<string, string> = {
   D:  "#dbeafe",
   N:  "#1e3a5f",
