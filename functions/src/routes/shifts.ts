@@ -883,8 +883,9 @@ shiftsRouter.put(
 );
 
 // PATCH /shifts/plans/:planId/employees/:docId/x-allowance — set the per-employee,
-// per-month extra X allowance (admin/director). Stored on the planEmployee so it is
-// naturally scoped to the plan's month. Effective limit = base(8/13) + extra.
+// per-month absolute X limit (admin/director). Stored on the planEmployee so it is
+// naturally scoped to the plan's month. This override is only meaningful when the
+// employee has an approved vacation in the month; the client applies it accordingly.
 shiftsRouter.patch(
   "/plans/:planId/employees/:docId/x-allowance",
   requireAuth,
@@ -892,10 +893,10 @@ shiftsRouter.patch(
   async (req, res) => {
     const { planId, docId } = req.params;
     const body = req.body as Record<string, unknown>;
-    const extra = Number(body.extra);
+    const limit = Number(body.limit);
 
-    if (!Number.isInteger(extra) || extra < 0 || extra > 31) {
-      res.status(400).json({ error: "Navýšení musí být celé číslo 0–31" });
+    if (!Number.isInteger(limit) || limit < 0 || limit > 31) {
+      res.status(400).json({ error: "Limit musí být celé číslo 0–31" });
       return;
     }
 
@@ -906,19 +907,20 @@ shiftsRouter.patch(
       res.status(404).json({ error: "Zaměstnanec v plánu nenalezen" });
       return;
     }
-    const prevExtra = Number((prevSnap.data() as Record<string, unknown>).xAllowanceExtra ?? 0);
+    const prevData = prevSnap.data() as Record<string, unknown>;
+    const prevLimit = prevData.xLimitOverride ?? null;
 
-    await empRef.update({ xAllowanceExtra: extra, updatedAt: FieldValue.serverTimestamp() });
+    await empRef.update({ xLimitOverride: limit, updatedAt: FieldValue.serverTimestamp() });
     await planRef.update({ updatedAt: FieldValue.serverTimestamp() });
     await logUpdate(ctxFromReq(req as AuthRequest), {
       collection: "shiftPlans/planEmployees",
       resourceId: planId,
       subResourceId: docId,
-      employeeId: (prevSnap.data() as Record<string, unknown>).employeeId as string | undefined,
-      before: { xAllowanceExtra: prevExtra },
-      after: { xAllowanceExtra: extra },
+      employeeId: prevData.employeeId as string | undefined,
+      before: { xLimitOverride: prevLimit },
+      after: { xLimitOverride: limit },
     });
-    res.json({ ok: true, xAllowanceExtra: extra });
+    res.json({ ok: true, xLimitOverride: limit });
   }
 );
 
@@ -1010,7 +1012,11 @@ shiftsRouter.post(
     const batch = db().batch();
     for (const doc of sourceSnap.docs) {
       const ref = targetPlanRef.collection("planEmployees").doc(doc.id);
-      batch.set(ref, { ...doc.data(), createdAt: FieldValue.serverTimestamp() });
+      // The X-limit override is month-specific (tied to that month's vacation), so it
+      // must not carry into a copied month. Drop it (and the legacy extra field too).
+      const { xLimitOverride: _x, xAllowanceExtra: _xa, ...rest } = doc.data() as Record<string, unknown>;
+      void _x; void _xa;
+      batch.set(ref, { ...rest, createdAt: FieldValue.serverTimestamp() });
     }
     await batch.commit();
 

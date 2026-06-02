@@ -1,8 +1,9 @@
 import React, { useCallback, useMemo, useState } from "react";
 import * as clock from "../lib/clock";
 import type { PlanDetail, PlanEmployee, ShiftDoc, ModShiftDoc } from "../pages/ShiftPlannerPage";
-import { SECTION_LABELS, SECTIONS, type Section, getCzechHolidays, MOD_PERSONS, parseShiftExpression } from "../lib/shiftConstants";
+import { SECTION_LABELS, SECTIONS, type Section, getCzechHolidays, MOD_PERSONS, parseShiftExpression, getCellColor } from "../lib/shiftConstants";
 import { employeeDisplayName } from "../lib/employeeName";
+import { useTheme } from "../context/ThemeContext";
 import ShiftCell from "./ShiftCell";
 import ModCell from "./ModCell";
 import styles from "./ShiftGrid.module.css";
@@ -35,10 +36,12 @@ interface Props {
   showModCounts?: boolean;
   onModPersonChange?: (employeeId: string, oldLetter: string | null, newLetter: string | null) => Promise<void>;
   onCellRequestChange?: (employeeId: string, date: string, currentRawInput: string) => void;
-  /** Per-employee X usage + limit info for the inline badge; null = no limit (DPP/unknown). */
-  xInfoFor?: (emp: PlanEmployee) => { used: number; base: number; extra: number; limit: number } | null;
-  /** Save the per-employee extra X allowance (admin/director). When set, the badge is editable. */
-  onSetXAllowance?: (emp: PlanEmployee, extra: number) => Promise<void>;
+  /** Per-employee X usage + limit info for the inline badge; null = no limit (DPP/unknown).
+   *  `editable` is true only when the employee has an approved vacation this month (the
+   *  only case in which admin may raise the limit). `vacCount` = vacation-origin X days. */
+  xInfoFor?: (emp: PlanEmployee) => { used: number; base: number; limit: number; vacCount: number; editable: boolean } | null;
+  /** Save the per-employee absolute X limit for the month (admin/director). */
+  onSetXAllowance?: (emp: PlanEmployee, limit: number) => Promise<void>;
   /** Show the Volné směny (free-shift) rows at the bottom (published plans). */
   showFreeShifts?: boolean;
   /** Days on which the optional DPA free-shift row is active. */
@@ -115,6 +118,8 @@ export default function ShiftGrid({
   currentEmployeeId,
   stickyTop = 0,
 }: Props) {
+  const { theme } = useTheme();
+  const dark = theme === "dark";
   const days = useMemo(() => getDaysInMonth(plan.year, plan.month), [plan.year, plan.month]);
 
   const holidays = useMemo(() => getCzechHolidays(plan.year), [plan.year]);
@@ -429,23 +434,25 @@ export default function ShiftGrid({
                               </span>
                             );
                           })()}
-                          {/* X-limit badge: voluntary-X usage / effective limit (+ extra). #34 */}
+                          {/* X-limit badge: voluntary-X usage / month limit. Editable only
+                              when the employee has an approved vacation this month. #34 */}
                           {xInfoFor && (() => {
                             const info = xInfoFor(emp);
                             if (!info) return null;
                             const over = info.used > info.limit;
-                            if (editingXEmployee === emp.employeeId && onSetXAllowance) {
+                            const canEditLimit = info.editable && !!onSetXAllowance;
+                            if (editingXEmployee === emp.employeeId && canEditLimit) {
                               return (
                                 <span className={styles.xBadge}>
-                                  X: {info.used} / {info.base}+
+                                  X: {info.used} /{" "}
                                   <input
                                     type="number"
                                     className={styles.xBadgeInput}
-                                    defaultValue={info.extra}
+                                    defaultValue={info.limit}
                                     min={0}
                                     max={31}
                                     autoFocus
-                                    title="Mimořádné navýšení limitu X pro tento měsíc — Enter uložit, Esc zrušit"
+                                    title="Nový limit X pro tento měsíc (kolik X smí napsat nad rámec dovolené) — Enter uložit, Esc zrušit"
                                     onFocus={(e) => e.target.select()}
                                     onBlur={() => setEditingXEmployee(null)}
                                     onKeyDown={async (e) => {
@@ -453,21 +460,24 @@ export default function ShiftGrid({
                                       if (e.key === "Enter") {
                                         const v = Math.max(0, Math.min(31, Math.floor(Number(e.currentTarget.value) || 0)));
                                         setEditingXEmployee(null);
-                                        if (v !== info.extra) await onSetXAllowance(emp, v);
+                                        if (v !== info.limit) await onSetXAllowance!(emp, v);
                                       }
                                     }}
                                   />
+                                  <span className={styles.xBadgeHint}>(dovolená: {info.vacCount} X)</span>
                                 </span>
                               );
                             }
                             return (
                               <span
-                                className={`${styles.xBadge}${over ? ` ${styles.xBadgeOver}` : ""}${onSetXAllowance ? ` ${styles.xBadgeEditable}` : ""}`}
-                                onClick={onSetXAllowance ? () => setEditingXEmployee(emp.employeeId) : undefined}
-                                title={onSetXAllowance ? "Kliknutím upravíte mimořádné navýšení limitu X" : undefined}
+                                className={`${styles.xBadge}${over ? ` ${styles.xBadgeOver}` : ""}${canEditLimit ? ` ${styles.xBadgeEditable}` : ""}`}
+                                onClick={canEditLimit ? () => setEditingXEmployee(emp.employeeId) : undefined}
+                                title={canEditLimit
+                                  ? `Kliknutím upravíte limit X (zaměstnanec má dovolenou: ${info.vacCount} X tento měsíc)`
+                                  : undefined}
                               >
-                                X: {info.used} / {info.limit}{info.extra > 0 ? ` (+${info.extra})` : ""}
-                                {onSetXAllowance && <span className={styles.xBadgeEdit}>✎</span>}
+                                X: {info.used} / {info.limit}
+                                {canEditLimit && <span className={styles.xBadgeEdit}>✎</span>}
                               </span>
                             );
                           })()}
@@ -666,7 +676,10 @@ export default function ShiftGrid({
                   Volné směny
                 </td>
               </tr>
-              {FREE_SHIFT_ROWS.map((row) => (
+              {FREE_SHIFT_ROWS.map((row) => {
+                // Match the colour the shift gets in the plan (per code+hotel, theme-aware).
+                const chipColor = getCellColor(parseShiftExpression(`${row.code}${row.hotel}`), dark);
+                return (
                 <tr key={`free-${row.label}`} className={styles.freeRow}>
                   <td className={styles.freeLabelCell}>{row.label}</td>
                   {days.map((d) => {
@@ -684,6 +697,7 @@ export default function ShiftGrid({
                       content = (
                         <span
                           className={`${styles.freeChip}${onClaimFreeShift ? ` ${styles.freeChipClaimable}` : ""}`}
+                          style={{ background: chipColor.bg, color: chipColor.text }}
                           title={onClaimFreeShift ? "Dvojklik – zažádat o volnou směnu" : "Volná (neobsazená) směna"}
                           onDoubleClick={onClaimFreeShift ? () => onClaimFreeShift(dateStr, row.code, row.hotel) : undefined}
                         >
@@ -694,7 +708,7 @@ export default function ShiftGrid({
                     return (
                       <td
                         key={dateStr}
-                        className={`${styles.cell} ${dayClass(d)}${cellTogglable ? ` ${styles.freeDpaCell}` : ""}`}
+                        className={`${styles.cell} ${styles.freeCell} ${dayClass(d)}${cellTogglable ? ` ${styles.freeDpaCell}` : ""}`}
                         onClick={cellTogglable ? () => onToggleDpaDay!(dateStr, !dpaDaySet.has(dateStr)) : undefined}
                         title={cellTogglable ? (dpaDaySet.has(dateStr) ? "Kliknutím zrušíte volnou DPA" : "Kliknutím přidáte volnou DPA") : undefined}
                       >
@@ -704,7 +718,8 @@ export default function ShiftGrid({
                   })}
                   <td className={styles.footerCell} />
                 </tr>
-              ))}
+                );
+              })}
             </>
           )}
         </tbody>

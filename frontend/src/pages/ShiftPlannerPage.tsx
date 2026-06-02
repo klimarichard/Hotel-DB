@@ -36,7 +36,10 @@ export interface PlanEmployee {
   displayOrder: number;
   active: boolean;
   contractType: string | null;
-  xAllowanceExtra?: number; // admin-set per-month bump on top of the base X limit
+  // Admin-set absolute X limit for the month. Only settable (and only applied) when
+  // the employee has an approved vacation overlapping the month; otherwise the base
+  // limit (8 HPP / 13 PPP) applies.
+  xLimitOverride?: number | null;
 }
 
 export interface ViolationInfo {
@@ -875,12 +878,27 @@ export default function ShiftPlannerPage() {
     return null; // DPP or unknown = no limit
   }
 
-  /** Effective limit = base + admin-set extra allowance; null when no base applies. */
+  // Count of vacation-origin Xs (source:"vacation") for an employee this month. A
+  // non-zero count means the employee has an approved vacation overlapping the month —
+  // the only situation in which admin may raise the X limit.
+  function vacationXCount(shifts: ShiftDoc[], employeeId: string): number {
+    return shifts.filter(
+      (s) => s.employeeId === employeeId && s.status === "day_off" && s.source === "vacation"
+    ).length;
+  }
+
+  /**
+   * Effective monthly X limit. The admin-set override only applies when the employee
+   * has an approved vacation this month; otherwise the base (8 HPP / 13 PPP) applies.
+   * null when no base applies (DPP/unknown).
+   */
   function getEffectiveXLimit(emp: PlanEmployee | undefined): number | null {
     if (!emp) return null;
     const base = getXBase(emp.contractType);
     if (base === null) return null;
-    return base + (emp.xAllowanceExtra ?? 0);
+    const hasVacation = vacationXCount(plan?.shifts ?? [], emp.employeeId) > 0;
+    if (hasVacation && emp.xLimitOverride != null) return emp.xLimitOverride;
+    return base;
   }
 
   // A day counts toward the voluntary X limit only when it's an employee-entered
@@ -1556,19 +1574,21 @@ export default function ShiftPlannerPage() {
                       const limit = getEffectiveXLimit(emp);
                       if (limit === null) return null;
                       const base = getXBase(emp.contractType) ?? 0;
+                      const vacCount = vacationXCount(plan.shifts, emp.employeeId);
                       return {
                         used: countXShifts(plan.shifts, emp.employeeId),
                         base,
-                        extra: emp.xAllowanceExtra ?? 0,
                         limit,
+                        vacCount,
+                        editable: vacCount > 0,
                       };
                     }
                   : undefined
               }
               onSetXAllowance={
                 canPublish
-                  ? async (emp, extra) => {
-                      await api.patch(`/shifts/plans/${plan.id}/employees/${emp.id}/x-allowance`, { extra });
+                  ? async (emp, limit) => {
+                      await api.patch(`/shifts/plans/${plan.id}/employees/${emp.id}/x-allowance`, { limit });
                       loadPlan(true);
                     }
                   : undefined

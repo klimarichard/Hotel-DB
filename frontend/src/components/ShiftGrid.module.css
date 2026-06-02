@@ -354,30 +354,39 @@
   border-right: 1px solid var(--color-border);
 }
 
-/* Claimable free-shift chip (uncovered slot) */
-.freeChip {
-  display: inline-block;
-  font-size: 0.62rem;
-  font-weight: 700;
+/* Free-shift cells: center inline content (✓ / +) both axes */
+.freeCell {
   text-align: center;
-  padding: 1px 3px;
-  border-radius: 4px;
-  background: #fef3c7;
-  color: #b45309;
+}
+
+/* Claimable free-shift chip (uncovered slot) — mirrors a real shift cell so the
+   colour matches how the shift appears in the plan. The bg/text colour is set
+   inline via getCellColor (per code+hotel, theme-aware). */
+.freeChip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 1.75rem;
+  font-size: 0.725rem;
+  font-weight: 600;
+  border-radius: 2px;
+  font-family: monospace;
+  user-select: none;
+  box-sizing: border-box;
 }
 
 .freeChipClaimable {
   cursor: pointer;
 }
 
+/* Hover affordance that works regardless of the inline bg colour */
 .freeChipClaimable:hover {
-  background: #fde68a;
+  outline: 2px solid currentColor;
+  outline-offset: -2px;
 }
 
-[data-theme="dark"] .freeChip { background: #b45309; color: #fef3c7; }
-[data-theme="dark"] .freeChipClaimable:hover { background: #92400e; }
-
-/* Covered slot marker */
+/* Covered slot marker — centered ✓ (td centers it via .freeCell + vertical-align) */
 .freeCovered {
   font-size: 0.7rem;
   color: var(--color-text-subtle);
@@ -387,7 +396,6 @@
 /* DPA day toggle affordances (admin/director) */
 .freeDpaCell {
   cursor: pointer;
-  text-align: center;
 }
 
 .freeDpaAdd {
@@ -561,4 +569,12 @@
   border-radius: 5px;
   background: var(--color-surface);
   color: var(--color-text);
+}
+
+/* Vacation-X hint shown while editing the limit */
+.xBadgeHint {
+  font-size: 0.58rem;
+  font-weight: 500;
+  color: var(--color-text-subtle);
+  white-space: nowrap;
 }
