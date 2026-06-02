@@ -29,6 +29,9 @@ interface ChangeRequest {
   status: "pending" | "approved" | "rejected";
   requestedAt: { seconds?: number; _seconds?: number } | null;
   rejectionReason: string | null;
+  kind?: "change" | "free-claim";
+  code?: string;
+  hotel?: string;
 }
 
 interface Props {
@@ -170,7 +173,11 @@ export default function MyRequestsPanel({ planId }: Props) {
                   {changes.map((req) => (
                     <tr key={req.id} className={req.status !== "pending" ? styles.rowDone : ""}>
                       <td>{formatDateCZ(req.date)}</td>
-                      <td>{req.currentRawInput || "—"}</td>
+                      <td>
+                        {req.kind === "free-claim"
+                          ? `Volná směna ${req.code ?? ""}${req.hotel ?? ""}`
+                          : (req.currentRawInput || "—")}
+                      </td>
                       <td>{req.reason || "—"}</td>
                       <td>{formatDatetimeCZ(req.requestedAt)}</td>
                       <td>

@@ -321,6 +321,93 @@
 [data-theme="dark"] .counterCell1 { background: #15803d; color: #dcfce7; }
 [data-theme="dark"] .counterCell2 { background: #1d4ed8; color: #dbeafe; }
 
+/* ── Volné směny (free-shift) rows ─────────────────────────────────────── */
+.freeSeparatorRow {
+  border-top: 2px solid var(--color-border);
+}
+
+.freeSeparatorCell {
+  background: var(--color-surface-3);
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-secondary);
+  padding: 0.3rem 0.65rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.freeRow {
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.freeLabelCell {
+  position: sticky;
+  left: 0;
+  background: var(--color-surface-2);
+  z-index: 1;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--color-text-secondary);
+  padding: 2px 0.65rem;
+  white-space: nowrap;
+  border-right: 1px solid var(--color-border);
+}
+
+/* Free-shift cells: center inline content (✓ / +) both axes */
+.freeCell {
+  text-align: center;
+}
+
+/* Claimable free-shift chip (uncovered slot) — mirrors a real shift cell so the
+   colour matches how the shift appears in the plan. The bg/text colour is set
+   inline via getCellColor (per code+hotel, theme-aware). */
+.freeChip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 1.75rem;
+  font-size: 0.725rem;
+  font-weight: 600;
+  border-radius: 2px;
+  font-family: monospace;
+  user-select: none;
+  box-sizing: border-box;
+}
+
+.freeChipClaimable {
+  cursor: pointer;
+}
+
+/* Hover affordance that works regardless of the inline bg colour */
+.freeChipClaimable:hover {
+  outline: 2px solid currentColor;
+  outline-offset: -2px;
+}
+
+/* Covered slot marker — centered ✓ (td centers it via .freeCell + vertical-align) */
+.freeCovered {
+  font-size: 0.7rem;
+  color: var(--color-text-subtle);
+  opacity: 0.45;
+}
+
+/* DPA day toggle affordances (admin/director) */
+.freeDpaCell {
+  cursor: pointer;
+}
+
+.freeDpaAdd {
+  font-size: 0.7rem;
+  color: var(--color-text-subtle);
+  opacity: 0.25;
+}
+
+.freeDpaCell:hover .freeDpaAdd {
+  opacity: 0.7;
+}
+
 /* Keep MOD row uniform in dark mode — weekend/holiday tints don't apply */
 [data-theme="dark"] .modRow .weekend,
 [data-theme="dark"] .modRow .holiday { background: var(--color-mod-bg); }
@@ -436,5 +523,58 @@
   font-weight: 500;
   color: var(--color-text-muted);
   margin-top: 1px;
+  white-space: nowrap;
+}
+
+/* X-limit badge under the employee name (voluntary-X usage / effective limit) */
+.xBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  margin-top: 1px;
+  white-space: nowrap;
+}
+
+.xBadgeEditable {
+  cursor: pointer;
+}
+
+.xBadgeEditable:hover {
+  color: var(--color-text-secondary);
+}
+
+/* Over the effective limit — flag it red */
+.xBadgeOver {
+  color: var(--color-danger);
+}
+
+.xBadgeEdit {
+  opacity: 0.55;
+  font-size: 0.6rem;
+}
+
+.xBadgeEditable:hover .xBadgeEdit {
+  opacity: 1;
+}
+
+.xBadgeInput {
+  width: 2.2rem;
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-align: center;
+  border: 1px solid var(--color-primary);
+  border-radius: 5px;
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+/* Vacation-X hint shown while editing the limit */
+.xBadgeHint {
+  font-size: 0.58rem;
+  font-weight: 500;
+  color: var(--color-text-subtle);
   white-space: nowrap;
 }
