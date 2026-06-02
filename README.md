@@ -30,14 +30,14 @@ Role-based access control across six roles gates every screen, route, and API en
 
 ## Roles
 
-`admin` · `ředitel` (director) · `vedoucí` (manager) · `zaměstnanec` (employee) · `účetní` (accountant) · `personalista` (HR)
+`admin` · `ředitel` (director) · `FOM` (manager / front office manager) · `zaměstnanec` (employee) · `účetní` (accountant) · `personalista` (HR)
 
 ## User manuals (Czech)
 
 Per-role manuals — each covers **only** what that role can do in the app. (These may later be surfaced as in-app help.)
 
 - [Administrátor a ředitel](manuals/admin-a-reditel.md)
-- [Vedoucí](manuals/vedouci.md)
+- [FOM (vedoucí)](manuals/vedouci.md)
 - [Zaměstnanec](manuals/zamestnanec.md)
 - [Účetní](manuals/ucetni.md)
 - [Personalista](manuals/personalista.md)

@@ -28,7 +28,7 @@ export const SECTIONS = ["vedoucí", "recepce", "portýři"] as const;
 export type Section = typeof SECTIONS[number];
 
 export const SECTION_LABELS: Record<Section, string> = {
-  "vedoucí": "Vedoucí",
+  "vedoucí": "FOM",
   "recepce": "Recepce",
   "portýři": "Portýři",
 };

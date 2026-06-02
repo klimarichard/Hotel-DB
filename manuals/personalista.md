@@ -37,7 +37,7 @@ Vlevo dole je vždy vidět **jméno přihlášeného uživatele**; tlačítkem *
 Úvodní stránka po přihlášení. Ukazuje aktuální provozní situaci pro dnešní den:
 
 - kdo má dnes směnu (recepce i portýři), kdo je MOD (vedoucí směny),
-- kteří vedoucí jsou nepřítomní,
+- kteří FOM jsou nepřítomní,
 - rychlé statistiky personálu (počty, věkové složení, národnosti, pozice).
 
 > 📷 *(Místo pro snímek obrazovky: Přehled)*
@@ -48,7 +48,7 @@ Vlevo dole je vždy vidět **jméno přihlášeného uživatele**; tlačítkem *
 
 Evidence všech zaměstnanců. Záložky **Aktivní** a **Ukončení** přepínají mezi zaměstnanci v pracovním poměru a ukončenými.
 
-Spravujete celou evidenci zaměstnanců s jednou výjimkou: **nevidíte záznamy zaměstnanců, kteří jsou zároveň administrátor, ředitel nebo vedoucí** — tito se vám v seznamu nezobrazují.
+Spravujete celou evidenci zaměstnanců s jednou výjimkou: **nevidíte záznamy zaměstnanců, kteří jsou zároveň administrátor, ředitel nebo FOM** — tito se vám v seznamu nezobrazují.
 
 ### Vyhledávání a seznam
 
@@ -128,7 +128,7 @@ Stránka **Šablony smluv** obsahuje editor ve stylu Wordu (TipTap): formátová
 
 ## Směny
 
-Měsíční plán směn (recepce, portýři, vedoucí). Plány můžete **prohlížet a vyplňovat**.
+Měsíční plán směn (recepce, portýři, FOM). Plány můžete **prohlížet a vyplňovat**.
 
 ### Životní cyklus plánu
 
@@ -141,7 +141,7 @@ Plán prochází stavy **Vytvořený → Otevřený → Uzavřený → Publikova
 - Do buňky se zapisuje **kód směny** — např. `DA`, `NS` (denní/noční + hotel), `R`, `X` (volno), `ZDA`/`ZN…`, `HO` (home office).
 - Pod plánem je **legenda** s vysvětlením typů směn, kódů hotelů a pravidel přestávek.
 - **Limity X (volna):** HPP 8/měsíc, PPP 13/měsíc, DPP neomezeně; maximálně **6 X v řadě**.
-- **MOD (vedoucí směny):** u jména vedoucího se zobrazuje písmeno MOD a počty směn.
+- **MOD (vedoucí směny):** u jména FOM se zobrazuje písmeno MOD a počty směn.
 
 ### Export
 

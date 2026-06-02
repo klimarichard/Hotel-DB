@@ -105,7 +105,7 @@ const ROLES: UserRole[] = ["admin", "director", "manager", "employee", "accounta
 const ROLE_LABELS: Record<UserRole, string> = {
   admin: "Admin",
   director: "Ředitel",
-  manager: "Vedoucí",
+  manager: "FOM",
   employee: "Zaměstnanec",
   accountant: "Účetní",
   hr: "Personalista",

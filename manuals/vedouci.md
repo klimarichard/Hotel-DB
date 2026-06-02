@@ -1,6 +1,6 @@
-# Příručka — Vedoucí
+# Příručka — FOM (Front Office Manager)
 
-Tato příručka popisuje práci s aplikací HPM Intranet z pohledu **vedoucího**. Jako vedoucí plánujete a vyplňujete směny, podáváte vlastní žádosti o dovolenou a spravujete svůj profil.
+Tato příručka popisuje práci s aplikací HPM Intranet z pohledu **FOM** (Front Office Manager; v aplikaci dříve „vedoucí"). Jako FOM plánujete a vyplňujete směny, podáváte vlastní žádosti o dovolenou a spravujete svůj profil.
 
 > 📷 *(Místo pro snímek obrazovky: úvodní obrazovka aplikace)*
 
@@ -35,7 +35,7 @@ Vlevo dole je vždy vidět **jméno přihlášeného uživatele**; tlačítkem *
 Úvodní stránka po přihlášení. Ukazuje aktuální provozní situaci pro dnešní den:
 
 - kdo má dnes směnu (recepce i portýři), kdo je MOD (vedoucí směny),
-- kteří vedoucí jsou nepřítomní,
+- kteří FOM jsou nepřítomní,
 - rychlé statistiky personálu (počty, věkové složení, národnosti, pozice).
 
 > 📷 *(Místo pro snímek obrazovky: Přehled)*
@@ -44,7 +44,7 @@ Vlevo dole je vždy vidět **jméno přihlášeného uživatele**; tlačítkem *
 
 ## Směny
 
-Měsíční plán směn (recepce, portýři, vedoucí).
+Měsíční plán směn (recepce, portýři, FOM).
 
 ### Životní cyklus plánu
 
@@ -60,7 +60,7 @@ Plán prochází stavy **Vytvořený → Otevřený → Uzavřený → Publikova
 - Do buňky se zapisuje **kód směny** — např. `DA`, `NS` (denní/noční + hotel), `R`, `X` (volno), `ZDA`/`ZN…`, `HO` (home office).
 - Pod plánem je **legenda** s vysvětlením typů směn, kódů hotelů a pravidel přestávek.
 - **Limity X (volna):** HPP 8/měsíc, PPP 13/měsíc, DPP neomezeně; maximálně **6 X v řadě**.
-- **MOD (vedoucí směny):** u jména vedoucího se zobrazuje písmeno MOD a počty směn.
+- **MOD (vedoucí směny):** u jména FOM se zobrazuje písmeno MOD a počty směn.
 
 ### Export
 

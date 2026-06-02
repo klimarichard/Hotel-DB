@@ -72,9 +72,11 @@ Implementation notes for the Phase 5 Shift Planner: the shift expression parser,
 - Storage: `xLimitOverride` on the `planEmployee` doc (per-month). Effective limit = `xLimitOverride` when a vacation exists, else base. `PATCH /shifts/plans/:id/employees/:docId/x-allowance` body `{limit}` (0–31), admin/director, audited (`fieldPath:"xLimitOverride"`).
 - `copy-employees` strips `xLimitOverride` (and the legacy `xAllowanceExtra`) so a month-specific override never carries into a copied month.
 - Inline badge under the employee name (`ShiftGrid`): `X: used / limit`, plus `(N dovolená)` when the employee has vacation Xs that month; red when over. The `✎` editor appears only when a vacation exists; editing shows the vacation-X count as a hint.
+- Shown to **admin/director only** (never managers — `xInfoFor`/`onSetXAllowance` gated on `canPublish`), and **only in `created`/`opened`** plan states. Hidden in `closed`/`published` to keep rows compact.
 
 ### Other Batch 4 items
 - **Count/occupancy table** (`showCounterTable`) is shown to **admin in every plan state** (previously only when closed).
+- **Compact name-cell rows + FOM label** (admin/director): the MOD-count line (`MOD: N (PD/V+S)`, `showModCounts`) shows **only in `closed`/`published`**, the X-limit line **only in `created`/`opened`** — at most one guide line per row. The manager role/section is **displayed as "FOM"** (Front Office Manager) via `SECTION_LABELS["vedoucí"]` and `ROLE_LABELS.manager`; the stored section data key stays `"vedoucí"` (display-only rename).
 - **Delete gate**: `DELETE /shifts/plans/:id` returns **409 unless `status === "created"`**; the UI hides the delete button otherwise. Deleting a created plan still cascades its sub-collections (`planEmployees`, `shifts`, `shiftsSnapshot`, `modRow`, `rules`, `unavailabilityRequests`, `shiftOverrideRequests`, `shiftChangeRequests`).
 - **Click-time timestamp** (#32): a shift-change-request captures `requestedAtClient` at the moment of the double-click (carried through to the POST); the server validates it against a window and falls back to its own serverTimestamp if out of range.
 - **Grid remount** (#35): `ShiftGrid` is keyed on the sorted employee-id list so it remounts on membership change, fixing the sticky / `table-layout:fixed` rendering glitch after an employee is removed.
