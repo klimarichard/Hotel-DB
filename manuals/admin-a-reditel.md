@@ -127,8 +127,21 @@ Plán prochází stavy **Vytvořený → Otevřený → Uzavřený → Publikova
 
 - Do buňky se zapisuje **kód směny** — např. `DA`, `NS` (denní/noční + hotel), `R`, `X` (volno), `ZDA`/`ZN…`, `HO` (home office).
 - Pod plánem je **legenda** s vysvětlením typů směn, kódů hotelů a pravidel přestávek.
-- **Limity X (volna):** HPP 8/měsíc, PPP 13/měsíc, DPP neomezeně; maximálně **6 X v řadě**. Vy (administrátor a ředitel) limitům nepodléháte a můžete je navýšit.
+- **Limity X (volna):** HPP 8/měsíc, PPP 13/měsíc, DPP neomezeně; maximálně **6 X v řadě**. Vy (administrátor a ředitel) limitům nepodléháte. Dny dovolené se do limitu **nezapočítávají**.
+- **Navýšení limitu X:** u jména zaměstnance je odznak `X: využito / limit`. Pokud má zaměstnanec v daném měsíci schválenou **dovolenou**, zobrazí se i počet dní dovolené (`… dovolená`) a ikonka `✎`, kterou nastavíte **nový limit X pro tento měsíc** (kolik X smí napsat nad rámec dovolené). Bez schválené dovolené limit upravit nelze.
 - **MOD (vedoucí směny):** u jména vedoucího se zobrazuje písmeno MOD a počty směn; písmeno upravíte kliknutím.
+- **Tabulka obsazenosti:** přehled počtu obsazených směn po dnech vidíte (jako administrátor) ve **všech stavech** plánu, nejen v uzavřeném.
+
+### Volné směny
+
+V **publikovaném** plánu se dole zobrazují **volné (neobsazené) směny** portýrů (`DPQ`, `NPQ`, `NPA` každý den; `DPA` jen ve dnech, které označíte). Den ve volné směně **DPA** zapnete/vypnete **kliknutím na buňku** v řádku DPA.
+
+- Volný den má barevný štítek směny, obsazený den `✓`.
+- Zaměstnanec si volnou směnu vyžádá **dvojklikem**. Po vašem **schválení** se směna automaticky zapíše danému zaměstnanci a konkurenční žádosti o stejnou směnu se zamítnou.
+
+### Mazání plánu
+
+Plán lze **smazat pouze ve stavu *Vytvořený***. Jakmile je otevřený nebo dál, tlačítko pro smazání zmizí (a smazání je zablokované i na pozadí), aby nedošlo ke ztrátě již vyplněných směn.
 
 ### Žádosti o změnu směny
 
