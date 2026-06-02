@@ -178,7 +178,8 @@ export default function ShiftCell({
           border: isInvalid ? "2px solid #dc2626" : "1px solid #3b82f6",
           borderRadius: "3px",
           padding: "2px 4px",
-          fontSize: "0.75rem",
+          fontSize: "0.85rem",
+          fontWeight: 700,
           fontFamily: "monospace",
           background: isInvalid ? (dark ? "#450a0a" : "#fef2f2") : (dark ? "#0f172a" : "#fff"),
           color: dark ? "#f1f5f9" : "#111827",
@@ -205,6 +206,11 @@ export default function ShiftCell({
   // Display mode
   const { bg: bgColor, text: textColor } = getCellColor(displayParsed, dark);
 
+  // Shrink the (monospace) code to fit the ~40px column so long entries like
+  // "DPQ+2" never widen the column. ~4 chars fit at 0.85rem; scale down beyond that.
+  const displayText = saveError ? "!" : (rawInput || "");
+  const fitFontSize = `${Math.max(0.5, Math.min(0.85, 3.4 / (displayText.length || 1))).toFixed(3)}rem`;
+
   return (
     <div
       ref={cellRef}
@@ -217,8 +223,9 @@ export default function ShiftCell({
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        fontSize: "0.725rem",
-        fontWeight: 500,
+        overflow: "hidden",
+        fontSize: fitFontSize,
+        fontWeight: 700,
         cursor: readOnly ? (onRequestChange ? "pointer" : "default") : "pointer",
         borderRadius: "2px",
         userSelect: "none",

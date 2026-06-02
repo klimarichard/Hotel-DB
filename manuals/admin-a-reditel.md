@@ -118,6 +118,7 @@ Měsíční plán směn (recepce, portýři, FOM).
 Plán prochází stavy **Vytvořený → Otevřený → Uzavřený → Publikovaný** (jednosměrně). Přechody mohou být automatické podle nastavených termínů, nebo je spouštíte ručně.
 
 - **Vytvoření plánu, přechody mezi stavy, nastavení termínů a kopírování zaměstnanců z předchozího plánu** děláte vy (administrátor i ředitel).
+- **Termíny všech tří přechodů (Otevření, Uzavření, Publikování) můžete nastavit už ve stavu *Vytvořený*** — plán se pak postupně posune sám, jak jednotlivé termíny nastanou. Termíny musí jít po sobě (Otevření ≤ Uzavření ≤ Publikování).
 - Plán ve stavu *Vytvořený* zaměstnanci nevidí; objeví se až po otevření.
 - FOM vidí všechny stavy a může vyplňovat směny v otevřeném plánu, ale plán neposouvá dál — to děláte vy.
 
