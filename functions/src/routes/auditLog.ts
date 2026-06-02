@@ -1,6 +1,7 @@
 import { Router, Response } from "express";
 import * as admin from "firebase-admin";
-import { requireAuth, requireRole, AuthRequest } from "../middleware/auth";
+import { requireAuth, AuthRequest } from "../middleware/auth";
+import { requirePermission } from "../auth/permissions";
 
 export const auditLogRouter = Router();
 
@@ -23,7 +24,7 @@ const DEFAULT_LIMIT = 100;
 auditLogRouter.get(
   "/",
   requireAuth,
-  requireRole("admin", "director"),
+  requirePermission("audit.view"),
   async (req: AuthRequest, res: Response) => {
     const {
       employeeId,
@@ -88,7 +89,7 @@ auditLogRouter.get(
 auditLogRouter.get(
   "/:id",
   requireAuth,
-  requireRole("admin", "director"),
+  requirePermission("audit.view"),
   async (req: AuthRequest, res: Response) => {
     const doc = await db().collection("auditLog").doc(req.params.id).get();
     if (!doc.exists) {
@@ -108,7 +109,7 @@ auditLogRouter.get(
 auditLogRouter.get(
   "/meta/collections",
   requireAuth,
-  requireRole("admin", "director"),
+  requirePermission("audit.view"),
   async (_req: AuthRequest, res: Response) => {
     const snap = await db()
       .collection("auditLog")

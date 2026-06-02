@@ -1,7 +1,8 @@
 import { Router, Response } from "express";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
-import { requireAuth, requireRole, AuthRequest } from "../middleware/auth";
+import { requireAuth, AuthRequest } from "../middleware/auth";
+import { requirePermission } from "../auth/permissions";
 import { ctxFromReq, logCreate, logUpdate, logDelete } from "../services/auditLog";
 
 export const companiesRouter = Router();
@@ -22,7 +23,7 @@ companiesRouter.get(
   // Read access for everyone who works with employee/contract records — hr needs
   // the list to pick a company on a Nástup, accountant reads it on employee views.
   // Mutations below stay admin/director.
-  requireRole("admin", "director", "hr", "accountant"),
+  requirePermission("masterData.view"),
   async (_req: AuthRequest, res: Response) => {
     const snap = await db().collection("companies").get();
     const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -43,7 +44,7 @@ companiesRouter.get(
 companiesRouter.get(
   "/:id",
   requireAuth,
-  requireRole("admin", "director", "hr", "accountant"),
+  requirePermission("masterData.view"),
   async (req: AuthRequest, res: Response) => {
     const doc = await db().collection("companies").doc(req.params.id).get();
     if (!doc.exists) {
@@ -72,7 +73,7 @@ interface CompanyBody {
 companiesRouter.post(
   "/",
   requireAuth,
-  requireRole("admin", "director"),
+  requirePermission("settings.companies.manage"),
   async (req: AuthRequest, res: Response) => {
     const { abbreviation, name, address, ic, dic, fileNo, displayOrder } = req.body as CompanyBody;
     if (!abbreviation || !abbreviation.trim()) {
@@ -113,7 +114,7 @@ companiesRouter.post(
 companiesRouter.put(
   "/:id",
   requireAuth,
-  requireRole("admin", "director"),
+  requirePermission("settings.companies.manage"),
   async (req: AuthRequest, res: Response) => {
     const { abbreviation, name, address, ic, dic, fileNo, displayOrder } = req.body as CompanyBody;
 
@@ -159,7 +160,7 @@ companiesRouter.put(
 companiesRouter.delete(
   "/:id",
   requireAuth,
-  requireRole("admin", "director"),
+  requirePermission("settings.companies.manage"),
   async (req: AuthRequest, res: Response) => {
     const ref = db().collection("companies").doc(req.params.id);
     const beforeSnap = await ref.get();

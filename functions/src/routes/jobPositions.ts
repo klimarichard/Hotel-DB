@@ -1,7 +1,8 @@
 import { Router, Response } from "express";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
-import { requireAuth, requireRole, AuthRequest } from "../middleware/auth";
+import { requireAuth, AuthRequest } from "../middleware/auth";
+import { requirePermission } from "../auth/permissions";
 import { ctxFromReq, logCreate, logUpdate, logDelete } from "../services/auditLog";
 
 export const jobPositionsRouter = Router();
@@ -19,7 +20,7 @@ jobPositionsRouter.get(
   // Read access for everyone who works with employee records — hr needs the
   // list to pick a position when adding a contract; accountant reads it on the
   // employee detail view. Mutations below stay admin/director.
-  requireRole("admin", "director", "hr", "accountant"),
+  requirePermission("masterData.view"),
   async (req: AuthRequest, res: Response) => {
     const { departmentId } = req.query as { departmentId?: string };
     let query: FirebaseFirestore.Query = db().collection("jobPositions");
@@ -39,7 +40,7 @@ jobPositionsRouter.get(
 jobPositionsRouter.post(
   "/",
   requireAuth,
-  requireRole("admin", "director"),
+  requirePermission("settings.jobPositions.manage"),
   async (req: AuthRequest, res: Response) => {
     const { name, departmentId, defaultSalary, hourlyRate, clothingAllowance, homeOfficeAllowance, displayOrder } = req.body as {
       name: string;
@@ -186,7 +187,7 @@ async function analyzeHourlyRateCascade(
 jobPositionsRouter.patch(
   "/:id",
   requireAuth,
-  requireRole("admin", "director"),
+  requirePermission("settings.jobPositions.manage"),
   async (req: AuthRequest, res: Response) => {
     const {
       name, departmentId, defaultSalary, hourlyRate, clothingAllowance, homeOfficeAllowance,
@@ -279,7 +280,7 @@ jobPositionsRouter.patch(
 jobPositionsRouter.delete(
   "/:id",
   requireAuth,
-  requireRole("admin", "director"),
+  requirePermission("settings.jobPositions.manage"),
   async (req: AuthRequest, res: Response) => {
     const ref = db().collection("jobPositions").doc(req.params.id);
     const beforeSnap = await ref.get();

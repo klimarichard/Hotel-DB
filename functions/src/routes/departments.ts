@@ -1,7 +1,8 @@
 import { Router, Response } from "express";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
-import { requireAuth, requireRole, AuthRequest } from "../middleware/auth";
+import { requireAuth, AuthRequest } from "../middleware/auth";
+import { requirePermission } from "../auth/permissions";
 import { ctxFromReq, logCreate, logUpdate, logDelete } from "../services/auditLog";
 
 export const departmentsRouter = Router();
@@ -18,7 +19,7 @@ departmentsRouter.get(
   // Read access for everyone who works with employee records — hr needs the
   // list to pick a department when adding a contract; accountant reads it on
   // the employee detail view. Mutations below stay admin/director.
-  requireRole("admin", "director", "hr", "accountant"),
+  requirePermission("masterData.view"),
   async (_req: AuthRequest, res: Response) => {
     const snap = await db().collection("departments").orderBy("displayOrder", "asc").get();
     res.json(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
@@ -33,7 +34,7 @@ departmentsRouter.get(
 departmentsRouter.post(
   "/",
   requireAuth,
-  requireRole("admin", "director"),
+  requirePermission("settings.departments.manage"),
   async (req: AuthRequest, res: Response) => {
     const { name, displayOrder } = req.body as { name: string; displayOrder?: number };
     if (!name || typeof name !== "string") {
@@ -63,7 +64,7 @@ departmentsRouter.post(
 departmentsRouter.patch(
   "/:id",
   requireAuth,
-  requireRole("admin", "director"),
+  requirePermission("settings.departments.manage"),
   async (req: AuthRequest, res: Response) => {
     const { name, displayOrder } = req.body as { name?: string; displayOrder?: number };
     const update: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp() };
@@ -90,7 +91,7 @@ departmentsRouter.patch(
 departmentsRouter.delete(
   "/:id",
   requireAuth,
-  requireRole("admin", "director"),
+  requirePermission("settings.departments.manage"),
   async (req: AuthRequest, res: Response) => {
     const posSnap = await db()
       .collection("jobPositions")

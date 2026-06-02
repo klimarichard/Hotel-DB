@@ -1,6 +1,7 @@
 import { Router } from "express";
 import * as admin from "firebase-admin";
-import { requireAuth, requireRole, AuthRequest } from "../middleware/auth";
+import { requireAuth, AuthRequest } from "../middleware/auth";
+import { requirePermission } from "../auth/permissions";
 
 export const statsRouter = Router();
 const db = () => admin.firestore();
@@ -20,7 +21,7 @@ const TENURE_ORDER: TenureBucket[] = ["<1m", "1-3m", "3-6m", "6-12m", "1-2y", "2
 statsRouter.get(
   "/headcount",
   requireAuth,
-  requireRole("admin", "director", "accountant"),
+  requirePermission("dashboard.stats.view"),
   async (_req: AuthRequest, res) => {
     const [empSnap, historySnap] = await Promise.all([
       db().collection("employees").where("status", "==", "active").get(),
