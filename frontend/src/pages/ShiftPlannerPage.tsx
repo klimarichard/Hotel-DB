@@ -460,6 +460,28 @@ export default function ShiftPlannerPage() {
   async function handleDeadlineChange(field: "openedAt" | "closedAt" | "publishedAt", value: string) {
     if (!plan) return;
     const iso = value ? new Date(value).toISOString() : null;
+    // Guard chronological order (Otevření ≤ Uzavření ≤ Publikování) against the
+    // other stored deadlines. Now that all three are settable from "created", an
+    // out-of-order chain would make the auto-advance cron skip a state.
+    if (iso) {
+      const trio = {
+        openedAt: field === "openedAt" ? iso : plan.openedAt,
+        closedAt: field === "closedAt" ? iso : plan.closedAt,
+        publishedAt: field === "publishedAt" ? iso : plan.publishedAt,
+      };
+      const seq = [trio.openedAt, trio.closedAt, trio.publishedAt].filter(Boolean) as string[];
+      const inOrder = seq.every((v, i) => i === 0 || new Date(seq[i - 1]).getTime() <= new Date(v).getTime());
+      if (!inOrder) {
+        setConfirmModal({
+          title: "Termíny ve špatném pořadí",
+          message: "Termíny musí následovat po sobě: Otevření ≤ Uzavření ≤ Publikování. Upravte zadané datum.",
+          confirmLabel: "Rozumím",
+          showCancel: false,
+          onConfirm: () => setConfirmModal(null),
+        });
+        return;
+      }
+    }
     try {
       await api.patch(`/shifts/plans/${plan.id}/deadlines`, { [field]: iso });
       setPlan((prev) => (prev ? { ...prev, [field]: iso } : prev));
@@ -1349,11 +1371,13 @@ export default function ShiftPlannerPage() {
           </div>
 
           {/* Deadline bar — visible to all when there is a saved deadline or user can edit.
-              Otevření shown only when created; Uzavření when opened; Publikování when closed. */}
+              Each upcoming transition's deadline can be set from any earlier state, so from
+              "created" admin can schedule all three at once (Otevření/Uzavření/Publikování).
+              The cron advances one step per run, so a full chain cascades correctly. */}
           {plan && (
             (plan.status === "created" && (canPublish || plan.openedAt)) ||
-            (plan.status === "opened" && (canPublish || plan.closedAt)) ||
-            (plan.status === "closed" && (canPublish || plan.publishedAt))
+            ((plan.status === "created" || plan.status === "opened") && (canPublish || plan.closedAt)) ||
+            (plan.status !== "published" && (canPublish || plan.publishedAt))
           ) && (
             <div className={styles.deadlineBar}>
               {plan.status === "created" && (canPublish || plan.openedAt) && (
@@ -1397,7 +1421,7 @@ export default function ShiftPlannerPage() {
                   )}
                 </div>
               )}
-              {plan.status === "opened" && (canPublish || plan.closedAt) && (
+              {(plan.status === "created" || plan.status === "opened") && (canPublish || plan.closedAt) && (
                 <div className={styles.deadlineItem}>
                   <label className={styles.deadlineLabel}>Uzavření:</label>
                   {canPublish && (
@@ -1438,7 +1462,8 @@ export default function ShiftPlannerPage() {
                   )}
                 </div>
               )}
-              {plan.status === "closed" && (canPublish || plan.publishedAt) && (
+              {/* status is already narrowed to created/opened/closed by the bar's wrapper */}
+              {(canPublish || plan.publishedAt) && (
                 <div className={styles.deadlineItem}>
                   <label className={styles.deadlineLabel}>Publikování:</label>
                   {canPublish && (
