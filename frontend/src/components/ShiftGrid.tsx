@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo, useState } from "react";
 import * as clock from "../lib/clock";
 import type { PlanDetail, PlanEmployee, ShiftDoc, ModShiftDoc } from "../pages/ShiftPlannerPage";
-import { SECTION_LABELS, SECTIONS, type Section, getCzechHolidays, MOD_PERSONS, parseShiftExpression, getCellColor } from "../lib/shiftConstants";
+import { SECTION_LABELS, SECTIONS, type Section, getCzechHolidays, MOD_PERSONS, parseShiftExpression, getCellColor, isNightShiftType, sortSectionEmployees } from "../lib/shiftConstants";
 import { employeeDisplayName } from "../lib/employeeName";
 import { useTheme } from "../context/ThemeContext";
 import ShiftCell from "./ShiftCell";
@@ -185,7 +185,7 @@ export default function ShiftGrid({
       map.get(emp.section as Section)?.push(emp);
     }
     for (const sec of SECTIONS) {
-      map.get(sec)?.sort((a, b) => a.displayOrder - b.displayOrder);
+      map.set(sec, sortSectionEmployees(sec, map.get(sec) ?? []));
     }
     return map;
   }, [plan.employees]);
@@ -406,15 +406,21 @@ export default function ShiftGrid({
                   {SECTION_LABELS[section]}
                 </td>
               </tr>,
-              ...emps.map((emp) => {
+              ...emps.map((emp, i) => {
                 const rowIdx = empRowIndex.get(emp.employeeId) ?? 0;
                 const modLetter = effectiveLetterByEmployeeId.get(emp.employeeId);
                 const isEditingMod = editingModEmployee === emp.employeeId;
                 const availableLetters = ALL_LETTERS.filter(
                   (l) => !takenLetterByLetter.has(l) || takenLetterByLetter.get(l) === emp.employeeId
                 );
+                // Thick divider above the first night employee in recepce/portýři.
+                const showShiftDivider =
+                  (section === "recepce" || section === "portýři") &&
+                  i > 0 &&
+                  isNightShiftType(emp.primaryShiftType) &&
+                  !isNightShiftType(emps[i - 1].primaryShiftType);
                 return (
-                  <tr key={emp.id} className={`${styles.empRow}${emp.employeeId === currentEmployeeId ? ` ${styles.currentEmpRow}` : ""}`}>
+                  <tr key={emp.id} className={`${styles.empRow}${showShiftDivider ? ` ${styles.shiftPeriodDivider}` : ""}${emp.employeeId === currentEmployeeId ? ` ${styles.currentEmpRow}` : ""}`}>
                     <td className={`${styles.nameCell}${emp.employeeId === currentEmployeeId ? ` ${styles.currentNameCell}` : ""}`}>
                       <div className={styles.nameCellInner}>
                         {/* Left: name line + MOD count line */}

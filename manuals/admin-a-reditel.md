@@ -132,6 +132,7 @@ Plán prochází stavy **Vytvořený → Otevřený → Uzavřený → Publikova
 - **Navýšení limitu X:** u jména zaměstnance je odznak `X: využito / limit`. Pokud má zaměstnanec v daném měsíci schválenou **dovolenou**, zobrazí se i počet dní dovolené (`… dovolená`) a ikonka `✎`, kterou nastavíte **nový limit X pro tento měsíc** (kolik X smí napsat nad rámec dovolené). Bez schválené dovolené limit upravit nelze. Odznak X se zobrazuje jen ve stavech *Vytvořený* a *Otevřený*.
 - **MOD (vedoucí směny):** u jména FOM se zobrazuje písmeno MOD; písmeno upravíte kliknutím. Počty směn u MOD (`MOD: N …`) se zobrazují jen ve stavech *Uzavřený* a *Publikovaný*.
 - **Tabulka obsazenosti:** přehled počtu obsazených směn po dnech vidíte (jako administrátor) ve **všech stavech** plánu, nejen v uzavřeném.
+- **Řazení recepce / portýři:** denní (`D`/`DP`) jsou vždy nahoře, noční (`N`/`NP`) dole, oddělené silnější čarou. Ruční pořadí platí v rámci každé skupiny. Stejné řazení má i export do PDF a CSV.
 
 ### Volné směny
 
