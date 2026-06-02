@@ -163,7 +163,7 @@ export default function AddEmployeeToPlanModal({ planId, existingEmployees, onCl
             <option value="">— žádný —</option>
             <option value="D">D — denní (12h)</option>
             <option value="N">N — noční (12h)</option>
-            <option value="R">R — vedoucí (8h)</option>
+            <option value="R">R — FOM (8h)</option>
           </select>
 
           {/* Primary hotel */}

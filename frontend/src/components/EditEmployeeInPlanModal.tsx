@@ -78,7 +78,7 @@ export default function EditEmployeeInPlanModal({ planId, employee, onClose, onS
             <option value="">— žádný —</option>
             <option value="D">D — denní (12h)</option>
             <option value="N">N — noční (12h)</option>
-            <option value="R">R — vedoucí (8h)</option>
+            <option value="R">R — FOM (8h)</option>
             <option value="DP">DP — portýr denní (12h)</option>
             <option value="NP">NP — portýr noční (12h)</option>
           </select>

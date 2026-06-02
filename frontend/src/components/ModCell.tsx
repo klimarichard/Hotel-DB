@@ -130,7 +130,7 @@ export default function ModCell({ code, validCodes, letterNames, readOnly, onSav
         onChange={(e) => setDraft(e.target.value.toUpperCase())}
         onKeyDown={handleEditKeyDown}
         onBlur={() => commit(draft)}
-        title={isInvalid ? (validCodes.length ? `Platná písmena: ${validCodes.join(", ")}` : "Nejprve přiřaďte písmeno některému vedoucímu") : undefined}
+        title={isInvalid ? (validCodes.length ? `Platná písmena: ${validCodes.join(", ")}` : "Nejprve přiřaďte písmeno některému FOM") : undefined}
         maxLength={1}
         disabled={saving}
       />
