@@ -464,7 +464,7 @@ export default function ShiftGrid({
                                       }
                                     }}
                                   />
-                                  <span className={styles.xBadgeHint}>(dovolená: {info.vacCount} X)</span>
+                                  <span className={styles.xBadgeHint}>({info.vacCount} dovolená)</span>
                                 </span>
                               );
                             }
@@ -477,6 +477,9 @@ export default function ShiftGrid({
                                   : undefined}
                               >
                                 X: {info.used} / {info.limit}
+                                {info.vacCount > 0 && (
+                                  <span className={styles.xBadgeHint}>({info.vacCount} dovolená)</span>
+                                )}
                                 {canEditLimit && <span className={styles.xBadgeEdit}>✎</span>}
                               </span>
                             );
