@@ -4,7 +4,7 @@ import { db } from "../lib/firebase";
 import { api } from "../lib/api";
 import * as clock from "../lib/clock";
 import { useAuth } from "../hooks/useAuth";
-import { parseShiftExpression, getCellColor, SECTIONS, SECTION_LABELS, getCzechHolidays, MOD_PERSONS } from "../lib/shiftConstants";
+import { parseShiftExpression, getCellColor, SECTIONS, SECTION_LABELS, getCzechHolidays, MOD_PERSONS, sortSectionEmployees } from "../lib/shiftConstants";
 import { employeeDisplayName } from "../lib/employeeName";
 import ShiftGrid from "../components/ShiftGrid";
 import AddEmployeeToPlanModal from "../components/AddEmployeeToPlanModal";
@@ -654,9 +654,7 @@ export default function ShiftPlannerPage() {
       // ── Group employees by section ──
       const grouped = new Map<string, PlanEmployee[]>();
       for (const section of SECTIONS) {
-        grouped.set(section, plan.employees
-          .filter((e) => e.section === section)
-          .sort((a, b) => a.displayOrder - b.displayOrder));
+        grouped.set(section, sortSectionEmployees(section, plan.employees.filter((e) => e.section === section)));
       }
 
       // ── Styles ──
@@ -849,9 +847,7 @@ export default function ShiftPlannerPage() {
 
     // Employee rows grouped by section
     for (const section of SECTIONS) {
-      const sectionEmps = plan.employees
-        .filter((e) => e.section === section)
-        .sort((a, b) => a.displayOrder - b.displayOrder);
+      const sectionEmps = sortSectionEmployees(section, plan.employees.filter((e) => e.section === section));
       if (sectionEmps.length === 0) continue;
 
       rows.push([escape(SECTION_LABELS[section]), ...daysInMonth.map(() => ""), ""].join(";"));

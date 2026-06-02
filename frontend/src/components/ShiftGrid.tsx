@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo, useState } from "react";
 import * as clock from "../lib/clock";
 import type { PlanDetail, PlanEmployee, ShiftDoc, ModShiftDoc } from "../pages/ShiftPlannerPage";
-import { SECTION_LABELS, SECTIONS, type Section, getCzechHolidays, MOD_PERSONS, parseShiftExpression, getCellColor } from "../lib/shiftConstants";
+import { SECTION_LABELS, SECTIONS, type Section, getCzechHolidays, MOD_PERSONS, parseShiftExpression, getCellColor, isNightShiftType, sortSectionEmployees } from "../lib/shiftConstants";
 import { employeeDisplayName } from "../lib/employeeName";
 import { useTheme } from "../context/ThemeContext";
 import ShiftCell from "./ShiftCell";
@@ -63,11 +63,6 @@ const FREE_SHIFT_ROWS: { label: string; code: string; hotel: string; auto: boole
   { label: "NPA", code: "NP", hotel: "A", auto: true },
   { label: "DPA", code: "DP", hotel: "A", auto: false },
 ];
-
-// Night shift roles (recepce N, portýři NP) sort below the day ones (D / DP).
-function isNightType(t: string | null | undefined): boolean {
-  return t === "N" || t === "NP";
-}
 
 const DAY_NAMES = ["Ne", "Po", "Út", "St", "Čt", "Pá", "So"];
 const ALL_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
@@ -190,18 +185,7 @@ export default function ShiftGrid({
       map.get(emp.section as Section)?.push(emp);
     }
     for (const sec of SECTIONS) {
-      const arr = map.get(sec);
-      if (!arr) continue;
-      if (sec === "recepce" || sec === "portýři") {
-        // Day shift (D / DP) always above night (N / NP); displayOrder within each group.
-        arr.sort((a, b) => {
-          const na = isNightType(a.primaryShiftType) ? 1 : 0;
-          const nb = isNightType(b.primaryShiftType) ? 1 : 0;
-          return na - nb || a.displayOrder - b.displayOrder;
-        });
-      } else {
-        arr.sort((a, b) => a.displayOrder - b.displayOrder);
-      }
+      map.set(sec, sortSectionEmployees(sec, map.get(sec) ?? []));
     }
     return map;
   }, [plan.employees]);
@@ -433,8 +417,8 @@ export default function ShiftGrid({
                 const showShiftDivider =
                   (section === "recepce" || section === "portýři") &&
                   i > 0 &&
-                  isNightType(emp.primaryShiftType) &&
-                  !isNightType(emps[i - 1].primaryShiftType);
+                  isNightShiftType(emp.primaryShiftType) &&
+                  !isNightShiftType(emps[i - 1].primaryShiftType);
                 return (
                   <tr key={emp.id} className={`${styles.empRow}${showShiftDivider ? ` ${styles.shiftPeriodDivider}` : ""}${emp.employeeId === currentEmployeeId ? ` ${styles.currentEmpRow}` : ""}`}>
                     <td className={`${styles.nameCell}${emp.employeeId === currentEmployeeId ? ` ${styles.currentNameCell}` : ""}`}>
