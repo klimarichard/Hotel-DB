@@ -36,6 +36,7 @@ export interface PlanEmployee {
   displayOrder: number;
   active: boolean;
   contractType: string | null;
+  xAllowanceExtra?: number; // admin-set per-month bump on top of the base X limit
 }
 
 export interface ViolationInfo {
@@ -60,6 +61,7 @@ export interface ShiftDoc {
   hoursComputed: number;
   isDouble: boolean;
   status: "assigned" | "day_off" | "unassigned";
+  source?: string | null; // "vacation" for auto-applied vacation Xs; absent for manual
 }
 
 export interface ModShiftDoc {
@@ -78,6 +80,7 @@ export interface PlanDetail {
   closedAt: string | null;
   publishedAt: string | null;
   modPersons: Record<string, string>; // letter → employeeId, per-plan overrides
+  freeShiftDpaDays?: string[]; // days where the optional DPA free-shift row is active
   employees: PlanEmployee[];
   shifts: ShiftDoc[];
   modShifts: ModShiftDoc[];
@@ -156,9 +159,10 @@ export default function ShiftPlannerPage() {
   const [showChangeRequests, setShowChangeRequests] = useState(false);
   const [showMyRequests, setShowMyRequests] = useState(false);
   const [pendingChangeRequest, setPendingChangeRequest] = useState<{
-    employeeId: string; date: string; currentRawInput: string;
+    employeeId: string; date: string; currentRawInput: string; clickedAt: string;
   } | null>(null);
   const [pendingX, setPendingX] = useState<PendingXRequest | null>(null);
+  const [pendingFreeClaim, setPendingFreeClaim] = useState<{ date: string; code: string; hotel: string } | null>(null);
   const [editingEmployee, setEditingEmployee] = useState<PlanEmployee | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [confirmModal, setConfirmModal] = useState<{
@@ -342,6 +346,15 @@ export default function ShiftPlannerPage() {
     }
   }
 
+  // Whether we're viewing a month other than the current one (#53)
+  const isCurrentMonth =
+    selectedMonth === now.getMonth() + 1 && selectedYear === now.getFullYear();
+
+  function goToday() {
+    setSelectedMonth(now.getMonth() + 1);
+    setSelectedYear(now.getFullYear());
+  }
+
   // ── Plan actions ───────────────────────────────────────────────────────────
 
   async function handleCreatePlan() {
@@ -449,6 +462,42 @@ export default function ShiftPlannerPage() {
       setPlan((prev) => (prev ? { ...prev, [field]: iso } : prev));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Chyba při nastavení termínu");
+    }
+  }
+
+  // ── Volné směny (free shifts) ──────────────────────────────────────────────
+
+  async function handleToggleDpaDay(date: string, enabled: boolean) {
+    if (!plan) return;
+    try {
+      const { freeShiftDpaDays } = await api.patch<{ ok: boolean; freeShiftDpaDays: string[] }>(
+        `/shifts/plans/${plan.id}/free-dpa-day`,
+        { date, enabled }
+      );
+      setPlan((prev) => (prev ? { ...prev, freeShiftDpaDays } : prev));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Chyba při úpravě volných směn");
+    }
+  }
+
+  async function submitFreeClaim() {
+    if (!plan || !pendingFreeClaim || !currentEmployeeId) return;
+    const { date, code, hotel } = pendingFreeClaim;
+    try {
+      await api.post(`/shifts/plans/${plan.id}/shiftChangeRequests`, {
+        employeeId: currentEmployeeId,
+        date,
+        kind: "free-claim",
+        code,
+        hotel,
+        requestedAtClient: clock.now().toISOString(),
+      });
+      setPendingFreeClaim(null);
+      setPlanChangeRequestCount((c) => c + 1);
+      refreshChangeRequestCount();
+    } catch (e) {
+      setPendingFreeClaim(null);
+      setError(e instanceof Error ? e.message : "Chyba při žádosti o volnou směnu");
     }
   }
 
@@ -818,22 +867,37 @@ export default function ShiftPlannerPage() {
 
   // ── X limit helpers ────────────────────────────────────────────────────────
 
-  function getXLimit(contractType: string | null): number | null {
+  /** Base monthly X limit by contract type (8 HPP / 13 PPP); null = no limit. */
+  function getXBase(contractType: string | null): number | null {
     const ct = (contractType ?? "").toUpperCase();
     if (ct.includes("HPP")) return 8;
     if (ct.includes("PPP")) return 13;
     return null; // DPP or unknown = no limit
   }
 
-  function countXShifts(shifts: ShiftDoc[], employeeId: string): number {
-    return shifts.filter((s) => s.employeeId === employeeId && s.status === "day_off").length;
+  /** Effective limit = base + admin-set extra allowance; null when no base applies. */
+  function getEffectiveXLimit(emp: PlanEmployee | undefined): number | null {
+    if (!emp) return null;
+    const base = getXBase(emp.contractType);
+    if (base === null) return null;
+    return base + (emp.xAllowanceExtra ?? 0);
   }
 
-  /** Returns the length of the consecutive X run that would include newDate. */
+  // A day counts toward the voluntary X limit only when it's an employee-entered
+  // X — vacation-origin Xs (source:"vacation") are tracked separately and excluded.
+  function isVoluntaryX(s: ShiftDoc): boolean {
+    return s.status === "day_off" && s.source !== "vacation";
+  }
+
+  function countXShifts(shifts: ShiftDoc[], employeeId: string): number {
+    return shifts.filter((s) => s.employeeId === employeeId && isVoluntaryX(s)).length;
+  }
+
+  /** Returns the length of the consecutive (voluntary) X run that would include newDate. */
   function consecutiveXRun(shifts: ShiftDoc[], employeeId: string, newDate: string): number {
     const xDates = new Set(
       shifts
-        .filter((s) => s.employeeId === employeeId && s.status === "day_off")
+        .filter((s) => s.employeeId === employeeId && isVoluntaryX(s))
         .map((s) => s.date)
     );
     xDates.add(newDate);
@@ -958,8 +1022,8 @@ export default function ShiftPlannerPage() {
       const emp = plan.employees.find((e) => e.employeeId === employeeId);
       const violations: ViolationInfo[] = [];
 
-      // Per-employee X limit check
-      const limit = getXLimit(emp?.contractType ?? null);
+      // Per-employee X limit check (base + admin extra allowance)
+      const limit = getEffectiveXLimit(emp);
       if (limit !== null) {
         const current = countXShifts(plan.shifts, employeeId);
         if (current >= limit) {
@@ -1018,6 +1082,9 @@ export default function ShiftPlannerPage() {
             {MONTH_NAMES[selectedMonth - 1]} {selectedYear}
           </span>
           <button className={styles.navBtn} onClick={nextMonth}>›</button>
+          {!isCurrentMonth && (
+            <button className={styles.todayBtn} onClick={goToday}>DNES</button>
+          )}
         </div>
         <div />
       </div>
@@ -1251,7 +1318,7 @@ export default function ShiftPlannerPage() {
             )}
 
             {/* Delete plan (admin, any status) */}
-            {plan && role === "admin" && (
+            {plan && role === "admin" && plan.status === "created" && (
               <Button
                 variant="danger"
                 onClick={confirmDeletePlan}
@@ -1452,6 +1519,11 @@ export default function ShiftPlannerPage() {
           )}
           {plan && plan.employees.length > 0 && (
             <ShiftGrid
+              // Remount when plan membership changes so removing a row triggers a
+              // clean re-layout — the sticky + table-layout:fixed grid mis-renders
+              // when a row is dropped in place (fixed on refresh otherwise). #35.
+              // Sorted ids → changes on add/remove only, not on reorder.
+              key={[...plan.employees].map((e) => e.id).sort().join(",")}
               plan={plan}
               onCellSave={handleCellSave}
               onModSave={handleModSave}
@@ -1464,16 +1536,51 @@ export default function ShiftPlannerPage() {
               readOnly={role === "employee" ? plan.status !== "opened" : !canEdit}
               alwaysReadOnlySections={role === "employee" ? ["vedoucí"] : []}
               currentEmployeeId={currentEmployeeId}
-              showCounterTable={plan.status === "closed" && role === "admin"}
+              showCounterTable={role === "admin"}
               showModCounts={role === "admin" || role === "director"}
               onModPersonChange={role === "admin" || role === "director" ? handleModPersonChange : undefined}
               onCellRequestChange={
                 role === "employee" && plan.status === "published"
                   ? (employeeId, date, currentRawInput) => {
-                      setPendingChangeRequest({ employeeId, date, currentRawInput });
+                      // #32 — stamp the moment of the click, carried through to the POST
+                      setPendingChangeRequest({
+                        employeeId, date, currentRawInput,
+                        clickedAt: clock.now().toISOString(),
+                      });
                     }
                   : undefined
               }
+              xInfoFor={
+                canEdit
+                  ? (emp) => {
+                      const limit = getEffectiveXLimit(emp);
+                      if (limit === null) return null;
+                      const base = getXBase(emp.contractType) ?? 0;
+                      return {
+                        used: countXShifts(plan.shifts, emp.employeeId),
+                        base,
+                        extra: emp.xAllowanceExtra ?? 0,
+                        limit,
+                      };
+                    }
+                  : undefined
+              }
+              onSetXAllowance={
+                canPublish
+                  ? async (emp, extra) => {
+                      await api.patch(`/shifts/plans/${plan.id}/employees/${emp.id}/x-allowance`, { extra });
+                      loadPlan(true);
+                    }
+                  : undefined
+              }
+              showFreeShifts={plan.status === "published"}
+              freeShiftDpaDays={plan.freeShiftDpaDays ?? []}
+              onClaimFreeShift={
+                role === "employee" && plan.status === "published"
+                  ? (date, code, hotel) => setPendingFreeClaim({ date, code, hotel })
+                  : undefined
+              }
+              onToggleDpaDay={canPublish && plan.status === "published" ? handleToggleDpaDay : undefined}
               stickyTop={stickyTop}
             />
           )}
@@ -1557,12 +1664,25 @@ export default function ShiftPlannerPage() {
               date: pendingChangeRequest.date,
               currentRawInput: pendingChangeRequest.currentRawInput,
               reason,
+              requestedAtClient: pendingChangeRequest.clickedAt,
             });
             setPendingChangeRequest(null);
             setPlanChangeRequestCount((c) => c + 1);
             refreshChangeRequestCount();
           }}
           onClose={() => setPendingChangeRequest(null)}
+        />
+      )}
+      {pendingFreeClaim && (
+        <ConfirmModal
+          title="Zažádat o volnou směnu"
+          message={(() => {
+            const [y, m, d] = pendingFreeClaim.date.split("-").map(Number);
+            return `Zažádat o volnou směnu ${pendingFreeClaim.code}${pendingFreeClaim.hotel} dne ${d}. ${m}. ${y}? Žádost posoudí vedoucí.`;
+          })()}
+          confirmLabel="Zažádat"
+          onConfirm={submitFreeClaim}
+          onCancel={() => setPendingFreeClaim(null)}
         />
       )}
       {editingEmployee && plan && (

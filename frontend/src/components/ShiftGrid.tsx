@@ -35,10 +35,31 @@ interface Props {
   showModCounts?: boolean;
   onModPersonChange?: (employeeId: string, oldLetter: string | null, newLetter: string | null) => Promise<void>;
   onCellRequestChange?: (employeeId: string, date: string, currentRawInput: string) => void;
+  /** Per-employee X usage + limit info for the inline badge; null = no limit (DPP/unknown). */
+  xInfoFor?: (emp: PlanEmployee) => { used: number; base: number; extra: number; limit: number } | null;
+  /** Save the per-employee extra X allowance (admin/director). When set, the badge is editable. */
+  onSetXAllowance?: (emp: PlanEmployee, extra: number) => Promise<void>;
+  /** Show the Volné směny (free-shift) rows at the bottom (published plans). */
+  showFreeShifts?: boolean;
+  /** Days on which the optional DPA free-shift row is active. */
+  freeShiftDpaDays?: string[];
+  /** Employee double-clicks an uncovered free slot to claim it. */
+  onClaimFreeShift?: (date: string, code: string, hotel: string) => void;
+  /** Admin/director toggles whether a day has a DPA free row. */
+  onToggleDpaDay?: (date: string, enabled: boolean) => void;
   alwaysReadOnlySections?: string[];
   currentEmployeeId?: string | null;
   stickyTop?: number;
 }
+
+// Volné směny rows. DPQ/NPQ/NPA are standing daily requirements (auto:true);
+// DPA appears only on admin-marked days (auto:false).
+const FREE_SHIFT_ROWS: { label: string; code: string; hotel: string; auto: boolean }[] = [
+  { label: "DPQ", code: "DP", hotel: "Q", auto: true },
+  { label: "NPQ", code: "NP", hotel: "Q", auto: true },
+  { label: "NPA", code: "NP", hotel: "A", auto: true },
+  { label: "DPA", code: "DP", hotel: "A", auto: false },
+];
 
 const DAY_NAMES = ["Ne", "Po", "Út", "St", "Čt", "Pá", "So"];
 const ALL_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
@@ -84,6 +105,12 @@ export default function ShiftGrid({
   showModCounts = false,
   onModPersonChange,
   onCellRequestChange,
+  xInfoFor,
+  onSetXAllowance,
+  showFreeShifts = false,
+  freeShiftDpaDays,
+  onClaimFreeShift,
+  onToggleDpaDay,
   alwaysReadOnlySections = [],
   currentEmployeeId,
   stickyTop = 0,
@@ -183,6 +210,24 @@ export default function ShiftGrid({
     }
     return counts;
   }, [showCounterTable, plan.shifts]);
+
+  // Volné směny: per-date set of "code_hotel" slots covered by some employee.
+  const freeShiftCoverage = useMemo(() => {
+    const m = new Map<string, Set<string>>();
+    if (!showFreeShifts) return m;
+    for (const s of plan.shifts) {
+      const parsed = parseShiftExpression(s.rawInput);
+      if (!parsed.isValid) continue;
+      for (const seg of parsed.segments) {
+        if (!seg.hotel) continue;
+        if (!m.has(s.date)) m.set(s.date, new Set());
+        m.get(s.date)!.add(`${seg.code}_${seg.hotel}`);
+      }
+    }
+    return m;
+  }, [showFreeShifts, plan.shifts]);
+
+  const dpaDaySet = useMemo(() => new Set(freeShiftDpaDays ?? []), [freeShiftDpaDays]);
 
   const [focusedCell, setFocusedCell] = useState<{ row: number; col: number } | null>(null);
   const [focusedModCol, setFocusedModCol] = useState<number | null>(null);
@@ -315,6 +360,7 @@ export default function ShiftGrid({
   }, [plan.employees, effectiveLetterByEmployeeId]);
 
   const [editingModEmployee, setEditingModEmployee] = useState<string | null>(null);
+  const [editingXEmployee, setEditingXEmployee] = useState<string | null>(null);
 
   return (
     <div className={styles.wrapper} style={{ "--sticky-top": `${stickyTop}px` } as React.CSSProperties}>
@@ -380,6 +426,48 @@ export default function ShiftGrid({
                             return (
                               <span className={styles.modCountBadge}>
                                 MOD: {total} ({c.pd} PD, {c.vs} V+S)
+                              </span>
+                            );
+                          })()}
+                          {/* X-limit badge: voluntary-X usage / effective limit (+ extra). #34 */}
+                          {xInfoFor && (() => {
+                            const info = xInfoFor(emp);
+                            if (!info) return null;
+                            const over = info.used > info.limit;
+                            if (editingXEmployee === emp.employeeId && onSetXAllowance) {
+                              return (
+                                <span className={styles.xBadge}>
+                                  X: {info.used} / {info.base}+
+                                  <input
+                                    type="number"
+                                    className={styles.xBadgeInput}
+                                    defaultValue={info.extra}
+                                    min={0}
+                                    max={31}
+                                    autoFocus
+                                    title="Mimořádné navýšení limitu X pro tento měsíc — Enter uložit, Esc zrušit"
+                                    onFocus={(e) => e.target.select()}
+                                    onBlur={() => setEditingXEmployee(null)}
+                                    onKeyDown={async (e) => {
+                                      if (e.key === "Escape") { setEditingXEmployee(null); return; }
+                                      if (e.key === "Enter") {
+                                        const v = Math.max(0, Math.min(31, Math.floor(Number(e.currentTarget.value) || 0)));
+                                        setEditingXEmployee(null);
+                                        if (v !== info.extra) await onSetXAllowance(emp, v);
+                                      }
+                                    }}
+                                  />
+                                </span>
+                              );
+                            }
+                            return (
+                              <span
+                                className={`${styles.xBadge}${over ? ` ${styles.xBadgeOver}` : ""}${onSetXAllowance ? ` ${styles.xBadgeEditable}` : ""}`}
+                                onClick={onSetXAllowance ? () => setEditingXEmployee(emp.employeeId) : undefined}
+                                title={onSetXAllowance ? "Kliknutím upravíte mimořádné navýšení limitu X" : undefined}
+                              >
+                                X: {info.used} / {info.limit}{info.extra > 0 ? ` (+${info.extra})` : ""}
+                                {onSetXAllowance && <span className={styles.xBadgeEdit}>✎</span>}
                               </span>
                             );
                           })()}
@@ -563,6 +651,54 @@ export default function ShiftGrid({
                     return (
                       <td key={dateStr} className={`${cls} ${dayClass(d)}`}>
                         {count}
+                      </td>
+                    );
+                  })}
+                  <td className={styles.footerCell} />
+                </tr>
+              ))}
+            </>
+          )}
+          {showFreeShifts && (
+            <>
+              <tr className={styles.freeSeparatorRow}>
+                <td colSpan={days.length + 2} className={styles.freeSeparatorCell}>
+                  Volné směny
+                </td>
+              </tr>
+              {FREE_SHIFT_ROWS.map((row) => (
+                <tr key={`free-${row.label}`} className={styles.freeRow}>
+                  <td className={styles.freeLabelCell}>{row.label}</td>
+                  {days.map((d) => {
+                    const dateStr = formatDate(d);
+                    const covered = freeShiftCoverage.get(dateStr)?.has(`${row.code}_${row.hotel}`) ?? false;
+                    const applicable = row.auto || dpaDaySet.has(dateStr);
+                    // DPA cells are clickable for admin/director to toggle the day on/off.
+                    const cellTogglable = !row.auto && !!onToggleDpaDay;
+                    let content: React.ReactNode = null;
+                    if (!applicable) {
+                      content = cellTogglable ? <span className={styles.freeDpaAdd}>+</span> : null;
+                    } else if (covered) {
+                      content = <span className={styles.freeCovered} title="Obsazeno">✓</span>;
+                    } else {
+                      content = (
+                        <span
+                          className={`${styles.freeChip}${onClaimFreeShift ? ` ${styles.freeChipClaimable}` : ""}`}
+                          title={onClaimFreeShift ? "Dvojklik – zažádat o volnou směnu" : "Volná (neobsazená) směna"}
+                          onDoubleClick={onClaimFreeShift ? () => onClaimFreeShift(dateStr, row.code, row.hotel) : undefined}
+                        >
+                          {row.label}
+                        </span>
+                      );
+                    }
+                    return (
+                      <td
+                        key={dateStr}
+                        className={`${styles.cell} ${dayClass(d)}${cellTogglable ? ` ${styles.freeDpaCell}` : ""}`}
+                        onClick={cellTogglable ? () => onToggleDpaDay!(dateStr, !dpaDaySet.has(dateStr)) : undefined}
+                        title={cellTogglable ? (dpaDaySet.has(dateStr) ? "Kliknutím zrušíte volnou DPA" : "Kliknutím přidáte volnou DPA") : undefined}
+                      >
+                        {content}
                       </td>
                     );
                   })}
