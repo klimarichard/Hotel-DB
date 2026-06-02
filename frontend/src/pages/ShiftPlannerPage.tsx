@@ -1555,7 +1555,7 @@ export default function ShiftPlannerPage() {
               alwaysReadOnlySections={role === "employee" ? ["vedoucí"] : []}
               currentEmployeeId={currentEmployeeId}
               showCounterTable={role === "admin"}
-              showModCounts={role === "admin" || role === "director"}
+              showModCounts={canPublish && (plan.status === "closed" || plan.status === "published")}
               onModPersonChange={role === "admin" || role === "director" ? handleModPersonChange : undefined}
               onCellRequestChange={
                 role === "employee" && plan.status === "published"
@@ -1569,7 +1569,7 @@ export default function ShiftPlannerPage() {
                   : undefined
               }
               xInfoFor={
-                canEdit
+                canPublish && (plan.status === "created" || plan.status === "opened")
                   ? (emp) => {
                       const limit = getEffectiveXLimit(emp);
                       if (limit === null) return null;
@@ -1586,7 +1586,7 @@ export default function ShiftPlannerPage() {
                   : undefined
               }
               onSetXAllowance={
-                canPublish
+                canPublish && (plan.status === "created" || plan.status === "opened")
                   ? async (emp, limit) => {
                       await api.patch(`/shifts/plans/${plan.id}/employees/${emp.id}/x-allowance`, { limit });
                       loadPlan(true);
