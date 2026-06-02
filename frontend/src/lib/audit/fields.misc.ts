@@ -151,7 +151,7 @@ const settings: FieldLabelMap = {
   // settings/menuOrder — per-role menu order arrays
   admin: "Pořadí menu – administrátor",
   director: "Pořadí menu – ředitel",
-  manager: "Pořadí menu – vedoucí",
+  manager: "Pořadí menu – FOM",
   employee: "Pořadí menu – zaměstnanec",
   accountant: "Pořadí menu – účetní",
   hr: "Pořadí menu – personalista",

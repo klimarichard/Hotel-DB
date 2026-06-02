@@ -1698,7 +1698,7 @@ export default function ShiftPlannerPage() {
           title="Zažádat o volnou směnu"
           message={(() => {
             const [y, m, d] = pendingFreeClaim.date.split("-").map(Number);
-            return `Zažádat o volnou směnu ${pendingFreeClaim.code}${pendingFreeClaim.hotel} dne ${d}. ${m}. ${y}? Žádost posoudí vedoucí.`;
+            return `Zažádat o volnou směnu ${pendingFreeClaim.code}${pendingFreeClaim.hotel} dne ${d}. ${m}. ${y}? Žádost posoudí FOM.`;
           })()}
           confirmLabel="Zažádat"
           onConfirm={submitFreeClaim}

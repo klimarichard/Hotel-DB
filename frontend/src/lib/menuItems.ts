@@ -21,7 +21,7 @@ export const ALL_ROLES: ReadonlyArray<UserRole> = ["admin", "director", "manager
 export const ROLE_LABELS: Record<UserRole, string> = {
   admin: "Admin",
   director: "Director",
-  manager: "Manager",
+  manager: "FOM",
   employee: "Employee",
   accountant: "Accountant",
   hr: "HR",

@@ -102,7 +102,7 @@ const MONTH_NAMES = [
 // top; reception + porters are shown together as one section. The stored
 // `section` value on each entry is unchanged — this is a display-only merge.
 const SECTION_GROUPS: { label: string; sections: string[] }[] = [
-  { label: "Vedoucí", sections: ["vedoucí"] },
+  { label: "FOM", sections: ["vedoucí"] },
   { label: "Recepce a portýři", sections: ["recepce", "portýři"] },
 ];
 

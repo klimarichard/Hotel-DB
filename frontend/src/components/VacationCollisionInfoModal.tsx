@@ -40,7 +40,7 @@ export default function VacationCollisionInfoModal({ collisions, onClose }: Prop
           >
             <p style={{ margin: 0, fontSize: "0.8125rem", color: "#854d0e" }}>
               Pro tyto dny v žádaném období jsou už zapsané směny v plánu.
-              Změňte termín dovolené, nebo požádejte vedoucího o úpravu plánu.
+              Změňte termín dovolené, nebo požádejte FOM o úpravu plánu.
             </p>
           </div>
 
