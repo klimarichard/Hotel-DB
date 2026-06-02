@@ -56,6 +56,14 @@ Do plánu můžete sami zadávat a mazat **pouze „X" (volno)**.
 
 V **hotovém** plánu podáte **dvojklikem na buňku** žádost o změnu směny. Žádost schvaluje administrátor.
 
+### Volné směny
+
+V **publikovaném** plánu se dole pod tabulkou zobrazují **volné (neobsazené) směny** portýrů. Obsazený den je označen `✓`, volný den má barevný štítek směny.
+
+- **Dvojklikem na volný štítek** podáte žádost o tuto směnu (důvod není potřeba).
+- Po **schválení** administrátorem se vám směna automaticky zapíše do plánu; konkurenční žádosti o stejnou směnu se zamítnou.
+- Stav svých žádostí vidíte v sekci **Moje žádosti**.
+
 ### Export
 
 Tlačítko **Exportovat ▾** nabízí **PDF** (plán na jednu stránku A4). Tlačítkem **DNES** se vrátíte na aktuální měsíc.

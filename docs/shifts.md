@@ -55,3 +55,27 @@ Implementation notes for the Phase 5 Shift Planner: the shift expression parser,
 **Backend** — `renumberSection(planRef, section, target?)` in `shifts.ts` handles all three cases. Uses ±0.5 tiebreak offsets so the targeted doc always lands at exactly the requested position regardless of move direction. POST/PUT/DELETE all bump `shiftPlans/{id}.updatedAt` so connected clients reload.
 
 **Frontend** — mutations call `loadPlan(true)` (silent reload — no `setPlan(null)` blank flash) immediately after the API responds, giving instant correct feedback. The `onSnapshot` listener also uses silent mode for background changes from other users.
+
+## Batch 4 — Shifts enhancements
+
+### Volné směny (free shifts)
+- Shown only on **published** plans, as extra rows at the bottom of `ShiftGrid` (gated by the `showFreeShifts` prop = `plan.status === "published"`).
+- `FREE_SHIFT_ROWS` in `ShiftGrid.tsx`: `DPQ`/`NPQ`/`NPA` are standing daily requirements (`auto:true`); `DPA` appears only on admin-marked days. Marked days live in `plan.freeShiftDpaDays[]` (array of `YYYY-MM-DD`), toggled by admin/director clicking a DPA cell → `PATCH /shifts/plans/:id/free-dpa-day`.
+- **Coverage** is derived from the parsed shift segments: a `{code,hotel}` slot on a date is "covered" if any employee's cell that day parses to a segment with that code+hotel. Covered slots render a muted `✓`; uncovered slots render a claimable chip.
+- **Chip colour** matches how the shift appears in the plan — `getCellColor(parseShiftExpression(code+hotel), dark)` (theme-aware), not a flat colour. Chips are centered (flex) and fill the cell like a real `ShiftCell`.
+- **Claiming**: an employee double-clicks an uncovered chip → `ConfirmModal` → `POST /shifts/.../changeRequests` with `kind:"free-claim"` + `{date,code,hotel}` (no reason required). Duplicate same-slot claim by the same employee → 409; claiming a now-covered slot → 409.
+- **Approving a free-claim** (admin/director/hr) writes the porter shift into the claimant's row (`status:"assigned"`) and **auto-rejects** competing pending claims for the same slot. Approving a slot covered in the meantime → 409. `ShiftChangeRequestPanel` + `MyRequestsPanel` render free-claims with their slot label.
+
+### X-limit allowance (vacation-gated)
+- Vacation-origin Xs are tagged `source:"vacation"` in `applyVacationXs` (manual Xs have no `source`). The voluntary-X count and the consecutive-6-X rule **exclude** vacation Xs — only employee-entered Xs count toward the 8 HPP / 13 PPP base.
+- Admin/director may **raise the month's X limit only when the employee has an approved vacation overlapping the month** (i.e. `vacationXCount > 0`). The entered number is the **absolute new limit** for the month (not an increment).
+- Storage: `xLimitOverride` on the `planEmployee` doc (per-month). Effective limit = `xLimitOverride` when a vacation exists, else base. `PATCH /shifts/plans/:id/employees/:docId/x-allowance` body `{limit}` (0–31), admin/director, audited (`fieldPath:"xLimitOverride"`).
+- `copy-employees` strips `xLimitOverride` (and the legacy `xAllowanceExtra`) so a month-specific override never carries into a copied month.
+- Inline badge under the employee name (`ShiftGrid`): `X: used / limit`, plus `(N dovolená)` when the employee has vacation Xs that month; red when over. The `✎` editor appears only when a vacation exists; editing shows the vacation-X count as a hint.
+
+### Other Batch 4 items
+- **Count/occupancy table** (`showCounterTable`) is shown to **admin in every plan state** (previously only when closed).
+- **Delete gate**: `DELETE /shifts/plans/:id` returns **409 unless `status === "created"`**; the UI hides the delete button otherwise. Deleting a created plan still cascades its sub-collections (`planEmployees`, `shifts`, `shiftsSnapshot`, `modRow`, `rules`, `unavailabilityRequests`, `shiftOverrideRequests`, `shiftChangeRequests`).
+- **Click-time timestamp** (#32): a shift-change-request captures `requestedAtClient` at the moment of the double-click (carried through to the POST); the server validates it against a window and falls back to its own serverTimestamp if out of range.
+- **Grid remount** (#35): `ShiftGrid` is keyed on the sorted employee-id list so it remounts on membership change, fixing the sticky / `table-layout:fixed` rendering glitch after an employee is removed.
+- **DNES** (#53): a button in the month nav, shown only when the user is viewing a month other than the current one.
