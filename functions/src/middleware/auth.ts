@@ -1,5 +1,6 @@
 import * as admin from "firebase-admin";
 import { Request, Response, NextFunction } from "express";
+import { resolveEffectivePermissions } from "../auth/permissions";
 
 export type UserRole = "admin" | "director" | "manager" | "employee" | "accountant" | "hr";
 
@@ -7,6 +8,9 @@ export interface AuthRequest extends Request {
   uid?: string;
   role?: UserRole;
   userEmail?: string;
+  /** Effective permission set resolved from the token claim (roleType + per-user
+   *  overrides), attached by requireAuth. requirePermission checks against this. */
+  permissions?: Set<string>;
 }
 
 /**
@@ -24,10 +28,19 @@ export function requireAuth(req: AuthRequest, res: Response, next: NextFunction)
   admin
     .auth()
     .verifyIdToken(idToken)
-    .then((decoded) => {
+    .then(async (decoded) => {
       req.uid = decoded.uid;
       req.role = (decoded.role as UserRole) ?? undefined;
       req.userEmail = decoded.email ?? "";
+      // Resolve the effective permission set once per request from the claim.
+      // roleType + per-user grants/revokes are optional claims (Phase 5); legacy
+      // accounts carry only `role`, which defaults roleType to the role id.
+      req.permissions = await resolveEffectivePermissions({
+        role: req.role,
+        roleType: typeof decoded.roleType === "string" ? decoded.roleType : undefined,
+        extra: Array.isArray(decoded.extraPermissions) ? (decoded.extraPermissions as string[]) : [],
+        revoked: Array.isArray(decoded.revokedPermissions) ? (decoded.revokedPermissions as string[]) : [],
+      });
       next();
     })
     .catch(() => {

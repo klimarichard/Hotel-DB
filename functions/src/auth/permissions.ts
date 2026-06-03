@@ -13,6 +13,7 @@
  * Keep the catalog KEYS in sync with frontend/src/lib/permissions/catalog.ts
  * (the two packages cannot share code; labels may differ, keys must not).
  */
+import * as admin from "firebase-admin";
 import { Response, NextFunction } from "express";
 import { AuthRequest, UserRole } from "../middleware/auth";
 
@@ -314,10 +315,20 @@ export const BUILTIN_ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
 
 const ALL_SET = new Set<string>(ALL_PERMISSIONS);
 
+/** Apply per-user overrides on top of a base permission list. system.admin
+ *  expands to every permission (and revokes can't strip it). */
+function applyOverrides(base: readonly string[], extra: string[], revoked: string[]): Set<string> {
+  const set = new Set<string>(base);
+  for (const p of extra) set.add(p);
+  if (set.has("system.admin")) return new Set(ALL_SET);
+  for (const p of revoked) set.delete(p);
+  return set;
+}
+
 /**
- * Effective permission set for a built-in role plus optional per-user overrides.
- * `system.admin` expands to every permission (and any added later). Phase 4 will
- * feed real overrides from the user's claim; for now extra/revoked default empty.
+ * Effective permission set for a BUILT-IN role plus optional per-user overrides.
+ * Pure/synchronous — used as the fallback when the configurable roleTypes
+ * collection is unavailable, and by the verification scripts.
  */
 export function resolvePermissions(
   role: UserRole | undefined,
@@ -325,12 +336,76 @@ export function resolvePermissions(
   revoked: string[] = []
 ): Set<string> {
   if (!role) return new Set();
-  const base = BUILTIN_ROLE_PERMISSIONS[role] ?? [];
-  const set = new Set<string>(base);
-  for (const p of extra) set.add(p);
-  if (set.has("system.admin")) return new Set(ALL_SET);
-  for (const p of revoked) set.delete(p);
-  return set;
+  return applyOverrides(BUILTIN_ROLE_PERMISSIONS[role] ?? [], extra, revoked);
+}
+
+// ─── Configurable roleTypes (Phase 4) ────────────────────────────────────────
+// Roles are now editable DATA in roleTypes/{id} = { name, permissions[], system }.
+// The resolver reads them through a per-instance cache (cheap: a handful of
+// docs) and ALWAYS falls back to BUILTIN_ROLE_PERMISSIONS when a doc is missing
+// or Firestore is unreachable — so a seeding gap or outage can never lock anyone
+// out, and behaviour stays identical to the built-in mapping until an admin
+// edits a type.
+
+export const ROLE_TYPES_COLLECTION = "roleTypes";
+const ROLE_TYPE_CACHE_TTL_MS = 60_000;
+let roleTypeCache: { at: number; map: Map<string, string[]> } | null = null;
+
+async function loadRoleTypePermissions(): Promise<Map<string, string[]> | null> {
+  if (roleTypeCache && Date.now() - roleTypeCache.at < ROLE_TYPE_CACHE_TTL_MS) {
+    return roleTypeCache.map;
+  }
+  try {
+    const snap = await admin.firestore().collection(ROLE_TYPES_COLLECTION).get();
+    const map = new Map<string, string[]>();
+    for (const d of snap.docs) {
+      const data = d.data() as { permissions?: unknown };
+      if (Array.isArray(data.permissions)) {
+        map.set(d.id, data.permissions.filter((p): p is string => typeof p === "string"));
+      }
+    }
+    roleTypeCache = { at: Date.now(), map };
+    return map;
+  } catch (e) {
+    console.error("[rbac] roleTypes load failed; falling back to built-in roles:", e);
+    return roleTypeCache?.map ?? null; // stale-but-usable, or null → builtin fallback
+  }
+}
+
+/** Clear the in-memory roleTypes cache (used by tests + after an admin edit). */
+export function clearRoleTypeCache(): void {
+  roleTypeCache = null;
+}
+
+export interface EffectivePermissionInput {
+  /** Legacy role claim — drives the builtin fallback + default roleType id. */
+  role?: UserRole;
+  /** Configurable user-type id (defaults to `role` for legacy accounts). */
+  roleType?: string;
+  /** Per-user granted permissions (on top of the type). */
+  extra?: string[];
+  /** Per-user revoked permissions (cannot strip system.admin). */
+  revoked?: string[];
+}
+
+/**
+ * Effective permission set from the configurable roleTypes + per-user overrides.
+ * Resolution order for the base list: roleTypes/{roleType||role} doc → built-in
+ * mapping for the legacy role → built-in mapping for the id → empty. Then apply
+ * grants/revokes. This is the runtime gate; requireAuth resolves it once per
+ * request and attaches it to req.permissions.
+ */
+export async function resolveEffectivePermissions(input: EffectivePermissionInput): Promise<Set<string>> {
+  const { role, roleType, extra = [], revoked = [] } = input;
+  const id = roleType ?? role;
+  if (!id) return new Set();
+  const map = await loadRoleTypePermissions();
+  const base =
+    map?.get(id) ??
+    (role ? BUILTIN_ROLE_PERMISSIONS[role] : undefined) ??
+    BUILTIN_ROLE_PERMISSIONS[id as UserRole] ??
+    [];
+  return applyOverrides(base, extra, revoked);
 }
 
 export function hasPermission(set: Set<string>, perm: Permission): boolean {
@@ -339,11 +414,12 @@ export function hasPermission(set: Set<string>, perm: Permission): boolean {
 
 /**
  * Express middleware — passes if the caller has ANY of the listed permissions.
- * Call requireAuth first. (Phase 2 wires this in place of requireRole.)
+ * Reads the effective set resolved by requireAuth (req.permissions); call
+ * requireAuth first.
  */
 export function requirePermission(...perms: Permission[]) {
   return (req: AuthRequest, res: Response, next: NextFunction): void => {
-    const set = resolvePermissions(req.role);
+    const set = req.permissions ?? new Set<string>();
     const ok = set.has("system.admin") || perms.some((p) => set.has(p));
     if (!ok) {
       res.status(403).json({ error: "Insufficient permissions" });
