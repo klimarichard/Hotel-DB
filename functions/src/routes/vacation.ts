@@ -139,9 +139,8 @@ vacationRouter.get(
       return;
     }
 
-    const role = req.role;
-    const isAdminOrDirector = role === "admin" || role === "director";
-    if (!isAdminOrDirector) {
+    const canReview = req.permissions?.has("vacation.review") ?? false;
+    if (!canReview) {
       const userDoc = await db().collection("users").doc(req.uid!).get();
       const userEmpId = userDoc.exists
         ? ((userDoc.data() as Record<string, unknown>).employeeId as string | null)
@@ -158,13 +157,12 @@ vacationRouter.get(
 );
 
 // ─── GET /vacation ────────────────────────────────────────────────────────────
-// Admin/director: all requests; others: own requests only
+// Reviewers (vacation.view.all): all requests; others: own requests only
 
 vacationRouter.get("/", requireAuth, async (req: AuthRequest, res) => {
-  const role = req.role;
   let query: admin.firestore.Query = db().collection("vacationRequests");
 
-  if (role !== "admin" && role !== "director") {
+  if (!req.permissions?.has("vacation.view.all")) {
     // Own requests by stable employeeId (migrated requests carry stale uids);
     // fall back to uid for users without an employee link.
     const empId = await requesterEmployeeId(req.uid);
@@ -281,8 +279,7 @@ vacationRouter.post("/", requireAuth, async (req: AuthRequest, res) => {
 vacationRouter.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
   const { id } = req.params;
   const body = req.body as Record<string, unknown>;
-  const role = req.role;
-  const isAdminOrDirector = role === "admin" || role === "director";
+  const canReview = req.permissions?.has("vacation.review") ?? false;
 
   const docRef = db().collection("vacationRequests").doc(id);
   const doc = await docRef.get();
@@ -296,7 +293,7 @@ vacationRouter.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
   if ("startDate" in body) {
     const myEmpId = await requesterEmployeeId(req.uid);
     const isOwn = data.uid === req.uid || (!!myEmpId && data.employeeId === myEmpId);
-    if (!isOwn && !isAdminOrDirector) {
+    if (!isOwn && !canReview) {
       res.status(403).json({ error: "Nemáte oprávnění upravit tuto žádost" });
       return;
     }
@@ -359,8 +356,8 @@ vacationRouter.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
     return;
   }
 
-  // ── Admin approve / reject ─────────────────────────────────────────────────
-  if (!isAdminOrDirector) {
+  // ── Approve / reject (reviewers only) ──────────────────────────────────────
+  if (!canReview) {
     res.status(403).json({ error: "Nemáte oprávnění" });
     return;
   }
@@ -499,7 +496,6 @@ vacationRouter.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
 
 vacationRouter.delete("/:id", requireAuth, async (req: AuthRequest, res) => {
   const { id } = req.params;
-  const role = req.role;
 
   const docRef = db().collection("vacationRequests").doc(id);
   const doc = await docRef.get();
@@ -511,9 +507,9 @@ vacationRouter.delete("/:id", requireAuth, async (req: AuthRequest, res) => {
   const data = doc.data() as Record<string, unknown>;
   const myEmpId = await requesterEmployeeId(req.uid);
   const isOwn = data.uid === req.uid || (!!myEmpId && data.employeeId === myEmpId);
-  const isAdmin = role === "admin" || role === "director";
+  const canReview = req.permissions?.has("vacation.review") ?? false;
 
-  if (!isOwn && !isAdmin) {
+  if (!isOwn && !canReview) {
     res.status(403).json({ error: "Nemáte oprávnění smazat tuto žádost" });
     return;
   }
