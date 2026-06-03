@@ -349,19 +349,35 @@ export function resolvePermissions(
 
 export const ROLE_TYPES_COLLECTION = "roleTypes";
 const ROLE_TYPE_CACHE_TTL_MS = 60_000;
-let roleTypeCache: { at: number; map: Map<string, string[]> } | null = null;
 
-async function loadRoleTypePermissions(): Promise<Map<string, string[]> | null> {
+export interface RoleTypeData {
+  permissions: string[];
+  /** Whether holders count as "management" for employee-record scoping. */
+  management: boolean;
+}
+
+/** Built-in management classification — the fallback when a roleTypes doc is
+ *  missing (unseeded / Firestore down). Matches the legacy role-based query. */
+const BUILTIN_MANAGEMENT: Record<UserRole, boolean> = {
+  admin: true, director: true, manager: true, employee: false, accountant: false, hr: false,
+};
+
+let roleTypeCache: { at: number; map: Map<string, RoleTypeData> } | null = null;
+
+async function loadRoleTypes(): Promise<Map<string, RoleTypeData> | null> {
   if (roleTypeCache && Date.now() - roleTypeCache.at < ROLE_TYPE_CACHE_TTL_MS) {
     return roleTypeCache.map;
   }
   try {
     const snap = await admin.firestore().collection(ROLE_TYPES_COLLECTION).get();
-    const map = new Map<string, string[]>();
+    const map = new Map<string, RoleTypeData>();
     for (const d of snap.docs) {
-      const data = d.data() as { permissions?: unknown };
+      const data = d.data() as { permissions?: unknown; management?: unknown };
       if (Array.isArray(data.permissions)) {
-        map.set(d.id, data.permissions.filter((p): p is string => typeof p === "string"));
+        map.set(d.id, {
+          permissions: data.permissions.filter((p): p is string => typeof p === "string"),
+          management: data.management === true,
+        });
       }
     }
     roleTypeCache = { at: Date.now(), map };
@@ -375,6 +391,28 @@ async function loadRoleTypePermissions(): Promise<Map<string, string[]> | null> 
 /** Clear the in-memory roleTypes cache (used by tests + after an admin edit). */
 export function clearRoleTypeCache(): void {
   roleTypeCache = null;
+}
+
+/**
+ * The set of user-type ids that count as "management" for employee-record
+ * scoping (whose linked employees are hidden from non-management viewers like
+ * personalista). Reads the per-type `management` flag; falls back to the
+ * built-in classification when the collection is unseeded/unavailable, and
+ * back-fills any built-in management role missing as a doc (partial-seed safety).
+ */
+export async function getManagementTypeIds(): Promise<Set<string>> {
+  const builtinMgmt = (Object.entries(BUILTIN_MANAGEMENT) as [UserRole, boolean][])
+    .filter(([, isMgmt]) => isMgmt)
+    .map(([id]) => id);
+  const map = await loadRoleTypes();
+  if (!map || map.size === 0) {
+    return new Set<string>(builtinMgmt);
+  }
+  const ids = new Set<string>();
+  for (const [id, t] of map) if (t.management) ids.add(id);
+  // Back-fill built-in management roles not present as docs (partial-seed safety).
+  for (const r of builtinMgmt) if (!map.has(r)) ids.add(r);
+  return ids;
 }
 
 export interface EffectivePermissionInput {
@@ -399,9 +437,9 @@ export async function resolveEffectivePermissions(input: EffectivePermissionInpu
   const { role, roleType, extra = [], revoked = [] } = input;
   const id = roleType ?? role;
   if (!id) return new Set();
-  const map = await loadRoleTypePermissions();
+  const map = await loadRoleTypes();
   const base =
-    map?.get(id) ??
+    map?.get(id)?.permissions ??
     (role ? BUILTIN_ROLE_PERMISSIONS[role] : undefined) ??
     BUILTIN_ROLE_PERMISSIONS[id as UserRole] ??
     [];

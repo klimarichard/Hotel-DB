@@ -2,7 +2,7 @@ import { Router, Response, NextFunction } from "express";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireAuth, AuthRequest } from "../middleware/auth";
-import { requirePermission, resolvePermissions, hasPermission } from "../auth/permissions";
+import { requirePermission, hasPermission, getManagementTypeIds } from "../auth/permissions";
 import { encryptFields, redactFields, decrypt, decryptFields } from "../services/encryption";
 import {
   ctxFromReq,
@@ -351,28 +351,35 @@ export async function refreshEffectiveRootForAllActive(): Promise<{ scanned: num
 //     permission overrides resolve correctly.
 // requireAuth is applied here (router-level) so req.role is set before the guard.
 
-/** employeeIds whose linked login account is admin/director/manager. */
+/**
+ * employeeIds whose linked login is a "management" user type. Determined by the
+ * type's `management` flag (via getManagementTypeIds), keyed by the user's
+ * roleType (falling back to the legacy role). Works for built-in and custom
+ * types alike; falls back to the built-in admin/director/manager classification
+ * when roleTypes is unseeded/unavailable.
+ */
 export async function getManagementEmployeeIds(): Promise<Set<string>> {
-  const snap = await db()
-    .collection("users")
-    .where("role", "in", ["admin", "director", "manager"])
-    .get();
+  const mgmtTypes = await getManagementTypeIds();
+  const snap = await db().collection("users").get();
   const ids = new Set<string>();
   for (const d of snap.docs) {
-    const empId = (d.data() as Record<string, unknown>).employeeId;
-    if (typeof empId === "string" && empId) ids.add(empId);
+    const u = d.data() as Record<string, unknown>;
+    const typeId = (u.roleType as string) || (u.role as string) || "";
+    const empId = u.employeeId;
+    if (typeId && mgmtTypes.has(typeId) && typeof empId === "string" && empId) ids.add(empId);
   }
   return ids;
 }
 
 /**
  * True when the caller's employee visibility is the non-management SUBSET
- * (built-in `hr`) rather than full access — i.e. they hold
- * `employees.view.nonManagement` but not `employees.view.all`. Drives the
+ * (e.g. built-in personalista) rather than full access — i.e. they hold
+ * `employees.view.nonManagement` but not `employees.view.all`. Reads the
+ * caller's EFFECTIVE permission set (works for any user type), driving the
  * row-level management-record block (here and in contracts.ts).
  */
-export function isNonManagementScoped(role: AuthRequest["role"]): boolean {
-  const set = resolvePermissions(role);
+export function isNonManagementScoped(perms: Set<string> | undefined): boolean {
+  const set = perms ?? new Set<string>();
   return (
     hasPermission(set, "employees.view.nonManagement") &&
     !hasPermission(set, "employees.view.all")
@@ -389,7 +396,7 @@ async function enforceEmpAccess(req: AuthRequest, res: Response, next: NextFunct
     return;
   }
 
-  if (isNonManagementScoped(role)) {
+  if (isNonManagementScoped(req.permissions)) {
     // Router is mounted at /employees, so req.path is relative: the first
     // segment is the employee id for /:id[/...] routes ("" for the list/create,
     // "export" for the export route — neither is a real id).
@@ -434,7 +441,7 @@ employeesRouter.get(
     });
 
     // Non-management-scoped callers (hr) never see admin/director/manager records.
-    if (isNonManagementScoped(req.role)) {
+    if (isNonManagementScoped(req.permissions)) {
       const mgmt = await getManagementEmployeeIds();
       employees = employees.filter((e) => !mgmt.has(e.id));
     }
@@ -473,7 +480,7 @@ employeesRouter.get(
 
     const snapshot = await query.get();
     let exportDocs = snapshot.docs;
-    if (isNonManagementScoped(req.role)) {
+    if (isNonManagementScoped(req.permissions)) {
       const mgmt = await getManagementEmployeeIds();
       exportDocs = exportDocs.filter((d) => !mgmt.has(d.id));
     }

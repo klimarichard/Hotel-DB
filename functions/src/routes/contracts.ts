@@ -21,7 +21,7 @@ async function enforceContractAccess(req: AuthRequest, res: Response, next: Next
     res.status(403).json({ error: "Účetní má pouze náhledový přístup." });
     return;
   }
-  if (isNonManagementScoped(req.role)) {
+  if (isNonManagementScoped(req.permissions)) {
     const parts = req.path.split("/"); // ["", "employees", "<id>", "contracts", ...]
     if (parts[1] === "employees" && parts[2]) {
       const mgmt = await getManagementEmployeeIds();
