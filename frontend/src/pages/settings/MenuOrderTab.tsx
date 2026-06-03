@@ -1,59 +1,36 @@
 import { useEffect, useMemo, useState } from "react";
 import Button from "@/components/Button";
-import { api } from "@/lib/api";
-import {
-  ALL_ROLES,
-  ROLE_LABELS,
-  MENU_ITEMS,
-  resolveOrderForRole,
-  type MenuOrderMap,
-} from "@/lib/menuItems";
-import type { UserRole } from "@/hooks/useAuth";
+import { api, roleTypesApi, type RoleType } from "@/lib/api";
+import { MENU_ITEMS, resolveOrderByPermission } from "@/lib/menuItems";
 import styles from "./MenuOrderTab.module.css";
 
 const labelById = new Map(MENU_ITEMS.map((m) => [m.id, m.label] as const));
 
+/** Build a can()-style checker for a user type's permission set. */
+const canForType = (t: RoleType) => (perm: string) =>
+  t.permissions.includes("system.admin") || t.permissions.includes(perm);
+
 export default function MenuOrderTab() {
-  const [drafts, setDrafts] = useState<Record<UserRole, string[]>>({
-    admin: [],
-    director: [],
-    manager: [],
-    employee: [],
-    accountant: [],
-    hr: [],
-  });
+  const [types, setTypes] = useState<RoleType[]>([]);
+  const [drafts, setDrafts] = useState<Record<string, string[]>>({});
+  const [original, setOriginal] = useState<Record<string, string[]>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
 
-  // Capture the originally-saved map so we can detect "dirty" rows and
-  // disable Uložit when nothing has changed.
-  const [original, setOriginal] = useState<Record<UserRole, string[]>>({
-    admin: [],
-    director: [],
-    manager: [],
-    employee: [],
-    accountant: [],
-    hr: [],
-  });
-
   useEffect(() => {
     setLoading(true);
-    api
-      .get<MenuOrderMap>("/settings/menu-order")
-      .then((map) => {
-        const next: Record<UserRole, string[]> = {
-          admin: [],
-          director: [],
-          manager: [],
-          employee: [],
-          accountant: [],
-          hr: [],
-        };
-        for (const role of ALL_ROLES) {
-          // resolveOrderForRole produces the same view Layout renders, so
-          // the editor reflects exactly what each role sees today.
-          next[role] = resolveOrderForRole(role, map[role] ?? null).map((m) => m.id);
+    Promise.all([
+      roleTypesApi.list(),
+      api.get<Record<string, string[]>>("/settings/menu-order").catch(() => ({} as Record<string, string[]>)),
+    ])
+      .then(([typeList, saved]) => {
+        setTypes(typeList);
+        const next: Record<string, string[]> = {};
+        for (const t of typeList) {
+          // resolveOrderByPermission produces exactly the sidebar view for the
+          // type, so the editor reflects what each type sees.
+          next[t.id] = resolveOrderByPermission(canForType(t), saved[t.id] ?? null).map((m) => m.id);
         }
         setDrafts(next);
         setOriginal(next);
@@ -63,30 +40,31 @@ export default function MenuOrderTab() {
 
   const isDirty = useMemo(
     () =>
-      ALL_ROLES.some(
-        (role) =>
-          drafts[role].length !== original[role].length ||
-          drafts[role].some((id, i) => id !== original[role][i])
+      types.some(
+        (t) =>
+          (drafts[t.id]?.length ?? 0) !== (original[t.id]?.length ?? 0) ||
+          (drafts[t.id] ?? []).some((id, i) => id !== original[t.id]?.[i])
       ),
-    [drafts, original]
+    [drafts, original, types]
   );
 
-  function move(role: UserRole, idx: number, dir: -1 | 1) {
+  function move(typeId: string, idx: number, dir: -1 | 1) {
     setDrafts((prev) => {
-      const list = prev[role].slice();
+      const list = (prev[typeId] ?? []).slice();
       const target = idx + dir;
       if (target < 0 || target >= list.length) return prev;
       [list[idx], list[target]] = [list[target], list[idx]];
-      return { ...prev, [role]: list };
+      return { ...prev, [typeId]: list };
     });
   }
 
-  function copyFrom(target: UserRole, source: UserRole) {
+  function copyFrom(targetId: string, sourceId: string) {
+    const targetType = types.find((t) => t.id === targetId);
+    if (!targetType) return;
     setDrafts((prev) => {
-      // Take source's order, drop ids the target role can't access, then
-      // append any target-only items the source list lacks.
-      const filtered = resolveOrderForRole(target, prev[source]).map((m) => m.id);
-      return { ...prev, [target]: filtered };
+      // Take source's order, drop ids the target type can't access.
+      const filtered = resolveOrderByPermission(canForType(targetType), prev[sourceId] ?? []).map((m) => m.id);
+      return { ...prev, [targetId]: filtered };
     });
   }
 
@@ -94,12 +72,9 @@ export default function MenuOrderTab() {
     setSaving(true);
     setSaveMsg(null);
     try {
-      await api.put("/settings/menu-order", {
-        admin: drafts.admin,
-        director: drafts.director,
-        manager: drafts.manager,
-        employee: drafts.employee,
-      });
+      const payload: Record<string, string[]> = {};
+      for (const t of types) payload[t.id] = drafts[t.id] ?? [];
+      await api.put("/settings/menu-order", payload);
       setOriginal({ ...drafts });
       setSaveMsg("Uloženo");
     } catch (e) {
@@ -115,42 +90,40 @@ export default function MenuOrderTab() {
   return (
     <div>
       <p className={styles.intro}>
-        Pořadí položek v menu pro jednotlivé role. Šipky ▲ ▼ posouvají položku v rámci role.
-        Tlačítko „Kopírovat z…" převezme pořadí z jiné role (s respektováním oprávnění cílové role).
+        Pořadí položek v menu pro jednotlivé typy uživatelů. Šipky ▲ ▼ posouvají položku v rámci typu.
+        Tlačítko „Kopírovat z…" převezme pořadí z jiného typu (s respektováním jeho oprávnění).
       </p>
 
       <div className={styles.grid}>
-        {ALL_ROLES.map((role) => (
-          <section key={role} className={styles.card}>
+        {types.map((t) => (
+          <section key={t.id} className={styles.card}>
             <header className={styles.cardHeader}>
-              <h3 className={styles.cardTitle}>{ROLE_LABELS[role]}</h3>
+              <h3 className={styles.cardTitle}>{t.name}</h3>
               <div className={styles.copyRow}>
                 <label className={styles.copyLabel}>Kopírovat z:</label>
                 <select
                   className={styles.copySelect}
                   value=""
                   onChange={(e) => {
-                    const src = e.target.value as UserRole | "";
+                    const src = e.target.value;
                     if (!src) return;
-                    copyFrom(role, src);
+                    copyFrom(t.id, src);
                     e.target.value = "";
                   }}
                 >
                   <option value="">—</option>
-                  {ALL_ROLES.filter((r) => r !== role).map((r) => (
-                    <option key={r} value={r}>
-                      {ROLE_LABELS[r]}
-                    </option>
+                  {types.filter((x) => x.id !== t.id).map((x) => (
+                    <option key={x.id} value={x.id}>{x.name}</option>
                   ))}
                 </select>
               </div>
             </header>
 
-            {drafts[role].length === 0 ? (
+            {(drafts[t.id]?.length ?? 0) === 0 ? (
               <div className={styles.empty}>Žádné položky.</div>
             ) : (
               <ul className={styles.list}>
-                {drafts[role].map((id, idx) => (
+                {(drafts[t.id] ?? []).map((id, idx) => (
                   <li key={id} className={styles.row}>
                     <span className={styles.rowLabel}>{labelById.get(id) ?? id}</span>
                     <div className={styles.rowActions}>
@@ -158,7 +131,7 @@ export default function MenuOrderTab() {
                         type="button"
                         className={styles.arrowBtn}
                         disabled={idx === 0}
-                        onClick={() => move(role, idx, -1)}
+                        onClick={() => move(t.id, idx, -1)}
                         aria-label="Posunout nahoru"
                         title="Posunout nahoru"
                       >
@@ -167,8 +140,8 @@ export default function MenuOrderTab() {
                       <button
                         type="button"
                         className={styles.arrowBtn}
-                        disabled={idx === drafts[role].length - 1}
-                        onClick={() => move(role, idx, 1)}
+                        disabled={idx === (drafts[t.id]?.length ?? 0) - 1}
+                        onClick={() => move(t.id, idx, 1)}
                         aria-label="Posunout dolů"
                         title="Posunout dolů"
                       >

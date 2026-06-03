@@ -47,17 +47,17 @@ export default function Layout() {
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
 
-  // Per-role saved menu order (admin-configurable in Settings → Menu).
-  // null = falls back to default order from menuItems.ts.
+  // Per-type saved menu order (admin-configurable in Settings → Menu); the
+  // endpoint keys by the user's type. null = default order from menuItems.ts.
   const [savedOrder, setSavedOrder] = useState<string[] | null>(null);
 
   useEffect(() => {
-    if (!role) return;
+    if (!user) return;
     api
       .get<{ order: string[] | null }>("/settings/menu-order/me")
       .then((res) => setSavedOrder(res.order))
       .catch(() => setSavedOrder(null));
-  }, [role]);
+  }, [user]);
 
   const items = resolveOrderByPermission(can, savedOrder);
 
