@@ -1326,8 +1326,9 @@ export default function ShiftPlannerPage() {
               </Button>
             )}
 
-            {/* Export (admin/director) */}
-            {plan && canPublish && plan.employees.length > 0 && (
+            {/* Export — anyone with shifts.export (built-in admin/director, plus
+                custom types like Rezervace that are granted export rights) */}
+            {plan && can("shifts.export") && plan.employees.length > 0 && (
               <div className={styles.exportWrapper} ref={exportMenuRef}>
                 <Button
                   variant="secondary"
