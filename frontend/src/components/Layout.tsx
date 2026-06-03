@@ -36,7 +36,7 @@ const MoonIcon = () => (
 );
 
 export default function Layout() {
-  const { user, role, name, can } = useAuth();
+  const { user, role, name, roleTypeName, can } = useAuth();
   const { unreadCount, unreadProbationCount } = useAlertsContext();
   const upozorneniBadge = unreadCount + unreadProbationCount;
   const { pendingCount: pendingOverrideCount } = useShiftOverridesContext();
@@ -106,7 +106,7 @@ export default function Layout() {
         </ul>
         <div className={styles.userBar}>
           <span className={styles.userEmail}>{name?.trim() || user?.email}</span>
-          <span className={styles.userRole}>{role}</span>
+          <span className={styles.userRole}>{roleTypeName ?? role}</span>
           <button className={styles.logoutBtn} onClick={handleLogout}>
             Odhlásit
           </button>

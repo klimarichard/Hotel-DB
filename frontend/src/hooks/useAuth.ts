@@ -12,6 +12,8 @@ interface AuthState {
   employeeId: string | null;
   /** Display name from users/{uid}.name (via /auth/me); null when unset. */
   name: string | null;
+  /** Display name of the user's type (roleType), for the sidebar label. */
+  roleTypeName: string | null;
   /** Effective permission set from /auth/me (resolved server-side from role). */
   permissions: ReadonlySet<string>;
   loading: boolean;
@@ -34,6 +36,7 @@ export function useAuth(): AuthValue {
     role: null,
     employeeId: null,
     name: null,
+    roleTypeName: null,
     permissions: EMPTY_PERMS,
     loading: true,
   });
@@ -43,18 +46,19 @@ export function useAuth(): AuthValue {
       if (user) {
         const tokenResult = await user.getIdTokenResult();
         const profile = await api
-          .get<{ employeeId: string | null; name?: string | null; permissions?: string[] }>("/auth/me")
-          .catch(() => ({ employeeId: null, name: null, permissions: [] as string[] }));
+          .get<{ employeeId: string | null; name?: string | null; permissions?: string[]; roleTypeName?: string | null }>("/auth/me")
+          .catch(() => ({ employeeId: null, name: null, permissions: [] as string[], roleTypeName: null }));
         setState({
           user,
           role: (tokenResult.claims.role as UserRole) ?? null,
           employeeId: profile.employeeId ?? null,
           name: profile.name ?? null,
+          roleTypeName: profile.roleTypeName ?? null,
           permissions: new Set(profile.permissions ?? []),
           loading: false,
         });
       } else {
-        setState({ user: null, role: null, employeeId: null, name: null, permissions: EMPTY_PERMS, loading: false });
+        setState({ user: null, role: null, employeeId: null, name: null, roleTypeName: null, permissions: EMPTY_PERMS, loading: false });
       }
     });
   }, []);
