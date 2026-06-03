@@ -23,8 +23,10 @@ import { menuOrderRouter } from "./routes/menuOrder";
 import { timeOverrideRouter } from "./routes/timeOverride";
 import { selfServiceRouter } from "./routes/selfService";
 import { employeeChangeRequestsRouter } from "./routes/employeeChangeRequests";
+import { roleTypesRouter } from "./routes/roleTypes";
 import * as clock from "./services/clock";
-import { requireAuth, requireRole, AuthRequest } from "./middleware/auth";
+import { requireAuth, AuthRequest } from "./middleware/auth";
+import { requirePermission } from "./auth/permissions";
 import { writeAudit, ctxFromReq } from "./services/auditLog";
 import { transitionPlanDeadlines } from "./services/planTransitions";
 import { createOrUpdatePayrollPeriod } from "./services/payrollCalculator";
@@ -73,6 +75,7 @@ app.use("/settings/menu-order", menuOrderRouter);
 app.use("/settings/time-override", timeOverrideRouter);
 app.use("/me", selfServiceRouter);
 app.use("/employee-change-requests", employeeChangeRequestsRouter);
+app.use("/role-types", roleTypesRouter);
 
 // Health check
 app.get("/health", (_req, res) => {
@@ -85,7 +88,7 @@ app.get("/health", (_req, res) => {
 app.post(
   "/shifts/trigger-deadlines",
   requireAuth,
-  requireRole("admin"),
+  requirePermission("system.triggers"),
   async (req: AuthRequest, res) => {
     const result = await transitionPlanDeadlines();
     await writeAudit(ctxFromReq(req), {
@@ -100,7 +103,7 @@ app.post(
 app.post(
   "/benefits/trigger-multisport-sweep",
   requireAuth,
-  requireRole("admin"),
+  requirePermission("system.triggers"),
   async (req: AuthRequest, res) => {
     const result = await sweepExpiredMultisport();
     await writeAudit(ctxFromReq(req), {
@@ -115,7 +118,7 @@ app.post(
 app.post(
   "/employees/trigger-probation-refresh",
   requireAuth,
-  requireRole("admin"),
+  requirePermission("system.triggers"),
   async (req: AuthRequest, res) => {
     const result = await refreshAllProbationAlerts();
     await writeAudit(ctxFromReq(req), {
@@ -130,7 +133,7 @@ app.post(
 app.post(
   "/employees/trigger-alert-refresh",
   requireAuth,
-  requireRole("admin"),
+  requirePermission("system.triggers"),
   async (req: AuthRequest, res) => {
     const db = admin.firestore();
     const employeesSnap = await db.collection("employees").get();
@@ -157,7 +160,7 @@ app.post(
 app.post(
   "/employees/trigger-effective-refresh",
   requireAuth,
-  requireRole("admin"),
+  requirePermission("system.triggers"),
   async (req: AuthRequest, res) => {
     // Backfill the denormalized current* root fields by re-folding every active
     // employee's latest session. Mirrors the daily refreshEmployeeEffective job;

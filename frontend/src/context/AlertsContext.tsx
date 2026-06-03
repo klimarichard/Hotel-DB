@@ -38,12 +38,12 @@ const AlertsContext = createContext<AlertsContextValue>({
 });
 
 export function AlertsProvider({ children }: { children: ReactNode }) {
-  const { role } = useAuth();
+  const { can } = useAuth();
   const [alerts, setAlerts] = useState<AlertFlag[]>([]);
   const [probationAlerts, setProbationAlerts] = useState<AlertFlag[]>([]);
 
   function fetchAll() {
-    if (role !== "admin" && role !== "director") return;
+    if (!can("alerts.view")) return;
     api.get<AlertFlag[]>("/alerts").then(setAlerts).catch(() => {});
     api.get<AlertFlag[]>("/alerts/probation").then(setProbationAlerts).catch(() => {});
   }
@@ -51,7 +51,7 @@ export function AlertsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     fetchAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [role]);
+  }, [can]);
 
   const unreadCount = alerts.filter((a) => !a.read).length;
   const unreadProbationCount = probationAlerts.filter((a) => !a.read).length;

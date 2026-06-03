@@ -13,16 +13,16 @@ const ShiftChangeRequestsContext = createContext<ShiftChangeRequestsContextValue
 });
 
 export function ShiftChangeRequestsProvider({ children }: { children: ReactNode }) {
-  const { role } = useAuth();
+  const { can } = useAuth();
   const [pendingCount, setPendingCount] = useState(0);
 
   const fetch = useCallback(() => {
-    if (role !== "admin" && role !== "director") return;
+    if (!can("shifts.changeRequest.review")) return;
     api
       .get<{ count: number }>("/shifts/changeRequests/pending-count")
       .then((data) => setPendingCount(data.count))
       .catch(() => {});
-  }, [role]);
+  }, [can]);
 
   useEffect(() => {
     fetch();

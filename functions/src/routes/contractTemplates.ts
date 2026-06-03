@@ -1,7 +1,8 @@
 import { Router, Response } from "express";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
-import { requireAuth, requireRole, AuthRequest } from "../middleware/auth";
+import { requireAuth, AuthRequest } from "../middleware/auth";
+import { requirePermission } from "../auth/permissions";
 import { ctxFromReq, logCreate, logUpdate } from "../services/auditLog";
 
 export const contractTemplatesRouter = Router();
@@ -46,7 +47,7 @@ function extractVariables(html: string): string[] {
 contractTemplatesRouter.get(
   "/",
   requireAuth,
-  requireRole("admin", "director"),
+  requirePermission("contractTemplates.view"),
   async (_req: AuthRequest, res: Response) => {
     const snap = await db().collection("contractTemplates").get();
     const docs = snap.docs.map((d) => {
@@ -86,7 +87,7 @@ const SLUG_RE = /^[a-z][a-z0-9_]{1,39}$/;
 contractTemplatesRouter.post(
   "/",
   requireAuth,
-  requireRole("admin", "director"),
+  requirePermission("contractTemplates.manage"),
   async (req: AuthRequest, res: Response) => {
     const { id, name } = req.body as { id?: string; name?: string };
     if (!id || !name || !name.trim()) {
@@ -137,7 +138,7 @@ contractTemplatesRouter.post(
 contractTemplatesRouter.get(
   "/:id",
   requireAuth,
-  requireRole("admin", "director"),
+  requirePermission("contractTemplates.view"),
   async (req: AuthRequest, res: Response) => {
     const doc = await db().collection("contractTemplates").doc(req.params.id).get();
     if (!doc.exists) {
@@ -171,7 +172,7 @@ function isValidMargins(m: unknown): m is Margins {
 contractTemplatesRouter.put(
   "/:id",
   requireAuth,
-  requireRole("admin", "director"),
+  requirePermission("contractTemplates.manage"),
   async (req: AuthRequest, res: Response) => {
     const { type, name, htmlContent, margins } = req.body as {
       type: string;

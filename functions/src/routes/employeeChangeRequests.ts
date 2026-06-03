@@ -1,7 +1,8 @@
 import { Router } from "express";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
-import { requireAuth, requireRole, AuthRequest } from "../middleware/auth";
+import { requireAuth, AuthRequest } from "../middleware/auth";
+import { requirePermission } from "../auth/permissions";
 import { ctxFromReq, writeAudit, logUpdate } from "../services/auditLog";
 import {
   applyApprovedChanges,
@@ -21,7 +22,7 @@ export const employeeChangeRequestsRouter = Router();
 const db = () => admin.firestore();
 
 employeeChangeRequestsRouter.use(requireAuth);
-employeeChangeRequestsRouter.use(requireRole("admin", "director"));
+employeeChangeRequestsRouter.use(requirePermission("changeRequests.review"));
 
 // ─── Pending count (badge) ───────────────────────────────────────────────────
 

@@ -283,6 +283,32 @@ Historie změn konkrétního zaměstnance je i přímo na jeho detailu v sekci *
 - **Vzdělání** — stupně vzdělání pro výběr u zaměstnance.
 - **Mzdy** — sazba stravenky, maximální měsíční odměna DPP, **minimální mzda** a **základní cena Multisport** (výchozí 470 Kč/měsíc).
 - **Menu** — pořadí položek v levém menu pro jednotlivé role.
-- **Uživatelé** — vytváření a správa uživatelských účtů: vytvoření (i bez hesla s odkazem pro reset), úprava jména/e-mailu/role, deaktivace a reaktivace, reset hesla, propojení účtu se zaměstnancem. Neaktivní účty jsou dole; při vytvoření účtu se stejným e-mailem jako neaktivní účet se nabídne jeho reaktivace.
+- **Uživatelské typy** — správa typů uživatelů a jejich oprávnění (viz níže).
+- **Uživatelé** — vytváření a správa uživatelských účtů: vytvoření (i bez hesla s odkazem pro reset), úprava jména/e-mailu/role, **úprava oprávnění** (viz níže), deaktivace a reaktivace, reset hesla, propojení účtu se zaměstnancem. Neaktivní účty jsou dole; při vytvoření účtu se stejným e-mailem jako neaktivní účet se nabídne jeho reaktivace.
 
 > 📷 *(Místo pro snímek obrazovky: Nastavení)*
+
+### Uživatelské typy
+
+Záložka **Uživatelské typy** umožňuje spravovat **typy uživatelů** (např. *Administrátor*, *Ředitel*, *FOM*, *Zaměstnanec*, *Účetní*, *Personalista*) a přesně určit, co každý typ smí. To, co dříve bylo pevně dané rolí, je nyní **plně nastavitelné**.
+
+- Seznam ukazuje všechny typy s odznaky **systém** (chráněný typ), **vedení** (drží práva managementu) a **počtem oprávnění**.
+- Po výběru typu se zobrazí **přehledná matice oprávnění** seskupená podle oblastí (zaměstnanci, mzdy, směny, smlouvy…), kde zaškrtnutím/odškrtnutím povolíte nebo zakážete jednotlivá oprávnění. Dále lze upravit **název** typu a přepínač **„Vedení"** (zda se držitelé typu počítají jako management).
+- **Nový typ** vytvoříte buď **zkopírováním** existujícího typu (převezme jeho oprávnění), nebo jako **„Prázdný (bez práv)"** (po potvrzení).
+- **Smazat typ** lze tlačítkem pro odstranění. Systémový typ **„Administrátor" smazat nelze**; typ, který je ještě přiřazen některým uživatelům, nelze smazat, dokud je nepřevedete na jiný typ.
+- Typ **„Administrátor" je pouze ke čtení** — nelze ho upravit ani smazat a má vždy všechna oprávnění.
+
+> 📷 *(Místo pro snímek obrazovky: Uživatelské typy)*
+
+### Oprávnění uživatele
+
+V záložce **Uživatelé** je u každého uživatele tlačítko **„Oprávnění"**. Otevře dialog, kde:
+
+- z rozbalovacího seznamu vyberete **typ uživatele** (tím nastavíte výchozí sadu oprávnění),
+- a navíc můžete **doladit jednotlivá oprávnění** nad rámec typu — zaškrtnutím či odškrtnutím konkrétního oprávnění, které se liší od typu, vznikne **individuální výjimka** (přidání či odebrání práva), označená tečkou (●).
+
+Pojistky: **nemůžete si odebrat vlastní administrátorská práva** a **posledního administrátora nelze degradovat**.
+
+> 📷 *(Místo pro snímek obrazovky: Oprávnění uživatele)*
+
+> **Poznámka:** vedle nového tlačítka *Oprávnění* zůstává u uživatele i původní rozbalovací seznam **role**. Skutečná oprávnění uživatele ale určuje právě **„Oprávnění" (typ + individuální výjimky)**, nikoli tento starší seznam role.

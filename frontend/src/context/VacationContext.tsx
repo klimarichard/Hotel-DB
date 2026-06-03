@@ -13,16 +13,16 @@ const VacationContext = createContext<VacationContextValue>({
 });
 
 export function VacationProvider({ children }: { children: ReactNode }) {
-  const { role } = useAuth();
+  const { can } = useAuth();
   const [pendingCount, setPendingCount] = useState(0);
 
   const fetch = useCallback(() => {
-    if (role !== "admin" && role !== "director") return;
+    if (!can("vacation.review")) return;
     api
       .get<{ count: number }>("/vacation/pending-count")
       .then((data) => setPendingCount(data.count))
       .catch(() => {});
-  }, [role]);
+  }, [can]);
 
   useEffect(() => {
     fetch();

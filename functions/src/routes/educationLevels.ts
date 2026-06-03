@@ -1,7 +1,8 @@
 import { Router, Response } from "express";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
-import { requireAuth, requireRole, AuthRequest } from "../middleware/auth";
+import { requireAuth, AuthRequest } from "../middleware/auth";
+import { requirePermission } from "../auth/permissions";
 import { ctxFromReq, logCreate, logUpdate, logDelete } from "../services/auditLog";
 
 export const educationLevelsRouter = Router();
@@ -25,7 +26,7 @@ educationLevelsRouter.get(
 educationLevelsRouter.post(
   "/",
   requireAuth,
-  requireRole("admin"),
+  requirePermission("settings.educationLevels.manage"),
   async (req: AuthRequest, res: Response) => {
     const { name, code, displayOrder } = req.body as { name: string; code: string; displayOrder?: number };
     if (!name || typeof name !== "string" || !name.trim()) {
@@ -55,7 +56,7 @@ educationLevelsRouter.post(
 educationLevelsRouter.patch(
   "/:id",
   requireAuth,
-  requireRole("admin"),
+  requirePermission("settings.educationLevels.manage"),
   async (req: AuthRequest, res: Response) => {
     const { name, code, displayOrder } = req.body as { name?: string; code?: string; displayOrder?: number };
     const update: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp() };
@@ -79,7 +80,7 @@ educationLevelsRouter.patch(
 educationLevelsRouter.delete(
   "/:id",
   requireAuth,
-  requireRole("admin"),
+  requirePermission("settings.educationLevels.manage"),
   async (req: AuthRequest, res: Response) => {
     const ref = db().collection("educationLevels").doc(req.params.id);
     const beforeSnap = await ref.get();

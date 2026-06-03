@@ -1,7 +1,8 @@
 import { Router } from "express";
 import * as admin from "firebase-admin";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
-import { requireAuth, requireRole, AuthRequest } from "../middleware/auth";
+import { requireAuth, AuthRequest } from "../middleware/auth";
+import { requirePermission } from "../auth/permissions";
 import { parseShiftExpression, HOTEL_CODES } from "../services/shiftParser";
 import { snapshotShifts, deleteCollection } from "../services/planTransitions";
 import { createOrUpdatePayrollPeriod } from "../services/payrollCalculator";
@@ -358,7 +359,7 @@ export async function removeVacationXsFromPlans(
 shiftsRouter.get(
   "/plans",
   requireAuth,
-  requireRole("admin", "director", "manager", "employee", "hr"),
+  requirePermission("shifts.view.all", "shifts.view.self"),
   async (req: AuthRequest, res) => {
     const snap = await db()
       .collection("shiftPlans")
@@ -377,7 +378,7 @@ shiftsRouter.get(
 shiftsRouter.post(
   "/plans",
   requireAuth,
-  requireRole("admin", "director", "hr"),
+  requirePermission("shifts.plan.create"),
   async (req: AuthRequest, res) => {
     const body = req.body as Record<string, unknown>;
     const month = Number(body.month);
@@ -428,7 +429,7 @@ shiftsRouter.post(
 shiftsRouter.get(
   "/plans/:planId",
   requireAuth,
-  requireRole("admin", "director", "manager", "employee", "hr"),
+  requirePermission("shifts.view.all", "shifts.view.self"),
   async (req: AuthRequest, res) => {
     const { planId } = req.params;
     const planRef = db().collection("shiftPlans").doc(planId);
@@ -503,7 +504,7 @@ shiftsRouter.get(
 shiftsRouter.patch(
   "/plans/:planId",
   requireAuth,
-  requireRole("admin", "director", "hr"),
+  requirePermission("shifts.plan.transition"),
   async (req, res) => {
     const { planId } = req.params;
     const body = req.body as Record<string, unknown>;
@@ -575,7 +576,7 @@ shiftsRouter.patch(
 shiftsRouter.patch(
   "/plans/:planId/deadlines",
   requireAuth,
-  requireRole("admin", "director", "hr"),
+  requirePermission("shifts.plan.edit"),
   async (req, res) => {
     const { planId } = req.params;
     const body = req.body as Record<string, unknown>;
@@ -626,7 +627,7 @@ shiftsRouter.patch(
 shiftsRouter.patch(
   "/plans/:planId/free-dpa-day",
   requireAuth,
-  requireRole("admin", "director"),
+  requirePermission("shifts.freeShift.manage"),
   async (req, res) => {
     const { planId } = req.params;
     const body = req.body as Record<string, unknown>;
@@ -660,7 +661,7 @@ shiftsRouter.patch(
 shiftsRouter.delete(
   "/plans/:planId",
   requireAuth,
-  requireRole("admin"),
+  requirePermission("shifts.plan.delete"),
   async (req, res) => {
     const { planId } = req.params;
     const planRef = db().collection("shiftPlans").doc(planId);
@@ -702,7 +703,7 @@ shiftsRouter.delete(
 shiftsRouter.get(
   "/plans/:planId/employees",
   requireAuth,
-  requireRole("admin", "director", "manager", "hr"),
+  requirePermission("shifts.view.all"),
   async (req, res) => {
     const { planId } = req.params;
     const snap = await db()
@@ -719,7 +720,7 @@ shiftsRouter.get(
 shiftsRouter.post(
   "/plans/:planId/employees",
   requireAuth,
-  requireRole("admin", "director", "manager", "hr"),
+  requirePermission("shifts.planEmployees.manage"),
   async (req, res) => {
     const { planId } = req.params;
     const body = req.body as Record<string, unknown>;
@@ -811,7 +812,7 @@ shiftsRouter.post(
 shiftsRouter.put(
   "/plans/:planId/employees/:docId",
   requireAuth,
-  requireRole("admin", "director", "manager", "hr"),
+  requirePermission("shifts.planEmployees.manage"),
   async (req, res) => {
     const { planId, docId } = req.params;
     const body = req.body as Record<string, unknown>;
@@ -889,7 +890,7 @@ shiftsRouter.put(
 shiftsRouter.patch(
   "/plans/:planId/employees/:docId/x-allowance",
   requireAuth,
-  requireRole("admin", "director"),
+  requirePermission("shifts.xAllowance.manage"),
   async (req, res) => {
     const { planId, docId } = req.params;
     const body = req.body as Record<string, unknown>;
@@ -928,7 +929,7 @@ shiftsRouter.patch(
 shiftsRouter.delete(
   "/plans/:planId/employees/:docId",
   requireAuth,
-  requireRole("admin", "director", "manager", "hr"),
+  requirePermission("shifts.planEmployees.manage"),
   async (req, res) => {
     const { planId, docId } = req.params;
     const planRef = db().collection("shiftPlans").doc(planId);
@@ -980,7 +981,7 @@ shiftsRouter.delete(
 shiftsRouter.post(
   "/plans/:planId/copy-employees",
   requireAuth,
-  requireRole("admin", "director", "hr"),
+  requirePermission("shifts.plan.edit"),
   async (req, res) => {
     const { planId } = req.params;
     const body = req.body as Record<string, unknown>;
@@ -1042,7 +1043,7 @@ shiftsRouter.post(
 shiftsRouter.put(
   "/plans/:planId/shifts/:employeeId/:date",
   requireAuth,
-  requireRole("admin", "director", "manager", "employee", "hr"),
+  requirePermission("shifts.cells.edit", "shifts.cells.editOwnX"),
   async (req: AuthRequest, res) => {
     const { planId, employeeId, date } = req.params;
     const body = req.body as Record<string, unknown>;
@@ -1124,7 +1125,7 @@ shiftsRouter.put(
 shiftsRouter.delete(
   "/plans/:planId/shifts/:employeeId/:date",
   requireAuth,
-  requireRole("admin", "director", "manager", "employee", "hr"),
+  requirePermission("shifts.cells.edit", "shifts.cells.editOwnX"),
   async (req: AuthRequest, res) => {
     const { planId, employeeId, date } = req.params;
     const userRole = req.role;
@@ -1167,7 +1168,7 @@ shiftsRouter.delete(
 shiftsRouter.get(
   "/plans/:planId/rules",
   requireAuth,
-  requireRole("admin", "director", "manager", "hr"),
+  requirePermission("shifts.view.all"),
   async (req, res) => {
     const { planId } = req.params;
     const snap = await db()
@@ -1183,7 +1184,7 @@ shiftsRouter.get(
 shiftsRouter.put(
   "/plans/:planId/rules",
   requireAuth,
-  requireRole("admin", "director", "manager", "hr"),
+  requirePermission("shifts.cells.edit"),
   async (req, res) => {
     const { planId } = req.params;
     const body = req.body as Record<string, unknown>;
@@ -1222,7 +1223,7 @@ shiftsRouter.put(
 shiftsRouter.get(
   "/plans/:planId/unavailability",
   requireAuth,
-  requireRole("admin", "director", "manager", "hr"),
+  requirePermission("shifts.view.all"),
   async (req, res) => {
     const { planId } = req.params;
     const snap = await db()
@@ -1287,7 +1288,7 @@ shiftsRouter.post(
 shiftsRouter.patch(
   "/plans/:planId/unavailability/:reqId",
   requireAuth,
-  requireRole("admin", "director", "manager", "hr"),
+  requirePermission("shifts.override.review"),
   async (req: AuthRequest, res) => {
     const { planId, reqId } = req.params;
     const body = req.body as Record<string, unknown>;
@@ -1329,7 +1330,7 @@ shiftsRouter.patch(
 shiftsRouter.get(
   "/overrides/pending-count",
   requireAuth,
-  requireRole("admin", "director", "hr"),
+  requirePermission("shifts.override.review"),
   async (_req, res) => {
     const snap = await db()
       .collectionGroup("shiftOverrideRequests")
@@ -1344,7 +1345,7 @@ shiftsRouter.get(
 shiftsRouter.get(
   "/overrides/pending",
   requireAuth,
-  requireRole("admin", "director", "hr"),
+  requirePermission("shifts.override.review"),
   async (_req, res) => {
     const snap = await db()
       .collectionGroup("shiftOverrideRequests")
@@ -1389,7 +1390,7 @@ shiftsRouter.get(
 shiftsRouter.get(
   "/plans/:planId/shiftOverrides",
   requireAuth,
-  requireRole("admin", "director", "manager", "employee", "hr"),
+  requirePermission("shifts.override.review", "shifts.override.submit", "shifts.view.self"),
   async (req: AuthRequest, res) => {
     const { planId } = req.params;
     const isPrivileged = req.role === "admin" || req.role === "director" || req.role === "manager";
@@ -1413,7 +1414,7 @@ shiftsRouter.get(
 shiftsRouter.post(
   "/plans/:planId/shiftOverrides",
   requireAuth,
-  requireRole("admin", "director", "manager", "employee", "hr"),
+  requirePermission("shifts.override.submit", "shifts.view.self"),
   async (req: AuthRequest, res) => {
     const { planId } = req.params;
     const body = req.body as Record<string, unknown>;
@@ -1470,7 +1471,7 @@ shiftsRouter.post(
 shiftsRouter.patch(
   "/plans/:planId/shiftOverrides/:reqId",
   requireAuth,
-  requireRole("admin", "director", "hr"),
+  requirePermission("shifts.override.review"),
   async (req: AuthRequest, res) => {
     const { planId, reqId } = req.params;
     const body = req.body as Record<string, unknown>;
@@ -1549,7 +1550,7 @@ shiftsRouter.patch(
 shiftsRouter.delete(
   "/plans/:planId/shiftOverrides/:reqId",
   requireAuth,
-  requireRole("admin", "director", "manager", "employee", "hr"),
+  requirePermission("shifts.override.submit", "shifts.view.self"),
   async (req: AuthRequest, res) => {
     const { planId, reqId } = req.params;
     const ref = db()
@@ -1591,7 +1592,7 @@ shiftsRouter.delete(
 shiftsRouter.get(
   "/changeRequests/pending-count",
   requireAuth,
-  requireRole("admin", "director", "hr"),
+  requirePermission("shifts.changeRequest.review"),
   async (_req, res) => {
     const snap = await db()
       .collectionGroup("shiftChangeRequests")
@@ -1605,7 +1606,7 @@ shiftsRouter.get(
 shiftsRouter.get(
   "/changeRequests/pending",
   requireAuth,
-  requireRole("admin", "director", "hr"),
+  requirePermission("shifts.changeRequest.review"),
   async (_req, res) => {
     const snap = await db()
       .collectionGroup("shiftChangeRequests")
@@ -1647,7 +1648,7 @@ shiftsRouter.get(
 shiftsRouter.get(
   "/plans/:planId/shiftChangeRequests",
   requireAuth,
-  requireRole("admin", "director", "manager", "employee", "hr"),
+  requirePermission("shifts.changeRequest.review", "shifts.changeRequest.submit", "shifts.view.self"),
   async (req: AuthRequest, res) => {
     const { planId } = req.params;
     const userRole = req.role;
@@ -1672,7 +1673,7 @@ shiftsRouter.get(
 shiftsRouter.post(
   "/plans/:planId/shiftChangeRequests",
   requireAuth,
-  requireRole("admin", "director", "manager", "employee", "hr"),
+  requirePermission("shifts.changeRequest.submit", "shifts.freeShift.claim"),
   async (req: AuthRequest, res) => {
     const { planId } = req.params;
     const body = req.body as Record<string, unknown>;
@@ -1776,7 +1777,7 @@ shiftsRouter.post(
 shiftsRouter.patch(
   "/plans/:planId/shiftChangeRequests/:reqId",
   requireAuth,
-  requireRole("admin", "director", "hr"),
+  requirePermission("shifts.changeRequest.review"),
   async (req: AuthRequest, res) => {
     const { planId, reqId } = req.params;
     const body = req.body as Record<string, unknown>;
@@ -1877,7 +1878,7 @@ shiftsRouter.patch(
 shiftsRouter.delete(
   "/plans/:planId/shiftChangeRequests/:reqId",
   requireAuth,
-  requireRole("admin", "director", "manager", "employee", "hr"),
+  requirePermission("shifts.changeRequest.submit", "shifts.freeShift.claim"),
   async (req: AuthRequest, res) => {
     const { planId, reqId } = req.params;
     const ref = db()
@@ -1922,7 +1923,7 @@ const VALID_MOD_CODE = /^[A-Z]$/;
 shiftsRouter.patch(
   "/plans/:planId/mod-persons",
   requireAuth,
-  requireRole("admin", "director", "hr"),
+  requirePermission("shifts.mod.manage"),
   async (req: AuthRequest, res) => {
     const { planId } = req.params;
     const { employeeId, oldLetter, newLetter } = req.body as {
@@ -1993,7 +1994,7 @@ shiftsRouter.patch(
 shiftsRouter.put(
   "/plans/:planId/mod/:date",
   requireAuth,
-  requireRole("admin", "director", "manager", "hr"),
+  requirePermission("shifts.mod.manage"),
   async (req, res) => {
     const { planId, date } = req.params;
     const body = req.body as Record<string, unknown>;
@@ -2034,7 +2035,7 @@ shiftsRouter.put(
 shiftsRouter.delete(
   "/plans/:planId/mod/:date",
   requireAuth,
-  requireRole("admin", "director", "manager", "hr"),
+  requirePermission("shifts.mod.manage"),
   async (req, res) => {
     const { planId, date } = req.params;
     const modRef = db()

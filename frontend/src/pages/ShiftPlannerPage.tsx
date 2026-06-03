@@ -149,7 +149,7 @@ function StatusBadge({ status }: { status: PlanStatus }) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ShiftPlannerPage() {
-  const { role, employeeId: currentEmployeeId } = useAuth();
+  const { can, employeeId: currentEmployeeId } = useAuth();
   const now = clock.now();
 
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
@@ -189,8 +189,12 @@ export default function ShiftPlannerPage() {
   const [headerHeight, setHeaderHeight] = useState(0);
   const [stickyTop, setStickyTop] = useState(0);
 
-  const canEdit = role === "admin" || role === "director" || role === "manager";
-  const canPublish = role === "admin" || role === "director";
+  // Permission-derived (Phase 3). Coverage is identical to the previous role
+  // checks: cells.edit = {admin,director,manager}; plan.transition = {admin,director}.
+  const canEdit = can("shifts.cells.edit");
+  const canPublish = can("shifts.plan.transition");
+  // Self-service worker (built-in "employee"): edits only own X, no full cell edit.
+  const selfServiceOnly = can("shifts.cells.editOwnX") && !can("shifts.cells.edit");
 
   // Local draft for deadline inputs — avoids live-saving on every keystroke
   const [deadlineDraft, setDeadlineDraft] = useState({ openedAt: "", closedAt: "", publishedAt: "" });
@@ -989,7 +993,7 @@ export default function ShiftPlannerPage() {
     if (!plan) return;
 
     // Employees may only enter X or clear a cell — silently discard anything else
-    if (role === "employee" && rawInput.trim() !== "") {
+    if (selfServiceOnly && rawInput.trim() !== "") {
       const parsed = parseShiftExpression(rawInput);
       if (!parsed.isValid || !parsed.segments.every((s) => s.code === "X")) {
         return; // resolve without error so ShiftCell reverts to original value
@@ -1040,7 +1044,7 @@ export default function ShiftPlannerPage() {
     const isAllX =
       parsed.segments.length > 0 && parsed.segments.every((s) => s.code === "X");
 
-    if (isAllX && role !== "admin" && role !== "director") {
+    if (isAllX && !canPublish) {
       // Hard block: no more than 6 consecutive Xs — no override allowed
       if (consecutiveXRun(plan.shifts, employeeId, date) > 6) {
         setConfirmModal({
@@ -1200,7 +1204,7 @@ export default function ShiftPlannerPage() {
             )}
 
             {/* Add employee */}
-            {plan && (plan.status !== "published" || role === "admin") && canEdit && (
+            {plan && (plan.status !== "published" || can("shifts.plan.revert")) && canEdit && (
               <Button
                 variant="secondary"
                 onClick={() => setShowAddEmployee(true)}
@@ -1343,7 +1347,7 @@ export default function ShiftPlannerPage() {
             )}
 
             {/* Revert plan (admin only) */}
-            {plan && role === "admin" && plan.status !== "created" && (
+            {plan && can("shifts.plan.revert") && plan.status !== "created" && (
               <Button
                 variant="secondary"
                 onClick={confirmRevertPlan}
@@ -1354,7 +1358,7 @@ export default function ShiftPlannerPage() {
             )}
 
             {/* Delete plan (admin, any status) */}
-            {plan && role === "admin" && plan.status === "created" && (
+            {plan && can("shifts.plan.delete") && plan.status === "created" && (
               <Button
                 variant="danger"
                 onClick={confirmDeletePlan}
@@ -1569,17 +1573,17 @@ export default function ShiftPlannerPage() {
               onEditEmployee={(emp) => setEditingEmployee(emp)}
               onDeleteEmployee={handleDeleteEmployee}
               canEditEmployees={
-                role === "admin" || (canEdit && plan.status !== "published")
+                can("shifts.plan.revert") || (canEdit && plan.status !== "published")
               }
               canSeeInactiveFlag={canEdit}
-              readOnly={role === "employee" ? plan.status !== "opened" : !canEdit}
-              alwaysReadOnlySections={role === "employee" ? ["vedoucí"] : []}
+              readOnly={selfServiceOnly ? plan.status !== "opened" : !canEdit}
+              alwaysReadOnlySections={selfServiceOnly ? ["vedoucí"] : []}
               currentEmployeeId={currentEmployeeId}
-              showCounterTable={role === "admin"}
+              showCounterTable={can("shifts.counterTable.view")}
               showModCounts={canPublish && (plan.status === "closed" || plan.status === "published")}
-              onModPersonChange={role === "admin" || role === "director" ? handleModPersonChange : undefined}
+              onModPersonChange={can("shifts.mod.manage") ? handleModPersonChange : undefined}
               onCellRequestChange={
-                role === "employee" && plan.status === "published"
+                selfServiceOnly && plan.status === "published"
                   ? (employeeId, date, currentRawInput) => {
                       // #32 — stamp the moment of the click, carried through to the POST
                       setPendingChangeRequest({
@@ -1617,7 +1621,7 @@ export default function ShiftPlannerPage() {
               showFreeShifts={plan.status === "published"}
               freeShiftDpaDays={plan.freeShiftDpaDays ?? []}
               onClaimFreeShift={
-                role === "employee" && plan.status === "published"
+                can("shifts.freeShift.claim") && plan.status === "published"
                   ? (date, code, hotel) => setPendingFreeClaim({ date, code, hotel })
                   : undefined
               }

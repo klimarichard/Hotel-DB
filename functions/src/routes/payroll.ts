@@ -2,7 +2,8 @@ import { Router, Response } from "express";
 import { randomUUID } from "crypto";
 import * as admin from "firebase-admin";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
-import { requireAuth, requireRole, AuthRequest } from "../middleware/auth";
+import { requireAuth, AuthRequest } from "../middleware/auth";
+import { requirePermission } from "../auth/permissions";
 import { createOrUpdatePayrollPeriod, getMultisportPrice, recomputeEntryForEmployee } from "../services/payrollCalculator";
 import { ctxFromReq, logCreate, logUpdate, logDelete, writeAudit } from "../services/auditLog";
 
@@ -71,7 +72,7 @@ async function ensurePeriodUnlocked(
 payrollRouter.post(
   "/periods/:id/entries/:employeeId/notes",
   requireAuth,
-  requireRole("admin", "director"),
+  requirePermission("payroll.notes.manage"),
   async (req: AuthRequest, res: Response) => {
     const { id: periodId, employeeId } = req.params;
     const body = req.body as { text?: unknown; carryForward?: unknown };
@@ -165,7 +166,7 @@ payrollRouter.post(
 payrollRouter.post(
   "/periods/:id/entries/:employeeId/notes/:noteId/read",
   requireAuth,
-  requireRole("admin", "director"),
+  requirePermission("payroll.notes.manage"),
   async (req: AuthRequest, res: Response) => {
     const { id: periodId, employeeId, noteId } = req.params;
     const periodRef = db().collection("payrollPeriods").doc(periodId);
@@ -249,7 +250,7 @@ payrollRouter.post(
 payrollRouter.patch(
   "/periods/:id/entries/:employeeId/notes/:noteId",
   requireAuth,
-  requireRole("admin", "director"),
+  requirePermission("payroll.notes.manage"),
   async (req: AuthRequest, res: Response) => {
     const { id: periodId, employeeId, noteId } = req.params;
     const body = req.body as { text?: unknown; carryForward?: unknown };
@@ -366,7 +367,7 @@ payrollRouter.patch(
 payrollRouter.delete(
   "/periods/:id/entries/:employeeId/notes/:noteId",
   requireAuth,
-  requireRole("admin", "director"),
+  requirePermission("payroll.notes.manage"),
   async (req: AuthRequest, res: Response) => {
     const { id: periodId, employeeId, noteId } = req.params;
     const periodRef = db().collection("payrollPeriods").doc(periodId);
@@ -406,7 +407,7 @@ payrollRouter.delete(
 payrollRouter.get(
   "/settings",
   requireAuth,
-  requireRole("admin", "director"),
+  requirePermission("payroll.view"),
   async (_req: AuthRequest, res: Response) => {
     const snap = await db().collection("settings").doc("payroll").get();
     const data = snap.exists ? snap.data() : undefined;
@@ -423,7 +424,7 @@ payrollRouter.get(
 payrollRouter.patch(
   "/settings",
   requireAuth,
-  requireRole("admin"),
+  requirePermission("settings.payroll.manage"),
   async (req: AuthRequest, res: Response) => {
     const { foodVoucherRate, dppMaxMonthlyReward, minimumWage, multisportBasePrice } = req.body as {
       foodVoucherRate?: number;
@@ -482,7 +483,7 @@ payrollRouter.patch(
 payrollRouter.get(
   "/periods",
   requireAuth,
-  requireRole("admin", "director"),
+  requirePermission("payroll.view"),
   async (_req: AuthRequest, res: Response) => {
     const snap = await db()
       .collection("payrollPeriods")
@@ -517,7 +518,7 @@ async function hydrateMultisport(
 payrollRouter.get(
   "/periods/:id",
   requireAuth,
-  requireRole("admin", "director"),
+  requirePermission("payroll.view"),
   async (req: AuthRequest, res: Response) => {
     const periodRef = db().collection("payrollPeriods").doc(req.params.id);
     const [periodSnap, entriesSnap] = await Promise.all([
@@ -546,7 +547,7 @@ payrollRouter.get(
 payrollRouter.get(
   "/periods/by-month/:year/:month",
   requireAuth,
-  requireRole("admin", "director"),
+  requirePermission("payroll.view"),
   async (req: AuthRequest, res: Response) => {
     const year = parseInt(req.params.year);
     const month = parseInt(req.params.month);
@@ -581,7 +582,7 @@ payrollRouter.get(
 payrollRouter.patch(
   "/periods/:id",
   requireAuth,
-  requireRole("admin"),
+  requirePermission("payroll.lock"),
   async (req: AuthRequest, res: Response) => {
     const { locked } = req.body as { locked?: boolean };
     if (typeof locked !== "boolean") {
@@ -622,7 +623,7 @@ payrollRouter.patch(
 payrollRouter.patch(
   "/periods/:id/entries/:employeeId",
   requireAuth,
-  requireRole("admin", "director"),
+  requirePermission("payroll.edit"),
   async (req: AuthRequest, res: Response) => {
     const periodRef = db().collection("payrollPeriods").doc(req.params.id);
     const periodSnap = await periodRef.get();
@@ -696,7 +697,7 @@ const RECALC_OVERRIDE_KEYS = new Set([
 payrollRouter.post(
   "/periods/:id/entries/:employeeId/recalculate",
   requireAuth,
-  requireRole("admin"),
+  requirePermission("payroll.recalculate.hard"),
   async (req: AuthRequest, res: Response) => {
     const { id: periodId, employeeId } = req.params;
     const fields = Array.isArray((req.body as { fields?: unknown }).fields)
@@ -756,7 +757,7 @@ payrollRouter.post(
 payrollRouter.post(
   "/periods/:id/recalculate",
   requireAuth,
-  requireRole("admin", "director"),
+  requirePermission("payroll.recalculate"),
   async (req: AuthRequest, res: Response) => {
     const periodRef = db().collection("payrollPeriods").doc(req.params.id);
     const snap = await periodRef.get();
@@ -795,7 +796,7 @@ payrollRouter.post(
 payrollRouter.post(
   "/periods/:id/reset",
   requireAuth,
-  requireRole("admin"),
+  requirePermission("payroll.recalculate.hard"),
   async (req: AuthRequest, res: Response) => {
     const periodRef = db().collection("payrollPeriods").doc(req.params.id);
     const snap = await periodRef.get();
@@ -836,7 +837,7 @@ payrollRouter.post(
 payrollRouter.delete(
   "/periods/:id",
   requireAuth,
-  requireRole("admin"),
+  requirePermission("payroll.period.delete"),
   async (req: AuthRequest, res: Response) => {
     const periodRef = db().collection("payrollPeriods").doc(req.params.id);
     const snap = await periodRef.get();
@@ -879,7 +880,7 @@ payrollRouter.delete(
 payrollRouter.post(
   "/periods/by-month/:year/:month",
   requireAuth,
-  requireRole("admin", "director"),
+  requirePermission("payroll.create"),
   async (req: AuthRequest, res: Response) => {
     const year = parseInt(req.params.year);
     const month = parseInt(req.params.month);
@@ -930,7 +931,7 @@ payrollRouter.post(
 payrollRouter.post(
   "/trigger",
   requireAuth,
-  requireRole("admin"),
+  requirePermission("system.triggers"),
   async (_req: AuthRequest, res: Response) => {
     const snap = await db()
       .collection("shiftPlans")

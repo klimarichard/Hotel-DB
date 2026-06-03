@@ -10,7 +10,8 @@
  */
 import { Router } from "express";
 import { FieldValue } from "firebase-admin/firestore";
-import { requireAuth, requireRole, AuthRequest } from "../middleware/auth";
+import { requireAuth, AuthRequest } from "../middleware/auth";
+import { requirePermission } from "../auth/permissions";
 import {
   overrideDocRef,
   getState,
@@ -35,7 +36,7 @@ timeOverrideRouter.get("/", requireAuth, async (_req: AuthRequest, res) => {
 timeOverrideRouter.put(
   "/",
   requireAuth,
-  requireRole("admin"),
+  requirePermission("system.timeOverride"),
   async (req: AuthRequest, res) => {
     if (!isOverrideAllowed()) {
       res.status(403).json({ error: "Úprava času je v produkci zakázána." });
@@ -64,7 +65,7 @@ timeOverrideRouter.put(
 timeOverrideRouter.delete(
   "/",
   requireAuth,
-  requireRole("admin"),
+  requirePermission("system.timeOverride"),
   async (_req: AuthRequest, res) => {
     if (!isOverrideAllowed()) {
       res.status(403).json({ error: "Úprava času je v produkci zakázána." });
