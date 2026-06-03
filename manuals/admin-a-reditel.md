@@ -282,7 +282,7 @@ Historie změn konkrétního zaměstnance je i přímo na jeho detailu v sekci *
 - **Oddělení** — katalog oddělení.
 - **Vzdělání** — stupně vzdělání pro výběr u zaměstnance.
 - **Mzdy** — sazba stravenky, maximální měsíční odměna DPP, **minimální mzda** a **základní cena Multisport** (výchozí 470 Kč/měsíc).
-- **Menu** — pořadí položek v levém menu pro jednotlivé role.
+- **Menu** — pořadí položek v levém menu pro jednotlivé **typy uživatelů**.
 - **Uživatelské typy** — správa typů uživatelů a jejich oprávnění (viz níže).
 - **Uživatelé** — vytváření a správa uživatelských účtů: vytvoření (i bez hesla s odkazem pro reset), úprava jména/e-mailu, volba **typu uživatele** (sloupec *Typ*), **úprava oprávnění** (viz níže), deaktivace a reaktivace, reset hesla, propojení účtu se zaměstnancem. Neaktivní účty jsou dole; při vytvoření účtu se stejným e-mailem jako neaktivní účet se nabídne jeho reaktivace.
 

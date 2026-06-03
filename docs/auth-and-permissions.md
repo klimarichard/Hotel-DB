@@ -1,6 +1,6 @@
 # Authentication, Roles & Permissions
 
-This document covers how users authenticate (login + password reset), the **configurable permission model** that gates routes, menus, and API endpoints across the frontend/backend layers, and how the per-role sidebar menu order is configured and stored.
+This document covers how users authenticate (login + password reset), the **configurable permission model** that gates routes, menus, and API endpoints across the frontend/backend layers, and how the per-user-type sidebar menu order is configured and stored.
 
 > **History.** The app originally hard-coded a fixed six-role model (`admin`/`director`/`manager`/`employee` + `accountant`/`hr`) where every gate was a `requireRole(...)`/`RequireRole` check. That has been replaced by a **configurable RBAC** model: a fixed catalogue of ~90 granular permissions, editable **user types** stored as Firestore data, and per-user grants/revokes on top. The six former roles survive as **seeded built-in types** with the same effective access, so behaviour is identical until an admin edits a type.
 
@@ -104,7 +104,7 @@ The per-user **"Oprávnění"** button lets an admin choose the user's **type** 
 
 Guards: you **can't remove your own administrator rights**, and the **last administrator can't be demoted**.
 
-> **Transitional note.** The backend is **fully permission-based** (handler checks read `req.permissions`; `requireRole` is gone) and the **user-management UI is type-based**: the user list's per-row **"Typ"** dropdown and the create-user form both pick a `roleType` (the row quick-changes it via `PATCH /auth/users/:uid/permissions`), and the sidebar label shows the type name. The legacy `role` field is still **retained on the data side** as the `roleType` default, the `getManagementEmployeeIds` fallback, and the key for the per-role menu-order configurator (Settings → Menu). Full retirement of `role` — per-type menu config + stopping new-user `role` writes + a `roleType=role` user migration — is the remaining cleanup. `create-user` keeps the legacy `role` in sync only when the chosen type is a built-in id.
+> **Legacy `role` — fully retired from the live paths.** Everything now keys off the user **type**: the backend is permission-based (`req.permissions`; no `requireRole`), the user-management UI is type-based (per-row "Typ" dropdown + create-user type selector + type-name sidebar label), the menu configurator is per-type, and **new users are created with only a `roleType`** (no `role`). What remains of `role` is purely a **safety fallback**: `req.roleType` and `getManagementEmployeeIds` fall back to the `role` claim, and the resolver falls back to `BUILTIN_ROLE_PERMISSIONS` (keyed by the built-in type ids) when a roleType doc is missing — so accounts created before the cutover keep working unchanged. An optional additive backfill (`scripts/migrate-roletype-from-role.js`) can set `roleType=role` on those older user docs for tidiness; it's not required. The `UserRole` type + `BUILTIN_ROLE_PERMISSIONS` stay as the built-in type definitions.
 
 ## Endpoints
 
@@ -116,17 +116,17 @@ Guards: you **can't remove your own administrator rights**, and the **last admin
 
 **Seeding** — `scripts/seed-role-types.js` seeds the six built-ins (additive; the resolver falls back to the built-ins if unseeded).
 
-## Per-role menu order
+## Per-type menu order
 
-Settings → **Menu** (admin-only) lets admin configure the sidebar order independently for each **role** — the menu-order configurator is still keyed by the **legacy `role`** (see the transitional note above), not by user type. The roles render side-by-side as cards; each card shows the role's items with ▲▼ buttons to reorder, plus a "Kopírovat z…" dropdown that overwrites the draft with another role's order (filtered to ids the target role can access — e.g., copying admin → employee drops `nastaveni` because employee can't see it). Single Uložit at the bottom of the tab commits all lists.
+Settings → **Menu** (admin-only) lets admin configure the sidebar order independently for each **user type**. Each type renders as a card showing the items that type can see (its permissions), with ▲▼ buttons to reorder, plus a "Kopírovat z…" dropdown that overwrites the draft with another type's order (filtered to ids the target type can access). Single Uložit commits all lists.
 
-**Storage** — `settings/menuOrder` Firestore doc with shape `{ admin: [...ids], director: [...], manager: [...], employee: [...] }`. Saved on every PUT through the audit log.
+**Storage** — `settings/menuOrder` Firestore doc keyed by **user-type id** (`{ <typeId>: [...ids] }`). Built-in type ids equal the old role names, so pre-existing per-role data maps over unchanged. Saved on every PUT through the audit log.
 
-**Registry** — `frontend/src/lib/menuItems.ts` is the single source of truth for sidebar items (id, label, path, and the `permission` that gates them). When adding a new menu item, register it here and add the matching `<Route>` in `App.tsx` — the sidebar appends new items at the end of any saved order automatically, so existing orderings don't need backfilling. The backend mirrors this list (validates ids + role permissions on PUT) at `functions/src/routes/menuOrder.ts`.
+**Registry** — `frontend/src/lib/menuItems.ts` is the single source of truth for sidebar items (id, label, path, and the `permission` that gates them). When adding a new menu item, register it here and add the matching `<Route>` in `App.tsx` — the sidebar appends new items at the end of any saved order automatically. The backend (`functions/src/routes/menuOrder.ts`) validates that saved orders reference only real item ids; per-type *visibility* is enforced by the sidebar itself, so it isn't re-checked there.
 
-**Layout consumption** — `frontend/src/components/Layout.tsx` calls `GET /api/settings/menu-order/me` once on mount and resolves the order via `resolveOrderByPermission(can, savedOrder)`, which drops items the user lacks the permission for and appends any allowed items missing from the saved list. Falls back to the registry's default declaration order when no order is saved. Badges (Směny, Dovolená, Upozornění) are still resolved per-id.
+**Layout consumption** — `frontend/src/components/Layout.tsx` calls `GET /api/settings/menu-order/me` on mount and resolves the order via `resolveOrderByPermission(can, savedOrder)`, which drops items the user lacks the permission for and appends any allowed items missing from the saved list. Falls back to the registry's default declaration order when none is saved. The configurator (`MenuOrderTab`) reuses the same resolver with a per-type `can`. Badges (Směny, Dovolená, Upozornění) are still resolved per-id.
 
 **Endpoints**:
-- `GET /api/settings/menu-order` — admin only; returns the full map.
-- `GET /api/settings/menu-order/me` — any authenticated user; returns just their role's order (or `null` for default).
-- `PUT /api/settings/menu-order` — admin only; validated against the registry (ids must exist, must be allowed for the target role); audit-logged.
+- `GET /api/settings/menu-order` — admin only; returns the full per-type map.
+- `GET /api/settings/menu-order/me` — any authenticated user; returns just their **type's** order (keyed by `req.roleType`, which falls back to the legacy role), or `null` for default.
+- `PUT /api/settings/menu-order` — admin only; per-type-id arrays of valid item ids (unknown ids dropped, de-duplicated); audit-logged.
