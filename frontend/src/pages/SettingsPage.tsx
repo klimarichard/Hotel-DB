@@ -10,6 +10,7 @@ import ConfirmModal from "@/components/ConfirmModal";
 import MenuOrderTab from "./settings/MenuOrderTab";
 import UserTypesTab from "./settings/UserTypesTab";
 import UserPermissionsModal from "@/components/UserPermissionsModal";
+import type { Permission } from "@/lib/permissions/catalog";
 import styles from "./SettingsPage.module.css";
 
 const EyeIcon = () => (
@@ -104,6 +105,21 @@ const DEFAULT_COMPANY_IDS = ["HPM", "STP"];
 
 const emptyForm = { name: "", email: "", password: "", roleType: "employee", employeeId: "" };
 
+type SettingsTab = "users" | "companies" | "departments" | "jobPositions" | "education" | "payroll" | "menu" | "userTypes";
+
+// Each tab and the permission that gates it. Order is the display order; the
+// default tab resolves to the first one the user can actually access.
+const SETTINGS_TABS: { id: SettingsTab; perm: Permission }[] = [
+  { id: "users", perm: "users.view" },
+  { id: "companies", perm: "settings.companies.manage" },
+  { id: "departments", perm: "settings.departments.manage" },
+  { id: "jobPositions", perm: "settings.jobPositions.manage" },
+  { id: "education", perm: "settings.educationLevels.manage" },
+  { id: "payroll", perm: "settings.payroll.manage" },
+  { id: "menu", perm: "settings.menuOrder.manage" },
+  { id: "userTypes", perm: "userTypes.manage" },
+];
+
 export default function SettingsPage() {
   const { can, loading: authLoading } = useAuth();
 
@@ -150,7 +166,11 @@ export default function SettingsPage() {
   const [linkEmployeeId, setLinkEmployeeId] = useState<string>("");
   const [linkSaving, setLinkSaving] = useState(false);
 
-  const [settingsTab, setSettingsTab] = useState<"users" | "companies" | "departments" | "jobPositions" | "education" | "payroll" | "menu" | "userTypes">("users");
+  // Default to the first tab the user can actually access, so a user without
+  // users.view doesn't land on a blank/forbidden Users tab.
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>(
+    () => SETTINGS_TABS.find((t) => can(t.perm))?.id ?? "users"
+  );
 
   // Departments
   const [departments, setDepartments] = useState<DepartmentRecord[]>([]);
@@ -751,22 +771,22 @@ export default function SettingsPage() {
     <div>
       <div className={styles.header}>
         <h1 className={styles.title}>Nastavení</h1>
-        {settingsTab === "users" && (
+        {settingsTab === "users" && can("users.manage") && (
           <Button variant="primary" onClick={() => { setShowCreate(true); setFormError(null); }}>
             + Přidat uživatele
           </Button>
         )}
-        {settingsTab === "jobPositions" && (
+        {settingsTab === "jobPositions" && can("settings.jobPositions.manage") && (
           <Button variant="primary" onClick={openCreatePosition} disabled={departments.length === 0}>
             + Přidat pozici
           </Button>
         )}
-        {settingsTab === "departments" && (
+        {settingsTab === "departments" && can("settings.departments.manage") && (
           <Button variant="primary" onClick={() => { setDepNewName(""); setDepError(null); setShowDepCreate(true); }}>
             + Přidat oddělení
           </Button>
         )}
-        {settingsTab === "education" && (
+        {settingsTab === "education" && can("settings.educationLevels.manage") && (
           <Button variant="primary" onClick={() => { setEduNewName(""); setEduError(null); setShowEduCreate(true); }}>
             + Přidat vzdělání
           </Button>
@@ -774,13 +794,27 @@ export default function SettingsPage() {
       </div>
 
       <div className={styles.tabs}>
-        <button className={settingsTab === "users" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("users")}>Uživatelé</button>
-        <button className={settingsTab === "companies" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("companies")}>Společnosti</button>
-        <button className={settingsTab === "departments" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("departments")}>Oddělení</button>
-        <button className={settingsTab === "jobPositions" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("jobPositions")}>Pracovní pozice</button>
-        <button className={settingsTab === "education" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("education")}>Vzdělání</button>
-        <button className={settingsTab === "payroll" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("payroll")}>Mzdy</button>
-        <button className={settingsTab === "menu" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("menu")}>Menu</button>
+        {can("users.view") && (
+          <button className={settingsTab === "users" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("users")}>Uživatelé</button>
+        )}
+        {can("settings.companies.manage") && (
+          <button className={settingsTab === "companies" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("companies")}>Společnosti</button>
+        )}
+        {can("settings.departments.manage") && (
+          <button className={settingsTab === "departments" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("departments")}>Oddělení</button>
+        )}
+        {can("settings.jobPositions.manage") && (
+          <button className={settingsTab === "jobPositions" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("jobPositions")}>Pracovní pozice</button>
+        )}
+        {can("settings.educationLevels.manage") && (
+          <button className={settingsTab === "education" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("education")}>Vzdělání</button>
+        )}
+        {can("settings.payroll.manage") && (
+          <button className={settingsTab === "payroll" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("payroll")}>Mzdy</button>
+        )}
+        {can("settings.menuOrder.manage") && (
+          <button className={settingsTab === "menu" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("menu")}>Menu</button>
+        )}
         {can("userTypes.manage") && (
           <button className={settingsTab === "userTypes" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("userTypes")}>Uživatelské typy</button>
         )}
@@ -901,7 +935,7 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {settingsTab === "users" && (
+      {settingsTab === "users" && can("users.view") && (
         <>
           {loading && <p className={styles.state}>Načítám…</p>}
           {error && <p className={styles.errorState}>{error}</p>}
@@ -1018,7 +1052,7 @@ export default function SettingsPage() {
         </>
       )}
 
-      {settingsTab === "companies" && (
+      {settingsTab === "companies" && can("settings.companies.manage") && (
         <>
           {companyError && <p className={styles.errorState}>{companyError}</p>}
           <div style={{ marginBottom: "1rem" }}>
@@ -1141,7 +1175,7 @@ export default function SettingsPage() {
         </>
       )}
 
-      {settingsTab === "departments" && (
+      {settingsTab === "departments" && can("settings.departments.manage") && (
         <>
           {depError && <p className={styles.errorState}>{depError}</p>}
           <table className={styles.table}>
@@ -1218,7 +1252,7 @@ export default function SettingsPage() {
         </>
       )}
 
-      {settingsTab === "jobPositions" && (
+      {settingsTab === "jobPositions" && can("settings.jobPositions.manage") && (
         <>
           {showPosCreate && (
             <div className={styles.modal}>
@@ -1391,7 +1425,7 @@ export default function SettingsPage() {
         </>
       )}
 
-      {settingsTab === "education" && (
+      {settingsTab === "education" && can("settings.educationLevels.manage") && (
         <>
           {eduError && <p className={styles.errorState}>{eduError}</p>}
           <table className={styles.table}>
@@ -1491,7 +1525,7 @@ export default function SettingsPage() {
         </>
       )}
 
-      {settingsTab === "payroll" && (
+      {settingsTab === "payroll" && can("settings.payroll.manage") && (
         <div style={{ maxWidth: 480 }}>
           <h2 style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--color-text-heading)", marginBottom: "1rem" }}>
             Sazba stravenek
@@ -1726,8 +1760,8 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {settingsTab === "menu" && <MenuOrderTab />}
-      {settingsTab === "userTypes" && <UserTypesTab />}
+      {settingsTab === "menu" && can("settings.menuOrder.manage") && <MenuOrderTab />}
+      {settingsTab === "userTypes" && can("userTypes.manage") && <UserTypesTab />}
 
       {depDeleteId && (
         <ConfirmModal

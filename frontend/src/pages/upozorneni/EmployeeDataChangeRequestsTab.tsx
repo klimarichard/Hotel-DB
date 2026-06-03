@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "@/lib/api";
+import { useAuth } from "@/hooks/useAuth";
 import { formatDatetimeCZ } from "@/lib/dateFormat";
 import { employeeDisplayName } from "@/lib/employeeName";
 import { useEmployeeChangeRequestsContext } from "@/context/EmployeeChangeRequestsContext";
@@ -30,6 +31,9 @@ interface PendingRequest {
 
 export default function EmployeeDataChangeRequestsTab() {
   const { refresh } = useEmployeeChangeRequestsContext();
+  const { can } = useAuth();
+  const canReview = can("changeRequests.review");
+  const canReveal = can("sensitive.reveal");
   const [items, setItems] = useState<PendingRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [revealed, setRevealed] = useState<Record<string, string>>({});
@@ -78,9 +82,11 @@ export default function EmployeeDataChangeRequestsTab() {
       return (
         <span>
           {MASK}
-          <button type="button" className={card.revealBtn} onClick={() => handleReveal(req.id, c.field)}>
-            Zobrazit
-          </button>
+          {canReveal && (
+            <button type="button" className={card.revealBtn} onClick={() => handleReveal(req.id, c.field)}>
+              Zobrazit
+            </button>
+          )}
         </span>
       );
     }
@@ -121,22 +127,24 @@ export default function EmployeeDataChangeRequestsTab() {
             ))}
           </div>
 
-          <div style={{ display: "flex", gap: "0.6rem", marginTop: "0.75rem" }}>
-            <Button variant="primary" size="sm" onClick={() => resolve(req.id, "approved")} disabled={saving}>
-              Schválit
-            </Button>
-            <Button
-              variant="danger"
-              size="sm"
-              onClick={() => {
-                setRejectingId(req.id);
-                setRejectionReason("");
-              }}
-              disabled={saving}
-            >
-              Zamítnout
-            </Button>
-          </div>
+          {canReview && (
+            <div style={{ display: "flex", gap: "0.6rem", marginTop: "0.75rem" }}>
+              <Button variant="primary" size="sm" onClick={() => resolve(req.id, "approved")} disabled={saving}>
+                Schválit
+              </Button>
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={() => {
+                  setRejectingId(req.id);
+                  setRejectionReason("");
+                }}
+                disabled={saving}
+              >
+                Zamítnout
+              </Button>
+            </div>
+          )}
 
           {rejectingId === req.id && (
             <div style={{ display: "flex", gap: "0.6rem", marginTop: "0.6rem", alignItems: "center" }}>

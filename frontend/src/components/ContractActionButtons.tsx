@@ -39,7 +39,6 @@ interface Props {
   /** Filename shown in the Content-Disposition header on download. */
   defaultDisplayName: string;
   employeeId: string;
-  canEdit: boolean;
   /** Open the generation modal. Required when `contract` is null and the row supports generation. */
   onGenerate?: () => void;
   /** Called after any mutation (delete, upload, create-and-upload) so the parent can refetch. */
@@ -53,11 +52,18 @@ export default function ContractActionButtons({
   rowSnapshot,
   defaultDisplayName,
   employeeId,
-  canEdit,
   onGenerate,
   onChanged,
 }: Props) {
-  const { user } = useAuth();
+  const { user, can } = useAuth();
+  // Each contract action is gated by its own permission so custom user types can
+  // be granted granular access. Built-in admin/director hold all of these →
+  // unchanged. (Regenerate deletes the stale PDF then reopens the generator, but
+  // contracts.generate is the show-gate per the matrix.)
+  const canViewContracts = can("contracts.view");
+  const canGenerate = can("contracts.generate");
+  const canSign = can("contracts.sign");
+  const canDeleteContract = can("contracts.delete");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [busy, setBusy] = useState<null | "uploading" | "deleting" | "downloading">(null);
@@ -232,7 +238,7 @@ export default function ContractActionButtons({
   // editors get the regenerate path; read-only roles still see the preview.
   const storedSnap = contract?.rowSnapshot;
   const isStale =
-    canEdit &&
+    canGenerate &&
     !!onGenerate &&
     !!rowSnapshot &&
     !!storedSnap &&
@@ -253,7 +259,7 @@ export default function ContractActionButtons({
           {busy === "deleting" ? "Zahazuji…" : "Znovu generovat smlouvu"}
         </button>
       ) : (
-        previewKind && previewLabel && (
+        canViewContracts && previewKind && previewLabel && (
           <>
             <button
               type="button"
@@ -276,7 +282,7 @@ export default function ContractActionButtons({
         )
       )}
 
-      {canEdit && onGenerate && !hasUnsigned && !hasSigned && !isStale && (
+      {canGenerate && onGenerate && !hasUnsigned && !hasSigned && !isStale && (
         <button
           type="button"
           className={styles.generateBtn}
@@ -287,7 +293,7 @@ export default function ContractActionButtons({
         </button>
       )}
 
-      {canEdit && !hasSigned && (
+      {canSign && !hasSigned && (
         <label className={styles.uploadBtn}>
           {busy === "uploading" ? "Nahrávám…" : "Nahrát podepsanou smlouvu"}
           <input
@@ -304,7 +310,7 @@ export default function ContractActionButtons({
         </label>
       )}
 
-      {contract && canEdit && (
+      {contract && canDeleteContract && (
         <button
           type="button"
           className={styles.deleteBtn}

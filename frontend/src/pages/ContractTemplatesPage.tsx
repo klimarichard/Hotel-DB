@@ -501,7 +501,11 @@ function SaveIcon() {
 }
 
 export default function ContractTemplatesPage() {
-  const { user } = useAuth();
+  const { user, can } = useAuth();
+  // Editing is gated by contractTemplates.manage; a view-only user (route perm
+  // contractTemplates.view) sees templates read-only — no toolbar, no Save, no
+  // Create, no variable-insert, no margins editor.
+  const canManage = can("contractTemplates.manage");
   const imageInputRef = useRef<HTMLInputElement>(null);
   const [templates, setTemplates] = useState<Record<string, TemplateMeta | null>>({});
   const [customTypes, setCustomTypes] = useState<TemplateMeta[]>([]);
@@ -558,10 +562,12 @@ export default function ContractTemplatesPage() {
       SearchHighlight,
     ],
     content: "",
+    editable: canManage,
     editorProps: {
       attributes: { class: styles.editorContent },
       handleKeyDown(view, event) {
         if ((event.ctrlKey || event.metaKey) && (event.key === "f" || event.key === "F")) {
+          if (!view.editable) return false;
           event.preventDefault();
           setFindOpen(true);
           setTimeout(() => findInputRef.current?.focus(), 0);
@@ -609,6 +615,13 @@ export default function ContractTemplatesPage() {
     editor.on("transaction", handler);
     return () => { editor.off("transaction", handler); };
   }, [editor]);
+
+  // Keep the editor's editable state in sync with the permission, which resolves
+  // asynchronously after auth loads (and could change on re-auth).
+  useEffect(() => {
+    if (!editor) return;
+    editor.setEditable(canManage);
+  }, [editor, canManage]);
 
   /**
    * Visually push every page-break node down to the start of the next A4
@@ -882,31 +895,35 @@ export default function ContractTemplatesPage() {
       <div className={styles.header}>
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
           <h1 className={styles.title}>Šablony smluv</h1>
-          <Button
-            variant="primary"
-            onClick={() => {
-              setCreateIdDraft("");
-              setCreateNameDraft("");
-              setCreateError(null);
-              setCreateModalOpen(true);
-            }}
-          >
-            + Nová šablona
-          </Button>
-        </div>
-        <div className={styles.headerActions}>
-          {saveMsg && (
-            <span className={`${styles.saveMsg} ${saveMsg === "Uloženo" ? styles.saveMsgOk : styles.saveMsgErr}`}>
-              {saveMsg}
-            </span>
+          {canManage && (
+            <Button
+              variant="primary"
+              onClick={() => {
+                setCreateIdDraft("");
+                setCreateNameDraft("");
+                setCreateError(null);
+                setCreateModalOpen(true);
+              }}
+            >
+              + Nová šablona
+            </Button>
           )}
-          <Button variant="primary" onClick={handleSave} disabled={saving || !isDirty}>
-            <span className={styles.saveBtnInner}>
-              <SaveIcon />
-              {saving ? "Ukládám…" : "Uložit šablonu"}
-            </span>
-          </Button>
         </div>
+        {canManage && (
+          <div className={styles.headerActions}>
+            {saveMsg && (
+              <span className={`${styles.saveMsg} ${saveMsg === "Uloženo" ? styles.saveMsgOk : styles.saveMsgErr}`}>
+                {saveMsg}
+              </span>
+            )}
+            <Button variant="primary" onClick={handleSave} disabled={saving || !isDirty}>
+              <span className={styles.saveBtnInner}>
+                <SaveIcon />
+                {saving ? "Ukládám…" : "Uložit šablonu"}
+              </span>
+            </Button>
+          </div>
+        )}
       </div>
 
       <div className={styles.workspace}>
@@ -949,6 +966,7 @@ export default function ContractTemplatesPage() {
 
         {/* Center: TipTap editor */}
         <div className={styles.editorWrapper}>
+          {canManage && (
           <div className={styles.toolbar}>
             {/* Undo / Redo (Word convention: leftmost) */}
             <button
@@ -1230,7 +1248,8 @@ export default function ContractTemplatesPage() {
               onChange={handleImageFile}
             />
           </div>
-          {(editor?.isActive("table") || editor?.isActive("image")) && (
+          )}
+          {canManage && (editor?.isActive("table") || editor?.isActive("image")) && (
             <div className={styles.toolbarSecondary}>
               {editor?.isActive("table") && (
                 <>
@@ -1308,7 +1327,7 @@ export default function ContractTemplatesPage() {
               )}
             </div>
           )}
-          {marginsOpen && (
+          {canManage && marginsOpen && (
             <div className={styles.marginsBar}>
               {MARGIN_PRESETS.map((p) => {
                 const active = marginsEqual(margins, p.value);
@@ -1353,7 +1372,7 @@ export default function ContractTemplatesPage() {
               >✕</button>
             </div>
           )}
-          {findOpen && (
+          {canManage && findOpen && (
             <div className={styles.findBar}>
               <input
                 ref={findInputRef}
@@ -1403,6 +1422,7 @@ export default function ContractTemplatesPage() {
         </div>
 
         {/* Right: variable picker */}
+        {canManage && (
         <aside className={styles.varPanel}>
           <p className={styles.varPanelTitle}>Proměnné</p>
           <p className={styles.varPanelHint}>Kliknutím vložíte do dokumentu</p>
@@ -1422,9 +1442,10 @@ export default function ContractTemplatesPage() {
             </div>
           ))}
         </aside>
+        )}
       </div>
 
-      {createModalOpen && (
+      {canManage && createModalOpen && (
         <div className={modalStyles.overlay}>
           <div className={modalStyles.modal}>
             <div className={modalStyles.header}>

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Navigate, useSearchParams } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
 import { api } from "@/lib/api";
 import { employeeDisplayName } from "@/lib/employeeName";
 import Button from "@/components/Button";
@@ -17,6 +18,7 @@ interface EmployeeMini {
 }
 
 export default function AuditLogPage() {
+  const { can } = useAuth();
   const [params, setParams] = useSearchParams();
 
   // Filter state mirrors the URL so deep-links from EmployeeDetailPage work.
@@ -132,6 +134,8 @@ export default function AuditLogPage() {
   // the full accumulated list so groups re-form correctly across pagination.
   const events = useMemo(() => groupEntries(entries), [entries]);
   const buckets = useMemo(() => bucketByDate(events), [events]);
+
+  if (!can("audit.view")) return <Navigate to="/" replace />;
 
   return (
     <div>

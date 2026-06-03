@@ -11,7 +11,6 @@ interface Props {
   contracts: ContractRecord[];
   customTemplates: CustomTemplate[];
   employeeId: string;
-  canEdit: boolean;
   onContractsChanged: () => void;
   /** Open the generation modal for an ad-hoc row that has no PDF yet. */
   onGenerate: (contract: ContractRecord) => void;
@@ -28,7 +27,6 @@ export default function AdhocContractsSection({
   contracts,
   customTemplates,
   employeeId,
-  canEdit,
   onContractsChanged,
   onGenerate,
 }: Props) {
@@ -81,7 +79,6 @@ export default function AdhocContractsSection({
                   defaultType={c.type}
                   defaultDisplayName={labelFor(c.type)}
                   employeeId={employeeId}
-                  canEdit={canEdit}
                   onGenerate={() => onGenerate(c)}
                   onChanged={onContractsChanged}
                 />

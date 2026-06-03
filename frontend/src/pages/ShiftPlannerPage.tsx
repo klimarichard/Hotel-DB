@@ -1053,7 +1053,7 @@ export default function ShiftPlannerPage() {
     const isAllX =
       parsed.segments.length > 0 && parsed.segments.every((s) => s.code === "X");
 
-    if (isAllX && !canPublish) {
+    if (isAllX && !can("shifts.xAllowance.manage")) {
       // Hard block: no more than 6 consecutive Xs — no override allowed
       if (consecutiveXRun(plan.shifts, employeeId, date) > 6) {
         setConfirmModal({
@@ -1153,7 +1153,7 @@ export default function ShiftPlannerPage() {
             )}
 
             {/* Create plan */}
-            {!plan && canPublish && (
+            {!plan && can("shifts.plan.create") && (
               <>
                 {plansList.length > 0 && (
                   <select
@@ -1213,7 +1213,7 @@ export default function ShiftPlannerPage() {
             )}
 
             {/* Add employee */}
-            {plan && (plan.status !== "published" || can("shifts.plan.revert")) && canEdit && (
+            {plan && (plan.status !== "published" || can("shifts.plan.revert")) && can("shifts.planEmployees.manage") && (
               <Button
                 variant="secondary"
                 onClick={() => setShowAddEmployee(true)}
@@ -1223,7 +1223,7 @@ export default function ShiftPlannerPage() {
             )}
 
             {/* Copy employees into existing created plan */}
-            {plan?.status === "created" && canPublish && plansList.filter(p => p.id !== plan.id).length > 0 && (
+            {plan?.status === "created" && can("shifts.plan.edit") && plansList.filter(p => p.id !== plan.id).length > 0 && (
               <>
                 <select
                   className={styles.copyFromSelect}
@@ -1253,7 +1253,7 @@ export default function ShiftPlannerPage() {
 
             {/* Unavailability requests toggle */}
             {/* Override requests toggle (admin/director only) */}
-            {plan && canPublish && (
+            {plan && can("shifts.override.review") && (
               <Button
                 variant="secondary"
                 onClick={() => setShowOverrideRequests((v) => !v)}
@@ -1285,7 +1285,7 @@ export default function ShiftPlannerPage() {
             )}
 
             {/* Admin/director: separate Žádosti o změny button with badge */}
-            {plan && canPublish && (
+            {plan && can("shifts.changeRequest.review") && (
               <Button
                 variant="secondary"
                 onClick={() => setShowChangeRequests((v) => !v)}
@@ -1385,15 +1385,15 @@ export default function ShiftPlannerPage() {
               "created" admin can schedule all three at once (Otevření/Uzavření/Publikování).
               The cron advances one step per run, so a full chain cascades correctly. */}
           {plan && (
-            (plan.status === "created" && (canPublish || plan.openedAt)) ||
-            ((plan.status === "created" || plan.status === "opened") && (canPublish || plan.closedAt)) ||
-            (plan.status !== "published" && (canPublish || plan.publishedAt))
+            (plan.status === "created" && (can("shifts.plan.edit") || plan.openedAt)) ||
+            ((plan.status === "created" || plan.status === "opened") && (can("shifts.plan.edit") || plan.closedAt)) ||
+            (plan.status !== "published" && (can("shifts.plan.edit") || plan.publishedAt))
           ) && (
             <div className={styles.deadlineBar}>
-              {plan.status === "created" && (canPublish || plan.openedAt) && (
+              {plan.status === "created" && (can("shifts.plan.edit") || plan.openedAt) && (
                 <div className={styles.deadlineItem}>
                   <label className={styles.deadlineLabel}>Otevření:</label>
-                  {canPublish && (
+                  {can("shifts.plan.edit") && (
                     <>
                       <input
                         type="datetime-local"
@@ -1415,7 +1415,7 @@ export default function ShiftPlannerPage() {
                       <span className={styles.deadlineCountdown}>
                         ({deadlineCountdown(plan.openedAt)})
                       </span>
-                      {canPublish && (
+                      {can("shifts.plan.edit") && (
                         <button
                           className={styles.deadlineClear}
                           onClick={() => {
@@ -1431,10 +1431,10 @@ export default function ShiftPlannerPage() {
                   )}
                 </div>
               )}
-              {(plan.status === "created" || plan.status === "opened") && (canPublish || plan.closedAt) && (
+              {(plan.status === "created" || plan.status === "opened") && (can("shifts.plan.edit") || plan.closedAt) && (
                 <div className={styles.deadlineItem}>
                   <label className={styles.deadlineLabel}>Uzavření:</label>
-                  {canPublish && (
+                  {can("shifts.plan.edit") && (
                     <>
                       <input
                         type="datetime-local"
@@ -1456,7 +1456,7 @@ export default function ShiftPlannerPage() {
                       <span className={styles.deadlineCountdown}>
                         ({deadlineCountdown(plan.closedAt)})
                       </span>
-                      {canPublish && (
+                      {can("shifts.plan.edit") && (
                         <button
                           className={styles.deadlineClear}
                           onClick={() => {
@@ -1473,10 +1473,10 @@ export default function ShiftPlannerPage() {
                 </div>
               )}
               {/* status is already narrowed to created/opened/closed by the bar's wrapper */}
-              {(canPublish || plan.publishedAt) && (
+              {(can("shifts.plan.edit") || plan.publishedAt) && (
                 <div className={styles.deadlineItem}>
                   <label className={styles.deadlineLabel}>Publikování:</label>
-                  {canPublish && (
+                  {can("shifts.plan.edit") && (
                     <>
                       <input
                         type="datetime-local"
@@ -1498,7 +1498,7 @@ export default function ShiftPlannerPage() {
                       <span className={styles.deadlineCountdown}>
                         ({deadlineCountdown(plan.publishedAt)})
                       </span>
-                      {canPublish && (
+                      {can("shifts.plan.edit") && (
                         <button
                           className={styles.deadlineClear}
                           onClick={() => {
@@ -1547,7 +1547,7 @@ export default function ShiftPlannerPage() {
           )}
 
           {/* Shift change requests panel — admin/director only (full review mode) */}
-          {plan && showChangeRequests && canPublish && (
+          {plan && showChangeRequests && can("shifts.changeRequest.review") && (
             <ShiftChangeRequestPanel
               planId={plan.id}
               employees={plan.employees}
@@ -1583,7 +1583,7 @@ export default function ShiftPlannerPage() {
               onEditEmployee={(emp) => setEditingEmployee(emp)}
               onDeleteEmployee={handleDeleteEmployee}
               canEditEmployees={
-                can("shifts.plan.revert") || (canEdit && plan.status !== "published")
+                can("shifts.plan.revert") || (can("shifts.planEmployees.manage") && plan.status !== "published")
               }
               canSeeInactiveFlag={canEdit}
               readOnly={selfServiceOnly ? plan.status !== "opened" : !canEdit}
@@ -1593,7 +1593,7 @@ export default function ShiftPlannerPage() {
               showModCounts={canPublish && (plan.status === "closed" || plan.status === "published")}
               onModPersonChange={can("shifts.mod.manage") ? handleModPersonChange : undefined}
               onCellRequestChange={
-                selfServiceOnly && plan.status === "published"
+                can("shifts.changeRequest.submit") && plan.status === "published"
                   ? (employeeId, date, currentRawInput) => {
                       // #32 — stamp the moment of the click, carried through to the POST
                       setPendingChangeRequest({
@@ -1604,7 +1604,7 @@ export default function ShiftPlannerPage() {
                   : undefined
               }
               xInfoFor={
-                canPublish && (plan.status === "created" || plan.status === "opened")
+                can("shifts.xAllowance.manage") && (plan.status === "created" || plan.status === "opened")
                   ? (emp) => {
                       const limit = getEffectiveXLimit(emp);
                       if (limit === null) return null;
@@ -1621,7 +1621,7 @@ export default function ShiftPlannerPage() {
                   : undefined
               }
               onSetXAllowance={
-                canPublish && (plan.status === "created" || plan.status === "opened")
+                can("shifts.xAllowance.manage") && (plan.status === "created" || plan.status === "opened")
                   ? async (emp, limit) => {
                       await api.patch(`/shifts/plans/${plan.id}/employees/${emp.id}/x-allowance`, { limit });
                       loadPlan(true);
@@ -1635,7 +1635,7 @@ export default function ShiftPlannerPage() {
                   ? (date, code, hotel) => setPendingFreeClaim({ date, code, hotel })
                   : undefined
               }
-              onToggleDpaDay={canPublish && plan.status === "published" ? handleToggleDpaDay : undefined}
+              onToggleDpaDay={can("shifts.freeShift.manage") && plan.status === "published" ? handleToggleDpaDay : undefined}
               stickyTop={stickyTop}
             />
           )}

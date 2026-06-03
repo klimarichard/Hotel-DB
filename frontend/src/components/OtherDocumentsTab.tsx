@@ -28,13 +28,17 @@ interface OtherDocument {
 
 interface Props {
   employeeId: string;
-  canEdit: boolean;
 }
 
 const MAX_SIZE_BYTES = 15 * 1024 * 1024; // 15 MB
 
-export default function OtherDocumentsTab({ employeeId, canEdit }: Props) {
-  const { user } = useAuth();
+export default function OtherDocumentsTab({ employeeId }: Props) {
+  const { user, can } = useAuth();
+  // Each action gated by its own permission so custom user types can be granted
+  // granular access. Built-in admin/director hold all of these → unchanged.
+  const canView = can("documents.view");
+  const canUpload = can("documents.upload");
+  const canDelete = can("documents.delete");
   const [docs, setDocs] = useState<OtherDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -169,7 +173,7 @@ export default function OtherDocumentsTab({ employeeId, canEdit }: Props) {
 
   return (
     <div className={styles.wrap}>
-      {canEdit && (
+      {canUpload && (
         <div className={styles.toolbar}>
           <Button variant="primary" size="sm" onClick={openUpload}>
             Nahrát dokument
@@ -190,13 +194,17 @@ export default function OtherDocumentsTab({ employeeId, canEdit }: Props) {
                 <span className={styles.date}>{formatTimestampCZ(doc.uploadedAt)}</span>
               </div>
               <div className={styles.actions}>
-                <Button variant="secondary" size="sm" onClick={() => handlePreview(doc)}>
-                  Zobrazit
-                </Button>
-                <Button variant="secondary" size="sm" onClick={() => handleDownload(doc)}>
-                  Stáhnout
-                </Button>
-                {canEdit && (
+                {canView && (
+                  <>
+                    <Button variant="secondary" size="sm" onClick={() => handlePreview(doc)}>
+                      Zobrazit
+                    </Button>
+                    <Button variant="secondary" size="sm" onClick={() => handleDownload(doc)}>
+                      Stáhnout
+                    </Button>
+                  </>
+                )}
+                {canDelete && (
                   <Button variant="danger" size="sm" onClick={() => setDeleteTarget(doc)}>
                     Smazat
                   </Button>

@@ -64,9 +64,11 @@ export default function EmployeesPage() {
       <div className={styles.header}>
         <h1 className={styles.title}>Zaměstnanci</h1>
         <div className={styles.headerActions}>
-          <Button variant="secondary" onClick={() => setShowExport(true)}>
-            Exportovat CSV
-          </Button>
+          {can("employees.export") && (
+            <Button variant="secondary" onClick={() => setShowExport(true)}>
+              Exportovat CSV
+            </Button>
+          )}
           {can("employees.create") && (
             <Link to="/zamestnanci/novy" className={styles.addBtn}>
               + Přidat zaměstnance
