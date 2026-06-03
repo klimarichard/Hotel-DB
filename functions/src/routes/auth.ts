@@ -227,19 +227,32 @@ authRouter.post(
   requireAuth,
   requirePermission("users.manage"),
   async (req: AuthRequest, res) => {
-    const { email, password, name, role, employeeId } = req.body as {
+    const { email, password, name, roleType, role, employeeId } = req.body as {
       email: string;
       password?: string;
       name: string;
-      role: UserRole;
+      roleType?: string;
+      role?: UserRole; // legacy fallback for older callers
       employeeId?: string;
     };
 
-    const validRoles: UserRole[] = ["admin", "director", "manager", "employee", "accountant", "hr"];
-    if (!email || !name || !validRoles.includes(role)) {
-      res.status(400).json({ error: "email, name, and valid role are required" });
+    // Type-based: the user gets a roleType. Older callers may still send `role`.
+    const typeId = (typeof roleType === "string" && roleType) ? roleType : role;
+    if (!email || !name || !typeId) {
+      res.status(400).json({ error: "email, name, and a user type are required" });
       return;
     }
+    const typeDoc = await admin.firestore().collection(ROLE_TYPES_COLLECTION).doc(typeId).get();
+    if (!typeDoc.exists) {
+      res.status(400).json({ error: "Zvolený typ uživatele neexistuje." });
+      return;
+    }
+    // Keep the legacy `role` in sync only when the type is a built-in role id
+    // (drives the per-role menu configurator + sidebar label + resolver fallback).
+    // Custom types have no base role — that's fine; the sidebar + checks are
+    // permission-driven and management scoping reads the type's flag.
+    const validRoles: UserRole[] = ["admin", "director", "manager", "employee", "accountant", "hr"];
+    const baseRole: UserRole | null = validRoles.includes(typeId as UserRole) ? (typeId as UserRole) : null;
     // Password is optional. When omitted the account is created WITHOUT a password
     // and we hand back a reset link so the user can set their own (see below).
     const hasPassword = typeof password === "string" && password.length > 0;
@@ -253,12 +266,16 @@ authRouter.post(
       const userRecord = await admin.auth().createUser(
         hasPassword ? { email, password, displayName: name } : { email, displayName: name }
       );
-      await admin.auth().setCustomUserClaims(userRecord.uid, { role });
+      await admin.auth().setCustomUserClaims(userRecord.uid, {
+        ...(baseRole ? { role: baseRole } : {}),
+        roleType: typeId,
+      });
 
       await admin.firestore().collection("users").doc(userRecord.uid).set({
         name,
         email,
-        role,
+        ...(baseRole ? { role: baseRole } : {}),
+        roleType: typeId,
         employeeId: employeeId ?? null,
         active: true,
         createdAt: FieldValue.serverTimestamp(),
@@ -269,7 +286,7 @@ authRouter.post(
         collection: "users",
         resourceId: userRecord.uid,
         employeeId: employeeId ?? undefined,
-        summary: { name, email, role, employeeId: employeeId ?? null },
+        summary: { name, email, roleType: typeId, employeeId: employeeId ?? null },
       });
 
       // No password set → return a reset link the admin can send (there is no
@@ -497,7 +514,16 @@ authRouter.get("/me", requireAuth, async (req: AuthRequest, res) => {
   // grants/revokes, falling back to the built-in role mapping). The backend is
   // still the real gate; this only drives which UI controls show.
   const permissions = [...(req.permissions ?? [])];
-  res.json({ uid: doc.id, ...doc.data(), permissions });
+  // Resolve the user's type display name for the sidebar label (roleType,
+  // falling back to the legacy role). Best-effort — null if the type doc is gone.
+  const data = doc.data() as Record<string, unknown>;
+  const typeId = (data.roleType as string) || (data.role as string) || "";
+  let roleTypeName: string | null = null;
+  if (typeId) {
+    const t = await admin.firestore().collection(ROLE_TYPES_COLLECTION).doc(typeId).get();
+    roleTypeName = t.exists ? ((t.data() as Record<string, unknown>).name as string) ?? typeId : typeId;
+  }
+  res.json({ uid: doc.id, ...data, permissions, roleTypeName });
 });
 
 /**

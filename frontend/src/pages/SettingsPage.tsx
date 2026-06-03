@@ -2,8 +2,8 @@ import { useState, useEffect, useCallback } from "react";
 import { Navigate } from "react-router-dom";
 import { sendPasswordResetEmail } from "firebase/auth";
 import { auth } from "@/lib/firebase";
-import { useAuth, UserRole } from "@/hooks/useAuth";
-import { authApi, UserProfile, api, ApiError } from "@/lib/api";
+import { useAuth } from "@/hooks/useAuth";
+import { authApi, roleTypesApi, UserProfile, RoleType, api, ApiError } from "@/lib/api";
 import { employeeSurnameFirst } from "@/lib/employeeName";
 import Button from "@/components/Button";
 import ConfirmModal from "@/components/ConfirmModal";
@@ -102,18 +102,7 @@ interface PosCascadePreview {
 
 const DEFAULT_COMPANY_IDS = ["HPM", "STP"];
 
-const ROLES: UserRole[] = ["admin", "director", "manager", "employee", "accountant", "hr"];
-
-const ROLE_LABELS: Record<UserRole, string> = {
-  admin: "Admin",
-  director: "Ředitel",
-  manager: "FOM",
-  employee: "Zaměstnanec",
-  accountant: "Účetní",
-  hr: "Personalista",
-};
-
-const emptyForm = { name: "", email: "", password: "", role: "employee" as UserRole, employeeId: "" };
+const emptyForm = { name: "", email: "", password: "", roleType: "employee", employeeId: "" };
 
 export default function SettingsPage() {
   const { can, loading: authLoading } = useAuth();
@@ -127,8 +116,10 @@ export default function SettingsPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // Per-row role change state: uid → pending role
-  const [pendingRole, setPendingRole] = useState<Record<string, UserRole>>({});
+  // Configurable user types (for the create form + per-row type dropdown).
+  const [roleTypes, setRoleTypes] = useState<RoleType[]>([]);
+  // Per-row type change state: uid → pending roleType id
+  const [pendingType, setPendingType] = useState<Record<string, string>>({});
   const [roleChanging, setRoleChanging] = useState<Record<string, boolean>>({});
 
   // Per-row activation toggle state
@@ -235,6 +226,11 @@ export default function SettingsPage() {
   }, []);
 
   useEffect(() => { loadUsers(); }, [loadUsers]);
+
+  // Configurable user types — for the create form + per-row type dropdown.
+  useEffect(() => {
+    roleTypesApi.list().then(setRoleTypes).catch(() => setRoleTypes([]));
+  }, []);
 
   useEffect(() => {
     api.get<EmployeeSummary[]>("/employees?status=active")
@@ -611,7 +607,7 @@ export default function SettingsPage() {
         name: form.name,
         email,
         password: form.password || undefined,
-        role: form.role,
+        roleType: form.roleType,
         employeeId: form.employeeId || undefined,
       });
       setShowCreate(false);
@@ -643,7 +639,7 @@ export default function SettingsPage() {
       await authApi.reactivateUser(target.uid);
       const ops: Promise<unknown>[] = [];
       if (form.name && form.name !== target.name) ops.push(authApi.updateUser(target.uid, { name: form.name }));
-      if (form.role && form.role !== target.role) ops.push(authApi.setRole(target.uid, form.role));
+      if (form.roleType && form.roleType !== (target.roleType ?? target.role)) ops.push(authApi.setUserPermissions(target.uid, { roleType: form.roleType }));
       const newEmp = form.employeeId || null;
       if (newEmp !== (target.employeeId ?? null)) ops.push(authApi.linkEmployee(target.uid, newEmp));
       await Promise.all(ops);
@@ -692,15 +688,17 @@ export default function SettingsPage() {
     }
   }
 
-  async function handleRoleChange(uid: string, newRole: UserRole) {
-    setPendingRole((prev) => ({ ...prev, [uid]: newRole }));
+  // Quick-change a user's type from the row. Preserves any per-user grants/revokes
+  // (setUserPermissions keeps fields it isn't given). Fine-grained edits live in
+  // the "Oprávnění" modal.
+  async function handleTypeChange(uid: string, newType: string) {
+    setPendingType((prev) => ({ ...prev, [uid]: newType }));
     setRoleChanging((prev) => ({ ...prev, [uid]: true }));
     try {
-      await authApi.setRole(uid, newRole);
-      setUsers((prev) => prev.map((u) => (u.uid === uid ? { ...u, role: newRole } : u)));
+      await authApi.setUserPermissions(uid, { roleType: newType });
+      setUsers((prev) => prev.map((u) => (u.uid === uid ? { ...u, roleType: newType } : u)));
     } catch {
-      // Revert on failure
-      setPendingRole((prev) => {
+      setPendingType((prev) => {
         const next = { ...prev };
         delete next[uid];
         return next;
@@ -829,14 +827,14 @@ export default function SettingsPage() {
                 </p>
               </div>
               <div className={styles.field}>
-                <label className={styles.label}>Role</label>
+                <label className={styles.label}>Typ uživatele</label>
                 <select
                   className={styles.input}
-                  value={form.role}
-                  onChange={(e) => setForm({ ...form, role: e.target.value as UserRole })}
+                  value={form.roleType}
+                  onChange={(e) => setForm({ ...form, roleType: e.target.value })}
                 >
-                  {ROLES.map((r) => (
-                    <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+                  {roleTypes.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
                   ))}
                 </select>
               </div>
@@ -913,7 +911,7 @@ export default function SettingsPage() {
                 <tr>
                   <th>Jméno</th>
                   <th>E-mail</th>
-                  <th>Role</th>
+                  <th>Typ</th>
                   <th>Zaměstnanec</th>
                   <th>Stav</th>
                   <th>Akce</th>
@@ -934,12 +932,12 @@ export default function SettingsPage() {
                       <td>
                         <select
                           className={styles.roleSelect}
-                          value={pendingRole[u.uid] ?? u.role}
+                          value={pendingType[u.uid] ?? u.roleType ?? u.role}
                           disabled={roleChanging[u.uid]}
-                          onChange={(e) => handleRoleChange(u.uid, e.target.value as UserRole)}
+                          onChange={(e) => handleTypeChange(u.uid, e.target.value)}
                         >
-                          {ROLES.map((r) => (
-                            <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+                          {roleTypes.map((t) => (
+                            <option key={t.id} value={t.id}>{t.name}</option>
                           ))}
                         </select>
                       </td>

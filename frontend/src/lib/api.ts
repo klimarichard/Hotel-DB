@@ -100,7 +100,7 @@ export const authApi = {
   listUsers: () => api.get<UserProfile[]>("/auth/users"),
   // password optional: omit to create the account without one and get back a
   // reset link the admin can send (resetLink is null only if link generation failed).
-  createUser: (body: { email: string; password?: string; name: string; role: UserRole; employeeId?: string }) =>
+  createUser: (body: { email: string; password?: string; name: string; roleType: string; employeeId?: string }) =>
     api.post<{ uid: string; resetLink: string | null }>("/auth/create-user", body),
   updateUser: (uid: string, body: { name?: string; email?: string }) =>
     api.patch<{ success: boolean }>(`/auth/users/${uid}`, body),

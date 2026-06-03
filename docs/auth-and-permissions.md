@@ -104,7 +104,7 @@ The per-user **"Oprávnění"** button lets an admin choose the user's **type** 
 
 Guards: you **can't remove your own administrator rights**, and the **last administrator can't be demoted**.
 
-> **Transitional note.** The backend is now **fully permission-based** — all handler-internal checks read the effective permission set (`req.permissions`) and `requireRole` is gone. The legacy `role` field is still **retained** on the frontend/data side: it drives the per-role menu-order configurator (Settings → Menu), the sidebar user label, and serves as the `roleType` default + the `getManagementEmployeeIds` fallback. So the user-row **role dropdown remains alongside the new "Oprávnění" button** for now; full retirement of `role` (per-type menu config + a `roleType=role` user migration) is future cleanup. The permissions a user actually has come from the type + individual overrides, not the legacy dropdown.
+> **Transitional note.** The backend is **fully permission-based** (handler checks read `req.permissions`; `requireRole` is gone) and the **user-management UI is type-based**: the user list's per-row **"Typ"** dropdown and the create-user form both pick a `roleType` (the row quick-changes it via `PATCH /auth/users/:uid/permissions`), and the sidebar label shows the type name. The legacy `role` field is still **retained on the data side** as the `roleType` default, the `getManagementEmployeeIds` fallback, and the key for the per-role menu-order configurator (Settings → Menu). Full retirement of `role` — per-type menu config + stopping new-user `role` writes + a `roleType=role` user migration — is the remaining cleanup. `create-user` keeps the legacy `role` in sync only when the chosen type is a built-in id.
 
 ## Endpoints
 
