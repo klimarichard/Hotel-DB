@@ -18,16 +18,16 @@ const EmployeeChangeRequestsContext = createContext<EmployeeChangeRequestsContex
 });
 
 export function EmployeeChangeRequestsProvider({ children }: { children: ReactNode }) {
-  const { role } = useAuth();
+  const { can } = useAuth();
   const [pendingCount, setPendingCount] = useState(0);
 
   const fetch = useCallback(() => {
-    if (role !== "admin" && role !== "director") return;
+    if (!can("changeRequests.review")) return;
     api
       .get<{ count: number }>("/employee-change-requests/pending-count")
       .then((data) => setPendingCount(data.count))
       .catch(() => {});
-  }, [role]);
+  }, [can]);
 
   useEffect(() => {
     fetch();

@@ -20,7 +20,7 @@ type Tab = "doklady" | "zkusebni" | "dovolena" | "vyjimky" | "zmeny" | "uprava";
 
 export default function AlertsPage() {
   const [tab, setTab] = useState<Tab>("doklady");
-  const { role } = useAuth();
+  const { can } = useAuth();
   const { unreadCount, unreadProbationCount, refresh } = useAlertsContext();
   const { pendingCount: vacationCount } = useVacationContext();
   const { pendingCount: overridesCount } = useShiftOverridesContext();
@@ -67,7 +67,7 @@ export default function AlertsPage() {
       <div className={styles.header}>
         <div className={styles.titleGroup}>
           <h1 className={styles.title}>Upozornění</h1>
-          {role === "admin" && (
+          {can("alerts.refresh") && (
             <IconButton
               variant="refresh"
               aria-label="Obnovit upozornění"

@@ -1,7 +1,8 @@
 import { Router } from "express";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
-import { requireAuth, requireRole, AuthRequest, UserRole } from "../middleware/auth";
+import { requireAuth, AuthRequest, UserRole } from "../middleware/auth";
+import { requirePermission } from "../auth/permissions";
 import { ctxFromReq, logUpdate } from "../services/auditLog";
 
 export const menuOrderRouter = Router();
@@ -44,7 +45,7 @@ const docRef = () => db().collection("settings").doc("menuOrder");
 menuOrderRouter.get(
   "/",
   requireAuth,
-  requireRole("admin"),
+  requirePermission("settings.menuOrder.manage"),
   async (_req: AuthRequest, res) => {
     const snap = await docRef().get();
     res.json(snap.exists ? (snap.data() ?? {}) : {});
@@ -86,7 +87,7 @@ menuOrderRouter.get(
 menuOrderRouter.put(
   "/",
   requireAuth,
-  requireRole("admin"),
+  requirePermission("settings.menuOrder.manage"),
   async (req: AuthRequest, res) => {
     const body = req.body as Record<string, unknown>;
     const update: Record<string, string[]> = {};

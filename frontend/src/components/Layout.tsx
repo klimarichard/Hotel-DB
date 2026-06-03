@@ -9,7 +9,7 @@ import { useShiftChangeRequestsContext } from "@/context/ShiftChangeRequestsCont
 import { useVacationContext } from "@/context/VacationContext";
 import { useTheme } from "@/context/ThemeContext";
 import { api } from "@/lib/api";
-import { resolveOrderForRole } from "@/lib/menuItems";
+import { resolveOrderByPermission } from "@/lib/menuItems";
 import TimeOverrideBanner from "@/components/TimeOverrideBanner";
 import TimeOverrideControl from "@/components/TimeOverrideControl";
 import logoMark from "@/assets/logo.svg";
@@ -36,14 +36,14 @@ const MoonIcon = () => (
 );
 
 export default function Layout() {
-  const { user, role, name } = useAuth();
+  const { user, role, name, can } = useAuth();
   const { unreadCount, unreadProbationCount } = useAlertsContext();
   const upozorneniBadge = unreadCount + unreadProbationCount;
   const { pendingCount: pendingOverrideCount } = useShiftOverridesContext();
   const { pendingCount: pendingChangeRequestCount } = useShiftChangeRequestsContext();
   const { pendingCount: pendingVacationCount } = useVacationContext();
   const shiftsBadgeCount = pendingOverrideCount + pendingChangeRequestCount;
-  const showVacationBadge = (role === "admin" || role === "director") && pendingVacationCount > 0;
+  const showVacationBadge = can("vacation.review") && pendingVacationCount > 0;
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
 
@@ -59,7 +59,7 @@ export default function Layout() {
       .catch(() => setSavedOrder(null));
   }, [role]);
 
-  const items = role ? resolveOrderForRole(role, savedOrder) : [];
+  const items = resolveOrderByPermission(can, savedOrder);
 
   function badgeFor(id: string): number {
     if (id === "smeny") return shiftsBadgeCount;

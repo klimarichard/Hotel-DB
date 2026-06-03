@@ -1,7 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { User, onAuthStateChanged } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { api } from "@/lib/api";
+import { hasPermission, type Permission } from "@/lib/permissions/catalog";
 
 export type UserRole = "admin" | "director" | "manager" | "employee" | "accountant" | "hr";
 
@@ -11,15 +12,29 @@ interface AuthState {
   employeeId: string | null;
   /** Display name from users/{uid}.name (via /auth/me); null when unset. */
   name: string | null;
+  /** Effective permission set from /auth/me (resolved server-side from role). */
+  permissions: ReadonlySet<string>;
   loading: boolean;
 }
 
-export function useAuth(): AuthState {
+const EMPTY_PERMS: ReadonlySet<string> = new Set();
+
+export interface AuthValue extends AuthState {
+  /**
+   * Permission check — the frontend mirror of the backend gate. Honours the
+   * system.admin superuser key. Use this to show/hide UI; the backend enforces
+   * the same permission independently on every endpoint.
+   */
+  can: (perm: Permission) => boolean;
+}
+
+export function useAuth(): AuthValue {
   const [state, setState] = useState<AuthState>({
     user: null,
     role: null,
     employeeId: null,
     name: null,
+    permissions: EMPTY_PERMS,
     loading: true,
   });
 
@@ -28,20 +43,27 @@ export function useAuth(): AuthState {
       if (user) {
         const tokenResult = await user.getIdTokenResult();
         const profile = await api
-          .get<{ employeeId: string | null; name?: string | null }>("/auth/me")
-          .catch(() => ({ employeeId: null, name: null }));
+          .get<{ employeeId: string | null; name?: string | null; permissions?: string[] }>("/auth/me")
+          .catch(() => ({ employeeId: null, name: null, permissions: [] as string[] }));
         setState({
           user,
           role: (tokenResult.claims.role as UserRole) ?? null,
           employeeId: profile.employeeId ?? null,
           name: profile.name ?? null,
+          permissions: new Set(profile.permissions ?? []),
           loading: false,
         });
       } else {
-        setState({ user: null, role: null, employeeId: null, name: null, loading: false });
+        setState({ user: null, role: null, employeeId: null, name: null, permissions: EMPTY_PERMS, loading: false });
       }
     });
   }, []);
 
-  return state;
+  // Stable across renders; changes identity only when the permission set does.
+  const can = useCallback(
+    (perm: Permission) => hasPermission(state.permissions, perm),
+    [state.permissions]
+  );
+
+  return { ...state, can };
 }

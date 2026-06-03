@@ -312,7 +312,7 @@ function EditableCell({
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function PayrollPage() {
-  const { role, loading: authLoading } = useAuth();
+  const { can, loading: authLoading } = useAuth();
 
   const now = clock.now();
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
@@ -358,11 +358,15 @@ export default function PayrollPage() {
   useEffect(() => { loadPeriod(); }, [loadPeriod]);
 
   if (authLoading) return <div className={styles.state}>Načítám…</div>;
-  if (role !== "admin" && role !== "director") return <Navigate to="/" replace />;
+  if (!can("payroll.view")) return <Navigate to="/" replace />;
 
   const isLocked = period?.locked === true;
-  const canEdit = (role === "admin" || role === "director") && !isLocked;
-  const canToggleLock = role === "admin";
+  // Permission-derived (Phase 3). Same coverage as before: payroll.edit =
+  // {admin,director}; lock/hard-recompute/delete are all admin-only.
+  const canEdit = can("payroll.edit") && !isLocked;
+  const canToggleLock = can("payroll.lock");
+  const canHardRecompute = can("payroll.recalculate.hard");
+  const canDeletePeriod = can("payroll.period.delete");
 
   function toggleLock() {
     if (!period) return;
@@ -733,7 +737,7 @@ export default function PayrollPage() {
                 {entry.contractType && (
                   <span className={styles.contractBadge}>{entry.contractType}</span>
                 )}
-                {canToggleLock && !isLocked && (
+                {canHardRecompute && !isLocked && (
                   <button
                     type="button"
                     className={styles.recalcRowBtn}
@@ -989,27 +993,27 @@ export default function PayrollPage() {
                   {isLocked ? "Odemknout" : "Uzamknout"}
                 </button>
               )}
-              {canToggleLock && !isLocked && (
-                <>
-                  <button
-                    type="button"
-                    className={styles.lockBtn}
-                    onClick={hardRecalculate}
-                    disabled={resetting}
-                    title="Přepočítat a zahodit všechny ruční úpravy (Nemoc a poznámky zůstanou zachovány)"
-                  >
-                    {resetting ? "Přepočítávám…" : "Tvrdý přepočet"}
-                  </button>
-                  <button
-                    type="button"
-                    className={styles.dangerBtn}
-                    onClick={deletePeriod}
-                    disabled={deleting}
-                    title="Nenávratně smazat celé mzdové období (lze znovu vygenerovat z publikovaného plánu)"
-                  >
-                    {deleting ? "Mažu…" : "Smazat období"}
-                  </button>
-                </>
+              {!isLocked && canHardRecompute && (
+                <button
+                  type="button"
+                  className={styles.lockBtn}
+                  onClick={hardRecalculate}
+                  disabled={resetting}
+                  title="Přepočítat a zahodit všechny ruční úpravy (Nemoc a poznámky zůstanou zachovány)"
+                >
+                  {resetting ? "Přepočítávám…" : "Tvrdý přepočet"}
+                </button>
+              )}
+              {!isLocked && canDeletePeriod && (
+                <button
+                  type="button"
+                  className={styles.dangerBtn}
+                  onClick={deletePeriod}
+                  disabled={deleting}
+                  title="Nenávratně smazat celé mzdové období (lze znovu vygenerovat z publikovaného plánu)"
+                >
+                  {deleting ? "Mažu…" : "Smazat období"}
+                </button>
               )}
             </span>
           </div>

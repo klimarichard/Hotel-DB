@@ -1,7 +1,8 @@
 import { Router } from "express";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
-import { requireAuth, requireRole, AuthRequest } from "../middleware/auth";
+import { requireAuth, AuthRequest } from "../middleware/auth";
+import { requirePermission } from "../auth/permissions";
 
 export const alertsRouter = Router();
 
@@ -49,7 +50,7 @@ async function setAlertsRead(
 alertsRouter.get(
   "/",
   requireAuth,
-  requireRole("admin", "director"),
+  requirePermission("alerts.view"),
   async (_req: AuthRequest, res) => {
     const snap = await db()
       .collection("alerts")
@@ -66,7 +67,7 @@ alertsRouter.get(
 alertsRouter.get(
   "/probation",
   requireAuth,
-  requireRole("admin", "director"),
+  requirePermission("alerts.view"),
   async (_req: AuthRequest, res) => {
     const snap = await db()
       .collection("probationAlerts")
@@ -84,7 +85,7 @@ alertsRouter.get(
 alertsRouter.post(
   "/read",
   requireAuth,
-  requireRole("admin", "director"),
+  requirePermission("alerts.read"),
   async (req: AuthRequest, res) => {
     const body = (req.body ?? {}) as { ids?: unknown; read?: unknown };
     const read = body.read !== false;
@@ -101,7 +102,7 @@ alertsRouter.post(
 alertsRouter.post(
   "/probation/read",
   requireAuth,
-  requireRole("admin", "director"),
+  requirePermission("alerts.read"),
   async (req: AuthRequest, res) => {
     const body = (req.body ?? {}) as { ids?: unknown; read?: unknown };
     const read = body.read !== false;

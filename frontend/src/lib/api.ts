@@ -72,7 +72,29 @@ export interface UserProfile {
   employeeId: string | null;
   createdAt: unknown;
   lastLogin: unknown;
+  /** Assigned user type (defaults to `role` when unset). */
+  roleType?: string | null;
+  /** Per-user permission grants/revokes on top of the type. */
+  extraPermissions?: string[];
+  revokedPermissions?: string[];
 }
+
+export interface RoleType {
+  id: string;
+  name: string;
+  permissions: string[];
+  management: boolean;
+  system: boolean;
+}
+
+export const roleTypesApi = {
+  list: () => api.get<RoleType[]>("/role-types"),
+  create: (body: { name: string; permissions?: string[]; management?: boolean; cloneFrom?: string }) =>
+    api.post<{ id: string }>("/role-types", body),
+  update: (id: string, body: { name?: string; permissions?: string[]; management?: boolean }) =>
+    api.patch<{ ok: boolean }>(`/role-types/${id}`, body),
+  remove: (id: string) => api.delete<{ ok: boolean }>(`/role-types/${id}`),
+};
 
 export const authApi = {
   listUsers: () => api.get<UserProfile[]>("/auth/users"),
@@ -90,6 +112,10 @@ export const authApi = {
     api.patch<{ success: boolean }>(`/auth/reactivate-user/${uid}`, {}),
   linkEmployee: (uid: string, employeeId: string | null) =>
     api.patch<{ success: boolean }>(`/auth/users/${uid}/employee`, { employeeId }),
+  setUserPermissions: (
+    uid: string,
+    body: { roleType?: string | null; extraPermissions?: string[]; revokedPermissions?: string[] }
+  ) => api.patch<{ success: boolean }>(`/auth/users/${uid}/permissions`, body),
   me: () => api.get<UserProfile>("/auth/me"),
   getTheme: () => api.get<{ theme: "light" | "dark" | null }>("/auth/me/theme"),
   setTheme: (theme: "light" | "dark") =>

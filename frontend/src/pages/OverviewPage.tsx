@@ -334,11 +334,14 @@ export default function OverviewPage() {
 
   const { theme } = useTheme();
   const isDark = theme === "dark";
-  const { employeeId, role } = useAuth();
-  const showTasks = role === "admin" || role === "director";
+  const { employeeId, can } = useAuth();
+  const showTasks = can("dashboard.tasks.view");
   // Accountant gets a stats-only dashboard: the HR headcount graphs, none of
   // the shift-staffing sections (they have no shifts access — /shifts/plans 403s).
-  const isAccountant = role === "accountant";
+  // Stats-only viewer (built-in accountant): has the HR stats dashboard but no
+  // shift access, so we skip the shift-staffing fetch and personal tiles.
+  const isStatsOnlyViewer =
+    can("dashboard.stats.view") && !can("shifts.view.all") && !can("shifts.view.self");
 
   const { unreadCount: alertsCount } = useAlertsContext();
   const { pendingCount: overridesCount } = useShiftOverridesContext();
@@ -365,7 +368,7 @@ export default function OverviewPage() {
   }, [employeeId]);
 
   useEffect(() => {
-    if (isAccountant) { setLoading(false); return; }
+    if (isStatsOnlyViewer) { setLoading(false); return; }
     let cancelled = false;
     (async () => {
       setLoading(true);
@@ -396,7 +399,7 @@ export default function OverviewPage() {
       }
     })();
     return () => { cancelled = true; };
-  }, [next7Days, isAccountant]);
+  }, [next7Days, isStatsOnlyViewer]);
 
   const plansByYM = useMemo(() => {
     const map = new Map<string, PlanDetail>();
@@ -434,7 +437,7 @@ export default function OverviewPage() {
   }, [employeeId, plans, plansByYM, next7Days]);
 
   // Accountant: HR stats dashboard only (no shift staffing, no personal tiles).
-  if (isAccountant) {
+  if (isStatsOnlyViewer) {
     return (
       <div className={styles.page}>
         <div className={styles.dateHeaderRow}>
@@ -629,7 +632,7 @@ export default function OverviewPage() {
             );
           })()}
 
-          {showTasks && <HeadcountStats />}
+          {can("dashboard.stats.view") && <HeadcountStats />}
         </>
       )}
     </div>
