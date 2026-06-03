@@ -2,7 +2,12 @@ import { Router } from "express";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireAuth, AuthRequest, UserRole } from "../middleware/auth";
-import { requirePermission } from "../auth/permissions";
+import {
+  requirePermission,
+  resolveEffectivePermissions,
+  ALL_PERMISSIONS,
+  ROLE_TYPES_COLLECTION,
+} from "../auth/permissions";
 import { ctxFromReq, logCreate, logUpdate } from "../services/auditLog";
 
 export const authRouter = Router();
@@ -36,6 +41,34 @@ function passwordPolicyMessage(message: string): string {
 }
 
 /**
+ * Merge a partial claim patch into a user's existing custom claims.
+ * setCustomUserClaims REPLACES all claims, so we read + merge to avoid wiping
+ * role / roleType / per-user permission overrides. The new claims take effect
+ * on the user's next token refresh (≤1h, or immediately on re-login).
+ */
+async function mergeCustomClaims(uid: string, patch: Record<string, unknown>): Promise<void> {
+  const user = await admin.auth().getUser(uid);
+  await admin.auth().setCustomUserClaims(uid, { ...(user.customClaims ?? {}), ...patch });
+}
+
+const ALL_PERM_SET = new Set<string>(ALL_PERMISSIONS);
+const sanitizePerms = (value: unknown): string[] =>
+  Array.isArray(value)
+    ? [...new Set(value.filter((p): p is string => typeof p === "string" && ALL_PERM_SET.has(p)))]
+    : [];
+
+/** Does this user's stored config resolve to the superadmin permission? */
+async function userIsAdmin(u: Record<string, unknown>): Promise<boolean> {
+  const set = await resolveEffectivePermissions({
+    role: u.role as UserRole | undefined,
+    roleType: typeof u.roleType === "string" ? u.roleType : undefined,
+    extra: Array.isArray(u.extraPermissions) ? (u.extraPermissions as string[]) : [],
+    revoked: Array.isArray(u.revokedPermissions) ? (u.revokedPermissions as string[]) : [],
+  });
+  return set.has("system.admin");
+}
+
+/**
  * POST /api/auth/set-role
  * Admin-only: set a custom role claim on a user.
  * Body: { uid: string, role: UserRole }
@@ -57,7 +90,7 @@ authRouter.post(
     const beforeSnap = await userRef.get();
     const before = beforeSnap.exists ? (beforeSnap.data() as Record<string, unknown>) : {};
 
-    await admin.auth().setCustomUserClaims(uid, { role });
+    await mergeCustomClaims(uid, { role });
 
     // Also update the users/ collection
     await userRef.set(
@@ -72,6 +105,114 @@ authRouter.post(
       after: { role },
     });
 
+    res.json({ success: true });
+  }
+);
+
+/**
+ * PATCH /api/auth/users/:uid/permissions
+ * Assign a user's configurable type + per-user permission grants/revokes.
+ * Body: { roleType?: string|null, extraPermissions?: string[], revokedPermissions?: string[] }
+ * (absent fields keep their current value). Writes merged claims + mirrors to
+ * users/{uid}; the resolver reads these. Lockout guards: you can't remove your
+ * own superadmin, and the last active superadmin can't be demoted.
+ */
+authRouter.patch(
+  "/users/:uid/permissions",
+  requireAuth,
+  requirePermission("users.permissions.manage", "users.setType"),
+  async (req: AuthRequest, res) => {
+    const { uid } = req.params;
+    const body = req.body as {
+      roleType?: string | null;
+      extraPermissions?: unknown;
+      revokedPermissions?: unknown;
+    };
+
+    const userRef = admin.firestore().collection("users").doc(uid);
+    const snap = await userRef.get();
+    if (!snap.exists) {
+      res.status(404).json({ error: "Uživatel nenalezen." });
+      return;
+    }
+    const cur = snap.data() as Record<string, unknown>;
+
+    // Desired next state (absent fields keep current values).
+    let nextRoleType: string | null;
+    if ("roleType" in body) {
+      if (body.roleType === null) {
+        nextRoleType = null;
+      } else if (typeof body.roleType === "string" && body.roleType) {
+        const t = await admin.firestore().collection(ROLE_TYPES_COLLECTION).doc(body.roleType).get();
+        if (!t.exists) {
+          res.status(400).json({ error: "Zvolený typ neexistuje." });
+          return;
+        }
+        nextRoleType = body.roleType;
+      } else {
+        res.status(400).json({ error: "Neplatný typ." });
+        return;
+      }
+    } else {
+      nextRoleType = (cur.roleType as string) ?? null;
+    }
+    const nextExtra = "extraPermissions" in body
+      ? sanitizePerms(body.extraPermissions)
+      : (Array.isArray(cur.extraPermissions) ? (cur.extraPermissions as string[]) : []);
+    const nextRevoked = "revokedPermissions" in body
+      ? sanitizePerms(body.revokedPermissions)
+      : (Array.isArray(cur.revokedPermissions) ? (cur.revokedPermissions as string[]) : []);
+
+    // ── Lockout guards ────────────────────────────────────────────────────────
+    const wasAdmin = await userIsAdmin(cur);
+    const willBeAdmin = (
+      await resolveEffectivePermissions({
+        role: cur.role as UserRole | undefined,
+        roleType: nextRoleType ?? undefined,
+        extra: nextExtra,
+        revoked: nextRevoked,
+      })
+    ).has("system.admin");
+
+    if (wasAdmin && !willBeAdmin) {
+      if (uid === req.uid) {
+        res.status(400).json({ error: "Nemůžete odebrat vlastní administrátorská práva." });
+        return;
+      }
+      const activeUsers = await admin.firestore().collection("users").where("active", "==", true).get();
+      let otherAdmins = 0;
+      for (const d of activeUsers.docs) {
+        if (d.id === uid) continue;
+        if (await userIsAdmin(d.data() as Record<string, unknown>)) otherAdmins++;
+      }
+      if (otherAdmins === 0) {
+        res.status(400).json({ error: "Nelze odebrat práva poslednímu administrátorovi." });
+        return;
+      }
+    }
+
+    // ── Apply: merge claims (take effect on next token refresh) + mirror doc ──
+    await mergeCustomClaims(uid, {
+      roleType: nextRoleType,
+      extraPermissions: nextExtra,
+      revokedPermissions: nextRevoked,
+    });
+    await userRef.update({
+      roleType: nextRoleType,
+      extraPermissions: nextExtra,
+      revokedPermissions: nextRevoked,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    await logUpdate(ctxFromReq(req), {
+      collection: "users",
+      resourceId: uid,
+      before: {
+        roleType: cur.roleType ?? null,
+        extraPermissions: cur.extraPermissions ?? [],
+        revokedPermissions: cur.revokedPermissions ?? [],
+      },
+      after: { roleType: nextRoleType, extraPermissions: nextExtra, revokedPermissions: nextRevoked },
+    });
     res.json({ success: true });
   }
 );

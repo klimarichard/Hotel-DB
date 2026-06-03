@@ -23,6 +23,7 @@ import { menuOrderRouter } from "./routes/menuOrder";
 import { timeOverrideRouter } from "./routes/timeOverride";
 import { selfServiceRouter } from "./routes/selfService";
 import { employeeChangeRequestsRouter } from "./routes/employeeChangeRequests";
+import { roleTypesRouter } from "./routes/roleTypes";
 import * as clock from "./services/clock";
 import { requireAuth, AuthRequest } from "./middleware/auth";
 import { requirePermission } from "./auth/permissions";
@@ -74,6 +75,7 @@ app.use("/settings/menu-order", menuOrderRouter);
 app.use("/settings/time-override", timeOverrideRouter);
 app.use("/me", selfServiceRouter);
 app.use("/employee-change-requests", employeeChangeRequestsRouter);
+app.use("/role-types", roleTypesRouter);
 
 // Health check
 app.get("/health", (_req, res) => {
