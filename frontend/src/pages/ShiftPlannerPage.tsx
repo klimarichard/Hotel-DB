@@ -195,6 +195,15 @@ export default function ShiftPlannerPage() {
   const canPublish = can("shifts.plan.transition");
   // Self-service worker (built-in "employee"): edits only own X, no full cell edit.
   const selfServiceOnly = can("shifts.cells.editOwnX") && !can("shifts.cells.edit");
+  // "Moje žádosti" is for users who can submit their own requests (change /
+  // exception / free-shift claim) — not reviewers, and not types with no
+  // request rights at all (e.g. personalista).
+  const canSubmitRequests =
+    can("shifts.changeRequest.submit") || can("shifts.override.submit") || can("shifts.freeShift.claim");
+  // Free shifts below the grid are shown to those who can claim them, plus those
+  // who manage them (admin/director toggle DPA free days). Hidden from everyone
+  // else (e.g. personalista, FOM).
+  const canSeeFreeShifts = can("shifts.freeShift.claim") || can("shifts.freeShift.manage");
 
   // Local draft for deadline inputs — avoids live-saving on every keystroke
   const [deadlineDraft, setDeadlineDraft] = useState({ openedAt: "", closedAt: "", publishedAt: "" });
@@ -1307,8 +1316,8 @@ export default function ShiftPlannerPage() {
               </Button>
             )}
 
-            {/* Employee/manager: combined Moje žádosti button */}
-            {plan && !canPublish && (
+            {/* Non-reviewers who can submit their own requests: Moje žádosti */}
+            {plan && !canPublish && canSubmitRequests && (
               <Button
                 variant="secondary"
                 onClick={() => setShowMyRequests((v) => !v)}
@@ -1550,7 +1559,7 @@ export default function ShiftPlannerPage() {
           )}
 
           {/* My requests panel — employee/manager (read-only, own requests only) */}
-          {plan && showMyRequests && !canPublish && (
+          {plan && showMyRequests && !canPublish && canSubmitRequests && (
             <MyRequestsPanel planId={plan.id} />
           )}
 
@@ -1618,7 +1627,7 @@ export default function ShiftPlannerPage() {
                     }
                   : undefined
               }
-              showFreeShifts={plan.status === "published"}
+              showFreeShifts={plan.status === "published" && canSeeFreeShifts}
               freeShiftDpaDays={plan.freeShiftDpaDays ?? []}
               onClaimFreeShift={
                 can("shifts.freeShift.claim") && plan.status === "published"
