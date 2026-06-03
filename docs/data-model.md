@@ -4,7 +4,7 @@ This document describes the Firestore data model (top-level collections, sub-col
 
 ## Firestore Data Model
 
-**Top-level collections:** `employees`, `users`, `companies`, `jobPositions`, `departments`, `educationLevels`, `alerts`, `notifications`, `shiftPlans`, `vacationRequests`, `payrollPeriods`, `auditLog`
+**Top-level collections:** `employees`, `users`, `roleTypes`, `companies`, `jobPositions`, `departments`, `educationLevels`, `alerts`, `notifications`, `shiftPlans`, `vacationRequests`, `payrollPeriods`, `auditLog`
 
 **Sub-collections under `employees/{id}`:** `documents`, `contact`, `employment`, `benefits`, `contracts`
 
@@ -13,6 +13,31 @@ This document describes the Firestore data model (top-level collections, sub-col
 **Sub-collections under `payrollPeriods/{id}`:** `entries`
 
 **Denormalized fields on `employees` root doc** (for querying): `currentCompanyId`, `currentDepartment`, `currentContractType`, `currentJobTitle`
+
+### `roleTypes/{id}` — configurable user types
+
+Editable **user types** (the configurable-RBAC replacement for hard-coded roles). See [Authentication, Roles & Permissions](auth-and-permissions.md) for the full model.
+
+```
+roleTypes/{id} = {
+  name: string,            // display label, e.g. "Ředitel"
+  permissions: string[],   // permission keys from the catalogue this type grants
+  management: boolean,      // holders count as "management" for employee-record scoping
+  system: boolean           // protected built-in — only `admin` is true (not editable/deletable)
+}
+```
+
+Six built-ins are seeded (`admin`, `director`, `manager`, `employee`, `accountant`, `hr`) by `scripts/seed-role-types.js`. Seeding is additive; the backend resolver falls back to the built-in mapping when a doc is missing, so an unseeded collection never locks anyone out.
+
+### New permission fields on `users/{uid}`
+
+Each user document gains three optional RBAC fields (mirrored as Firebase Auth custom claims):
+
+- **`roleType`** — the `roleTypes` id assigned to the user (defaults to the legacy `role` when unset).
+- **`extraPermissions: string[]`** — per-user permission grants on top of the type.
+- **`revokedPermissions: string[]`** — per-user permission revokes subtracted from the type.
+
+Effective permissions = `roleType.permissions ∪ extraPermissions − revokedPermissions`. The legacy **`role`** field is retained (still drives menu-order config, the sidebar label, and a few inline checks).
 
 ---
 

@@ -23,7 +23,7 @@ Firebase project: `hotel-hr-app-75581` (production), `hote-hr-app-staging` (stag
 | Document | Covers |
 |---|---|
 | [Data Model & Build Phases](docs/data-model.md) | Firestore top-level collections, sub-collections, denormalized fields, and build-phase status. |
-| [Authentication, Roles & Permissions](docs/auth-and-permissions.md) | Login + password reset, the six roles, route/menu role gating, accountant + hr roles, per-role menu order. |
+| [Authentication, Roles & Permissions](docs/auth-and-permissions.md) | Login + password reset, the configurable permission model (catalogue + editable user types + per-user grants/revokes), `requirePermission` enforcement, the admin type/permission UI, and per-role menu order. |
 | [Employees](docs/employees.md) | Employee module, session-based employment history, `Můj profil` self-service. |
 | [Shifts (Shift Planner)](docs/shifts.md) | Shift-expression parser, monthly grid, MOD badges, shift-change requests, X-limits, plan lifecycle. |
 | [Vacation (Dovolená)](docs/vacation.md) | Request/approval workflow, pendingEdit pattern, shift-collision handling. |
