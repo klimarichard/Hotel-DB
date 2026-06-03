@@ -284,7 +284,7 @@ Historie změn konkrétního zaměstnance je i přímo na jeho detailu v sekci *
 - **Mzdy** — sazba stravenky, maximální měsíční odměna DPP, **minimální mzda** a **základní cena Multisport** (výchozí 470 Kč/měsíc).
 - **Menu** — pořadí položek v levém menu pro jednotlivé role.
 - **Uživatelské typy** — správa typů uživatelů a jejich oprávnění (viz níže).
-- **Uživatelé** — vytváření a správa uživatelských účtů: vytvoření (i bez hesla s odkazem pro reset), úprava jména/e-mailu/role, **úprava oprávnění** (viz níže), deaktivace a reaktivace, reset hesla, propojení účtu se zaměstnancem. Neaktivní účty jsou dole; při vytvoření účtu se stejným e-mailem jako neaktivní účet se nabídne jeho reaktivace.
+- **Uživatelé** — vytváření a správa uživatelských účtů: vytvoření (i bez hesla s odkazem pro reset), úprava jména/e-mailu, volba **typu uživatele** (sloupec *Typ*), **úprava oprávnění** (viz níže), deaktivace a reaktivace, reset hesla, propojení účtu se zaměstnancem. Neaktivní účty jsou dole; při vytvoření účtu se stejným e-mailem jako neaktivní účet se nabídne jeho reaktivace.
 
 > 📷 *(Místo pro snímek obrazovky: Nastavení)*
 
@@ -311,4 +311,4 @@ Pojistky: **nemůžete si odebrat vlastní administrátorská práva** a **posle
 
 > 📷 *(Místo pro snímek obrazovky: Oprávnění uživatele)*
 
-> **Poznámka:** vedle nového tlačítka *Oprávnění* zůstává u uživatele i původní rozbalovací seznam **role**. Skutečná oprávnění uživatele ale určuje právě **„Oprávnění" (typ + individuální výjimky)**, nikoli tento starší seznam role.
+> **Poznámka:** sloupec **„Typ"** rychle změní typ uživatele přímo v seznamu; tlačítko **„Oprávnění"** umožní navíc doladit jednotlivá práva (typ + individuální výjimky). Skutečná oprávnění uživatele určuje právě tato kombinace.
