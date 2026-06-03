@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
 import { ContractType } from "@/lib/contractVariables";
 import { formatDateCZ } from "@/lib/dateFormat";
 import type { EmploymentRow, ContractRecord } from "@/lib/employmentSessions";
@@ -14,7 +15,6 @@ interface Props {
   defaultDisplayName: string;
   rowSnapshot: Record<string, unknown>;
   employeeId: string;
-  canEdit: boolean;
   /** Number of rows in the session this Nástup anchors. Drives the
    *  cascade-delete confirm copy ("smaže pracovní poměr — N záznamů").
    *  Ignored for non-Nástup rows. */
@@ -63,13 +63,16 @@ export default function EmploymentRowItem({
   defaultDisplayName,
   rowSnapshot,
   employeeId,
-  canEdit,
   sessionRowCount,
   onGenerate,
   onEdit,
   onDelete,
   onContractsChanged,
 }: Props) {
+  const { can } = useAuth();
+  // Per-row Upravit/Smazat are employment-record management. Built-in
+  // admin/director hold employment.manage → unchanged.
+  const canManageEmployment = can("employment.manage");
   const label = ROW_LABEL[row.changeType] ?? row.changeType;
 
   let detail: React.ReactNode = null;
@@ -119,7 +122,7 @@ export default function EmploymentRowItem({
         {detail && <span className={styles.detail}>{detail}</span>}
       </div>
       <div className={styles.actions}>
-        {canEdit && onEdit && !signedLocked && (
+        {canManageEmployment && onEdit && !signedLocked && (
           <button
             type="button"
             className={styles.editBtn}
@@ -135,11 +138,10 @@ export default function EmploymentRowItem({
           rowSnapshot={rowSnapshot}
           defaultDisplayName={defaultDisplayName}
           employeeId={employeeId}
-          canEdit={canEdit}
           onGenerate={onGenerate}
           onChanged={onContractsChanged}
         />
-        {canEdit && onDelete && (
+        {canManageEmployment && onDelete && (
           <button
             type="button"
             className={styles.deleteBtn}

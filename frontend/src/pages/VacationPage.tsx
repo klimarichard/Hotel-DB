@@ -72,7 +72,10 @@ function StatusBadge({ status }: { status: VacationRequest["status"] }) {
 export default function VacationPage() {
   const { user, can, employeeId } = useAuth();
   const { refresh: refreshVacationBadge } = useVacationContext();
-  const canApprove = can("vacation.review");
+  const canReview = can("vacation.review");
+  const canRequestSelf = can("vacation.request.self");
+  const canViewAll = can("vacation.view.all");
+  const canViewApprovedUpcoming = can("vacation.view.approvedUpcoming");
 
   const [requests, setRequests] = useState<VacationRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -115,14 +118,14 @@ export default function VacationPage() {
   }, []);
 
   useEffect(() => {
-    if (canApprove) return;
+    if (!canViewApprovedUpcoming) return;
     let cancelled = false;
     api
       .get<ApprovedUpcoming[]>("/vacation/approved-upcoming")
       .then((data) => { if (!cancelled) setApprovedUpcoming(data); })
       .catch(() => { if (!cancelled) setApprovedUpcoming([]); });
     return () => { cancelled = true; };
-  }, [canApprove]);
+  }, [canViewApprovedUpcoming]);
 
   // Match my requests by my stable employeeId (migrated requests carry stale
   // staging uids; the auth uid only matches requests created in prod). Fall back
@@ -325,6 +328,7 @@ export default function VacationPage() {
       <h1 className={styles.title}>Dovolená</h1>
 
       {/* New request form */}
+      {canRequestSelf && (
       <div className={styles.card}>
         <h2 className={styles.cardTitle}>Nová žádost o dovolenou</h2>
 
@@ -381,6 +385,7 @@ export default function VacationPage() {
           </>
         )}
       </div>
+      )}
 
       {/* My requests */}
       <div className={styles.tableWrapper}>
@@ -417,7 +422,7 @@ export default function VacationPage() {
                       )}
                     </td>
                     <td>
-                      {!req.pendingEdit && req.status !== "rejected" && (
+                      {canRequestSelf && !req.pendingEdit && req.status !== "rejected" && (
                         <div className={styles.actions}>
                           <button
                             className={styles.editBtn}
@@ -492,7 +497,7 @@ export default function VacationPage() {
       </div>
 
       {/* Approved upcoming vacations — employees & managers */}
-      {!canApprove && (
+      {canViewApprovedUpcoming && (
         <div className={styles.tableWrapper}>
           <div className={styles.sectionTitle}>Schválené dovolené (všichni zaměstnanci)</div>
           {approvedUpcoming === null ? (
@@ -542,7 +547,7 @@ export default function VacationPage() {
       )}
 
       {/* All requests — admin/director only */}
-      {canApprove && (() => {
+      {canViewAll && (() => {
         const renderRow = (req: VacationRequest) => (
           <Fragment key={req.id}>
             <tr
@@ -565,7 +570,7 @@ export default function VacationPage() {
                 )}
               </td>
               <td>
-                {req.status === "pending" && !req.pendingEdit && (
+                {canReview && req.status === "pending" && !req.pendingEdit && (
                   <div className={styles.actions}>
                     <button
                       className={styles.approveBtn}
@@ -598,21 +603,25 @@ export default function VacationPage() {
                     {formatDateCZ(req.pendingEdit.endDate)}
                     {req.pendingEdit.reason && <> &middot; {req.pendingEdit.reason}</>}
                   </span>
-                  <button
-                    className={styles.approveBtn}
-                    onClick={() => handleApprove(req.id)}
-                    disabled={actionSaving}
-                  >
-                    Schválit úpravu
-                  </button>
-                  <button
-                    className={styles.rejectBtn}
-                    style={{ marginLeft: "0.5rem" }}
-                    onClick={() => handleReject(req.id)}
-                    disabled={actionSaving}
-                  >
-                    Zamítnout úpravu
-                  </button>
+                  {canReview && (
+                    <>
+                      <button
+                        className={styles.approveBtn}
+                        onClick={() => handleApprove(req.id)}
+                        disabled={actionSaving}
+                      >
+                        Schválit úpravu
+                      </button>
+                      <button
+                        className={styles.rejectBtn}
+                        style={{ marginLeft: "0.5rem" }}
+                        onClick={() => handleReject(req.id)}
+                        disabled={actionSaving}
+                      >
+                        Zamítnout úpravu
+                      </button>
+                    </>
+                  )}
                 </td>
               </tr>
             )}

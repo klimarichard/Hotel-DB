@@ -83,7 +83,9 @@ interface Dialog {
 }
 
 export default function EmployeeSelfPage() {
-  const { employeeId, loading: authLoading } = useAuth();
+  const { employeeId, loading: authLoading, can } = useAuth();
+  const canRequestEdit = can("self.profile.requestEdit");
+  const canRevealSelf = can("sensitive.reveal.self");
   const [loading, setLoading] = useState(true);
   const [emp, setEmp] = useState<EmployeeRoot | null>(null);
   const [contact, setContact] = useState<SubDoc>(null);
@@ -207,6 +209,13 @@ export default function EmployeeSelfPage() {
     // Auto-reveal editable sensitive fields so the employee sees what they're
     // changing (TODO 41). Each reveal hits POST /me/employee/reveal, which logs
     // a "reveal" audit action. Done in parallel; failures leave the input blank.
+    // Gated by sensitive.reveal.self: without it we never decrypt — the inputs
+    // stay blank and buildChanges() treats the original as "" (so an untouched
+    // sensitive field is simply not submitted).
+    if (!canRevealSelf) {
+      setSensitiveOriginals({});
+      return;
+    }
     const revealedValues = await Promise.all(
       sensitiveKeys.map(async (key) => {
         try {
@@ -306,15 +315,17 @@ export default function EmployeeSelfPage() {
       return (
         <span>
           {isRevealed ? revealed[f.key] : MASK}
-          <button
-            type="button"
-            className={styles.revealBtn}
-            onClick={() => handleReveal(f.key)}
-            title={isRevealed ? "Skrýt" : "Zobrazit"}
-            aria-label={isRevealed ? "Skrýt" : "Zobrazit"}
-          >
-            {isRevealed ? <EyeOffIcon /> : <EyeIcon />}
-          </button>
+          {canRevealSelf && (
+            <button
+              type="button"
+              className={styles.revealBtn}
+              onClick={() => handleReveal(f.key)}
+              title={isRevealed ? "Skrýt" : "Zobrazit"}
+              aria-label={isRevealed ? "Skrýt" : "Zobrazit"}
+            >
+              {isRevealed ? <EyeOffIcon /> : <EyeIcon />}
+            </button>
+          )}
         </span>
       );
     }
@@ -390,7 +401,7 @@ export default function EmployeeSelfPage() {
     <div>
       <div className={styles.headerRow}>
         <h1 className={styles.title}>Můj profil</h1>
-        {!editMode && (
+        {!editMode && canRequestEdit && (
           <Button variant="primary" onClick={enterEdit}>
             Navrhnout úpravu
           </Button>
@@ -436,9 +447,11 @@ export default function EmployeeSelfPage() {
             </div>
           ))}
           <div className={styles.actionsRow}>
-            <Button variant="primary" onClick={handleSubmit} disabled={submitting}>
-              {submitting ? "Odesílám…" : "Odeslat ke schválení"}
-            </Button>
+            {canRequestEdit && (
+              <Button variant="primary" onClick={handleSubmit} disabled={submitting}>
+                {submitting ? "Odesílám…" : "Odeslat ke schválení"}
+              </Button>
+            )}
             <Button variant="secondary" onClick={() => { setEditMode(false); setRevealed({}); setSensitiveOriginals({}); setContactSameAsPermanent(false); }} disabled={submitting}>
               Zrušit
             </Button>
@@ -511,7 +524,6 @@ export default function EmployeeSelfPage() {
                       defaultExpanded={idx === 0}
                       companies={{}}
                       employeeId={employeeId}
-                      canEdit={false}
                       resolveDefaultType={() => "nastup_hpp"}
                       resolveDisplayName={() => ""}
                       resolveRowSnapshot={() => ({})}
@@ -558,7 +570,7 @@ export default function EmployeeSelfPage() {
               {r.status === "rejected" && r.rejectionReason && (
                 <div className={styles.rejectionNote}>Důvod zamítnutí: {r.rejectionReason}</div>
               )}
-              {r.status === "pending" && (
+              {r.status === "pending" && canRequestEdit && (
                 <div style={{ marginTop: "0.5rem" }}>
                   <Button variant="ghost" size="sm" onClick={() => setCancelId(r.id)}>
                     Zrušit žádost

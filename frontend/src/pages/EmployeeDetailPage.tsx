@@ -71,6 +71,8 @@ function SensitiveField({
   label: string;
   apiValue?: string;
 }) {
+  const { can } = useAuth();
+  const canReveal = can("sensitive.reveal");
   const [revealed, setRevealed] = useState(false);
   const [displayValue, setDisplayValue] = useState("••••••••");
   const [loading, setLoading] = useState(false);
@@ -101,9 +103,11 @@ function SensitiveField({
       ) : (
         <span className={styles.fieldValue}>
           {displayValue}
-          <button className={styles.revealBtn} onClick={handleReveal} disabled={loading} title={revealed ? "Skrýt" : "Zobrazit"}>
-            {revealed ? <EyeOffIcon /> : <EyeIcon />}
-          </button>
+          {canReveal && (
+            <button className={styles.revealBtn} onClick={handleReveal} disabled={loading} title={revealed ? "Skrýt" : "Zobrazit"}>
+              {revealed ? <EyeOffIcon /> : <EyeIcon />}
+            </button>
+          )}
         </span>
       )}
     </div>
@@ -1126,9 +1130,13 @@ export default function EmployeeDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { can } = useAuth();
-  // Edit/delete/contract-management capability. admin/director/hr; accountant
-  // is read-only (sees data + reveal + contract download only).
-  const canDelete = can("employees.edit");
+  // Per-area capabilities. Each action is gated by its own specific permission
+  // so custom user types can be granted granular access. Built-in admin/director
+  // hold all of these, so their behaviour is unchanged.
+  const canEditEmployee = can("employees.edit");
+  const canDeleteEmployee = can("employees.delete");
+  const canManageEmployment = can("employment.manage");
+  const canGenerateContracts = can("contracts.generate");
 
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [employment, setEmployment] = useState<EmploymentRow[]>([]);
@@ -1344,7 +1352,7 @@ export default function EmployeeDetailPage() {
   // Fetch user-created custom standalone templates for the "+ Adhoc dokument"
   // dropdown. Built-in standalone types are listed in STANDALONE_TYPES.
   useEffect(() => {
-    if (!id || !can("employees.edit")) return;
+    if (!id || !can("contracts.generate")) return;
     api
       .get<{ id: string; name: string; kind?: string | null }[]>("/contractTemplates")
       .then((list) =>
@@ -1443,12 +1451,12 @@ export default function EmployeeDetailPage() {
           </div>
         </div>
         <div style={{ display: "flex", gap: "0.5rem" }}>
-          {canDelete && (
+          {canEditEmployee && (
             <Button variant="secondary" onClick={() => navigate(`/zamestnanci/${id}/upravit`)}>
               Upravit
             </Button>
           )}
-          {canDelete && (
+          {canDeleteEmployee && (
             <Button
               variant="danger"
               onClick={handleDeleteEmployee}
@@ -1486,15 +1494,18 @@ export default function EmployeeDetailPage() {
         <>
           <div className={styles.historyHeader}>
             <span className={styles.historyTitle}>Historie pracovního poměru</span>
-            {canDelete && (
+            {(canManageEmployment || canGenerateContracts) && (
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={() => setNewEntryMode({ lockedChangeType: "nástup" })}
-                >
-                  + Nástup
-                </Button>
+                {canManageEmployment && (
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => setNewEntryMode({ lockedChangeType: "nástup" })}
+                  >
+                    + Nástup
+                  </Button>
+                )}
+                {canGenerateContracts && (
                 <div ref={adhocDropdownRef} style={{ position: "relative" }}>
                   <Button
                     variant="secondary"
@@ -1527,6 +1538,7 @@ export default function EmployeeDetailPage() {
                     </div>
                   )}
                 </div>
+                )}
               </div>
             )}
           </div>
@@ -1542,7 +1554,6 @@ export default function EmployeeDetailPage() {
                 defaultExpanded={idx === 0}
                 companies={Object.fromEntries(companies.map((c) => [c.id, companyLabel(c)]))}
                 employeeId={id!}
-                canEdit={canDelete}
                 resolveDefaultType={(row) => {
                   if (row.changeType === "nástup") {
                     if (row.contractType === "HPP") return "nastup_hpp";
@@ -1603,7 +1614,6 @@ export default function EmployeeDetailPage() {
             contracts={contracts.filter((c) => !c.employmentRowId)}
             customTemplates={customStandalone}
             employeeId={id!}
-            canEdit={canDelete}
             onContractsChanged={refetchContracts}
             onGenerate={(c) =>
               setGenerateModal({
@@ -1765,7 +1775,7 @@ export default function EmployeeDetailPage() {
       )}
 
       {page === "other-docs" && (
-        <OtherDocumentsTab employeeId={id!} canEdit={canDelete} />
+        <OtherDocumentsTab employeeId={id!} />
       )}
 
       {page === "detail" && (
@@ -1889,7 +1899,7 @@ export default function EmployeeDetailPage() {
           <div className={styles.loading}>Načítám…</div>
         ) : (
           <>
-            <MultisportEditor employeeId={id!} canEdit={canDelete} />
+            <MultisportEditor employeeId={id!} />
             <div className={styles.fields}>
               <div className={styles.field}><span className={styles.fieldLabel}>Home office</span><span className={styles.fieldValue}>{additional?.homeOffice != null ? String(additional.homeOffice) : "—"}</span></div>
               <div className={styles.field}><span className={styles.fieldLabel}>Náhrady</span><span className={styles.fieldValue}>{additional?.allowances === true ? "Ano" : additional?.allowances === false ? "Ne" : "—"}</span></div>

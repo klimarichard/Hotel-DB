@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
 import { api } from "@/lib/api";
 import { formatDateCZ } from "@/lib/dateFormat";
 import Button from "./Button";
@@ -27,7 +28,6 @@ interface BenefitsDoc {
 
 interface Props {
   employeeId: string;
-  canEdit: boolean;
 }
 
 interface PeriodRow {
@@ -56,7 +56,11 @@ function readPeriods(b: BenefitsDoc | null): Period[] {
   return [];
 }
 
-export default function MultisportEditor({ employeeId, canEdit }: Props) {
+export default function MultisportEditor({ employeeId }: Props) {
+  const { can } = useAuth();
+  // Both managing (open editor) and saving are gated by benefits.edit. Built-in
+  // admin/director hold it → unchanged.
+  const canEdit = can("benefits.edit");
   const [doc, setDoc] = useState<BenefitsDoc | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

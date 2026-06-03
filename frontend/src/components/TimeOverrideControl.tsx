@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
 import Button from "./Button";
 import IconButton from "./IconButton";
 import ConfirmModal from "./ConfirmModal";
@@ -40,13 +41,15 @@ export default function TimeOverrideControl() {
     setOverride,
     clearOverride,
   } = useTimeOverride();
+  const { can } = useAuth();
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState(() => toLocalInput(clockNow()));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Never available in production (and the offset is inert there anyway).
-  if (!allowed) return null;
+  // Never available in production (and the offset is inert there anyway), and
+  // only for users who hold the time-override permission.
+  if (!allowed || !can("system.timeOverride")) return null;
 
   async function jumpTo(target: Date) {
     if (!Number.isFinite(target.getTime())) {

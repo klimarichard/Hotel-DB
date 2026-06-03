@@ -42,7 +42,9 @@ export default function Layout() {
   const { pendingCount: pendingOverrideCount } = useShiftOverridesContext();
   const { pendingCount: pendingChangeRequestCount } = useShiftChangeRequestsContext();
   const { pendingCount: pendingVacationCount } = useVacationContext();
-  const shiftsBadgeCount = pendingOverrideCount + pendingChangeRequestCount;
+  const shiftsBadgeCount =
+    (can("shifts.override.review") ? pendingOverrideCount : 0) +
+    (can("shifts.changeRequest.review") ? pendingChangeRequestCount : 0);
   const showVacationBadge = can("vacation.review") && pendingVacationCount > 0;
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
