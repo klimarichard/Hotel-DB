@@ -1,24 +1,27 @@
 import { Router, Response, NextFunction } from "express";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
-import { requireAuth, requireRole, AuthRequest } from "../middleware/auth";
+import { requireAuth, AuthRequest } from "../middleware/auth";
+import { requirePermission } from "../auth/permissions";
 import { renderPdf, RenderMargins } from "../services/pdfRenderer";
 import type { ContractType } from "./contractTemplates";
 import { ctxFromReq, logCreate, logUpdate, logDelete } from "../services/auditLog";
-import { getManagementEmployeeIds } from "./employees";
+import { getManagementEmployeeIds, isNonManagementScoped } from "./employees";
 
 export const contractsRouter = Router();
 
-// Access refinements for the two new roles (mirrors employees.ts):
-//   • accountant — read-only: only GET (view + download) is allowed.
-//   • hr — blocked from any contract under a management employee's record.
+// Row-level access refinements layered on the per-route requirePermission gates
+// (mirrors employees.ts):
+//   • accountant — read-only safety net: only GET (view + download) is allowed.
+//   • non-management-scoped callers (hr) — blocked from any contract under a
+//     management employee's record. Triggered by permission state, not the role.
 // requireAuth is router-level so req.role is set before this guard runs.
 async function enforceContractAccess(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   if (req.role === "accountant" && req.method !== "GET") {
     res.status(403).json({ error: "Účetní má pouze náhledový přístup." });
     return;
   }
-  if (req.role === "hr") {
+  if (isNonManagementScoped(req.role)) {
     const parts = req.path.split("/"); // ["", "employees", "<id>", "contracts", ...]
     if (parts[1] === "employees" && parts[2]) {
       const mgmt = await getManagementEmployeeIds();
@@ -49,7 +52,7 @@ contractsRouter.use(enforceContractAccess);
  */
 contractsRouter.post(
   "/contracts/render-pdf",
-  requireRole("admin", "director", "hr"),
+  requirePermission("contracts.generate"),
   async (req: AuthRequest, res: Response) => {
     const { html, margins } = req.body as {
       html?: string;
@@ -81,7 +84,7 @@ type ContractStatus = "unsigned" | "signed" | "archived";
  */
 contractsRouter.get(
   "/employees/:employeeId/contracts",
-  requireRole("admin", "director", "manager", "accountant", "hr"),
+  requirePermission("contracts.view"),
   async (req: AuthRequest, res: Response) => {
     const snap = await db()
       .collection("employees")
@@ -110,7 +113,7 @@ contractsRouter.get(
  */
 contractsRouter.post(
   "/employees/:employeeId/contracts",
-  requireRole("admin", "director", "hr"),
+  requirePermission("contracts.generate"),
   async (req: AuthRequest, res: Response) => {
     const {
       type,
@@ -207,7 +210,7 @@ contractsRouter.post(
  */
 contractsRouter.patch(
   "/employees/:employeeId/contracts/:contractId",
-  requireRole("admin", "director", "hr"),
+  requirePermission("contracts.edit"),
   async (req: AuthRequest, res: Response) => {
     const { status, signedStoragePath, notes, signingDate, requestedAt, validFrom } = req.body as {
       status?: ContractStatus;
@@ -263,7 +266,7 @@ contractsRouter.patch(
  */
 contractsRouter.get(
   "/employees/:employeeId/contracts/:contractId/download",
-  requireRole("admin", "director", "manager", "accountant", "hr"),
+  requirePermission("contracts.view"),
   async (req: AuthRequest, res: Response) => {
     const kind = req.query.kind === "signed" ? "signed" : "unsigned";
 
@@ -331,7 +334,7 @@ contractsRouter.get(
  */
 contractsRouter.post(
   "/employees/:employeeId/contracts/:contractId/signed-pdf",
-  requireRole("admin", "director", "hr"),
+  requirePermission("contracts.sign"),
   async (req: AuthRequest, res: Response) => {
     const { pdfBase64 } = req.body as { pdfBase64?: string };
     if (!pdfBase64) {
@@ -396,7 +399,7 @@ contractsRouter.post(
  */
 contractsRouter.post(
   "/employees/:employeeId/contracts/:contractId/unsigned-pdf",
-  requireRole("admin", "director", "hr"),
+  requirePermission("contracts.generate"),
   async (req: AuthRequest, res: Response) => {
     const { pdfBase64 } = req.body as { pdfBase64?: string };
     if (!pdfBase64) {
@@ -454,7 +457,7 @@ contractsRouter.post(
  */
 contractsRouter.delete(
   "/employees/:employeeId/contracts/:contractId/signed-pdf",
-  requireRole("admin", "director", "hr"),
+  requirePermission("contracts.sign"),
   async (req: AuthRequest, res: Response) => {
     const ref = db()
       .collection("employees")
@@ -506,7 +509,7 @@ contractsRouter.delete(
  */
 contractsRouter.delete(
   "/employees/:employeeId/contracts/:contractId",
-  requireRole("admin", "director", "hr"),
+  requirePermission("contracts.delete"),
   async (req: AuthRequest, res: Response) => {
     const ref = db()
       .collection("employees")

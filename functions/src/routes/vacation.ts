@@ -1,7 +1,8 @@
 import { Router } from "express";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
-import { requireAuth, requireRole, AuthRequest } from "../middleware/auth";
+import { requireAuth, AuthRequest } from "../middleware/auth";
+import { requirePermission } from "../auth/permissions";
 import { applyVacationXsToPlans, removeVacationXsFromPlans, findShiftCollisions } from "./shifts";
 import { ctxFromReq, logCreate, logUpdate, logDelete } from "../services/auditLog";
 
@@ -48,7 +49,7 @@ vacationRouter.get("/check", requireAuth, async (req: AuthRequest, res) => {
 vacationRouter.get(
   "/pending-count",
   requireAuth,
-  requireRole("admin", "director"),
+  requirePermission("vacation.review"),
   async (_req, res) => {
     // Two single-field equality queries (status) — both served by Firestore's
     // automatic index. We deliberately do NOT combine status == "approved" with

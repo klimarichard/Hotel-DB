@@ -1,7 +1,8 @@
 import { Router, Response, NextFunction } from "express";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
-import { requireAuth, requireRole, AuthRequest } from "../middleware/auth";
+import { requireAuth, AuthRequest } from "../middleware/auth";
+import { requirePermission, resolvePermissions, hasPermission } from "../auth/permissions";
 import { encryptFields, redactFields, decrypt, decryptFields } from "../services/encryption";
 import {
   ctxFromReq,
@@ -338,13 +339,17 @@ export async function refreshEffectiveRootForAllActive(): Promise<{ scanned: num
 
 // ─── LIST ────────────────────────────────────────────────────────────────────
 
-// ─── ROLE REFINEMENTS (accountant / hr) ──────────────────────────────────────
-// Every employee route is role-gated by requireRole("admin","director",
-// "accountant","hr"). These router-level guards add the two finer rules:
-//   • accountant — read-only: any mutation (non-GET, except /reveal) is blocked.
-//   • hr — cannot see/touch a record whose linked login is admin/director/manager.
-// requireAuth is applied here (router-level) so req.role is set before the
-// guard runs and before each route's requireRole.
+// ─── ROW-LEVEL SCOPE REFINEMENTS (accountant / hr) ───────────────────────────
+// Each employee route is capability-gated by requirePermission(...). These
+// router-level guards add the two finer, row-level rules on top:
+//   • accountant — read-only safety net: any mutation (non-GET, except /reveal)
+//     is blocked. (Writes are already blocked by the per-route edit/manage perms;
+//     this stays role-based as defence-in-depth.)
+//   • non-management-scoped callers (built-in hr) — cannot see/touch a record
+//     whose linked login is admin/director/manager. Triggered by permission state
+//     (view.nonManagement without view.all), not the role string, so per-user
+//     permission overrides resolve correctly.
+// requireAuth is applied here (router-level) so req.role is set before the guard.
 
 /** employeeIds whose linked login account is admin/director/manager. */
 export async function getManagementEmployeeIds(): Promise<Set<string>> {
@@ -360,6 +365,20 @@ export async function getManagementEmployeeIds(): Promise<Set<string>> {
   return ids;
 }
 
+/**
+ * True when the caller's employee visibility is the non-management SUBSET
+ * (built-in `hr`) rather than full access — i.e. they hold
+ * `employees.view.nonManagement` but not `employees.view.all`. Drives the
+ * row-level management-record block (here and in contracts.ts).
+ */
+export function isNonManagementScoped(role: AuthRequest["role"]): boolean {
+  const set = resolvePermissions(role);
+  return (
+    hasPermission(set, "employees.view.nonManagement") &&
+    !hasPermission(set, "employees.view.all")
+  );
+}
+
 async function enforceEmpAccess(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   const role = req.role;
   const isReveal = req.method === "POST" && req.path.endsWith("/reveal");
@@ -370,7 +389,7 @@ async function enforceEmpAccess(req: AuthRequest, res: Response, next: NextFunct
     return;
   }
 
-  if (role === "hr") {
+  if (isNonManagementScoped(role)) {
     // Router is mounted at /employees, so req.path is relative: the first
     // segment is the employee id for /:id[/...] routes ("" for the list/create,
     // "export" for the export route — neither is a real id).
@@ -398,7 +417,7 @@ employeesRouter.use(enforceEmpAccess);
  */
 employeesRouter.get(
   "/",
-  requireRole("admin", "director", "accountant", "hr"),
+  requirePermission("employees.view.all", "employees.view.nonManagement"),
   async (req: AuthRequest, res) => {
     let query: admin.firestore.Query = db().collection("employees");
 
@@ -414,8 +433,8 @@ employeesRouter.get(
       return { id: doc.id, ...redactFields(data, [...SENSITIVE_FIELDS]) };
     });
 
-    // hr never sees admin/director/manager records.
-    if (req.role === "hr") {
+    // Non-management-scoped callers (hr) never see admin/director/manager records.
+    if (isNonManagementScoped(req.role)) {
       const mgmt = await getManagementEmployeeIds();
       employees = employees.filter((e) => !mgmt.has(e.id));
     }
@@ -437,11 +456,10 @@ employeesRouter.get(
  *                          / bankAccount; writes ONE auditLog entry per export.
  *
  * Must be declared before GET /:id so Express matches "export" as a literal.
- * TODO: When the "accountant" role is introduced, add it to requireRole(...) below.
  */
 employeesRouter.get(
   "/export",
-  requireRole("admin", "director", "accountant", "hr"),
+  requirePermission("employees.export"),
   async (req: AuthRequest, res) => {
     const includeSensitive = req.query.includeSensitive === "true";
 
@@ -455,7 +473,7 @@ employeesRouter.get(
 
     const snapshot = await query.get();
     let exportDocs = snapshot.docs;
-    if (req.role === "hr") {
+    if (isNonManagementScoped(req.role)) {
       const mgmt = await getManagementEmployeeIds();
       exportDocs = exportDocs.filter((d) => !mgmt.has(d.id));
     }
@@ -540,7 +558,7 @@ employeesRouter.get(
  */
 employeesRouter.get(
   "/:id",
-  requireRole("admin", "director", "accountant", "hr"),
+  requirePermission("employees.view.all", "employees.view.nonManagement"),
   async (req: AuthRequest, res) => {
     const doc = await db().collection("employees").doc(req.params.id).get();
     if (!doc.exists) {
@@ -561,7 +579,7 @@ employeesRouter.get(
  */
 employeesRouter.post(
   "/",
-  requireRole("admin", "director", "accountant", "hr"),
+  requirePermission("employees.create"),
   async (req: AuthRequest, res) => {
     const body = req.body as Record<string, unknown>;
     const now = FieldValue.serverTimestamp();
@@ -618,7 +636,7 @@ employeesRouter.post(
  */
 employeesRouter.patch(
   "/:id",
-  requireRole("admin", "director", "accountant", "hr"),
+  requirePermission("employees.edit"),
   async (req: AuthRequest, res) => {
     const body = req.body as Record<string, unknown>;
     const clearFields = Array.isArray(body.clearFields) ? body.clearFields as string[] : [];
@@ -669,7 +687,7 @@ employeesRouter.patch(
  */
 employeesRouter.post(
   "/:id/reveal",
-  requireRole("admin", "director", "accountant", "hr"),
+  requirePermission("sensitive.reveal"),
   async (req: AuthRequest, res) => {
     const { field } = req.body as { field: string };
     const allSensitive = [
@@ -741,7 +759,7 @@ employeesRouter.post(
  */
 employeesRouter.get(
   "/:id/contact",
-  requireRole("admin", "director", "accountant", "hr"),
+  requirePermission("employees.view.all", "employees.view.nonManagement"),
   async (req: AuthRequest, res) => {
     const snap = await db()
       .collection("employees")
@@ -758,7 +776,7 @@ employeesRouter.get(
  */
 employeesRouter.put(
   "/:id/contact",
-  requireRole("admin", "director", "accountant", "hr"),
+  requirePermission("employees.edit"),
   async (req: AuthRequest, res) => {
     const colRef = db().collection("employees").doc(req.params.id).collection("contact");
     const snap = await colRef.limit(1).get();
@@ -789,7 +807,7 @@ employeesRouter.put(
  */
 employeesRouter.get(
   "/:id/employment",
-  requireRole("admin", "director", "accountant", "hr"),
+  requirePermission("employment.view"),
   async (req: AuthRequest, res) => {
     const snap = await db()
       .collection("employees")
@@ -859,7 +877,7 @@ async function endMultisportOnTermination(
  */
 employeesRouter.post(
   "/:id/employment",
-  requireRole("admin", "director", "accountant", "hr"),
+  requirePermission("employment.manage"),
   async (req: AuthRequest, res) => {
     const body = req.body as Record<string, unknown>;
     const now = FieldValue.serverTimestamp();
@@ -921,7 +939,7 @@ employeesRouter.post(
  */
 employeesRouter.get(
   "/:id/documents",
-  requireRole("admin", "director", "accountant", "hr"),
+  requirePermission("employees.view.all", "employees.view.nonManagement"),
   async (req: AuthRequest, res) => {
     const snap = await db()
       .collection("employees")
@@ -1009,7 +1027,7 @@ export async function updateDocumentAlerts(
  */
 employeesRouter.put(
   "/:id/documents",
-  requireRole("admin", "director", "accountant", "hr"),
+  requirePermission("employees.edit"),
   async (req: AuthRequest, res) => {
     const body = req.body as Record<string, unknown>;
 
@@ -1086,7 +1104,7 @@ employeesRouter.put(
  */
 employeesRouter.get(
   "/:id/other-documents",
-  requireRole("admin", "director", "accountant", "hr"),
+  requirePermission("documents.view"),
   async (req: AuthRequest, res) => {
     const snap = await db()
       .collection("employees")
@@ -1108,7 +1126,7 @@ employeesRouter.get(
  */
 employeesRouter.post(
   "/:id/other-documents",
-  requireRole("admin", "director", "accountant", "hr"),
+  requirePermission("documents.upload"),
   async (req: AuthRequest, res) => {
     const { name, pdfBase64 } = req.body as {
       name?: string;
@@ -1164,7 +1182,7 @@ employeesRouter.post(
  */
 employeesRouter.get(
   "/:id/other-documents/:docId/download",
-  requireRole("admin", "director", "accountant", "hr"),
+  requirePermission("documents.view"),
   async (req: AuthRequest, res) => {
     const ref = db()
       .collection("employees")
@@ -1223,7 +1241,7 @@ employeesRouter.get(
  */
 employeesRouter.delete(
   "/:id/other-documents/:docId",
-  requireRole("admin", "director", "accountant", "hr"),
+  requirePermission("documents.delete"),
   async (req: AuthRequest, res) => {
     const employeeId = req.params.id;
     const docId = req.params.docId;
@@ -1263,7 +1281,7 @@ employeesRouter.delete(
  */
 employeesRouter.get(
   "/:id/benefits",
-  requireRole("admin", "director", "accountant", "hr"),
+  requirePermission("benefits.view"),
   async (req: AuthRequest, res) => {
     const snap = await db()
       .collection("employees")
@@ -1284,7 +1302,7 @@ employeesRouter.get(
  */
 employeesRouter.put(
   "/:id/benefits",
-  requireRole("admin", "director", "accountant", "hr"),
+  requirePermission("benefits.edit"),
   async (req: AuthRequest, res) => {
     const body = req.body as Record<string, unknown>;
     const clearFields = Array.isArray(body.clearFields) ? body.clearFields as string[] : [];
@@ -1339,7 +1357,7 @@ employeesRouter.put(
  */
 employeesRouter.put(
   "/:id/multisport",
-  requireRole("admin", "director", "hr"),
+  requirePermission("benefits.edit"),
   async (req: AuthRequest, res) => {
     const body = req.body as {
       periods?: Array<{ from?: string; to?: string | null }>;
@@ -1434,7 +1452,7 @@ employeesRouter.put(
  */
 employeesRouter.patch(
   "/:id/employment/:rowId",
-  requireRole("admin", "director", "accountant", "hr"),
+  requirePermission("employment.manage"),
   async (req: AuthRequest, res) => {
     const body = req.body as Record<string, unknown>;
     const now = FieldValue.serverTimestamp();
@@ -1485,7 +1503,7 @@ employeesRouter.patch(
  */
 employeesRouter.delete(
   "/:id/employment/:rowId",
-  requireRole("admin", "director", "accountant", "hr"),
+  requirePermission("employment.manage"),
   async (req: AuthRequest, res) => {
     const empRef = db().collection("employees").doc(req.params.id);
     const rowRef = empRef.collection("employment").doc(req.params.rowId);
@@ -1651,7 +1669,7 @@ employeesRouter.delete(
  */
 employeesRouter.get(
   "/:id/alerts",
-  requireRole("admin", "director", "accountant", "hr"),
+  requirePermission("employees.view.all", "employees.view.nonManagement"),
   async (req: AuthRequest, res) => {
     const snap = await db()
       .collection("alerts")
@@ -1667,7 +1685,7 @@ employeesRouter.get(
  */
 employeesRouter.get(
   "/:id/linked-user",
-  requireRole("admin", "director", "accountant", "hr"),
+  requirePermission("employees.view.all", "employees.view.nonManagement"),
   async (req, res) => {
     const snap = await db()
       .collection("users")
@@ -1691,7 +1709,7 @@ employeesRouter.get(
  */
 employeesRouter.delete(
   "/:id",
-  requireRole("admin", "director", "accountant", "hr"),
+  requirePermission("employees.delete"),
   async (req, res) => {
     const { id } = req.params;
     const deleteUser = req.query.deleteUser === "true";
@@ -1777,7 +1795,7 @@ employeesRouter.delete(
  */
 employeesRouter.get(
   "/:id/contracts",
-  requireRole("admin", "director", "accountant", "hr"),
+  requirePermission("contracts.view"),
   async (req: AuthRequest, res) => {
     const snap = await db()
       .collection("employees")

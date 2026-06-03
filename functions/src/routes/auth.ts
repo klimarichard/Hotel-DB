@@ -1,7 +1,8 @@
 import { Router } from "express";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
-import { requireAuth, requireRole, AuthRequest, UserRole } from "../middleware/auth";
+import { requireAuth, AuthRequest, UserRole } from "../middleware/auth";
+import { requirePermission } from "../auth/permissions";
 import { ctxFromReq, logCreate, logUpdate } from "../services/auditLog";
 
 export const authRouter = Router();
@@ -42,7 +43,7 @@ function passwordPolicyMessage(message: string): string {
 authRouter.post(
   "/set-role",
   requireAuth,
-  requireRole("admin"),
+  requirePermission("users.setType"),
   async (req: AuthRequest, res) => {
     const { uid, role } = req.body as { uid: string; role: UserRole };
     const validRoles: UserRole[] = ["admin", "director", "manager", "employee", "accountant", "hr"];
@@ -83,7 +84,7 @@ authRouter.post(
 authRouter.post(
   "/create-user",
   requireAuth,
-  requireRole("admin"),
+  requirePermission("users.manage"),
   async (req: AuthRequest, res) => {
     const { email, password, name, role, employeeId } = req.body as {
       email: string;
@@ -185,7 +186,7 @@ authRouter.post(
 authRouter.patch(
   "/deactivate-user/:uid",
   requireAuth,
-  requireRole("admin"),
+  requirePermission("users.manage"),
   async (req: AuthRequest, res) => {
     const { uid } = req.params;
     await admin.auth().updateUser(uid, { disabled: true });
@@ -207,7 +208,7 @@ authRouter.patch(
  * GET /api/auth/users
  * Admin-only: list all user profiles from users/ collection.
  */
-authRouter.get("/users", requireAuth, requireRole("admin"), async (_req, res) => {
+authRouter.get("/users", requireAuth, requirePermission("users.view"), async (_req, res) => {
   const snapshot = await admin.firestore().collection("users").orderBy("name").get();
   const users = snapshot.docs.map((doc) => ({ uid: doc.id, ...doc.data() }));
   res.json(users);
@@ -220,7 +221,7 @@ authRouter.get("/users", requireAuth, requireRole("admin"), async (_req, res) =>
 authRouter.patch(
   "/reactivate-user/:uid",
   requireAuth,
-  requireRole("admin"),
+  requirePermission("users.manage"),
   async (req: AuthRequest, res) => {
     const { uid } = req.params;
     await admin.auth().updateUser(uid, { disabled: false });
@@ -246,7 +247,7 @@ authRouter.patch(
 authRouter.patch(
   "/users/:uid/employee",
   requireAuth,
-  requireRole("admin"),
+  requirePermission("users.manage"),
   async (req: AuthRequest, res) => {
     const { uid } = req.params;
     const { employeeId } = req.body as { employeeId: string | null };
@@ -284,7 +285,7 @@ authRouter.patch(
 authRouter.patch(
   "/users/:uid",
   requireAuth,
-  requireRole("admin"),
+  requirePermission("users.manage"),
   async (req: AuthRequest, res) => {
     const { uid } = req.params;
     const { name, email } = req.body as { name?: string; email?: string };
