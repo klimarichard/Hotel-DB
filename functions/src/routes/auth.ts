@@ -2,7 +2,7 @@ import { Router } from "express";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireAuth, AuthRequest, UserRole } from "../middleware/auth";
-import { requirePermission } from "../auth/permissions";
+import { requirePermission, resolvePermissions } from "../auth/permissions";
 import { ctxFromReq, logCreate, logUpdate } from "../services/auditLog";
 
 export const authRouter = Router();
@@ -351,7 +351,11 @@ authRouter.get("/me", requireAuth, async (req: AuthRequest, res) => {
     res.status(404).json({ error: "User profile not found" });
     return;
   }
-  res.json({ uid: doc.id, ...doc.data() });
+  // Effective permission set for the frontend's can() helper. Resolved from the
+  // legacy `role` claim today; per-user grants/revokes feed in at Phase 4. The
+  // backend is still the real gate — this only drives which UI controls show.
+  const permissions = [...resolvePermissions(req.role)];
+  res.json({ uid: doc.id, ...doc.data(), permissions });
 });
 
 /**

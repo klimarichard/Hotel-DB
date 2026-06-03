@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { api } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
-import { canEditEmployees } from "@/lib/permissions";
 import * as clock from "@/lib/clock";
 import ConfirmModal from "@/components/ConfirmModal";
 import { formatDateCZ } from "@/lib/dateFormat";
@@ -1126,10 +1125,10 @@ interface AlertItem {
 export default function EmployeeDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { role } = useAuth();
+  const { can } = useAuth();
   // Edit/delete/contract-management capability. admin/director/hr; accountant
   // is read-only (sees data + reveal + contract download only).
-  const canDelete = canEditEmployees(role);
+  const canDelete = can("employees.edit");
 
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [employment, setEmployment] = useState<EmploymentRow[]>([]);
@@ -1345,7 +1344,7 @@ export default function EmployeeDetailPage() {
   // Fetch user-created custom standalone templates for the "+ Adhoc dokument"
   // dropdown. Built-in standalone types are listed in STANDALONE_TYPES.
   useEffect(() => {
-    if (!id || !canEditEmployees(role)) return;
+    if (!id || !can("employees.edit")) return;
     api
       .get<{ id: string; name: string; kind?: string | null }[]>("/contractTemplates")
       .then((list) =>
@@ -1354,7 +1353,7 @@ export default function EmployeeDetailPage() {
         )
       )
       .catch(() => {});
-  }, [id, role]);
+  }, [id, can]);
 
   // Close adhoc dropdown on outside click
   useEffect(() => {
@@ -1899,7 +1898,7 @@ export default function EmployeeDetailPage() {
         )}
       </Section>
 
-      {(role === "admin" || role === "director") && id && (
+      {can("audit.view") && id && (
         <Section title="Historie změn" sectionKey="audit" expanded={expanded.has("audit")} onToggle={toggle}>
           {expanded.has("audit") ? <EmployeeAuditHistory employeeId={id} employmentRows={employment} /> : null}
         </Section>

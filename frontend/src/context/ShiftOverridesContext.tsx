@@ -13,16 +13,16 @@ const ShiftOverridesContext = createContext<ShiftOverridesContextValue>({
 });
 
 export function ShiftOverridesProvider({ children }: { children: ReactNode }) {
-  const { role } = useAuth();
+  const { can } = useAuth();
   const [pendingCount, setPendingCount] = useState(0);
 
   const fetch = useCallback(() => {
-    if (role !== "admin" && role !== "director") return;
+    if (!can("shifts.override.review")) return;
     api
       .get<{ count: number }>("/shifts/overrides/pending-count")
       .then((data) => setPendingCount(data.count))
       .catch(() => {});
-  }, [role]);
+  }, [can]);
 
   useEffect(() => {
     fetch();

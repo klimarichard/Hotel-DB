@@ -19,7 +19,7 @@ function fmt(d: Date): string {
  */
 export default function TimeOverrideBanner() {
   const { enabled, clearOverride } = useTimeOverride();
-  const { role } = useAuth();
+  const { can } = useAuth();
   const [, setTick] = useState(0);
 
   useEffect(() => {
@@ -49,7 +49,7 @@ export default function TimeOverrideBanner() {
         🕒 <strong>Testovací čas:</strong> {fmt(clockNow())}
       </span>
       <span style={{ opacity: 0.75 }}>(reálně {fmt(new Date())})</span>
-      {role === "admin" && (
+      {can("system.timeOverride") && (
         <button
           onClick={() => clearOverride()}
           style={{

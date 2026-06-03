@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from "react-router-dom";
-import { useAuth, type UserRole } from "@/hooks/useAuth";
-import { resolveOrderForRole } from "@/lib/menuItems";
+import { useAuth } from "@/hooks/useAuth";
+import type { Permission } from "@/lib/permissions/catalog";
+import { resolveOrderByPermission } from "@/lib/menuItems";
 import LoginPage from "@/pages/LoginPage";
 import Layout from "@/components/Layout";
 import EmployeesPage from "@/pages/EmployeesPage";
@@ -30,21 +31,24 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-function RequireRole({ allow, children }: { allow: ReadonlyArray<UserRole>; children: React.ReactNode }) {
-  const { role, loading } = useAuth();
+// Permission-gated route. Passes if the caller has ANY of the listed
+// permissions (system.admin satisfies all via can()). Mirrors the backend
+// requirePermission gate; the backend still enforces independently.
+function RequirePermission({ allow, children }: { allow: ReadonlyArray<Permission>; children: React.ReactNode }) {
+  const { can, loading } = useAuth();
   if (loading) return <div style={{ padding: "2rem" }}>Načítám...</div>;
-  if (!role || !allow.includes(role)) return <Navigate to="/" replace />;
+  if (!allow.some((p) => can(p))) return <Navigate to="/" replace />;
   return <>{children}</>;
 }
 
-// Role-aware landing: send each role to the first page it can actually see
-// (its first allowed menu item). The fallback must itself be a page the role
-// can open, otherwise the landing → guard → "/" bounce becomes an infinite
-// redirect loop. accountant now lands on Přehled (its first item — the HR
-// stats dashboard), same as the other roles.
+// Permission-aware landing: send the user to the first page they can actually
+// see (their first visible menu item). The fallback must itself be a page the
+// user can open, otherwise the landing → guard → "/" bounce becomes an
+// infinite redirect loop. Every role holds nav.dashboard.view, so /prehled is
+// a safe fallback.
 function DefaultRedirect() {
-  const { role } = useAuth();
-  const target = (role ? resolveOrderForRole(role, null)[0]?.path : null) ?? "/prehled";
+  const { can } = useAuth();
+  const target = resolveOrderByPermission(can, null)[0]?.path ?? "/prehled";
   return <Navigate to={target} replace />;
 }
 
@@ -81,19 +85,19 @@ export default function App() {
         }
       >
         <Route index element={<DefaultRedirect />} />
-        <Route path="prehled" element={<RequireRole allow={["admin", "director", "manager", "employee", "hr", "accountant"]}><OverviewPage /></RequireRole>} />
-        <Route path="smeny" element={<RequireRole allow={["admin", "director", "manager", "employee", "hr"]}><ShiftPlannerPage /></RequireRole>} />
-        <Route path="dovolena" element={<RequireRole allow={["admin", "director", "manager", "employee", "hr"]}><VacationPage /></RequireRole>} />
-        <Route path="zamestnanci" element={<RequireRole allow={["admin", "director", "accountant", "hr"]}><EmployeesPage /></RequireRole>} />
-        <Route path="zamestnanci/novy" element={<RequireRole allow={["admin", "director", "hr"]}><EmployeeFormPage /></RequireRole>} />
-        <Route path="zamestnanci/:id" element={<RequireRole allow={["admin", "director", "accountant", "hr"]}><EmployeeDetailPage /></RequireRole>} />
-        <Route path="zamestnanci/:id/upravit" element={<RequireRole allow={["admin", "director", "hr"]}><EmployeeFormPage /></RequireRole>} />
-        <Route path="muj-profil" element={<RequireRole allow={["admin", "director", "manager", "employee", "hr"]}><EmployeeSelfPage /></RequireRole>} />
-        <Route path="mzdy" element={<RequireRole allow={["admin", "director"]}><PayrollPage /></RequireRole>} />
-        <Route path="smlouvy" element={<RequireRole allow={["admin", "director"]}><ContractTemplatesPage /></RequireRole>} />
-        <Route path="upozorneni" element={<RequireRole allow={["admin", "director"]}><AlertsPage /></RequireRole>} />
-        <Route path="nastaveni" element={<RequireRole allow={["admin"]}><SettingsPage /></RequireRole>} />
-        <Route path="audit" element={<RequireRole allow={["admin", "director"]}><AuditLogPage /></RequireRole>} />
+        <Route path="prehled" element={<RequirePermission allow={["nav.dashboard.view"]}><OverviewPage /></RequirePermission>} />
+        <Route path="smeny" element={<RequirePermission allow={["nav.shifts.view"]}><ShiftPlannerPage /></RequirePermission>} />
+        <Route path="dovolena" element={<RequirePermission allow={["nav.vacation.view"]}><VacationPage /></RequirePermission>} />
+        <Route path="zamestnanci" element={<RequirePermission allow={["nav.employees.view"]}><EmployeesPage /></RequirePermission>} />
+        <Route path="zamestnanci/novy" element={<RequirePermission allow={["employees.create"]}><EmployeeFormPage /></RequirePermission>} />
+        <Route path="zamestnanci/:id" element={<RequirePermission allow={["nav.employees.view"]}><EmployeeDetailPage /></RequirePermission>} />
+        <Route path="zamestnanci/:id/upravit" element={<RequirePermission allow={["employees.edit"]}><EmployeeFormPage /></RequirePermission>} />
+        <Route path="muj-profil" element={<RequirePermission allow={["nav.profile.view"]}><EmployeeSelfPage /></RequirePermission>} />
+        <Route path="mzdy" element={<RequirePermission allow={["nav.payroll.view"]}><PayrollPage /></RequirePermission>} />
+        <Route path="smlouvy" element={<RequirePermission allow={["nav.contractTemplates.view"]}><ContractTemplatesPage /></RequirePermission>} />
+        <Route path="upozorneni" element={<RequirePermission allow={["nav.alerts.view"]}><AlertsPage /></RequirePermission>} />
+        <Route path="nastaveni" element={<RequirePermission allow={["nav.settings.view"]}><SettingsPage /></RequirePermission>} />
+        <Route path="audit" element={<RequirePermission allow={["nav.audit.view"]}><AuditLogPage /></RequirePermission>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

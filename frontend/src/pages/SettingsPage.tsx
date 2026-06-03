@@ -114,7 +114,7 @@ const ROLE_LABELS: Record<UserRole, string> = {
 const emptyForm = { name: "", email: "", password: "", role: "employee" as UserRole, employeeId: "" };
 
 export default function SettingsPage() {
-  const { role, loading: authLoading } = useAuth();
+  const { can, loading: authLoading } = useAuth();
 
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -516,7 +516,7 @@ export default function SettingsPage() {
   }
 
   if (authLoading) return null;
-  if (role !== "admin") return <Navigate to="/" replace />;
+  if (!can("nav.settings.view")) return <Navigate to="/" replace />;
 
   function toggleDepSort(col: "name") {
     setDepSort((s) => ({ col, dir: s.col === col && s.dir === "asc" ? "desc" : "asc" }));

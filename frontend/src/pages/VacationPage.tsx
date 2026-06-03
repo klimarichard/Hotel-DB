@@ -70,9 +70,9 @@ function StatusBadge({ status }: { status: VacationRequest["status"] }) {
 }
 
 export default function VacationPage() {
-  const { user, role, employeeId } = useAuth();
+  const { user, can, employeeId } = useAuth();
   const { refresh: refreshVacationBadge } = useVacationContext();
-  const canApprove = role === "admin" || role === "director";
+  const canApprove = can("vacation.review");
 
   const [requests, setRequests] = useState<VacationRequest[]>([]);
   const [loading, setLoading] = useState(true);
