@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "../lib/api";
+import { useAuth } from "@/hooks/useAuth";
 import Button from "./Button";
 import IconButton from "./IconButton";
 import ConfirmModal from "./ConfirmModal";
@@ -39,6 +40,9 @@ const COMPANIES = ["HPM", "STP"];
 const GROUP_ORDER: ColumnGroup[] = ["basic", "documents", "contact", "employment", "benefits", "sensitive"];
 
 export default function ExportEmployeesModal({ onClose }: Props) {
+  const { can } = useAuth();
+  const canSensitive = can("employees.export.sensitive");
+
   // ─── Filters ──────────────────────────────────────────────────────────────
   const [status, setStatus] = useState<StatusChoice>("active");
   const [selectedContracts, setSelectedContracts] = useState<Set<string>>(new Set());
@@ -305,6 +309,10 @@ export default function ExportEmployeesModal({ onClose }: Props) {
               </h3>
 
               {GROUP_ORDER.map((group) => {
+                // Without the sensitive-export permission, the sensitive column
+                // group is never shown (and the include-sensitive toggle below is
+                // hidden), so such users can only export non-sensitive columns.
+                if (group === "sensitive" && !canSensitive) return null;
                 const cols = columnsByGroup[group];
                 if (cols.length === 0) return null;
                 const allOn = cols.every(
@@ -365,19 +373,21 @@ export default function ExportEmployeesModal({ onClose }: Props) {
             </section>
 
             {/* ── Citlivé údaje ── */}
-            <section className={styles.section}>
-              <label className={styles.sensitiveLabel}>
-                <input
-                  type="checkbox"
-                  checked={includeSensitive}
-                  onChange={(e) => handleSensitiveToggle(e.target.checked)}
-                />
-                <span>
-                  <strong>Včetně citlivých údajů</strong> (rodné číslo, číslo OP, číslo pojištěnce, číslo účtu).
-                  Tato akce bude zaznamenána do auditu.
-                </span>
-              </label>
-            </section>
+            {canSensitive && (
+              <section className={styles.section}>
+                <label className={styles.sensitiveLabel}>
+                  <input
+                    type="checkbox"
+                    checked={includeSensitive}
+                    onChange={(e) => handleSensitiveToggle(e.target.checked)}
+                  />
+                  <span>
+                    <strong>Včetně citlivých údajů</strong> (rodné číslo, číslo OP, číslo pojištěnce, číslo účtu).
+                    Tato akce bude zaznamenána do auditu.
+                  </span>
+                </label>
+              </section>
+            )}
 
             {error && <p className={styles.error}>{error}</p>}
           </div>

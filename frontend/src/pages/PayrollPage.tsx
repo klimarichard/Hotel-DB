@@ -367,6 +367,10 @@ export default function PayrollPage() {
   const canToggleLock = can("payroll.lock");
   const canHardRecompute = can("payroll.recalculate.hard");
   const canDeletePeriod = can("payroll.period.delete");
+  const canCreate = can("payroll.create");
+  const canSoftRecalculate = can("payroll.recalculate");
+  const canExport = can("payroll.export");
+  const canManageNotes = can("payroll.notes.manage");
 
   function toggleLock() {
     if (!period) return;
@@ -894,7 +898,7 @@ export default function PayrollPage() {
                     className={styles.notesDashBtn}
                     onClick={() => setNotesModal(entry)}
                     title="Přidat poznámku"
-                    disabled={!canEdit}
+                    disabled={!canManageNotes}
                   >
                     <span className={styles.dash}>—</span>
                   </button>
@@ -928,17 +932,21 @@ export default function PayrollPage() {
           Žádné mzdové období pro {MONTH_NAMES[selectedMonth - 1]} {selectedYear}.
           <br />
           <span className={styles.emptyHint}>Mzdy se generují automaticky po publikování směnného plánu.</span>
-          <br />
-          <button
-            type="button"
-            className={styles.lockBtn}
-            onClick={handleCreatePeriod}
-            disabled={creating}
-            style={{ marginTop: "1rem" }}
-            title="Vytvořit mzdové období z již publikovaného směnného plánu pro tento měsíc"
-          >
-            {creating ? "Vytvářím…" : "Vytvořit mzdy ručně"}
-          </button>
+          {canCreate && (
+            <>
+              <br />
+              <button
+                type="button"
+                className={styles.lockBtn}
+                onClick={handleCreatePeriod}
+                disabled={creating}
+                style={{ marginTop: "1rem" }}
+                title="Vytvořit mzdové období z již publikovaného směnného plánu pro tento měsíc"
+              >
+                {creating ? "Vytvářím…" : "Vytvořit mzdy ručně"}
+              </button>
+            </>
+          )}
         </div>
       )}
 
@@ -963,7 +971,7 @@ export default function PayrollPage() {
             </span>
             <span className={styles.metaItem}>
               {isLocked && <span className={styles.lockedBadge}>🔒 Uzamčeno</span>}
-              {!isLocked && (
+              {!isLocked && canSoftRecalculate && (
                 <button
                   type="button"
                   className={styles.lockBtn}
@@ -974,15 +982,17 @@ export default function PayrollPage() {
                   {recalculating ? "Přepočítávám…" : "Přepočítat"}
                 </button>
               )}
-              <button
-                type="button"
-                className={styles.lockBtn}
-                onClick={handleExportPdf}
-                disabled={exporting}
-                title="Exportovat mzdy do PDF"
-              >
-                {exporting ? "Exportuji…" : "Exportovat PDF"}
-              </button>
+              {canExport && (
+                <button
+                  type="button"
+                  className={styles.lockBtn}
+                  onClick={handleExportPdf}
+                  disabled={exporting}
+                  title="Exportovat mzdy do PDF"
+                >
+                  {exporting ? "Exportuji…" : "Exportovat PDF"}
+                </button>
+              )}
               {canToggleLock && (
                 <button
                   type="button"
@@ -1081,7 +1091,7 @@ export default function PayrollPage() {
           employeeId={notesModal.id}
           employeeLabel={employeeDisplayName(notesModal)}
           notes={period.entries.find((e) => e.id === notesModal.id)?.notes ?? []}
-          canEdit={canEdit}
+          canEdit={canManageNotes}
           onClose={() => setNotesModal(null)}
           onChanged={loadPeriod}
         />

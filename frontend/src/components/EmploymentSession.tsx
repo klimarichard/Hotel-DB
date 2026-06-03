@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
 import { ContractType } from "@/lib/contractVariables";
 import { formatDateCZ } from "@/lib/dateFormat";
 import { Fragment } from "react";
@@ -20,7 +21,6 @@ interface Props {
   defaultExpanded: boolean;
   companies: CompanyMap;
   employeeId: string;
-  canEdit: boolean;
   /** Build the template id used when the user uploads a signed PDF before generating one. */
   resolveDefaultType: (row: EmploymentRow) => ContractType;
   /** Build the human-readable filename used in Content-Disposition. */
@@ -53,7 +53,6 @@ export default function EmploymentSessionCard({
   defaultExpanded,
   companies,
   employeeId,
-  canEdit,
   resolveDefaultType,
   resolveDisplayName,
   resolveRowSnapshot,
@@ -64,6 +63,10 @@ export default function EmploymentSessionCard({
   onTerminate,
   onContractsChanged,
 }: Props) {
+  const { can } = useAuth();
+  // "+ Dodatek" / "Ukončit smlouvu" are employment-record management. Built-in
+  // admin/director hold employment.manage → unchanged.
+  const canManageEmployment = can("employment.manage");
   const [open, setOpen] = useState(defaultExpanded);
   const eff = session.effective;
   const companyName = companies[eff.companyId] ?? eff.companyId ?? "—";
@@ -131,7 +134,7 @@ export default function EmploymentSessionCard({
             date is set or has already passed, so they can always be ended
             (early or retroactively). "+ Dodatek" remains hidden once the
             session is over (terminated = Ukončení row or endDate in the past). */}
-        {canEdit && !session.ukonceni && (
+        {canManageEmployment && !session.ukonceni && (
           <div className={styles.headerActions} onClick={(e) => e.stopPropagation()}>
             {!session.terminated && (
               <Button variant="secondary" size="sm" onClick={onAddDodatek}>+ Dodatek</Button>
@@ -152,7 +155,6 @@ export default function EmploymentSessionCard({
               defaultDisplayName={resolveDisplayName(row)}
               rowSnapshot={resolveRowSnapshot(row)}
               employeeId={employeeId}
-              canEdit={canEdit}
               sessionRowCount={session.rows.length}
               onGenerate={() => onGenerate(row)}
               onEdit={() => onEditRow(row)}

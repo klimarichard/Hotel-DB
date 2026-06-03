@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "@/lib/api";
+import { useAuth } from "@/hooks/useAuth";
 import { useAlertsContext } from "@/context/AlertsContext";
 import { formatDateCZ } from "@/lib/dateFormat";
 import { employeeDisplayName } from "@/lib/employeeName";
@@ -89,6 +90,8 @@ export default function DocumentExpiryTab() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { markRead } = useAlertsContext();
+  const { can } = useAuth();
+  const canRead = can("alerts.read");
 
   useEffect(() => {
     api.get<Alert[]>("/alerts")
@@ -116,7 +119,7 @@ export default function DocumentExpiryTab() {
 
   return (
     <div>
-      {unread.length > 0 && (
+      {canRead && unread.length > 0 && (
         <div className={styles.tabHeader}>
           <Button
             variant="secondary"
@@ -137,8 +140,8 @@ export default function DocumentExpiryTab() {
         ) : (
           <AlertTable
             alerts={unread}
-            actionLabel="Přečteno"
-            onAction={(id) => setRead([id], true)}
+            actionLabel={canRead ? "Přečteno" : undefined}
+            onAction={canRead ? (id) => setRead([id], true) : undefined}
           />
         )}
       </div>
@@ -149,8 +152,8 @@ export default function DocumentExpiryTab() {
           <AlertTable
             alerts={read}
             muted
-            actionLabel="Označit jako nepřečtené"
-            onAction={(id) => setRead([id], false)}
+            actionLabel={canRead ? "Označit jako nepřečtené" : undefined}
+            onAction={canRead ? (id) => setRead([id], false) : undefined}
           />
         </div>
       )}
