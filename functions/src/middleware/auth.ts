@@ -47,17 +47,3 @@ export function requireAuth(req: AuthRequest, res: Response, next: NextFunction)
       res.status(401).json({ error: "Invalid or expired token" });
     });
 }
-
-/**
- * Middleware factory — restricts access to one or more roles.
- * Call requireAuth first, then requireRole(...).
- */
-export function requireRole(...roles: UserRole[]) {
-  return (req: AuthRequest, res: Response, next: NextFunction): void => {
-    if (!req.role || !roles.includes(req.role)) {
-      res.status(403).json({ error: "Insufficient permissions" });
-      return;
-    }
-    next();
-  };
-}

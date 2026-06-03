@@ -367,9 +367,10 @@ shiftsRouter.get(
       .orderBy("month", "desc")
       .get();
     const all = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Array<Record<string, unknown> & { id: string; status: string }>;
-    const filtered = req.role === "employee"
-      ? all.filter((p) => p.status !== "created")
-      : all;
+    // Self-service viewers (shifts.view.self without shifts.view.all — e.g. the
+    // built-in employee) don't see plans still in "created" (unopened).
+    const seesAllPlans = req.permissions?.has("shifts.view.all") ?? false;
+    const filtered = seesAllPlans ? all : all.filter((p) => p.status !== "created");
     res.json(filtered);
   }
 );
@@ -448,8 +449,10 @@ shiftsRouter.get(
 
     const planData = planDoc.data()!;
 
-    // Employees may only view plans that have been opened (or beyond).
-    if ((req as AuthRequest).role === "employee" && planData.status === "created") {
+    // Self-service viewers (no shifts.view.all) may only view plans that have
+    // been opened (or beyond).
+    const seesAllPlans = req.permissions?.has("shifts.view.all") ?? false;
+    if (!seesAllPlans && planData.status === "created") {
       res.status(404).json({ error: "Plán nenalezen" });
       return;
     }
@@ -478,11 +481,11 @@ shiftsRouter.get(
       contractType: contractTypeMap.get(e.employeeId) ?? null,
     }));
 
-    // Employees viewing a closed plan see the snapshot taken at close time,
-    // not the live shifts — admin changes after closing are invisible until publish.
+    // Self-service viewers (no shifts.view.all) see a closed plan's snapshot
+    // taken at close time, not the live shifts — admin changes after closing are
+    // invisible until publish.
     let visibleShifts = shifts;
-    const userRole = (req as AuthRequest).role;
-    if (planData.status === "closed" && userRole === "employee") {
+    if (planData.status === "closed" && !seesAllPlans) {
       const snapshotSnap = await planRef.collection("shiftsSnapshot").get();
       visibleShifts = snapshotSnap.docs
         .filter((d) => currentEmployeeIds.has(d.data().employeeId as string))
@@ -531,9 +534,9 @@ shiftsRouter.patch(
 
     const isForward = validTransitions[currentStatus] === newStatus;
     const isReverse = reverseTransitions[currentStatus] === newStatus;
-    const userRole = (req as AuthRequest).role;
+    const canRevert = (req as AuthRequest).permissions?.has("shifts.plan.revert") ?? false;
 
-    if (!isForward && !(isReverse && userRole === "admin")) {
+    if (!isForward && !(isReverse && canRevert)) {
       res.status(400).json({ error: "Neplatný přechod stavu" });
       return;
     }
@@ -1048,15 +1051,18 @@ shiftsRouter.put(
     const { planId, employeeId, date } = req.params;
     const body = req.body as Record<string, unknown>;
     const rawInput = (body.rawInput as string) ?? "";
-    const userRole = req.role;
+    // Self-service editors (shifts.cells.editOwnX but NOT shifts.cells.edit —
+    // e.g. the built-in employee) may only enter X on an opened plan.
+    const selfServiceOnly =
+      (req.permissions?.has("shifts.cells.editOwnX") && !req.permissions?.has("shifts.cells.edit")) ?? false;
 
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       res.status(400).json({ error: "Neplatný formát data" });
       return;
     }
 
-    // Employee-specific guards: X only, opened plan only
-    if (userRole === "employee") {
+    // Self-service guards: X only, opened plan only
+    if (selfServiceOnly) {
       const planDoc = await db().collection("shiftPlans").doc(planId).get();
       if (planDoc.data()?.status !== "opened") {
         res.status(403).json({ error: "Zaměstnanci mohou upravovat směny pouze v otevřeném plánu." });
@@ -1128,10 +1134,11 @@ shiftsRouter.delete(
   requirePermission("shifts.cells.edit", "shifts.cells.editOwnX"),
   async (req: AuthRequest, res) => {
     const { planId, employeeId, date } = req.params;
-    const userRole = req.role;
+    // Self-service editors (editOwnX but not cells.edit) may only delete on an opened plan.
+    const selfServiceOnly =
+      (req.permissions?.has("shifts.cells.editOwnX") && !req.permissions?.has("shifts.cells.edit")) ?? false;
 
-    // Employee-specific guards: opened plan only
-    if (userRole === "employee") {
+    if (selfServiceOnly) {
       const planDoc = await db().collection("shiftPlans").doc(planId).get();
       if (planDoc.data()?.status !== "opened") {
         res.status(403).json({ error: "Zaměstnanci mohou mazat směny pouze v otevřeném plánu." });
@@ -1393,7 +1400,9 @@ shiftsRouter.get(
   requirePermission("shifts.override.review", "shifts.override.submit", "shifts.view.self"),
   async (req: AuthRequest, res) => {
     const { planId } = req.params;
-    const isPrivileged = req.role === "admin" || req.role === "director" || req.role === "manager";
+    // Staff who fill the grid (shifts.cells.edit = built-in admin/director/manager)
+    // see all override requests; self-service submitters see only their own.
+    const isPrivileged = req.permissions?.has("shifts.cells.edit") ?? false;
 
     let query: admin.firestore.Query = db()
       .collection("shiftPlans")
@@ -1651,8 +1660,9 @@ shiftsRouter.get(
   requirePermission("shifts.changeRequest.review", "shifts.changeRequest.submit", "shifts.view.self"),
   async (req: AuthRequest, res) => {
     const { planId } = req.params;
-    const userRole = req.role;
-    const isPrivileged = userRole === "admin" || userRole === "director";
+    // Reviewers (shifts.changeRequest.review = built-in admin/director) see all
+    // change requests; submitters see only their own.
+    const isPrivileged = req.permissions?.has("shifts.changeRequest.review") ?? false;
 
     let query: admin.firestore.Query = db()
       .collection("shiftPlans")

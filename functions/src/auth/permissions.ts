@@ -5,10 +5,10 @@
  * code actually enforces). Roles ("user types") are configurable DATA that bundle
  * these keys; a user has a role type plus optional per-user grants/revokes.
  *
- * This file (Phase 1) defines the catalog, the built-in role→permission mappings
- * that reproduce today's behaviour exactly, and the resolver/middleware. It is
- * ADDITIVE — endpoints still use requireRole until the Phase 2 cutover wires
- * requirePermission in.
+ * This file defines the catalog, the built-in role→permission mappings (the
+ * fallback used when a roleTypes doc is missing/unavailable), and the resolver +
+ * requirePermission middleware. Every endpoint is gated by requirePermission,
+ * checked against the effective set requireAuth resolves onto req.permissions.
  *
  * Keep the catalog KEYS in sync with frontend/src/lib/permissions/catalog.ts
  * (the two packages cannot share code; labels may differ, keys must not).
