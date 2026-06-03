@@ -339,17 +339,15 @@ export async function refreshEffectiveRootForAllActive(): Promise<{ scanned: num
 
 // ─── LIST ────────────────────────────────────────────────────────────────────
 
-// ─── ROW-LEVEL SCOPE REFINEMENTS (accountant / hr) ───────────────────────────
-// Each employee route is capability-gated by requirePermission(...). These
-// router-level guards add the two finer, row-level rules on top:
-//   • accountant — read-only safety net: any mutation (non-GET, except /reveal)
-//     is blocked. (Writes are already blocked by the per-route edit/manage perms;
-//     this stays role-based as defence-in-depth.)
-//   • non-management-scoped callers (built-in hr) — cannot see/touch a record
-//     whose linked login is admin/director/manager. Triggered by permission state
-//     (view.nonManagement without view.all), not the role string, so per-user
-//     permission overrides resolve correctly.
-// requireAuth is applied here (router-level) so req.role is set before the guard.
+// ─── ROW-LEVEL SCOPE REFINEMENT (non-management viewers) ─────────────────────
+// Each employee route is capability-gated by requirePermission(...) — that
+// handles read-only viewers (e.g. účetní lack every write permission, so writes
+// 403 at the route). This router-level guard adds the one row-level rule on top:
+//   • non-management-scoped callers (e.g. built-in personalista) — cannot
+//     see/touch a record whose linked login is a management user type. Triggered
+//     by permission state (view.nonManagement without view.all), not a role
+//     string, so it works for custom types and per-user overrides too.
+// requireAuth is applied at the router level so req.permissions is set first.
 
 /**
  * employeeIds whose linked login is a "management" user type. Determined by the
@@ -387,15 +385,6 @@ export function isNonManagementScoped(perms: Set<string> | undefined): boolean {
 }
 
 async function enforceEmpAccess(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
-  const role = req.role;
-  const isReveal = req.method === "POST" && req.path.endsWith("/reveal");
-  const isWrite = req.method !== "GET" && !isReveal;
-
-  if (role === "accountant" && isWrite) {
-    res.status(403).json({ error: "Účetní má pouze náhledový přístup." });
-    return;
-  }
-
   if (isNonManagementScoped(req.permissions)) {
     // Router is mounted at /employees, so req.path is relative: the first
     // segment is the employee id for /:id[/...] routes ("" for the list/create,
