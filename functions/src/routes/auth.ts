@@ -247,12 +247,10 @@ authRouter.post(
       res.status(400).json({ error: "Zvolený typ uživatele neexistuje." });
       return;
     }
-    // Keep the legacy `role` in sync only when the type is a built-in role id
-    // (drives the per-role menu configurator + sidebar label + resolver fallback).
-    // Custom types have no base role — that's fine; the sidebar + checks are
-    // permission-driven and management scoping reads the type's flag.
-    const validRoles: UserRole[] = ["admin", "director", "manager", "employee", "accountant", "hr"];
-    const baseRole: UserRole | null = validRoles.includes(typeId as UserRole) ? (typeId as UserRole) : null;
+    // New users are purely type-based — no legacy `role` is set. Everything reads
+    // roleType: permissions resolve from it, the sidebar + menu config key off it
+    // (req.roleType), management scoping reads the type's flag, and the resolver
+    // falls back to the built-in mapping by the type id when a doc is missing.
     // Password is optional. When omitted the account is created WITHOUT a password
     // and we hand back a reset link so the user can set their own (see below).
     const hasPassword = typeof password === "string" && password.length > 0;
@@ -266,15 +264,11 @@ authRouter.post(
       const userRecord = await admin.auth().createUser(
         hasPassword ? { email, password, displayName: name } : { email, displayName: name }
       );
-      await admin.auth().setCustomUserClaims(userRecord.uid, {
-        ...(baseRole ? { role: baseRole } : {}),
-        roleType: typeId,
-      });
+      await admin.auth().setCustomUserClaims(userRecord.uid, { roleType: typeId });
 
       await admin.firestore().collection("users").doc(userRecord.uid).set({
         name,
         email,
-        ...(baseRole ? { role: baseRole } : {}),
         roleType: typeId,
         employeeId: employeeId ?? null,
         active: true,

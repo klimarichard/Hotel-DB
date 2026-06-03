@@ -7,6 +7,8 @@ export type UserRole = "admin" | "director" | "manager" | "employee" | "accounta
 export interface AuthRequest extends Request {
   uid?: string;
   role?: UserRole;
+  /** Configurable user-type id from the claim (defaults to the legacy role). */
+  roleType?: string;
   userEmail?: string;
   /** Effective permission set resolved from the token claim (roleType + per-user
    *  overrides), attached by requireAuth. requirePermission checks against this. */
@@ -31,6 +33,7 @@ export function requireAuth(req: AuthRequest, res: Response, next: NextFunction)
     .then(async (decoded) => {
       req.uid = decoded.uid;
       req.role = (decoded.role as UserRole) ?? undefined;
+      req.roleType = (typeof decoded.roleType === "string" ? decoded.roleType : undefined) ?? req.role;
       req.userEmail = decoded.email ?? "";
       // Resolve the effective permission set once per request from the claim.
       // roleType + per-user grants/revokes are optional claims (Phase 5); legacy

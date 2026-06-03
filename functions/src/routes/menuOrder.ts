@@ -1,7 +1,7 @@
 import { Router } from "express";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
-import { requireAuth, AuthRequest, UserRole } from "../middleware/auth";
+import { requireAuth, AuthRequest } from "../middleware/auth";
 import { requirePermission } from "../auth/permissions";
 import { ctxFromReq, logUpdate } from "../services/auditLog";
 
@@ -9,38 +9,20 @@ export const menuOrderRouter = Router();
 
 const db = () => admin.firestore();
 
-// Mirror of frontend/src/lib/menuItems.ts. Kept here so the backend can
-// validate PUT payloads — admin can't sneak in an item id that doesn't
-// exist or assign one to a role that can't access it.
-const MENU_ITEMS: { id: string; roles: UserRole[] }[] = [
-  { id: "prehled",     roles: ["admin", "director", "manager", "employee", "hr", "accountant"] },
-  { id: "smeny",       roles: ["admin", "director", "manager", "employee", "hr"] },
-  { id: "dovolena",    roles: ["admin", "director", "manager", "employee", "hr"] },
-  { id: "zamestnanci", roles: ["admin", "director", "accountant", "hr"] },
-  { id: "mzdy",        roles: ["admin", "director"] },
-  { id: "upozorneni",  roles: ["admin", "director"] },
-  { id: "smlouvy",     roles: ["admin", "director"] },
-  { id: "audit",       roles: ["admin", "director"] },
-  { id: "nastaveni",   roles: ["admin"] },
-  { id: "mujProfil",   roles: ["admin", "director", "manager", "employee", "hr"] },
-];
-
-const ALL_ROLES: UserRole[] = ["admin", "director", "manager", "employee", "accountant", "hr"];
-const VALID_IDS = new Set(MENU_ITEMS.map((m) => m.id));
-const ROLE_TO_ALLOWED_IDS: Record<UserRole, Set<string>> = {
-  admin: new Set(MENU_ITEMS.filter((m) => m.roles.includes("admin")).map((m) => m.id)),
-  director: new Set(MENU_ITEMS.filter((m) => m.roles.includes("director")).map((m) => m.id)),
-  manager: new Set(MENU_ITEMS.filter((m) => m.roles.includes("manager")).map((m) => m.id)),
-  employee: new Set(MENU_ITEMS.filter((m) => m.roles.includes("employee")).map((m) => m.id)),
-  accountant: new Set(MENU_ITEMS.filter((m) => m.roles.includes("accountant")).map((m) => m.id)),
-  hr: new Set(MENU_ITEMS.filter((m) => m.roles.includes("hr")).map((m) => m.id)),
-};
+// Valid sidebar item ids (mirror of frontend/src/lib/menuItems.ts). The backend
+// validates that saved orders only reference real items; per-TYPE visibility is
+// enforced by the sidebar itself (Layout's resolveOrderByPermission only shows
+// items the user has the permission for), so we don't re-check permissions here.
+const VALID_IDS = new Set<string>([
+  "prehled", "smeny", "dovolena", "zamestnanci", "mzdy",
+  "upozorneni", "smlouvy", "audit", "nastaveni", "mujProfil",
+]);
 
 const docRef = () => db().collection("settings").doc("menuOrder");
 
 /**
  * GET /api/settings/menu-order
- * Returns the full per-role map. Admin only.
+ * Returns the full per-user-type map. Admin only.
  */
 menuOrderRouter.get(
   "/",
@@ -54,16 +36,17 @@ menuOrderRouter.get(
 
 /**
  * GET /api/settings/menu-order/me
- * Returns just the current user's role's saved order, or null when no
- * order is configured (frontend falls back to default order). Available
- * to any authenticated user — needed by Layout.tsx on every login.
+ * Returns just the current user's type's saved order, or null when none is
+ * configured (frontend falls back to default order). Available to any
+ * authenticated user — needed by Layout.tsx on every login. Keyed by the user's
+ * roleType (which defaults to the legacy role).
  */
 menuOrderRouter.get(
   "/me",
   requireAuth,
   async (req: AuthRequest, res) => {
-    const role = req.role;
-    if (!role) {
+    const typeId = req.roleType;
+    if (!typeId) {
       res.json({ order: null });
       return;
     }
@@ -72,17 +55,17 @@ menuOrderRouter.get(
       res.json({ order: null });
       return;
     }
-    const data = snap.data() ?? {};
-    const order = (data as Record<string, unknown>)[role];
+    const order = (snap.data() as Record<string, unknown>)[typeId];
     res.json({ order: Array.isArray(order) ? order : null });
   }
 );
 
 /**
  * PUT /api/settings/menu-order
- * Admin only. Body: { admin?: [...], director?: [...], manager?: [...], employee?: [...] }
- * Each value must be an array of valid item ids that the role is allowed
- * to access — sneaking 'nastaveni' into 'employee' is rejected.
+ * Admin only. Body: { <typeId>: [...itemIds], ... } — one entry per user type.
+ * Each value is cleaned to valid, de-duplicated item ids. Item visibility per
+ * type is enforced by the sidebar, so we don't reject items here; unknown ids
+ * are silently dropped. Reserved keys (updatedAt/updatedBy) are ignored.
  */
 menuOrderRouter.put(
   "/",
@@ -92,33 +75,24 @@ menuOrderRouter.put(
     const body = req.body as Record<string, unknown>;
     const update: Record<string, string[]> = {};
 
-    for (const role of ALL_ROLES) {
-      if (!(role in body)) continue;
-      const value = body[role];
+    for (const [typeId, value] of Object.entries(body)) {
+      if (typeId === "updatedAt" || typeId === "updatedBy") continue;
       if (!Array.isArray(value)) {
-        res.status(400).json({ error: `Pole '${role}' musí být seznam id.` });
+        res.status(400).json({ error: `Pole '${typeId}' musí být seznam id.` });
         return;
       }
-      const allowed = ROLE_TO_ALLOWED_IDS[role];
       const seen = new Set<string>();
       const cleaned: string[] = [];
       for (const id of value) {
         if (typeof id !== "string") {
-          res.status(400).json({ error: `Neplatný typ id v '${role}'.` });
+          res.status(400).json({ error: `Neplatný typ id v '${typeId}'.` });
           return;
         }
-        if (!VALID_IDS.has(id)) continue; // silently drop unknown ids
-        if (!allowed.has(id)) {
-          res.status(400).json({
-            error: `Položka '${id}' není povolena pro roli '${role}'.`,
-          });
-          return;
-        }
-        if (seen.has(id)) continue;
+        if (!VALID_IDS.has(id) || seen.has(id)) continue; // drop unknown / dupes
         cleaned.push(id);
         seen.add(id);
       }
-      update[role] = cleaned;
+      update[typeId] = cleaned;
     }
 
     if (Object.keys(update).length === 0) {
