@@ -8,6 +8,8 @@ import { employeeSurnameFirst } from "@/lib/employeeName";
 import Button from "@/components/Button";
 import ConfirmModal from "@/components/ConfirmModal";
 import MenuOrderTab from "./settings/MenuOrderTab";
+import UserTypesTab from "./settings/UserTypesTab";
+import UserPermissionsModal from "@/components/UserPermissionsModal";
 import styles from "./SettingsPage.module.css";
 
 const EyeIcon = () => (
@@ -138,6 +140,7 @@ export default function SettingsPage() {
 
   // Edit-user (name/email) state
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
+  const [permsUser, setPermsUser] = useState<UserProfile | null>(null);
   const [editForm, setEditForm] = useState({ name: "", email: "" });
   const [editError, setEditError] = useState<string | null>(null);
   const [editSaving, setEditSaving] = useState(false);
@@ -156,7 +159,7 @@ export default function SettingsPage() {
   const [linkEmployeeId, setLinkEmployeeId] = useState<string>("");
   const [linkSaving, setLinkSaving] = useState(false);
 
-  const [settingsTab, setSettingsTab] = useState<"users" | "companies" | "departments" | "jobPositions" | "education" | "payroll" | "menu">("users");
+  const [settingsTab, setSettingsTab] = useState<"users" | "companies" | "departments" | "jobPositions" | "education" | "payroll" | "menu" | "userTypes">("users");
 
   // Departments
   const [departments, setDepartments] = useState<DepartmentRecord[]>([]);
@@ -780,6 +783,9 @@ export default function SettingsPage() {
         <button className={settingsTab === "education" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("education")}>Vzdělání</button>
         <button className={settingsTab === "payroll" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("payroll")}>Mzdy</button>
         <button className={settingsTab === "menu" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("menu")}>Menu</button>
+        {can("userTypes.manage") && (
+          <button className={settingsTab === "userTypes" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("userTypes")}>Uživatelské typy</button>
+        )}
       </div>
 
       {showCreate && settingsTab === "users" && (
@@ -971,6 +977,18 @@ export default function SettingsPage() {
                           Upravit
                         </button>
                         {" "}
+                        {(can("users.permissions.manage") || can("users.setType")) && (
+                          <>
+                            <button
+                              className={styles.linkBtn}
+                              onClick={() => setPermsUser(u)}
+                              title="Typ uživatele a individuální oprávnění"
+                            >
+                              Oprávnění
+                            </button>
+                            {" "}
+                          </>
+                        )}
                         <button
                           className={u.active ? styles.deactivateBtn : styles.activateBtn}
                           disabled={togglingUid === u.uid}
@@ -1711,6 +1729,7 @@ export default function SettingsPage() {
       )}
 
       {settingsTab === "menu" && <MenuOrderTab />}
+      {settingsTab === "userTypes" && <UserTypesTab />}
 
       {depDeleteId && (
         <ConfirmModal
@@ -1851,6 +1870,14 @@ export default function SettingsPage() {
           danger
           onConfirm={doSaveEdit}
           onCancel={() => setConfirmEmailChange(false)}
+        />
+      )}
+
+      {permsUser && (
+        <UserPermissionsModal
+          user={permsUser}
+          onClose={() => setPermsUser(null)}
+          onSaved={loadUsers}
         />
       )}
     </div>
