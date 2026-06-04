@@ -69,6 +69,7 @@ interface AdditionalForm {
   bankAccount: string;
   homeOffice: string;
   allowances: boolean;
+  nepodepiseProhlaseni: boolean;
 }
 
 const emptyPersonal: PersonalForm = {
@@ -88,7 +89,7 @@ const emptyDocuments: DocumentsForm = {
 
 const emptyAdditional: AdditionalForm = {
   insuranceNumber: "", insuranceCompany: "", bankAccount: "",
-  homeOffice: "", allowances: false,
+  homeOffice: "", allowances: false, nepodepiseProhlaseni: false,
 };
 
 // ─── SensitiveInput ───────────────────────────────────────────────────────────
@@ -622,6 +623,12 @@ export default function EmployeeFormPage() {
             <label className={styles.checkboxLabel}>
               <input type="checkbox" checked={additional.allowances} onChange={(e) => setA("allowances", e.target.checked)} />
               Náhrady
+            </label>
+          </div>
+          <div className={styles.checkboxRow}>
+            <label className={styles.checkboxLabel}>
+              <input type="checkbox" checked={additional.nepodepiseProhlaseni} onChange={(e) => setA("nepodepiseProhlaseni", e.target.checked)} />
+              Nepodepíše prohlášení poplatníka
             </label>
           </div>
         </section>

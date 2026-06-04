@@ -7,6 +7,7 @@ import ConfirmModal from "@/components/ConfirmModal";
 import { formatDateCZ } from "@/lib/dateFormat";
 import { displayGendered } from "@/lib/genderDisplay";
 import { employeeDisplayName } from "@/lib/employeeName";
+import { formatPhoneDisplay } from "@/lib/phoneFormat";
 import GenerateContractModal from "@/components/GenerateContractModal";
 import Button from "@/components/Button";
 import EmploymentSessionCard from "@/components/EmploymentSession";
@@ -1115,6 +1116,7 @@ interface AdditionalData {
   multisportTo?: string | null;
   homeOffice?: number | null;
   allowances?: boolean;
+  nepodepiseProhlaseni?: boolean;
 }
 
 interface AlertItem {
@@ -1469,6 +1471,14 @@ export default function EmployeeDetailPage() {
         </div>
       </div>
 
+      {additional?.nepodepiseProhlaseni === true && (
+        <div className={styles.alertBanner}>
+          <div className={styles.alertItemExpiring}>
+            <strong>Nepodepsané prohlášení</strong>
+          </div>
+        </div>
+      )}
+
       {alerts.length > 0 && (
         <div className={styles.alertBanner}>
           {alerts.map((a) => (
@@ -1813,7 +1823,7 @@ export default function EmployeeDetailPage() {
           <div className={styles.loading}>Načítám…</div>
         ) : (
           <div className={styles.fields}>
-            <div className={styles.field}><span className={styles.fieldLabel}>Telefon</span><span className={styles.fieldValue}>{val(contact?.phone)}</span></div>
+            <div className={styles.field}><span className={styles.fieldLabel}>Telefon</span><span className={styles.fieldValue}>{val(contact?.phone ? formatPhoneDisplay(contact.phone) : null)}</span></div>
             <div className={styles.field}><span className={styles.fieldLabel}>E-mail</span><span className={styles.fieldValue}>{val(contact?.email)}</span></div>
             <div className={styles.fieldFull}><span className={styles.fieldLabel}>Trvalá adresa</span><span className={styles.fieldValue}>{val(contact?.permanentAddress)}</span></div>
             {contact?.contactAddressSameAsPermanent ? (

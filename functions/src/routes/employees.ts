@@ -953,10 +953,14 @@ employeesRouter.get(
 
 const EXPIRY_ALERT_DAYS = 30;
 
-export const EXPIRY_FIELDS: { field: string; label: string }[] = [
-  { field: "idCardExpiry", label: "Platnost OP" },
-  { field: "passportExpiry", label: "Platnost pasu" },
-  { field: "visaExpiry", label: "Platnost povolení k pobytu" },
+// `sensitive` = stored AES-encrypted (must be decrypted before use). Kept here,
+// next to DOCUMENT_SENSITIVE_FIELDS, rather than inferred from the self-service
+// EDITABLE_FIELDS whitelist — the two are unrelated (a field can be encrypted
+// without being self-editable, e.g. idCardExpiry).
+export const EXPIRY_FIELDS: { field: string; label: string; sensitive: boolean }[] = [
+  { field: "idCardExpiry", label: "Platnost OP", sensitive: true },
+  { field: "passportExpiry", label: "Platnost pasu", sensitive: false },
+  { field: "visaExpiry", label: "Platnost povolení k pobytu", sensitive: false },
 ];
 
 export async function updateDocumentAlerts(
