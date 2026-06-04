@@ -4,6 +4,8 @@
  * navigate to a route first. anchor === null renders a centered card (used for
  * the welcome / outro steps).
  */
+import type { Permission } from "@/lib/permissions/catalog";
+
 export type TourPlacement = "top" | "bottom" | "left" | "right" | "auto";
 
 export interface TourStep {
@@ -14,6 +16,10 @@ export interface TourStep {
   title: string;
   body: string;
   placement?: TourPlacement;
+  /** Show this step only if the user holds this permission. Omit = always shown.
+   *  This is what makes one adaptive tour serve every user type (built-in AND
+   *  custom): the engine filters steps to those the user can actually reach. */
+  permission?: Permission;
 }
 
 export interface TourDefinition {

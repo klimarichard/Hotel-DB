@@ -3,11 +3,13 @@ import { useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { authApi } from "@/lib/api";
 import { TOURS, resolveTourIdForRole } from "@/lib/tours";
-import type { TourDefinition } from "@/lib/tours/types";
+import type { TourDefinition, TourStep } from "@/lib/tours/types";
 import TourOverlay from "@/components/TourOverlay";
 
 interface OnboardingContextValue {
   activeTour: TourDefinition | null;
+  /** The steps actually shown — filtered to the ones this user can reach. */
+  steps: TourStep[];
   stepIndex: number;
   /** Start (or replay) a tour by id, ignoring whether it was already seen. */
   startTour: (tourId: string) => void;
@@ -19,6 +21,7 @@ interface OnboardingContextValue {
 
 const OnboardingContext = createContext<OnboardingContextValue>({
   activeTour: null,
+  steps: [],
   stepIndex: 0,
   startTour: () => {},
   next: () => {},
@@ -27,11 +30,12 @@ const OnboardingContext = createContext<OnboardingContextValue>({
 });
 
 export function OnboardingProvider({ children }: { children: ReactNode }) {
-  const { user, role, roleType, loading } = useAuth();
+  const { user, role, roleType, loading, can } = useAuth();
   const location = useLocation();
 
   const [toursSeen, setToursSeen] = useState<Record<string, number> | null>(null);
   const [activeTour, setActiveTour] = useState<TourDefinition | null>(null);
+  const [steps, setSteps] = useState<TourStep[]>([]);
   const [stepIndex, setStepIndex] = useState(0);
   const autoStartedRef = useRef(false);
 
@@ -43,6 +47,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     if (!user || !cacheKey) {
       setToursSeen(null);
       setActiveTour(null);
+      setSteps([]);
       autoStartedRef.current = false;
       return;
     }
@@ -76,9 +81,13 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   const startTour = useCallback((tourId: string) => {
     const tour = TOURS[tourId];
     if (!tour) return;
+    // Adaptive: show only the steps this user can reach (permission-gated).
+    const visible = tour.steps.filter((s) => !s.permission || can(s.permission));
+    if (visible.length === 0) return;
+    setSteps(visible);
     setStepIndex(0);
     setActiveTour(tour);
-  }, []);
+  }, [can]);
 
   // Auto-start once per session for a first-time (or version-bumped) user, after
   // the landing redirect has resolved to a real page. Resolve by roleType first
@@ -113,24 +122,25 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   const dismiss = useCallback(() => {
     if (activeTour) markSeen(activeTour);
     setActiveTour(null);
+    setSteps([]);
     setStepIndex(0);
   }, [activeTour, markSeen]);
 
   const next = useCallback(() => {
     if (!activeTour) return;
-    if (stepIndex >= activeTour.steps.length - 1) {
+    if (stepIndex >= steps.length - 1) {
       dismiss();
     } else {
       setStepIndex((i) => i + 1);
     }
-  }, [activeTour, stepIndex, dismiss]);
+  }, [activeTour, stepIndex, steps.length, dismiss]);
 
   const prev = useCallback(() => {
     setStepIndex((i) => Math.max(0, i - 1));
   }, []);
 
   return (
-    <OnboardingContext.Provider value={{ activeTour, stepIndex, startTour, next, prev, dismiss }}>
+    <OnboardingContext.Provider value={{ activeTour, steps, stepIndex, startTour, next, prev, dismiss }}>
       {children}
       <TourOverlay />
     </OnboardingContext.Provider>

@@ -17,7 +17,7 @@ const POLL_MS = 80;
  * Rendered by OnboardingProvider, so it overlays the whole authenticated app.
  */
 export default function TourOverlay() {
-  const { activeTour, stepIndex, next, prev, dismiss } = useOnboarding();
+  const { activeTour, steps, stepIndex, next, prev, dismiss } = useOnboarding();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -25,7 +25,7 @@ export default function TourOverlay() {
   const [rect, setRect] = useState<DOMRect | null>(null);
   const [ready, setReady] = useState(false);
 
-  const step = activeTour ? activeTour.steps[stepIndex] : null;
+  const step = activeTour ? steps[stepIndex] : null;
 
   // Navigate to the step's route before resolving its anchor.
   useEffect(() => {
@@ -108,7 +108,7 @@ export default function TourOverlay() {
 
   if (!activeTour || !step || !ready) return null;
 
-  const total = activeTour.steps.length;
+  const total = steps.length;
   const isFirst = stepIndex === 0;
   const isLast = stepIndex === total - 1;
 
