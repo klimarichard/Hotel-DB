@@ -18,7 +18,7 @@ interface EmployeeMini {
 }
 
 export default function AuditLogPage() {
-  const { can } = useAuth();
+  const { can, loading: authLoading } = useAuth();
   const [params, setParams] = useSearchParams();
 
   // Filter state mirrors the URL so deep-links from EmployeeDetailPage work.
@@ -141,6 +141,13 @@ export default function AuditLogPage() {
   const events = useMemo(() => groupEntries(entries), [entries]);
   const buckets = useMemo(() => bucketByDate(events), [events]);
 
+  // Wait for this component's own useAuth instance to finish loading before
+  // gating — useAuth is a per-component hook (no shared context), so on first
+  // render permissions are still empty. Without this, the page would redirect
+  // to "/" before /auth/me resolves, bouncing every user (incl. admin) to
+  // Přehled even though the route guard already passed. Mirrors PayrollPage /
+  // SettingsPage.
+  if (authLoading) return null;
   if (!can("audit.view")) return <Navigate to="/" replace />;
 
   return (
