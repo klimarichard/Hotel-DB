@@ -16,6 +16,20 @@ CLAUDE.md
 # Staging→prod promotion runbook — kept local
 DEPLOY_RUNBOOK.md
 
+# Local data exports & source documents (sensitive — employee/payroll data; not tracked)
+DTB.xlsx
+MZDY.xlsx
+OTH-L-CMYK-Blend.pdf
+excels/
+doc_templates/
+
+# Local working notes & screenshots (not tracked)
+TODO_change_log.md
+screenshots/
+
+# Editor / IDE settings (machine-specific)
+.vscode/
+
 # Legacy — seed CSVs are now under scripts/seeds/ (already excluded by scripts/)
 
 # Dependencies
