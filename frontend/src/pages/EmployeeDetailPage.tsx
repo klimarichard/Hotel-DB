@@ -684,9 +684,10 @@ function AddEntryModal({
       api.get<CompanyRec[]>("/companies").catch(() => [] as CompanyRec[]),
     ]).then(([deps, poss, comps]) => {
       if (cancelled) return;
-      setDepartments(deps);
-      setPositions(poss);
-      setCompanies(comps);
+      // Dropdowns list these alphabetically (cs); companies by their label.
+      setDepartments([...deps].sort((a, b) => a.name.localeCompare(b.name, "cs")));
+      setPositions([...poss].sort((a, b) => a.name.localeCompare(b.name, "cs")));
+      setCompanies([...comps].sort((a, b) => companyLabel(a).localeCompare(companyLabel(b), "cs")));
       // Pre-select dropdowns from existing row on edit
       if (initialRow) {
         const depByName = deps.find(
