@@ -42,7 +42,6 @@ export const EDITABLE_FIELDS: Record<string, { section: Section; sensitive: bool
   contactAddress:    { section: "contact", sensitive: false },
   // documents (single doc in employees/{id}/documents)
   idCardNumber:      { section: "documents", sensitive: true },
-  idCardExpiry:      { section: "documents", sensitive: true },
   passportNumber:    { section: "documents", sensitive: false },
   passportIssueDate: { section: "documents", sensitive: false },
   passportExpiry:    { section: "documents", sensitive: false },
@@ -289,17 +288,16 @@ async function refreshDocumentExpiryAlerts(
   const changeByField = new Map(changes.map((c) => [c.field, c]));
 
   const alertBody: Record<string, unknown> = {};
-  for (const { field } of EXPIRY_FIELDS) {
-    const def = EDITABLE_FIELDS[field];
+  for (const { field, sensitive } of EXPIRY_FIELDS) {
     const ch = changeByField.get(field);
     let plain: string | undefined;
     if (ch) {
       const stored = resolveStored(ch);
-      plain = stored === null ? undefined : (def?.sensitive ? safeDecrypt(stored) : stored);
+      plain = stored === null ? undefined : (sensitive ? safeDecrypt(stored) : stored);
     } else {
       const existing = before[field];
       if (typeof existing === "string" && existing) {
-        plain = def?.sensitive ? safeDecrypt(existing) : existing;
+        plain = sensitive ? safeDecrypt(existing) : existing;
       }
     }
     alertBody[field] = plain;

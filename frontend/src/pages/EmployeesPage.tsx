@@ -33,16 +33,20 @@ export default function EmployeesPage() {
 
   useEffect(() => {
     setLoading(true);
-    api
-      .get<Employee[]>(`/employees?status=${statusFilter}`)
-      .then(setEmployees)
+    Promise.all([
+      api.get<Employee[]>(`/employees?status=active`),
+      api.get<Employee[]>(`/employees?status=terminated`),
+    ])
+      .then(([active, terminated]) => setEmployees([...active, ...terminated]))
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [statusFilter]);
+  }, []);
 
+  const q = search.toLowerCase();
   const filtered = employees
+    // When searching, match across BOTH tabs; otherwise show only the current tab.
+    .filter((e) => (q ? true : e.status === statusFilter))
     .filter((e) => {
-      const q = search.toLowerCase();
       return (
         !q ||
         (e.firstName ?? "").toLowerCase().includes(q) ||
@@ -113,7 +117,6 @@ export default function EmployeesPage() {
               <th>Jméno</th>
               <th>Pozice</th>
               <th>Oddělení</th>
-              <th>Typ smlouvy</th>
               <th>Národnost</th>
               <th>Stav</th>
             </tr>
@@ -121,7 +124,7 @@ export default function EmployeesPage() {
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={6} className={styles.empty}>
+                <td colSpan={5} className={styles.empty}>
                   Žádní zaměstnanci nenalezeni.
                 </td>
               </tr>
@@ -141,10 +144,12 @@ export default function EmployeesPage() {
                     <Link to={`/zamestnanci/${emp.id}`} className={styles.nameLink}>
                       {employeeSurnameFirst(emp)}
                     </Link>
+                    {emp.currentContractType && (
+                      <span className={styles.contractBadge}>{emp.currentContractType}</span>
+                    )}
                   </td>
                   <td>{emp.currentJobTitle || "—"}</td>
                   <td>{emp.currentDepartment || "—"}</td>
-                  <td>{emp.currentContractType || "—"}</td>
                   <td>{emp.nationality ? nationalityName(emp.nationality) : "—"}</td>
                   <td>
                     <span

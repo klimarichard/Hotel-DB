@@ -40,7 +40,6 @@ export const SELF_EDIT_FIELDS: SelfEditField[] = [
   { key: "contactAddress", section: "contact", label: "Kontaktní adresa", sensitive: false, kind: "text" },
   // Doklady
   { key: "idCardNumber", section: "documents", label: "Číslo OP", sensitive: true, kind: "text" },
-  { key: "idCardExpiry", section: "documents", label: "Platnost OP", sensitive: true, kind: "date" },
   { key: "passportNumber", section: "documents", label: "Číslo pasu", sensitive: false, kind: "text" },
   { key: "passportIssueDate", section: "documents", label: "Datum vydání pasu", sensitive: false, kind: "date" },
   { key: "passportExpiry", section: "documents", label: "Platnost pasu", sensitive: false, kind: "date" },

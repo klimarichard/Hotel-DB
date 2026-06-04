@@ -6,6 +6,7 @@ import ConfirmModal from "@/components/ConfirmModal";
 import { formatDateCZ, formatDatetimeCZ } from "@/lib/dateFormat";
 import { displayGendered } from "@/lib/genderDisplay";
 import { nationalityName } from "@/lib/nationalities";
+import { formatPhoneDisplay } from "@/lib/phoneFormat";
 import { isCzechNationality } from "@/lib/contractVariables";
 import { groupBySession } from "@/lib/employmentSessions";
 import EmploymentSessionCard from "@/components/EmploymentSession";
@@ -338,6 +339,9 @@ export default function EmployeeSelfPage() {
     // nationality is stored as an ISO code; show the Czech country name (TODO 63).
     if (f.key === "nationality") {
       return <span>{nationalityName(String(raw)) || String(raw)}</span>;
+    }
+    if (f.key === "phone") {
+      return <span>{formatPhoneDisplay(String(raw))}</span>;
     }
     return <span>{String(raw)}</span>;
   }

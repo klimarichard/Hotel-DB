@@ -77,7 +77,20 @@ export default function EmploymentRowItem({
 
   let detail: React.ReactNode = null;
   if (row.changeType === "nástup") {
-    detail = row.contractType || null;
+    const ct = row.contractType || null;
+    const showSalary =
+      (row.contractType === "HPP" || row.contractType === "PPP") &&
+      typeof row.salary === "number" &&
+      Number.isFinite(row.salary);
+    if (ct && showSalary) {
+      detail = (
+        <>
+          {ct} <SalaryReveal value={row.salary as number} />
+        </>
+      );
+    } else {
+      detail = ct;
+    }
   } else if (row.changeType === "změna smlouvy") {
     const parts = (row.changes ?? [])
       .filter((c) => c.changeKind)
