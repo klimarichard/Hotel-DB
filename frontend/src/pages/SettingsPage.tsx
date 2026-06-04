@@ -1547,7 +1547,7 @@ export default function SettingsPage() {
             </button>
           </div>
           <p style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
-            Tato hodnota se násobí počtem odpracovaných dnů v měsíci. Výchozí hodnota: 129,5 Kč/den.
+            Tato hodnota se násobí počtem odpracovaných dnů v měsíci.
           </p>
 
           <h2 style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--color-text-heading)", marginTop: "2rem", marginBottom: "1rem" }}>
@@ -1562,7 +1562,7 @@ export default function SettingsPage() {
             </button>
           </div>
           <p style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
-            Limit pro automatický výpočet sjednané odměny u DPP smluv. Výchozí hodnota: 11 999 Kč/měsíc.
+            Limit pro automatický výpočet sjednané odměny u DPP smluv.
           </p>
 
           <h2 style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--color-text-heading)", marginTop: "2rem", marginBottom: "1rem" }}>
@@ -1577,7 +1577,7 @@ export default function SettingsPage() {
             </button>
           </div>
           <p style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
-            Aktuální zákonná minimální měsíční mzda. Výchozí hodnota: 22 400 Kč/měsíc.
+            Aktuální zákonná minimální měsíční mzda.
           </p>
 
           {showMinWageConfirm && (
@@ -1634,7 +1634,7 @@ export default function SettingsPage() {
             </button>
           </div>
           <p style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
-            Základní měsíční cena Multisport karty. Výchozí hodnota: 470 Kč/měsíc.
+            Základní měsíční cena Multisport karty.
           </p>
 
           {showMultisportConfirm && (
