@@ -60,13 +60,18 @@ export default function AddEmployeeToPlanModal({ planId, existingEmployees, onCl
       .finally(() => setLoadingEmps(false));
   }, []);
 
-  const filtered = employees.filter((e) => {
-    const q = search.toLowerCase();
-    return (
-      `${e.lastName} ${e.firstName}`.toLowerCase().includes(q) ||
-      employeeDisplayName(e).toLowerCase().includes(q)
-    );
-  });
+  const filtered = employees
+    .filter((e) => {
+      const q = search.toLowerCase();
+      return (
+        `${e.lastName} ${e.firstName}`.toLowerCase().includes(q) ||
+        employeeDisplayName(e).toLowerCase().includes(q)
+      );
+    })
+    .sort((a, b) => {
+      const last = (a.lastName ?? "").localeCompare(b.lastName ?? "", "cs");
+      return last !== 0 ? last : (a.firstName ?? "").localeCompare(b.firstName ?? "", "cs");
+    });
 
   async function handleSubmit() {
     if (!selected) {
