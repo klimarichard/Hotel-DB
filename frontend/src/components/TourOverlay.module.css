@@ -1,0 +1,100 @@
+/* Full-screen transparent click blocker — keeps interaction on the tour. */
+.blocker {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  background: transparent;
+}
+
+/* Dim layer for centered (anchor-less / not-found) steps. */
+.dim {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  background: var(--overlay-bg, rgba(0, 0, 0, 0.55));
+}
+
+/* Spotlight cut-out: the huge box-shadow dims everything except this rect. */
+.spotlight {
+  position: fixed;
+  z-index: 1101;
+  border-radius: 8px;
+  border: 2px solid var(--color-accent, #3b82f6);
+  box-shadow: 0 0 0 9999px var(--overlay-bg, rgba(0, 0, 0, 0.55));
+  pointer-events: none;
+  transition: top 0.15s ease, left 0.15s ease, width 0.15s ease, height 0.15s ease;
+}
+
+.popover {
+  position: fixed;
+  z-index: 1102;
+  box-sizing: border-box;
+  max-width: calc(100vw - 28px);
+  background: var(--color-surface, #ffffff);
+  color: var(--color-text, #111827);
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  padding: 1rem 1.1rem 0.9rem;
+}
+
+.popoverCentered {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.popoverHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.4rem;
+}
+
+.stepCount {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--color-text-muted, #6b7280);
+}
+
+.title {
+  margin: 0 0 0.4rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--color-text, #111827);
+}
+
+.body {
+  margin: 0 0 0.9rem;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--color-text, #374151);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.navBtns {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.skip {
+  background: none;
+  border: none;
+  padding: 0.2rem 0.1rem;
+  font-size: 0.82rem;
+  color: var(--color-text-muted, #6b7280);
+  cursor: pointer;
+}
+
+.skip:hover {
+  color: var(--color-text, #111827);
+  text-decoration: underline;
+}

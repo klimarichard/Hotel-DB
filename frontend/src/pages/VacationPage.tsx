@@ -329,7 +329,7 @@ export default function VacationPage() {
 
       {/* New request form */}
       {canRequestSelf && (
-      <div className={styles.card}>
+      <div className={styles.card} data-tour="vacation-request-form">
         <h2 className={styles.cardTitle}>Nová žádost o dovolenou</h2>
 
         {!employeeId && !loading ? (
@@ -388,7 +388,7 @@ export default function VacationPage() {
       )}
 
       {/* My requests */}
-      <div className={styles.tableWrapper}>
+      <div className={styles.tableWrapper} data-tour="vacation-my-requests">
         <div className={styles.sectionTitle}>Moje žádosti</div>
         {loading ? (
           <div className={styles.empty}>Načítám…</div>
@@ -498,7 +498,7 @@ export default function VacationPage() {
 
       {/* Approved upcoming vacations — employees & managers */}
       {canViewApprovedUpcoming && (
-        <div className={styles.tableWrapper}>
+        <div className={styles.tableWrapper} data-tour="vacation-approved-colleagues">
           <div className={styles.sectionTitle}>Schválené dovolené (všichni zaměstnanci)</div>
           {approvedUpcoming === null ? (
             <div className={styles.empty}>Načítám…</div>

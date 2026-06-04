@@ -21,6 +21,10 @@ import styles from "./EmployeeSelfPage.module.css";
 
 const MASK = "••••••••";
 
+// First sensitive field key — used solely to anchor the onboarding tour's reveal
+// step on a single (the first) reveal button. Inert: drives no behaviour.
+const FIRST_SENSITIVE_KEY = SELF_EDIT_FIELDS.find((f) => f.sensitive)?.key;
+
 // Mirrors EmployeeFormPage — combined gendered forms; displayGendered() picks
 // the variant on read.
 const MARITAL_STATUSES = ["svobodný/á", "ženatý/vdaná", "rozvedený/á", "vdovec/vdova"];
@@ -323,6 +327,7 @@ export default function EmployeeSelfPage() {
               onClick={() => handleReveal(f.key)}
               title={isRevealed ? "Skrýt" : "Zobrazit"}
               aria-label={isRevealed ? "Skrýt" : "Zobrazit"}
+              data-tour={f.key === FIRST_SENSITIVE_KEY ? "selfpage-reveal" : undefined}
             >
               {isRevealed ? <EyeOffIcon /> : <EyeIcon />}
             </button>
@@ -404,9 +409,9 @@ export default function EmployeeSelfPage() {
   return (
     <div>
       <div className={styles.headerRow}>
-        <h1 className={styles.title}>Můj profil</h1>
+        <h1 className={styles.title} data-tour="selfpage-title">Můj profil</h1>
         {!editMode && canRequestEdit && (
-          <Button variant="primary" onClick={enterEdit}>
+          <Button variant="primary" onClick={enterEdit} data-tour="selfpage-edit-btn">
             Navrhnout úpravu
           </Button>
         )}
@@ -546,7 +551,7 @@ export default function EmployeeSelfPage() {
       )}
 
       {/* ── Own change requests ── */}
-      <div className={styles.section}>
+      <div className={styles.section} data-tour="selfpage-requests">
         <div className={styles.sectionTitle}>Moje žádosti o úpravu</div>
         {requests.length === 0 ? (
           <div className={styles.empty}>Zatím jste nepodali žádnou žádost.</div>

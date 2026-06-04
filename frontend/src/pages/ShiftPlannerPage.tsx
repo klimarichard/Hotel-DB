@@ -1125,7 +1125,7 @@ export default function ShiftPlannerPage() {
       {/* Header — month nav centred as the page's primary control */}
       <div className={styles.header} ref={headerRef} style={{ position: "sticky", top: 0, zIndex: 10, background: "var(--color-bg)" }}>
         <div />
-        <div className={styles.monthNav}>
+        <div className={styles.monthNav} data-tour="shift-month-nav">
           <button className={styles.navBtn} onClick={prevMonth}>‹</button>
           <span className={styles.monthLabel}>
             {MONTH_NAMES[selectedMonth - 1]} {selectedYear}
@@ -1561,7 +1561,9 @@ export default function ShiftPlannerPage() {
 
           {/* My requests panel — employee/manager (read-only, own requests only) */}
           {plan && showMyRequests && !canPublish && canSubmitRequests && (
-            <MyRequestsPanel planId={plan.id} />
+            <div data-tour="shift-my-requests">
+              <MyRequestsPanel planId={plan.id} />
+            </div>
           )}
 
           {/* Shift grid */}
@@ -1571,6 +1573,7 @@ export default function ShiftPlannerPage() {
             </div>
           )}
           {plan && plan.employees.length > 0 && (
+            <div data-tour="shift-grid">
             <ShiftGrid
               // Remount when plan membership changes so removing a row triggers a
               // clean re-layout — the sticky + table-layout:fixed grid mis-renders
@@ -1638,6 +1641,7 @@ export default function ShiftPlannerPage() {
               onToggleDpaDay={can("shifts.freeShift.manage") && plan.status === "published" ? handleToggleDpaDay : undefined}
               stickyTop={stickyTop}
             />
+            </div>
           )}
 
           {plan && plan.employees.length > 0 && (

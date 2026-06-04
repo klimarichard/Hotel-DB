@@ -451,7 +451,7 @@ export default function OverviewPage() {
   return (
     <div className={styles.page}>
       <div className={styles.dateHeaderRow}>
-        <h1 className={styles.dateHeader}>{formatLongHeader(today)}</h1>
+        <h1 className={styles.dateHeader} data-tour="overview-date-header">{formatLongHeader(today)}</h1>
         <span
           className={styles.shiftBadge}
           style={{
@@ -468,7 +468,7 @@ export default function OverviewPage() {
 
       {!loading && !error && (
         <>
-          <section className={styles.section}>
+          <section className={styles.section} data-tour="overview-staffing">
             <h2 className={styles.dayHeading}>DNES</h2>
 
             <div className={styles.subBlock}>
@@ -566,9 +566,9 @@ export default function OverviewPage() {
             if (taskTiles.length === 0 && !showMyShiftsTile) return null;
 
             return (
-              <div className={styles.tileGrid}>
+              <div className={styles.tileGrid} data-tour="overview-task-tiles">
                 {showMyShiftsTile && (
-                  <Link to="/smeny" className={`${styles.tile} ${styles.myShiftsTile}`}>
+                  <Link to="/smeny" className={`${styles.tile} ${styles.myShiftsTile}`} data-tour="overview-my-shifts">
                     <span className={styles.tileLabel}>Moje směny</span>
                     <ul className={styles.myShiftsList}>
                       {myShifts!.map((row) => {

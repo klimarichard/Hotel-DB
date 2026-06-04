@@ -125,4 +125,7 @@ export const authApi = {
   getTheme: () => api.get<{ theme: "light" | "dark" | null }>("/auth/me/theme"),
   setTheme: (theme: "light" | "dark") =>
     api.put<{ theme: "light" | "dark" }>("/auth/me/theme", { theme }),
+  getTours: () => api.get<{ toursSeen: Record<string, number> }>("/auth/me/tours"),
+  markTourSeen: (tourId: string, version: number) =>
+    api.put<{ ok: boolean }>("/auth/me/tours", { tourId, version }),
 };
