@@ -1,6 +1,5 @@
 import * as admin from "firebase-admin";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
-import { UserRole } from "../middleware/auth";
 
 const db = () => admin.firestore();
 
@@ -9,13 +8,15 @@ export type AuditAction = "create" | "update" | "delete" | "reveal" | "export" |
 export interface AuditContext {
   uid: string;
   email: string;
-  role: UserRole;
+  /** The actor's user-type id at the time of the change (for forensics). */
+  roleType: string;
 }
 
 export interface AuditEntry {
   userId: string;
   userEmail: string;
-  userRole: UserRole;
+  /** Stored field name kept as `userRole` for back-compat; holds the type id. */
+  userRole: string;
   action: AuditAction;
   collection: string;
   resourceId?: string;
@@ -103,7 +104,7 @@ function baseEntry(
   return {
     userId: ctx.uid,
     userEmail: ctx.email,
-    userRole: ctx.role,
+    userRole: ctx.roleType,
     action,
     collection,
     resourceId,
@@ -305,15 +306,15 @@ function sanitizeForLog(v: unknown): unknown {
 }
 
 // Build an AuditContext from an AuthRequest. Routes call this once at the
-// top of each handler (after requireAuth has populated uid/role/userEmail).
+// top of each handler (after requireAuth has populated uid/roleType/userEmail).
 export function ctxFromReq(req: {
   uid?: string;
-  role?: UserRole;
+  roleType?: string;
   userEmail?: string;
 }): AuditContext {
   return {
     uid: req.uid ?? "",
     email: req.userEmail ?? "",
-    role: req.role ?? "employee",
+    roleType: req.roleType ?? "",
   };
 }

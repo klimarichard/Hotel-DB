@@ -46,19 +46,19 @@ Six built-ins are seeded: `admin`, `director`, `manager`, `employee`, `accountan
 
 Each user document (and their custom claims) carries:
 
-- **`roleType`** — the type id. Defaults to the legacy `role` when unset.
+- **`roleType`** — the type id. Every user has one (it is the sole identity for authorization).
 - **`extraPermissions[]`** — per-user grants (added on top of the type).
 - **`revokedPermissions[]`** — per-user revokes (subtracted from the type).
 
 **Effective set** = `roleType.permissions ∪ extraPermissions − revokedPermissions`. `system.admin` expands to everything and can never be revoked.
 
-`roleType`/`extraPermissions`/`revokedPermissions` are **optional custom claims** set via `setCustomUserClaims` (merged, not replaced) alongside the still-present legacy `role` claim. They take effect on the **next token refresh** (≤ 1 h, or on re-login).
+`roleType`/`extraPermissions`/`revokedPermissions` are **custom claims** set via `setCustomUserClaims` (merged, not replaced). They take effect on the **next token refresh** (≤ 1 h, or on re-login). (A legacy `role` claim may still be present on older accounts but is **no longer read** for authorization.)
 
 ### Resolution & fallback (backend)
 
-`resolveEffectivePermissions` reads the `roleTypes` collection through a **per-instance 60 s TTL cache** and applies the per-user overrides.
+`resolveEffectivePermissions({ roleType, extra, revoked })` keys off the **`roleType`** claim only and reads the `roleTypes` collection through a **per-instance 60 s TTL cache**, then applies the per-user overrides.
 
-It **always falls back to the built-in role→permission mapping** when a `roleType` doc is missing or Firestore is unreachable. So a seeding gap or an outage never locks anyone out, and behaviour is identical to the built-ins until an admin edits a type.
+When a `roleType` doc is missing or Firestore is unreachable it **falls back to the built-in type defaults** (`BUILTIN_TYPE_PERMISSIONS`, keyed by the built-in type id). So a seeding gap or an outage never locks anyone out, and behaviour is identical to the built-ins until an admin edits a type.
 
 ## Enforcement (backend is the real gate)
 
@@ -74,9 +74,9 @@ The endpoint→permission mapping is **aligned to the UI**. Where the API was hi
 
 A second layer is still applied at the router level on `employees.ts` and `contracts.ts` (`enforceEmpAccess` / `enforceContractAccess`):
 
-- **accountant write-block** — a safety net against any mutation.
+- **read-only viewers** (callers holding no write permission for the resource, e.g. built-in `accountant`) are blocked from any mutation — a **permission-based** safety net (contracts: any non-GET requires one of `contracts.generate/edit/delete/sign`), not a role check.
 - A **non-management-scoped caller** — one who holds `employees.view.nonManagement` but NOT `employees.view.all` (e.g. built-in `hr`) — is blocked from any record whose linked login's **type is management**. The list + export handlers filter management records out for such callers.
-- `getManagementEmployeeIds` resolves each user's type (`roleType ?? role`) against the per-type `management` flag.
+- `getManagementEmployeeIds` resolves each user's type (`roleType`) against the per-type `management` flag.
 
 ## Frontend
 
@@ -104,7 +104,7 @@ The per-user **"Oprávnění"** button lets an admin choose the user's **type** 
 
 Guards: you **can't remove your own administrator rights**, and the **last administrator can't be demoted**.
 
-> **Legacy `role` — fully retired from the live paths.** Everything now keys off the user **type**: the backend is permission-based (`req.permissions`; no `requireRole`), the user-management UI is type-based (per-row "Typ" dropdown + create-user type selector + type-name sidebar label), the menu configurator is per-type, and **new users are created with only a `roleType`** (no `role`). What remains of `role` is purely a **safety fallback**: `req.roleType` and `getManagementEmployeeIds` fall back to the `role` claim, and the resolver falls back to `BUILTIN_ROLE_PERMISSIONS` (keyed by the built-in type ids) when a roleType doc is missing — so accounts created before the cutover keep working unchanged. An optional additive backfill (`scripts/migrate-roletype-from-role.js`) can set `roleType=role` on those older user docs for tidiness; it's not required. The `UserRole` type + `BUILTIN_ROLE_PERMISSIONS` stay as the built-in type definitions.
+> **Legacy `role` — fully retired (2026-06-04).** There are no roles; authorization is purely the permission set, keyed off the user **type**. The per-user `role` fallback is **gone**: `requireAuth` sets `req.roleType` from the `roleType` claim only (no `?? role`), `req.role` no longer exists, the resolver's `id = roleType`, `getManagementEmployeeIds` reads `roleType` only, and the legacy `POST /auth/set-role` endpoint + the create-user `role` param were removed. **Prerequisite that made this safe:** every user's `roleType` **claim** was backfilled first (`scripts/backfill-roletype-claim.js`, additive `setCustomUserClaims` merge) — the earlier doc-only backfill didn't touch claims, and the runtime gates on the claim. The audit log now records the actor's `roleType` (stored field name kept as `userRole`). What stays of the old role concept is the **built-in type machinery**, renamed so it no longer reads as gating: `BUILTIN_TYPE_PERMISSIONS` (was `BUILTIN_ROLE_PERMISSIONS`) + `BUILTIN_TYPE_MANAGEMENT` + the `BuiltinTypeId` union (was `UserRole`) — these are the seed source for the built-in types and the resolver's anti-lockout fallback, **not** a per-user role.
 
 ## Endpoints
 
@@ -128,5 +128,5 @@ Settings → **Menu** (admin-only) lets admin configure the sidebar order indepe
 
 **Endpoints**:
 - `GET /api/settings/menu-order` — admin only; returns the full per-type map.
-- `GET /api/settings/menu-order/me` — any authenticated user; returns just their **type's** order (keyed by `req.roleType`, which falls back to the legacy role), or `null` for default.
+- `GET /api/settings/menu-order/me` — any authenticated user; returns just their **type's** order (keyed by `req.roleType`), or `null` for default.
 - `PUT /api/settings/menu-order` — admin only; per-type-id arrays of valid item ids (unknown ids dropped, de-duplicated); audit-logged.

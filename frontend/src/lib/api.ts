@@ -109,8 +109,6 @@ export const authApi = {
     api.post<{ uid: string; resetLink: string | null }>("/auth/create-user", body),
   updateUser: (uid: string, body: { name?: string; email?: string }) =>
     api.patch<{ success: boolean }>(`/auth/users/${uid}`, body),
-  setRole: (uid: string, role: UserRole) =>
-    api.post<{ success: boolean }>("/auth/set-role", { uid, role }),
   deactivateUser: (uid: string) =>
     api.patch<{ success: boolean }>(`/auth/deactivate-user/${uid}`, {}),
   reactivateUser: (uid: string) =>
