@@ -14,9 +14,7 @@ export interface MenuItem {
   id: string;
   label: string;
   path: string;
-  /** nav.* permission that gates this item. Omit for universal items (e.g.
-   *  Nápověda) that every authenticated user can always see. */
-  permission?: Permission;
+  permission: Permission;
 }
 
 export const MENU_ITEMS: ReadonlyArray<MenuItem> = [
@@ -30,7 +28,6 @@ export const MENU_ITEMS: ReadonlyArray<MenuItem> = [
   { id: "audit",       label: "Log změn",        path: "/audit",       permission: "nav.audit.view" },
   { id: "nastaveni",   label: "Nastavení",       path: "/nastaveni",   permission: "nav.settings.view" },
   { id: "mujProfil",   label: "Můj profil",      path: "/muj-profil",  permission: "nav.profile.view" },
-  { id: "napoveda",    label: "Nápověda",        path: "/napoveda" },
 ];
 
 /**
@@ -45,7 +42,7 @@ export function resolveOrderByPermission(
   can: (perm: Permission) => boolean,
   savedOrder?: string[] | null
 ): MenuItem[] {
-  const allowed = MENU_ITEMS.filter((m) => !m.permission || can(m.permission));
+  const allowed = MENU_ITEMS.filter((m) => can(m.permission));
   const allowedById = new Map(allowed.map((m) => [m.id, m] as const));
   const seen = new Set<string>();
   const out: MenuItem[] = [];

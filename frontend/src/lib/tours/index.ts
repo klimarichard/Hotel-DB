@@ -1,4 +1,3 @@
-import type { UserRole } from "@/hooks/useAuth";
 import type { TourDefinition } from "./types";
 import { employeeTour } from "./employeeTour";
 import { managerTour } from "./managerTour";
@@ -13,11 +12,12 @@ export const TOURS: Record<string, TourDefinition> = {
 };
 
 /**
- * Which tour (if any) auto-runs for a given role. Employee + manager ship in
- * v1; the other roles return null (no auto-tour) until their tours are added.
+ * Which tour (if any) auto-runs for a user. Pass the roleType id (preferred) or
+ * the legacy role — for built-in types they're the same string. Employee +
+ * manager ship in v1; everything else returns null (no auto-tour) for now.
  */
-export function resolveTourIdForRole(role: UserRole | null): string | null {
-  switch (role) {
+export function resolveTourIdForRole(roleOrType: string | null): string | null {
+  switch (roleOrType) {
     case "employee":
       return "employee";
     case "manager":

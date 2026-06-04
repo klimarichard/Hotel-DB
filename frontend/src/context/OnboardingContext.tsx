@@ -27,7 +27,7 @@ const OnboardingContext = createContext<OnboardingContextValue>({
 });
 
 export function OnboardingProvider({ children }: { children: ReactNode }) {
-  const { user, role, loading } = useAuth();
+  const { user, role, roleType, loading } = useAuth();
   const location = useLocation();
 
   const [toursSeen, setToursSeen] = useState<Record<string, number> | null>(null);
@@ -81,13 +81,14 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // Auto-start once per session for a first-time (or version-bumped) user, after
-  // the landing redirect has resolved to a real page.
+  // the landing redirect has resolved to a real page. Resolve by roleType first
+  // (type-based users carry no legacy `role` claim), then fall back to role.
   useEffect(() => {
     if (loading || !user || toursSeen === null) return;
     if (autoStartedRef.current || activeTour) return;
     if (location.pathname === "/" || location.pathname === "/login") return;
 
-    const tourId = resolveTourIdForRole(role);
+    const tourId = resolveTourIdForRole(roleType ?? role);
     if (!tourId) return;
     const tour = TOURS[tourId];
     if (!tour) return;
@@ -96,9 +97,8 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     if (typeof seenVersion === "number" && seenVersion >= tour.version) return;
 
     autoStartedRef.current = true;
-    const raf = requestAnimationFrame(() => startTour(tourId));
-    return () => cancelAnimationFrame(raf);
-  }, [loading, user, role, toursSeen, location.pathname, activeTour, startTour]);
+    startTour(tourId);
+  }, [loading, user, role, roleType, toursSeen, location.pathname, activeTour, startTour]);
 
   const markSeen = useCallback(
     (tour: TourDefinition) => {

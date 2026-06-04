@@ -16,7 +16,6 @@ const db = () => admin.firestore();
 const VALID_IDS = new Set<string>([
   "prehled", "smeny", "dovolena", "zamestnanci", "mzdy",
   "upozorneni", "smlouvy", "audit", "nastaveni", "mujProfil",
-  "napoveda",
 ]);
 
 const docRef = () => db().collection("settings").doc("menuOrder");

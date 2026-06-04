@@ -10,19 +10,30 @@ import styles from "./HelpPage.module.css";
  * replays the guided tour for roles that have one (employee + manager in v1).
  */
 export default function HelpPage() {
-  const { role } = useAuth();
+  const { role, roleType, can } = useAuth();
   const { startTour } = useOnboarding();
   const sections = helpSectionsForRole(role);
-  const tourId = resolveTourIdForRole(role);
+
+  // The user's own tour (employee/manager in v1). For roles without one yet,
+  // offer the employee tour as a general overview — but only to users who can
+  // actually follow it (they need access to every page it visits), so e.g. an
+  // účetní isn't bounced through pages they can't open.
+  const ownTourId = resolveTourIdForRole(roleType ?? role);
+  const canFollowEmployeeTour =
+    can("nav.dashboard.view") && can("nav.shifts.view") && can("nav.vacation.view") && can("nav.profile.view");
+  const tourId = ownTourId ?? (canFollowEmployeeTour ? "employee" : null);
+  const isPreview = !ownTourId && !!tourId;
 
   return (
     <div className={styles.page}>
       <div className={styles.header}>
         <h1 className={styles.title}>Nápověda</h1>
-        {tourId && (
+        {tourId ? (
           <Button variant="primary" onClick={() => startTour(tourId)}>
-            Spustit prohlídku
+            {isPreview ? "Zobrazit ukázku prohlídky" : "Spustit prohlídku"}
           </Button>
+        ) : (
+          <span className={styles.tourNote}>Prohlídka pro vaši roli se připravuje.</span>
         )}
       </div>
 

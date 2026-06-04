@@ -9,6 +9,10 @@ export type UserRole = "admin" | "director" | "manager" | "employee" | "accounta
 interface AuthState {
   user: User | null;
   role: UserRole | null;
+  /** The user's configurable type id (roleType). For built-in types this equals
+   *  the legacy role name ("employee", "manager", …). Null when unset. Prefer
+   *  this over `role` — type-based users created post-RBAC carry no role claim. */
+  roleType: string | null;
   employeeId: string | null;
   /** Display name from users/{uid}.name (via /auth/me); null when unset. */
   name: string | null;
@@ -34,6 +38,7 @@ export function useAuth(): AuthValue {
   const [state, setState] = useState<AuthState>({
     user: null,
     role: null,
+    roleType: null,
     employeeId: null,
     name: null,
     roleTypeName: null,
@@ -46,11 +51,12 @@ export function useAuth(): AuthValue {
       if (user) {
         const tokenResult = await user.getIdTokenResult();
         const profile = await api
-          .get<{ employeeId: string | null; name?: string | null; permissions?: string[]; roleTypeName?: string | null }>("/auth/me")
-          .catch(() => ({ employeeId: null, name: null, permissions: [] as string[], roleTypeName: null }));
+          .get<{ employeeId: string | null; name?: string | null; permissions?: string[]; roleTypeName?: string | null; roleType?: string | null }>("/auth/me")
+          .catch(() => ({ employeeId: null, name: null, permissions: [] as string[], roleTypeName: null, roleType: null }));
         setState({
           user,
           role: (tokenResult.claims.role as UserRole) ?? null,
+          roleType: profile.roleType ?? null,
           employeeId: profile.employeeId ?? null,
           name: profile.name ?? null,
           roleTypeName: profile.roleTypeName ?? null,
@@ -58,7 +64,7 @@ export function useAuth(): AuthValue {
           loading: false,
         });
       } else {
-        setState({ user: null, role: null, employeeId: null, name: null, roleTypeName: null, permissions: EMPTY_PERMS, loading: false });
+        setState({ user: null, role: null, roleType: null, employeeId: null, name: null, roleTypeName: null, permissions: EMPTY_PERMS, loading: false });
       }
     });
   }, []);
