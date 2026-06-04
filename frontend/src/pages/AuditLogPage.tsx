@@ -54,7 +54,13 @@ export default function AuditLogPage() {
 
     api
       .get<UserProfile[]>("/auth/users")
-      .then(setUsers)
+      .then((list) =>
+        setUsers(
+          [...list].sort((a, b) =>
+            (a.name || a.email || "").localeCompare(b.name || b.email || "", "cs")
+          )
+        )
+      )
       .catch(() => undefined);
 
     api

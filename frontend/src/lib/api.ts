@@ -88,7 +88,12 @@ export interface RoleType {
 }
 
 export const roleTypesApi = {
-  list: () => api.get<RoleType[]>("/role-types"),
+  // Always alphabetical by name (cs) — every consumer (type dropdowns, the
+  // user-types list, menu-order cards) expects the same ordering.
+  list: () =>
+    api
+      .get<RoleType[]>("/role-types")
+      .then((l) => [...l].sort((a, b) => a.name.localeCompare(b.name, "cs"))),
   create: (body: { name: string; permissions?: string[]; management?: boolean; cloneFrom?: string }) =>
     api.post<{ id: string }>("/role-types", body),
   update: (id: string, body: { name?: string; permissions?: string[]; management?: boolean }) =>

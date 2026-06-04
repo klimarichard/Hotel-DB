@@ -767,6 +767,12 @@ export default function SettingsPage() {
     return (a.name ?? "").localeCompare(b.name ?? "", "cs");
   });
 
+  // Employee-picker dropdowns are always sorted by surname, then first name.
+  const sortedEmployees = [...employees].sort((a, b) => {
+    const last = (a.lastName ?? "").localeCompare(b.lastName ?? "", "cs");
+    return last !== 0 ? last : (a.firstName ?? "").localeCompare(b.firstName ?? "", "cs");
+  });
+
   return (
     <div>
       <div className={styles.header}>
@@ -880,7 +886,7 @@ export default function SettingsPage() {
                   onChange={(e) => setForm({ ...form, employeeId: e.target.value })}
                 >
                   <option value="">— Nepropojovat —</option>
-                  {employees.map((emp) => (
+                  {sortedEmployees.map((emp) => (
                     <option key={emp.id} value={emp.id}>
                       {employeeSurnameFirst(emp)}
                     </option>
@@ -916,7 +922,7 @@ export default function SettingsPage() {
                 onChange={(e) => setLinkEmployeeId(e.target.value)}
               >
                 <option value="">— Zrušit propojení —</option>
-                {employees.map((emp) => (
+                {sortedEmployees.map((emp) => (
                   <option key={emp.id} value={emp.id}>
                     {employeeSurnameFirst(emp)}
                   </option>
@@ -1275,9 +1281,11 @@ export default function SettingsPage() {
                     onChange={(e) => setPosForm({ ...posForm, departmentId: e.target.value })}
                   >
                     <option value="">— vyberte —</option>
-                    {departments.map((d) => (
-                      <option key={d.id} value={d.id}>{d.name}</option>
-                    ))}
+                    {[...departments]
+                      .sort((a, b) => a.name.localeCompare(b.name, "cs"))
+                      .map((d) => (
+                        <option key={d.id} value={d.id}>{d.name}</option>
+                      ))}
                   </select>
                 </div>
                 <div className={styles.field}>
