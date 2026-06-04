@@ -362,7 +362,7 @@ export async function getManagementEmployeeIds(): Promise<Set<string>> {
   const ids = new Set<string>();
   for (const d of snap.docs) {
     const u = d.data() as Record<string, unknown>;
-    const typeId = (u.roleType as string) || (u.role as string) || "";
+    const typeId = (u.roleType as string) || "";
     const empId = u.employeeId;
     if (typeId && mgmtTypes.has(typeId) && typeof empId === "string" && empId) ids.add(empId);
   }

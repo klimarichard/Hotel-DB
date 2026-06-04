@@ -4,6 +4,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { requireAuth, AuthRequest } from "../middleware/auth";
 import { requirePermission } from "../auth/permissions";
 import { applyVacationXsToPlans, removeVacationXsFromPlans, findShiftCollisions } from "./shifts";
+import { getManagementEmployeeIds } from "./employees";
 import { ctxFromReq, logCreate, logUpdate, logDelete } from "../services/auditLog";
 
 export const vacationRouter = Router();
@@ -76,8 +77,8 @@ vacationRouter.get(
 
 // ─── GET /vacation/approved-upcoming ──────────────────────────────────────────
 // Lightweight list of approved vacations that haven't ended yet (endDate
-// today or later — includes ongoing vacations), scoped to rank-and-file
-// employees only. Returned to every authenticated user so employees can see
+// today or later — includes ongoing vacations), scoped to NON-management staff
+// (colleagues). Returned to every authenticated user so employees can see
 // where colleagues already have approved vacation without leaking reasons
 // or other metadata. Sorted by startDate ascending.
 
@@ -87,23 +88,21 @@ vacationRouter.get("/approved-upcoming", requireAuth, async (_req, res) => {
     timeZone: "Europe/Prague",
   }).format(new Date());
 
-  const [vacSnap, employeeUsersSnap] = await Promise.all([
+  // Exclude vacations belonging to management staff. Management is determined by
+  // the user type's `management` flag (works for built-in AND custom types) —
+  // never by the legacy role, so a custom non-management type still shows here.
+  const [vacSnap, mgmtIds] = await Promise.all([
     db().collection("vacationRequests").where("status", "==", "approved").get(),
-    db().collection("users").where("role", "==", "employee").get(),
+    getManagementEmployeeIds(),
   ]);
-
-  // Match employee-role users by their stable employeeId, not auth uid —
-  // migrated requests carry stale uids (see requesterEmployeeId).
-  const employeeIds = new Set(
-    employeeUsersSnap.docs
-      .map((d) => ((d.data() as Record<string, unknown>).employeeId as string) ?? "")
-      .filter(Boolean)
-  );
 
   const rows = vacSnap.docs
     .map((d) => d.data() as Record<string, unknown>)
     .filter((v) => ((v.endDate as string) ?? "") >= todayYMD)
-    .filter((v) => employeeIds.has((v.employeeId as string) ?? ""))
+    .filter((v) => {
+      const eid = (v.employeeId as string) ?? "";
+      return eid !== "" && !mgmtIds.has(eid);
+    })
     .map((v) => ({
       employeeId: (v.employeeId as string) ?? "",
       firstName: (v.firstName as string) ?? "",

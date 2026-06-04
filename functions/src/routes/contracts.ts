@@ -2,7 +2,7 @@ import { Router, Response, NextFunction } from "express";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireAuth, AuthRequest } from "../middleware/auth";
-import { requirePermission } from "../auth/permissions";
+import { requirePermission, hasPermission, type Permission } from "../auth/permissions";
 import { renderPdf, RenderMargins } from "../services/pdfRenderer";
 import type { ContractType } from "./contractTemplates";
 import { ctxFromReq, logCreate, logUpdate, logDelete } from "../services/auditLog";
@@ -10,15 +10,22 @@ import { getManagementEmployeeIds, isNonManagementScoped } from "./employees";
 
 export const contractsRouter = Router();
 
+// Contract write permissions — holding none of these makes a caller a read-only
+// contract viewer (e.g. built-in accountant), so any non-GET is rejected.
+const CONTRACT_WRITE_PERMS: Permission[] = [
+  "contracts.generate", "contracts.edit", "contracts.delete", "contracts.sign",
+];
+
 // Row-level access refinements layered on the per-route requirePermission gates
-// (mirrors employees.ts):
-//   • accountant — read-only safety net: only GET (view + download) is allowed.
+// (mirrors employees.ts), driven by PERMISSIONS, not the legacy role:
+//   • read-only viewers (no contract-write permission) — only GET is allowed.
 //   • non-management-scoped callers (hr) — blocked from any contract under a
-//     management employee's record. Triggered by permission state, not the role.
-// requireAuth is router-level so req.role is set before this guard runs.
+//     management employee's record.
+// requireAuth is router-level so req.permissions is set before this guard runs.
 async function enforceContractAccess(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
-  if (req.role === "accountant" && req.method !== "GET") {
-    res.status(403).json({ error: "Účetní má pouze náhledový přístup." });
+  const perms = req.permissions ?? new Set<string>();
+  if (req.method !== "GET" && !CONTRACT_WRITE_PERMS.some((p) => hasPermission(perms, p))) {
+    res.status(403).json({ error: "Pouze náhledový přístup ke smlouvám." });
     return;
   }
   if (isNonManagementScoped(req.permissions)) {

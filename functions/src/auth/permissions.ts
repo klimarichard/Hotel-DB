@@ -15,7 +15,15 @@
  */
 import * as admin from "firebase-admin";
 import { Response, NextFunction } from "express";
-import { AuthRequest, UserRole } from "../middleware/auth";
+import { AuthRequest } from "../middleware/auth";
+
+/**
+ * The ids of the BUILT-IN user types. These are not "roles" in the old gating
+ * sense — they're the starter user types (editable data in roleTypes/{id}) whose
+ * default permissions + management flag live in code so they can be seeded and
+ * so the resolver has a fallback when a roleTypes doc is missing/unreachable.
+ */
+export type BuiltinTypeId = "admin" | "director" | "manager" | "employee" | "accountant" | "hr";
 
 // ─── Catalog ──────────────────────────────────────────────────────────────────
 // Grouped for the in-app permission matrix; granularity is preserved.
@@ -229,7 +237,7 @@ const BASE_SELF: Permission[] = [
   "vacation.request.self",
 ];
 
-export const BUILTIN_ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
+export const BUILTIN_TYPE_PERMISSIONS: Record<BuiltinTypeId, Permission[]> = {
   admin: ["system.admin"],
 
   director: [
@@ -331,18 +339,18 @@ function applyOverrides(base: readonly string[], extra: string[], revoked: strin
  * collection is unavailable, and by the verification scripts.
  */
 export function resolvePermissions(
-  role: UserRole | undefined,
+  typeId: BuiltinTypeId | undefined,
   extra: string[] = [],
   revoked: string[] = []
 ): Set<string> {
-  if (!role) return new Set();
-  return applyOverrides(BUILTIN_ROLE_PERMISSIONS[role] ?? [], extra, revoked);
+  if (!typeId) return new Set();
+  return applyOverrides(BUILTIN_TYPE_PERMISSIONS[typeId] ?? [], extra, revoked);
 }
 
 // ─── Configurable roleTypes (Phase 4) ────────────────────────────────────────
 // Roles are now editable DATA in roleTypes/{id} = { name, permissions[], system }.
 // The resolver reads them through a per-instance cache (cheap: a handful of
-// docs) and ALWAYS falls back to BUILTIN_ROLE_PERMISSIONS when a doc is missing
+// docs) and ALWAYS falls back to BUILTIN_TYPE_PERMISSIONS when a doc is missing
 // or Firestore is unreachable — so a seeding gap or outage can never lock anyone
 // out, and behaviour stays identical to the built-in mapping until an admin
 // edits a type.
@@ -358,7 +366,7 @@ export interface RoleTypeData {
 
 /** Built-in management classification — the fallback when a roleTypes doc is
  *  missing (unseeded / Firestore down). Matches the legacy role-based query. */
-const BUILTIN_MANAGEMENT: Record<UserRole, boolean> = {
+const BUILTIN_TYPE_MANAGEMENT: Record<BuiltinTypeId, boolean> = {
   admin: true, director: true, manager: true, employee: false, accountant: false, hr: false,
 };
 
@@ -401,7 +409,7 @@ export function clearRoleTypeCache(): void {
  * back-fills any built-in management role missing as a doc (partial-seed safety).
  */
 export async function getManagementTypeIds(): Promise<Set<string>> {
-  const builtinMgmt = (Object.entries(BUILTIN_MANAGEMENT) as [UserRole, boolean][])
+  const builtinMgmt = (Object.entries(BUILTIN_TYPE_MANAGEMENT) as [BuiltinTypeId, boolean][])
     .filter(([, isMgmt]) => isMgmt)
     .map(([id]) => id);
   const map = await loadRoleTypes();
@@ -416,9 +424,7 @@ export async function getManagementTypeIds(): Promise<Set<string>> {
 }
 
 export interface EffectivePermissionInput {
-  /** Legacy role claim — drives the builtin fallback + default roleType id. */
-  role?: UserRole;
-  /** Configurable user-type id (defaults to `role` for legacy accounts). */
+  /** Configurable user-type id (from the roleType claim). */
   roleType?: string;
   /** Per-user granted permissions (on top of the type). */
   extra?: string[];
@@ -428,20 +434,19 @@ export interface EffectivePermissionInput {
 
 /**
  * Effective permission set from the configurable roleTypes + per-user overrides.
- * Resolution order for the base list: roleTypes/{roleType||role} doc → built-in
- * mapping for the legacy role → built-in mapping for the id → empty. Then apply
- * grants/revokes. This is the runtime gate; requireAuth resolves it once per
- * request and attaches it to req.permissions.
+ * Resolution order for the base list: roleTypes/{roleType} doc → built-in
+ * defaults for that id (resilience fallback when the doc is missing/unreachable)
+ * → empty. Then apply grants/revokes. This is the runtime gate; requireAuth
+ * resolves it once per request and attaches it to req.permissions.
  */
 export async function resolveEffectivePermissions(input: EffectivePermissionInput): Promise<Set<string>> {
-  const { role, roleType, extra = [], revoked = [] } = input;
-  const id = roleType ?? role;
+  const { roleType, extra = [], revoked = [] } = input;
+  const id = roleType;
   if (!id) return new Set();
   const map = await loadRoleTypes();
   const base =
     map?.get(id)?.permissions ??
-    (role ? BUILTIN_ROLE_PERMISSIONS[role] : undefined) ??
-    BUILTIN_ROLE_PERMISSIONS[id as UserRole] ??
+    BUILTIN_TYPE_PERMISSIONS[id as BuiltinTypeId] ??
     [];
   return applyOverrides(base, extra, revoked);
 }
