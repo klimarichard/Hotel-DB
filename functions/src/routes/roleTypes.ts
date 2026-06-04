@@ -187,12 +187,11 @@ roleTypesRouter.delete(
       return;
     }
 
-    // Block delete while any user is assigned this type (roleType, or the legacy
-    // role for users without an explicit roleType) — admin must reassign first.
+    // Block delete while any user is assigned this type — admin must reassign first.
     const usersSnap = await db().collection("users").get();
     const assigned = usersSnap.docs.filter((d) => {
       const u = d.data() as Record<string, unknown>;
-      return ((u.roleType as string) || (u.role as string) || "") === id;
+      return ((u.roleType as string) || "") === id;
     });
     if (assigned.length > 0) {
       res.status(409).json({
