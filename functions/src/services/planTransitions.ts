@@ -4,6 +4,7 @@
  */
 
 import * as admin from "firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
 import * as clock from "./clock";
 
 const db = () => admin.firestore();
@@ -62,7 +63,7 @@ export async function transitionPlanDeadlines(): Promise<{ transitioned: string[
       data.openedAt &&
       new Date(data.openedAt).getTime() <= now
     ) {
-      await planRef.update({ status: "opened", updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+      await planRef.update({ status: "opened", updatedAt: FieldValue.serverTimestamp() });
       transitioned.push(`${doc.id}: created → opened`);
       continue;
     }
@@ -74,7 +75,7 @@ export async function transitionPlanDeadlines(): Promise<{ transitioned: string[
       new Date(data.closedAt).getTime() <= now
     ) {
       await snapshotShifts(planRef);
-      await planRef.update({ status: "closed", updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+      await planRef.update({ status: "closed", updatedAt: FieldValue.serverTimestamp() });
       transitioned.push(`${doc.id}: opened → closed`);
       continue;
     }
@@ -86,7 +87,7 @@ export async function transitionPlanDeadlines(): Promise<{ transitioned: string[
       new Date(data.publishedAt).getTime() <= now
     ) {
       await deleteCollection(planRef.collection("shiftsSnapshot"));
-      await planRef.update({ status: "published", updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+      await planRef.update({ status: "published", updatedAt: FieldValue.serverTimestamp() });
       transitioned.push(`${doc.id}: closed → published`);
     }
   }
