@@ -11,7 +11,7 @@ export const employeeBaseSteps: TourStep[] = [
     anchor: null,
     route: "/prehled",
     title: "Vítejte v HPM Intranetu",
-    body: "Tento krátký průvodce vás provede hlavními částmi aplikace. Ukáže vám, kde najdete svůj plán směn, dovolenou i vlastní profil. Průvodce trvá přibližně dvě minuty a kdykoliv jej můžete ukončit tlačítkem Přeskočit.",
+    body: "Tento krátký průvodce vás provede hlavními částmi aplikace. Ukáže vám, kde najdete plán směn, dovolenou i vlastní profil. Průvodce trvá přibližně dvě minuty a kdykoliv jej můžete ukončit tlačítkem Přeskočit.",
   },
 
   // ── Přehled ─────────────────────────────────────────────────────────────
@@ -24,20 +24,14 @@ export const employeeBaseSteps: TourStep[] = [
   {
     anchor: "overview-staffing",
     title: "Kdo je dnes na směně",
-    body: "Sekce Dnes zobrazuje aktuální obsazení hotelu: kdo pracuje na recepci, kteří portýři jsou přítomni a kdo vykonává roli MOD (vedoucí směny). Pomáhá vám rychle zjistit, s kým dnes spolupracujete.",
+    body: "Sekce Dnes zobrazuje aktuální obsazení hotelu: kdo pracuje na recepci, kteří portýři jsou přítomni a kdo vykonává roli MOD (vedoucí směny). Zároveň ukazuje manažery, kteří mají dovolenou. Pomáhá vám rychle zjistit, s kým dnes spolupracujete.",
     placement: "bottom",
   },
   {
     anchor: "overview-my-shifts",
     title: "Moje směny",
-    body: "Dlaždice Moje směny vás přenese přímo do měsíčního plánu, kde uvidíte své naplánované směny. Kliknutím se dostanete na stránku Směny.",
+    body: "Dlaždice Moje směny zobrazuje vaše nejbližší směny. Kliknutím se dostanete na stránku Směny.",
     placement: "right",
-  },
-  {
-    anchor: "overview-task-tiles",
-    title: "Rychlé akce",
-    body: "Ostatní dlaždice nabízejí zkratky k nejčastějším úkolům — například podání žádosti o dovolenou nebo zobrazení vlastního profilu. Slouží jen pro pohodlnější navigaci; vše najdete i v postranní nabídce.",
-    placement: "top",
   },
 
   // ── Směny ───────────────────────────────────────────────────────────────
@@ -45,13 +39,13 @@ export const employeeBaseSteps: TourStep[] = [
     anchor: "shift-month-nav",
     route: "/smeny",
     title: "Výběr měsíce",
-    body: "Šipkami vlevo a vpravo přecházíte mezi měsíci. Tlačítkem Dnes se okamžitě vrátíte na aktuální měsíc.",
+    body: "Šipkami vlevo a vpravo přecházíte mezi měsíci. Tlačítkem Dnes se vrátíte na aktuální měsíc.",
     placement: "bottom",
   },
   {
     anchor: "shift-grid",
     title: "Plán směn",
-    body: "Tabulka zobrazuje váš měsíční plán směn. Každé políčko odpovídá jednomu dni; kódy jako DA, NS nebo X označují typ směny nebo volno. Pod tabulkou je legenda vysvětlující všechny kódy. Jako zaměstnanec vidíte publikovaný plán a do políček s volnem (X) můžete přímo klikat.",
+    body: "Tabulka zobrazuje měsíční plán směn. Každé políčko odpovídá jednomu dni; kódy jako DA, NS nebo X označují typ směny nebo volno. Pod tabulkou je legenda vysvětlující všechny kódy. Jako zaměstnanec vidíte publikovaný plán a do políček s volnem (X) můžete přímo klikat.",
     placement: "bottom",
   },
   {
