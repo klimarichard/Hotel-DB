@@ -16,6 +16,7 @@ import ShiftPlannerPage from "@/pages/ShiftPlannerPage";
 import VacationPage from "@/pages/VacationPage";
 import OverviewPage from "@/pages/OverviewPage";
 import AuditLogPage from "@/pages/AuditLogPage";
+import HelpPage from "@/pages/HelpPage";
 import { AlertsProvider } from "@/context/AlertsContext";
 import { ShiftOverridesProvider } from "@/context/ShiftOverridesContext";
 import { ShiftChangeRequestsProvider } from "@/context/ShiftChangeRequestsContext";
@@ -23,6 +24,7 @@ import { EmployeeChangeRequestsProvider } from "@/context/EmployeeChangeRequests
 import { VacationProvider } from "@/context/VacationContext";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { TimeOverrideProvider } from "@/context/TimeOverrideContext";
+import { OnboardingProvider } from "@/context/OnboardingContext";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -68,19 +70,21 @@ export default function App() {
         path="/"
         element={
           <RequireAuth>
-            <TimeOverrideProvider>
-              <AlertsProvider>
-                <ShiftOverridesProvider>
-                  <ShiftChangeRequestsProvider>
-                    <EmployeeChangeRequestsProvider>
-                      <VacationProvider>
-                        <Layout />
-                      </VacationProvider>
-                    </EmployeeChangeRequestsProvider>
-                  </ShiftChangeRequestsProvider>
-                </ShiftOverridesProvider>
-              </AlertsProvider>
-            </TimeOverrideProvider>
+            <OnboardingProvider>
+              <TimeOverrideProvider>
+                <AlertsProvider>
+                  <ShiftOverridesProvider>
+                    <ShiftChangeRequestsProvider>
+                      <EmployeeChangeRequestsProvider>
+                        <VacationProvider>
+                          <Layout />
+                        </VacationProvider>
+                      </EmployeeChangeRequestsProvider>
+                    </ShiftChangeRequestsProvider>
+                  </ShiftOverridesProvider>
+                </AlertsProvider>
+              </TimeOverrideProvider>
+            </OnboardingProvider>
           </RequireAuth>
         }
       >
@@ -98,6 +102,8 @@ export default function App() {
         <Route path="upozorneni" element={<RequirePermission allow={["nav.alerts.view"]}><AlertsPage /></RequirePermission>} />
         <Route path="nastaveni" element={<RequirePermission allow={["nav.settings.view"]}><SettingsPage /></RequirePermission>} />
         <Route path="audit" element={<RequirePermission allow={["nav.audit.view"]}><AuditLogPage /></RequirePermission>} />
+        {/* Help is available to every authenticated user — no permission gate. */}
+        <Route path="napoveda" element={<HelpPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

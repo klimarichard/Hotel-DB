@@ -89,6 +89,7 @@ export default function Layout() {
               <li key={item.id}>
                 <NavLink
                   to={item.path}
+                  data-tour={`nav-${item.id}`}
                   className={({ isActive }) =>
                     [styles.navLink, isActive ? styles.active : ""].join(" ")
                   }
@@ -111,6 +112,15 @@ export default function Layout() {
           <span className={styles.userRole}>{roleTypeName ?? role}</span>
           <button className={styles.logoutBtn} onClick={handleLogout}>
             Odhlásit
+          </button>
+          <button
+            className={styles.themeToggle}
+            data-tour="help-button"
+            onClick={() => navigate("/napoveda")}
+            title="Nápověda"
+            aria-label="Nápověda"
+          >
+            ? Nápověda
           </button>
           <button
             className={styles.themeToggle}
