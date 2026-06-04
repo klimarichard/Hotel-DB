@@ -88,6 +88,8 @@ Tlačítko **Exportovat ▾** nabízí **PDF** (plán na jednu stránku A4). Tla
 Vlastní karta zaměstnance.
 
 - Vidíte své osobní údaje, kontakt, doklady a **historii pracovního poměru**.
+- **Telefon** začínající `+420` se zobrazuje po skupinách jako `+420 XXX XXX XXX`.
+- Pole **„Platnost OP"** se zde už nezobrazuje ani nenavrhuje k úpravě.
 - **Navrhnout úpravu** — změny se odešlou ke schválení administrátorovi/řediteli.
 
 > 📷 *(Místo pro snímek obrazovky: Můj profil)*

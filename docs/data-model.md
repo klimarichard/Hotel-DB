@@ -8,6 +8,8 @@ This document describes the Firestore data model (top-level collections, sub-col
 
 **Sub-collections under `employees/{id}`:** `documents`, `contact`, `employment`, `benefits`, `contracts`
 
+The `benefits` sub-doc carries the insurance/bank/Multisport fields plus `nepodepiseProhlaseni: boolean` ("Nepodepíše prohlášení poplatníka" — drives the "Nepodepsané prohlášení" banner on the employee detail page).
+
 **Sub-collections under `shiftPlans/{id}`:** `planEmployees`, `shifts`, `rules`, `unavailabilityRequests`, `shiftOverrideRequests`, `shiftChangeRequests`, `shiftsSnapshot`
 
 **Sub-collections under `payrollPeriods/{id}`:** `entries`

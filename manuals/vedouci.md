@@ -75,6 +75,7 @@ Tlačítko **Exportovat ▾** nabízí **PDF** (plán na jednu stránku A4). Tla
 - **Nová žádost** — zadáte termín a důvod. V sekci **Moje žádosti** vidíte stav svých žádostí.
 - Schválenou žádost lze **upravit** — změna čeká na schválení administrátorem (původní termín platí, dokud není úprava schválena).
 - **Schválené dovolené (všichni zaměstnanci)** — přehled schválených dovolených kolegů (jen řadoví zaměstnanci, ne management).
+- Má-li váš účet přidělené oprávnění **„Zobrazit všechny žádosti"** (nastavuje administrátor u vašeho typu uživatele), vidíte navíc **veškeré žádosti o dovolenou všech**, včetně vedení (administrátor, ředitel).
 - Pokud termín koliduje s již naplánovanou směnou, žádost je **zablokována** s upozorněním.
 
 > 📷 *(Místo pro snímek obrazovky: Dovolená — moje žádosti)*
