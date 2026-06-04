@@ -45,13 +45,13 @@ export const employeeBaseSteps: TourStep[] = [
   {
     anchor: "shift-grid",
     title: "Plán směn",
-    body: "Tabulka zobrazuje měsíční plán směn. Každé políčko odpovídá jednomu dni; kódy jako DA, NS nebo X označují typ směny nebo volno. Pod tabulkou je legenda vysvětlující všechny kódy. Jako zaměstnanec vidíte publikovaný plán a do políček s volnem (X) můžete přímo klikat.",
+    body: "Tabulka zobrazuje měsíční plán směn. Každé políčko odpovídá jednomu dni; kódy jako DA, NS nebo X označují typ směny nebo volno. Pod tabulkou je legenda vysvětlující všechny kódy. Jako zaměstnanec můžete přímo zadávat pouze X značící volno.",
     placement: "bottom",
   },
   {
     anchor: "shift-my-requests",
     title: "Moje žádosti o změnu",
-    body: "V sekci Moje žádosti vidíte všechny podané žádosti o změnu směny i o volné směny a jejich aktuální stav (čeká na schválení, schváleno, zamítnuto). Novou žádost o změnu podáte dvojklikem na příslušnou buňku v plánu; žádost o volnou (neobsazenou) směnu portýrů podáte dvojklikem na barevný štítek pod tabulkou.",
+    body: "V sekci Moje žádosti vlevo nahoře vidíte všechny podané žádosti o změnu směny i o volné směny a jejich aktuální stav (čeká na schválení, schváleno, zamítnuto). Novou žádost o změnu podáte dvojklikem na příslušnou buňku v plánu; žádost o volnou (neobsazenou) směnu portýrů podáte dvojklikem na barevný štítek pod tabulkou.",
     placement: "top",
   },
 
@@ -60,13 +60,13 @@ export const employeeBaseSteps: TourStep[] = [
     anchor: "vacation-request-form",
     route: "/dovolena",
     title: "Nová žádost o dovolenou",
-    body: "Zde zadáváte novou žádost o dovolenou: vyberete termín a napíšete důvod. Žádost odeslíte tlačítkem Odeslat žádost a systém ji předá ke schválení administrátorovi. Pokud termín koliduje s naplánovanou směnou, aplikace vás na to upozorní.",
+    body: "Zde zadáváte novou žádost o dovolenou: vyberete termín a napíšete důvod. Žádost odešlete tlačítkem Odeslat žádost a systém ji předá ke schválení administrátorovi. Pokud termín koliduje s naplánovanou směnou, aplikace vás na to upozorní.",
     placement: "right",
   },
   {
     anchor: "vacation-my-requests",
     title: "Moje žádosti o dovolenou",
-    body: "Seznam všech vašich žádostí o dovolenou s jejich stavem. Schválenou žádost můžete upravit — změna bude čekat na nové schválení, přičemž původní termín platí až do té doby.",
+    body: "Seznam všech vašich žádostí o dovolenou s jejich stavem. Schválenou žádost můžete upravit — změna bude čekat na nové schválení, přičemž původní termín platí až do schválení úprav.",
     placement: "top",
   },
   {
@@ -81,7 +81,7 @@ export const employeeBaseSteps: TourStep[] = [
     anchor: "selfpage-title",
     route: "/muj-profil",
     title: "Můj profil",
-    body: "Tato stránka zobrazuje vaši kartu zaměstnance — osobní údaje, kontakt, doklady a historii pracovního poměru. Slouží jen ke čtení; ke změnám slouží tlačítko Navrhnout úpravu níže.",
+    body: "Tato stránka zobrazuje vaši kartu zaměstnance — osobní údaje, kontakt, doklady a historii pracovního poměru. Slouží jen ke čtení; ke změnám slouží tlačítko Navrhnout úpravu vpravo nahoře.",
     placement: "bottom",
   },
   {
@@ -93,7 +93,7 @@ export const employeeBaseSteps: TourStep[] = [
   {
     anchor: "selfpage-reveal",
     title: "Zobrazení citlivých údajů",
-    body: "Pole označená ikonou oka (například rodné číslo nebo číslo dokladu) jsou skryta z bezpečnostních důvodů. Kliknutím na ikonu pole dočasně zobrazíte. Každé zobrazení je zaznamenáno v systémovém logu.",
+    body: "Pole označená ikonou oka (například rodné číslo nebo číslo českého dokladu) jsou skryta z bezpečnostních důvodů. Kliknutím na ikonu pole dočasně zobrazíte. Každé zobrazení je zaznamenáno v systémovém logu.",
     placement: "left",
   },
   {
@@ -107,7 +107,7 @@ export const employeeBaseSteps: TourStep[] = [
   {
     anchor: "help-button",
     title: "Průvodce dokončen",
-    body: "To je vše! Průvodce si můžete kdykoliv znovu spustit kliknutím na tlačítko ? v horní liště — tam najdete i nápovědu k jednotlivým částem aplikace. Přejeme vám příjemnou práci.",
+    body: "To je vše! Průvodce si můžete kdykoliv znovu spustit kliknutím na tlačítko \"? Nápověda \" vlevo dole — tam najdete i nápovědu k jednotlivým částem aplikace. Přejeme vám příjemnou práci.",
     placement: "bottom",
   },
 ];
