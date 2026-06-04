@@ -8,7 +8,7 @@ import { employeeBaseSteps } from "./employeeTour";
 const managerShiftGridStep: TourStep = {
   anchor: "shift-grid",
   title: "Vyplňování plánu (pouze FOM)",
-  body: "Jako FOM (Front Office Manager) můžete v otevřeném plánu přímo upravovat směny všech zaměstnanců: kliknutím do buňky zapíšete kód směny (např. DA, NS, X), mazáte nebo přepisujete existující záznamy. Plán v ostatních stavech (uzavřený, publikovaný) je jen pro čtení; přechody mezi stavy provádí administrátor nebo ředitel.",
+  body: "Jako FOM (Front Office Manager) můžete v otevřeném plánu přímo upravovat směny všech zaměstnanců: kliknutím do buňky zapíšete kód směny (např. DA, NS, X), mažete nebo přepisujete existující záznamy. Plán v ostatních stavech (uzavřený, publikovaný) je jen pro čtení; přechody mezi stavy provádí administrátor nebo ředitel.",
   placement: "top",
 };
 
