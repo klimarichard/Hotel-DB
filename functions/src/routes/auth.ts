@@ -1,7 +1,7 @@
 import { Router } from "express";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
-import { requireAuth, AuthRequest, UserRole } from "../middleware/auth";
+import { requireAuth, AuthRequest } from "../middleware/auth";
 import {
   requirePermission,
   resolveEffectivePermissions,
@@ -60,54 +60,12 @@ const sanitizePerms = (value: unknown): string[] =>
 /** Does this user's stored config resolve to the superadmin permission? */
 async function userIsAdmin(u: Record<string, unknown>): Promise<boolean> {
   const set = await resolveEffectivePermissions({
-    role: u.role as UserRole | undefined,
     roleType: typeof u.roleType === "string" ? u.roleType : undefined,
     extra: Array.isArray(u.extraPermissions) ? (u.extraPermissions as string[]) : [],
     revoked: Array.isArray(u.revokedPermissions) ? (u.revokedPermissions as string[]) : [],
   });
   return set.has("system.admin");
 }
-
-/**
- * POST /api/auth/set-role
- * Admin-only: set a custom role claim on a user.
- * Body: { uid: string, role: UserRole }
- */
-authRouter.post(
-  "/set-role",
-  requireAuth,
-  requirePermission("users.setType"),
-  async (req: AuthRequest, res) => {
-    const { uid, role } = req.body as { uid: string; role: UserRole };
-    const validRoles: UserRole[] = ["admin", "director", "manager", "employee", "accountant", "hr"];
-
-    if (!uid || !validRoles.includes(role)) {
-      res.status(400).json({ error: "uid and a valid role are required" });
-      return;
-    }
-
-    const userRef = admin.firestore().collection("users").doc(uid);
-    const beforeSnap = await userRef.get();
-    const before = beforeSnap.exists ? (beforeSnap.data() as Record<string, unknown>) : {};
-
-    await mergeCustomClaims(uid, { role });
-
-    // Also update the users/ collection
-    await userRef.set(
-      { role, updatedAt: FieldValue.serverTimestamp() },
-      { merge: true }
-    );
-
-    await logUpdate(ctxFromReq(req), {
-      collection: "users",
-      resourceId: uid,
-      before: { role: before.role },
-      after: { role },
-    });
-
-    res.json({ success: true });
-  }
-);
 
 /**
  * PATCH /api/auth/users/:uid/permissions
@@ -167,7 +125,6 @@ authRouter.patch(
     const wasAdmin = await userIsAdmin(cur);
     const willBeAdmin = (
       await resolveEffectivePermissions({
-        role: cur.role as UserRole | undefined,
         roleType: nextRoleType ?? undefined,
         extra: nextExtra,
         revoked: nextRevoked,
@@ -220,24 +177,23 @@ authRouter.patch(
 /**
  * POST /api/auth/create-user
  * Admin-only: create a Firebase Auth user and store in users/ collection.
- * Body: { email, password, name, role, employeeId? }
+ * Body: { email, password, name, roleType, employeeId? }
  */
 authRouter.post(
   "/create-user",
   requireAuth,
   requirePermission("users.manage"),
   async (req: AuthRequest, res) => {
-    const { email, password, name, roleType, role, employeeId } = req.body as {
+    const { email, password, name, roleType, employeeId } = req.body as {
       email: string;
       password?: string;
       name: string;
       roleType?: string;
-      role?: UserRole; // legacy fallback for older callers
       employeeId?: string;
     };
 
-    // Type-based: the user gets a roleType. Older callers may still send `role`.
-    const typeId = (typeof roleType === "string" && roleType) ? roleType : role;
+    // Users are purely type-based: they get a roleType (and nothing else).
+    const typeId = typeof roleType === "string" && roleType ? roleType : "";
     if (!email || !name || !typeId) {
       res.status(400).json({ error: "email, name, and a user type are required" });
       return;
@@ -508,10 +464,10 @@ authRouter.get("/me", requireAuth, async (req: AuthRequest, res) => {
   // grants/revokes, falling back to the built-in role mapping). The backend is
   // still the real gate; this only drives which UI controls show.
   const permissions = [...(req.permissions ?? [])];
-  // Resolve the user's type display name for the sidebar label (roleType,
-  // falling back to the legacy role). Best-effort — null if the type doc is gone.
+  // Resolve the user's type display name for the sidebar label.
+  // Best-effort — null if the type doc is gone.
   const data = doc.data() as Record<string, unknown>;
-  const typeId = (data.roleType as string) || (data.role as string) || "";
+  const typeId = (data.roleType as string) || "";
   let roleTypeName: string | null = null;
   if (typeId) {
     const t = await admin.firestore().collection(ROLE_TYPES_COLLECTION).doc(typeId).get();
