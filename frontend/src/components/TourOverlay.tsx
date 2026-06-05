@@ -1,4 +1,4 @@
-import { useEffect, useState, CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, CSSProperties } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import Button from "./Button";
 import IconButton from "./IconButton";
@@ -24,6 +24,8 @@ export default function TourOverlay() {
   const [el, setEl] = useState<HTMLElement | null>(null);
   const [rect, setRect] = useState<DOMRect | null>(null);
   const [ready, setReady] = useState(false);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const [popH, setPopH] = useState(0);
 
   const step = activeTour ? activeTour.steps[stepIndex] : null;
 
@@ -106,14 +108,23 @@ export default function TourOverlay() {
     return () => window.removeEventListener("keydown", onKey);
   }, [activeTour, next, prev, dismiss]);
 
+  // Measure the popover so we can clamp it fully inside the viewport (its height
+  // varies per step). Runs before paint, so there's no visible jump.
+  useLayoutEffect(() => {
+    if (!ready) return;
+    const node = popoverRef.current;
+    if (node) setPopH(node.getBoundingClientRect().height);
+  }, [ready, stepIndex, rect]);
+
   if (!activeTour || !step || !ready) return null;
 
   const total = activeTour.steps.length;
   const isFirst = stepIndex === 0;
   const isLast = stepIndex === total - 1;
 
-  // Popover position: below the anchor if there's room, else above; clamped to
-  // the viewport. Centered when there's no anchor rect.
+  // Popover position: below the anchor if there's room, else above — then the
+  // top is ALWAYS clamped so the whole popover (incl. its buttons) stays inside
+  // the viewport. Horizontal is clamped too. Centered when there's no anchor.
   let popStyle: CSSProperties;
   let centered = false;
   if (rect) {
@@ -121,10 +132,11 @@ export default function TourOverlay() {
       GAP,
       Math.min(rect.left + rect.width / 2 - POPOVER_WIDTH / 2, window.innerWidth - POPOVER_WIDTH - GAP)
     );
-    const placeBelow = window.innerHeight - rect.bottom >= 260 || rect.top < 260;
-    popStyle = placeBelow
-      ? { top: rect.bottom + GAP, left, width: POPOVER_WIDTH }
-      : { top: rect.top - GAP, left, width: POPOVER_WIDTH, transform: "translateY(-100%)" };
+    const placeBelow = window.innerHeight - rect.bottom >= popH + GAP || rect.top < popH + GAP;
+    let top = placeBelow ? rect.bottom + GAP : rect.top - GAP - popH;
+    // Keep the full popover on-screen even if the anchor is at an edge.
+    top = Math.max(GAP, Math.min(top, window.innerHeight - popH - GAP));
+    popStyle = { top, left, width: POPOVER_WIDTH };
   } else {
     centered = true;
     popStyle = { width: POPOVER_WIDTH };
@@ -145,6 +157,7 @@ export default function TourOverlay() {
       )}
 
       <div
+        ref={popoverRef}
         className={centered ? `${styles.popover} ${styles.popoverCentered}` : styles.popover}
         style={popStyle}
         role="dialog"
