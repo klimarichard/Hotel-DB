@@ -1,8 +1,9 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useOnboarding } from "@/context/OnboardingContext";
 import { buildAppTour } from "@/lib/tours";
 import { PERMISSION_CATALOG } from "@/lib/permissions/catalog";
+import { getHelpImage } from "@/lib/help/helpImages";
 import Button from "@/components/Button";
 import styles from "./HelpPage.module.css";
 
@@ -11,6 +12,10 @@ import styles from "./HelpPage.module.css";
  * current user can do, derived from the same master tour step list (filtered by
  * `can()`) that powers the guided tour, grouped by the permission catalog's own
  * groups. The "Spustit prohlídku" button replays that same filtered tour.
+ *
+ * Full-text search filters this already-permission-filtered list, so results can
+ * never include content the user has no access to. Each section may show an
+ * optional screenshot (see lib/help/helpImages.ts).
  *
  * Single source of truth: add a permission to the catalog + a tour step and it
  * surfaces here automatically — no per-role help content.
@@ -25,9 +30,18 @@ const GROUP_BY_PERMISSION: Record<string, string> = PERMISSION_CATALOG.reduce(
   {} as Record<string, string>
 );
 
+/** Lowercase + strip diacritics so "smeny" matches "Směny". */
+function normalize(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "");
+}
+
 export default function HelpPage() {
   const { can } = useAuth();
   const { startTour } = useOnboarding();
+  const [query, setQuery] = useState("");
 
   // The user's filtered steps, grouped by catalog group (preserving catalog
   // order). Welcome / outro steps (no permission) are intro material, not a
@@ -46,6 +60,24 @@ export default function HelpPage() {
       .map((g) => ({ title: g, items: byGroup.get(g)! }));
   }, [can]);
 
+  // Search over the permission-filtered content only. A section whose title
+  // matches keeps all its items; otherwise only matching items are kept.
+  const visible = useMemo(() => {
+    const q = normalize(query.trim());
+    if (!q) return groups;
+    return groups
+      .map((section) => {
+        const titleMatch = normalize(section.title).includes(q);
+        const items = titleMatch
+          ? section.items
+          : section.items.filter(
+              (it) => normalize(it.title).includes(q) || normalize(it.body).includes(q)
+            );
+        return { ...section, items };
+      })
+      .filter((section) => section.items.length > 0);
+  }, [groups, query]);
+
   return (
     <div className={styles.page}>
       <div className={styles.header}>
@@ -61,17 +93,42 @@ export default function HelpPage() {
         tlačítkem nahoře.
       </p>
 
-      {groups.map((section) => (
-        <section key={section.title} className={styles.section}>
-          <h2 className={styles.sectionTitle}>{section.title}</h2>
-          {section.items.map((item, j) => (
-            <div key={j} className={styles.item}>
-              <h3 className={styles.itemTitle}>{item.title}</h3>
-              <p className={styles.para}>{item.body}</p>
-            </div>
-          ))}
-        </section>
-      ))}
+      <div className={styles.toolbar}>
+        <input
+          type="search"
+          className={styles.search}
+          placeholder="Hledat v nápovědě…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          aria-label="Hledat v nápovědě"
+        />
+      </div>
+
+      {visible.length === 0 ? (
+        <p className={styles.noResults}>
+          Pro „{query.trim()}“ nebyly nalezeny žádné výsledky.
+        </p>
+      ) : (
+        visible.map((section) => {
+          const shot = getHelpImage(section.title);
+          return (
+            <section key={section.title} className={styles.section}>
+              <h2 className={styles.sectionTitle}>{section.title}</h2>
+              {shot && (
+                <img className={styles.shot} src={shot} alt={`Náhled: ${section.title}`} loading="lazy" />
+              )}
+              <div className={styles.items}>
+                {section.items.map((item, j) => (
+                  <div key={j} className={styles.item}>
+                    <h3 className={styles.itemTitle}>{item.title}</h3>
+                    <p className={styles.para}>{item.body}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          );
+        })
+      )}
     </div>
   );
 }
