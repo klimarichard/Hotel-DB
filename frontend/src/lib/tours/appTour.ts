@@ -26,7 +26,9 @@ import type { TourStep, TourDefinition } from "./types";
  * add a matching step here (and the permission matrix per the project rule).
  */
 
-const DEMO = "/napoveda/ukazka";
+// Tour demo routes: the REAL pages rendered with mock data (lib/tours/demoData).
+const DEMO_SELF = "/napoveda/ukazka-profil"; // real Můj profil page
+const DEMO_EMP = "/zamestnanci/tour-demo"; // real employee-detail page (sentinel id)
 
 export const APP_TOUR_STEPS: TourStep[] = [
   // ── Welcome ───────────────────────────────────────────────────────────────
@@ -88,26 +90,30 @@ export const APP_TOUR_STEPS: TourStep[] = [
   { permission: "employees.export", anchor: "emp-export", route: "/zamestnanci", title: "Export seznamu", body: "Tlačítkem Exportovat CSV stáhnete seznam zaměstnanců.", placement: "bottom" },
   { permission: "employees.export.sensitive", anchor: "emp-export", route: "/zamestnanci", title: "Export citlivých údajů", body: "V dialogu exportu lze zahrnout i citlivé údaje (např. rodná čísla). Každý takový export je zaznamenán v logu změn.", placement: "bottom" },
 
-  // ── Zaměstnanec — karta (tour demo profile /napoveda/ukazka) ──────────────────
-  { permission: "self.profile.view", anchor: "demo-title", route: DEMO, title: "Karta zaměstnance / Můj profil", body: "Karta zobrazuje osobní údaje, kontakt, doklady, smlouvy a historii poměru. (Toto je ukázkový profil pouze pro průvodce.)", placement: "bottom" },
-  { permission: "self.profile.requestEdit", anchor: "demo-self-edit", route: DEMO, title: "Navrhnout úpravu", body: "Tlačítkem Navrhnout úpravu odešlete návrh na změnu svých údajů — projde až po schválení.", placement: "bottom" },
-  { permission: "changeRequests.submit.self", anchor: "demo-self-requests", route: DEMO, title: "Vaše návrhy na změnu", body: "Zde vidíte odeslané návrhy na úpravu profilu a jejich stav; čekající lze stáhnout.", placement: "top" },
-  { permission: "employees.edit", anchor: "demo-hero-edit", route: DEMO, title: "Úprava zaměstnance", body: "Tlačítkem Upravit změníte údaje na kartě zaměstnance.", placement: "bottom" },
-  { permission: "employees.delete", anchor: "demo-hero-delete", route: DEMO, title: "Smazání zaměstnance", body: "Tlačítkem Smazat nevratně odstraníte kartu zaměstnance (s potvrzením).", placement: "bottom" },
-  { permission: "sensitive.reveal", anchor: "demo-reveal", route: DEMO, reveal: ["demo-tab-detail"], title: "Zobrazení cizích citlivých údajů", body: "Ikonou oka odhalíte citlivé pole (rodné číslo, číslo dokladu). Každé zobrazení je zaznamenáno v logu změn.", placement: "left" },
-  { permission: "sensitive.reveal.self", anchor: "demo-reveal", route: DEMO, reveal: ["demo-tab-detail"], title: "Zobrazení vlastních citlivých údajů", body: "Svá citlivá pole zobrazíte kliknutím na ikonu oka; každé zobrazení je zaznamenáno v logu změn.", placement: "left" },
-  { permission: "benefits.view", anchor: "demo-benefits", route: DEMO, reveal: ["demo-tab-detail"], title: "Benefity", body: "V sekci Benefity vidíte benefity zaměstnance včetně Multisportu.", placement: "left" },
-  { permission: "benefits.edit", anchor: "demo-benefits", route: DEMO, reveal: ["demo-tab-detail"], title: "Úprava benefitů / Multisport", body: "Tlačítkem Spravovat upravíte benefity a Multisport (období, doprovodné osoby).", placement: "left" },
-  { permission: "employment.view", anchor: "demo-employment", route: DEMO, reveal: ["demo-tab-history"], title: "Historie pracovního poměru", body: "Na záložce Historie vidíte nástupy, dodatky a ukončení pracovního poměru.", placement: "bottom" },
-  { permission: "employment.manage", anchor: "demo-employment", route: DEMO, reveal: ["demo-tab-history"], title: "Správa pracovního poměru", body: "Spravujete poměr — Nástup, Dodatek (změna) a Ukončení. Tyto změny ovlivňují i výpočet mezd.", placement: "bottom" },
-  { permission: "contracts.view", anchor: "demo-contract-view", route: DEMO, reveal: ["demo-tab-history"], title: "Zobrazení smluv", body: "Vygenerované smlouvy a dodatky lze zobrazit a stáhnout.", placement: "left" },
-  { permission: "contracts.generate", anchor: "demo-contract-generate", route: DEMO, reveal: ["demo-tab-history"], title: "Generování smlouvy", body: "Z šablony vygenerujete smlouvu nebo dodatek pro zaměstnance.", placement: "left" },
-  { permission: "contracts.edit", anchor: "demo-contract-edit", route: DEMO, reveal: ["demo-tab-history"], title: "Úprava smlouvy", body: "Vygenerovanou smlouvu lze před uložením upravit.", placement: "left" },
-  { permission: "contracts.sign", anchor: "demo-contract-sign", route: DEMO, reveal: ["demo-tab-history"], title: "Podepsaná smlouva", body: "Tlačítkem Nahrát podepsanou smlouvu označíte smlouvu jako podepsanou a nahrajete její verzi.", placement: "left" },
-  { permission: "contracts.delete", anchor: "demo-contract-delete", route: DEMO, reveal: ["demo-tab-history"], title: "Smazání smlouvy", body: "Tlačítkem Smazat smlouvu odstraníte vygenerovanou smlouvu (s potvrzením).", placement: "left" },
-  { permission: "documents.view", anchor: "demo-doc-view", route: DEMO, reveal: ["demo-tab-docs"], title: "Další dokumenty", body: "Na záložce Další dokumenty vidíte nahrané dokumenty zaměstnance.", placement: "left" },
-  { permission: "documents.upload", anchor: "demo-doc-upload", route: DEMO, reveal: ["demo-tab-docs"], title: "Nahrání dokumentu", body: "Tlačítkem Nahrát dokument přidáte k zaměstnanci další dokument.", placement: "bottom" },
-  { permission: "documents.delete", anchor: "demo-doc-delete", route: DEMO, reveal: ["demo-tab-docs"], title: "Smazání dokumentu", body: "Tlačítkem Smazat odstraníte nahraný dokument (s potvrzením).", placement: "left" },
+  // ── Můj profil — REAL self page fed by mock data (/napoveda/ukazka-profil) ──────
+  { permission: "self.profile.view", anchor: "selfpage-title", route: DEMO_SELF, title: "Můj profil", body: "Tato stránka zobrazuje vaši kartu zaměstnance — osobní údaje, kontakt, doklady a historii poměru. Slouží ke čtení. (Ukázková data pouze pro průvodce.)", placement: "bottom" },
+  { permission: "self.profile.requestEdit", anchor: "selfpage-edit-btn", route: DEMO_SELF, title: "Navrhnout úpravu", body: "Tlačítkem Navrhnout úpravu odešlete návrh na změnu svých údajů — projde až po schválení.", placement: "left" },
+  { permission: "sensitive.reveal.self", anchor: "selfpage-reveal", route: DEMO_SELF, title: "Zobrazení vlastních citlivých údajů", body: "Pole označená ikonou oka (např. rodné číslo) jsou skryta. Kliknutím je dočasně zobrazíte; každé zobrazení je zaznamenáno v logu změn.", placement: "left" },
+  { permission: "changeRequests.submit.self", anchor: "selfpage-requests", route: DEMO_SELF, title: "Vaše návrhy na změnu", body: "Zde vidíte odeslané návrhy na úpravu profilu a jejich stav; čekající lze stáhnout.", placement: "top" },
+
+  // ── Zaměstnanec — karta: REAL detail page fed by mock data (/zamestnanci/tour-demo) ──
+  // Detail-tab sections are expanded by default; history/docs controls live on
+  // their tab, so those steps `reveal` (click) the tab button first.
+  { permission: "employees.edit", anchor: "emp-hero-edit", route: DEMO_EMP, title: "Úprava zaměstnance", body: "Tlačítkem Upravit změníte údaje na kartě zaměstnance.", placement: "bottom" },
+  { permission: "employees.delete", anchor: "emp-hero-delete", route: DEMO_EMP, title: "Smazání zaměstnance", body: "Tlačítkem Smazat nevratně odstraníte kartu zaměstnance (s potvrzením).", placement: "bottom" },
+  { permission: "sensitive.reveal", anchor: "emp-reveal", route: DEMO_EMP, reveal: ["emp-tab-detail"], title: "Zobrazení cizích citlivých údajů", body: "Ikonou oka odhalíte citlivé pole (rodné číslo, číslo dokladu). Každé zobrazení je zaznamenáno v logu změn.", placement: "left" },
+  { permission: "benefits.view", anchor: "emp-benefits", route: DEMO_EMP, reveal: ["emp-tab-detail"], title: "Benefity", body: "V sekci Benefity vidíte benefity zaměstnance včetně Multisportu.", placement: "left" },
+  { permission: "benefits.edit", anchor: "emp-benefits", route: DEMO_EMP, reveal: ["emp-tab-detail"], title: "Úprava benefitů / Multisport", body: "Tlačítkem Spravovat upravíte benefity a Multisport (období, doprovodné osoby).", placement: "left" },
+  { permission: "employment.view", anchor: "emp-employment-add", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Historie pracovního poměru", body: "Na záložce Historie vidíte nástupy, dodatky a ukončení pracovního poměru.", placement: "bottom" },
+  { permission: "employment.manage", anchor: "emp-employment-add", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Správa pracovního poměru", body: "Spravujete poměr — Nástup, Dodatek (změna) a Ukončení (v záhlaví poměru). Tyto změny ovlivňují i výpočet mezd.", placement: "bottom" },
+  { permission: "contracts.view", anchor: "emp-contract-view", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Zobrazení smluv", body: "Vygenerované smlouvy a dodatky lze zobrazit a stáhnout.", placement: "left" },
+  { permission: "contracts.generate", anchor: "emp-contract-generate", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Generování smlouvy", body: "Z šablony vygenerujete smlouvu nebo dodatek pro zaměstnance.", placement: "left" },
+  { permission: "contracts.edit", anchor: "emp-contract-edit", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Úprava smlouvy", body: "Vygenerovanou smlouvu lze před uložením upravit.", placement: "left" },
+  { permission: "contracts.sign", anchor: "emp-contract-sign", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Podepsaná smlouva", body: "Tlačítkem Nahrát podepsanou smlouvu označíte smlouvu jako podepsanou a nahrajete její verzi.", placement: "left" },
+  { permission: "contracts.delete", anchor: "emp-contract-delete", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Smazání smlouvy", body: "Tlačítkem Smazat smlouvu odstraníte vygenerovanou smlouvu (s potvrzením).", placement: "left" },
+  { permission: "documents.view", anchor: "emp-doc-view", route: DEMO_EMP, reveal: ["emp-tab-docs"], title: "Další dokumenty", body: "Na záložce Další dokumenty vidíte nahrané dokumenty zaměstnance.", placement: "left" },
+  { permission: "documents.upload", anchor: "emp-doc-upload", route: DEMO_EMP, reveal: ["emp-tab-docs"], title: "Nahrání dokumentu", body: "Tlačítkem Nahrát dokument přidáte k zaměstnanci další dokument.", placement: "bottom" },
+  { permission: "documents.delete", anchor: "emp-doc-delete", route: DEMO_EMP, reveal: ["emp-tab-docs"], title: "Smazání dokumentu", body: "Tlačítkem Smazat odstraníte nahraný dokument (s potvrzením).", placement: "left" },
 
   // ── Šablony smluv (/smlouvy) ──────────────────────────────────────────────────
   { permission: "contractTemplates.view", anchor: "templates-list", route: "/smlouvy", title: "Zobrazení šablon", body: "V seznamu vlevo si vyberete a prohlédnete dostupné šablony.", placement: "right" },

@@ -1,4 +1,5 @@
 import { auth } from "./firebase";
+import { tourDemo, getDemoResponse } from "@/lib/tours/demoData";
 
 const BASE_URL = "/api";
 
@@ -31,6 +32,12 @@ async function request<T>(
   path: string,
   body?: unknown
 ): Promise<T> {
+  // Guided-tour demo: serve mock fixtures (no backend, no Firestore) for the
+  // sentinel demo employee and — while the self-demo route is mounted — the
+  // /me/* self endpoints. See lib/tours/demoData.ts.
+  const demo = getDemoResponse(method, path, tourDemo.active);
+  if (demo.hit) return demo.value as T;
+
   const headers: Record<string, string> = {
     ...(await getAuthHeader()),
     "Content-Type": "application/json",

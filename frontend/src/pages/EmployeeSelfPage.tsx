@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { tourDemo } from "@/lib/tours/demoData";
 import { useAuth } from "@/hooks/useAuth";
 import Button from "@/components/Button";
 import ConfirmModal from "@/components/ConfirmModal";
@@ -149,7 +150,9 @@ export default function EmployeeSelfPage() {
 
   useEffect(() => {
     if (authLoading) return;
-    if (!employeeId) {
+    // Tour demo: load the mock self profile even if the real account has no
+    // linked employee (the /me/* calls are intercepted, see lib/tours/demoData).
+    if (!employeeId && !tourDemo.active) {
       setLoading(false);
       return;
     }
@@ -393,7 +396,7 @@ export default function EmployeeSelfPage() {
 
   if (authLoading || loading) return <div className={styles.state}>Načítám…</div>;
 
-  if (!employeeId) {
+  if (!employeeId && !tourDemo.active) {
     return (
       <div>
         <h1 className={styles.title}>Můj profil</h1>
@@ -532,7 +535,7 @@ export default function EmployeeSelfPage() {
                       contractsByRow={new Map()}
                       defaultExpanded={idx === 0}
                       companies={{}}
-                      employeeId={employeeId}
+                      employeeId={employeeId ?? "tour-demo"}
                       resolveDefaultType={() => "nastup_hpp"}
                       resolveDisplayName={() => ""}
                       resolveRowSnapshot={() => ({})}
