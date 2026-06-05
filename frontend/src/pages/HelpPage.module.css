@@ -67,15 +67,20 @@
   border-radius: 10px;
 }
 
-/* Use the page width: items flow into wide, well-spaced responsive columns. */
+/* Single readable column with a divider between rows. */
 .items {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
-  gap: 0.5rem 4rem;
+  display: flex;
+  flex-direction: column;
 }
 
 .item {
-  padding: 0.55rem 0;
+  padding: 0.85rem 0;
+  border-top: 1px solid var(--color-border, #e5e7eb);
+}
+
+.item:first-child {
+  border-top: none;
+  padding-top: 0;
 }
 
 .itemTitle {
