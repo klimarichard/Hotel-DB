@@ -50,8 +50,21 @@ export default function TourOverlay() {
 
     let cancelled = false;
     let elapsed = 0;
+    const clicked = new Set<string>();
     const timer = setInterval(() => {
       if (cancelled) return;
+      // Reveal controls behind tabs/expanders: click each reveal anchor once as
+      // it appears (e.g. open the right tab), then wait for the real anchor.
+      if (step.reveal) {
+        for (const sel of step.reveal) {
+          if (clicked.has(sel)) continue;
+          const r = document.querySelector<HTMLElement>(`[data-tour="${sel}"]`);
+          if (r) {
+            r.click();
+            clicked.add(sel);
+          }
+        }
+      }
       const found = document.querySelector<HTMLElement>(`[data-tour="${step.anchor}"]`);
       if (found) {
         clearInterval(timer);

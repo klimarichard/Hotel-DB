@@ -17,6 +17,7 @@ import VacationPage from "@/pages/VacationPage";
 import OverviewPage from "@/pages/OverviewPage";
 import AuditLogPage from "@/pages/AuditLogPage";
 import HelpPage from "@/pages/HelpPage";
+import TourDemoProfile from "@/pages/TourDemoProfile";
 import { AlertsProvider } from "@/context/AlertsContext";
 import { ShiftOverridesProvider } from "@/context/ShiftOverridesContext";
 import { ShiftChangeRequestsProvider } from "@/context/ShiftChangeRequestsContext";
@@ -104,6 +105,8 @@ export default function App() {
         <Route path="audit" element={<RequirePermission allow={["nav.audit.view"]}><AuditLogPage /></RequirePermission>} />
         {/* Help is available to every authenticated user — no permission gate. */}
         <Route path="napoveda" element={<HelpPage />} />
+        {/* Tour-only demo profile (inert dummy data) — no permission gate. */}
+        <Route path="napoveda/ukazka" element={<TourDemoProfile />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

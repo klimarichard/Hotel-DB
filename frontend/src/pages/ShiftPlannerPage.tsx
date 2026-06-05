@@ -1170,6 +1170,7 @@ export default function ShiftPlannerPage() {
                   </select>
                 )}
                 <Button
+                  data-tour="shift-create"
                   variant="primary"
                   onClick={handleCreatePlan}
                   disabled={actionLoading}
@@ -1183,6 +1184,7 @@ export default function ShiftPlannerPage() {
             {plan?.status === "created" && canPublish && (
               <Button
                 variant="primary"
+                data-tour="shift-transitions"
                 onClick={() => handleTransitionStatus("opened")}
                 disabled={actionLoading}
               >
@@ -1194,6 +1196,7 @@ export default function ShiftPlannerPage() {
             {plan?.status === "opened" && canPublish && (
               <Button
                 variant="primary"
+                data-tour="shift-transitions"
                 onClick={() => handleTransitionStatus("closed")}
                 disabled={actionLoading}
               >
@@ -1205,6 +1208,7 @@ export default function ShiftPlannerPage() {
             {plan?.status === "closed" && canPublish && (
               <Button
                 variant="primary"
+                data-tour="shift-transitions"
                 onClick={() => handleTransitionStatus("published")}
                 disabled={actionLoading}
               >
@@ -1215,6 +1219,7 @@ export default function ShiftPlannerPage() {
             {/* Add employee */}
             {plan && (plan.status !== "published" || can("shifts.plan.revert")) && can("shifts.planEmployees.manage") && (
               <Button
+                data-tour="shift-add-employee"
                 variant="secondary"
                 onClick={() => setShowAddEmployee(true)}
               >
@@ -1255,6 +1260,7 @@ export default function ShiftPlannerPage() {
             {/* Override requests toggle (admin/director only) */}
             {plan && can("shifts.override.review") && (
               <Button
+                data-tour="shift-overrides"
                 variant="secondary"
                 onClick={() => setShowOverrideRequests((v) => !v)}
                 style={{ position: "relative" }}
@@ -1287,6 +1293,7 @@ export default function ShiftPlannerPage() {
             {/* Admin/director: separate Žádosti o změny button with badge */}
             {plan && can("shifts.changeRequest.review") && (
               <Button
+                data-tour="shift-change-requests"
                 variant="secondary"
                 onClick={() => setShowChangeRequests((v) => !v)}
                 style={{ position: "relative" }}
@@ -1329,7 +1336,7 @@ export default function ShiftPlannerPage() {
             {/* Export — anyone with shifts.export (built-in admin/director, plus
                 custom types like Rezervace that are granted export rights) */}
             {plan && can("shifts.export") && plan.employees.length > 0 && (
-              <div className={styles.exportWrapper} ref={exportMenuRef}>
+              <div data-tour="shift-export" className={styles.exportWrapper} ref={exportMenuRef}>
                 <Button
                   variant="secondary"
                   onClick={() => setShowExportMenu((v) => !v)}
@@ -1359,6 +1366,7 @@ export default function ShiftPlannerPage() {
             {/* Revert plan (admin only) */}
             {plan && can("shifts.plan.revert") && plan.status !== "created" && (
               <Button
+                data-tour="shift-revert"
                 variant="secondary"
                 onClick={confirmRevertPlan}
                 disabled={actionLoading}
@@ -1370,6 +1378,7 @@ export default function ShiftPlannerPage() {
             {/* Delete plan (admin, any status) */}
             {plan && can("shifts.plan.delete") && plan.status === "created" && (
               <Button
+                data-tour="shift-delete"
                 variant="danger"
                 onClick={confirmDeletePlan}
                 disabled={actionLoading}
@@ -1389,7 +1398,7 @@ export default function ShiftPlannerPage() {
             ((plan.status === "created" || plan.status === "opened") && (can("shifts.plan.edit") || plan.closedAt)) ||
             (plan.status !== "published" && (can("shifts.plan.edit") || plan.publishedAt))
           ) && (
-            <div className={styles.deadlineBar}>
+            <div data-tour="shift-edit-deadlines" className={styles.deadlineBar}>
               {plan.status === "created" && (can("shifts.plan.edit") || plan.openedAt) && (
                 <div className={styles.deadlineItem}>
                   <label className={styles.deadlineLabel}>Otevření:</label>
