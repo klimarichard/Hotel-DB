@@ -137,6 +137,7 @@ export default function EmploymentRowItem({
       <div className={styles.actions}>
         {canManageEmployment && onEdit && !signedLocked && (
           <button
+            data-tour="emp-contract-edit"
             type="button"
             className={styles.editBtn}
             onClick={onEdit}

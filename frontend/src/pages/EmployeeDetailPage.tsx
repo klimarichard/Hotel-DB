@@ -105,7 +105,7 @@ function SensitiveField({
         <span className={styles.fieldValue}>
           {displayValue}
           {canReveal && (
-            <button className={styles.revealBtn} onClick={handleReveal} disabled={loading} title={revealed ? "Skrýt" : "Zobrazit"}>
+            <button data-tour={field === "birthNumber" ? "emp-reveal" : undefined} className={styles.revealBtn} onClick={handleReveal} disabled={loading} title={revealed ? "Skrýt" : "Zobrazit"}>
               {revealed ? <EyeOffIcon /> : <EyeIcon />}
             </button>
           )}
@@ -224,7 +224,7 @@ function Section({
 }) {
   return (
     <div className={styles.section}>
-      <button className={styles.sectionHeader} onClick={() => onToggle(sectionKey)}>
+      <button data-tour={sectionKey === "benefity" ? "emp-section-benefits" : undefined} className={styles.sectionHeader} onClick={() => onToggle(sectionKey)}>
         <span className={styles.sectionTitle}>{title}</span>
         <ChevronIcon open={expanded} />
       </button>
@@ -1455,12 +1455,13 @@ export default function EmployeeDetailPage() {
         </div>
         <div style={{ display: "flex", gap: "0.5rem" }}>
           {canEditEmployee && (
-            <Button variant="secondary" onClick={() => navigate(`/zamestnanci/${id}/upravit`)}>
+            <Button data-tour="emp-hero-edit" variant="secondary" onClick={() => navigate(`/zamestnanci/${id}/upravit`)}>
               Upravit
             </Button>
           )}
           {canDeleteEmployee && (
             <Button
+              data-tour="emp-hero-delete"
               variant="danger"
               onClick={handleDeleteEmployee}
               disabled={deleteLoading}
@@ -1496,9 +1497,9 @@ export default function EmployeeDetailPage() {
       )}
 
       <div className={styles.tabs}>
-        <button className={page === "detail" ? styles.tabActive : styles.tabBtn} onClick={() => setPage("detail")}>Detail</button>
-        <button className={page === "history" ? styles.tabActive : styles.tabBtn} onClick={() => setPage("history")}>Historie pracovního poměru</button>
-        <button className={page === "other-docs" ? styles.tabActive : styles.tabBtn} onClick={() => setPage("other-docs")}>Další dokumenty</button>
+        <button data-tour="emp-tab-detail" className={page === "detail" ? styles.tabActive : styles.tabBtn} onClick={() => setPage("detail")}>Detail</button>
+        <button data-tour="emp-tab-history" className={page === "history" ? styles.tabActive : styles.tabBtn} onClick={() => setPage("history")}>Historie pracovního poměru</button>
+        <button data-tour="emp-tab-docs" className={page === "other-docs" ? styles.tabActive : styles.tabBtn} onClick={() => setPage("other-docs")}>Další dokumenty</button>
       </div>
 
       {page === "history" && (
@@ -1509,6 +1510,7 @@ export default function EmployeeDetailPage() {
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 {canManageEmployment && (
                   <Button
+                    data-tour="emp-employment-add"
                     variant="primary"
                     size="sm"
                     onClick={() => setNewEntryMode({ lockedChangeType: "nástup" })}

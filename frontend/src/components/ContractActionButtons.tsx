@@ -262,6 +262,7 @@ export default function ContractActionButtons({
         canViewContracts && previewKind && previewLabel && (
           <>
             <button
+              data-tour="emp-contract-view"
               type="button"
               className={styles.downloadBtn}
               onClick={() => handlePreview(previewKind)}
@@ -284,6 +285,7 @@ export default function ContractActionButtons({
 
       {canGenerate && onGenerate && !hasUnsigned && !hasSigned && !isStale && (
         <button
+          data-tour="emp-contract-generate"
           type="button"
           className={styles.generateBtn}
           onClick={onGenerate}
@@ -294,7 +296,7 @@ export default function ContractActionButtons({
       )}
 
       {canSign && !hasSigned && (
-        <label className={styles.uploadBtn}>
+        <label data-tour="emp-contract-sign" className={styles.uploadBtn}>
           {busy === "uploading" ? "Nahrávám…" : "Nahrát podepsanou smlouvu"}
           <input
             type="file"
@@ -312,6 +314,7 @@ export default function ContractActionButtons({
 
       {contract && canDeleteContract && (
         <button
+          data-tour="emp-contract-delete"
           type="button"
           className={styles.deleteBtn}
           onClick={() => setDeleteConfirm(true)}

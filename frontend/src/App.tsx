@@ -17,7 +17,7 @@ import VacationPage from "@/pages/VacationPage";
 import OverviewPage from "@/pages/OverviewPage";
 import AuditLogPage from "@/pages/AuditLogPage";
 import HelpPage from "@/pages/HelpPage";
-import TourDemoProfile from "@/pages/TourDemoProfile";
+import TourDemoSelf from "@/pages/TourDemoSelf";
 import { AlertsProvider } from "@/context/AlertsContext";
 import { ShiftOverridesProvider } from "@/context/ShiftOverridesContext";
 import { ShiftChangeRequestsProvider } from "@/context/ShiftChangeRequestsContext";
@@ -105,8 +105,10 @@ export default function App() {
         <Route path="audit" element={<RequirePermission allow={["nav.audit.view"]}><AuditLogPage /></RequirePermission>} />
         {/* Help is available to every authenticated user — no permission gate. */}
         <Route path="napoveda" element={<HelpPage />} />
-        {/* Tour-only demo profile (inert dummy data) — no permission gate. */}
-        <Route path="napoveda/ukazka" element={<TourDemoProfile />} />
+        {/* Tour-only Můj profil demo — the real page fed by mock data. The
+            employee-detail demo reuses the real /zamestnanci/:id route with the
+            sentinel id "tour-demo" (no separate route needed). */}
+        <Route path="napoveda/ukazka-profil" element={<TourDemoSelf />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
