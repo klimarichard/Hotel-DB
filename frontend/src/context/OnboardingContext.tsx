@@ -2,15 +2,15 @@ import { createContext, useContext, useEffect, useRef, useState, useCallback, Re
 import { useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { authApi } from "@/lib/api";
-import { TOURS, resolveTourIdForRole } from "@/lib/tours";
+import { buildAppTour, APP_TOUR_ID, APP_TOUR_VERSION } from "@/lib/tours";
 import type { TourDefinition } from "@/lib/tours/types";
 import TourOverlay from "@/components/TourOverlay";
 
 interface OnboardingContextValue {
   activeTour: TourDefinition | null;
   stepIndex: number;
-  /** Start (or replay) a tour by id, ignoring whether it was already seen. */
-  startTour: (tourId: string) => void;
+  /** Start (or replay) the permission-filtered tour, ignoring the seen flag. */
+  startTour: () => void;
   next: () => void;
   prev: () => void;
   /** Finish or skip — both mark the tour as seen so it won't auto-fire again. */
@@ -27,7 +27,7 @@ const OnboardingContext = createContext<OnboardingContextValue>({
 });
 
 export function OnboardingProvider({ children }: { children: ReactNode }) {
-  const { user, role, roleType, loading } = useAuth();
+  const { user, can, loading } = useAuth();
   const location = useLocation();
 
   const [toursSeen, setToursSeen] = useState<Record<string, number> | null>(null);
@@ -73,32 +73,28 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     };
   }, [user, cacheKey]);
 
-  const startTour = useCallback((tourId: string) => {
-    const tour = TOURS[tourId];
-    if (!tour) return;
+  // Build the tour from the master step list filtered by the user's effective
+  // permissions (`can`), then start at step 0. Same source for auto-start and
+  // replay, so each user always sees exactly the steps they hold.
+  const startTour = useCallback(() => {
     setStepIndex(0);
-    setActiveTour(tour);
-  }, []);
+    setActiveTour(buildAppTour(can));
+  }, [can]);
 
   // Auto-start once per session for a first-time (or version-bumped) user, after
-  // the landing redirect has resolved to a real page. Resolve by roleType first
-  // (type-based users carry no legacy `role` claim), then fall back to role.
+  // the landing redirect has resolved to a real page. Gated on `loading` so it
+  // never fires before /auth/me resolves (see useAuth per-component race).
   useEffect(() => {
     if (loading || !user || toursSeen === null) return;
     if (autoStartedRef.current || activeTour) return;
     if (location.pathname === "/" || location.pathname === "/login") return;
 
-    const tourId = resolveTourIdForRole(roleType ?? role);
-    if (!tourId) return;
-    const tour = TOURS[tourId];
-    if (!tour) return;
-
-    const seenVersion = toursSeen[tourId];
-    if (typeof seenVersion === "number" && seenVersion >= tour.version) return;
+    const seenVersion = toursSeen[APP_TOUR_ID];
+    if (typeof seenVersion === "number" && seenVersion >= APP_TOUR_VERSION) return;
 
     autoStartedRef.current = true;
-    startTour(tourId);
-  }, [loading, user, role, roleType, toursSeen, location.pathname, activeTour, startTour]);
+    startTour();
+  }, [loading, user, toursSeen, location.pathname, activeTour, startTour]);
 
   const markSeen = useCallback(
     (tour: TourDefinition) => {
