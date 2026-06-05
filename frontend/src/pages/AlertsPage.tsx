@@ -94,6 +94,7 @@ export default function AlertsPage() {
           <h1 className={styles.title}>Upozornění</h1>
           {can("alerts.refresh") && (
             <IconButton
+              data-tour="alerts-refresh"
               variant="refresh"
               aria-label="Obnovit upozornění"
               title="Obnovit upozornění"
@@ -107,7 +108,7 @@ export default function AlertsPage() {
         </div>
       </div>
 
-      <div className={styles.tabs}>
+      <div data-tour="alerts-tabs" className={styles.tabs}>
         <button
           className={tab === "doklady" ? styles.tabActive : styles.tabBtn}
           onClick={() => setTab("doklady")}
@@ -146,6 +147,7 @@ export default function AlertsPage() {
         )}
         {canDataChanges && (
           <button
+            data-tour="alerts-tab-uprava"
             className={tab === "uprava" ? styles.tabActive : styles.tabBtn}
             onClick={() => setTab("uprava")}
           >

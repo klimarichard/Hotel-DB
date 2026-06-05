@@ -19,6 +19,14 @@ export interface TourStep {
   /** Route to navigate to before showing this step (omit if same page). */
   route?: string;
   /**
+   * `data-tour` anchors to CLICK (once each, if present) before resolving this
+   * step's anchor — used to reveal controls behind tabs/expanders (e.g. click a
+   * tab button so its content mounts). Clicked in order as they appear; missing
+   * ones are skipped. The engine then waits for `anchor` and falls back to a
+   * centered card if it never appears.
+   */
+  reveal?: string[];
+  /**
    * Permission key gating this step. The step is included only when the user's
    * `can(permission)` is true. Omit for always-shown steps (welcome / outro).
    * Steps whose `permission` lives on a section without a dedicated on-page

@@ -122,6 +122,7 @@ export default function DocumentExpiryTab() {
       {canRead && unread.length > 0 && (
         <div className={styles.tabHeader}>
           <Button
+            data-tour="alerts-mark-read"
             variant="secondary"
             onClick={() => setRead(unread.map((a) => a.id), true)}
           >

@@ -778,22 +778,22 @@ export default function SettingsPage() {
       <div className={styles.header}>
         <h1 className={styles.title}>Nastavení</h1>
         {settingsTab === "users" && can("users.manage") && (
-          <Button variant="primary" onClick={() => { setShowCreate(true); setFormError(null); }}>
+          <Button data-tour="settings-add-user" variant="primary" onClick={() => { setShowCreate(true); setFormError(null); }}>
             + Přidat uživatele
           </Button>
         )}
         {settingsTab === "jobPositions" && can("settings.jobPositions.manage") && (
-          <Button variant="primary" onClick={openCreatePosition} disabled={departments.length === 0}>
+          <Button data-tour="settings-add-position" variant="primary" onClick={openCreatePosition} disabled={departments.length === 0}>
             + Přidat pozici
           </Button>
         )}
         {settingsTab === "departments" && can("settings.departments.manage") && (
-          <Button variant="primary" onClick={() => { setDepNewName(""); setDepError(null); setShowDepCreate(true); }}>
+          <Button data-tour="settings-add-department" variant="primary" onClick={() => { setDepNewName(""); setDepError(null); setShowDepCreate(true); }}>
             + Přidat oddělení
           </Button>
         )}
         {settingsTab === "education" && can("settings.educationLevels.manage") && (
-          <Button variant="primary" onClick={() => { setEduNewName(""); setEduError(null); setShowEduCreate(true); }}>
+          <Button data-tour="settings-add-education" variant="primary" onClick={() => { setEduNewName(""); setEduError(null); setShowEduCreate(true); }}>
             + Přidat vzdělání
           </Button>
         )}
@@ -801,28 +801,28 @@ export default function SettingsPage() {
 
       <div className={styles.tabs}>
         {can("users.view") && (
-          <button className={settingsTab === "users" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("users")}>Uživatelé</button>
+          <button data-tour="settings-tab-users" className={settingsTab === "users" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("users")}>Uživatelé</button>
         )}
         {can("settings.companies.manage") && (
-          <button className={settingsTab === "companies" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("companies")}>Společnosti</button>
+          <button data-tour="settings-tab-companies" className={settingsTab === "companies" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("companies")}>Společnosti</button>
         )}
         {can("settings.departments.manage") && (
-          <button className={settingsTab === "departments" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("departments")}>Oddělení</button>
+          <button data-tour="settings-tab-departments" className={settingsTab === "departments" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("departments")}>Oddělení</button>
         )}
         {can("settings.jobPositions.manage") && (
-          <button className={settingsTab === "jobPositions" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("jobPositions")}>Pracovní pozice</button>
+          <button data-tour="settings-tab-jobPositions" className={settingsTab === "jobPositions" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("jobPositions")}>Pracovní pozice</button>
         )}
         {can("settings.educationLevels.manage") && (
-          <button className={settingsTab === "education" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("education")}>Vzdělání</button>
+          <button data-tour="settings-tab-education" className={settingsTab === "education" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("education")}>Vzdělání</button>
         )}
         {can("settings.payroll.manage") && (
-          <button className={settingsTab === "payroll" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("payroll")}>Mzdy</button>
+          <button data-tour="settings-tab-payroll" className={settingsTab === "payroll" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("payroll")}>Mzdy</button>
         )}
         {can("settings.menuOrder.manage") && (
-          <button className={settingsTab === "menu" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("menu")}>Menu</button>
+          <button data-tour="settings-tab-menu" className={settingsTab === "menu" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("menu")}>Menu</button>
         )}
         {can("userTypes.manage") && (
-          <button className={settingsTab === "userTypes" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("userTypes")}>Uživatelské typy</button>
+          <button data-tour="settings-tab-userTypes" className={settingsTab === "userTypes" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("userTypes")}>Uživatelské typy</button>
         )}
       </div>
 
@@ -971,6 +971,7 @@ export default function SettingsPage() {
                       <td className={styles.email}>{u.email}</td>
                       <td>
                         <select
+                          data-tour="settings-user-type"
                           className={styles.roleSelect}
                           value={pendingType[u.uid] ?? u.roleType ?? u.role}
                           disabled={roleChanging[u.uid]}
@@ -1018,6 +1019,7 @@ export default function SettingsPage() {
                         {(can("users.permissions.manage") || can("users.setType")) && (
                           <>
                             <button
+                              data-tour="settings-user-perms"
                               className={styles.linkBtn}
                               onClick={() => setPermsUser(u)}
                               title="Typ uživatele a individuální oprávnění"
@@ -1063,6 +1065,7 @@ export default function SettingsPage() {
           {companyError && <p className={styles.errorState}>{companyError}</p>}
           <div style={{ marginBottom: "1rem" }}>
             <Button
+              data-tour="settings-add-company"
               variant="primary"
               onClick={() => {
                 setCompanyError(null);

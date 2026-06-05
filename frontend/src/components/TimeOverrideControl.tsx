@@ -93,6 +93,7 @@ export default function TimeOverrideControl() {
   return (
     <>
       <button
+        data-tour="tour-timeclock"
         type="button"
         className={`${styles.footerBtn} ${enabled ? styles.footerBtnActive : ""}`}
         onClick={() => {
