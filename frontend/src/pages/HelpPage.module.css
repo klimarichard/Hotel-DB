@@ -67,11 +67,11 @@
   border-radius: 10px;
 }
 
-/* Use the page width: items flow into responsive columns on wider screens. */
+/* Use the page width: items flow into wide, well-spaced responsive columns. */
 .items {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 0.25rem 1.5rem;
+  grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+  gap: 0.5rem 4rem;
 }
 
 .item {
