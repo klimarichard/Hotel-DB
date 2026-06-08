@@ -46,6 +46,7 @@ export const PERMISSION_CATALOG = [
       { key: "employees.delete", label: "Smazat zaměstnance" },
       { key: "employees.export", label: "Exportovat seznam (CSV)" },
       { key: "employees.export.sensitive", label: "Export včetně citlivých údajů" },
+      { key: "employees.export.questionnaire", label: "Export osobního dotazníku (PDF)" },
     ],
   },
   {
@@ -80,6 +81,7 @@ export const PERMISSION_CATALOG = [
       { key: "documents.view", label: "Zobrazit další dokumenty" },
       { key: "documents.upload", label: "Nahrát dokument" },
       { key: "documents.delete", label: "Smazat dokument" },
+      { key: "documents.export.taxDeclaration", label: "Generovat prohlášení k dani (PDF)" },
     ],
   },
   {
