@@ -1127,12 +1127,22 @@ interface AlertItem {
   status: "expiring" | "expired";
 }
 
+// Pull the filename out of a Content-Disposition header, preferring the UTF-8
+// (filename*=) form so diacritics survive; fall back to filename= or a default.
+function filenameFromDisposition(cd: string | null, fallback: string): string {
+  if (!cd) return fallback;
+  const star = cd.match(/filename\*=UTF-8''([^;]+)/i);
+  if (star) { try { return decodeURIComponent(star[1]); } catch { /* malformed */ } }
+  const plain = cd.match(/filename="([^"]+)"/i);
+  return plain ? plain[1] : fallback;
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function EmployeeDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { can } = useAuth();
+  const { can, user } = useAuth();
   // Per-area capabilities. Each action is gated by its own specific permission
   // so custom user types can be granted granular access. Built-in admin/director
   // hold all of these, so their behaviour is unchanged.
@@ -1140,6 +1150,8 @@ export default function EmployeeDetailPage() {
   const canDeleteEmployee = can("employees.delete");
   const canManageEmployment = can("employment.manage");
   const canGenerateContracts = can("contracts.generate");
+  const canExportQuestionnaire = can("employees.export.questionnaire");
+  const [questionnaireLoading, setQuestionnaireLoading] = useState(false);
 
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [employment, setEmployment] = useState<EmploymentRow[]>([]);
@@ -1217,6 +1229,52 @@ export default function EmployeeDetailPage() {
       else next.add(key);
       return next;
     });
+  }
+
+  // Download the "Osobní dotazník" PDF. Generated server-side (it embeds
+  // decrypted sensitive fields and is audited there), so we stream the blob.
+  async function handleDownloadQuestionnaire() {
+    if (!user || !id || questionnaireLoading) return;
+    setQuestionnaireLoading(true);
+    try {
+      const token = await user.getIdToken();
+      const resp = await fetch(`/api/employees/${id}/questionnaire-pdf`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!resp.ok) {
+        setConfirmModal({
+          title: "Chyba",
+          message: "Nepodařilo se vygenerovat dotazník.",
+          confirmLabel: "OK",
+          showCancel: false,
+          onConfirm: () => setConfirmModal(null),
+        });
+        return;
+      }
+      const filename = filenameFromDisposition(
+        resp.headers.get("Content-Disposition"),
+        "Dotaznik.pdf"
+      );
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5_000);
+    } catch {
+      setConfirmModal({
+        title: "Chyba",
+        message: "Nepodařilo se vygenerovat dotazník.",
+        confirmLabel: "OK",
+        showCancel: false,
+        onConfirm: () => setConfirmModal(null),
+      });
+    } finally {
+      setQuestionnaireLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -1454,6 +1512,16 @@ export default function EmployeeDetailPage() {
           </div>
         </div>
         <div style={{ display: "flex", gap: "0.5rem" }}>
+          {canExportQuestionnaire && (
+            <Button
+              data-tour="emp-hero-questionnaire"
+              variant="secondary"
+              onClick={handleDownloadQuestionnaire}
+              disabled={questionnaireLoading}
+            >
+              {questionnaireLoading ? "Generuji…" : "Osobní dotazník"}
+            </Button>
+          )}
           {canEditEmployee && (
             <Button data-tour="emp-hero-edit" variant="secondary" onClick={() => navigate(`/zamestnanci/${id}/upravit`)}>
               Upravit
