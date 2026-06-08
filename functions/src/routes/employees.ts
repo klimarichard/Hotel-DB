@@ -16,6 +16,9 @@ import {
   deleteProbationAlertsForEmployee,
 } from "../services/probationAlerts";
 import * as clock from "../services/clock";
+import { renderPdf } from "../services/pdfRenderer";
+import { buildQuestionnaireHtml } from "../services/questionnairePdf";
+import { renderProhlaseni } from "../services/prohlaseniPdf";
 import { randomUUID } from "crypto";
 import {
   anyPeriodActiveOn,
@@ -33,6 +36,29 @@ const db = () => admin.firestore();
 const SENSITIVE_FIELDS = ["birthNumber"] as const;
 const DOCUMENT_SENSITIVE_FIELDS = ["idCardNumber", "idCardExpiry"] as const;
 const BENEFITS_SENSITIVE_FIELDS = ["insuranceNumber", "bankAccount"] as const;
+
+/** Coerce any Firestore value to a plain string for templating. */
+function asStr(v: unknown): string {
+  return typeof v === "string" ? v : v == null ? "" : String(v);
+}
+
+/**
+ * Stream a generated PDF buffer back as a download. Sets a UTF-8 filename with a
+ * plain-ASCII fallback for legacy clients (mirrors the other-documents download).
+ */
+function sendPdfAttachment(res: Response, pdf: Buffer, filenameBase: string): void {
+  const asciiFallback = filenameBase
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^\x20-\x7e]/g, "_");
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Length", pdf.length);
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="${asciiFallback}.pdf"; filename*=UTF-8''${encodeURIComponent(filenameBase)}.pdf`
+  );
+  res.end(pdf);
+}
 
 /**
  * Walk an employee's employment rows in chronological order, find the latest
@@ -745,6 +771,187 @@ employeesRouter.post(
     });
 
     res.json({ value: plaintext });
+  }
+);
+
+// ─── PDF EXPORTS ──────────────────────────────────────────────────────────────
+
+/**
+ * GET /api/employees/:id/questionnaire-pdf
+ * Generates the "Osobní dotazník zaměstnance" PDF, filled with all employee
+ * data INCLUDING decrypted sensitive fields (rodné číslo, číslo OP, číslo
+ * pojištěnce, číslo účtu). Gated by its own permission and audited as an export.
+ */
+employeesRouter.get(
+  "/:id/questionnaire-pdf",
+  requirePermission("employees.export.questionnaire"),
+  async (req: AuthRequest, res) => {
+    const id = req.params.id;
+    const empRef = db().collection("employees").doc(id);
+    const empSnap = await empRef.get();
+    if (!empSnap.exists) {
+      res.status(404).json({ error: "Employee not found" });
+      return;
+    }
+
+    const [contactSnap, documentsSnap, benefitsSnap, employmentSnap] = await Promise.all([
+      empRef.collection("contact").limit(1).get(),
+      empRef.collection("documents").limit(1).get(),
+      empRef.collection("benefits").limit(1).get(),
+      empRef.collection("employment").orderBy("startDate", "desc").limit(1).get(),
+    ]);
+
+    const root = decryptFields(empSnap.data() as Record<string, unknown>, [...SENSITIVE_FIELDS]);
+    const documents = documentsSnap.empty
+      ? {}
+      : decryptFields(documentsSnap.docs[0].data() as Record<string, unknown>, [...DOCUMENT_SENSITIVE_FIELDS]);
+    const benefits = benefitsSnap.empty
+      ? {}
+      : decryptFields(benefitsSnap.docs[0].data() as Record<string, unknown>, [...BENEFITS_SENSITIVE_FIELDS]);
+    const contact = contactSnap.empty ? {} : (contactSnap.docs[0].data() as Record<string, unknown>);
+    const employment = employmentSnap.empty ? {} : (employmentSnap.docs[0].data() as Record<string, unknown>);
+
+    const permanentAddress = asStr(contact.permanentAddress);
+    const contactAddress = contact.contactAddressSameAsPermanent
+      ? permanentAddress
+      : asStr(contact.contactAddress);
+
+    const html = buildQuestionnaireHtml({
+      jobTitle: asStr(root.currentJobTitle),
+      startDate: asStr(employment.startDate),
+      firstName: asStr(root.firstName),
+      lastName: asStr(root.lastName),
+      birthSurname: asStr(root.birthSurname),
+      nationality: asStr(root.nationality),
+      placeOfBirth: asStr(root.placeOfBirth),
+      dateOfBirth: asStr(root.dateOfBirth),
+      birthNumber: asStr(root.birthNumber),
+      maritalStatus: asStr(root.maritalStatus),
+      education: asStr(root.education),
+      permanentAddress,
+      contactAddress,
+      idCardNumber: asStr(documents.idCardNumber),
+      passportNumber: asStr(documents.passportNumber),
+      passportAuthority: asStr(documents.passportAuthority),
+      passportIssueDate: asStr(documents.passportIssueDate),
+      passportExpiry: asStr(documents.passportExpiry),
+      visaNumber: asStr(documents.visaNumber),
+      visaIssueDate: asStr(documents.visaIssueDate),
+      visaExpiry: asStr(documents.visaExpiry),
+      visaType: asStr(documents.visaType),
+      phone: asStr(contact.phone),
+      email: asStr(contact.email),
+      insuranceCompany: asStr(benefits.insuranceCompany),
+      insuranceNumber: asStr(benefits.insuranceNumber),
+      bankAccount: asStr(benefits.bankAccount),
+    });
+
+    const pdf = await renderPdf(html);
+
+    await writeAudit(ctxFromReq(req), {
+      action: "export",
+      collection: "employees",
+      resourceId: id,
+      employeeId: id,
+      extra: {
+        document: "questionnaire",
+        fields: [
+          ...SENSITIVE_FIELDS,
+          ...DOCUMENT_SENSITIVE_FIELDS,
+          ...BENEFITS_SENSITIVE_FIELDS,
+        ],
+      },
+    });
+
+    sendPdfAttachment(res, pdf, `Dotaznik_${asStr(root.lastName) || id}`);
+  }
+);
+
+/**
+ * GET /api/employees/:id/tax-declaration-pdf
+ * Generates the "Prohlášení poplatníka daně" (MFin 5457) PDF by overlaying
+ * employer + employee identity data onto the official blank form. Decrypts
+ * rodné číslo (and the identity doc for non-residents). Gated by its own
+ * permission and audited as an export.
+ */
+employeesRouter.get(
+  "/:id/tax-declaration-pdf",
+  requirePermission("documents.export.taxDeclaration"),
+  async (req: AuthRequest, res) => {
+    const id = req.params.id;
+    const empRef = db().collection("employees").doc(id);
+    const empSnap = await empRef.get();
+    if (!empSnap.exists) {
+      res.status(404).json({ error: "Employee not found" });
+      return;
+    }
+
+    const [contactSnap, documentsSnap, employmentSnap] = await Promise.all([
+      empRef.collection("contact").limit(1).get(),
+      empRef.collection("documents").limit(1).get(),
+      empRef.collection("employment").orderBy("startDate", "desc").limit(1).get(),
+    ]);
+
+    const root = decryptFields(empSnap.data() as Record<string, unknown>, [...SENSITIVE_FIELDS]);
+    const documents = documentsSnap.empty
+      ? {}
+      : decryptFields(documentsSnap.docs[0].data() as Record<string, unknown>, [...DOCUMENT_SENSITIVE_FIELDS]);
+    const contact = contactSnap.empty ? {} : (contactSnap.docs[0].data() as Record<string, unknown>);
+    const employment = employmentSnap.empty ? {} : (employmentSnap.docs[0].data() as Record<string, unknown>);
+
+    const companyId = asStr(employment.companyId) || asStr(root.currentCompanyId);
+    let company: Record<string, unknown> = {};
+    if (companyId) {
+      const companySnap = await db().collection("companies").doc(companyId).get();
+      if (companySnap.exists) company = companySnap.data() as Record<string, unknown>;
+    }
+
+    // Resident → leave the foreigner identity block blank. Match common spellings.
+    const nationality = asStr(root.nationality).trim();
+    const RESIDENT_VALUES = new Set([
+      "cz", "čr", "cr", "česká republika", "ceska republika", "česko", "cesko",
+      "czech republic", "czechia",
+    ]);
+    const isNonResident =
+      nationality !== "" && !RESIDENT_VALUES.has(nationality.toLowerCase());
+
+    const passport = asStr(documents.passportNumber);
+    const idCard = asStr(documents.idCardNumber);
+    const idDocument = passport
+      ? `Pas č. ${passport}`
+      : idCard
+      ? `OP č. ${idCard}`
+      : "";
+
+    const pdf = await renderProhlaseni({
+      taxYear: Number((clock.today() || "").slice(0, 4)) || null,
+      companyName: asStr(company.name),
+      companyAddress: asStr(company.address),
+      lastName: asStr(root.lastName),
+      firstName: asStr(root.firstName),
+      birthNumber: asStr(root.birthNumber),
+      permanentAddress: asStr(contact.permanentAddress),
+      isNonResident,
+      dateOfBirth: asStr(root.dateOfBirth),
+      idDocument,
+      idDocumentIssuer: nationality,
+    });
+
+    await writeAudit(ctxFromReq(req), {
+      action: "export",
+      collection: "employees",
+      resourceId: id,
+      employeeId: id,
+      extra: {
+        document: "taxDeclaration",
+        companyId: companyId || null,
+        fields: isNonResident
+          ? ["birthNumber", "idCardNumber"]
+          : ["birthNumber"],
+      },
+    });
+
+    sendPdfAttachment(res, pdf, `Prohlaseni_${asStr(root.lastName) || id}`);
   }
 );
 
