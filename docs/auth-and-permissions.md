@@ -106,6 +106,16 @@ Guards: you **can't remove your own administrator rights**, and the **last admin
 
 > **Legacy `role` — fully retired (2026-06-04).** There are no roles; authorization is purely the permission set, keyed off the user **type**. The per-user `role` fallback is **gone**: `requireAuth` sets `req.roleType` from the `roleType` claim only (no `?? role`), `req.role` no longer exists, the resolver's `id = roleType`, `getManagementEmployeeIds` reads `roleType` only, and the legacy `POST /auth/set-role` endpoint + the create-user `role` param were removed. **Prerequisite that made this safe:** every user's `roleType` **claim** was backfilled first (`scripts/backfill-roletype-claim.js`, additive `setCustomUserClaims` merge) — the earlier doc-only backfill didn't touch claims, and the runtime gates on the claim. The audit log now records the actor's `roleType` (stored field name kept as `userRole`). What stays of the old role concept is the **built-in type machinery**, renamed so it no longer reads as gating: `BUILTIN_TYPE_PERMISSIONS` (was `BUILTIN_ROLE_PERMISSIONS`) + `BUILTIN_TYPE_MANAGEMENT` + the `BuiltinTypeId` union (was `UserRole`) — these are the seed source for the built-in types and the resolver's anti-lockout fallback, **not** a per-user role.
 
+## Inverse permission gating (`excludeIfPermission` pattern)
+
+Some UI sections are redundant for users who already hold a superseding permission. Rather than creating a separate lower-privilege permission or hard-coding role checks, the codebase uses an **inverse gate**: show content only when the user does NOT hold a given permission.
+
+Examples:
+- `VacationPage.tsx` — "Schválené dovolené (všichni zaměstnanci)" is hidden (and its fetch skipped) for `vacation.view.all` holders, because "Všechny žádosti" already shows every approved request.
+- The onboarding tour uses `TourStep.excludeIfPermission` with the same semantics — see `docs/onboarding-and-help.md` for details.
+
+When adding a new UI section, check whether it is a subset of something a higher-privilege user already sees before adding a separate permission. If it is, apply this pattern (`&& !can("superseding.permission")`) rather than gating by a narrower permission alone.
+
 ## Endpoints
 
 | Endpoint | Purpose | Gate |
