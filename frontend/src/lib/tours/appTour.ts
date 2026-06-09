@@ -51,9 +51,11 @@ export const APP_TOUR_STEPS: TourStep[] = [
   { permission: "nav.profile.view", anchor: "nav-mujProfil", title: "Můj profil", body: "Můj profil zobrazuje vaše zaměstnanecké údaje.", placement: "right" },
 
   // ── Přehled (/prehled) ──────────────────────────────────────────────────────
-  { permission: "dashboard.view", anchor: "overview-date-header", route: "/prehled", title: "Přehled — dnešní datum", body: "Datum nahoře vždy ukazuje dnešní datum a právě probíhající směnu (denní/noční).", placement: "bottom" },
+  { permission: "dashboard.view", anchor: "overview-date-header", route: "/prehled", title: "Přehled - dnešní datum", body: "Datum nahoře vždy ukazuje dnešní datum a právě probíhající směnu (denní/noční).", placement: "bottom" },
   { permission: "dashboard.stats.view", anchor: "overview-staffing", route: "/prehled", title: "Dnešní a zítřejší přehled", body: "Sekce Dnes a Zítra zobrazují zaměstnance, kteří mají naplánované směny, MOD a manažery, kteří mají dovolenou.", placement: "bottom" },
+  { permission: "shifts.view.self", anchor: "overview-my-shifts", route: "/prehled", title: "Moje směny", body: "Tato dlaždice zobrazuje vaše nejbližší směny. Kliknutím se dostanete do tabulky směn.", placement: "bottom" },
   { permission: "dashboard.tasks.view", anchor: "overview-task-tiles", route: "/prehled", title: "Úkoly ke schválení", body: "Dlaždice úkolů upozorňují na položky čekající na vaše schválení. Kliknutím přejdete k vyřízení.", placement: "bottom" },
+  { permission: "dashboard.stats.view", anchor: "overview-stats", route: "/prehled", title: "Statistiky", body: "Na těchto dlaždicích vidíte různé statistiky zaměstnanců.", placement: "top" },
 
   // ── Směny (/smeny) ──────────────────────────────────────────────────────────
   { permission: "shifts.view.self", anchor: "shift-month-nav", route: "/smeny", title: "Výběr měsíce", body: "Šipkami přecházíte mezi měsíci, tlačítkem Dnes zpět na aktuální. V plánu vidíte své směny.", placement: "bottom" },
@@ -155,7 +157,7 @@ export const APP_TOUR_STEPS: TourStep[] = [
   { permission: "settings.menuOrder.manage", anchor: "settings-tab-menu", route: "/nastaveni", reveal: ["settings-tab-menu"], title: "Pořadí menu", body: "Na záložce Menu můžete nastavit pořadí položek v bočním menu pro jednotlivé uživatelské role.", placement: "bottom" },
 
   // ── Systém ─────────────────────────────────────────────────────────────────────
-  { permission: "system.timeOverride", anchor: "tour-timeclock", title: "Testovací hodiny", body: "Mimo live verzi můžete nastavit testovací „nynější“ čas pro ověřování chování závislého na datu. V live verzi je funkce neaktivní.", placement: "top" },
+  { permission: "system.timeOverride", anchor: "tour-timeclock", hideInProd: true, title: "Testovací hodiny", body: "Mimo live verzi můžete nastavit testovací „nynější“ čas pro ověřování chování závislého na datu. V live verzi je funkce neaktivní.", placement: "top" },
   { permission: "system.triggers", anchor: null, title: "Ruční spuštění úloh", body: "Můžete ručně spustit naplánované úlohy (přepočet mezd, obnova upozornění). Každé spuštění je zaznamenáno v logu změn.", placement: "bottom" },
   { permission: "system.admin", anchor: null, title: "Superadmin", body: "Máte oprávnění superadministrátora — přístup ke všem funkcím bez omezení. Používejte je obezřetně, zejména u nevratných operací.", placement: "bottom" },
 
@@ -165,7 +167,7 @@ export const APP_TOUR_STEPS: TourStep[] = [
 
 export const appTour: TourDefinition = {
   id: "app",
-  version: 3,
+  version: 4,
   label: "Prohlídka aplikace",
   steps: APP_TOUR_STEPS,
 };

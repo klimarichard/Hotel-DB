@@ -35,6 +35,12 @@ export interface TourStep {
    * a dedicated on-page anchor spotlight that section's sidebar nav item instead.
    */
   permission?: Permission | Permission[];
+  /**
+   * Hide this step in the production build (`import.meta.env.MODE === "production"`).
+   * Used for steps that describe non-prod-only tooling (e.g. the test clock,
+   * which is inert in prod). Filtered out in buildAppTour().
+   */
+  hideInProd?: boolean;
   title: string;
   body: string;
   placement?: TourPlacement;
