@@ -76,7 +76,9 @@ Five `POST /api/.../trigger-*` endpoints mirror the scheduled jobs that publish 
 | `POST /api/employees/trigger-alert-refresh` | document expiry alert refresh |
 | `POST /api/employees/trigger-effective-refresh` | `refreshEffectiveRootForAllActive()` (re-folds `current*` for every active employee; repairs any drifted cache) |
 
-All five are admin-only (`requireAuth` + `requireRole("admin")`) and write a `manual-trigger` audit entry per successful call (`extra.trigger` names the underlying job, `extra.result` carries the job's return value). The audit-log write happens *after* the job, so a failed re-run leaves no entry — the failure surfaces in `firebase functions:log`.
+All five are gated `requireAuth` + `requirePermission("system.triggers")` and write a `manual-trigger` audit entry per successful call (`extra.trigger` names the underlying job, `extra.result` carries the job's return value). The audit-log write happens *after* the job, so a failed re-run leaves no entry — the failure surfaces in `firebase functions:log`.
+
+**In-app UI — Settings → Úlohy** (`frontend/src/pages/settings/JobsTab.tsx`, tab id `"jobs"`): a card-per-job panel that POSTs each endpoint with a `ConfirmModal` confirmation before firing. Visible to users holding `system.triggers` (tab is registered in `SETTINGS_TABS` in `SettingsPage.tsx`). Each card shows a one-line description and a result/error badge after the run. Use this instead of curl for day-to-day manual re-runs.
 
 ### Staging credential rotation
 `scripts/rotate-staging-passwords.js` paginates through every staging Auth user, replaces each password with a fresh 16-char random string, and writes `scripts/staging-credentials.txt` (gitignored). Requires Application Default Credentials (`gcloud auth application-default login`); refuses to run without `--allow-staging`; the shared `scripts/_seed-target.js` guard hard-blocks targeting prod.

@@ -8,11 +8,23 @@ Tato příručka popisuje práci s aplikací HPM Intranet z pohledu **FOM** (Fro
 
 ## Obsah
 
+- [Průvodce a Nápověda](#průvodce-a-nápověda)
 - [Přihlášení](#přihlášení)
 - [Přehled](#přehled)
 - [Směny](#směny)
 - [Dovolená](#dovolená)
 - [Můj profil](#můj-profil)
+
+---
+
+## Průvodce a Nápověda
+
+Při **prvním přihlášení** se automaticky spustí interaktivní **Prohlídka aplikace** — průvodce, který vás krok po kroku provede těmi částmi aplikace, ke kterým máte přístup. Průvodce je přizpůsobený právě vašim oprávněním: uvidíte jen kroky, které se vás týkají.
+
+- Průvodce můžete kdykoli přerušit tlačítkem **Přeskočit**.
+- Chcete-li si prohlídku zopakovat nebo ji spustit znovu, klikněte vlevo dole na tlačítko **„? Nápověda"**. Otevře se stránka **Nápověda**, kde najdete tlačítko pro opětovné spuštění průvodce a přehled sekcí aplikace, ve kterém lze vyhledávat.
+
+> 📷 *(Místo pro snímek obrazovky: tlačítko Nápověda v levém dolním rohu)*
 
 ---
 
@@ -74,8 +86,8 @@ Tlačítko **Exportovat ▾** nabízí **PDF** (plán na jednu stránku A4). Tla
 
 - **Nová žádost** — zadáte termín a důvod. V sekci **Moje žádosti** vidíte stav svých žádostí.
 - Schválenou žádost lze **upravit** — změna čeká na schválení administrátorem (původní termín platí, dokud není úprava schválena).
-- **Schválené dovolené (všichni zaměstnanci)** — přehled schválených dovolených kolegů (jen řadoví zaměstnanci, ne management).
-- Má-li váš účet přidělené oprávnění **„Zobrazit všechny žádosti"** (nastavuje administrátor u vašeho typu uživatele), vidíte navíc **veškeré žádosti o dovolenou všech**, včetně vedení (administrátor, ředitel).
+- **Schválené dovolené (všichni zaměstnanci)** — přehled schválených dovolených kolegů (jen řadoví zaměstnanci, ne management). Pokud má váš účet přidělené oprávnění **„Zobrazit všechny žádosti"** (nastavuje administrátor u vašeho typu uživatele), tento přehled se nezobrazuje — veškeré schválené dovolené včetně vedení jsou v tu chvíli vidět přímo v tabulce **Všechny žádosti** výše.
+- Má-li váš účet přidělené oprávnění **„Zobrazit všechny žádosti"**, vidíte v tabulce **Všechny žádosti veškeré** žádosti o dovolenou, včetně vedení (administrátor, ředitel).
 - Pokud termín koliduje s již naplánovanou směnou, žádost je **zablokována** s upozorněním.
 
 > 📷 *(Místo pro snímek obrazovky: Dovolená — moje žádosti)*

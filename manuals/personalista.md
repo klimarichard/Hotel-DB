@@ -8,6 +8,7 @@ Tato příručka popisuje práci s aplikací HPM Intranet z pohledu **personalis
 
 ## Obsah
 
+- [Průvodce a Nápověda](#průvodce-a-nápověda)
 - [Přihlášení](#přihlášení)
 - [Přehled (úvodní dashboard)](#přehled)
 - [Zaměstnanci](#zaměstnanci)
@@ -15,6 +16,17 @@ Tato příručka popisuje práci s aplikací HPM Intranet z pohledu **personalis
 - [Směny](#směny)
 - [Dovolená](#dovolená)
 - [Můj profil](#můj-profil)
+
+---
+
+## Průvodce a Nápověda
+
+Při **prvním přihlášení** se automaticky spustí interaktivní **Prohlídka aplikace** — průvodce, který vás krok po kroku provede těmi částmi aplikace, ke kterým máte přístup. Průvodce je přizpůsobený právě vašim oprávněním: uvidíte jen kroky, které se týkají vašeho účtu.
+
+- Průvodce můžete kdykoli přerušit tlačítkem **Přeskočit**.
+- Chcete-li si prohlídku zopakovat nebo ji spustit znovu, klikněte vlevo dole na tlačítko **„? Nápověda"**. Otevře se stránka **Nápověda**, kde najdete tlačítko pro opětovné spuštění průvodce a přehled sekcí aplikace, ve kterém lze vyhledávat.
+
+> 📷 *(Místo pro snímek obrazovky: tlačítko Nápověda v levém dolním rohu)*
 
 ---
 
@@ -157,6 +169,8 @@ Tlačítko **Exportovat ▾** nabízí **PDF** (plán na jednu stránku A4). Tla
 - Schválenou žádost lze **upravit** — změna čeká na schválení administrátorem (původní termín platí, dokud není úprava schválena).
 - **Schválené dovolené (všichni zaměstnanci)** — přehled schválených dovolených kolegů (jen řadoví zaměstnanci, ne management).
 - Pokud termín koliduje s již naplánovanou směnou, žádost je **zablokována** s upozorněním.
+
+> **Poznámka:** Uživatelé, kteří mají oprávnění vidět **veškeré žádosti o dovolenou** (typicky administrátor a ředitel), přehled schválených dovolených kolegů nezobrazují — všechny schválené dovolené jsou jim dostupné přímo v tabulce všech žádostí. Vám jako personalistovi pracujícímu v režimu zaměstnance se přehled zobrazuje standardně.
 
 > 📷 *(Místo pro snímek obrazovky: Dovolená — moje žádosti)*
 
