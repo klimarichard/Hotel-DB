@@ -898,6 +898,7 @@ export default function ContractTemplatesPage() {
           {canManage && (
             <Button
               variant="primary"
+              data-tour="templates-new"
               onClick={() => {
                 setCreateIdDraft("");
                 setCreateNameDraft("");
@@ -928,7 +929,7 @@ export default function ContractTemplatesPage() {
 
       <div className={styles.workspace}>
         {/* Left: template list */}
-        <aside className={styles.sidebar}>
+        <aside className={styles.sidebar} data-tour="templates-list">
           {loading ? (
             <p className={styles.loadingText}>Načítám…</p>
           ) : (

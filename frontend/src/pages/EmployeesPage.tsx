@@ -69,12 +69,12 @@ export default function EmployeesPage() {
         <h1 className={styles.title}>Zaměstnanci</h1>
         <div className={styles.headerActions}>
           {can("employees.export") && (
-            <Button variant="secondary" onClick={() => setShowExport(true)}>
+            <Button variant="secondary" data-tour="emp-export" onClick={() => setShowExport(true)}>
               Exportovat CSV
             </Button>
           )}
           {can("employees.create") && (
-            <Link to="/zamestnanci/novy" className={styles.addBtn}>
+            <Link to="/zamestnanci/novy" className={styles.addBtn} data-tour="emp-create">
               + Přidat zaměstnance
             </Link>
           )}
@@ -111,7 +111,7 @@ export default function EmployeesPage() {
       {error && <div className={styles.errorState}>{error}</div>}
 
       {!loading && !error && (
-        <table className={styles.table}>
+        <table className={styles.table} data-tour="emp-list">
           <thead>
             <tr>
               <th>Jméno</th>

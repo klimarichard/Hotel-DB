@@ -443,14 +443,16 @@ export default function OverviewPage() {
         <div className={styles.dateHeaderRow}>
           <h1 className={styles.dateHeader}>{formatLongHeader(today)}</h1>
         </div>
-        <HeadcountStats />
+        <div data-tour="overview-stats">
+          <HeadcountStats />
+        </div>
       </div>
     );
   }
 
   return (
     <div className={styles.page}>
-      <div className={styles.dateHeaderRow}>
+      <div className={styles.dateHeaderRow} data-tour="overview-date-header">
         <h1 className={styles.dateHeader}>{formatLongHeader(today)}</h1>
         <span
           className={styles.shiftBadge}
@@ -468,7 +470,7 @@ export default function OverviewPage() {
 
       {!loading && !error && (
         <>
-          <section className={styles.section}>
+          <section className={styles.section} data-tour="overview-staffing">
             <h2 className={styles.dayHeading}>DNES</h2>
 
             <div className={styles.subBlock}>
@@ -568,7 +570,7 @@ export default function OverviewPage() {
             return (
               <div className={styles.tileGrid}>
                 {showMyShiftsTile && (
-                  <Link to="/smeny" className={`${styles.tile} ${styles.myShiftsTile}`}>
+                  <Link to="/smeny" className={`${styles.tile} ${styles.myShiftsTile}`} data-tour="overview-my-shifts">
                     <span className={styles.tileLabel}>Moje směny</span>
                     <ul className={styles.myShiftsList}>
                       {myShifts!.map((row) => {
@@ -618,21 +620,29 @@ export default function OverviewPage() {
                   </Link>
                 )}
 
-                {taskTiles.map((t) => (
-                  <Link
-                    key={t.label}
-                    to={t.to}
-                    className={`${styles.tile} ${styles.taskTile} ${t.count === 0 ? styles.tileMuted : ""}`}
-                  >
-                    <span className={styles.tileBig}>{t.count}</span>
-                    <span className={styles.tileLabel}>{t.label}</span>
-                  </Link>
-                ))}
+                {taskTiles.length > 0 && (
+                  <div className={styles.taskTilesGroup} data-tour="overview-task-tiles">
+                    {taskTiles.map((t) => (
+                      <Link
+                        key={t.label}
+                        to={t.to}
+                        className={`${styles.tile} ${styles.taskTile} ${t.count === 0 ? styles.tileMuted : ""}`}
+                      >
+                        <span className={styles.tileBig}>{t.count}</span>
+                        <span className={styles.tileLabel}>{t.label}</span>
+                      </Link>
+                    ))}
+                  </div>
+                )}
               </div>
             );
           })()}
 
-          {can("dashboard.stats.view") && <HeadcountStats />}
+          {can("dashboard.stats.view") && (
+            <div data-tour="overview-stats">
+              <HeadcountStats />
+            </div>
+          )}
         </>
       )}
     </div>

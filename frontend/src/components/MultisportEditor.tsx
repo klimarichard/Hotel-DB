@@ -166,7 +166,7 @@ export default function MultisportEditor({ employeeId }: Props) {
         <span className={styles.label}>Multisport</span>
         {active && <span className={styles.badge}>Aktivní</span>}
         {canEdit && (
-          <Button variant="secondary" size="sm" onClick={openEditor}>
+          <Button data-tour="emp-benefits" variant="secondary" size="sm" onClick={openEditor}>
             Spravovat
           </Button>
         )}

@@ -937,6 +937,7 @@ export default function PayrollPage() {
               <br />
               <button
                 type="button"
+                data-tour="payroll-create"
                 className={styles.lockBtn}
                 onClick={handleCreatePeriod}
                 disabled={creating}
@@ -974,6 +975,7 @@ export default function PayrollPage() {
               {!isLocked && canSoftRecalculate && (
                 <button
                   type="button"
+                  data-tour="payroll-recalc"
                   className={styles.lockBtn}
                   onClick={recalculate}
                   disabled={recalculating}
@@ -985,6 +987,7 @@ export default function PayrollPage() {
               {canExport && (
                 <button
                   type="button"
+                  data-tour="payroll-export"
                   className={styles.lockBtn}
                   onClick={handleExportPdf}
                   disabled={exporting}
@@ -996,6 +999,7 @@ export default function PayrollPage() {
               {canToggleLock && (
                 <button
                   type="button"
+                  data-tour="payroll-lock"
                   className={styles.lockBtn}
                   onClick={toggleLock}
                   title={isLocked ? "Odemknout období pro úpravy" : "Uzamknout období (zablokovat úpravy)"}
@@ -1006,6 +1010,7 @@ export default function PayrollPage() {
               {!isLocked && canHardRecompute && (
                 <button
                   type="button"
+                  data-tour="payroll-recalc-hard"
                   className={styles.lockBtn}
                   onClick={hardRecalculate}
                   disabled={resetting}
@@ -1017,6 +1022,7 @@ export default function PayrollPage() {
               {!isLocked && canDeletePeriod && (
                 <button
                   type="button"
+                  data-tour="payroll-delete"
                   className={styles.dangerBtn}
                   onClick={deletePeriod}
                   disabled={deleting}
@@ -1027,7 +1033,7 @@ export default function PayrollPage() {
               )}
             </span>
           </div>
-          <div className={styles.tableWrapper}>
+          <div className={styles.tableWrapper} data-tour="payroll-table">
             <table className={styles.table}>
               <thead>
                 <tr>
@@ -1054,7 +1060,7 @@ export default function PayrollPage() {
                   </th>
                   <th className={styles.numHeader}>STRAVENKY</th>
                   <th className={styles.numHeader}>MULTISPORT</th>
-                  <th className={styles.numHeader}>POZNÁMKY</th>
+                  <th className={styles.numHeader} data-tour="payroll-notes-col">POZNÁMKY</th>
                 </tr>
               </thead>
               <tbody>

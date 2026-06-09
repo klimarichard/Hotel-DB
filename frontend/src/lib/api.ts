@@ -1,4 +1,5 @@
 import { auth } from "./firebase";
+import { getDemoResponse } from "@/lib/tours/demoData";
 
 const BASE_URL = "/api";
 
@@ -31,6 +32,12 @@ async function request<T>(
   path: string,
   body?: unknown
 ): Promise<T> {
+  // Guided-tour demo: serve mock fixtures (no backend, no Firestore) for the
+  // sentinel demo employee and — while a demo route is mounted — the self /
+  // payroll / shifts endpoints for the active scenario. See lib/tours/demoData.ts.
+  const demo = getDemoResponse(method, path);
+  if (demo.hit) return demo.value as T;
+
   const headers: Record<string, string> = {
     ...(await getAuthHeader()),
     "Content-Type": "application/json",
@@ -123,4 +130,7 @@ export const authApi = {
   getTheme: () => api.get<{ theme: "light" | "dark" | null }>("/auth/me/theme"),
   setTheme: (theme: "light" | "dark") =>
     api.put<{ theme: "light" | "dark" }>("/auth/me/theme", { theme }),
+  getTours: () => api.get<{ toursSeen: Record<string, number> }>("/auth/me/tours"),
+  markTourSeen: (tourId: string, version: number) =>
+    api.put<{ ok: boolean }>("/auth/me/tours", { tourId, version }),
 };

@@ -75,7 +75,11 @@ export default function VacationPage() {
   const canReview = can("vacation.review");
   const canRequestSelf = can("vacation.request.self");
   const canViewAll = can("vacation.view.all");
-  const canViewApprovedUpcoming = can("vacation.view.approvedUpcoming");
+  // "Schválené dovolené kolegů" is redundant for anyone who can see ALL requests
+  // (the "Všechny žádosti" table below already lists every approved request), so
+  // hide it — and skip its fetch — for vacation.view.all holders. Inverse-gate
+  // pattern, mirroring the tour's excludeIfPermission.
+  const canViewApprovedUpcoming = can("vacation.view.approvedUpcoming") && !canViewAll;
 
   const [requests, setRequests] = useState<VacationRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -329,7 +333,7 @@ export default function VacationPage() {
 
       {/* New request form */}
       {canRequestSelf && (
-      <div className={styles.card}>
+      <div className={styles.card} data-tour="vacation-request-form">
         <h2 className={styles.cardTitle}>Nová žádost o dovolenou</h2>
 
         {!employeeId && !loading ? (
@@ -388,7 +392,7 @@ export default function VacationPage() {
       )}
 
       {/* My requests */}
-      <div className={styles.tableWrapper}>
+      <div className={styles.tableWrapper} data-tour="vacation-my-requests">
         <div className={styles.sectionTitle}>Moje žádosti</div>
         {loading ? (
           <div className={styles.empty}>Načítám…</div>
@@ -498,7 +502,7 @@ export default function VacationPage() {
 
       {/* Approved upcoming vacations — employees & managers */}
       {canViewApprovedUpcoming && (
-        <div className={styles.tableWrapper}>
+        <div className={styles.tableWrapper} data-tour="vacation-approved-colleagues">
           <div className={styles.sectionTitle}>Schválené dovolené (všichni zaměstnanci)</div>
           {approvedUpcoming === null ? (
             <div className={styles.empty}>Načítám…</div>
@@ -671,7 +675,7 @@ export default function VacationPage() {
 
         return (
           <>
-            <div className={styles.tableWrapper}>
+            <div className={styles.tableWrapper} data-tour="vacation-all-requests">
               <div className={styles.sectionTitle}>Všechny žádosti</div>
               {loading ? (
                 <div className={styles.empty}>Načítám…</div>

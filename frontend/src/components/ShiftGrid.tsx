@@ -395,7 +395,7 @@ export default function ShiftGrid({
             <th className={styles.totalHeader}>Směny</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody data-tour="shift-rows">
           {SECTIONS.flatMap((section) => {
             const emps = grouped.get(section) ?? [];
             if (emps.length === 0) return [];
@@ -476,6 +476,7 @@ export default function ShiftGrid({
                             }
                             return (
                               <span
+                                data-tour="shift-x-badge"
                                 className={`${styles.xBadge}${over ? ` ${styles.xBadgeOver}` : ""}${canEditLimit ? ` ${styles.xBadgeEditable}` : ""}`}
                                 onClick={canEditLimit ? () => setEditingXEmployee(emp.employeeId) : undefined}
                                 title={canEditLimit
@@ -617,7 +618,7 @@ export default function ShiftGrid({
             // Insert MOD row after the vedoucí section
             if (section === "vedoucí") {
               rows.push(
-                <tr key="mod-row" className={styles.modRow}>
+                <tr key="mod-row" className={styles.modRow} data-tour="shift-mod-row">
                   <td className={styles.modLabel}>MOD</td>
                   {days.map((d, colIdx) => {
                     const dateStr = formatDate(d);
@@ -650,8 +651,9 @@ export default function ShiftGrid({
 
             return rows;
           })}
-          {shiftCounts && (
-            <>
+        </tbody>
+        {shiftCounts && (
+          <tbody data-tour="shift-counter">
               <tr className={styles.counterSeparatorRow}>
                 <td colSpan={days.length + 2} className={styles.counterSeparatorCell}>
                   Přehled obsazení
@@ -676,10 +678,10 @@ export default function ShiftGrid({
                   <td className={styles.footerCell} />
                 </tr>
               ))}
-            </>
-          )}
-          {showFreeShifts && (
-            <>
+          </tbody>
+        )}
+        {showFreeShifts && (
+          <tbody data-tour="shift-free">
               <tr className={styles.freeSeparatorRow}>
                 <td colSpan={days.length + 2} className={styles.freeSeparatorCell}>
                   Volné směny
@@ -729,9 +731,8 @@ export default function ShiftGrid({
                 </tr>
                 );
               })}
-            </>
-          )}
-        </tbody>
+          </tbody>
+        )}
       </table>
     </div>
   );

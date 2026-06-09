@@ -8,11 +8,23 @@ HPM Intranet je interní HR systém společností Special Tours Prague (STP) a H
 
 ## Obsah
 
+- [Průvodce a Nápověda](#průvodce-a-nápověda)
 - [Přihlášení](#přihlášení)
 - [Přehled](#přehled)
 - [Směny](#směny)
 - [Dovolená](#dovolená)
 - [Můj profil](#můj-profil)
+
+---
+
+## Průvodce a Nápověda
+
+Při **prvním přihlášení** se automaticky spustí interaktivní **Prohlídka aplikace** — průvodce, který vás krok po kroku provede těmi částmi aplikace, ke kterým máte přístup. Průvodce je přizpůsobený právě vašim oprávněním: uvidíte jen kroky, které se týkají vašeho účtu.
+
+- Průvodce můžete kdykoli přerušit tlačítkem **Přeskočit**.
+- Chcete-li si prohlídku zopakovat nebo ji spustit znovu, klikněte vlevo dole na tlačítko **„? Nápověda"**. Otevře se stránka **Nápověda**, kde najdete tlačítko pro opětovné spuštění průvodce a přehled sekcí aplikace, ve kterém lze vyhledávat.
+
+> 📷 *(Místo pro snímek obrazovky: tlačítko Nápověda v levém dolním rohu)*
 
 ---
 

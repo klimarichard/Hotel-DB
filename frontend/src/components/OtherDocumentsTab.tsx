@@ -175,7 +175,7 @@ export default function OtherDocumentsTab({ employeeId }: Props) {
     <div className={styles.wrap}>
       {canUpload && (
         <div className={styles.toolbar}>
-          <Button variant="primary" size="sm" onClick={openUpload}>
+          <Button data-tour="emp-doc-upload" variant="primary" size="sm" onClick={openUpload}>
             Nahrát dokument
           </Button>
         </div>
@@ -196,7 +196,7 @@ export default function OtherDocumentsTab({ employeeId }: Props) {
               <div className={styles.actions}>
                 {canView && (
                   <>
-                    <Button variant="secondary" size="sm" onClick={() => handlePreview(doc)}>
+                    <Button data-tour="emp-doc-view" variant="secondary" size="sm" onClick={() => handlePreview(doc)}>
                       Zobrazit
                     </Button>
                     <Button variant="secondary" size="sm" onClick={() => handleDownload(doc)}>
@@ -205,7 +205,7 @@ export default function OtherDocumentsTab({ employeeId }: Props) {
                   </>
                 )}
                 {canDelete && (
-                  <Button variant="danger" size="sm" onClick={() => setDeleteTarget(doc)}>
+                  <Button data-tour="emp-doc-delete" variant="danger" size="sm" onClick={() => setDeleteTarget(doc)}>
                     Smazat
                   </Button>
                 )}

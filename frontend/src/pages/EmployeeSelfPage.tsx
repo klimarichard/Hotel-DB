@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { tourDemo } from "@/lib/tours/demoData";
 import { useAuth } from "@/hooks/useAuth";
 import Button from "@/components/Button";
 import ConfirmModal from "@/components/ConfirmModal";
@@ -20,6 +21,10 @@ import {
 import styles from "./EmployeeSelfPage.module.css";
 
 const MASK = "••••••••";
+
+// First sensitive field key — used solely to anchor the onboarding tour's reveal
+// step on a single (the first) reveal button. Inert: drives no behaviour.
+const FIRST_SENSITIVE_KEY = SELF_EDIT_FIELDS.find((f) => f.sensitive)?.key;
 
 // Mirrors EmployeeFormPage — combined gendered forms; displayGendered() picks
 // the variant on read.
@@ -145,7 +150,9 @@ export default function EmployeeSelfPage() {
 
   useEffect(() => {
     if (authLoading) return;
-    if (!employeeId) {
+    // Tour demo: load the mock self profile even if the real account has no
+    // linked employee (the /me/* calls are intercepted, see lib/tours/demoData).
+    if (!employeeId && !tourDemo.active) {
       setLoading(false);
       return;
     }
@@ -323,6 +330,7 @@ export default function EmployeeSelfPage() {
               onClick={() => handleReveal(f.key)}
               title={isRevealed ? "Skrýt" : "Zobrazit"}
               aria-label={isRevealed ? "Skrýt" : "Zobrazit"}
+              data-tour={f.key === FIRST_SENSITIVE_KEY ? "selfpage-reveal" : undefined}
             >
               {isRevealed ? <EyeOffIcon /> : <EyeIcon />}
             </button>
@@ -388,7 +396,7 @@ export default function EmployeeSelfPage() {
 
   if (authLoading || loading) return <div className={styles.state}>Načítám…</div>;
 
-  if (!employeeId) {
+  if (!employeeId && !tourDemo.active) {
     return (
       <div>
         <h1 className={styles.title}>Můj profil</h1>
@@ -404,9 +412,9 @@ export default function EmployeeSelfPage() {
   return (
     <div>
       <div className={styles.headerRow}>
-        <h1 className={styles.title}>Můj profil</h1>
+        <h1 className={styles.title} data-tour="selfpage-title">Můj profil</h1>
         {!editMode && canRequestEdit && (
-          <Button variant="primary" onClick={enterEdit}>
+          <Button variant="primary" onClick={enterEdit} data-tour="selfpage-edit-btn">
             Navrhnout úpravu
           </Button>
         )}
@@ -527,7 +535,7 @@ export default function EmployeeSelfPage() {
                       contractsByRow={new Map()}
                       defaultExpanded={idx === 0}
                       companies={{}}
-                      employeeId={employeeId}
+                      employeeId={employeeId ?? "tour-demo"}
                       resolveDefaultType={() => "nastup_hpp"}
                       resolveDisplayName={() => ""}
                       resolveRowSnapshot={() => ({})}
@@ -546,7 +554,7 @@ export default function EmployeeSelfPage() {
       )}
 
       {/* ── Own change requests ── */}
-      <div className={styles.section}>
+      <div className={styles.section} data-tour="selfpage-requests">
         <div className={styles.sectionTitle}>Moje žádosti o úpravu</div>
         {requests.length === 0 ? (
           <div className={styles.empty}>Zatím jste nepodali žádnou žádost.</div>

@@ -503,3 +503,33 @@ authRouter.put("/me/theme", requireAuth, async (req: AuthRequest, res) => {
   );
   res.json({ theme });
 });
+
+/**
+ * GET /api/auth/me/tours
+ * Returns the onboarding tours the user has completed:
+ * { toursSeen: { [tourId]: completedVersion } } (empty map if none).
+ */
+authRouter.get("/me/tours", requireAuth, async (req: AuthRequest, res) => {
+  const doc = await admin.firestore().collection("users").doc(req.uid!).get();
+  const toursSeen = doc.exists ? (doc.data()?.toursSeen ?? {}) : {};
+  res.json({ toursSeen });
+});
+
+/**
+ * PUT /api/auth/me/tours
+ * Marks one tour as completed at a given version. Deep-merges a single key so
+ * sibling tour entries are preserved.
+ * Body: { tourId: string, version: number }
+ */
+authRouter.put("/me/tours", requireAuth, async (req: AuthRequest, res) => {
+  const { tourId, version } = req.body as { tourId: unknown; version: unknown };
+  if (typeof tourId !== "string" || !tourId.trim() || typeof version !== "number" || !Number.isFinite(version)) {
+    res.status(400).json({ error: "tourId musí být řetězec a version číslo." });
+    return;
+  }
+  await admin.firestore().collection("users").doc(req.uid!).set(
+    { toursSeen: { [tourId]: version }, updatedAt: FieldValue.serverTimestamp() },
+    { merge: true }
+  );
+  res.json({ ok: true });
+});

@@ -16,6 +16,8 @@ import ShiftPlannerPage from "@/pages/ShiftPlannerPage";
 import VacationPage from "@/pages/VacationPage";
 import OverviewPage from "@/pages/OverviewPage";
 import AuditLogPage from "@/pages/AuditLogPage";
+import HelpPage from "@/pages/HelpPage";
+import TourDemoRoute from "@/pages/TourDemoRoute";
 import { AlertsProvider } from "@/context/AlertsContext";
 import { ShiftOverridesProvider } from "@/context/ShiftOverridesContext";
 import { ShiftChangeRequestsProvider } from "@/context/ShiftChangeRequestsContext";
@@ -23,6 +25,7 @@ import { EmployeeChangeRequestsProvider } from "@/context/EmployeeChangeRequests
 import { VacationProvider } from "@/context/VacationContext";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { TimeOverrideProvider } from "@/context/TimeOverrideContext";
+import { OnboardingProvider } from "@/context/OnboardingContext";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -68,19 +71,21 @@ export default function App() {
         path="/"
         element={
           <RequireAuth>
-            <TimeOverrideProvider>
-              <AlertsProvider>
-                <ShiftOverridesProvider>
-                  <ShiftChangeRequestsProvider>
-                    <EmployeeChangeRequestsProvider>
-                      <VacationProvider>
-                        <Layout />
-                      </VacationProvider>
-                    </EmployeeChangeRequestsProvider>
-                  </ShiftChangeRequestsProvider>
-                </ShiftOverridesProvider>
-              </AlertsProvider>
-            </TimeOverrideProvider>
+            <OnboardingProvider>
+              <TimeOverrideProvider>
+                <AlertsProvider>
+                  <ShiftOverridesProvider>
+                    <ShiftChangeRequestsProvider>
+                      <EmployeeChangeRequestsProvider>
+                        <VacationProvider>
+                          <Layout />
+                        </VacationProvider>
+                      </EmployeeChangeRequestsProvider>
+                    </ShiftChangeRequestsProvider>
+                  </ShiftOverridesProvider>
+                </AlertsProvider>
+              </TimeOverrideProvider>
+            </OnboardingProvider>
           </RequireAuth>
         }
       >
@@ -98,6 +103,22 @@ export default function App() {
         <Route path="upozorneni" element={<RequirePermission allow={["nav.alerts.view"]}><AlertsPage /></RequirePermission>} />
         <Route path="nastaveni" element={<RequirePermission allow={["nav.settings.view"]}><SettingsPage /></RequirePermission>} />
         <Route path="audit" element={<RequirePermission allow={["nav.audit.view"]}><AuditLogPage /></RequirePermission>} />
+        {/* Help is available to every authenticated user — no permission gate. */}
+        <Route path="napoveda" element={<HelpPage />} />
+        {/* Tour-only demo routes — REAL pages fed by mock data (no backend).
+            The employee-detail demo reuses the real /zamestnanci/:id route with
+            the sentinel id "tour-demo" (no separate route needed). */}
+        {/* `key` forces a remount (and thus a re-fetch of the mock data) when the
+            tour navigates between demo routes that render the same page component
+            — e.g. shifts opened → published, or payroll period → empty. Without it
+            React reuses the instance and the page keeps its first-loaded state. */}
+        <Route path="napoveda/ukazka-profil" element={<TourDemoRoute scenario="self"><EmployeeSelfPage key="demo-self" /></TourDemoRoute>} />
+        <Route path="napoveda/ukazka-mzdy" element={<TourDemoRoute scenario="payroll"><PayrollPage key="demo-payroll" /></TourDemoRoute>} />
+        <Route path="napoveda/ukazka-mzdy-prazdne" element={<TourDemoRoute scenario="payroll-empty"><PayrollPage key="demo-payroll-empty" /></TourDemoRoute>} />
+        <Route path="napoveda/ukazka-smeny" element={<TourDemoRoute scenario="shifts"><ShiftPlannerPage key="demo-shifts" /></TourDemoRoute>} />
+        <Route path="napoveda/ukazka-smeny-prazdne" element={<TourDemoRoute scenario="shifts-empty"><ShiftPlannerPage key="demo-shifts-empty" /></TourDemoRoute>} />
+        <Route path="napoveda/ukazka-smeny-vytvoreny" element={<TourDemoRoute scenario="shifts-created"><ShiftPlannerPage key="demo-shifts-created" /></TourDemoRoute>} />
+        <Route path="napoveda/ukazka-smeny-publikovane" element={<TourDemoRoute scenario="shifts-published"><ShiftPlannerPage key="demo-shifts-published" /></TourDemoRoute>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
