@@ -36,6 +36,16 @@ export interface TourStep {
    */
   permission?: Permission | Permission[];
   /**
+   * Inverse ("superset") gate: hide this step when the user holds ANY of these
+   * permissions. For steps that are redundant or inapplicable for a
+   * higher-privileged user — e.g. the "Schválené dovolené kolegů" step is
+   * superseded by `vacation.view.all` (which already lists ALL requests), and the
+   * "Moje žádosti" shift step is hidden in-app for anyone who can publish
+   * (`shifts.plan.transition`), so it's pointless to show it to them. The
+   * effective rule is: HAS `permission` AND NOT any `excludeIfPermission`.
+   */
+  excludeIfPermission?: Permission | Permission[];
+  /**
    * Hide this step in the production build (`import.meta.env.MODE === "production"`).
    * Used for steps that describe non-prod-only tooling (e.g. the test clock,
    * which is inert in prod). Filtered out in buildAppTour().

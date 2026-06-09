@@ -10,12 +10,25 @@ import { appTour, APP_TOUR_STEPS } from "./appTour";
 export const APP_TOUR_ID = appTour.id;
 export const APP_TOUR_VERSION = appTour.version;
 
-/** True when the user holds the step's permission — or ANY of them if it's an
- *  array (OR semantics for merged-variant steps). Always true when unset. */
+/**
+ * Whether a step is shown for this user. The rule is:
+ *   HAS `permission` (any of them if it's an array — OR semantics for merged
+ *   variants)  AND NOT any `excludeIfPermission` (the inverse "superset" gate —
+ *   a superseding permission hides a step that would be redundant, e.g. an admin
+ *   who can see ALL vacation requests shouldn't get the approved-colleagues-only
+ *   step). Steps with no `permission` (welcome / outro) are always shown unless
+ *   excluded.
+ */
 export function userHasStepPermission(
-  step: { permission?: Permission | Permission[] },
+  step: { permission?: Permission | Permission[]; excludeIfPermission?: Permission | Permission[] },
   can: (perm: Permission) => boolean
 ): boolean {
+  if (step.excludeIfPermission) {
+    const exclude = Array.isArray(step.excludeIfPermission)
+      ? step.excludeIfPermission
+      : [step.excludeIfPermission];
+    if (exclude.some(can)) return false;
+  }
   if (!step.permission) return true;
   return Array.isArray(step.permission) ? step.permission.some(can) : can(step.permission);
 }
