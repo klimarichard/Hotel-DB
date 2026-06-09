@@ -29,6 +29,8 @@ import type { TourStep, TourDefinition } from "./types";
 // Tour demo routes: the REAL pages rendered with mock data (lib/tours/demoData).
 const DEMO_SELF = "/napoveda/ukazka-profil"; // real Můj profil page
 const DEMO_EMP = "/zamestnanci/tour-demo"; // real employee-detail page (sentinel id)
+const DEMO_PAYROLL = "/napoveda/ukazka-mzdy"; // real Mzdy page, populated period
+const DEMO_PAYROLL_EMPTY = "/napoveda/ukazka-mzdy-prazdne"; // real Mzdy page, no period → create
 
 export const APP_TOUR_STEPS: TourStep[] = [
   // ── Welcome ───────────────────────────────────────────────────────────────
@@ -122,15 +124,15 @@ export const APP_TOUR_STEPS: TourStep[] = [
   { permission: "contractTemplates.manage", anchor: "templates-new", route: "/smlouvy", title: "Nová šablona", body: "Tlačítkem Nová šablona vytvoříte šablonu. Její obsah upravíte v editoru a uložíte.", placement: "bottom" },
 
   // ── Mzdy (/mzdy) ──────────────────────────────────────────────────────────────
-  { permission: "payroll.view", anchor: "payroll-table", route: "/mzdy", title: "Zobrazení mezd", body: "Tabulka zobrazuje vypočtené mzdy zaměstnanců pro zvolené období.", placement: "top" },
-  { permission: "payroll.create", anchor: "payroll-create", route: "/mzdy", title: "Vytvoření mzdového období", body: "Tlačítkem Vytvořit mzdy ručně založíte období pro zvolený měsíc.", placement: "bottom" },
-  { permission: "payroll.edit", anchor: "payroll-table", route: "/mzdy", title: "Úprava mezd", body: "V odemčeném období upravíte jednotlivé položky dvojklikem na buňku.", placement: "top" },
-  { permission: "payroll.recalculate", anchor: "payroll-recalc", route: "/mzdy", title: "Přepočítání mezd", body: "Tímto tlačítkem můžete přepočítat mzdy pro tento měsíc. Všechny ruční úpravy zůstanou zachovány.", placement: "bottom" },
-  { permission: "payroll.recalculate.hard", anchor: "payroll-recalc-hard", route: "/mzdy", title: "Tvrdý přepočet", body: "Tímto tlačítkem můžete přepočítat mzdy „natvrdo“, tzn. ani ruční úpravy nezůstanou zachovány (aplikace se zeptá na potvrzení).", placement: "bottom" },
-  { permission: "payroll.lock", anchor: "payroll-lock", route: "/mzdy", title: "Uzamčení/odemčení období", body: "Daný měsíc můžete uzamknout pro úpravy.", placement: "bottom" },
-  { permission: "payroll.period.delete", anchor: "payroll-delete", route: "/mzdy", title: "Smazání období", body: "Tlačítkem Smazat období nevratně odstraníte celé mzdové období (aplikace se zeptá na potvrzení).", placement: "bottom" },
-  { permission: "payroll.export", anchor: "payroll-export", route: "/mzdy", title: "Export mezd", body: "Mzdy můžete exportovat do PDF.", placement: "bottom" },
-  { permission: "payroll.notes.manage", anchor: "payroll-table", route: "/mzdy", title: "Poznámky ke mzdám", body: "Ve sloupci poznámek přidáváte a spravujete poznámky k jednotlivým mzdám.", placement: "top" },
+  { permission: "payroll.view", anchor: "payroll-table", route: DEMO_PAYROLL, title: "Zobrazení mezd", body: "Tabulka zobrazuje vypočtené mzdy zaměstnanců pro zvolené období.", placement: "top" },
+  { permission: "payroll.create", anchor: "payroll-create", route: DEMO_PAYROLL_EMPTY, title: "Vytvoření mzdového období", body: "Tlačítkem Vytvořit mzdy ručně založíte období pro zvolený měsíc.", placement: "bottom" },
+  { permission: "payroll.edit", anchor: "payroll-table", route: DEMO_PAYROLL, title: "Úprava mezd", body: "V odemčeném období upravíte jednotlivé položky dvojklikem na buňku.", placement: "top" },
+  { permission: "payroll.recalculate", anchor: "payroll-recalc", route: DEMO_PAYROLL, title: "Přepočítání mezd", body: "Tímto tlačítkem můžete přepočítat mzdy pro tento měsíc. Všechny ruční úpravy zůstanou zachovány.", placement: "bottom" },
+  { permission: "payroll.recalculate.hard", anchor: "payroll-recalc-hard", route: DEMO_PAYROLL, title: "Tvrdý přepočet", body: "Tímto tlačítkem můžete přepočítat mzdy „natvrdo“, tzn. ani ruční úpravy nezůstanou zachovány (aplikace se zeptá na potvrzení).", placement: "bottom" },
+  { permission: "payroll.lock", anchor: "payroll-lock", route: DEMO_PAYROLL, title: "Uzamčení/odemčení období", body: "Daný měsíc můžete uzamknout pro úpravy.", placement: "bottom" },
+  { permission: "payroll.period.delete", anchor: "payroll-delete", route: DEMO_PAYROLL, title: "Smazání období", body: "Tlačítkem Smazat období nevratně odstraníte celé mzdové období (aplikace se zeptá na potvrzení).", placement: "bottom" },
+  { permission: "payroll.export", anchor: "payroll-export", route: DEMO_PAYROLL, title: "Export mezd", body: "Mzdy můžete exportovat do PDF.", placement: "bottom" },
+  { permission: "payroll.notes.manage", anchor: "payroll-notes-col", route: DEMO_PAYROLL, title: "Poznámky ke mzdám", body: "Ve sloupci poznámek přidáváte a spravujete poznámky k jednotlivým mzdám.", placement: "top" },
 
   // ── Upozornění (/upozorneni) ────────────────────────────────────────────────────
   { permission: "alerts.view", anchor: "alerts-tabs", route: "/upozorneni", title: "Zobrazení upozornění", body: "Záložky člení upozornění (doklady, zkušební doba, dovolená, výjimky, žádosti).", placement: "bottom" },
