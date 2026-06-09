@@ -108,12 +108,16 @@ export default function App() {
         {/* Tour-only demo routes — REAL pages fed by mock data (no backend).
             The employee-detail demo reuses the real /zamestnanci/:id route with
             the sentinel id "tour-demo" (no separate route needed). */}
-        <Route path="napoveda/ukazka-profil" element={<TourDemoRoute scenario="self"><EmployeeSelfPage /></TourDemoRoute>} />
-        <Route path="napoveda/ukazka-mzdy" element={<TourDemoRoute scenario="payroll"><PayrollPage /></TourDemoRoute>} />
-        <Route path="napoveda/ukazka-mzdy-prazdne" element={<TourDemoRoute scenario="payroll-empty"><PayrollPage /></TourDemoRoute>} />
-        <Route path="napoveda/ukazka-smeny" element={<TourDemoRoute scenario="shifts"><ShiftPlannerPage /></TourDemoRoute>} />
-        <Route path="napoveda/ukazka-smeny-prazdne" element={<TourDemoRoute scenario="shifts-empty"><ShiftPlannerPage /></TourDemoRoute>} />
-        <Route path="napoveda/ukazka-smeny-publikovane" element={<TourDemoRoute scenario="shifts-published"><ShiftPlannerPage /></TourDemoRoute>} />
+        {/* `key` forces a remount (and thus a re-fetch of the mock data) when the
+            tour navigates between demo routes that render the same page component
+            — e.g. shifts opened → published, or payroll period → empty. Without it
+            React reuses the instance and the page keeps its first-loaded state. */}
+        <Route path="napoveda/ukazka-profil" element={<TourDemoRoute scenario="self"><EmployeeSelfPage key="demo-self" /></TourDemoRoute>} />
+        <Route path="napoveda/ukazka-mzdy" element={<TourDemoRoute scenario="payroll"><PayrollPage key="demo-payroll" /></TourDemoRoute>} />
+        <Route path="napoveda/ukazka-mzdy-prazdne" element={<TourDemoRoute scenario="payroll-empty"><PayrollPage key="demo-payroll-empty" /></TourDemoRoute>} />
+        <Route path="napoveda/ukazka-smeny" element={<TourDemoRoute scenario="shifts"><ShiftPlannerPage key="demo-shifts" /></TourDemoRoute>} />
+        <Route path="napoveda/ukazka-smeny-prazdne" element={<TourDemoRoute scenario="shifts-empty"><ShiftPlannerPage key="demo-shifts-empty" /></TourDemoRoute>} />
+        <Route path="napoveda/ukazka-smeny-publikovane" element={<TourDemoRoute scenario="shifts-published"><ShiftPlannerPage key="demo-shifts-published" /></TourDemoRoute>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

@@ -446,13 +446,14 @@ function buildDemoPayrollPeriod(year: number, month: number): unknown {
  */
 function payrollFixture(
   isGet: boolean,
-  clean: string
+  clean: string,
+  scenario: TourScenario
 ): { hit: boolean; value?: unknown } | null {
   if (clean !== "/payroll" && !clean.startsWith("/payroll/")) return null;
   if (!isGet) return { hit: true, value: {} };
   const m = clean.match(/^\/payroll\/periods\/by-month\/(\d+)\/(\d+)$/);
   if (m) {
-    if (tourDemo.scenario === "payroll-empty") return { hit: true, value: null };
+    if (scenario === "payroll-empty") return { hit: true, value: null };
     return { hit: true, value: buildDemoPayrollPeriod(Number(m[1]), Number(m[2])) };
   }
   return { hit: true, value: {} };
@@ -558,15 +559,16 @@ function buildDemoShiftPlan(status: string): unknown {
  */
 function shiftsFixture(
   isGet: boolean,
-  clean: string
+  clean: string,
+  scenario: TourScenario
 ): { hit: boolean; value?: unknown } | null {
   if (clean !== "/shifts" && !clean.startsWith("/shifts/")) return null;
   if (!isGet) return { hit: true, value: {} };
 
-  const planStatus = tourDemo.scenario === "shifts-published" ? "published" : "opened";
+  const planStatus = scenario === "shifts-published" ? "published" : "opened";
   // Plan list — drives whether the page lands on a plan or the empty state.
   if (clean === "/shifts/plans") {
-    if (tourDemo.scenario === "shifts-empty") return { hit: true, value: [] };
+    if (scenario === "shifts-empty") return { hit: true, value: [] };
     const { year, month } = currentYM();
     return { hit: true, value: [{ id: DEMO_SHIFT_PLAN_ID, month, year, status: planStatus }] };
   }
@@ -665,6 +667,28 @@ const SELF_PATHS = new Set<string>([
 ]);
 
 /**
+ * Active demo scenario, derived from the URL rather than a mutable flag. This is
+ * race-proof: when the tour navigates between two demo routes that render the
+ * SAME page component (e.g. shifts opened → published), React reuses the page
+ * instance and its remount-time fetch can fire while the route wrapper's effect
+ * cleanup has momentarily reset a flag. The URL, by contrast, is always current
+ * by the time any fetch runs. (Pages are also given a per-route `key` so they
+ * actually remount + refetch on such transitions — see App.tsx.)
+ */
+function activeScenario(): TourScenario | null {
+  const p = typeof window !== "undefined" ? window.location.pathname : "";
+  switch (p) {
+    case "/napoveda/ukazka-profil": return "self";
+    case "/napoveda/ukazka-mzdy": return "payroll";
+    case "/napoveda/ukazka-mzdy-prazdne": return "payroll-empty";
+    case "/napoveda/ukazka-smeny": return "shifts";
+    case "/napoveda/ukazka-smeny-prazdne": return "shifts-empty";
+    case "/napoveda/ukazka-smeny-publikovane": return "shifts-published";
+    default: return null;
+  }
+}
+
+/**
  * Decide whether the guided-tour demo should serve a mock for this request.
  *
  * - Any path under the sentinel detail employee (`/employees/tour-demo` or
@@ -697,15 +721,16 @@ export function getDemoResponse(
   // also while any demo route is mounted.
   if (clean === "/audit" || clean.startsWith("/audit/")) {
     const refsDemo = path.includes(`employeeId=${DEMO_EMP_ID}`);
-    if (refsDemo || tourDemo.active) {
+    if (refsDemo || activeScenario() !== null) {
       if (!isGet) return { hit: true, value: {} };
       return { hit: true, value: { entries: [] } };
     }
   }
 
-  if (!tourDemo.active) return { hit: false };
+  const scenario = activeScenario();
+  if (!scenario) return { hit: false };
 
-  switch (tourDemo.scenario) {
+  switch (scenario) {
     // ── Self endpoints (Můj profil demo) ──
     case "self": {
       if (SELF_PATHS.has(clean) || clean.startsWith("/me/")) {
@@ -718,12 +743,12 @@ export function getDemoResponse(
     // ── Payroll demo (populated period or empty "create" state) ──
     case "payroll":
     case "payroll-empty":
-      return payrollFixture(isGet, clean) ?? { hit: false };
-    // ── Shifts demo (added with the shift-plan fixtures) ──
+      return payrollFixture(isGet, clean, scenario) ?? { hit: false };
+    // ── Shifts demo (opened / empty-create / published) ──
     case "shifts":
     case "shifts-empty":
     case "shifts-published":
-      return shiftsFixture(isGet, clean) ?? { hit: false };
+      return shiftsFixture(isGet, clean, scenario) ?? { hit: false };
     default:
       return { hit: false };
   }
