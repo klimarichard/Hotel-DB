@@ -191,9 +191,10 @@ vacationRouter.get("/", requireAuth, async (req: AuthRequest, res) => {
 });
 
 // ─── POST /vacation ───────────────────────────────────────────────────────────
-// Any authenticated user submits a vacation request for themselves
+// A user submits a vacation request for themselves. Gated on vacation.request.self
+// (mirrors the frontend form gate; closes the front↔back enforcement gap).
 
-vacationRouter.post("/", requireAuth, async (req: AuthRequest, res) => {
+vacationRouter.post("/", requireAuth, requirePermission("vacation.request.self"), async (req: AuthRequest, res) => {
   const body = req.body as Record<string, unknown>;
   const startDate = (body.startDate as string) ?? "";
   const endDate = (body.endDate as string) ?? "";

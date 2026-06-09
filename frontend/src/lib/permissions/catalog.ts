@@ -132,13 +132,11 @@ export const PERMISSION_CATALOG = [
     items: [
       { key: "alerts.view", label: "Zobrazit upozornění" },
       { key: "alerts.read", label: "Označit upozornění jako přečtené" },
-      { key: "alerts.refresh", label: "Ručně obnovit upozornění" },
     ],
   },
   {
     group: "Žádosti o úpravu údajů",
     items: [
-      { key: "changeRequests.submit.self", label: "Navrhnout úpravu vlastních údajů" },
       { key: "changeRequests.review", label: "Schvalovat úpravy údajů" },
     ],
   },

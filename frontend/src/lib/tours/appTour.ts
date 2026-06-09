@@ -125,7 +125,7 @@ export const APP_TOUR_STEPS: TourStep[] = [
   { permission: "self.profile.view", anchor: "selfpage-title", route: DEMO_SELF, title: "Můj profil", body: "Tato stránka zobrazuje vaši kartu zaměstnance — osobní údaje, kontakt, doklady a historii poměru. Slouží ke čtení. (Ukázková data pouze pro průvodce.)", placement: "bottom" },
   { permission: "self.profile.requestEdit", anchor: "selfpage-edit-btn", route: DEMO_SELF, title: "Navrhnout úpravu", body: "Tlačítkem Navrhnout úpravu můžete upravit svoje údaje a odeslat úpravu ke schválení. Změněné hodnoty se objeví až po schválení administrátorem nebo ředitelem.", placement: "left" },
   { permission: "sensitive.reveal.self", anchor: "selfpage-reveal", route: DEMO_SELF, title: "Zobrazení vlastních citlivých údajů", body: "Pole označená ikonou oka (např. rodné číslo) jsou skryta. Kliknutím je dočasně zobrazíte. Každé zobrazení je zaznamenáno v logu aplikace.", placement: "left" },
-  { permission: "changeRequests.submit.self", anchor: "selfpage-requests", route: DEMO_SELF, title: "Vaše návrhy na změnu", body: "Zde vidíte odeslané návrhy na úpravu profilu a jejich stav. Změny čekající na schválení jde zrušit.", placement: "top" },
+  { permission: "self.profile.requestEdit", anchor: "selfpage-requests", route: DEMO_SELF, title: "Vaše návrhy na změnu", body: "Zde vidíte odeslané návrhy na úpravu profilu a jejich stav. Změny čekající na schválení jde zrušit.", placement: "top" },
 
   // ── Šablony smluv (/smlouvy) ──────────────────────────────────────────────────
   { permission: "contractTemplates.view", anchor: "templates-list", route: "/smlouvy", title: "Zobrazení šablon", body: "V seznamu vlevo si vyberete a prohlédnete dostupné šablony.", placement: "right" },
@@ -145,7 +145,7 @@ export const APP_TOUR_STEPS: TourStep[] = [
   // ── Upozornění (/upozorneni) ────────────────────────────────────────────────────
   { permission: "alerts.view", anchor: "alerts-tabs", route: "/upozorneni", title: "Zobrazení upozornění", body: "Záložky člení upozornění (doklady, zkušební doba, dovolená, výjimky, žádosti).", placement: "bottom" },
   { permission: "alerts.read", anchor: "alerts-mark-read", route: "/upozorneni", title: "Označení jako přečtené", body: "Upozornění označíte jako přečtené jednotlivě nebo hromadně. Tento stav je sdílený pro všechny uživatele, kteří upozornění vidí.", placement: "bottom" },
-  { permission: "alerts.refresh", anchor: "alerts-refresh", route: "/upozorneni", title: "Ruční obnovení", body: "Můžete ručně aktualizovat upozornění.", placement: "bottom" },
+  { permission: "system.triggers", anchor: "alerts-refresh", route: "/upozorneni", title: "Ruční obnovení", body: "Můžete ručně aktualizovat upozornění.", placement: "bottom" },
   { permission: "changeRequests.review", anchor: "alerts-tab-uprava", route: "/upozorneni", reveal: ["alerts-tab-uprava"], title: "Schvalování úprav údajů", body: "Na záložce Žádosti o úpravu údajů schvalujete nebo zamítáte návrhy zaměstnanců.", placement: "bottom" },
 
   // ── Log změn ────────────────────────────────────────────────────────────────────
