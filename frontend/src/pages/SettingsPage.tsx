@@ -9,6 +9,7 @@ import Button from "@/components/Button";
 import ConfirmModal from "@/components/ConfirmModal";
 import MenuOrderTab from "./settings/MenuOrderTab";
 import UserTypesTab from "./settings/UserTypesTab";
+import JobsTab from "./settings/JobsTab";
 import UserPermissionsModal from "@/components/UserPermissionsModal";
 import type { Permission } from "@/lib/permissions/catalog";
 import styles from "./SettingsPage.module.css";
@@ -105,7 +106,7 @@ const DEFAULT_COMPANY_IDS = ["HPM", "STP"];
 
 const emptyForm = { name: "", email: "", password: "", roleType: "employee", employeeId: "" };
 
-type SettingsTab = "users" | "companies" | "departments" | "jobPositions" | "education" | "payroll" | "menu" | "userTypes";
+type SettingsTab = "users" | "companies" | "departments" | "jobPositions" | "education" | "payroll" | "menu" | "userTypes" | "jobs";
 
 // Each tab and the permission that gates it. Order is the display order; the
 // default tab resolves to the first one the user can actually access.
@@ -118,6 +119,7 @@ const SETTINGS_TABS: { id: SettingsTab; perm: Permission }[] = [
   { id: "payroll", perm: "settings.payroll.manage" },
   { id: "menu", perm: "settings.menuOrder.manage" },
   { id: "userTypes", perm: "userTypes.manage" },
+  { id: "jobs", perm: "system.triggers" },
 ];
 
 export default function SettingsPage() {
@@ -823,6 +825,9 @@ export default function SettingsPage() {
         )}
         {can("userTypes.manage") && (
           <button data-tour="settings-tab-userTypes" className={settingsTab === "userTypes" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("userTypes")}>Uživatelské typy</button>
+        )}
+        {can("system.triggers") && (
+          <button data-tour="settings-tab-jobs" className={settingsTab === "jobs" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("jobs")}>Úlohy</button>
         )}
       </div>
 
@@ -1773,6 +1778,7 @@ export default function SettingsPage() {
 
       {settingsTab === "menu" && can("settings.menuOrder.manage") && <MenuOrderTab />}
       {settingsTab === "userTypes" && can("userTypes.manage") && <UserTypesTab />}
+      {settingsTab === "jobs" && can("system.triggers") && <JobsTab />}
 
       {depDeleteId && (
         <ConfirmModal

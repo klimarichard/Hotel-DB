@@ -1,3 +1,5 @@
+import { now as clockNow } from "@/lib/clock";
+
 /**
  * Guided-tour demo fixtures.
  *
@@ -50,6 +52,9 @@ export const tourDemo: { active: boolean; scenario: TourScenario | null } = {
 
 /** Sentinel employee id used in `/employees/tour-demo/*` detail-page paths. */
 export const DEMO_EMP_ID = "tour-demo";
+
+/** Sentinel plan id for the shift-plan demo (GET /shifts/plans/<id>). */
+const DEMO_SHIFT_PLAN_ID = "demo-shift-plan";
 
 // The redacted placeholder the pages use to decide whether a sensitive field
 // "has data" (and thus should render the reveal eye). Must match the MASK
@@ -448,17 +453,132 @@ function payrollFixture(
 }
 
 // ─── Shifts-demo fixtures (`/smeny` via /napoveda/ukazka-smeny[-prazdne]) ──────
-// Filled in with the shift-plan demo state. Returns null when the path isn't a
-// shifts path (let the caller continue) — so until the fixtures land, the shifts
-// scenario is a no-op and the steps fall back to the centered card.
+
+/** Current year/month, honouring the test clock (so the demo plan matches the
+ *  month the page lands on, which defaults to clock.now()). */
+function currentYM(): { year: number; month: number } {
+  const d = clockNow();
+  return { year: d.getFullYear(), month: d.getMonth() + 1 };
+}
+
+function demoPlanEmployee(
+  employeeId: string,
+  firstName: string,
+  lastName: string,
+  section: string,
+  primaryShiftType: string,
+  primaryHotel: string | null,
+  displayOrder: number
+): unknown {
+  return {
+    id: `pe-${employeeId}`,
+    employeeId,
+    firstName,
+    lastName,
+    displayName: "",
+    section,
+    primaryShiftType,
+    primaryHotel,
+    displayOrder,
+    active: true,
+    contractType: "HPP",
+    xLimitOverride: null,
+  };
+}
+
+/**
+ * A populated "opened" shift plan for the current month, so the REAL
+ * ShiftPlannerPage + ShiftGrid render the full grid (all three sections → MOD
+ * row, X-limit badges) plus the toolbar buttons that an "opened" plan exposes
+ * (transitions / revert / add-employee / edit-deadlines / export, and the
+ * review panels for users who hold those permissions). create / delete (created)
+ * / counter table (closed) / free porter shifts (published) are out of this
+ * state by design and keep the centered fallback.
+ */
+function buildDemoShiftPlan(): unknown {
+  const { year, month } = currentYM();
+  const ymd = (day: number) =>
+    `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  const shift = (employeeId: string, day: number, rawInput: string, hours: number) => ({
+    id: `${employeeId}_${ymd(day)}`,
+    employeeId,
+    date: ymd(day),
+    rawInput,
+    hoursComputed: hours,
+    isDouble: false,
+    status: "assigned",
+    source: null,
+  });
+  return {
+    id: DEMO_SHIFT_PLAN_ID,
+    month,
+    year,
+    status: "opened",
+    createdBy: "demo",
+    openedAt: null,
+    closedAt: null,
+    publishedAt: null,
+    modPersons: { A: "demo-ved-1" },
+    freeShiftDpaDays: [],
+    employees: [
+      demoPlanEmployee("demo-ved-1", "Tomáš", "Veselý", "vedoucí", "R", null, 0),
+      demoPlanEmployee("demo-rec-1", "Jana", "Dvořáková", "recepce", "D", "A", 1),
+      demoPlanEmployee("demo-rec-2", "Petr", "Novák", "recepce", "N", "A", 2),
+      demoPlanEmployee("demo-por-1", "Karel", "Svoboda", "portýři", "DP", "A", 3),
+    ],
+    shifts: [
+      shift("demo-rec-1", 1, "DA", 11.5),
+      shift("demo-rec-1", 2, "DA", 11.5),
+      shift("demo-rec-1", 5, "X", 0),
+      shift("demo-rec-2", 1, "NA", 11.5),
+      shift("demo-rec-2", 3, "NA", 11.5),
+      shift("demo-por-1", 1, "DPA", 11.5),
+    ],
+    modShifts: [
+      { id: ymd(1), date: ymd(1), code: "A" },
+      { id: ymd(2), date: ymd(2), code: "A" },
+    ],
+  };
+}
+
+/**
+ * Serve mocks for the shifts page while a shift demo scenario is active. Returns
+ * null when the path isn't a shifts path (let the caller continue).
+ *  - scenario "shifts":       a populated "opened" plan for the current month.
+ *  - scenario "shifts-empty": an empty plan list → no plan for the month → the
+ *                             "Vytvořit plán" (shift-create) state renders.
+ * Every non-GET (cell/plan/mod/request writes) is swallowed with `{}`.
+ */
 function shiftsFixture(
-  _isGet: boolean,
+  isGet: boolean,
   clean: string
 ): { hit: boolean; value?: unknown } | null {
   if (clean !== "/shifts" && !clean.startsWith("/shifts/")) return null;
-  // Swallow everything under /shifts/* while the demo is mounted so no real
-  // backend call fires; GET fixtures are added in the shift-demo step.
-  return { hit: true, value: {} };
+  if (!isGet) return { hit: true, value: {} };
+
+  // Plan list — drives whether the page lands on a plan or the empty state.
+  if (clean === "/shifts/plans") {
+    if (tourDemo.scenario === "shifts-empty") return { hit: true, value: [] };
+    const { year, month } = currentYM();
+    return { hit: true, value: [{ id: DEMO_SHIFT_PLAN_ID, month, year, status: "opened" }] };
+  }
+  // Full plan detail.
+  if (clean === `/shifts/plans/${DEMO_SHIFT_PLAN_ID}`) {
+    return { hit: true, value: buildDemoShiftPlan() };
+  }
+  // Global pending-count badges (override/change-request reviewers).
+  if (
+    clean === "/shifts/overrides/pending-count" ||
+    clean === "/shifts/changeRequests/pending-count"
+  ) {
+    return { hit: true, value: { count: 0 } };
+  }
+  // Per-plan sub-resources (shiftOverrides / shiftChangeRequests lists) → empty.
+  if (clean.startsWith(`/shifts/plans/${DEMO_SHIFT_PLAN_ID}/`)) {
+    return { hit: true, value: [] };
+  }
+  // Any other GET under /shifts/* → empty list (safe default, no backend call).
+  return { hit: true, value: [] };
 }
 
 // ─── Dispatcher ───────────────────────────────────────────────────────────────
