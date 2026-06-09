@@ -80,6 +80,8 @@ All five are gated `requireAuth` + `requirePermission("system.triggers")` and wr
 
 **In-app UI — Settings → Úlohy** (`frontend/src/pages/settings/JobsTab.tsx`, tab id `"jobs"`): a card-per-job panel that POSTs each endpoint with a `ConfirmModal` confirmation before firing. Visible to users holding `system.triggers` (tab is registered in `SETTINGS_TABS` in `SettingsPage.tsx`). Each card shows a one-line description and a result/error badge after the run. Use this instead of curl for day-to-day manual re-runs.
 
+A second in-app surface is the **Upozornění ↻** refresh button (`AlertsPage.tsx`, also gated `system.triggers`), which fires `trigger-alert-refresh` + `trigger-probation-refresh` together. (The former `alerts.refresh` permission was removed in the 2026-06-09 gating audit — it duplicated `system.triggers`, which these endpoints already require.)
+
 ### Staging credential rotation
 `scripts/rotate-staging-passwords.js` paginates through every staging Auth user, replaces each password with a fresh 16-char random string, and writes `scripts/staging-credentials.txt` (gitignored). Requires Application Default Credentials (`gcloud auth application-default login`); refuses to run without `--allow-staging`; the shared `scripts/_seed-target.js` guard hard-blocks targeting prod.
 
