@@ -10,10 +10,20 @@ import { appTour, APP_TOUR_STEPS } from "./appTour";
 export const APP_TOUR_ID = appTour.id;
 export const APP_TOUR_VERSION = appTour.version;
 
+/** True when the user holds the step's permission — or ANY of them if it's an
+ *  array (OR semantics for merged-variant steps). Always true when unset. */
+export function userHasStepPermission(
+  step: { permission?: Permission | Permission[] },
+  can: (perm: Permission) => boolean
+): boolean {
+  if (!step.permission) return true;
+  return Array.isArray(step.permission) ? step.permission.some(can) : can(step.permission);
+}
+
 export function buildAppTour(can: (perm: Permission) => boolean): TourDefinition {
   return {
     ...appTour,
-    steps: APP_TOUR_STEPS.filter((step) => !step.permission || can(step.permission)),
+    steps: APP_TOUR_STEPS.filter((step) => userHasStepPermission(step, can)),
   };
 }
 

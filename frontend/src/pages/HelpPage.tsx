@@ -51,7 +51,9 @@ export default function HelpPage() {
     const order = PERMISSION_CATALOG.map((g) => g.group);
     const byGroup = new Map<string, { title: string; body: string }[]>();
     for (const step of steps) {
-      const group = GROUP_BY_PERMISSION[step.permission as string] ?? "Ostatní";
+      // A step may carry an array of permissions (merged variants); group by the first.
+      const permKey = Array.isArray(step.permission) ? step.permission[0] : step.permission;
+      const group = GROUP_BY_PERMISSION[permKey as string] ?? "Ostatní";
       if (!byGroup.has(group)) byGroup.set(group, []);
       byGroup.get(group)!.push({ title: step.title, body: step.body });
     }
