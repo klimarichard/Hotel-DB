@@ -44,6 +44,10 @@ export const APP_TOUR_STEPS: TourStep[] = [
     body: "Tento průvodce vás provede částmi aplikace, ke kterým máte přístup. Obsah se přizpůsobuje vašim oprávněním, takže uvidíte přesně to, co můžete používat. Průvodce můžete kdykoliv ukončit tlačítkem Přeskočit a později znovu spustit z Nápovědy vlevo dole.",
   },
 
+  // ── Úvod: přihlášený uživatel + režim zobrazení (vždy zobrazeno) ─────────────
+  { anchor: "menu-footer", title: "Přihlášený uživatel", body: "V levém dolním rohu vidíte, kdo je právě přihlášen do aplikace.", placement: "right" },
+  { anchor: "theme-toggle", title: "Světlý/tmavý režim", body: "Můžete si zvolit zobrazení ve světlém, nebo tmavém režimu. Aplikace si bude vaši volbu pamatovat i při příštím přihlášení.", placement: "right" },
+
   // ── Stránky / navigace (sidebar nav items) ──────────────────────────────────
   { permission: "nav.dashboard.view", anchor: "nav-prehled", title: "Přehled", body: "Přehled je vaše úvodní obrazovka se shrnutím dnešního dne.", placement: "right" },
   { permission: "nav.shifts.view", anchor: "nav-smeny", title: "Směny", body: "V sekci Směny najdete měsíční plán směn.", placement: "right" },
@@ -173,7 +177,7 @@ export const APP_TOUR_STEPS: TourStep[] = [
 
 export const appTour: TourDefinition = {
   id: "app",
-  version: 5,
+  version: 6,
   label: "Prohlídka aplikace",
   steps: APP_TOUR_STEPS,
 };
