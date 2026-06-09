@@ -671,7 +671,7 @@ export default function VacationPage() {
 
         return (
           <>
-            <div className={styles.tableWrapper}>
+            <div className={styles.tableWrapper} data-tour="vacation-all-requests">
               <div className={styles.sectionTitle}>Všechny žádosti</div>
               {loading ? (
                 <div className={styles.empty}>Načítám…</div>

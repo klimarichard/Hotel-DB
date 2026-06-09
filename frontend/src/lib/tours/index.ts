@@ -20,10 +20,16 @@ export function userHasStepPermission(
   return Array.isArray(step.permission) ? step.permission.some(can) : can(step.permission);
 }
 
+/** Production build flag — staging/dev keep non-prod-only steps (e.g. test clock). */
+const IS_PROD = import.meta.env.MODE === "production";
+
 export function buildAppTour(can: (perm: Permission) => boolean): TourDefinition {
   return {
     ...appTour,
-    steps: APP_TOUR_STEPS.filter((step) => userHasStepPermission(step, can)),
+    steps: APP_TOUR_STEPS.filter((step) => {
+      if (step.hideInProd && IS_PROD) return false;
+      return userHasStepPermission(step, can);
+    }),
   };
 }
 

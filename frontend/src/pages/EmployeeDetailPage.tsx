@@ -223,8 +223,8 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <div className={styles.section}>
-      <button data-tour={sectionKey === "benefity" ? "emp-section-benefits" : undefined} className={styles.sectionHeader} onClick={() => onToggle(sectionKey)}>
+    <div className={styles.section} data-tour={sectionKey === "benefity" ? "emp-section-benefits" : undefined}>
+      <button className={styles.sectionHeader} onClick={() => onToggle(sectionKey)}>
         <span className={styles.sectionTitle}>{title}</span>
         <ChevronIcon open={expanded} />
       </button>
