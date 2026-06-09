@@ -75,7 +75,11 @@ export default function VacationPage() {
   const canReview = can("vacation.review");
   const canRequestSelf = can("vacation.request.self");
   const canViewAll = can("vacation.view.all");
-  const canViewApprovedUpcoming = can("vacation.view.approvedUpcoming");
+  // "Schválené dovolené kolegů" is redundant for anyone who can see ALL requests
+  // (the "Všechny žádosti" table below already lists every approved request), so
+  // hide it — and skip its fetch — for vacation.view.all holders. Inverse-gate
+  // pattern, mirroring the tour's excludeIfPermission.
+  const canViewApprovedUpcoming = can("vacation.view.approvedUpcoming") && !canViewAll;
 
   const [requests, setRequests] = useState<VacationRequest[]>([]);
   const [loading, setLoading] = useState(true);
