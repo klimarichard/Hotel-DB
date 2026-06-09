@@ -117,6 +117,7 @@ export default function App() {
         <Route path="napoveda/ukazka-mzdy-prazdne" element={<TourDemoRoute scenario="payroll-empty"><PayrollPage key="demo-payroll-empty" /></TourDemoRoute>} />
         <Route path="napoveda/ukazka-smeny" element={<TourDemoRoute scenario="shifts"><ShiftPlannerPage key="demo-shifts" /></TourDemoRoute>} />
         <Route path="napoveda/ukazka-smeny-prazdne" element={<TourDemoRoute scenario="shifts-empty"><ShiftPlannerPage key="demo-shifts-empty" /></TourDemoRoute>} />
+        <Route path="napoveda/ukazka-smeny-vytvoreny" element={<TourDemoRoute scenario="shifts-created"><ShiftPlannerPage key="demo-shifts-created" /></TourDemoRoute>} />
         <Route path="napoveda/ukazka-smeny-publikovane" element={<TourDemoRoute scenario="shifts-published"><ShiftPlannerPage key="demo-shifts-published" /></TourDemoRoute>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
