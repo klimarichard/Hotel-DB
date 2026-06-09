@@ -33,6 +33,7 @@ const DEMO_PAYROLL = "/napoveda/ukazka-mzdy"; // real Mzdy page, populated perio
 const DEMO_PAYROLL_EMPTY = "/napoveda/ukazka-mzdy-prazdne"; // real Mzdy page, no period → create
 const DEMO_SHIFTS = "/napoveda/ukazka-smeny"; // real Směny page, populated "opened" plan
 const DEMO_SHIFTS_EMPTY = "/napoveda/ukazka-smeny-prazdne"; // real Směny page, no plan → create
+const DEMO_SHIFTS_CREATED = "/napoveda/ukazka-smeny-vytvoreny"; // created (not opened) plan → Smazat plán
 const DEMO_SHIFTS_PUBLISHED = "/napoveda/ukazka-smeny-publikovane"; // published plan → Volné směny section
 
 export const APP_TOUR_STEPS: TourStep[] = [
@@ -77,7 +78,7 @@ export const APP_TOUR_STEPS: TourStep[] = [
   { permission: "shifts.plan.edit", anchor: "shift-edit-deadlines", route: DEMO_SHIFTS, title: "Automatizace plánování", body: "Zde nastavíte termíny plánu (otevření, uzávěrka, publikování).", placement: "bottom" },
   { permission: "shifts.plan.transition", anchor: "shift-transitions", route: DEMO_SHIFTS, title: "Změna stavu plánu", body: "Tímto tlačítkem změníte stav tabulky směn (posloupnost stavů je Vytvořený → Otevřený → Uzavřený → Publikovaný). Stav plánu určuje, kdo do něj smí zapisovat.", placement: "bottom" },
   { permission: "shifts.plan.revert", anchor: "shift-revert", route: DEMO_SHIFTS, title: "Vrácení plánu zpět", body: "Tlačítkem Vrátit zpět vrátíte plán do předchozího stavu.", placement: "bottom" },
-  { permission: "shifts.plan.delete", anchor: "shift-delete", route: DEMO_SHIFTS, title: "Smazání plánu", body: "Tlačítkem Smazat plán nevratně odstraníte celý měsíční plán (program se ujistí, že to je opravdu to, co chcete udělat).", placement: "bottom" },
+  { permission: "shifts.plan.delete", anchor: "shift-delete", route: DEMO_SHIFTS_CREATED, title: "Smazání plánu", body: "Tlačítkem Smazat plán nevratně odstraníte celý měsíční plán (program se ujistí, že to je opravdu to, co chcete udělat).", placement: "bottom" },
   { permission: "shifts.planEmployees.manage", anchor: "shift-add-employee", route: DEMO_SHIFTS, title: "Přidání zaměstnance", body: "Tlačítkem Přidat zaměstnance určujete, kdo se v plánu zobrazuje.", placement: "bottom" },
   { permission: "shifts.mod.manage", anchor: "shift-mod-row", route: DEMO_SHIFTS, title: "MOD", body: "V tomto řádku můžete přiřadit manažerům MOD pro daný den.", placement: "bottom" },
   { permission: "shifts.xAllowance.manage", anchor: "shift-x-badge", route: DEMO_SHIFTS, title: "Limit X", body: "Můžete nastavit maximální počet volných dnů pro každého zaměstnance v plánu.", placement: "bottom" },
@@ -162,8 +163,8 @@ export const APP_TOUR_STEPS: TourStep[] = [
   { permission: "settings.menuOrder.manage", anchor: "settings-tab-menu", route: "/nastaveni", reveal: ["settings-tab-menu"], title: "Pořadí menu", body: "Na záložce Menu můžete nastavit pořadí položek v bočním menu pro jednotlivé uživatelské role.", placement: "bottom" },
 
   // ── Systém ─────────────────────────────────────────────────────────────────────
-  { permission: "system.timeOverride", anchor: "tour-timeclock", hideInProd: true, title: "Testovací hodiny", body: "Mimo live verzi můžete nastavit testovací „nynější“ čas pro ověřování chování závislého na datu. V live verzi je funkce neaktivní.", placement: "top" },
   { permission: "system.triggers", anchor: "settings-tab-jobs", route: "/nastaveni", reveal: ["settings-tab-jobs"], title: "Ruční spuštění úloh", body: "Na záložce Úlohy v Nastavení můžete ručně spustit naplánované úlohy (přechody plánů směn, obnova upozornění, přepočet aktuálních údajů). Každé spuštění je zaznamenáno v Logu změn.", placement: "bottom" },
+  { permission: "system.timeOverride", anchor: "tour-timeclock", hideInProd: true, title: "Testovací hodiny", body: "Mimo live verzi můžete nastavit testovací „nynější“ čas pro ověřování chování závislého na datu. V live verzi je funkce neaktivní.", placement: "top" },
   { permission: "system.admin", anchor: null, title: "Superadmin", body: "Máte oprávnění superadministrátora — přístup ke všem funkcím bez omezení. Používejte je obezřetně, zejména u nevratných operací.", placement: "bottom" },
 
   // ── Outro ───────────────────────────────────────────────────────────────────────
