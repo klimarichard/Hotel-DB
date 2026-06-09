@@ -476,6 +476,7 @@ export default function ShiftGrid({
                             }
                             return (
                               <span
+                                data-tour="shift-x-badge"
                                 className={`${styles.xBadge}${over ? ` ${styles.xBadgeOver}` : ""}${canEditLimit ? ` ${styles.xBadgeEditable}` : ""}`}
                                 onClick={canEditLimit ? () => setEditingXEmployee(emp.employeeId) : undefined}
                                 title={canEditLimit
@@ -617,7 +618,7 @@ export default function ShiftGrid({
             // Insert MOD row after the vedoucí section
             if (section === "vedoucí") {
               rows.push(
-                <tr key="mod-row" className={styles.modRow}>
+                <tr key="mod-row" className={styles.modRow} data-tour="shift-mod-row">
                   <td className={styles.modLabel}>MOD</td>
                   {days.map((d, colIdx) => {
                     const dateStr = formatDate(d);
