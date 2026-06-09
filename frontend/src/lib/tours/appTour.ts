@@ -29,6 +29,8 @@ import type { TourStep, TourDefinition } from "./types";
 // Tour demo routes: the REAL pages rendered with mock data (lib/tours/demoData).
 const DEMO_SELF = "/napoveda/ukazka-profil"; // real Můj profil page
 const DEMO_EMP = "/zamestnanci/tour-demo"; // real employee-detail page (sentinel id)
+const DEMO_PAYROLL = "/napoveda/ukazka-mzdy"; // real Mzdy page, populated period
+const DEMO_PAYROLL_EMPTY = "/napoveda/ukazka-mzdy-prazdne"; // real Mzdy page, no period → create
 
 export const APP_TOUR_STEPS: TourStep[] = [
   // ── Welcome ───────────────────────────────────────────────────────────────
@@ -101,11 +103,11 @@ export const APP_TOUR_STEPS: TourStep[] = [
   { permission: "benefits.edit", anchor: "emp-benefits", route: DEMO_EMP, reveal: ["emp-tab-detail"], title: "Úprava Multisport", body: "Zde můžete upravit Multisport benefity zaměstnance (platnost, doprovodné osoby, atd.).", placement: "left" },
   { permission: "employment.view", anchor: "emp-tab-history", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Historie pracovního poměru", body: "Zde vidíte historii pracovního poměru zaměstnance.", placement: "bottom" },
   { permission: "employment.manage", anchor: "emp-employment-add", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Správa pracovního poměru", body: "Můžete spravovat pracovní poměr zaměstnance (nástup, dodatky, ukončení).", placement: "bottom" },
-  // Contracts ordered: generate → view → delete → edit → sign (per tour_notes step 59).
+  // Contracts ordered: generate → view → edit → delete → sign (per user verdict 2026-06-09).
   { permission: "contracts.generate", anchor: "emp-contract-generate", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Generování smlouvy", body: "Z šablony vygenerujete smlouvu nebo dodatek pro zaměstnance.", placement: "left" },
   { permission: "contracts.view", anchor: "emp-contract-view", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Zobrazení smluv", body: "Vygenerované smlouvy a dodatky lze zobrazit a stáhnout.", placement: "left" },
-  { permission: "contracts.delete", anchor: "emp-contract-delete", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Smazání smlouvy", body: "Tlačítkem Smazat smlouvu odstraníte vygenerovanou smlouvu (aplikace se zeptá na potvrzení).", placement: "left" },
   { permission: "contracts.edit", anchor: "emp-contract-edit", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Úprava smlouvy", body: "Údaje v tomto záznamu můžete upravit. Pokud už jste měli vygenerovanou smlouvu s původními údaji, aplikace vám umožní ji generovat znovu s pozměněnými údaji.", placement: "left" },
+  { permission: "contracts.delete", anchor: "emp-contract-delete", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Smazání smlouvy", body: "Tlačítkem Smazat smlouvu odstraníte vygenerovanou smlouvu (aplikace se zeptá na potvrzení).", placement: "left" },
   { permission: "contracts.sign", anchor: "emp-contract-sign", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Podepsaná smlouva", body: "Tlačítkem Nahrát podepsanou smlouvu označíte smlouvu jako podepsanou a nahrajete naskenovanou podepsanou verzi.", placement: "left" },
   { permission: "documents.view", anchor: "emp-tab-docs", route: DEMO_EMP, reveal: ["emp-tab-docs"], title: "Další dokumenty", body: "Na záložce Další dokumenty vidíte nahrané dokumenty zaměstnance.", placement: "left" },
   { permission: "documents.upload", anchor: "emp-doc-upload", route: DEMO_EMP, reveal: ["emp-tab-docs"], title: "Nahrání dokumentu", body: "Tlačítkem Nahrát dokument přidáte k zaměstnanci další dokument.", placement: "bottom" },
@@ -122,15 +124,15 @@ export const APP_TOUR_STEPS: TourStep[] = [
   { permission: "contractTemplates.manage", anchor: "templates-new", route: "/smlouvy", title: "Nová šablona", body: "Tlačítkem Nová šablona vytvoříte šablonu. Její obsah upravíte v editoru a uložíte.", placement: "bottom" },
 
   // ── Mzdy (/mzdy) ──────────────────────────────────────────────────────────────
-  { permission: "payroll.view", anchor: "payroll-table", route: "/mzdy", title: "Zobrazení mezd", body: "Tabulka zobrazuje vypočtené mzdy zaměstnanců pro zvolené období.", placement: "top" },
-  { permission: "payroll.create", anchor: "payroll-create", route: "/mzdy", title: "Vytvoření mzdového období", body: "Tlačítkem Vytvořit mzdy ručně založíte období pro zvolený měsíc.", placement: "bottom" },
-  { permission: "payroll.edit", anchor: "payroll-table", route: "/mzdy", title: "Úprava mezd", body: "V odemčeném období upravíte jednotlivé položky dvojklikem na buňku.", placement: "top" },
-  { permission: "payroll.recalculate", anchor: "payroll-recalc", route: "/mzdy", title: "Přepočítání mezd", body: "Tímto tlačítkem můžete přepočítat mzdy pro tento měsíc. Všechny ruční úpravy zůstanou zachovány.", placement: "bottom" },
-  { permission: "payroll.recalculate.hard", anchor: "payroll-recalc-hard", route: "/mzdy", title: "Tvrdý přepočet", body: "Tímto tlačítkem můžete přepočítat mzdy „natvrdo“, tzn. ani ruční úpravy nezůstanou zachovány (aplikace se zeptá na potvrzení).", placement: "bottom" },
-  { permission: "payroll.lock", anchor: "payroll-lock", route: "/mzdy", title: "Uzamčení/odemčení období", body: "Daný měsíc můžete uzamknout pro úpravy.", placement: "bottom" },
-  { permission: "payroll.period.delete", anchor: "payroll-delete", route: "/mzdy", title: "Smazání období", body: "Tlačítkem Smazat období nevratně odstraníte celé mzdové období (aplikace se zeptá na potvrzení).", placement: "bottom" },
-  { permission: "payroll.export", anchor: "payroll-export", route: "/mzdy", title: "Export mezd", body: "Mzdy můžete exportovat do PDF.", placement: "bottom" },
-  { permission: "payroll.notes.manage", anchor: "payroll-table", route: "/mzdy", title: "Poznámky ke mzdám", body: "Ve sloupci poznámek přidáváte a spravujete poznámky k jednotlivým mzdám.", placement: "top" },
+  { permission: "payroll.view", anchor: "payroll-table", route: DEMO_PAYROLL, title: "Zobrazení mezd", body: "Tabulka zobrazuje vypočtené mzdy zaměstnanců pro zvolené období.", placement: "top" },
+  { permission: "payroll.create", anchor: "payroll-create", route: DEMO_PAYROLL_EMPTY, title: "Vytvoření mzdového období", body: "Tlačítkem Vytvořit mzdy ručně založíte období pro zvolený měsíc.", placement: "bottom" },
+  { permission: "payroll.edit", anchor: "payroll-table", route: DEMO_PAYROLL, title: "Úprava mezd", body: "V odemčeném období upravíte jednotlivé položky dvojklikem na buňku.", placement: "top" },
+  { permission: "payroll.recalculate", anchor: "payroll-recalc", route: DEMO_PAYROLL, title: "Přepočítání mezd", body: "Tímto tlačítkem můžete přepočítat mzdy pro tento měsíc. Všechny ruční úpravy zůstanou zachovány.", placement: "bottom" },
+  { permission: "payroll.recalculate.hard", anchor: "payroll-recalc-hard", route: DEMO_PAYROLL, title: "Tvrdý přepočet", body: "Tímto tlačítkem můžete přepočítat mzdy „natvrdo“, tzn. ani ruční úpravy nezůstanou zachovány (aplikace se zeptá na potvrzení).", placement: "bottom" },
+  { permission: "payroll.lock", anchor: "payroll-lock", route: DEMO_PAYROLL, title: "Uzamčení/odemčení období", body: "Daný měsíc můžete uzamknout pro úpravy.", placement: "bottom" },
+  { permission: "payroll.period.delete", anchor: "payroll-delete", route: DEMO_PAYROLL, title: "Smazání období", body: "Tlačítkem Smazat období nevratně odstraníte celé mzdové období (aplikace se zeptá na potvrzení).", placement: "bottom" },
+  { permission: "payroll.export", anchor: "payroll-export", route: DEMO_PAYROLL, title: "Export mezd", body: "Mzdy můžete exportovat do PDF.", placement: "bottom" },
+  { permission: "payroll.notes.manage", anchor: "payroll-notes-col", route: DEMO_PAYROLL, title: "Poznámky ke mzdám", body: "Ve sloupci poznámek přidáváte a spravujete poznámky k jednotlivým mzdám.", placement: "top" },
 
   // ── Upozornění (/upozorneni) ────────────────────────────────────────────────────
   { permission: "alerts.view", anchor: "alerts-tabs", route: "/upozorneni", title: "Zobrazení upozornění", body: "Záložky člení upozornění (doklady, zkušební doba, dovolená, výjimky, žádosti).", placement: "bottom" },

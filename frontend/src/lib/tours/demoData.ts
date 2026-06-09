@@ -36,8 +36,17 @@
  * benefits carry an active Multisport period + a companion.
  */
 
-/** Flag flipped by the self-demo route wrapper to enable /me/* self mocks. */
-export const tourDemo = { active: false };
+/**
+ * Tour-demo state. `active` is flipped on by the demo route wrappers
+ * (pages/TourDemoRoute); `scenario` selects which page's fixtures
+ * getDemoResponse serves while active. The sentinel-employee detail mocks are
+ * independent of this flag (keyed off the id in the request path).
+ */
+export type TourScenario = "self" | "shifts" | "shifts-empty" | "payroll" | "payroll-empty";
+export const tourDemo: { active: boolean; scenario: TourScenario | null } = {
+  active: false,
+  scenario: null,
+};
 
 /** Sentinel employee id used in `/employees/tour-demo/*` detail-page paths. */
 export const DEMO_EMP_ID = "tour-demo";
@@ -310,6 +319,148 @@ const educationLevels: unknown[] = [
   { code: "T", name: "Vysokoškolské vzdělání" },
 ];
 
+// ─── Payroll-demo fixtures (`/mzdy` via /napoveda/ukazka-mzdy[-prazdne]) ───────
+
+/** Epoch-seconds Firestore-style timestamp for a Y-M-D (UTC, deterministic). */
+function demoTs(year: number, month: number, day: number): { seconds: number } {
+  return { seconds: Math.floor(Date.UTC(year, month - 1, day) / 1000) };
+}
+
+/**
+ * A fully-populated payroll period for the requested month, so the REAL
+ * PayrollPage renders its table + every action button (recalc / hard-recalc /
+ * lock / delete / export) and the Poznámky column. `locked: false` so the
+ * unlock-gated buttons show. 3 entries spanning both display sections (FOM +
+ * Recepce/portýři); the first carries a note so the Poznámky cell is populated.
+ */
+function buildDemoPayrollPeriod(year: number, month: number): unknown {
+  const base = {
+    sickLeaveHours: 0,
+    totalHours: 160,
+    reportHours: 160,
+    vacationHours: 0,
+    nightHours: 0,
+    holidayHours: 0,
+    weekendHours: 0,
+    extraHours: 0,
+    extraPay: 0,
+    workingDays: 21,
+    foodVouchers: 21,
+    dppAmount: null,
+    salary: null as number | null,
+    hourlyRate: null as number | null,
+    overrides: {},
+    autoOverrides: {},
+    multisportActive: false,
+    notes: [] as unknown[],
+  };
+  return {
+    id: `demo-period-${year}-${String(month).padStart(2, "0")}`,
+    year,
+    month,
+    baseHours: 160,
+    maxNightHours: 36,
+    maxHolidayHours: 18,
+    foodVoucherRate: 96.9,
+    locked: false,
+    entries: [
+      {
+        ...base,
+        id: "demo-pe-1",
+        firstName: "Jana",
+        lastName: "Dvořáková",
+        contractType: "HPP",
+        salary: 45000,
+        jobTitle: "Vedoucí recepce",
+        section: "vedoucí",
+        nightHours: 8,
+        holidayHours: 4,
+        weekendHours: 12,
+        extraHours: 6,
+        extraPay: 3000,
+        multisportActive: true,
+        notes: [
+          {
+            id: "demo-note-1",
+            sourceNoteId: "demo-note-1",
+            text: "Dovolená 16.–20.",
+            carryForward: false,
+            createdBy: "demo-admin",
+            createdByName: "Admin",
+            createdAt: demoTs(year, month, 3),
+            auto: false,
+          },
+        ],
+      },
+      {
+        ...base,
+        id: "demo-pe-2",
+        firstName: "Petr",
+        lastName: "Novák",
+        contractType: "HPP",
+        salary: 38000,
+        jobTitle: "Recepční",
+        section: "recepce",
+        nightHours: 24,
+        weekendHours: 16,
+        foodVouchers: 20,
+      },
+      {
+        ...base,
+        id: "demo-pe-3",
+        firstName: "Karel",
+        lastName: "Svoboda",
+        contractType: "DPP",
+        hourlyRate: 200,
+        jobTitle: "Portýr",
+        section: "portýři",
+        totalHours: 60,
+        reportHours: 60,
+        workingDays: 8,
+        foodVouchers: 0,
+        dppAmount: 12000,
+        overrides: { dppAmount: 12000 },
+      },
+    ],
+  };
+}
+
+/**
+ * Serve mocks for the payroll page while a payroll demo scenario is active.
+ * Returns null when the path isn't a payroll path (let the caller continue).
+ *  - scenario "payroll":       by-month period fetch returns the populated period.
+ *  - scenario "payroll-empty": by-month returns null → the "Vytvořit mzdy ručně"
+ *                              (payroll-create) empty state renders.
+ * Every non-GET (create/recalc/lock/delete/notes) is swallowed with `{}`.
+ */
+function payrollFixture(
+  isGet: boolean,
+  clean: string
+): { hit: boolean; value?: unknown } | null {
+  if (clean !== "/payroll" && !clean.startsWith("/payroll/")) return null;
+  if (!isGet) return { hit: true, value: {} };
+  const m = clean.match(/^\/payroll\/periods\/by-month\/(\d+)\/(\d+)$/);
+  if (m) {
+    if (tourDemo.scenario === "payroll-empty") return { hit: true, value: null };
+    return { hit: true, value: buildDemoPayrollPeriod(Number(m[1]), Number(m[2])) };
+  }
+  return { hit: true, value: {} };
+}
+
+// ─── Shifts-demo fixtures (`/smeny` via /napoveda/ukazka-smeny[-prazdne]) ──────
+// Filled in with the shift-plan demo state. Returns null when the path isn't a
+// shifts path (let the caller continue) — so until the fixtures land, the shifts
+// scenario is a no-op and the steps fall back to the centered card.
+function shiftsFixture(
+  _isGet: boolean,
+  clean: string
+): { hit: boolean; value?: unknown } | null {
+  if (clean !== "/shifts" && !clean.startsWith("/shifts/")) return null;
+  // Swallow everything under /shifts/* while the demo is mounted so no real
+  // backend call fires; GET fixtures are added in the shift-demo step.
+  return { hit: true, value: {} };
+}
+
 // ─── Dispatcher ───────────────────────────────────────────────────────────────
 
 /** Strip a query string (and any trailing slash noise) for matching. */
@@ -391,20 +542,19 @@ const SELF_PATHS = new Set<string>([
  * - Any path under the sentinel detail employee (`/employees/tour-demo` or
  *   `/employees/tour-demo/...`) is ALWAYS handled: GET returns the matching
  *   fixture; any non-GET returns `{}` (write swallowed).
- * - Otherwise, only when `selfActive` is true and the path is a known self
- *   endpoint (or `/educationLevels`, or under `/audit`): GET returns the
- *   matching fixture; non-GET self paths return `{}`.
+ * - Otherwise, only while a demo route is mounted (`tourDemo.active`), the
+ *   active `tourDemo.scenario` selects which page's fixtures to serve (self /
+ *   payroll / shifts). GET returns the fixture; non-GET returns `{}`.
  * - Everything else: `{ hit: false }` (let the real request proceed).
  */
 export function getDemoResponse(
   method: string,
-  path: string,
-  selfActive: boolean
+  path: string
 ): { hit: boolean; value?: unknown } {
   const clean = stripQuery(path);
   const isGet = method.toUpperCase() === "GET";
 
-  // ── Detail sentinel: always handled ──
+  // ── Detail sentinel: always handled (independent of the active flag) ──
   const sentinelBase = `/employees/${DEMO_EMP_ID}`;
   if (clean === sentinelBase || clean.startsWith(`${sentinelBase}/`)) {
     if (!isGet) return { hit: true, value: {} };
@@ -416,23 +566,36 @@ export function getDemoResponse(
   // The employee-detail "Historie změn" section fetches `/audit?employeeId=…`
   // (the id isn't in the path, so it doesn't match the sentinel block above).
   // Serve an empty audit list when the query targets the demo employee, and
-  // also while the self-demo route is mounted.
+  // also while any demo route is mounted.
   if (clean === "/audit" || clean.startsWith("/audit/")) {
     const refsDemo = path.includes(`employeeId=${DEMO_EMP_ID}`);
-    if (refsDemo || selfActive) {
+    if (refsDemo || tourDemo.active) {
       if (!isGet) return { hit: true, value: {} };
       return { hit: true, value: { entries: [] } };
     }
   }
 
-  // ── Self endpoints: only while the self-demo route is mounted ──
-  if (selfActive) {
-    if (SELF_PATHS.has(clean) || clean.startsWith("/me/")) {
-      if (!isGet) return { hit: true, value: {} };
-      const fx = selfFixture(clean);
-      return { hit: true, value: fx === undefined ? {} : fx };
-    }
-  }
+  if (!tourDemo.active) return { hit: false };
 
-  return { hit: false };
+  switch (tourDemo.scenario) {
+    // ── Self endpoints (Můj profil demo) ──
+    case "self": {
+      if (SELF_PATHS.has(clean) || clean.startsWith("/me/")) {
+        if (!isGet) return { hit: true, value: {} };
+        const fx = selfFixture(clean);
+        return { hit: true, value: fx === undefined ? {} : fx };
+      }
+      return { hit: false };
+    }
+    // ── Payroll demo (populated period or empty "create" state) ──
+    case "payroll":
+    case "payroll-empty":
+      return payrollFixture(isGet, clean) ?? { hit: false };
+    // ── Shifts demo (added with the shift-plan fixtures) ──
+    case "shifts":
+    case "shifts-empty":
+      return shiftsFixture(isGet, clean) ?? { hit: false };
+    default:
+      return { hit: false };
+  }
 }

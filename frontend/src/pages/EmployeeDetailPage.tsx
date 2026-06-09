@@ -1564,7 +1564,11 @@ export default function EmployeeDetailPage() {
                 key={session.nastup.id}
                 session={session}
                 contractsByRow={mapContractsToRows(session.rows, contracts)}
-                defaultExpanded={idx === 0}
+                // Guided-tour demo (sentinel id "tour-demo"): expand EVERY session so
+                // the contract view/delete buttons on the older signed-contract session
+                // are in the DOM for the contracts tour steps (notes 55/59), not just
+                // the active session's generate/sign/edit. Real records keep idx===0.
+                defaultExpanded={idx === 0 || id === "tour-demo"}
                 companies={Object.fromEntries(companies.map((c) => [c.id, companyLabel(c)]))}
                 employeeId={id!}
                 resolveDefaultType={(row) => {

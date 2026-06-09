@@ -1060,7 +1060,7 @@ export default function PayrollPage() {
                   </th>
                   <th className={styles.numHeader}>STRAVENKY</th>
                   <th className={styles.numHeader}>MULTISPORT</th>
-                  <th className={styles.numHeader}>POZNÁMKY</th>
+                  <th className={styles.numHeader} data-tour="payroll-notes-col">POZNÁMKY</th>
                 </tr>
               </thead>
               <tbody>
