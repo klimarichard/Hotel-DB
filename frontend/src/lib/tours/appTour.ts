@@ -82,7 +82,7 @@ export const APP_TOUR_STEPS: TourStep[] = [
   // ── Dovolená (/dovolena) ─────────────────────────────────────────────────────
   { permission: "vacation.request.self", anchor: "vacation-request-form", route: "/dovolena", title: "Nová žádost o dovolenou", body: "Zadejte termín a důvod dovolené (důvod můžete nechat i prázdný, ale nedoporučuji to). Odesláním žádosti ji předáte ke schválení řediteli nebo adminovi. Pokud máte v daném termínu už naplánovanou nějakou směnu, aplikace vás na to upozorní.", placement: "right" },
   // Merged: viewing all requests + approving/rejecting them happen in the same panel.
-  { permission: ["vacation.view.all", "vacation.review"], anchor: "vacation-my-requests", route: "/dovolena", title: "Žádosti o dovolenou", body: "Seznam žádostí všech zaměstnanců se stavem (čeká, schváleno, zamítnuto). Žádosti zde můžete schvalovat nebo zamítat.", placement: "top" },
+  { permission: ["vacation.view.all", "vacation.review"], anchor: "vacation-all-requests", route: "/dovolena", title: "Žádosti o dovolenou", body: "Seznam žádostí všech zaměstnanců se stavem (čeká, schváleno, zamítnuto). Žádosti zde můžete schvalovat nebo zamítat.", placement: "top" },
   { permission: "vacation.view.approvedUpcoming", anchor: "vacation-approved-colleagues", route: "/dovolena", title: "Schválené dovolené kolegů", body: "Zde vidíte schválené dovolené vašich kolegů. Pokud je to možné, snažte se vyhnout kolizi termínu s někým jiným.", placement: "top" },
 
   // ── Zaměstnanci — seznam (/zamestnanci) ──────────────────────────────────────
@@ -97,9 +97,9 @@ export const APP_TOUR_STEPS: TourStep[] = [
   { permission: "employees.edit", anchor: "emp-hero-edit", route: DEMO_EMP, title: "Úprava zaměstnance", body: "Tlačítkem Upravit změníte údaje na kartě zaměstnance.", placement: "bottom" },
   { permission: "employees.delete", anchor: "emp-hero-delete", route: DEMO_EMP, title: "Smazání zaměstnance", body: "Tlačítkem Smazat nevratně odstraníte kartu zaměstnance (aplikace se zeptá na potvrzení).", placement: "bottom" },
   { permission: "sensitive.reveal", anchor: "emp-reveal", route: DEMO_EMP, reveal: ["emp-tab-detail"], title: "Zobrazení citlivých údajů", body: "Ikonou oka dočasně odhalíte citlivé údaje (např. rodné číslo, číslo účtu). Každé zobrazení je zaznamenáno v logu aplikace.", placement: "left" },
-  { permission: "benefits.view", anchor: "emp-benefits", route: DEMO_EMP, reveal: ["emp-tab-detail"], title: "Benefity", body: "V sekci Benefity vidíte zaměstnanecké výhody, např. Multisport.", placement: "left" },
+  { permission: "benefits.view", anchor: "emp-section-benefits", route: DEMO_EMP, reveal: ["emp-tab-detail"], title: "Benefity", body: "V sekci Benefity vidíte zaměstnanecké výhody, např. Multisport.", placement: "left" },
   { permission: "benefits.edit", anchor: "emp-benefits", route: DEMO_EMP, reveal: ["emp-tab-detail"], title: "Úprava Multisport", body: "Zde můžete upravit Multisport benefity zaměstnance (platnost, doprovodné osoby, atd.).", placement: "left" },
-  { permission: "employment.view", anchor: "emp-employment-add", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Historie pracovního poměru", body: "Zde vidíte historii pracovního poměru zaměstnance.", placement: "bottom" },
+  { permission: "employment.view", anchor: "emp-tab-history", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Historie pracovního poměru", body: "Zde vidíte historii pracovního poměru zaměstnance.", placement: "bottom" },
   { permission: "employment.manage", anchor: "emp-employment-add", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Správa pracovního poměru", body: "Můžete spravovat pracovní poměr zaměstnance (nástup, dodatky, ukončení).", placement: "bottom" },
   // Contracts ordered: generate → view → delete → edit → sign (per tour_notes step 59).
   { permission: "contracts.generate", anchor: "emp-contract-generate", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Generování smlouvy", body: "Z šablony vygenerujete smlouvu nebo dodatek pro zaměstnance.", placement: "left" },
@@ -107,7 +107,7 @@ export const APP_TOUR_STEPS: TourStep[] = [
   { permission: "contracts.delete", anchor: "emp-contract-delete", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Smazání smlouvy", body: "Tlačítkem Smazat smlouvu odstraníte vygenerovanou smlouvu (aplikace se zeptá na potvrzení).", placement: "left" },
   { permission: "contracts.edit", anchor: "emp-contract-edit", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Úprava smlouvy", body: "Údaje v tomto záznamu můžete upravit. Pokud už jste měli vygenerovanou smlouvu s původními údaji, aplikace vám umožní ji generovat znovu s pozměněnými údaji.", placement: "left" },
   { permission: "contracts.sign", anchor: "emp-contract-sign", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Podepsaná smlouva", body: "Tlačítkem Nahrát podepsanou smlouvu označíte smlouvu jako podepsanou a nahrajete naskenovanou podepsanou verzi.", placement: "left" },
-  { permission: "documents.view", anchor: "emp-doc-view", route: DEMO_EMP, reveal: ["emp-tab-docs"], title: "Další dokumenty", body: "Na záložce Další dokumenty vidíte nahrané dokumenty zaměstnance.", placement: "left" },
+  { permission: "documents.view", anchor: "emp-tab-docs", route: DEMO_EMP, reveal: ["emp-tab-docs"], title: "Další dokumenty", body: "Na záložce Další dokumenty vidíte nahrané dokumenty zaměstnance.", placement: "left" },
   { permission: "documents.upload", anchor: "emp-doc-upload", route: DEMO_EMP, reveal: ["emp-tab-docs"], title: "Nahrání dokumentu", body: "Tlačítkem Nahrát dokument přidáte k zaměstnanci další dokument.", placement: "bottom" },
   { permission: "documents.delete", anchor: "emp-doc-delete", route: DEMO_EMP, reveal: ["emp-tab-docs"], title: "Smazání dokumentu", body: "Tlačítkem Smazat odstraníte nahraný dokument (aplikace se zeptá na potvrzení).", placement: "left" },
 
@@ -149,10 +149,10 @@ export const APP_TOUR_STEPS: TourStep[] = [
   { permission: "userTypes.manage", anchor: "settings-tab-userTypes", route: "/nastaveni", reveal: ["settings-tab-userTypes"], title: "Typy uživatelů", body: "Na záložce Uživatelské typy vytváříte a upravujete typy a jejich výchozí oprávnění.", placement: "bottom" },
 
   // ── Číselníky a nastavení (/nastaveni) ────────────────────────────────────────────
-  { permission: "settings.companies.manage", anchor: "settings-add-company", route: "/nastaveni", reveal: ["settings-tab-companies"], title: "Správa společností", body: "Na záložce Společnosti přidáváte a upravujete údaje o firmách.", placement: "bottom" },
-  { permission: "settings.departments.manage", anchor: "settings-add-department", route: "/nastaveni", reveal: ["settings-tab-departments"], title: "Správa oddělení", body: "Na záložce Oddělení spravujete seznam oddělení.", placement: "bottom" },
-  { permission: "settings.jobPositions.manage", anchor: "settings-add-position", route: "/nastaveni", reveal: ["settings-tab-jobPositions"], title: "Správa pozic", body: "Na záložce Pracovní pozice spravujete seznam pozic.", placement: "bottom" },
-  { permission: "settings.educationLevels.manage", anchor: "settings-add-education", route: "/nastaveni", reveal: ["settings-tab-education"], title: "Správa vzdělání", body: "Na záložce Vzdělání spravujete úrovně vzdělání.", placement: "bottom" },
+  { permission: "settings.companies.manage", anchor: "settings-tab-companies", route: "/nastaveni", reveal: ["settings-tab-companies"], title: "Správa společností", body: "Na záložce Společnosti přidáváte a upravujete údaje o firmách.", placement: "bottom" },
+  { permission: "settings.departments.manage", anchor: "settings-tab-departments", route: "/nastaveni", reveal: ["settings-tab-departments"], title: "Správa oddělení", body: "Na záložce Oddělení spravujete seznam oddělení.", placement: "bottom" },
+  { permission: "settings.jobPositions.manage", anchor: "settings-tab-jobPositions", route: "/nastaveni", reveal: ["settings-tab-jobPositions"], title: "Správa pozic", body: "Na záložce Pracovní pozice spravujete seznam pozic.", placement: "bottom" },
+  { permission: "settings.educationLevels.manage", anchor: "settings-tab-education", route: "/nastaveni", reveal: ["settings-tab-education"], title: "Správa vzdělání", body: "Na záložce Vzdělání spravujete úrovně vzdělání.", placement: "bottom" },
   { permission: "settings.payroll.manage", anchor: "settings-tab-payroll", route: "/nastaveni", reveal: ["settings-tab-payroll"], title: "Mzdová nastavení", body: "Na záložce Mzdy spravujete mzdová nastavení (např. výši minimální mzdy, stravenkový paušál apod.).", placement: "bottom" },
   { permission: "settings.menuOrder.manage", anchor: "settings-tab-menu", route: "/nastaveni", reveal: ["settings-tab-menu"], title: "Pořadí menu", body: "Na záložce Menu můžete nastavit pořadí položek v bočním menu pro jednotlivé uživatelské role.", placement: "bottom" },
 
