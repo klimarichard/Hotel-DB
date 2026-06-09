@@ -162,7 +162,7 @@ export const APP_TOUR_STEPS: TourStep[] = [
 
   // ── Systém ─────────────────────────────────────────────────────────────────────
   { permission: "system.timeOverride", anchor: "tour-timeclock", hideInProd: true, title: "Testovací hodiny", body: "Mimo live verzi můžete nastavit testovací „nynější“ čas pro ověřování chování závislého na datu. V live verzi je funkce neaktivní.", placement: "top" },
-  { permission: "system.triggers", anchor: null, title: "Ruční spuštění úloh", body: "Můžete ručně spustit naplánované úlohy (přepočet mezd, obnova upozornění). Každé spuštění je zaznamenáno v logu změn.", placement: "bottom" },
+  { permission: "system.triggers", anchor: "settings-tab-jobs", route: "/nastaveni", reveal: ["settings-tab-jobs"], title: "Ruční spuštění úloh", body: "Na záložce Úlohy v Nastavení můžete ručně spustit naplánované úlohy (přechody plánů směn, obnova upozornění, přepočet aktuálních údajů). Každé spuštění je zaznamenáno v Logu změn.", placement: "bottom" },
   { permission: "system.admin", anchor: null, title: "Superadmin", body: "Máte oprávnění superadministrátora — přístup ke všem funkcím bez omezení. Používejte je obezřetně, zejména u nevratných operací.", placement: "bottom" },
 
   // ── Outro ───────────────────────────────────────────────────────────────────────
@@ -171,7 +171,7 @@ export const APP_TOUR_STEPS: TourStep[] = [
 
 export const appTour: TourDefinition = {
   id: "app",
-  version: 4,
+  version: 5,
   label: "Prohlídka aplikace",
   steps: APP_TOUR_STEPS,
 };
