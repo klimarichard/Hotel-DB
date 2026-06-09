@@ -107,7 +107,7 @@ export default function Layout() {
             );
           })}
         </ul>
-        <div className={styles.userBar}>
+        <div className={styles.userBar} data-tour="menu-footer">
           <span className={styles.userEmail}>{name?.trim() || user?.email}</span>
           <span className={styles.userRole}>{roleTypeName ?? role}</span>
           <button className={styles.logoutBtn} onClick={handleLogout}>
@@ -124,6 +124,7 @@ export default function Layout() {
           </button>
           <button
             className={styles.themeToggle}
+            data-tour="theme-toggle"
             onClick={toggleTheme}
             title={theme === "dark" ? "Světlý režim" : "Tmavý režim"}
           >
