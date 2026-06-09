@@ -155,7 +155,6 @@ export const PERMISSION_CATALOG = [
   {
     group: "Žádosti o úpravu údajů",
     items: [
-      { key: "changeRequests.submit.self", label: "Navrhnout úpravu vlastních údajů" },
       { key: "changeRequests.review", label: "Schvalovat úpravy údajů" },
     ],
   },
@@ -231,7 +230,6 @@ const BASE_SELF: Permission[] = [
   "dashboard.view",
   "self.profile.view",
   "self.profile.requestEdit",
-  "changeRequests.submit.self",
   "sensitive.reveal.self",
   "vacation.request.self",
 ];

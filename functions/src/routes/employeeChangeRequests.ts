@@ -74,7 +74,7 @@ employeeChangeRequestsRouter.get("/pending", async (_req: AuthRequest, res) => {
 
 // ─── Reveal a proposed sensitive value ───────────────────────────────────────
 
-employeeChangeRequestsRouter.post("/:id/reveal", async (req: AuthRequest, res) => {
+employeeChangeRequestsRouter.post("/:id/reveal", requirePermission("sensitive.reveal"), async (req: AuthRequest, res) => {
   const { field } = req.body as { field: string };
   const snap = await db().collection("employeeChangeRequests").doc(req.params.id).get();
   if (!snap.exists) { res.status(404).json({ error: "Žádost nenalezena." }); return; }
