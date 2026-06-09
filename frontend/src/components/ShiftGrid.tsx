@@ -395,7 +395,7 @@ export default function ShiftGrid({
             <th className={styles.totalHeader}>Směny</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody data-tour="shift-rows">
           {SECTIONS.flatMap((section) => {
             const emps = grouped.get(section) ?? [];
             if (emps.length === 0) return [];
@@ -651,8 +651,9 @@ export default function ShiftGrid({
 
             return rows;
           })}
-          {shiftCounts && (
-            <>
+        </tbody>
+        {shiftCounts && (
+          <tbody data-tour="shift-counter">
               <tr className={styles.counterSeparatorRow}>
                 <td colSpan={days.length + 2} className={styles.counterSeparatorCell}>
                   Přehled obsazení
@@ -677,10 +678,10 @@ export default function ShiftGrid({
                   <td className={styles.footerCell} />
                 </tr>
               ))}
-            </>
-          )}
-          {showFreeShifts && (
-            <>
+          </tbody>
+        )}
+        {showFreeShifts && (
+          <tbody data-tour="shift-free">
               <tr className={styles.freeSeparatorRow}>
                 <td colSpan={days.length + 2} className={styles.freeSeparatorCell}>
                   Volné směny
@@ -730,9 +731,8 @@ export default function ShiftGrid({
                 </tr>
                 );
               })}
-            </>
-          )}
-        </tbody>
+          </tbody>
+        )}
       </table>
     </div>
   );

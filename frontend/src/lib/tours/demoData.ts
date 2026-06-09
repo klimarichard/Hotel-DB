@@ -44,7 +44,13 @@ import { now as clockNow } from "@/lib/clock";
  * getDemoResponse serves while active. The sentinel-employee detail mocks are
  * independent of this flag (keyed off the id in the request path).
  */
-export type TourScenario = "self" | "shifts" | "shifts-empty" | "payroll" | "payroll-empty";
+export type TourScenario =
+  | "self"
+  | "shifts"
+  | "shifts-empty"
+  | "shifts-published"
+  | "payroll"
+  | "payroll-empty";
 export const tourDemo: { active: boolean; scenario: TourScenario | null } = {
   active: false,
   scenario: null,
@@ -487,15 +493,14 @@ function demoPlanEmployee(
 }
 
 /**
- * A populated "opened" shift plan for the current month, so the REAL
- * ShiftPlannerPage + ShiftGrid render the full grid (all three sections → MOD
- * row, X-limit badges) plus the toolbar buttons that an "opened" plan exposes
- * (transitions / revert / add-employee / edit-deadlines / export, and the
- * review panels for users who hold those permissions). create / delete (created)
- * / counter table (closed) / free porter shifts (published) are out of this
- * state by design and keep the centered fallback.
+ * A populated shift plan for the current month (status passed in), so the REAL
+ * ShiftPlannerPage + ShiftGrid render. The "opened" variant exposes the toolbar
+ * buttons (transitions / revert / add-employee / edit-deadlines / export) plus
+ * the grid's shift-rows and counter ("Přehled obsazení") sections; the
+ * "published" variant additionally renders the Volné směny (free porter shift)
+ * section. delete (needs "created") keeps the centered fallback.
  */
-function buildDemoShiftPlan(): unknown {
+function buildDemoShiftPlan(status: string): unknown {
   const { year, month } = currentYM();
   const ymd = (day: number) =>
     `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
@@ -513,13 +518,15 @@ function buildDemoShiftPlan(): unknown {
     id: DEMO_SHIFT_PLAN_ID,
     month,
     year,
-    status: "opened",
+    status,
     createdBy: "demo",
     openedAt: null,
     closedAt: null,
     publishedAt: null,
     modPersons: { A: "demo-ved-1" },
-    freeShiftDpaDays: [],
+    // Published plans surface the Volné směny section; mark a couple of DPA days
+    // so the "pick porter shift" row has claimable cells to spotlight.
+    freeShiftDpaDays: status === "published" ? [ymd(10), ymd(11)] : [],
     employees: [
       demoPlanEmployee("demo-ved-1", "Tomáš", "Veselý", "vedoucí", "R", null, 0),
       demoPlanEmployee("demo-rec-1", "Jana", "Dvořáková", "recepce", "D", "A", 1),
@@ -556,15 +563,16 @@ function shiftsFixture(
   if (clean !== "/shifts" && !clean.startsWith("/shifts/")) return null;
   if (!isGet) return { hit: true, value: {} };
 
+  const planStatus = tourDemo.scenario === "shifts-published" ? "published" : "opened";
   // Plan list — drives whether the page lands on a plan or the empty state.
   if (clean === "/shifts/plans") {
     if (tourDemo.scenario === "shifts-empty") return { hit: true, value: [] };
     const { year, month } = currentYM();
-    return { hit: true, value: [{ id: DEMO_SHIFT_PLAN_ID, month, year, status: "opened" }] };
+    return { hit: true, value: [{ id: DEMO_SHIFT_PLAN_ID, month, year, status: planStatus }] };
   }
   // Full plan detail.
   if (clean === `/shifts/plans/${DEMO_SHIFT_PLAN_ID}`) {
-    return { hit: true, value: buildDemoShiftPlan() };
+    return { hit: true, value: buildDemoShiftPlan(planStatus) };
   }
   // Global pending-count badges (override/change-request reviewers).
   if (
@@ -714,6 +722,7 @@ export function getDemoResponse(
     // ── Shifts demo (added with the shift-plan fixtures) ──
     case "shifts":
     case "shifts-empty":
+    case "shifts-published":
       return shiftsFixture(isGet, clean) ?? { hit: false };
     default:
       return { hit: false };
