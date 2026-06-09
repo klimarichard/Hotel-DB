@@ -27,12 +27,14 @@ export interface TourStep {
    */
   reveal?: string[];
   /**
-   * Permission key gating this step. The step is included only when the user's
-   * `can(permission)` is true. Omit for always-shown steps (welcome / outro).
-   * Steps whose `permission` lives on a section without a dedicated on-page
-   * anchor spotlight that section's sidebar nav item instead.
+   * Permission key(s) gating this step. The step is included when the user holds
+   * the permission — or, if an array is given, ANY of them (OR semantics, used
+   * for steps that merge two near-identical permission variants such as
+   * employees.view.all / employees.view.nonManagement). Omit for always-shown
+   * steps (welcome / outro). Steps whose `permission` lives on a section without
+   * a dedicated on-page anchor spotlight that section's sidebar nav item instead.
    */
-  permission?: Permission;
+  permission?: Permission | Permission[];
   title: string;
   body: string;
   placement?: TourPlacement;

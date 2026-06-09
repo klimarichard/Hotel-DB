@@ -64,7 +64,7 @@ export const APP_TOUR_STEPS: TourStep[] = [
   { permission: "shifts.changeRequest.submit", anchor: "shift-my-requests", route: "/smeny", title: "Žádost o změnu směny", body: "Když je plán směn již hotový, žádost o změnu podáte dvojklikem na danou buňku. Popište, o jakou změnu jde (stačí např. „vyměnit s …“). Admin změny schvaluje nebo zamítá. Stav žádosti vidíte v sekci Moje žádosti.", placement: "top" },
   { permission: "shifts.freeShift.claim", anchor: "shift-my-requests", route: "/smeny", title: "Žádost o volnou směnu", body: "Volné portýrské směny jsou zobrazeny pod rozpisem směn. Můžete o ně požádat dvojklikem na danou volnou směnu.", placement: "top" },
   { permission: "shifts.changeRequest.review", anchor: "shift-change-requests", route: "/smeny", title: "Schvalování žádostí o změnu", body: "Tlačítkem Žádosti o změny otevřete panel se žádostmi zaměstnanců ke schválení nebo zamítnutí.", placement: "bottom" },
-  { permission: "shifts.override.submit", anchor: "shift-grid", route: "/smeny", title: "Žádost o výjimku", body: "Při překročení limitu (např. volných dnů) podáte přímo v plánu žádost o výjimku.", placement: "bottom" },
+  // Note: shifts.override.submit ("Žádost o výjimku") folded into the X-limit step above (the 9th-X dialog).
   { permission: "shifts.override.review", anchor: "shift-overrides", route: "/smeny", title: "Schvalování výjimek", body: "Tlačítkem Výjimky otevřete panel žádostí o výjimky z pravidel plánu ke schválení.", placement: "bottom" },
   { permission: "shifts.plan.create", anchor: "shift-create", route: "/smeny", title: "Vytvoření plánu", body: "Tlačítkem Vytvořit plán založíte nový měsíční plán směn.", placement: "bottom" },
   { permission: "shifts.plan.edit", anchor: "shift-edit-deadlines", route: "/smeny", title: "Automatizace plánování", body: "Zde nastavíte termíny plánu (otevření, uzávěrka, publikování).", placement: "bottom" },
@@ -79,22 +79,15 @@ export const APP_TOUR_STEPS: TourStep[] = [
 
   // ── Dovolená (/dovolena) ─────────────────────────────────────────────────────
   { permission: "vacation.request.self", anchor: "vacation-request-form", route: "/dovolena", title: "Nová žádost o dovolenou", body: "Zadejte termín a důvod dovolené (důvod můžete nechat i prázdný, ale nedoporučuji to). Odesláním žádosti ji předáte ke schválení řediteli nebo adminovi. Pokud máte v daném termínu už naplánovanou nějakou směnu, aplikace vás na to upozorní.", placement: "right" },
-  { permission: "vacation.view.all", anchor: "vacation-my-requests", route: "/dovolena", title: "Žádosti o dovolenou", body: "Seznam žádostí se stavem (čeká, schváleno, zamítnuto) — vidíte žádosti všech zaměstnanců.", placement: "top" },
-  { permission: "vacation.review", anchor: "vacation-my-requests", route: "/dovolena", title: "Schvalování dovolené", body: "Žádosti o dovolenou můžete schvalovat nebo zamítat.", placement: "top" },
+  // Merged: viewing all requests + approving/rejecting them happen in the same panel.
+  { permission: ["vacation.view.all", "vacation.review"], anchor: "vacation-my-requests", route: "/dovolena", title: "Žádosti o dovolenou", body: "Seznam žádostí všech zaměstnanců se stavem (čeká, schváleno, zamítnuto). Žádosti zde můžete schvalovat nebo zamítat.", placement: "top" },
   { permission: "vacation.view.approvedUpcoming", anchor: "vacation-approved-colleagues", route: "/dovolena", title: "Schválené dovolené kolegů", body: "Zde vidíte schválené dovolené vašich kolegů. Pokud je to možné, snažte se vyhnout kolizi termínu s někým jiným.", placement: "top" },
 
   // ── Zaměstnanci — seznam (/zamestnanci) ──────────────────────────────────────
-  { permission: "employees.view.all", anchor: "emp-list", route: "/zamestnanci", title: "Seznam zaměstnanců", body: "Vidíte kompletní seznam zaměstnanců včetně vedení; kliknutím na jméno otevřete kartu.", placement: "top" },
-  { permission: "employees.view.nonManagement", anchor: "emp-list", route: "/zamestnanci", title: "Seznam zaměstnanců", body: "Vidíte seznam zaměstnanců s výjimkou členů vedení.", placement: "top" },
+  // Merged: view.all (vedení incl.) + view.nonManagement collapse into one step.
+  { permission: ["employees.view.all", "employees.view.nonManagement"], anchor: "emp-list", route: "/zamestnanci", title: "Seznam zaměstnanců", body: "Zde vidíte seznam zaměstnanců. Kliknutím na jméno otevřete zaměstnaneckou kartu.", placement: "top" },
   { permission: "employees.create", anchor: "emp-create", route: "/zamestnanci", title: "Vytvoření zaměstnance", body: "Tlačítkem Přidat zaměstnance založíte novou kartu.", placement: "bottom" },
-  { permission: "employees.export", anchor: "emp-export", route: "/zamestnanci", title: "Export seznamu", body: "Tlačítkem Exportovat CSV stáhnete seznam zaměstnanců.", placement: "bottom" },
-  { permission: "employees.export.sensitive", anchor: "emp-export", route: "/zamestnanci", title: "Export citlivých údajů", body: "V dialogu exportu lze zahrnout i citlivé údaje (např. rodná čísla). Každý takový export je zaznamenán v logu změn.", placement: "bottom" },
-
-  // ── Můj profil — REAL self page fed by mock data (/napoveda/ukazka-profil) ──────
-  { permission: "self.profile.view", anchor: "selfpage-title", route: DEMO_SELF, title: "Můj profil", body: "Tato stránka zobrazuje vaši kartu zaměstnance — osobní údaje, kontakt, doklady a historii poměru. Slouží ke čtení. (Ukázková data pouze pro průvodce.)", placement: "bottom" },
-  { permission: "self.profile.requestEdit", anchor: "selfpage-edit-btn", route: DEMO_SELF, title: "Navrhnout úpravu", body: "Tlačítkem Navrhnout úpravu můžete upravit svoje údaje a odeslat úpravu ke schválení. Změněné hodnoty se objeví až po schválení administrátorem nebo ředitelem.", placement: "left" },
-  { permission: "sensitive.reveal.self", anchor: "selfpage-reveal", route: DEMO_SELF, title: "Zobrazení vlastních citlivých údajů", body: "Pole označená ikonou oka (např. rodné číslo) jsou skryta. Kliknutím je dočasně zobrazíte. Každé zobrazení je zaznamenáno v logu aplikace.", placement: "left" },
-  { permission: "changeRequests.submit.self", anchor: "selfpage-requests", route: DEMO_SELF, title: "Vaše návrhy na změnu", body: "Zde vidíte odeslané návrhy na úpravu profilu a jejich stav. Změny čekající na schválení jde zrušit.", placement: "top" },
+  { permission: "employees.export", anchor: "emp-export", route: "/zamestnanci", title: "Export seznamu", body: "Seznam zaměstnanců můžete exportovat do CSV.", placement: "bottom" },
 
   // ── Zaměstnanec — karta: REAL detail page fed by mock data (/zamestnanci/tour-demo) ──
   // Detail-tab sections are expanded by default; history/docs controls live on
@@ -106,14 +99,21 @@ export const APP_TOUR_STEPS: TourStep[] = [
   { permission: "benefits.edit", anchor: "emp-benefits", route: DEMO_EMP, reveal: ["emp-tab-detail"], title: "Úprava Multisport", body: "Zde můžete upravit Multisport benefity zaměstnance (platnost, doprovodné osoby, atd.).", placement: "left" },
   { permission: "employment.view", anchor: "emp-employment-add", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Historie pracovního poměru", body: "Zde vidíte historii pracovního poměru zaměstnance.", placement: "bottom" },
   { permission: "employment.manage", anchor: "emp-employment-add", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Správa pracovního poměru", body: "Můžete spravovat pracovní poměr zaměstnance (nástup, dodatky, ukončení).", placement: "bottom" },
-  { permission: "contracts.view", anchor: "emp-contract-view", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Zobrazení smluv", body: "Vygenerované smlouvy a dodatky lze zobrazit a stáhnout.", placement: "left" },
+  // Contracts ordered: generate → view → delete → edit → sign (per tour_notes step 59).
   { permission: "contracts.generate", anchor: "emp-contract-generate", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Generování smlouvy", body: "Z šablony vygenerujete smlouvu nebo dodatek pro zaměstnance.", placement: "left" },
+  { permission: "contracts.view", anchor: "emp-contract-view", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Zobrazení smluv", body: "Vygenerované smlouvy a dodatky lze zobrazit a stáhnout.", placement: "left" },
+  { permission: "contracts.delete", anchor: "emp-contract-delete", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Smazání smlouvy", body: "Tlačítkem Smazat smlouvu odstraníte vygenerovanou smlouvu (aplikace se zeptá na potvrzení).", placement: "left" },
   { permission: "contracts.edit", anchor: "emp-contract-edit", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Úprava smlouvy", body: "Údaje v tomto záznamu můžete upravit. Pokud už jste měli vygenerovanou smlouvu s původními údaji, aplikace vám umožní ji generovat znovu s pozměněnými údaji.", placement: "left" },
   { permission: "contracts.sign", anchor: "emp-contract-sign", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Podepsaná smlouva", body: "Tlačítkem Nahrát podepsanou smlouvu označíte smlouvu jako podepsanou a nahrajete naskenovanou podepsanou verzi.", placement: "left" },
-  { permission: "contracts.delete", anchor: "emp-contract-delete", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Smazání smlouvy", body: "Tlačítkem Smazat smlouvu odstraníte vygenerovanou smlouvu (aplikace se zeptá na potvrzení).", placement: "left" },
   { permission: "documents.view", anchor: "emp-doc-view", route: DEMO_EMP, reveal: ["emp-tab-docs"], title: "Další dokumenty", body: "Na záložce Další dokumenty vidíte nahrané dokumenty zaměstnance.", placement: "left" },
   { permission: "documents.upload", anchor: "emp-doc-upload", route: DEMO_EMP, reveal: ["emp-tab-docs"], title: "Nahrání dokumentu", body: "Tlačítkem Nahrát dokument přidáte k zaměstnanci další dokument.", placement: "bottom" },
   { permission: "documents.delete", anchor: "emp-doc-delete", route: DEMO_EMP, reveal: ["emp-tab-docs"], title: "Smazání dokumentu", body: "Tlačítkem Smazat odstraníte nahraný dokument (aplikace se zeptá na potvrzení).", placement: "left" },
+
+  // ── Můj profil — REAL self page fed by mock data (/napoveda/ukazka-profil) ──────
+  { permission: "self.profile.view", anchor: "selfpage-title", route: DEMO_SELF, title: "Můj profil", body: "Tato stránka zobrazuje vaši kartu zaměstnance — osobní údaje, kontakt, doklady a historii poměru. Slouží ke čtení. (Ukázková data pouze pro průvodce.)", placement: "bottom" },
+  { permission: "self.profile.requestEdit", anchor: "selfpage-edit-btn", route: DEMO_SELF, title: "Navrhnout úpravu", body: "Tlačítkem Navrhnout úpravu můžete upravit svoje údaje a odeslat úpravu ke schválení. Změněné hodnoty se objeví až po schválení administrátorem nebo ředitelem.", placement: "left" },
+  { permission: "sensitive.reveal.self", anchor: "selfpage-reveal", route: DEMO_SELF, title: "Zobrazení vlastních citlivých údajů", body: "Pole označená ikonou oka (např. rodné číslo) jsou skryta. Kliknutím je dočasně zobrazíte. Každé zobrazení je zaznamenáno v logu aplikace.", placement: "left" },
+  { permission: "changeRequests.submit.self", anchor: "selfpage-requests", route: DEMO_SELF, title: "Vaše návrhy na změnu", body: "Zde vidíte odeslané návrhy na úpravu profilu a jejich stav. Změny čekající na schválení jde zrušit.", placement: "top" },
 
   // ── Šablony smluv (/smlouvy) ──────────────────────────────────────────────────
   { permission: "contractTemplates.view", anchor: "templates-list", route: "/smlouvy", title: "Zobrazení šablon", body: "V seznamu vlevo si vyberete a prohlédnete dostupné šablony.", placement: "right" },
@@ -139,21 +139,20 @@ export const APP_TOUR_STEPS: TourStep[] = [
   // ── Log změn ────────────────────────────────────────────────────────────────────
   { permission: "audit.view", anchor: "nav-audit", title: "Log změn", body: "V Logu změn dohledáte, kdo a kdy data změnil nebo zobrazil citlivé údaje.", placement: "right" },
 
+  // ── Uživatelé a oprávnění (/nastaveni) — before the číselník tabs ──────────────────
+  { permission: "users.view", anchor: "settings-tab-users", route: "/nastaveni", reveal: ["settings-tab-users"], title: "Uživatelé", body: "Na záložce Uživatelé vidíte uživatelské účty.", placement: "bottom" },
+  { permission: "users.manage", anchor: "settings-add-user", route: "/nastaveni", reveal: ["settings-tab-users"], title: "Správa uživatelů", body: "Tlačítkem Přidat uživatele zakládáte účty, můžete je upravovat a deaktivovat.", placement: "bottom" },
+  { permission: "users.setType", anchor: "settings-user-type", route: "/nastaveni", reveal: ["settings-tab-users"], title: "Přiřazení typu", body: "U každého uživatele zvolíte typ, který určuje jeho výchozí oprávnění.", placement: "left" },
+  { permission: "users.permissions.manage", anchor: "settings-user-perms", route: "/nastaveni", reveal: ["settings-tab-users"], title: "Individuální oprávnění", body: "Tlačítkem Oprávnění uživateli nad rámec typu přidáte nebo odeberete konkrétní práva.", placement: "left" },
+  { permission: "userTypes.manage", anchor: "settings-tab-userTypes", route: "/nastaveni", reveal: ["settings-tab-userTypes"], title: "Typy uživatelů", body: "Na záložce Uživatelské typy vytváříte a upravujete typy a jejich výchozí oprávnění.", placement: "bottom" },
+
   // ── Číselníky a nastavení (/nastaveni) ────────────────────────────────────────────
-  { permission: "masterData.view", anchor: null, title: "Číselníky", body: "Číselníky (společnosti, oddělení, pozice, vzdělání) se nabízejí v rozbalovacích polích formulářů. Spravují se v Nastavení.", placement: "bottom" },
   { permission: "settings.companies.manage", anchor: "settings-add-company", route: "/nastaveni", reveal: ["settings-tab-companies"], title: "Správa společností", body: "Na záložce Společnosti přidáváte a upravujete údaje o firmách.", placement: "bottom" },
   { permission: "settings.departments.manage", anchor: "settings-add-department", route: "/nastaveni", reveal: ["settings-tab-departments"], title: "Správa oddělení", body: "Na záložce Oddělení spravujete seznam oddělení.", placement: "bottom" },
   { permission: "settings.jobPositions.manage", anchor: "settings-add-position", route: "/nastaveni", reveal: ["settings-tab-jobPositions"], title: "Správa pozic", body: "Na záložce Pracovní pozice spravujete seznam pozic.", placement: "bottom" },
   { permission: "settings.educationLevels.manage", anchor: "settings-add-education", route: "/nastaveni", reveal: ["settings-tab-education"], title: "Správa vzdělání", body: "Na záložce Vzdělání spravujete úrovně vzdělání.", placement: "bottom" },
   { permission: "settings.payroll.manage", anchor: "settings-tab-payroll", route: "/nastaveni", reveal: ["settings-tab-payroll"], title: "Mzdová nastavení", body: "Na záložce Mzdy spravujete mzdová nastavení (např. výši minimální mzdy, stravenkový paušál apod.).", placement: "bottom" },
   { permission: "settings.menuOrder.manage", anchor: "settings-tab-menu", route: "/nastaveni", reveal: ["settings-tab-menu"], title: "Pořadí menu", body: "Na záložce Menu můžete nastavit pořadí položek v bočním menu pro jednotlivé uživatelské role.", placement: "bottom" },
-
-  // ── Uživatelé a oprávnění (/nastaveni) ────────────────────────────────────────────
-  { permission: "users.view", anchor: "settings-tab-users", route: "/nastaveni", reveal: ["settings-tab-users"], title: "Uživatelé", body: "Na záložce Uživatelé vidíte uživatelské účty.", placement: "bottom" },
-  { permission: "users.manage", anchor: "settings-add-user", route: "/nastaveni", reveal: ["settings-tab-users"], title: "Správa uživatelů", body: "Tlačítkem Přidat uživatele zakládáte účty, můžete je upravovat a deaktivovat.", placement: "bottom" },
-  { permission: "users.setType", anchor: "settings-user-type", route: "/nastaveni", reveal: ["settings-tab-users"], title: "Přiřazení typu", body: "U každého uživatele zvolíte typ, který určuje jeho výchozí oprávnění.", placement: "left" },
-  { permission: "users.permissions.manage", anchor: "settings-user-perms", route: "/nastaveni", reveal: ["settings-tab-users"], title: "Individuální oprávnění", body: "Tlačítkem Oprávnění uživateli nad rámec typu přidáte nebo odeberete konkrétní práva.", placement: "left" },
-  { permission: "userTypes.manage", anchor: "settings-tab-userTypes", route: "/nastaveni", reveal: ["settings-tab-userTypes"], title: "Typy uživatelů", body: "Na záložce Uživatelské typy vytváříte a upravujete typy a jejich výchozí oprávnění.", placement: "bottom" },
 
   // ── Systém ─────────────────────────────────────────────────────────────────────
   { permission: "system.timeOverride", anchor: "tour-timeclock", title: "Testovací hodiny", body: "Mimo live verzi můžete nastavit testovací „nynější“ čas pro ověřování chování závislého na datu. V live verzi je funkce neaktivní.", placement: "top" },
@@ -166,7 +165,7 @@ export const APP_TOUR_STEPS: TourStep[] = [
 
 export const appTour: TourDefinition = {
   id: "app",
-  version: 2,
+  version: 3,
   label: "Prohlídka aplikace",
   steps: APP_TOUR_STEPS,
 };
