@@ -92,7 +92,7 @@ export default function AlertsPage() {
       <div className={styles.header}>
         <div className={styles.titleGroup}>
           <h1 className={styles.title}>Upozornění</h1>
-          {can("alerts.refresh") && (
+          {can("system.triggers") && (
             <IconButton
               data-tour="alerts-refresh"
               variant="refresh"

@@ -132,7 +132,6 @@ export const PERMISSION_CATALOG = [
     items: [
       { key: "alerts.view", label: "Zobrazit upozornění" },
       { key: "alerts.read", label: "Označit upozornění jako přečtené" },
-      { key: "alerts.refresh", label: "Ručně obnovit upozornění" },
     ],
   },
   {

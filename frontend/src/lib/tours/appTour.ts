@@ -145,7 +145,7 @@ export const APP_TOUR_STEPS: TourStep[] = [
   // ── Upozornění (/upozorneni) ────────────────────────────────────────────────────
   { permission: "alerts.view", anchor: "alerts-tabs", route: "/upozorneni", title: "Zobrazení upozornění", body: "Záložky člení upozornění (doklady, zkušební doba, dovolená, výjimky, žádosti).", placement: "bottom" },
   { permission: "alerts.read", anchor: "alerts-mark-read", route: "/upozorneni", title: "Označení jako přečtené", body: "Upozornění označíte jako přečtené jednotlivě nebo hromadně. Tento stav je sdílený pro všechny uživatele, kteří upozornění vidí.", placement: "bottom" },
-  { permission: "alerts.refresh", anchor: "alerts-refresh", route: "/upozorneni", title: "Ruční obnovení", body: "Můžete ručně aktualizovat upozornění.", placement: "bottom" },
+  { permission: "system.triggers", anchor: "alerts-refresh", route: "/upozorneni", title: "Ruční obnovení", body: "Můžete ručně aktualizovat upozornění.", placement: "bottom" },
   { permission: "changeRequests.review", anchor: "alerts-tab-uprava", route: "/upozorneni", reveal: ["alerts-tab-uprava"], title: "Schvalování úprav údajů", body: "Na záložce Žádosti o úpravu údajů schvalujete nebo zamítáte návrhy zaměstnanců.", placement: "bottom" },
 
   // ── Log změn ────────────────────────────────────────────────────────────────────

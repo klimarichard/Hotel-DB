@@ -979,7 +979,7 @@ export default function SettingsPage() {
                           data-tour="settings-user-type"
                           className={styles.roleSelect}
                           value={pendingType[u.uid] ?? u.roleType ?? u.role}
-                          disabled={roleChanging[u.uid]}
+                          disabled={roleChanging[u.uid] || (!can("users.setType") && !can("users.permissions.manage"))}
                           onChange={(e) => handleTypeChange(u.uid, e.target.value)}
                         >
                           {roleTypes.map((t) => (
