@@ -969,9 +969,11 @@ export default function SettingsPage() {
                   <tr><td colSpan={6} className={styles.empty}>Žádní uživatelé</td></tr>
                 )}
                 {sortedUsers.map((u) => {
-                  const linkedEmp = u.employeeId
-                    ? employees.find((e) => e.id === u.employeeId)
-                    : null;
+                  const isLinked = !!u.employeeId;
+                  // Prefer the server-resolved name (works without the employees
+                  // list / for non-active employees); fall back to the local list.
+                  const localEmp = u.employeeId ? employees.find((e) => e.id === u.employeeId) : null;
+                  const linkedName = u.employeeName ?? (localEmp ? employeeSurnameFirst(localEmp) : null);
                   return (
                     <tr key={u.uid}>
                       <td className={styles.name}>{u.name}</td>
@@ -996,11 +998,11 @@ export default function SettingsPage() {
                         )}
                       </td>
                       <td>
-                        <span className={linkedEmp ? styles.employeeLinked : styles.employeeUnlinked}>
-                          {linkedEmp ? employeeSurnameFirst(linkedEmp) : "—"}
+                        <span className={isLinked ? styles.employeeLinked : styles.employeeUnlinked}>
+                          {linkedName ?? "—"}
                         </span>
                         {can("users.linkEmployee") &&
-                          (linkedEmp ? (
+                          (isLinked ? (
                             <button
                               className={styles.linkBtn}
                               onClick={() => handleUnlinkEmployee(u.uid)}
