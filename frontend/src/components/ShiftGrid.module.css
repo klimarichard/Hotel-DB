@@ -122,12 +122,6 @@
   border-bottom: 1px solid var(--color-border);
 }
 
-/* Thick divider between sections — replaces the removed per-section Σ rows.
-   Skips the first section (it sits directly under the table header). */
-.sectionRow:not(:first-child) td {
-  border-top: 3px solid var(--color-text-muted);
-}
-
 /* ── Employee rows ────────────────────────────────────────────────────── */
 
 .empRow {
@@ -229,7 +223,7 @@
 
 .modRow {
   border-bottom: 2px solid var(--color-border);
-  border-top: 3px solid var(--color-text-muted);
+  border-top: 1px solid var(--color-mod-border);
   background: var(--color-mod-bg);
 }
 
