@@ -98,6 +98,12 @@ Tab labels show pending counts as red pill badges.
 
 **Probation alert generator** — `functions/src/services/probationAlerts.ts`. Mirrors `updateDocumentAlerts`: parses the free-form `probationPeriod` string (e.g., "3 měsíce", "30 dní", "2 týdny", or a bare number defaulting to months — accent-insensitive match), computes the calendar-correct end-date, and upserts an alert iff end-date is within `PROBATION_ALERT_DAYS = 14`. Triggered on every employment row create + edit (best-effort, never blocks the response), cascade-deleted on employee delete, and re-scanned daily by `refreshProbationAlerts`. Manual emulator trigger: `POST /api/employees/trigger-probation-refresh`. Unparseable / zero values delete any existing alert. **Suppression**: the alert is also deleted when the active row's employment session is **terminated** (an `ukončení` row exists, or the effective `endDate` is in the past) or **already has a salary Dodatek** (`změna smlouvy` carrying a `mzda` change). `refreshProbationAlertsForEmployee` loads the full employment history (single-field `orderBy`, no composite index) and a server-side session walk (`sessionFlagsByNastup`, mirroring the frontend `groupBySession`) decides suppression per active row.
 
+**Alert suppression for terminated employees (both alert types):** `status === "terminated"` is the canonical suppression signal for both document-expiry alerts and probation alerts:
+- **Document-expiry alerts** (`refreshDocumentAlerts` scheduled + manual trigger in `functions/src/index.ts`): when building the expiry-fields body for `updateDocumentAlerts`, every field is set to `null` for terminated employees, causing all existing alerts to be deleted and none to be created. Active **and** `before-start` (upcoming) employees keep their document-expiry alerts.
+- **Probation alerts** (`refreshProbationAlertsForEmployee`): the canonical `empData.status === "terminated"` check overrides the per-session flags — if the employee root says terminated, the alert is suppressed regardless of session state. `before-start` employees (status not `"terminated"`) are not suppressed — a new hire awaiting day one can still have a ticking probation clock.
+
+The distinction matters because the employment-row `status` field can lag the derived employee-level `status` field; checking the employee root avoids stale alerts surviving after a status transition.
+
 **Manual refresh (admin)** — a rotating-arrow `IconButton` (`refresh` variant) next to the page title, rendered only for `admin`, re-triggers both refreshers (`POST /api/employees/trigger-alert-refresh` + `…/trigger-probation-refresh`) in parallel, spins while in flight, then calls `AlertsContext.refresh()` for the badges and bumps a `refreshKey` to remount the active tab so it re-fetches the regenerated alerts. Each call writes its usual `manual-trigger` audit entry; failures surface via `ConfirmModal`. Directors don't see the button (the trigger endpoints are `admin`-only).
 
 **Sidebar badge for `/upozorneni`** — sums **only** unread document + unread probation counts. Vacation/overrides/changes already have their own badges on `/dovolena` and `/smeny`; double-counting them here would be confusing.
@@ -142,3 +148,12 @@ Tab labels show pending counts as red pill badges.
 ## Companies
 
 `companies/{companyId}` fields: `name`, `address`, `ic`, `dic`, `fileNo` (Spisová značka).
+
+---
+
+## UI tweaks (2026-06-10)
+
+- **Shift-plan section labels** — the first shift section (formerly labelled "FOM") is now labelled **"Management"** in `SECTION_LABELS` in `frontend/src/lib/shiftConstants.ts`. The three sections remain `vedoucí`, `recepce`, `portýři`; only the display name of `vedoucí` changed. (The audit-log label in `frontend/src/lib/audit/fields.misc.ts` still says "FOM" for the `manager` menu-order field — a separate label not tied to shift sections.)
+- **Shift-plan Σ summary rows removed** — per-section subtotal rows (showing the daily Σ employee count per section) have been removed from the shift grid. Sections are now separated by header rows only.
+- **Sidebar footer button order** — in `Layout.tsx`, the footer `userBar` renders: theme toggle → **? Nápověda** → **Odhlásit** (in that order). Previously Nápověda was after Odhlásit.
+- **Settings tab order** — the Settings page tab strip now starts with **Uživatelé** → **Uživatelské typy** (users first, then types), followed by the číselník tabs. The order is driven by the render order in `SettingsPage.tsx`.

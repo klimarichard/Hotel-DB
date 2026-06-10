@@ -38,7 +38,7 @@ Aplikace je dostupná v prohlížeči. Přihlašujete se **uživatelským jméne
 
 > 📷 *(Místo pro snímek obrazovky: přihlašovací formulář)*
 
-Vlevo dole je vždy vidět **jméno přihlášeného uživatele**; tlačítkem *Odhlásit* se odhlásíte. Vedle je přepínač **světlého/tmavého režimu**.
+Vlevo dole je vždy vidět **jméno přihlášeného uživatele**. Pod ním jsou tři tlačítka v pořadí: přepínač **světlého/tmavého režimu** → **? Nápověda** → **Odhlásit**.
 
 ---
 
@@ -56,7 +56,7 @@ Směnové informace (kdo má dnes směnu, kdo je vedoucí směny, nepřítomní 
 
 ## Zaměstnanci
 
-Evidence všech zaměstnanců — **vše jen pro čtení**. Záložky **Aktivní** a **Ukončení** přepínají mezi zaměstnanci v pracovním poměru a ukončenými.
+Evidence všech zaměstnanců — **vše jen pro čtení**. Záložky **Aktivní**, **Před nástupem** a **Ukončení** přepínají mezi zaměstnanci v pracovním poměru, nadcházejícími a ukončenými.
 
 ### Vyhledávání a seznam
 
@@ -79,5 +79,5 @@ Detail má dvě hlavní části — **Detail** (osobní a kontaktní údaje) a *
 Pracovní poměr je členěn na **sezení (sessions)** — každé začíná **Nástupem**, může obsahovat **Dodatky** (změna mzdy, pozice, úvazku, délky smlouvy) a končí **Ukončením**.
 
 - Mzda a pozice v záhlaví poměru se mění až **k datu platnosti Dodatku**.
-- **Automatický přesun do „Ukončení":** zaměstnanec se do záložky *Ukončení* přesune sám, jakmile **uplyne datum ukončení** (smlouva na dobu určitou nebo zadané ukončení). Den ukončení je ještě aktivní — přesun proběhne až následující den. Naopak **budoucí Nástup** zaměstnance aktivuje **až v den nástupu**.
+- **Automatický přesun do „Ukončení":** zaměstnanec se do záložky *Ukončení* přesune sám, jakmile **uplyne datum ukončení** (smlouva na dobu určitou nebo zadané ukončení). Den ukončení je ještě aktivní — přesun proběhne až následující den. Naopak zaměstnanec s budoucím nástupem se zobrazuje v záložce **Před nástupem** a do záložky **Aktivní** se přesune automaticky **v den nástupu**.
 - U řádků historie si můžete **vygenerovanou smlouvu zobrazit a stáhnout** pod čitelným názvem.

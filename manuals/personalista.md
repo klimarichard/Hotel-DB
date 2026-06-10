@@ -42,7 +42,7 @@ Aplikace je dostupná v prohlížeči. Přihlašujete se **uživatelským jméne
 
 > 📷 *(Místo pro snímek obrazovky: přihlašovací formulář)*
 
-Vlevo dole je vždy vidět **jméno přihlášeného uživatele**; tlačítkem *Odhlásit* se odhlásíte. Vedle je přepínač **světlého/tmavého režimu**.
+Vlevo dole je vždy vidět **jméno přihlášeného uživatele**. Pod ním jsou tři tlačítka v pořadí: přepínač **světlého/tmavého režimu** → **? Nápověda** → **Odhlásit**.
 
 ---
 
@@ -60,13 +60,15 @@ Vlevo dole je vždy vidět **jméno přihlášeného uživatele**; tlačítkem *
 
 ## Zaměstnanci
 
-Evidence všech zaměstnanců. Záložky **Aktivní** a **Ukončení** přepínají mezi zaměstnanci v pracovním poměru a ukončenými.
+Evidence všech zaměstnanců. Záložky **Aktivní**, **Před nástupem** a **Ukončení** přepínají mezi zaměstnanci v pracovním poměru, nadcházejícími a ukončenými.
+
+- Záložka **Před nástupem** zobrazuje zaměstnance, jejichž datum nástupu teprve nastane. V den nástupu se zaměstnanec automaticky přesune do záložky **Aktivní**.
 
 Spravujete celou evidenci zaměstnanců s jednou výjimkou: **nevidíte záznamy zaměstnanců, kteří jsou zároveň administrátor, ředitel nebo FOM** — tito se vám v seznamu nezobrazují.
 
 ### Vyhledávání a seznam
 
-- Vyhledávací pole hledá podle jména, příjmení, **rodného příjmení**, pozice i národnosti.
+- Vyhledávací pole hledá podle jména, příjmení, **rodného příjmení**, pozice i národnosti. Při vyhledávání se prohledávají **všechny tři záložky najednou** (Aktivní, Před nástupem i Ukončení).
 - Řádky jsou barevně odlišené podle typu smlouvy (HPP / PPP / DPP).
 - Tlačítko **Exportovat CSV** otevře dialog, kde vyberete sloupce a filtry a stáhnete data do tabulky.
 
@@ -100,7 +102,7 @@ Pracovní poměr je členěn na **sezení (sessions)** — každé začíná **N
 
 - **+ Přidat změnu** (Nástup / Dodatek / Ukončení).
 - Mzda a pozice v záhlaví poměru se mění až **k datu platnosti Dodatku**.
-- **Automatický přesun do „Ukončení":** zaměstnanec se do záložky *Ukončení* přesune sám, jakmile **uplyne datum ukončení** (smlouva na dobu určitou nebo zadané ukončení). Den ukončení je ještě aktivní — přesun proběhne až následující den. Naopak **budoucí Nástup** zaměstnance aktivuje **až v den nástupu**.
+- **Automatický přesun do „Ukončení":** zaměstnanec se do záložky *Ukončení* přesune sám, jakmile **uplyne datum ukončení** (smlouva na dobu určitou nebo zadané ukončení). Den ukončení je ještě aktivní — přesun proběhne až následující den. Naopak zaměstnanec s budoucím nástupem se zobrazuje v záložce **Před nástupem** a do záložky **Aktivní** se přesune automaticky **v den nástupu**.
 - **Ukončení a Multisport:** má-li ukončovaný zaměstnanec aktivní Multisport, aplikace automaticky nastaví konec Multisportu na **konec měsíce ukončení** a upozorní, že je potřeba Multisport zrušit i v **extranetu Multisport**.
 - U každého řádku lze podle stavu **vygenerovat smlouvu**, zobrazit ji, nebo nahrát podepsanou kopii.
 - **Ad hoc dokumenty** (Multisport, Hmotná odpovědnost, vlastní šablony) se přidávají tlačítkem **+ Adhoc dokument**: zadáte datum podpisu a tlačítkem **Přidat** vznikne řádek dokumentu (zatím bez PDF). Řádek ukazuje **datum podpisu**, ne datum vytvoření. PDF se vygeneruje až dodatečně tlačítkem **Generovat smlouvu**.
@@ -142,7 +144,7 @@ Stránka **Šablony smluv** obsahuje editor ve stylu Wordu (TipTap): formátová
 
 ## Směny
 
-Měsíční plán směn (recepce, portýři, FOM). Plány můžete **prohlížet a vyplňovat**.
+Měsíční plán směn (recepce, portýři, Management). Plány můžete **prohlížet a vyplňovat**. Plán je rozčleněn do sekcí oddělených záhlavím; první sekce nese název **Management**. Souhrnné řádky Σ na konci sekcí byly odstraněny.
 
 ### Životní cyklus plánu
 

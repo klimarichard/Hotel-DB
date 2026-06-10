@@ -39,7 +39,7 @@ Aplikace je dostupná v prohlížeči. Přihlašujete se **e-mailem a heslem**.
 
 > 📷 *(Místo pro snímek obrazovky: přihlašovací formulář)*
 
-Vlevo dole v přihlášené aplikaci je vždy vidět **jméno přihlášeného uživatele**; tlačítkem *Odhlásit* se odhlásíte. Vedle je přepínač **světlého/tmavého režimu**.
+Vlevo dole v přihlášené aplikaci je vždy vidět **jméno přihlášeného uživatele**. Pod ním jsou tři tlačítka v pořadí: přepínač **světlého/tmavého režimu** → **? Nápověda** → **Odhlásit**.
 
 ---
 

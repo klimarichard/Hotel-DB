@@ -36,6 +36,21 @@ The special `system.admin` permission **expands to ALL permissions** and cannot 
 
 > **Deploy note:** `dashboard.staffing.view` was added as a new permission key. When deployed to an environment where the built-in `roleTypes` docs already exist in Firestore, those docs' `permissions` arrays won't contain the key, so the Dnes/Zítra sections will be **hidden for existing users** until it is backfilled. Backfill **additively** — either add the permission to each affected type in-app (Nastavení → Uživatelské typy), or run a targeted `arrayUnion` of just this key onto `director`, `manager`, `employee`, and `hr`. Do **not** re-run `seed-role-types.js` to fix this: it overwrites each type's whole `permissions` array from `BUILTIN_TYPE_PERMISSIONS`, discarding any in-app permission customisations. `admin` needs no backfill (`system.admin` expansion), and a type with no Firestore doc at all falls back to `BUILTIN_TYPE_PERMISSIONS`, which already includes the key.
 
+#### Users & permissions group
+
+| Key | Label | Granted to (built-in types) |
+|---|---|---|
+| `users.view` | Zobrazit uživatele | director, admin |
+| `users.manage` | Spravovat uživatele (vytvořit/upravit/deaktivovat) | admin |
+| `users.linkEmployee` | Propojit zaměstnance s účtem | admin (via `system.admin`) |
+| `users.setType` | Přiřadit typ uživatele | admin |
+| `users.permissions.manage` | Spravovat individuální oprávnění uživatele | admin |
+| `userTypes.manage` | Spravovat typy uživatelů | admin |
+
+**`users.linkEmployee`** gates `PATCH /api/auth/users/:uid/employee` (linking or unlinking an employee record to a user account). It was previously covered by `users.manage`; it is now a separate key so the ability to link employees can be delegated independently. `admin` receives it via `system.admin` expansion.
+
+> **Deploy note:** `users.linkEmployee` was introduced as a new key. Existing `roleTypes` docs in Firestore will not contain it, so the employee-link dropdown in Settings → Uživatelé will be hidden for those types. Backfill **additively** — add it to any type that previously relied on `users.manage` to link employees, using Nastavení → Uživatelské typy. Do **not** re-run `seed-role-types.js`; it overwrites each type's whole `permissions` array. `admin` needs no backfill (`system.admin` expansion).
+
 ### User types (editable data)
 
 What used to be hard-coded roles are now **editable user types** stored in Firestore at `roleTypes/{id}`:
@@ -135,9 +150,22 @@ When adding a new UI section, check whether it is a subset of something a higher
 |---|---|---|
 | `GET/POST/PATCH/DELETE /api/role-types` | Manage user types | `userTypes.manage` (list also allowed for `users.setType`); `DELETE` blocks the system type and any in-use type |
 | `PATCH /api/auth/users/:uid/permissions` | Assign a user's type + grants/revokes | `users.permissions.manage` / `users.setType`; writes merged claims + mirrors to `users/{uid}`; enforces own-admin / last-admin lockout guards |
-| `GET /api/auth/me` | Returns the resolved `permissions` array (plus the user profile) | authenticated |
+| `PATCH /api/auth/users/:uid/employee` | Link or unlink an employee record to a user | `users.linkEmployee`; body `{ employeeId: string \| null }` |
+| `GET /api/auth/users` | List all users | `users.view`; each entry includes `roleTypeName` and `employeeName` (see below) |
+| `GET /api/auth/me` | Returns the resolved `permissions` array (plus the user profile, including `roleTypeName`) | authenticated |
 
 **Seeding** — `scripts/seed-role-types.js` seeds the six built-ins (additive; the resolver falls back to the built-ins if unseeded).
+
+### `GET /api/auth/users` — resolved display names
+
+The user-list endpoint returns each user with two server-resolved display fields (in addition to the raw `roleType`/`employeeId` values):
+
+- **`roleTypeName`** — the Czech display name of the user's type, resolved from `roleTypes/{id}.name`. Falls back to the raw type id if the doc is missing.
+- **`employeeName`** — the linked employee's surname-first name (`${lastName} ${firstName}`), resolved via `admin.firestore().getAll(...)` regardless of the employee's `status` and regardless of whether the viewer has `employees.view.*` access.
+
+Both fields are resolved server-side so the Settings → Uživatelé tab shows readable type and linked-employee labels for any viewer holding only `users.view`, even if they lack access to the `roleTypes` collection or the employees list.
+
+**Type column in Settings → Uživatelé:** if the viewer holds `users.setType` or `users.permissions.manage`, the type column renders as an editable `<select>`. Otherwise it renders as a static `<span>` showing `roleTypeName` (with a fallback to the resolved name from the locally-loaded types list, then the raw id). No editability bleeds through to users who lack the relevant permissions.
 
 ## Per-type menu order
 
