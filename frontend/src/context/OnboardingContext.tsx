@@ -13,6 +13,8 @@ interface OnboardingContextValue {
   startTour: () => void;
   next: () => void;
   prev: () => void;
+  /** Jump directly to a step index (clamped). Used by the section-jump buttons. */
+  goToStep: (index: number) => void;
   /** Finish or skip — both mark the tour as seen so it won't auto-fire again. */
   dismiss: () => void;
 }
@@ -23,6 +25,7 @@ const OnboardingContext = createContext<OnboardingContextValue>({
   startTour: () => {},
   next: () => {},
   prev: () => {},
+  goToStep: () => {},
   dismiss: () => {},
 });
 
@@ -139,8 +142,16 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     setStepIndex((i) => Math.max(0, i - 1));
   }, []);
 
+  const goToStep = useCallback(
+    (index: number) => {
+      if (!activeTour) return;
+      setStepIndex(Math.max(0, Math.min(index, activeTour.steps.length - 1)));
+    },
+    [activeTour]
+  );
+
   return (
-    <OnboardingContext.Provider value={{ activeTour, stepIndex, startTour, next, prev, dismiss }}>
+    <OnboardingContext.Provider value={{ activeTour, stepIndex, startTour, next, prev, goToStep, dismiss }}>
       {children}
       <TourOverlay />
     </OnboardingContext.Provider>

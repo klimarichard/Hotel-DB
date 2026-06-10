@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import Button from "./Button";
 import IconButton from "./IconButton";
 import { useOnboarding } from "@/context/OnboardingContext";
+import { sectionNavTargets } from "@/lib/tours";
 import styles from "./TourOverlay.module.css";
 
 const POPOVER_WIDTH = 340;
@@ -17,7 +18,7 @@ const POLL_MS = 80;
  * Rendered by OnboardingProvider, so it overlays the whole authenticated app.
  */
 export default function TourOverlay() {
-  const { activeTour, stepIndex, next, prev, dismiss } = useOnboarding();
+  const { activeTour, stepIndex, next, prev, goToStep, dismiss } = useOnboarding();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -134,6 +135,9 @@ export default function TourOverlay() {
   const total = activeTour.steps.length;
   const isFirst = stepIndex === 0;
   const isLast = stepIndex === total - 1;
+  const currentSection = activeTour.steps[stepIndex].section;
+  const { prev: prevSection, next: nextSection } = sectionNavTargets(activeTour.steps, stepIndex);
+  const showSectionNav = prevSection !== null || nextSection !== null;
 
   // Popover position: below the anchor if there's room, else above — then the
   // top is ALWAYS clamped so the whole popover (incl. its buttons) stays inside
@@ -179,7 +183,7 @@ export default function TourOverlay() {
       >
         <div className={styles.popoverHeader}>
           <span className={styles.stepCount}>
-            Krok {stepIndex + 1} z {total}
+            {currentSection ? `${currentSection} · ` : ""}Krok {stepIndex + 1} z {total}
           </span>
           <IconButton aria-label="Zavřít prohlídku" onClick={dismiss}>
             ✕
@@ -187,6 +191,26 @@ export default function TourOverlay() {
         </div>
         <h3 className={styles.title}>{step.title}</h3>
         <p className={styles.body}>{step.body}</p>
+        {showSectionNav && (
+          <div className={styles.sectionNav}>
+            <button
+              className={styles.sectionBtn}
+              type="button"
+              onClick={() => prevSection !== null && goToStep(prevSection)}
+              disabled={prevSection === null}
+            >
+              ‹ Předchozí sekce
+            </button>
+            <button
+              className={styles.sectionBtn}
+              type="button"
+              onClick={() => nextSection !== null && goToStep(nextSection)}
+              disabled={nextSection === null}
+            >
+              Další sekce ›
+            </button>
+          </div>
+        )}
         <div className={styles.actions}>
           <button className={styles.skip} type="button" onClick={dismiss}>
             Přeskočit
