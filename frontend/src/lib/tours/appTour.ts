@@ -185,7 +185,7 @@ export const APP_TOUR_STEPS: TourStep[] = [
 
 export const appTour: TourDefinition = {
   id: "app",
-  version: 7,
+  version: 6,
   label: "Prohlídka aplikace",
   steps: APP_TOUR_STEPS,
 };
