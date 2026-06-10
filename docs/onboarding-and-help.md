@@ -176,7 +176,7 @@ This replaces the former `{ "app": 5 }` example. The `PUT /api/auth/me/tours` bo
 
 ## Tour sections
 
-The master step list is organised into 13 named sections defined in the `SECTIONS` const in `appTour.ts`. The section label is set only on the first step of each group; `buildAppTour` carries it forward to every subsequent step before filtering.
+The master step list is organised into **12 active sections** defined in the `SECTIONS` const in `appTour.ts`. (A thirteenth key, `audit`, remains in the const but is not referenced by any step — "Log změn" is covered inside the Navigace section as a nav-item step.) The section label is set only on the first step of each group; `buildAppTour` carries it forward to every subsequent step before filtering.
 
 | Section label | Content covered |
 |---|---|
@@ -189,12 +189,13 @@ The master step list is organised into 13 named sections defined in the `SECTION
 | Můj profil | Self-page title, Navrhnout úpravu, own sensitive reveal, pending requests |
 | Šablony smluv | Template list, new template |
 | Mzdy | Payroll table, create, edit, recalculate, hard-recalculate, lock, delete, export, notes |
-| Upozornění | Alerts tabs, mark-read, manual refresh, change-request approval tab |
-| Log změn | Single step spotlighting the nav item |
+| Upozornění | Alerts tabs, mark-read, manual refresh |
 | Nastavení | Users tab, add/edit/assign-type/per-user-perms; user types tab; all číselník tabs (companies, departments, positions, education, payroll settings, menu order); system triggers; test clock; superadmin card |
 | Závěr | Outro card pointing to the Nápověda button |
 
 Sections are used only for the overlay's "Předchozí/Další sekce" navigation — they have no effect on filtering or persistence.
+
+**Note on the Směny section:** the first step ("Výběr měsíce", `anchor: "shift-month-nav"`) is gated on `["shifts.view.all", "shifts.view.self"]` (OR semantics — shown to anyone who can see shifts in any capacity). This step leads the entire Směny section, so the section is only visible to users holding at least one shift-view permission.
 
 ---
 

@@ -6,7 +6,7 @@ The application UI is in **Czech**. This README and the developer documentation 
 
 ## Features
 
-- **Employees** — central records with AES-256-GCM-encrypted sensitive fields, session-based employment history (Nástup → Dodatek → Ukončení), date-based active/terminated status, document-expiry alerts, and CSV export.
+- **Employees** — central records with AES-256-GCM-encrypted sensitive fields, session-based employment history (Nástup → Dodatek → Ukončení), three-tab lifecycle (Před nástupem → Aktivní → Ukončení with automatic date-driven transitions), document-expiry alerts, and CSV export.
 - **Contracts & templates** — a Word-like (TipTap) template editor with variables and conditional blocks; contracts are generated server-side as PDFs.
 - **Shifts** — a monthly shift planner with a shift-expression parser, plan lifecycle (Created → Opened → Closed → Published), MOD (manager-on-duty) tracking, change requests, and X-limit rules.
 - **Vacation** — request/approval workflow with automatic shift-collision handling.

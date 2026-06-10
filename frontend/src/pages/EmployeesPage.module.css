@@ -196,6 +196,23 @@
   font-weight: 500;
 }
 
+/* Solid violet — stands out on white (HPP), blue (PPP) and amber (DPP) rows,
+   and is distinct from the green (active) / red (terminated) badges. */
+.badgeBeforeStart {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  background: #7c3aed;
+  color: #ffffff;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+[data-theme="dark"] .badgeBeforeStart {
+  background: #a78bfa;
+  color: #1e1b2e;
+}
+
 .state,
 .empty {
   text-align: center;

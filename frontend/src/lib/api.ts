@@ -77,10 +77,14 @@ export interface UserProfile {
   role: UserRole;
   active: boolean;
   employeeId: string | null;
+  /** Surname-first name of the linked employee (resolved server-side; null if none). */
+  employeeName?: string | null;
   createdAt: unknown;
   lastLogin: unknown;
   /** Assigned user type (defaults to `role` when unset). */
   roleType?: string | null;
+  /** Czech display name of the user's type (resolved server-side from roleType). */
+  roleTypeName?: string | null;
   /** Per-user permission grants/revokes on top of the type. */
   extraPermissions?: string[];
   revokedPermissions?: string[];

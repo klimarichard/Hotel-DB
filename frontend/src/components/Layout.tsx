@@ -110,8 +110,14 @@ export default function Layout() {
         <div className={styles.userBar} data-tour="menu-footer">
           <span className={styles.userEmail}>{name?.trim() || user?.email}</span>
           <span className={styles.userRole}>{roleTypeName ?? role}</span>
-          <button className={styles.logoutBtn} onClick={handleLogout}>
-            Odhlásit
+          <button
+            className={styles.themeToggle}
+            data-tour="theme-toggle"
+            onClick={toggleTheme}
+            title={theme === "dark" ? "Světlý režim" : "Tmavý režim"}
+          >
+            {theme === "dark" ? <SunIcon /> : <MoonIcon />}
+            {theme === "dark" ? "Světlý" : "Tmavý"}
           </button>
           <button
             className={styles.themeToggle}
@@ -122,14 +128,8 @@ export default function Layout() {
           >
             ? Nápověda
           </button>
-          <button
-            className={styles.themeToggle}
-            data-tour="theme-toggle"
-            onClick={toggleTheme}
-            title={theme === "dark" ? "Světlý režim" : "Tmavý režim"}
-          >
-            {theme === "dark" ? <SunIcon /> : <MoonIcon />}
-            {theme === "dark" ? "Světlý" : "Tmavý"}
+          <button className={styles.logoutBtn} onClick={handleLogout}>
+            Odhlásit
           </button>
           {/* Test-clock control — renders only where faking time is allowed
               (staging / emulator), never in production. */}

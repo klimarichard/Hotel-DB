@@ -65,6 +65,21 @@
   font-weight: 500;
 }
 
+.badgeBeforeStart {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  background: #7c3aed;
+  color: #ffffff;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+[data-theme="dark"] .badgeBeforeStart {
+  background: #a78bfa;
+  color: #1e1b2e;
+}
+
 /* ── Alert banner ──────────────────────────────────────────────────────────── */
 
 .alertBanner {

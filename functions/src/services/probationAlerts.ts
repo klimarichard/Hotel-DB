@@ -293,7 +293,12 @@ export async function refreshProbationAlertsForEmployee(employeeId: string): Pro
   // Update for each active row (typically one)
   for (const row of activeRows) {
     const flags = flagsByNastup.get(row.id);
-    const suppress = !!flags && (flags.terminated || flags.hasSalaryDodatek);
+    // Suppress (and delete) probation alerts for terminated employees. The
+    // canonical employee `status` is the source of truth — the employment ROW
+    // status can lag the derived employee status, which let alerts survive for
+    // terminated employees. (Before-start employees keep their alerts.)
+    const suppress =
+      empData.status === "terminated" || (!!flags && (flags.terminated || flags.hasSalaryDodatek));
     await updateProbationAlertForEmploymentRow(
       employeeId,
       { firstName: empData.firstName as string, lastName: empData.lastName as string },

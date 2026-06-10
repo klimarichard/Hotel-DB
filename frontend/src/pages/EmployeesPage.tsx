@@ -15,7 +15,7 @@ interface Employee {
   displayName?: string;
   birthSurname?: string;
   nationality: string;
-  status: "active" | "terminated";
+  status: "active" | "before-start" | "terminated";
   currentCompanyId: string | null;
   currentDepartment: string;
   currentContractType: string;
@@ -27,7 +27,7 @@ export default function EmployeesPage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<"active" | "terminated">("active");
+  const [statusFilter, setStatusFilter] = useState<"active" | "before-start" | "terminated">("active");
   const [search, setSearch] = useState("");
   const [showExport, setShowExport] = useState(false);
 
@@ -35,9 +35,10 @@ export default function EmployeesPage() {
     setLoading(true);
     Promise.all([
       api.get<Employee[]>(`/employees?status=active`),
+      api.get<Employee[]>(`/employees?status=before-start`),
       api.get<Employee[]>(`/employees?status=terminated`),
     ])
-      .then(([active, terminated]) => setEmployees([...active, ...terminated]))
+      .then(([active, beforeStart, terminated]) => setEmployees([...active, ...beforeStart, ...terminated]))
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
   }, []);
@@ -99,6 +100,12 @@ export default function EmployeesPage() {
             Aktivní
           </button>
           <button
+            className={statusFilter === "before-start" ? styles.toggleActive : styles.toggleBtn}
+            onClick={() => setStatusFilter("before-start")}
+          >
+            Před nástupem
+          </button>
+          <button
             className={statusFilter === "terminated" ? styles.toggleActive : styles.toggleBtn}
             onClick={() => setStatusFilter("terminated")}
           >
@@ -154,10 +161,18 @@ export default function EmployeesPage() {
                   <td>
                     <span
                       className={
-                        emp.status === "active" ? styles.badgeActive : styles.badgeTerminated
+                        emp.status === "active"
+                          ? styles.badgeActive
+                          : emp.status === "before-start"
+                            ? styles.badgeBeforeStart
+                            : styles.badgeTerminated
                       }
                     >
-                      {emp.status === "active" ? "Aktivní" : "Ukončen"}
+                      {emp.status === "active"
+                        ? "Aktivní"
+                        : emp.status === "before-start"
+                          ? "Před nástupem"
+                          : "Ukončen"}
                     </span>
                   </td>
                 </tr>

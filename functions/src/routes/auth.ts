@@ -317,8 +317,47 @@ authRouter.patch(
  * Admin-only: list all user profiles from users/ collection.
  */
 authRouter.get("/users", requireAuth, requirePermission("users.view"), async (_req, res) => {
-  const snapshot = await admin.firestore().collection("users").orderBy("name").get();
-  const users = snapshot.docs.map((doc) => ({ uid: doc.id, ...doc.data() }));
+  const [snapshot, typesSnap] = await Promise.all([
+    admin.firestore().collection("users").orderBy("name").get(),
+    admin.firestore().collection(ROLE_TYPES_COLLECTION).get(),
+  ]);
+  // id → Czech display name, so a viewer without the type catalogue still sees a
+  // readable type label (e.g. "FOM", "Ředitel") instead of the raw id.
+  const typeNames = new Map<string, string>();
+  typesSnap.docs.forEach((d) =>
+    typeNames.set(d.id, ((d.data() as Record<string, unknown>).name as string) ?? d.id)
+  );
+  // Resolve each linked employee's surname-first name server-side, so the
+  // linked-employee column shows even for viewers without the employees list
+  // (e.g. they can't link) and regardless of the employee's status.
+  const empIds = [
+    ...new Set(
+      snapshot.docs
+        .map((d) => (d.data() as Record<string, unknown>).employeeId as string | undefined)
+        .filter((id): id is string => !!id)
+    ),
+  ];
+  const empNames = new Map<string, string>();
+  if (empIds.length) {
+    const refs = empIds.map((id) => admin.firestore().collection("employees").doc(id));
+    const empDocs = await admin.firestore().getAll(...refs);
+    empDocs.forEach((d) => {
+      if (!d.exists) return;
+      const e = d.data() as Record<string, unknown>;
+      empNames.set(d.id, `${(e.lastName as string ?? "").trim()} ${(e.firstName as string ?? "").trim()}`.trim());
+    });
+  }
+  const users = snapshot.docs.map((doc) => {
+    const data = doc.data() as Record<string, unknown>;
+    const typeId = (data.roleType as string) || (data.role as string) || "";
+    const employeeId = (data.employeeId as string) || null;
+    return {
+      uid: doc.id,
+      ...data,
+      roleTypeName: typeId ? typeNames.get(typeId) ?? typeId : null,
+      employeeName: employeeId ? empNames.get(employeeId) ?? null : null,
+    };
+  });
   res.json(users);
 });
 
@@ -355,7 +394,7 @@ authRouter.patch(
 authRouter.patch(
   "/users/:uid/employee",
   requireAuth,
-  requirePermission("users.manage"),
+  requirePermission("users.linkEmployee"),
   async (req: AuthRequest, res) => {
     const { uid } = req.params;
     const { employeeId } = req.body as { employeeId: string | null };
