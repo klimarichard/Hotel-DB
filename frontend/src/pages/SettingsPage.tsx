@@ -991,7 +991,7 @@ export default function SettingsPage() {
                           </select>
                         ) : (
                           <span className={styles.roleStatic}>
-                            {roleTypes.find((t) => t.id === (u.roleType ?? u.role))?.name ?? (u.roleType ?? u.role)}
+                            {u.roleTypeName ?? roleTypes.find((t) => t.id === (u.roleType ?? u.role))?.name ?? (u.roleType ?? u.role)}
                           </span>
                         )}
                       </td>

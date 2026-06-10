@@ -317,8 +317,21 @@ authRouter.patch(
  * Admin-only: list all user profiles from users/ collection.
  */
 authRouter.get("/users", requireAuth, requirePermission("users.view"), async (_req, res) => {
-  const snapshot = await admin.firestore().collection("users").orderBy("name").get();
-  const users = snapshot.docs.map((doc) => ({ uid: doc.id, ...doc.data() }));
+  const [snapshot, typesSnap] = await Promise.all([
+    admin.firestore().collection("users").orderBy("name").get(),
+    admin.firestore().collection(ROLE_TYPES_COLLECTION).get(),
+  ]);
+  // id → Czech display name, so a viewer without the type catalogue still sees a
+  // readable type label (e.g. "FOM", "Ředitel") instead of the raw id.
+  const typeNames = new Map<string, string>();
+  typesSnap.docs.forEach((d) =>
+    typeNames.set(d.id, ((d.data() as Record<string, unknown>).name as string) ?? d.id)
+  );
+  const users = snapshot.docs.map((doc) => {
+    const data = doc.data() as Record<string, unknown>;
+    const typeId = (data.roleType as string) || (data.role as string) || "";
+    return { uid: doc.id, ...data, roleTypeName: typeId ? typeNames.get(typeId) ?? typeId : null };
+  });
   res.json(users);
 });
 
