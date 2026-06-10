@@ -112,13 +112,13 @@ type SettingsTab = "users" | "companies" | "departments" | "jobPositions" | "edu
 // default tab resolves to the first one the user can actually access.
 const SETTINGS_TABS: { id: SettingsTab; perm: Permission }[] = [
   { id: "users", perm: "users.view" },
+  { id: "userTypes", perm: "userTypes.manage" },
   { id: "companies", perm: "settings.companies.manage" },
   { id: "departments", perm: "settings.departments.manage" },
   { id: "jobPositions", perm: "settings.jobPositions.manage" },
   { id: "education", perm: "settings.educationLevels.manage" },
   { id: "payroll", perm: "settings.payroll.manage" },
   { id: "menu", perm: "settings.menuOrder.manage" },
-  { id: "userTypes", perm: "userTypes.manage" },
   { id: "jobs", perm: "system.triggers" },
 ];
 
@@ -805,6 +805,9 @@ export default function SettingsPage() {
         {can("users.view") && (
           <button data-tour="settings-tab-users" className={settingsTab === "users" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("users")}>Uživatelé</button>
         )}
+        {can("userTypes.manage") && (
+          <button data-tour="settings-tab-userTypes" className={settingsTab === "userTypes" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("userTypes")}>Uživatelské typy</button>
+        )}
         {can("settings.companies.manage") && (
           <button data-tour="settings-tab-companies" className={settingsTab === "companies" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("companies")}>Společnosti</button>
         )}
@@ -822,9 +825,6 @@ export default function SettingsPage() {
         )}
         {can("settings.menuOrder.manage") && (
           <button data-tour="settings-tab-menu" className={settingsTab === "menu" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("menu")}>Menu</button>
-        )}
-        {can("userTypes.manage") && (
-          <button data-tour="settings-tab-userTypes" className={settingsTab === "userTypes" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("userTypes")}>Uživatelské typy</button>
         )}
         {can("system.triggers") && (
           <button data-tour="settings-tab-jobs" className={settingsTab === "jobs" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("jobs")}>Úlohy</button>
