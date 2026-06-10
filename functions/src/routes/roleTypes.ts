@@ -5,7 +5,7 @@ import { requireAuth, AuthRequest } from "../middleware/auth";
 import {
   requirePermission,
   clearRoleTypeCache,
-  ALL_PERMISSIONS,
+  sanitizePermissionList,
   ROLE_TYPES_COLLECTION,
 } from "../auth/permissions";
 import { ctxFromReq, logCreate, logUpdate, logDelete } from "../services/auditLog";
@@ -26,13 +26,9 @@ const db = () => admin.firestore();
 
 roleTypesRouter.use(requireAuth);
 
-const ALL_PERM_SET = new Set<string>(ALL_PERMISSIONS);
-
-/** Keep only known, de-duplicated permission keys. */
-function sanitizePerms(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return [...new Set(value.filter((p): p is string => typeof p === "string" && ALL_PERM_SET.has(p)))];
-}
+// Strips unknown + non-grantable keys (e.g. system.admin) so a custom type can
+// never be edited/cloned into a superadmin — see sanitizePermissionList.
+const sanitizePerms = sanitizePermissionList;
 
 function slugify(s: string): string {
   return (

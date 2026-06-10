@@ -466,6 +466,16 @@ employeesRouter.get(
   async (req: AuthRequest, res) => {
     const includeSensitive = req.query.includeSensitive === "true";
 
+    // `employees.export` lets a caller export the roster; decrypting the
+    // sensitive fields into the CSV requires the SEPARATE, higher-trust
+    // `employees.export.sensitive`. The frontend hides the toggle without it,
+    // but that's only cosmetic — enforce it here so a direct API call (or a
+    // custom type granted plain export only) can't dump plaintext PII.
+    if (includeSensitive && !hasPermission(req.permissions ?? new Set(), "employees.export.sensitive")) {
+      res.status(403).json({ error: "K exportu citlivých údajů je třeba oprávnění „Exportovat citlivé údaje“." });
+      return;
+    }
+
     let query: admin.firestore.Query = db().collection("employees");
     if (req.query.status) query = query.where("status", "==", req.query.status);
     if (req.query.companyId) query = query.where("currentCompanyId", "==", req.query.companyId);

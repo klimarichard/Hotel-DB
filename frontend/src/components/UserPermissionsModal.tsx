@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import Button from "./Button";
 import IconButton from "./IconButton";
 import { authApi, roleTypesApi, type RoleType, type UserProfile } from "@/lib/api";
-import { PERMISSION_CATALOG } from "@/lib/permissions/catalog";
+import { GRANTABLE_CATALOG } from "@/lib/permissions/catalog";
+import { useAuth } from "@/hooks/useAuth";
 import styles from "./UserPermissionsModal.module.css";
 
 interface Props {
@@ -18,6 +19,12 @@ interface Props {
  * The backend enforces the lockout guards (own-admin / last-admin) — surfaced here.
  */
 export default function UserPermissionsModal({ user, onClose, onSaved }: Props) {
+  const { can } = useAuth();
+  // Editing individual grants/revokes requires users.permissions.manage. A
+  // caller with only users.setType can still open this modal (to change the
+  // type) but the permission matrix is read-only for them, and save() sends
+  // only the roleType — mirroring the backend gate on PATCH .../permissions.
+  const canManagePerms = can("users.permissions.manage");
   const [types, setTypes] = useState<RoleType[]>([]);
   const [loading, setLoading] = useState(true);
   const [roleType, setRoleType] = useState<string>(user.roleType ?? user.role);
@@ -40,11 +47,14 @@ export default function UserPermissionsModal({ user, onClose, onSaved }: Props) 
   }, [types, roleType]);
 
   const adminBaseline = baseline.has("system.admin");
+  // The matrix is read-only when the target type is admin (everything on) OR
+  // when the current admin lacks users.permissions.manage (setType-only).
+  const matrixReadOnly = adminBaseline || !canManagePerms;
   const effectiveHas = (key: string) =>
     adminBaseline || ((baseline.has(key) || extra.has(key)) && !revoked.has(key));
 
   function toggle(key: string) {
-    if (adminBaseline) return;
+    if (matrixReadOnly) return;
     const inBaseline = baseline.has(key);
     const on = effectiveHas(key);
     const ex = new Set(extra);
@@ -74,11 +84,12 @@ export default function UserPermissionsModal({ user, onClose, onSaved }: Props) 
     setSaving(true);
     setErr(null);
     try {
-      await authApi.setUserPermissions(user.uid, {
-        roleType,
-        extraPermissions: [...extra],
-        revokedPermissions: [...revoked],
-      });
+      await authApi.setUserPermissions(
+        user.uid,
+        canManagePerms
+          ? { roleType, extraPermissions: [...extra], revokedPermissions: [...revoked] }
+          : { roleType } // setType-only: never touch grants/revokes
+      );
       onSaved();
       onClose();
     } catch (e) {
@@ -116,6 +127,8 @@ export default function UserPermissionsModal({ user, onClose, onSaved }: Props) 
 
             {adminBaseline ? (
               <p className={styles.adminNote}>Tento typ má všechna oprávnění; individuální úpravy se neuplatní.</p>
+            ) : !canManagePerms ? (
+              <p className={styles.adminNote}>Můžete pouze změnit typ uživatele; individuální oprávnění upravit nelze.</p>
             ) : (
               <p className={styles.hint}>
                 Zaškrtnutí mimo výchozí nastavení typu se uloží jako individuální oprávnění (●).
@@ -123,8 +136,8 @@ export default function UserPermissionsModal({ user, onClose, onSaved }: Props) 
             )}
 
             <div className={styles.matrix}>
-              {PERMISSION_CATALOG.map((group) => (
-                <fieldset key={group.group} className={styles.group} disabled={adminBaseline}>
+              {GRANTABLE_CATALOG.map((group) => (
+                <fieldset key={group.group} className={styles.group} disabled={matrixReadOnly}>
                   <legend className={styles.groupLegend}>{group.group}</legend>
                   <div className={styles.groupItems}>
                     {group.items.map((item) => {
@@ -134,7 +147,7 @@ export default function UserPermissionsModal({ user, onClose, onSaved }: Props) 
                           <input
                             type="checkbox"
                             checked={effectiveHas(item.key)}
-                            disabled={adminBaseline}
+                            disabled={matrixReadOnly}
                             onChange={() => toggle(item.key)}
                           />
                           <span>{item.label}</span>
