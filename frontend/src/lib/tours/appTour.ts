@@ -61,9 +61,13 @@ export const APP_TOUR_STEPS: TourStep[] = [
   { permission: "nav.profile.view", anchor: "nav-mujProfil", title: "Můj profil", body: "Můj profil zobrazuje vaše zaměstnanecké údaje.", placement: "right" },
 
   // ── Přehled (/prehled) ──────────────────────────────────────────────────────
-  { permission: "dashboard.view", anchor: "overview-date-header", route: "/prehled", title: "Přehled - dnešní datum", body: "Datum nahoře vždy ukazuje dnešní datum a právě probíhající směnu (denní/noční).", placement: "bottom" },
-  { permission: "dashboard.stats.view", anchor: "overview-staffing", route: "/prehled", title: "Dnešní a zítřejší přehled", body: "Sekce Dnes a Zítra zobrazují zaměstnance, kteří mají naplánované směny, MOD a manažery, kteří mají dovolenou.", placement: "bottom" },
-  { permission: "shifts.view.self", anchor: "overview-my-shifts", route: "/prehled", title: "Moje směny", body: "Tato dlaždice zobrazuje vaše nejbližší směny. Kliknutím se dostanete do tabulky směn.", placement: "bottom" },
+  // Date header — two variants: WITH the denní/noční badge (users with shift
+  // access) and WITHOUT it (stats-only viewers like the účetní, whose header
+  // shows no shift badge). The inverse gate keeps shift users on the first only.
+  { permission: ["shifts.view.all", "shifts.view.self"], anchor: "overview-date-header", route: "/prehled", title: "Přehled - dnešní datum", body: "Datum nahoře vždy ukazuje dnešní datum a právě probíhající směnu (denní/noční).", placement: "bottom" },
+  { permission: "dashboard.view", excludeIfPermission: ["shifts.view.all", "shifts.view.self"], anchor: "overview-date-header", route: "/prehled", title: "Přehled - dnešní datum", body: "Datum nahoře vždy ukazuje dnešní datum.", placement: "bottom" },
+  { permission: "dashboard.staffing.view", anchor: "overview-staffing", route: "/prehled", title: "Dnešní a zítřejší přehled", body: "Sekce Dnes a Zítra zobrazují zaměstnance, kteří mají naplánované směny, MOD a manažery, kteří mají dovolenou.", placement: "bottom" },
+  { permission: "shifts.view.self", requiresEmployee: true, anchor: "overview-my-shifts", route: "/prehled", title: "Moje směny", body: "Tato dlaždice zobrazuje vaše nejbližší směny. Kliknutím se dostanete do tabulky směn.", placement: "bottom" },
   { permission: "dashboard.tasks.view", anchor: "overview-task-tiles", route: "/prehled", title: "Úkoly ke schválení", body: "Dlaždice úkolů upozorňují na položky čekající na vaše schválení. Kliknutím přejdete k vyřízení.", placement: "bottom" },
   { permission: "dashboard.stats.view", anchor: "overview-stats", route: "/prehled", title: "Statistiky", body: "Na těchto dlaždicích vidíte různé statistiky zaměstnanců.", placement: "top" },
 
@@ -73,7 +77,7 @@ export const APP_TOUR_STEPS: TourStep[] = [
   { permission: "shifts.counterTable.view", anchor: "shift-counter", route: DEMO_SHIFTS, title: "Tabulka obsazenosti", body: "Pod plánem je souhrnná tabulka obsazenosti — počty lidí na pozicích pro každý den.", placement: "bottom" },
   { permission: "shifts.cells.editOwnX", excludeIfPermission: "shifts.cells.edit", anchor: "shift-rows", route: DEMO_SHIFTS, title: "Zadání vlastního volna (X)", body: "Do svého řádku můžete po vytvoření plánu směn na další měsíc přímo zapsat volno (X). Maximální počet pro zaměstnance na plný úvazek je 8 X, pro poloviční úvazek 13 X. Pokud potřebujete více dní, můžete požádat o výjimku (po zadání devátého X se vám automaticky zobrazí okno s žádostí o X navíc, kam napíšete odůvodnění). Admin poté žádost schválí, nebo zamítne (také s odůvodněním). Pokud potřebujete zadat 7 a více dní v kuse, požádejte o dovolenou.", placement: "bottom" },
   { permission: "shifts.cells.edit", anchor: "shift-rows", route: DEMO_SHIFTS, title: "Vyplňování plánu", body: "V tabulce směn můžete kliknutím do buňky upravovat směny všech zaměstnanců.", placement: "bottom" },
-  { permission: "shifts.changeRequest.submit", excludeIfPermission: "shifts.plan.transition", anchor: "shift-my-requests", route: DEMO_SHIFTS, title: "Žádost o změnu směny", body: "Když je plán směn již hotový, žádost o změnu podáte dvojklikem na danou buňku. Popište, o jakou změnu jde (stačí např. „vyměnit s …“). Admin změny schvaluje nebo zamítá. Stav žádosti vidíte v sekci Moje žádosti.", placement: "top" },
+  { permission: "shifts.changeRequest.submit", excludeIfPermission: "shifts.plan.transition", anchor: "shift-my-requests-btn", route: DEMO_SHIFTS, title: "Žádost o změnu směny", body: "Když je plán směn již hotový, žádost o změnu podáte dvojklikem na danou buňku. Popište, o jakou změnu jde (stačí např. „vyměnit s …“). Admin změny schvaluje nebo zamítá. Stav žádosti vidíte po rozkliknutí tlačítka Moje žádosti.", placement: "bottom" },
   { permission: "shifts.freeShift.claim", excludeIfPermission: "shifts.freeShift.manage", anchor: "shift-free", route: DEMO_SHIFTS_PUBLISHED, title: "Žádost o volnou směnu", body: "Volné portýrské směny jsou zobrazeny pod rozpisem směn. Můžete o ně požádat dvojklikem na danou volnou směnu.", placement: "top" },
   { permission: "shifts.changeRequest.review", anchor: "shift-change-requests", route: DEMO_SHIFTS, title: "Schvalování žádostí o změnu", body: "Tlačítkem Žádosti o změny otevřete panel se žádostmi zaměstnanců ke schválení nebo zamítnutí.", placement: "bottom" },
   // Note: shifts.override.submit ("Žádost o výjimku") folded into the X-limit step above (the 9th-X dialog).
@@ -91,13 +95,17 @@ export const APP_TOUR_STEPS: TourStep[] = [
 
   // ── Dovolená (/dovolena) ─────────────────────────────────────────────────────
   { permission: "vacation.request.self", anchor: "vacation-request-form", route: "/dovolena", title: "Nová žádost o dovolenou", body: "Zadejte termín a důvod dovolené (důvod můžete nechat i prázdný, ale nedoporučuji to). Odesláním žádosti ji předáte ke schválení řediteli nebo adminovi. Pokud máte v daném termínu už naplánovanou nějakou směnu, aplikace vás na to upozorní.", placement: "right" },
-  // Merged: viewing all requests + approving/rejecting them happen in the same panel.
-  { permission: ["vacation.view.all", "vacation.review"], anchor: "vacation-all-requests", route: "/dovolena", title: "Žádosti o dovolenou", body: "Seznam žádostí všech zaměstnanců se stavem (čeká, schváleno, zamítnuto). Žádosti zde můžete schvalovat nebo zamítat.", placement: "top" },
+  // Two variants of the all-requests panel: reviewers also get the approve/reject
+  // line; view-only holders (vacation.view.all without vacation.review) see the
+  // list described without it. The inverse gate keeps reviewers on the first only.
+  { permission: "vacation.review", anchor: "vacation-all-requests", route: "/dovolena", title: "Žádosti o dovolenou", body: "Seznam žádostí všech zaměstnanců se stavem (čeká, schváleno, zamítnuto). Žádosti zde můžete schvalovat nebo zamítat.", placement: "top" },
+  { permission: "vacation.view.all", excludeIfPermission: "vacation.review", anchor: "vacation-all-requests", route: "/dovolena", title: "Žádosti o dovolenou", body: "Seznam žádostí všech zaměstnanců se stavem (čeká, schváleno, zamítnuto).", placement: "top" },
   { permission: "vacation.view.approvedUpcoming", excludeIfPermission: "vacation.view.all", anchor: "vacation-approved-colleagues", route: "/dovolena", title: "Schválené dovolené kolegů", body: "Zde vidíte schválené dovolené vašich kolegů. Pokud je to možné, snažte se vyhnout kolizi termínu s někým jiným.", placement: "top" },
 
   // ── Zaměstnanci — seznam (/zamestnanci) ──────────────────────────────────────
   // Merged: view.all (vedení incl.) + view.nonManagement collapse into one step.
-  { permission: ["employees.view.all", "employees.view.nonManagement"], anchor: "emp-list", route: "/zamestnanci", title: "Seznam zaměstnanců", body: "Zde vidíte seznam zaměstnanců. Kliknutím na jméno otevřete zaměstnaneckou kartu.", placement: "top" },
+  { permission: ["employees.view.all", "employees.view.nonManagement"], anchor: "emp-list", scrollBlock: "start", route: "/zamestnanci", title: "Seznam zaměstnanců", body: "Zde vidíte seznam zaměstnanců. Kliknutím na jméno otevřete zaměstnaneckou kartu.", placement: "bottom" },
+  { permission: ["employees.view.all", "employees.view.nonManagement"], anchor: "emp-filters", route: "/zamestnanci", title: "Vyhledávání a filtr", body: "Ve vyhledávacím poli najdete zaměstnance podle jména, pozice nebo národnosti. Přepínačem Aktivní/Ukončení zvolíte, zda zobrazit aktivní zaměstnance, nebo ty s ukončeným pracovním poměrem.", placement: "bottom" },
   { permission: "employees.create", anchor: "emp-create", route: "/zamestnanci", title: "Vytvoření zaměstnance", body: "Tlačítkem Přidat zaměstnance založíte novou kartu.", placement: "bottom" },
   { permission: "employees.export", anchor: "emp-export", route: "/zamestnanci", title: "Export seznamu", body: "Seznam zaměstnanců můžete exportovat do CSV.", placement: "bottom" },
 

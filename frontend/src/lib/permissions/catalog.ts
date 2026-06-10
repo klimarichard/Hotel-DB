@@ -150,6 +150,7 @@ export const PERMISSION_CATALOG = [
       { key: "dashboard.view", label: "Zobrazit vlastní přehled" },
       { key: "dashboard.tasks.view", label: "Zobrazit úkoly ke schválení" },
       { key: "dashboard.stats.view", label: "Zobrazit statistiky personálu" },
+      { key: "dashboard.staffing.view", label: "Zobrazit obsazenost (sekce Dnes/Zítra)" },
     ],
   },
   {

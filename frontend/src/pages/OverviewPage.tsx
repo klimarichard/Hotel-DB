@@ -440,7 +440,7 @@ export default function OverviewPage() {
   if (isStatsOnlyViewer) {
     return (
       <div className={styles.page}>
-        <div className={styles.dateHeaderRow}>
+        <div className={styles.dateHeaderRow} data-tour="overview-date-header">
           <h1 className={styles.dateHeader}>{formatLongHeader(today)}</h1>
         </div>
         <div data-tour="overview-stats">
@@ -470,6 +470,8 @@ export default function OverviewPage() {
 
       {!loading && !error && (
         <>
+          {can("dashboard.staffing.view") && (
+          <>
           <section className={styles.section} data-tour="overview-staffing">
             <h2 className={styles.dayHeading}>DNES</h2>
 
@@ -552,6 +554,8 @@ export default function OverviewPage() {
               </>
             )}
           </section>
+          </>
+          )}
 
           {(() => {
             const taskTiles: { count: number; label: string; to: string }[] = showTasks

@@ -1326,6 +1326,7 @@ export default function ShiftPlannerPage() {
             {/* Non-reviewers who can submit their own requests: Moje žádosti */}
             {plan && !canPublish && canSubmitRequests && (
               <Button
+                data-tour="shift-my-requests-btn"
                 variant="secondary"
                 onClick={() => setShowMyRequests((v) => !v)}
               >

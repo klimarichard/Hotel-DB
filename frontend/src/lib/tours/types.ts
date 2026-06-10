@@ -51,6 +51,21 @@ export interface TourStep {
    * which is inert in prod). Filtered out in buildAppTour().
    */
   hideInProd?: boolean;
+  /**
+   * Hide this step when the current user has NO linked employee record. Used for
+   * steps that spotlight a control that only renders for employee-linked users —
+   * e.g. the "Moje směny" overview tile (`!!employeeId`), which never appears for
+   * an admin account with no employee. Without this gate such a step would
+   * spotlight a missing anchor and time out to a centered card. Filtered out in
+   * buildAppTour() when `hasEmployee` is false.
+   */
+  requiresEmployee?: boolean;
+  /**
+   * How the engine scrolls the anchor into view (`scrollIntoView({ block })`).
+   * Defaults to "center". Set "start" for tall anchors (e.g. the employees table)
+   * so the user lands on the TOP of the element rather than its middle.
+   */
+  scrollBlock?: ScrollLogicalPosition;
   title: string;
   body: string;
   placement?: TourPlacement;

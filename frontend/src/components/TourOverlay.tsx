@@ -68,7 +68,7 @@ export default function TourOverlay() {
       const found = document.querySelector<HTMLElement>(`[data-tour="${step.anchor}"]`);
       if (found) {
         clearInterval(timer);
-        found.scrollIntoView({ block: "center", inline: "nearest" });
+        found.scrollIntoView({ block: step.scrollBlock ?? "center", inline: "nearest" });
         setEl(found);
         setReady(true);
       } else {

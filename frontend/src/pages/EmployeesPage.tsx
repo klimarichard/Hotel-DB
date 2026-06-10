@@ -83,7 +83,7 @@ export default function EmployeesPage() {
 
       {showExport && <ExportEmployeesModal onClose={() => setShowExport(false)} />}
 
-      <div className={styles.filters}>
+      <div className={styles.filters} data-tour="emp-filters">
         <input
           className={styles.search}
           type="text"
