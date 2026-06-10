@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState, useCallback, ReactNode } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { authApi } from "@/lib/api";
 import { buildAppTour, APP_TOUR_ID, APP_TOUR_VERSION } from "@/lib/tours";
@@ -26,9 +26,20 @@ const OnboardingContext = createContext<OnboardingContextValue>({
   dismiss: () => {},
 });
 
+/**
+ * Tour-only demo routes (App.tsx): the REAL pages rendered on mock data. When a
+ * user skips/closes the tour while parked on one of these, we bounce them back to
+ * a real app page (see dismiss) — otherwise they'd be stranded on a sandbox URL.
+ * `/zamestnanci/tour-demo` is the sentinel employee-detail demo (no wrapper).
+ */
+function isDemoRoute(pathname: string): boolean {
+  return pathname.startsWith("/napoveda/ukazka") || pathname === "/zamestnanci/tour-demo";
+}
+
 export function OnboardingProvider({ children }: { children: ReactNode }) {
-  const { user, can, loading } = useAuth();
+  const { user, can, employeeId, loading } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
 
   const [toursSeen, setToursSeen] = useState<Record<string, number> | null>(null);
   const [activeTour, setActiveTour] = useState<TourDefinition | null>(null);
@@ -78,8 +89,8 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   // replay, so each user always sees exactly the steps they hold.
   const startTour = useCallback(() => {
     setStepIndex(0);
-    setActiveTour(buildAppTour(can));
-  }, [can]);
+    setActiveTour(buildAppTour(can, { hasEmployee: !!employeeId }));
+  }, [can, employeeId]);
 
   // Auto-start once per session for a first-time (or version-bumped) user, after
   // the landing redirect has resolved to a real page. Gated on `loading` so it
@@ -110,7 +121,10 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     if (activeTour) markSeen(activeTour);
     setActiveTour(null);
     setStepIndex(0);
-  }, [activeTour, markSeen]);
+    // If skipped/closed while parked on a tour-only demo route, return the user
+    // to a real page. "/" resolves to their default landing page (DefaultRedirect).
+    if (isDemoRoute(location.pathname)) navigate("/", { replace: true });
+  }, [activeTour, markSeen, location.pathname, navigate]);
 
   const next = useCallback(() => {
     if (!activeTour) return;

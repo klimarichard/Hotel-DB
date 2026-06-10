@@ -36,11 +36,24 @@ export function userHasStepPermission(
 /** Production build flag — staging/dev keep non-prod-only steps (e.g. test clock). */
 const IS_PROD = import.meta.env.MODE === "production";
 
-export function buildAppTour(can: (perm: Permission) => boolean): TourDefinition {
+/**
+ * Context beyond the permission set that some steps gate on.
+ *  - `hasEmployee`: whether the user has a linked employee record. Steps marked
+ *    `requiresEmployee` (e.g. the "Moje směny" tile) are dropped when false.
+ */
+export interface TourBuildContext {
+  hasEmployee: boolean;
+}
+
+export function buildAppTour(
+  can: (perm: Permission) => boolean,
+  ctx: TourBuildContext = { hasEmployee: true }
+): TourDefinition {
   return {
     ...appTour,
     steps: APP_TOUR_STEPS.filter((step) => {
       if (step.hideInProd && IS_PROD) return false;
+      if (step.requiresEmployee && !ctx.hasEmployee) return false;
       return userHasStepPermission(step, can);
     }),
   };
