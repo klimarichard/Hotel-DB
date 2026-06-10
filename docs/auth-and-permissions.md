@@ -21,7 +21,7 @@ Permissions are a **fixed vocabulary of ~90 granular keys** — a catalogue, not
 - **Backend source of truth**: `functions/src/auth/permissions.ts` (`PERMISSION_CATALOG`).
 - **Frontend mirror**: `frontend/src/lib/permissions/catalog.ts` — the keys must stay in sync with the backend catalogue.
 
-The special `system.admin` permission **expands to ALL permissions** and cannot be revoked.
+The special `system.admin` permission **expands to ALL permissions** and cannot be revoked. It is also **non-grantable through the RBAC editors**: `sanitizePermissionList` (in `permissions.ts`, backed by `NON_GRANTABLE_PERMISSIONS`) strips `system.admin` from every grant path — a user type's `permissions` array (create + edit) and a per-user `extraPermissions` grant. The **only** way to confer superadmin is to assign the protected built-in `admin` type itself. This stops a delegated user-manager (a custom type holding `userTypes.manage` or `users.permissions.manage` but not `system.admin`) from editing `system.admin` onto its own type / its own user and self-escalating.
 
 #### Dashboard permissions
 
@@ -125,10 +125,13 @@ Visible to users who can manage types (`userTypes.manage`). Lists all user types
 - **Create** a new type by cloning an existing one or starting blank ("Prázdný (bez práv)", behind a confirmation).
 - **Delete** a type — except the system **"Administrátor"** type (blocked), and a type still assigned to users can't be deleted until those users are reassigned.
 - The **Administrátor** type is **read-only**.
+- The matrix is driven by `GRANTABLE_CATALOG` (the catalogue minus `NON_GRANTABLE_PERMISSIONS`), so **`system.admin` is not offered as a togglable permission** in either this editor or the per-user "Oprávnění" modal — it can't be granted, only conferred by assigning the `admin` type. The backend strips it regardless.
 
 ### Settings → Uživatelé → per-user "Oprávnění"
 
 The per-user **"Oprávnění"** button lets an admin choose the user's **type** from a dropdown and fine-tune individual permissions on top of it. Ticking/unticking a box that differs from the type is saved as an individual **grant/revoke** (marked ●).
+
+**`users.setType` vs `users.permissions.manage` are enforced separately.** `PATCH /api/auth/users/:uid/permissions` is reachable with *either* permission, but they are not equivalent: changing a user's **`roleType`** is the lower-trust action (`users.setType`), while writing per-user **`extraPermissions`/`revokedPermissions`** is the higher-trust one and requires **`users.permissions.manage`** specifically. A caller holding only `users.setType` may change the type but the backend rejects (403) any attempt to write grants/revokes; the frontend mirrors this — the permission matrix in the modal is **read-only** for such a caller and `save()` sends only `roleType`. (Previously the OR-gate honoured grant/revoke fields from a setType-only caller, which let them self-grant anything — now closed.)
 
 Guards: you **can't remove your own administrator rights**, and the **last administrator can't be demoted**.
 
@@ -149,7 +152,7 @@ When adding a new UI section, check whether it is a subset of something a higher
 | Endpoint | Purpose | Gate |
 |---|---|---|
 | `GET/POST/PATCH/DELETE /api/role-types` | Manage user types | `userTypes.manage` (list also allowed for `users.setType`); `DELETE` blocks the system type and any in-use type |
-| `PATCH /api/auth/users/:uid/permissions` | Assign a user's type + grants/revokes | `users.permissions.manage` / `users.setType`; writes merged claims + mirrors to `users/{uid}`; enforces own-admin / last-admin lockout guards |
+| `PATCH /api/auth/users/:uid/permissions` | Assign a user's type + grants/revokes | `users.setType` (type only) **or** `users.permissions.manage` (type + grants/revokes); writing `extraPermissions`/`revokedPermissions` requires `users.permissions.manage` specifically (403 otherwise); `system.admin` is stripped from grants; writes merged claims + mirrors to `users/{uid}`; enforces own-admin / last-admin lockout guards |
 | `PATCH /api/auth/users/:uid/employee` | Link or unlink an employee record to a user | `users.linkEmployee`; body `{ employeeId: string \| null }` |
 | `GET /api/auth/users` | List all users | `users.view`; each entry includes `roleTypeName` and `employeeName` (see below) |
 | `GET /api/auth/me` | Returns the resolved `permissions` array (plus the user profile, including `roleTypeName`) | authenticated |

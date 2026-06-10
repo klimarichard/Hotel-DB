@@ -68,6 +68,7 @@ Implementation notes for the Phase 5 Shift Planner: the shift expression parser,
 
 ### X-limit allowance (vacation-gated)
 - Vacation-origin Xs are tagged `source:"vacation"` in `applyVacationXs` (manual Xs have no `source`). The voluntary-X count and the consecutive-6-X rule **exclude** vacation Xs — only employee-entered Xs count toward the 8 HPP / 13 PPP base.
+- **Removal is content-aware.** When a vacation is deleted or an approved edit replaces its dates, `removeVacationXsFromPlans` reads each candidate cell and deletes **only** those tagged `source:"vacation"`. A real shift entered over a vacation day — one kept via the approval-time `excludedDates` collision dialog, or an admin overwriting an X after approval — survives, so worked shifts (and their payroll hours) are never silently destroyed. (The range is walked with local-date math, not `toISOString()`, which would roll back a day in UTC+2.)
 - Admin/director may **raise the month's X limit only when the employee has an approved vacation overlapping the month** (i.e. `vacationXCount > 0`). The entered number is the **absolute new limit** for the month (not an increment).
 - Storage: `xLimitOverride` on the `planEmployee` doc (per-month). Effective limit = `xLimitOverride` when a vacation exists, else base. `PATCH /shifts/plans/:id/employees/:docId/x-allowance` body `{limit}` (0–31), admin/director, audited (`fieldPath:"xLimitOverride"`).
 - `copy-employees` strips `xLimitOverride` (and the legacy `xAllowanceExtra`) so a month-specific override never carries into a copied month.
