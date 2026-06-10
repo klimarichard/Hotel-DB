@@ -181,7 +181,7 @@ const EMPTY_ROOT_FIELDS = {
 export function computeEffectiveStatus(
   rows: Array<Record<string, unknown>>,
   today: string
-): "active" | "terminated" | null {
+): "active" | "before-start" | "terminated" | null {
   type S = { nastup: Record<string, unknown>; dodatky: Record<string, unknown>[]; ukonceniDate: string | null };
   const sorted = [...rows].sort((a, b) =>
     String(a.startDate ?? "").localeCompare(String(b.startDate ?? ""))
@@ -221,7 +221,14 @@ export function computeEffectiveStatus(
     return !(endDate && endDate < today);
   };
 
-  return sessions.some(isActive) ? "active" : "terminated";
+  if (sessions.some(isActive)) return "active";
+  // Not currently active. If the most recent session's Nástup is in the future,
+  // they are "before start" (an upcoming new hire, or a returning past employee
+  // with an upcoming contract); otherwise genuinely terminated. Any future start
+  // qualifies — no time window.
+  const latest = sessions[sessions.length - 1];
+  const latestStart = (latest.nastup.startDate as string | undefined) ?? "";
+  return latestStart > today ? "before-start" : "terminated";
 }
 
 /**

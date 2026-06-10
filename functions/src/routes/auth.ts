@@ -355,7 +355,7 @@ authRouter.patch(
 authRouter.patch(
   "/users/:uid/employee",
   requireAuth,
-  requirePermission("users.manage"),
+  requirePermission("users.linkEmployee"),
   async (req: AuthRequest, res) => {
     const { uid } = req.params;
     const { employeeId } = req.body as { employeeId: string | null };

@@ -112,13 +112,13 @@ type SettingsTab = "users" | "companies" | "departments" | "jobPositions" | "edu
 // default tab resolves to the first one the user can actually access.
 const SETTINGS_TABS: { id: SettingsTab; perm: Permission }[] = [
   { id: "users", perm: "users.view" },
+  { id: "userTypes", perm: "userTypes.manage" },
   { id: "companies", perm: "settings.companies.manage" },
   { id: "departments", perm: "settings.departments.manage" },
   { id: "jobPositions", perm: "settings.jobPositions.manage" },
   { id: "education", perm: "settings.educationLevels.manage" },
   { id: "payroll", perm: "settings.payroll.manage" },
   { id: "menu", perm: "settings.menuOrder.manage" },
-  { id: "userTypes", perm: "userTypes.manage" },
   { id: "jobs", perm: "system.triggers" },
 ];
 
@@ -630,7 +630,7 @@ export default function SettingsPage() {
         email,
         password: form.password || undefined,
         roleType: form.roleType,
-        employeeId: form.employeeId || undefined,
+        employeeId: can("users.linkEmployee") ? form.employeeId || undefined : undefined,
       });
       setShowCreate(false);
       setForm(emptyForm);
@@ -663,7 +663,7 @@ export default function SettingsPage() {
       if (form.name && form.name !== target.name) ops.push(authApi.updateUser(target.uid, { name: form.name }));
       if (form.roleType && form.roleType !== (target.roleType ?? target.role)) ops.push(authApi.setUserPermissions(target.uid, { roleType: form.roleType }));
       const newEmp = form.employeeId || null;
-      if (newEmp !== (target.employeeId ?? null)) ops.push(authApi.linkEmployee(target.uid, newEmp));
+      if (can("users.linkEmployee") && newEmp !== (target.employeeId ?? null)) ops.push(authApi.linkEmployee(target.uid, newEmp));
       await Promise.all(ops);
       setShowCreate(false);
       setForm(emptyForm);
@@ -805,6 +805,9 @@ export default function SettingsPage() {
         {can("users.view") && (
           <button data-tour="settings-tab-users" className={settingsTab === "users" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("users")}>Uživatelé</button>
         )}
+        {can("userTypes.manage") && (
+          <button data-tour="settings-tab-userTypes" className={settingsTab === "userTypes" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("userTypes")}>Uživatelské typy</button>
+        )}
         {can("settings.companies.manage") && (
           <button data-tour="settings-tab-companies" className={settingsTab === "companies" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("companies")}>Společnosti</button>
         )}
@@ -822,9 +825,6 @@ export default function SettingsPage() {
         )}
         {can("settings.menuOrder.manage") && (
           <button data-tour="settings-tab-menu" className={settingsTab === "menu" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("menu")}>Menu</button>
-        )}
-        {can("userTypes.manage") && (
-          <button data-tour="settings-tab-userTypes" className={settingsTab === "userTypes" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("userTypes")}>Uživatelské typy</button>
         )}
         {can("system.triggers") && (
           <button data-tour="settings-tab-jobs" className={settingsTab === "jobs" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("jobs")}>Úlohy</button>
@@ -883,21 +883,23 @@ export default function SettingsPage() {
                   ))}
                 </select>
               </div>
-              <div className={styles.field}>
-                <label className={styles.label}>Zaměstnanec (volitelné)</label>
-                <select
-                  className={styles.input}
-                  value={form.employeeId}
-                  onChange={(e) => setForm({ ...form, employeeId: e.target.value })}
-                >
-                  <option value="">— Nepropojovat —</option>
-                  {sortedEmployees.map((emp) => (
-                    <option key={emp.id} value={emp.id}>
-                      {employeeSurnameFirst(emp)}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {can("users.linkEmployee") && (
+                <div className={styles.field}>
+                  <label className={styles.label}>Zaměstnanec (volitelné)</label>
+                  <select
+                    className={styles.input}
+                    value={form.employeeId}
+                    onChange={(e) => setForm({ ...form, employeeId: e.target.value })}
+                  >
+                    <option value="">— Nepropojovat —</option>
+                    {sortedEmployees.map((emp) => (
+                      <option key={emp.id} value={emp.id}>
+                        {employeeSurnameFirst(emp)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               {formError && <p className={styles.formError}>{formError}</p>}
               <div className={styles.formActions}>
                 <Button
@@ -975,37 +977,44 @@ export default function SettingsPage() {
                       <td className={styles.name}>{u.name}</td>
                       <td className={styles.email}>{u.email}</td>
                       <td>
-                        <select
-                          data-tour="settings-user-type"
-                          className={styles.roleSelect}
-                          value={pendingType[u.uid] ?? u.roleType ?? u.role}
-                          disabled={roleChanging[u.uid] || (!can("users.setType") && !can("users.permissions.manage"))}
-                          onChange={(e) => handleTypeChange(u.uid, e.target.value)}
-                        >
-                          {roleTypes.map((t) => (
-                            <option key={t.id} value={t.id}>{t.name}</option>
-                          ))}
-                        </select>
+                        {can("users.setType") || can("users.permissions.manage") ? (
+                          <select
+                            data-tour="settings-user-type"
+                            className={styles.roleSelect}
+                            value={pendingType[u.uid] ?? u.roleType ?? u.role}
+                            disabled={roleChanging[u.uid]}
+                            onChange={(e) => handleTypeChange(u.uid, e.target.value)}
+                          >
+                            {roleTypes.map((t) => (
+                              <option key={t.id} value={t.id}>{t.name}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span className={styles.roleStatic}>
+                            {roleTypes.find((t) => t.id === (u.roleType ?? u.role))?.name ?? (u.roleType ?? u.role)}
+                          </span>
+                        )}
                       </td>
                       <td>
                         <span className={linkedEmp ? styles.employeeLinked : styles.employeeUnlinked}>
                           {linkedEmp ? employeeSurnameFirst(linkedEmp) : "—"}
                         </span>
-                        {linkedEmp ? (
-                          <button
-                            className={styles.linkBtn}
-                            onClick={() => handleUnlinkEmployee(u.uid)}
-                          >
-                            Zrušit propojení
-                          </button>
-                        ) : (
-                          <button
-                            className={styles.linkBtn}
-                            onClick={() => openLinkModal(u.uid, u.employeeId ?? null)}
-                          >
-                            Propojit
-                          </button>
-                        )}
+                        {can("users.linkEmployee") &&
+                          (linkedEmp ? (
+                            <button
+                              className={styles.linkBtn}
+                              onClick={() => handleUnlinkEmployee(u.uid)}
+                            >
+                              Zrušit propojení
+                            </button>
+                          ) : (
+                            <button
+                              className={styles.linkBtn}
+                              onClick={() => openLinkModal(u.uid, u.employeeId ?? null)}
+                            >
+                              Propojit
+                            </button>
+                          ))}
                       </td>
                       <td>
                         <span className={u.active ? styles.badgeActive : styles.badgeInactive}>

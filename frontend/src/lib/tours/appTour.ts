@@ -80,7 +80,7 @@ export const APP_TOUR_STEPS: TourStep[] = [
   { permission: "nav.payroll.view", anchor: "nav-mzdy", title: "Mzdy", body: "V sekci Mzdy se vytvářejí a spravují mzdová období a provádějí přepočty.", placement: "right" },
   { permission: "nav.alerts.view", anchor: "nav-upozorneni", title: "Upozornění", body: "Sekce Upozornění shromažďuje důležité termíny a úkoly ke schválení.", placement: "right" },
   { permission: "nav.contractTemplates.view", anchor: "nav-smlouvy", title: "Šablony smluv", body: "Zde se spravují šablony pracovních smluv a dodatků.", placement: "right" },
-  { permission: "nav.audit.view", anchor: "nav-audit", title: "Log změn", body: "Log změn zaznamenává všechny změny dat provedené v aplikaci.", placement: "right" },
+  { permission: "nav.audit.view", anchor: "nav-audit", title: "Log změn", body: "Log změn zaznamenává všechny změny dat provedené v aplikaci. V Logu změn dohledáte, kdo a kdy data změnil nebo zobrazil citlivé údaje.", placement: "right" },
   { permission: "nav.settings.view", anchor: "nav-nastaveni", title: "Nastavení", body: "Nastavení obsahuje číselníky, správu uživatelů a typů, pořadí menu a další konfiguraci.", placement: "right" },
   { permission: "nav.profile.view", anchor: "nav-mujProfil", title: "Můj profil", body: "Můj profil zobrazuje vaše zaměstnanecké údaje.", placement: "right" },
 
@@ -178,9 +178,6 @@ export const APP_TOUR_STEPS: TourStep[] = [
   { section: SECTIONS.alerts, permission: "alerts.view", anchor: "alerts-tabs", route: "/upozorneni", title: "Zobrazení upozornění", body: "Záložky člení upozornění (doklady, zkušební doba, dovolená, výjimky, žádosti).", placement: "bottom" },
   { permission: "alerts.read", anchor: "alerts-mark-read", route: "/upozorneni", title: "Označení jako přečtené", body: "Upozornění označíte jako přečtené jednotlivě nebo hromadně. Tento stav je sdílený pro všechny uživatele, kteří upozornění vidí.", placement: "bottom" },
   { permission: "system.triggers", anchor: "alerts-refresh", route: "/upozorneni", title: "Ruční obnovení", body: "Můžete ručně aktualizovat upozornění.", placement: "bottom" },
-
-  // ── Log změn ────────────────────────────────────────────────────────────────────
-  { section: SECTIONS.audit, permission: "audit.view", anchor: "nav-audit", title: "Log změn", body: "V Logu změn dohledáte, kdo a kdy data změnil nebo zobrazil citlivé údaje.", placement: "right" },
 
   // ── Uživatelé a oprávnění (/nastaveni) — before the číselník tabs ──────────────────
   { section: SECTIONS.settings, permission: "users.view", anchor: "settings-tab-users", route: "/nastaveni", reveal: ["settings-tab-users"], title: "Uživatelé", body: "Na záložce Uživatelé vidíte uživatelské účty.", placement: "bottom" },
