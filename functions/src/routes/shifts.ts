@@ -340,15 +340,33 @@ export async function removeVacationXsFromPlans(
     const clampedStart = startDate < monthStart ? monthStart : startDate;
     const clampedEnd = endDate > monthEnd ? monthEnd : endDate;
 
-    const batch = db().batch();
+    // Collect the candidate cell refs for the range. NOTE: local-date math, not
+    // toISOString() — in UTC+2 toISOString() rolls back a day (see CLAUDE.md).
+    const refs: admin.firestore.DocumentReference[] = [];
     const curDate = new Date(clampedStart + "T00:00:00");
     const endDateObj = new Date(clampedEnd + "T00:00:00");
     while (curDate <= endDateObj) {
-      const dateStr = curDate.toISOString().slice(0, 10);
-      batch.delete(planDoc.ref.collection("shifts").doc(`${employeeId}_${dateStr}`));
+      const dateStr = `${curDate.getFullYear()}-${String(curDate.getMonth() + 1).padStart(2, "0")}-${String(curDate.getDate()).padStart(2, "0")}`;
+      refs.push(planDoc.ref.collection("shifts").doc(`${employeeId}_${dateStr}`));
       curDate.setDate(curDate.getDate() + 1);
     }
-    await batch.commit();
+    if (refs.length === 0) continue;
+
+    // Only delete cells that are actually vacation-origin Xs (tagged
+    // source === "vacation" on write). A real shift entered over a vacation day
+    // — e.g. a day kept via the approval-time `excludedDates` dialog, or an
+    // admin overwriting an X after approval — must survive, or we'd silently
+    // destroy worked shifts and drop their payroll hours.
+    const snaps = await db().getAll(...refs);
+    const batch = db().batch();
+    let toDelete = 0;
+    for (const snap of snaps) {
+      if (!snap.exists) continue;
+      if (snap.data()?.source !== "vacation") continue;
+      batch.delete(snap.ref);
+      toDelete++;
+    }
+    if (toDelete > 0) await batch.commit();
   }
 }
 

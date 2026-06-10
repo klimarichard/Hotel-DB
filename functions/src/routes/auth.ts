@@ -5,7 +5,7 @@ import { requireAuth, AuthRequest } from "../middleware/auth";
 import {
   requirePermission,
   resolveEffectivePermissions,
-  ALL_PERMISSIONS,
+  sanitizePermissionList,
   ROLE_TYPES_COLLECTION,
 } from "../auth/permissions";
 import { ctxFromReq, logCreate, logUpdate } from "../services/auditLog";
@@ -51,11 +51,9 @@ async function mergeCustomClaims(uid: string, patch: Record<string, unknown>): P
   await admin.auth().setCustomUserClaims(uid, { ...(user.customClaims ?? {}), ...patch });
 }
 
-const ALL_PERM_SET = new Set<string>(ALL_PERMISSIONS);
-const sanitizePerms = (value: unknown): string[] =>
-  Array.isArray(value)
-    ? [...new Set(value.filter((p): p is string => typeof p === "string" && ALL_PERM_SET.has(p)))]
-    : [];
+// Strips unknown + non-grantable keys (e.g. system.admin) so a per-user grant
+// can never confer superadmin — see sanitizePermissionList.
+const sanitizePerms = sanitizePermissionList;
 
 /** Does this user's stored config resolve to the superadmin permission? */
 async function userIsAdmin(u: Record<string, unknown>): Promise<boolean> {
@@ -94,6 +92,21 @@ authRouter.patch(
       return;
     }
     const cur = snap.data() as Record<string, unknown>;
+
+    // This endpoint is reachable with EITHER users.setType OR
+    // users.permissions.manage (requirePermission is an OR). Those are
+    // deliberately separate permissions: assigning a type is a lower-trust
+    // action than handing out individual grants/revokes. So a setType-only
+    // caller may change `roleType` but must NOT be able to write
+    // extra/revoked permissions — otherwise the split is meaningless and a
+    // setType-only user could grant themselves anything. Gate the per-user
+    // grant fields on users.permissions.manage specifically.
+    const canManagePerms =
+      req.permissions?.has("system.admin") || req.permissions?.has("users.permissions.manage") || false;
+    if (("extraPermissions" in body || "revokedPermissions" in body) && !canManagePerms) {
+      res.status(403).json({ error: "K úpravě individuálních oprávnění je třeba oprávnění „Spravovat individuální oprávnění uživatele“." });
+      return;
+    }
 
     // Desired next state (absent fields keep current values).
     let nextRoleType: string | null;

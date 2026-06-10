@@ -204,3 +204,17 @@ export const ALL_PERMISSIONS: Permission[] = PERMISSION_CATALOG.flatMap((g) =>
 export function hasPermission(set: ReadonlySet<string>, perm: Permission): boolean {
   return set.has("system.admin") || set.has(perm);
 }
+
+/**
+ * Permissions that may never be granted through the in-app RBAC editors
+ * (a user type's permission list or a per-user grant). Mirrors the backend
+ * NON_GRANTABLE_PERMISSIONS — the server strips these regardless, this just
+ * keeps the UI from offering a toggle that can't actually take effect.
+ * `system.admin` is conferred only by assigning the protected `admin` type.
+ */
+export const NON_GRANTABLE_PERMISSIONS: ReadonlySet<string> = new Set(["system.admin"]);
+
+/** PERMISSION_CATALOG with non-grantable keys removed (drops now-empty groups). */
+export const GRANTABLE_CATALOG = PERMISSION_CATALOG
+  .map((g) => ({ ...g, items: g.items.filter((i) => !NON_GRANTABLE_PERMISSIONS.has(i.key)) }))
+  .filter((g) => g.items.length > 0);
