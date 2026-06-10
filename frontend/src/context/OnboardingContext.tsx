@@ -87,17 +87,32 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     };
   }, [user, cacheKey]);
 
-  // Build the tour from the master step list filtered by the user's effective
-  // permissions (`can`), then start at step 0. Same source for auto-start and
-  // replay, so each user always sees exactly the steps they hold.
+  // Persist the user's last-seen tour version (localStorage flash cache + backend).
+  const recordSeenVersion = useCallback(
+    (version: number) => {
+      const map = { ...(toursSeen ?? {}), [APP_TOUR_ID]: version };
+      setToursSeen(map);
+      if (cacheKey) localStorage.setItem(cacheKey, JSON.stringify(map));
+      authApi.markTourSeen(APP_TOUR_ID, version).catch((e) => console.error("Failed to save tour:", e));
+    },
+    [toursSeen, cacheKey]
+  );
+
+  // Manual replay (from Nápověda) — ALWAYS the full tour filtered to this user's
+  // permissions, regardless of what they've already seen.
   const startTour = useCallback(() => {
     setStepIndex(0);
     setActiveTour(buildAppTour(can, { hasEmployee: !!employeeId }));
   }, [can, employeeId]);
 
-  // Auto-start once per session for a first-time (or version-bumped) user, after
-  // the landing redirect has resolved to a real page. Gated on `loading` so it
-  // never fires before /auth/me resolves (see useAuth per-component race).
+  // Auto-start once per session, after the landing redirect resolves to a real
+  // page. Gated on `loading` so it never fires before /auth/me resolves (see
+  // useAuth per-component race). Three cases:
+  //   - never seen     → full tour
+  //   - seen older ver → only what's new since then ("what's new" delta); if
+  //                      nothing new applies to this user, silently record the
+  //                      latest version instead of firing
+  //   - up to date     → nothing
   useEffect(() => {
     if (loading || !user || toursSeen === null) return;
     if (autoStartedRef.current || activeTour) return;
@@ -107,27 +122,32 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     if (typeof seenVersion === "number" && seenVersion >= APP_TOUR_VERSION) return;
 
     autoStartedRef.current = true;
-    startTour();
-  }, [loading, user, toursSeen, location.pathname, activeTour, startTour]);
+    const ctx = { hasEmployee: !!employeeId };
 
-  const markSeen = useCallback(
-    (tour: TourDefinition) => {
-      const map = { ...(toursSeen ?? {}), [tour.id]: tour.version };
-      setToursSeen(map);
-      if (cacheKey) localStorage.setItem(cacheKey, JSON.stringify(map));
-      authApi.markTourSeen(tour.id, tour.version).catch((e) => console.error("Failed to save tour:", e));
-    },
-    [toursSeen, cacheKey]
-  );
+    if (typeof seenVersion !== "number") {
+      setStepIndex(0);
+      setActiveTour(buildAppTour(can, ctx));
+      return;
+    }
+    const delta = buildAppTour(can, ctx, { sinceVersion: seenVersion });
+    if (delta.steps.length > 0) {
+      setStepIndex(0);
+      setActiveTour(delta);
+    } else {
+      recordSeenVersion(APP_TOUR_VERSION);
+    }
+  }, [loading, user, toursSeen, location.pathname, activeTour, can, employeeId, recordSeenVersion]);
 
   const dismiss = useCallback(() => {
-    if (activeTour) markSeen(activeTour);
+    // Finishing or skipping either the full tour OR a delta marks the user as
+    // current — both spread appTour.version, so this lands on APP_TOUR_VERSION.
+    if (activeTour) recordSeenVersion(activeTour.version);
     setActiveTour(null);
     setStepIndex(0);
     // If skipped/closed while parked on a tour-only demo route, return the user
     // to a real page. "/" resolves to their default landing page (DefaultRedirect).
     if (isDemoRoute(location.pathname)) navigate("/", { replace: true });
-  }, [activeTour, markSeen, location.pathname, navigate]);
+  }, [activeTour, recordSeenVersion, location.pathname, navigate]);
 
   const next = useCallback(() => {
     if (!activeTour) return;
