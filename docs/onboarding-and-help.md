@@ -4,7 +4,7 @@ This document covers the guided onboarding tour, the Nápověda (Help) page, and
 
 ## Overview
 
-When a user logs in for the first time (or after a tour version bump) a full-app interactive tour auto-starts. The tour spotlights actual on-page controls, navigates between pages, and is filtered to exactly the permissions the current user holds — there are no per-role tours and no duplicated content. After finishing, users can replay or browse the same content from the **Nápověda** link in the sidebar footer.
+When a user logs in for the first time, a full-app interactive tour auto-starts. On subsequent logins, if new tour steps have been added since the user last completed the tour, a "what's new" mini-tour shows only those new steps. The tour spotlights actual on-page controls, navigates between pages, and is filtered to exactly the permissions the current user holds — there are no per-role tours and no duplicated content. After finishing, users can replay or browse the same content from the **Nápověda** link in the sidebar footer.
 
 ---
 
@@ -38,19 +38,33 @@ interface TourStep {
   permission?: Permission | Permission[];
   excludeIfPermission?: Permission | Permission[];
   hideInProd?: boolean;
+  addedInVersion?: number;       // tour version this step was introduced in (drives "what's new" delta)
+  section?: string;              // section label (e.g. "Zaměstnanci"); set on first step of group only
+  requiresEmployee?: boolean;    // hide when the user has no linked employee record
+  scrollBlock?: ScrollLogicalPosition; // how the anchor is scrolled into view; defaults to "center"
   title: string;
   body: string;
   placement?: "top" | "bottom" | "left" | "right" | "auto";
 }
 ```
 
-There is a **single master list** of roughly 91 steps covering every permission in the catalogue. The welcome and outro steps have no `permission` and are always shown.
+There is a **single master list** covering every permission in the catalogue. The welcome and outro steps have no `permission` and are always shown.
+
+### New fields (added in tour revision pass)
+
+**`addedInVersion?: number`** — the `appTour.version` value at which this step was introduced. Drives the "what's new" delta: a returning user who already completed version N sees only steps whose `addedInVersion > N`. Leave unset for baseline steps (treated as version 0 — they are never part of a delta). When you add a step for a new feature, set this to the new `appTour.version` and bump `appTour.version` to match.
+
+**`section?: string`** — section label this step belongs to (e.g. `"Zaměstnanci"`, `"Nastavení"`). Set it only on the **first step of each section** in the master list. `buildAppTour` resolves it onto every following step by carry-forward **before** permission filtering, so a step retains its section even when its group's lead step is filtered out for the current user. Drives the "Předchozí/Další sekce" jump buttons in the overlay.
+
+**`requiresEmployee?: boolean`** — when `true`, the step is dropped when the user has no linked employee record (`employeeId` is absent on the auth token). Used for steps that spotlight a control that only renders for employee-linked users — e.g. the "Moje směny" overview tile, which never appears for an admin account with no employee record. Without this gate the step would spotlight a missing anchor and time out to a centered fallback card.
+
+**`scrollBlock?: ScrollLogicalPosition`** — controls the `block` argument passed to `scrollIntoView({ block })` when the overlay scrolls the anchor into view. Defaults to `"center"`. Set to `"start"` for tall elements (e.g. the employees table) so the user lands at the top of the element rather than its middle.
 
 ---
 
 ## Permission gating
 
-Three orthogonal filters, all applied in `buildAppTour(can)` inside `frontend/src/lib/tours/index.ts`:
+Four orthogonal filters, all applied in `buildAppTour(can, ctx?, opts?)` inside `frontend/src/lib/tours/index.ts`:
 
 ### 1. `permission` — inclusion gate (OR semantics)
 A step is included when the user holds the given permission. If `permission` is an **array**, the step is shown when the user holds **any** of them (OR semantics). This is used for steps that merge two near-identical permission variants, e.g. `["employees.view.all", "employees.view.nonManagement"]`.
@@ -67,7 +81,29 @@ The effective inclusion rule is: **HAS `permission` (any) AND NOT any `excludeIf
 ### 3. `hideInProd` — environment filter
 Steps flagged `hideInProd: true` are removed when `import.meta.env.MODE === "production"`. Used for the test-clock step, which describes a control that is inert in prod.
 
-The filtering function is exported as `userHasStepPermission(step, can)` for reuse (e.g. in `HelpPage`).
+### 4. `requiresEmployee` — employee-linkage filter
+
+Steps flagged `requiresEmployee: true` are removed when `ctx.hasEmployee` is `false`. `ctx` is the second argument to `buildAppTour`; `OnboardingContext` supplies `{ hasEmployee: !!employeeId }` from `useAuth().employeeId`.
+
+The filtering function `userHasStepPermission(step, can)` (exported for reuse in `HelpPage`) covers only the permission/exclude gates; the `requiresEmployee` and `hideInProd` filters are applied in `buildAppTour` directly.
+
+---
+
+## `buildAppTour` — public API
+
+```ts
+function buildAppTour(
+  can: (perm: Permission) => boolean,
+  ctx?: TourBuildContext,   // { hasEmployee: boolean } — defaults to { hasEmployee: true }
+  opts?: TourBuildOptions   // { sinceVersion?: number } — delta mode
+): TourDefinition
+```
+
+Section carry-forward runs over the **master** list first (before any filtering), so every surviving step has a resolved `section` even when its group's lead step was filtered out. Then the four filters above are applied in order.
+
+**Delta mode** (`opts.sinceVersion`): keeps only steps with `addedInVersion > sinceVersion`, and prepends the synthetic `WHATS_NEW_INTRO` ("Co je nového") card. If no step passes the delta filter for this user, the returned tour has an empty `steps` array — the caller should then skip firing and silently record the latest version.
+
+**`sectionNavTargets(steps, index)`** — helper exported from `frontend/src/lib/tours/index.ts`. Given the filtered step list and the current step index, returns `{ prev: number | null, next: number | null }` — the step indices of the first step of the preceding and following sections respectively. Used by `TourOverlay` to drive the section-jump buttons.
 
 ---
 
@@ -78,38 +114,87 @@ The filtering function is exported as `userHasStepPermission(step, can)` for reu
 `OnboardingProvider` wraps the entire authenticated app. It:
 
 1. **Loads persistence** — on login, seeds from `localStorage` (`hotel_hr_tours_<uid>`) for a flash-free paint, then fetches the authoritative `toursSeen` map from `GET /api/auth/me/tours`.
-2. **Auto-starts once** — after the first real page load (not `/` or `/login`), when `toursSeen[APP_TOUR_ID]` is absent or below `APP_TOUR_VERSION`, fires `startTour()`. The auto-start is guarded on `loading` (waits for `/auth/me` to resolve) to avoid the per-component `useAuth` race; `autoStartedRef` prevents double-firing on re-renders.
-3. **Builds the filtered tour** — `startTour()` calls `buildAppTour(can)`, which filters `APP_TOUR_STEPS` to the current user's permissions. The same filtered tour is used for both auto-start and manual replay, so both paths see exactly the same steps.
-4. **Marks seen** — `dismiss()` / reaching the last step calls `markSeen(tour)`, which merges `{ [tour.id]: tour.version }` into `toursSeen`, writes it to `localStorage`, and calls `PUT /api/auth/me/tours`.
+2. **Auto-starts once** — after the first real page load (not `/` or `/login`), the auto-start runs a **three-way branch** (guarded on `loading` to avoid the per-component `useAuth` race; `autoStartedRef` prevents double-firing):
+   - **Never seen** (`toursSeen[APP_TOUR_ID]` is absent) → full tour via `buildAppTour(can, ctx)`.
+   - **Seen an older version** (`seenVersion < APP_TOUR_VERSION`) → delta tour via `buildAppTour(can, ctx, { sinceVersion: seenVersion })`. If the delta is empty for this user (no new steps match their permissions), `recordSeenVersion(APP_TOUR_VERSION)` is called silently — the tour does not fire.
+   - **Up to date** (`seenVersion >= APP_TOUR_VERSION`) → nothing.
+3. **Builds the filtered tour** — `startTour()` (manual replay from Nápověda) always calls `buildAppTour(can, { hasEmployee: !!employeeId })` without a `sinceVersion`, returning the full permission-filtered tour regardless of version.
+4. **Records seen** — `dismiss()` / reaching the last step calls `recordSeenVersion(tour.version)`, which merges `{ [APP_TOUR_ID]: version }` into `toursSeen`, writes it to `localStorage`, and calls `PUT /api/auth/me/tours`. (`markSeen` no longer exists; `recordSeenVersion` is the current function name.)
+5. **Demo-route redirect on dismiss** — if the user skips or closes the tour while parked on a tour-only demo route (`/napoveda/ukazka-*` or `/zamestnanci/tour-demo`), `dismiss` navigates to `"/"` (which resolves via `DefaultRedirect` to their landing page), so they are never stranded on a sandbox URL.
 
-Exposed context value: `{ activeTour, stepIndex, startTour, next, prev, dismiss }`.
+Exposed context value: `{ activeTour, stepIndex, startTour, next, prev, goToStep, dismiss }`.
+
+`goToStep(index: number)` was added to support section-jump navigation. It clamps `index` to the valid range and updates `stepIndex` directly.
 
 ### Overlay (`TourOverlay.tsx`)
 
 `TourOverlay` is rendered inside `OnboardingProvider` and overlays the whole app. For each step it:
 
 1. **Navigates** to `step.route` if the current pathname doesn't match (using React Router `useNavigate`).
-2. **Resolves the anchor** — polls `document.querySelector('[data-tour="…"]')` every 80 ms for up to 2 000 ms. Before polling the main anchor, clicks each `reveal` anchor once as it appears (opening the right tab / expander). If the anchor is never found, the step **falls back to a centered card** — it never hangs or blocks progress.
+2. **Resolves the anchor** — polls `document.querySelector('[data-tour="…"]')` every 80 ms for up to 2 000 ms. Before polling the main anchor, clicks each `reveal` anchor once as it appears (opening the right tab / expander). Scrolls the anchor into view via `scrollIntoView({ block: step.scrollBlock ?? "center" })`. If the anchor is never found, the step **falls back to a centered card** — it never hangs or blocks progress.
 3. **Positions the popover** — 340 px wide, placed below the anchor if there is room, otherwise above; both axes are clamped so the popover never bleeds off-screen.
-4. **Keyboard bindings** — `Esc` = dismiss, `Enter` / `→` = next, `←` = prev.
+4. **Popover header** — shows `"<sectionName> · Krok X z Y"` (the current section name is prepended when resolved).
+5. **Section-jump navigation** — a second nav tier (`sectionNav`) sits above the Zpět/Další buttons. Two buttons — "‹ Předchozí sekce" and "Další sekce ›" — call `goToStep(index)` with targets from `sectionNavTargets`. Both buttons disable at the boundary of the first/last section; the entire row hides when neither target exists (single-section tours or fully degenerate cases).
+6. **Keyboard bindings** — `Esc` = dismiss, `Enter` / `→` = next, `←` = prev.
 
 When `anchor` is `null` (welcome, outro, or fallback) the overlay dims the full page and centers the popover.
 
 ---
 
-## Tour version & re-showing
+## Tour version & "what's new" delta
 
-`appTour.version` is the integer in `frontend/src/lib/tours/appTour.ts`:
+`appTour.version` (currently **6**) is the highest `addedInVersion` value present in the step list. It lives in `frontend/src/lib/tours/appTour.ts`:
 
 ```ts
 export const appTour: TourDefinition = {
   id: "app",
-  version: 5,   // bump this to re-show the tour to everyone who already completed it
+  // Highest step `addedInVersion` in the list. Bump it (and stamp the new steps'
+  // `addedInVersion`) whenever you add steps for a new feature.
+  version: 6,
   ...
 };
 ```
 
-`OnboardingContext` re-shows the tour to a user when their stored version is **less than** `appTour.version`. Bump the version whenever the tour content changes substantially enough to warrant a re-run.
+The model is **per-step versioning**, not whole-tour re-show. Adding a tour step for a new feature works as follows:
+
+1. Set `addedInVersion: <N>` on the new step(s), where `<N>` is the new version number.
+2. Bump `appTour.version` to `<N>`.
+
+On the next login, `OnboardingContext` detects that `users/{uid}.toursSeen["app"]` is less than `appTour.version` and fires a **delta tour** (`buildAppTour(can, ctx, { sinceVersion: seenVersion })`). The delta contains only the new steps (filtered to the user's permissions), prefixed by the `WHATS_NEW_INTRO` ("Co je nového") card. First-time users receive the full tour and never see the delta path.
+
+If a user's permissions don't include any of the new steps, the delta is empty and the tour does not auto-fire — `recordSeenVersion(APP_TOUR_VERSION)` is called silently to bring the stored version up to date.
+
+**`toursSeen` Firestore field:**
+
+```
+users/{uid}.toursSeen = { "app": 6 }   // tourId → last seen version
+```
+
+This replaces the former `{ "app": 5 }` example. The `PUT /api/auth/me/tours` body is `{ tourId, version }` and uses `merge: true` so other tour entries are preserved.
+
+---
+
+## Tour sections
+
+The master step list is organised into 13 named sections defined in the `SECTIONS` const in `appTour.ts`. The section label is set only on the first step of each group; `buildAppTour` carries it forward to every subsequent step before filtering.
+
+| Section label | Content covered |
+|---|---|
+| Úvod | Welcome card, přihlášený uživatel, světlý/tmavý režim |
+| Navigace | Sidebar nav items (one step per permission: Přehled, Směny, Dovolená, Zaměstnanci, Mzdy, Upozornění, Šablony smluv, Log změn, Nastavení, Můj profil) |
+| Přehled | Dnešní datum header, Dnes/Zítra staffing, Moje směny tile, Úkoly, Statistiky |
+| Směny | All shift-plan steps (view, edit, create, transitions, free shifts, export, …) |
+| Dovolená | Vacation request form, all-requests panel, approved-colleagues view |
+| Zaměstnanci | Employee list + filters + create/export; employee card (edit, delete, sensitive reveal, benefits, employment history, contracts, documents) |
+| Můj profil | Self-page title, Navrhnout úpravu, own sensitive reveal, pending requests |
+| Šablony smluv | Template list, new template |
+| Mzdy | Payroll table, create, edit, recalculate, hard-recalculate, lock, delete, export, notes |
+| Upozornění | Alerts tabs, mark-read, manual refresh, change-request approval tab |
+| Log změn | Single step spotlighting the nav item |
+| Nastavení | Users tab, add/edit/assign-type/per-user-perms; user types tab; all číselník tabs (companies, departments, positions, education, payroll settings, menu order); system triggers; test clock; superadmin card |
+| Závěr | Outro card pointing to the Nápověda button |
+
+Sections are used only for the overlay's "Předchozí/Další sekce" navigation — they have no effect on filtering or persistence.
 
 ---
 
@@ -118,7 +203,7 @@ export const appTour: TourDefinition = {
 The backend stores one Firestore field on the user document:
 
 ```
-users/{uid}.toursSeen = { "app": 5 }   // tourId → completedVersion
+users/{uid}.toursSeen = { "app": 6 }   // tourId → last seen version
 ```
 
 Two endpoints in `functions/src/routes/auth.ts`:
@@ -207,8 +292,8 @@ The "? Nápověda" button in the sidebar footer links to `/napoveda`.
 ## Adding or updating tour steps
 
 1. Add the `data-tour="<anchor>"` attribute to the relevant DOM element in the page component.
-2. Add (or update) the matching `TourStep` entry in `APP_TOUR_STEPS` in `appTour.ts`. Set `permission` to the controlling permission key, `route` to the page route, and `reveal` to any tab/expander anchors that must be clicked first.
+2. Add (or update) the matching `TourStep` entry in `APP_TOUR_STEPS` in `appTour.ts`. Set `permission` to the controlling permission key, `route` to the page route, and `reveal` to any tab/expander anchors that must be clicked first. Set `section` if this is the first step of a new section group.
 3. If the step targets a demo-only route, verify the route and scenario are registered in `App.tsx` and `demoData.ts`.
-4. If the new content is significant, bump `appTour.version` so the tour re-shows to existing users.
+4. **Set `addedInVersion` and bump `appTour.version`** — set `addedInVersion: <N>` on the new step(s) where `<N>` is one higher than the current `appTour.version`, then update `appTour.version` to `<N>`. This triggers a "what's new" delta for returning users who already completed an earlier version. First-time users always see the full tour regardless. Do **not** omit `addedInVersion` on new steps — without it they are treated as baseline (version 0) and returning users will never see them in a delta.
 5. No separate Nápověda update is needed — the page derives its content from the step list automatically.
-6. Follow the permission-matrix rule: any **new** permission also needs to be added to the backend + frontend permission catalogue and to `BUILTIN_ROLE_PERMISSIONS` (see `docs/auth-and-permissions.md`).
+6. Follow the permission-matrix rule: any **new** permission also needs to be added to the backend + frontend permission catalogue and to `BUILTIN_TYPE_PERMISSIONS` (see `docs/auth-and-permissions.md`).

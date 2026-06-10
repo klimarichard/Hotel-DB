@@ -36,9 +36,33 @@ const DEMO_SHIFTS_EMPTY = "/napoveda/ukazka-smeny-prazdne"; // real Směny page,
 const DEMO_SHIFTS_CREATED = "/napoveda/ukazka-smeny-vytvoreny"; // created (not opened) plan → Smazat plán
 const DEMO_SHIFTS_PUBLISHED = "/napoveda/ukazka-smeny-publikovane"; // published plan → Volné směny section
 
+/**
+ * Section labels for the "Předchozí/Další sekce" jump buttons. Set `section` only
+ * on the FIRST step of each group below; buildAppTour carries it forward to the
+ * rest of the group, so the labels survive permission filtering.
+ */
+const SECTIONS = {
+  intro: "Úvod",
+  nav: "Navigace",
+  overview: "Přehled",
+  shifts: "Směny",
+  vacation: "Dovolená",
+  // Zaměstnanci spans the list + the employee card (no separate "Karta" section).
+  employees: "Zaměstnanci",
+  profile: "Můj profil",
+  templates: "Šablony smluv",
+  payroll: "Mzdy",
+  alerts: "Upozornění",
+  audit: "Log změn",
+  // Nastavení spans uživatelé/oprávnění + číselníky + systém as one section.
+  settings: "Nastavení",
+  outro: "Závěr",
+} as const;
+
 export const APP_TOUR_STEPS: TourStep[] = [
   // ── Welcome ───────────────────────────────────────────────────────────────
   {
+    section: SECTIONS.intro,
     anchor: null,
     title: "Vítejte v HPM Intranetu",
     body: "Tento průvodce vás provede částmi aplikace, ke kterým máte přístup. Obsah se přizpůsobuje vašim oprávněním, takže uvidíte přesně to, co můžete používat. Průvodce můžete kdykoliv ukončit tlačítkem Přeskočit a později znovu spustit z Nápovědy vlevo dole.",
@@ -49,7 +73,7 @@ export const APP_TOUR_STEPS: TourStep[] = [
   { anchor: "theme-toggle", title: "Světlý/tmavý režim", body: "Můžete si zvolit zobrazení ve světlém, nebo tmavém režimu. Aplikace si bude vaši volbu pamatovat i při příštím přihlášení.", placement: "right" },
 
   // ── Stránky / navigace (sidebar nav items) ──────────────────────────────────
-  { permission: "nav.dashboard.view", anchor: "nav-prehled", title: "Přehled", body: "Přehled je vaše úvodní obrazovka se shrnutím dnešního dne.", placement: "right" },
+  { section: SECTIONS.nav, permission: "nav.dashboard.view", anchor: "nav-prehled", title: "Přehled", body: "Přehled je vaše úvodní obrazovka se shrnutím dnešního dne.", placement: "right" },
   { permission: "nav.shifts.view", anchor: "nav-smeny", title: "Směny", body: "V sekci Směny najdete měsíční plán směn.", placement: "right" },
   { permission: "nav.vacation.view", anchor: "nav-dovolena", title: "Dovolená", body: "Sekce Dovolená slouží k podávání a sledování žádostí o dovolenou.", placement: "right" },
   { permission: "nav.employees.view", anchor: "nav-zamestnanci", title: "Zaměstnanci", body: "Sekce Zaměstnanci obsahuje karty zaměstnanců s údaji, doklady, smlouvami a historií pracovního poměru.", placement: "right" },
@@ -61,19 +85,23 @@ export const APP_TOUR_STEPS: TourStep[] = [
   { permission: "nav.profile.view", anchor: "nav-mujProfil", title: "Můj profil", body: "Můj profil zobrazuje vaše zaměstnanecké údaje.", placement: "right" },
 
   // ── Přehled (/prehled) ──────────────────────────────────────────────────────
-  { permission: "dashboard.view", anchor: "overview-date-header", route: "/prehled", title: "Přehled - dnešní datum", body: "Datum nahoře vždy ukazuje dnešní datum a právě probíhající směnu (denní/noční).", placement: "bottom" },
-  { permission: "dashboard.stats.view", anchor: "overview-staffing", route: "/prehled", title: "Dnešní a zítřejší přehled", body: "Sekce Dnes a Zítra zobrazují zaměstnance, kteří mají naplánované směny, MOD a manažery, kteří mají dovolenou.", placement: "bottom" },
-  { permission: "shifts.view.self", anchor: "overview-my-shifts", route: "/prehled", title: "Moje směny", body: "Tato dlaždice zobrazuje vaše nejbližší směny. Kliknutím se dostanete do tabulky směn.", placement: "bottom" },
+  // Date header — two variants: WITH the denní/noční badge (users with shift
+  // access) and WITHOUT it (stats-only viewers like the účetní, whose header
+  // shows no shift badge). The inverse gate keeps shift users on the first only.
+  { section: SECTIONS.overview, permission: ["shifts.view.all", "shifts.view.self"], anchor: "overview-date-header", route: "/prehled", title: "Přehled - dnešní datum", body: "Datum nahoře vždy ukazuje dnešní datum a právě probíhající směnu (denní/noční).", placement: "bottom" },
+  { permission: "dashboard.view", excludeIfPermission: ["shifts.view.all", "shifts.view.self"], anchor: "overview-date-header", route: "/prehled", title: "Přehled - dnešní datum", body: "Datum nahoře vždy ukazuje dnešní datum.", placement: "bottom" },
+  { permission: "dashboard.staffing.view", anchor: "overview-staffing", route: "/prehled", title: "Dnešní a zítřejší přehled", body: "Sekce Dnes a Zítra zobrazují zaměstnance, kteří mají naplánované směny, MOD a manažery, kteří mají dovolenou.", placement: "bottom" },
+  { permission: "shifts.view.self", requiresEmployee: true, anchor: "overview-my-shifts", route: "/prehled", title: "Moje směny", body: "Tato dlaždice zobrazuje vaše nejbližší směny. Kliknutím se dostanete do tabulky směn.", placement: "bottom" },
   { permission: "dashboard.tasks.view", anchor: "overview-task-tiles", route: "/prehled", title: "Úkoly ke schválení", body: "Dlaždice úkolů upozorňují na položky čekající na vaše schválení. Kliknutím přejdete k vyřízení.", placement: "bottom" },
   { permission: "dashboard.stats.view", anchor: "overview-stats", route: "/prehled", title: "Statistiky", body: "Na těchto dlaždicích vidíte různé statistiky zaměstnanců.", placement: "top" },
 
   // ── Směny (/smeny) ──────────────────────────────────────────────────────────
-  { permission: "shifts.view.self", anchor: "shift-month-nav", route: DEMO_SHIFTS, title: "Výběr měsíce", body: "Šipkami přecházíte mezi měsíci, tlačítkem DNES se vrátíte na aktuální měsíc. V tabulce je rozpis směn.", placement: "bottom" },
+  { section: SECTIONS.shifts, permission: "shifts.view.self", anchor: "shift-month-nav", route: DEMO_SHIFTS, title: "Výběr měsíce", body: "Šipkami přecházíte mezi měsíci, tlačítkem DNES se vrátíte na aktuální měsíc. V tabulce je rozpis směn.", placement: "bottom" },
   { permission: "shifts.view.all", anchor: "shift-rows", route: DEMO_SHIFTS, title: "Celý plán směn", body: "Tabulka zobrazuje měsíční plán směn pro recepci. Kódy (DA, NS, X…) označují typ směny nebo volno; legenda je pod tabulkou.", placement: "bottom" },
   { permission: "shifts.counterTable.view", anchor: "shift-counter", route: DEMO_SHIFTS, title: "Tabulka obsazenosti", body: "Pod plánem je souhrnná tabulka obsazenosti — počty lidí na pozicích pro každý den.", placement: "bottom" },
   { permission: "shifts.cells.editOwnX", excludeIfPermission: "shifts.cells.edit", anchor: "shift-rows", route: DEMO_SHIFTS, title: "Zadání vlastního volna (X)", body: "Do svého řádku můžete po vytvoření plánu směn na další měsíc přímo zapsat volno (X). Maximální počet pro zaměstnance na plný úvazek je 8 X, pro poloviční úvazek 13 X. Pokud potřebujete více dní, můžete požádat o výjimku (po zadání devátého X se vám automaticky zobrazí okno s žádostí o X navíc, kam napíšete odůvodnění). Admin poté žádost schválí, nebo zamítne (také s odůvodněním). Pokud potřebujete zadat 7 a více dní v kuse, požádejte o dovolenou.", placement: "bottom" },
   { permission: "shifts.cells.edit", anchor: "shift-rows", route: DEMO_SHIFTS, title: "Vyplňování plánu", body: "V tabulce směn můžete kliknutím do buňky upravovat směny všech zaměstnanců.", placement: "bottom" },
-  { permission: "shifts.changeRequest.submit", excludeIfPermission: "shifts.plan.transition", anchor: "shift-my-requests", route: DEMO_SHIFTS, title: "Žádost o změnu směny", body: "Když je plán směn již hotový, žádost o změnu podáte dvojklikem na danou buňku. Popište, o jakou změnu jde (stačí např. „vyměnit s …“). Admin změny schvaluje nebo zamítá. Stav žádosti vidíte v sekci Moje žádosti.", placement: "top" },
+  { permission: "shifts.changeRequest.submit", excludeIfPermission: "shifts.plan.transition", anchor: "shift-my-requests-btn", route: DEMO_SHIFTS, title: "Žádost o změnu směny", body: "Když je plán směn již hotový, žádost o změnu podáte dvojklikem na danou buňku. Popište, o jakou změnu jde (stačí např. „vyměnit s …“). Admin změny schvaluje nebo zamítá. Stav žádosti vidíte po rozkliknutí tlačítka Moje žádosti.", placement: "bottom" },
   { permission: "shifts.freeShift.claim", excludeIfPermission: "shifts.freeShift.manage", anchor: "shift-free", route: DEMO_SHIFTS_PUBLISHED, title: "Žádost o volnou směnu", body: "Volné portýrské směny jsou zobrazeny pod rozpisem směn. Můžete o ně požádat dvojklikem na danou volnou směnu.", placement: "top" },
   { permission: "shifts.changeRequest.review", anchor: "shift-change-requests", route: DEMO_SHIFTS, title: "Schvalování žádostí o změnu", body: "Tlačítkem Žádosti o změny otevřete panel se žádostmi zaměstnanců ke schválení nebo zamítnutí.", placement: "bottom" },
   // Note: shifts.override.submit ("Žádost o výjimku") folded into the X-limit step above (the 9th-X dialog).
@@ -90,14 +118,18 @@ export const APP_TOUR_STEPS: TourStep[] = [
   { permission: "shifts.export", anchor: "shift-export", route: DEMO_SHIFTS, title: "Export plánu", body: "Tabulku směn můžete exportovat do CSV nebo PDF.", placement: "bottom" },
 
   // ── Dovolená (/dovolena) ─────────────────────────────────────────────────────
-  { permission: "vacation.request.self", anchor: "vacation-request-form", route: "/dovolena", title: "Nová žádost o dovolenou", body: "Zadejte termín a důvod dovolené (důvod můžete nechat i prázdný, ale nedoporučuji to). Odesláním žádosti ji předáte ke schválení řediteli nebo adminovi. Pokud máte v daném termínu už naplánovanou nějakou směnu, aplikace vás na to upozorní.", placement: "right" },
-  // Merged: viewing all requests + approving/rejecting them happen in the same panel.
-  { permission: ["vacation.view.all", "vacation.review"], anchor: "vacation-all-requests", route: "/dovolena", title: "Žádosti o dovolenou", body: "Seznam žádostí všech zaměstnanců se stavem (čeká, schváleno, zamítnuto). Žádosti zde můžete schvalovat nebo zamítat.", placement: "top" },
+  { section: SECTIONS.vacation, permission: "vacation.request.self", anchor: "vacation-request-form", route: "/dovolena", title: "Nová žádost o dovolenou", body: "Zadejte termín a důvod dovolené (důvod můžete nechat i prázdný, ale nedoporučuji to). Odesláním žádosti ji předáte ke schválení řediteli nebo adminovi. Pokud máte v daném termínu už naplánovanou nějakou směnu, aplikace vás na to upozorní.", placement: "right" },
+  // Two variants of the all-requests panel: reviewers also get the approve/reject
+  // line; view-only holders (vacation.view.all without vacation.review) see the
+  // list described without it. The inverse gate keeps reviewers on the first only.
+  { permission: "vacation.review", anchor: "vacation-all-requests", route: "/dovolena", title: "Žádosti o dovolenou", body: "Seznam žádostí všech zaměstnanců se stavem (čeká, schváleno, zamítnuto). Žádosti zde můžete schvalovat nebo zamítat.", placement: "top" },
+  { permission: "vacation.view.all", excludeIfPermission: "vacation.review", anchor: "vacation-all-requests", route: "/dovolena", title: "Žádosti o dovolenou", body: "Seznam žádostí všech zaměstnanců se stavem (čeká, schváleno, zamítnuto).", placement: "top" },
   { permission: "vacation.view.approvedUpcoming", excludeIfPermission: "vacation.view.all", anchor: "vacation-approved-colleagues", route: "/dovolena", title: "Schválené dovolené kolegů", body: "Zde vidíte schválené dovolené vašich kolegů. Pokud je to možné, snažte se vyhnout kolizi termínu s někým jiným.", placement: "top" },
 
   // ── Zaměstnanci — seznam (/zamestnanci) ──────────────────────────────────────
   // Merged: view.all (vedení incl.) + view.nonManagement collapse into one step.
-  { permission: ["employees.view.all", "employees.view.nonManagement"], anchor: "emp-list", route: "/zamestnanci", title: "Seznam zaměstnanců", body: "Zde vidíte seznam zaměstnanců. Kliknutím na jméno otevřete zaměstnaneckou kartu.", placement: "top" },
+  { section: SECTIONS.employees, permission: ["employees.view.all", "employees.view.nonManagement"], anchor: "emp-list", scrollBlock: "start", route: "/zamestnanci", title: "Seznam zaměstnanců", body: "Zde vidíte seznam zaměstnanců. Kliknutím na jméno otevřete zaměstnaneckou kartu.", placement: "bottom" },
+  { permission: ["employees.view.all", "employees.view.nonManagement"], anchor: "emp-filters", route: "/zamestnanci", title: "Vyhledávání a filtr", body: "Ve vyhledávacím poli najdete zaměstnance podle jména, pozice nebo národnosti. Přepínačem Aktivní/Ukončení zvolíte, zda zobrazit aktivní zaměstnance, nebo ty s ukončeným pracovním poměrem.", placement: "bottom" },
   { permission: "employees.create", anchor: "emp-create", route: "/zamestnanci", title: "Vytvoření zaměstnance", body: "Tlačítkem Přidat zaměstnance založíte novou kartu.", placement: "bottom" },
   { permission: "employees.export", anchor: "emp-export", route: "/zamestnanci", title: "Export seznamu", body: "Seznam zaměstnanců můžete exportovat do CSV.", placement: "bottom" },
 
@@ -122,17 +154,17 @@ export const APP_TOUR_STEPS: TourStep[] = [
   { permission: "documents.delete", anchor: "emp-doc-delete", route: DEMO_EMP, reveal: ["emp-tab-docs"], title: "Smazání dokumentu", body: "Tlačítkem Smazat odstraníte nahraný dokument (aplikace se zeptá na potvrzení).", placement: "left" },
 
   // ── Můj profil — REAL self page fed by mock data (/napoveda/ukazka-profil) ──────
-  { permission: "self.profile.view", anchor: "selfpage-title", route: DEMO_SELF, title: "Můj profil", body: "Tato stránka zobrazuje vaši kartu zaměstnance — osobní údaje, kontakt, doklady a historii poměru. Slouží ke čtení. (Ukázková data pouze pro průvodce.)", placement: "bottom" },
+  { section: SECTIONS.profile, permission: "self.profile.view", anchor: "selfpage-title", route: DEMO_SELF, title: "Můj profil", body: "Tato stránka zobrazuje vaši kartu zaměstnance — osobní údaje, kontakt, doklady a historii poměru. Slouží ke čtení. (Ukázková data pouze pro průvodce.)", placement: "bottom" },
   { permission: "self.profile.requestEdit", anchor: "selfpage-edit-btn", route: DEMO_SELF, title: "Navrhnout úpravu", body: "Tlačítkem Navrhnout úpravu můžete upravit svoje údaje a odeslat úpravu ke schválení. Změněné hodnoty se objeví až po schválení administrátorem nebo ředitelem.", placement: "left" },
   { permission: "sensitive.reveal.self", anchor: "selfpage-reveal", route: DEMO_SELF, title: "Zobrazení vlastních citlivých údajů", body: "Pole označená ikonou oka (např. rodné číslo) jsou skryta. Kliknutím je dočasně zobrazíte. Každé zobrazení je zaznamenáno v logu aplikace.", placement: "left" },
   { permission: "self.profile.requestEdit", anchor: "selfpage-requests", route: DEMO_SELF, title: "Vaše návrhy na změnu", body: "Zde vidíte odeslané návrhy na úpravu profilu a jejich stav. Změny čekající na schválení jde zrušit.", placement: "top" },
 
   // ── Šablony smluv (/smlouvy) ──────────────────────────────────────────────────
-  { permission: "contractTemplates.view", anchor: "templates-list", route: "/smlouvy", title: "Zobrazení šablon", body: "V seznamu vlevo si vyberete a prohlédnete dostupné šablony.", placement: "right" },
+  { section: SECTIONS.templates, permission: "contractTemplates.view", anchor: "templates-list", route: "/smlouvy", title: "Zobrazení šablon", body: "V seznamu vlevo si vyberete a prohlédnete dostupné šablony.", placement: "right" },
   { permission: "contractTemplates.manage", anchor: "templates-new", route: "/smlouvy", title: "Nová šablona", body: "Tlačítkem Nová šablona vytvoříte šablonu. Její obsah upravíte v editoru a uložíte.", placement: "bottom" },
 
   // ── Mzdy (/mzdy) ──────────────────────────────────────────────────────────────
-  { permission: "payroll.view", anchor: "payroll-table", route: DEMO_PAYROLL, title: "Zobrazení mezd", body: "Tabulka zobrazuje vypočtené mzdy zaměstnanců pro zvolené období.", placement: "top" },
+  { section: SECTIONS.payroll, permission: "payroll.view", anchor: "payroll-table", route: DEMO_PAYROLL, title: "Zobrazení mezd", body: "Tabulka zobrazuje vypočtené mzdy zaměstnanců pro zvolené období.", placement: "top" },
   { permission: "payroll.create", anchor: "payroll-create", route: DEMO_PAYROLL_EMPTY, title: "Vytvoření mzdového období", body: "Tlačítkem Vytvořit mzdy ručně založíte období pro zvolený měsíc.", placement: "bottom" },
   { permission: "payroll.edit", anchor: "payroll-table", route: DEMO_PAYROLL, title: "Úprava mezd", body: "V odemčeném období upravíte jednotlivé položky dvojklikem na buňku.", placement: "top" },
   { permission: "payroll.recalculate", anchor: "payroll-recalc", route: DEMO_PAYROLL, title: "Přepočítání mezd", body: "Tímto tlačítkem můžete přepočítat mzdy pro tento měsíc. Všechny ruční úpravy zůstanou zachovány.", placement: "bottom" },
@@ -143,16 +175,16 @@ export const APP_TOUR_STEPS: TourStep[] = [
   { permission: "payroll.notes.manage", anchor: "payroll-notes-col", route: DEMO_PAYROLL, title: "Poznámky ke mzdám", body: "Ve sloupci poznámek přidáváte a spravujete poznámky k jednotlivým mzdám.", placement: "top" },
 
   // ── Upozornění (/upozorneni) ────────────────────────────────────────────────────
-  { permission: "alerts.view", anchor: "alerts-tabs", route: "/upozorneni", title: "Zobrazení upozornění", body: "Záložky člení upozornění (doklady, zkušební doba, dovolená, výjimky, žádosti).", placement: "bottom" },
+  { section: SECTIONS.alerts, permission: "alerts.view", anchor: "alerts-tabs", route: "/upozorneni", title: "Zobrazení upozornění", body: "Záložky člení upozornění (doklady, zkušební doba, dovolená, výjimky, žádosti).", placement: "bottom" },
   { permission: "alerts.read", anchor: "alerts-mark-read", route: "/upozorneni", title: "Označení jako přečtené", body: "Upozornění označíte jako přečtené jednotlivě nebo hromadně. Tento stav je sdílený pro všechny uživatele, kteří upozornění vidí.", placement: "bottom" },
   { permission: "system.triggers", anchor: "alerts-refresh", route: "/upozorneni", title: "Ruční obnovení", body: "Můžete ručně aktualizovat upozornění.", placement: "bottom" },
   { permission: "changeRequests.review", anchor: "alerts-tab-uprava", route: "/upozorneni", reveal: ["alerts-tab-uprava"], title: "Schvalování úprav údajů", body: "Na záložce Žádosti o úpravu údajů schvalujete nebo zamítáte návrhy zaměstnanců.", placement: "bottom" },
 
   // ── Log změn ────────────────────────────────────────────────────────────────────
-  { permission: "audit.view", anchor: "nav-audit", title: "Log změn", body: "V Logu změn dohledáte, kdo a kdy data změnil nebo zobrazil citlivé údaje.", placement: "right" },
+  { section: SECTIONS.audit, permission: "audit.view", anchor: "nav-audit", title: "Log změn", body: "V Logu změn dohledáte, kdo a kdy data změnil nebo zobrazil citlivé údaje.", placement: "right" },
 
   // ── Uživatelé a oprávnění (/nastaveni) — before the číselník tabs ──────────────────
-  { permission: "users.view", anchor: "settings-tab-users", route: "/nastaveni", reveal: ["settings-tab-users"], title: "Uživatelé", body: "Na záložce Uživatelé vidíte uživatelské účty.", placement: "bottom" },
+  { section: SECTIONS.settings, permission: "users.view", anchor: "settings-tab-users", route: "/nastaveni", reveal: ["settings-tab-users"], title: "Uživatelé", body: "Na záložce Uživatelé vidíte uživatelské účty.", placement: "bottom" },
   { permission: "users.manage", anchor: "settings-add-user", route: "/nastaveni", reveal: ["settings-tab-users"], title: "Správa uživatelů", body: "Tlačítkem Přidat uživatele zakládáte účty, můžete je upravovat a deaktivovat.", placement: "bottom" },
   { permission: "users.setType", anchor: "settings-user-type", route: "/nastaveni", reveal: ["settings-tab-users"], title: "Přiřazení typu", body: "U každého uživatele zvolíte typ, který určuje jeho výchozí oprávnění.", placement: "left" },
   { permission: "users.permissions.manage", anchor: "settings-user-perms", route: "/nastaveni", reveal: ["settings-tab-users"], title: "Individuální oprávnění", body: "Tlačítkem Oprávnění uživateli nad rámec typu přidáte nebo odeberete konkrétní práva.", placement: "left" },
@@ -172,11 +204,26 @@ export const APP_TOUR_STEPS: TourStep[] = [
   { permission: "system.admin", anchor: null, title: "Superadmin", body: "Máte oprávnění superadministrátora — přístup ke všem funkcím bez omezení. Používejte je obezřetně, zejména u nevratných operací.", placement: "bottom" },
 
   // ── Outro ───────────────────────────────────────────────────────────────────────
-  { anchor: "help-button", title: "Průvodce dokončen", body: "To je vše! Průvodce i nápovědu kdykoliv znovu otevřete tlačítkem „? Nápověda“ vlevo dole.", placement: "right" },
+  { section: SECTIONS.outro, anchor: "help-button", title: "Průvodce dokončen", body: "To je vše! Průvodce i nápovědu kdykoliv znovu otevřete tlačítkem „? Nápověda“ vlevo dole.", placement: "right" },
 ];
+
+/**
+ * Synthetic lead card for the "what's new" mini-tour (delta mode). NOT part of
+ * APP_TOUR_STEPS — buildAppTour prepends it when `sinceVersion` is set and new
+ * steps exist, so an incremental tour feels intentional instead of dropping the
+ * returning user straight into an unfamiliar feature.
+ */
+export const WHATS_NEW_INTRO: TourStep = {
+  anchor: null,
+  title: "Co je nového",
+  body: "Od vašeho posledního přihlášení přibyly nové funkce. Tady je jejich krátké představení. Celého průvodce aplikací můžete kdykoliv spustit znovu z Nápovědy vlevo dole.",
+};
 
 export const appTour: TourDefinition = {
   id: "app",
+  // Highest step `addedInVersion` in the list. Bump it (and stamp the new steps'
+  // `addedInVersion`) whenever you add steps for a new feature — returning users
+  // then see ONLY those steps; first-time users still get the whole tour.
   version: 6,
   label: "Prohlídka aplikace",
   steps: APP_TOUR_STEPS,

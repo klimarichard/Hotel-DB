@@ -168,6 +168,7 @@ export const PERMISSION_CATALOG = [
       { key: "dashboard.view", label: "Zobrazit vlastní přehled" },
       { key: "dashboard.tasks.view", label: "Zobrazit úkoly ke schválení" },
       { key: "dashboard.stats.view", label: "Zobrazit statistiky personálu" },
+      { key: "dashboard.staffing.view", label: "Zobrazit obsazenost (sekce Dnes/Zítra)" },
     ],
   },
   {
@@ -260,7 +261,7 @@ export const BUILTIN_TYPE_PERMISSIONS: Record<BuiltinTypeId, Permission[]> = {
     "alerts.view", "alerts.read",
     "changeRequests.review",
     "audit.view",
-    "dashboard.tasks.view", "dashboard.stats.view",
+    "dashboard.tasks.view", "dashboard.stats.view", "dashboard.staffing.view",
     "masterData.view",
     "settings.companies.manage", "settings.departments.manage",
     "settings.jobPositions.manage",
@@ -270,6 +271,7 @@ export const BUILTIN_TYPE_PERMISSIONS: Record<BuiltinTypeId, Permission[]> = {
   manager: [
     ...BASE_SELF,
     "nav.shifts.view", "nav.vacation.view",
+    "dashboard.staffing.view",
     "shifts.view.all", "shifts.cells.edit", "shifts.planEmployees.manage",
     "shifts.changeRequest.submit", "shifts.override.submit",
     "vacation.view.approvedUpcoming",
@@ -278,6 +280,7 @@ export const BUILTIN_TYPE_PERMISSIONS: Record<BuiltinTypeId, Permission[]> = {
   employee: [
     ...BASE_SELF,
     "nav.shifts.view", "nav.vacation.view",
+    "dashboard.staffing.view",
     "shifts.view.self", "shifts.cells.editOwnX",
     "shifts.freeShift.claim", "shifts.changeRequest.submit",
     "vacation.view.approvedUpcoming",
@@ -311,6 +314,7 @@ export const BUILTIN_TYPE_PERMISSIONS: Record<BuiltinTypeId, Permission[]> = {
     "benefits.view", "benefits.edit",
     // hr sees the shift plan read-only in the UI (no edit/create/publish controls).
     "shifts.view.all",
+    "dashboard.staffing.view",
     "vacation.view.approvedUpcoming",
     "masterData.view",
   ],

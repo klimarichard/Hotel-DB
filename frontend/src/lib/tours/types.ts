@@ -51,6 +51,38 @@ export interface TourStep {
    * which is inert in prod). Filtered out in buildAppTour().
    */
   hideInProd?: boolean;
+  /**
+   * The tour `version` at which this step was INTRODUCED. Drives the "what's new"
+   * mini-tour: a returning user who already saw version N is shown only the steps
+   * whose `addedInVersion > N` (not the whole tour again). Leave UNSET for the
+   * original/baseline steps (treated as version 0 — never part of a delta). When
+   * you add a step for a new feature, set this to the new `appTour.version` and
+   * bump `appTour.version` to match. See buildAppTour({ sinceVersion }).
+   */
+  addedInVersion?: number;
+  /**
+   * Section label this step belongs to (e.g. "Zaměstnanci", "Mzdy"). Set it only
+   * on the FIRST step of each section in the master list; buildAppTour resolves it
+   * onto every following step by carry-forward (BEFORE permission filtering, so it
+   * survives even when a section's first step is filtered out). Drives the
+   * "Předchozí/Další sekce" jump buttons in the overlay.
+   */
+  section?: string;
+  /**
+   * Hide this step when the current user has NO linked employee record. Used for
+   * steps that spotlight a control that only renders for employee-linked users —
+   * e.g. the "Moje směny" overview tile (`!!employeeId`), which never appears for
+   * an admin account with no employee. Without this gate such a step would
+   * spotlight a missing anchor and time out to a centered card. Filtered out in
+   * buildAppTour() when `hasEmployee` is false.
+   */
+  requiresEmployee?: boolean;
+  /**
+   * How the engine scrolls the anchor into view (`scrollIntoView({ block })`).
+   * Defaults to "center". Set "start" for tall anchors (e.g. the employees table)
+   * so the user lands on the TOP of the element rather than its middle.
+   */
+  scrollBlock?: ScrollLogicalPosition;
   title: string;
   body: string;
   placement?: TourPlacement;
