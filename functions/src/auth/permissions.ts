@@ -458,6 +458,37 @@ export function hasPermission(set: Set<string>, perm: Permission): boolean {
 }
 
 /**
+ * Permissions that may NEVER be granted through the configurable-RBAC surfaces
+ * (a user type's permission list, or a per-user `extraPermissions` grant).
+ *
+ * `system.admin` is reserved for the protected built-in `admin` type, which is
+ * seeded out-of-band and can't be edited/deleted. If it were grantable here, a
+ * delegated "user manager" type (holding `userTypes.manage` or
+ * `users.permissions.manage` but NOT `system.admin`) could add it to its own
+ * type / its own user and self-escalate to superadmin — defeating the whole
+ * point of a scoped delegated type. So we strip it from every grant path; the
+ * only way to confer superadmin is to assign the protected `admin` type itself.
+ */
+export const NON_GRANTABLE_PERMISSIONS = new Set<string>(["system.admin"]);
+
+/**
+ * Keep only known, de-duplicated, GRANTABLE permission keys. Shared by the
+ * roleTypes editor and the per-user permission PATCH so neither can introduce
+ * an unknown key or a reserved/non-grantable one (see NON_GRANTABLE_PERMISSIONS).
+ */
+export function sanitizePermissionList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return [
+    ...new Set(
+      value.filter(
+        (p): p is string =>
+          typeof p === "string" && ALL_SET.has(p) && !NON_GRANTABLE_PERMISSIONS.has(p)
+      )
+    ),
+  ];
+}
+
+/**
  * Express middleware — passes if the caller has ANY of the listed permissions.
  * Reads the effective set resolved by requireAuth (req.permissions); call
  * requireAuth first.

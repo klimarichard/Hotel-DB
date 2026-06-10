@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import Button from "@/components/Button";
 import ConfirmModal from "@/components/ConfirmModal";
 import { roleTypesApi, type RoleType } from "@/lib/api";
-import { PERMISSION_CATALOG } from "@/lib/permissions/catalog";
+import { GRANTABLE_CATALOG } from "@/lib/permissions/catalog";
 import styles from "./UserTypesTab.module.css";
 
 interface Draft {
@@ -231,7 +231,7 @@ export default function UserTypesTab() {
             </label>
 
             <div className={styles.matrix}>
-              {PERMISSION_CATALOG.map((group) => {
+              {GRANTABLE_CATALOG.map((group) => {
                 const keys = group.items.map((i) => i.key);
                 const allOn = keys.every((k) => draft.perms.has(k));
                 return (
