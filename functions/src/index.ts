@@ -143,10 +143,11 @@ app.post(
       const docsSnap = await empDoc.ref.collection("documents").limit(1).get();
       if (docsSnap.empty) continue;
       const docData = docsSnap.docs[0].data() as Record<string, unknown>;
-      // Non-active employees get an all-null body → their alerts are deleted.
-      const active = emp.status === "active";
+      // Terminated employees get an all-null body → their alerts are deleted.
+      // Active and before-start employees keep their document-expiry alerts.
+      const terminated = emp.status === "terminated";
       const alertBody: Record<string, unknown> = {};
-      for (const { field } of EXPIRY_FIELDS) alertBody[field] = active ? (docData[field] ?? null) : null;
+      for (const { field } of EXPIRY_FIELDS) alertBody[field] = terminated ? null : (docData[field] ?? null);
       await updateDocumentAlerts(empDoc.id, (emp.firstName as string) ?? "", (emp.lastName as string) ?? "", alertBody);
       refreshed++;
     }
@@ -283,14 +284,14 @@ export const refreshDocumentAlerts = onSchedule("every 24 hours", async () => {
 
     const docData = docsSnap.docs[0].data() as Record<string, unknown>;
 
-    // Build a body-like object containing only the expiry fields. Non-active
-    // employees (terminated / before-start) get an all-null body so
-    // updateDocumentAlerts deletes any existing alerts and creates none —
-    // document-expiry alerts are for currently-active staff only.
-    const active = emp.status === "active";
+    // Build a body-like object containing only the expiry fields. Terminated
+    // employees get an all-null body so updateDocumentAlerts deletes any existing
+    // alerts and creates none. Active AND before-start (upcoming) employees still
+    // get document-expiry alerts.
+    const terminated = emp.status === "terminated";
     const alertBody: Record<string, unknown> = {};
     for (const { field } of EXPIRY_FIELDS) {
-      alertBody[field] = active ? (docData[field] ?? null) : null;
+      alertBody[field] = terminated ? null : (docData[field] ?? null);
     }
 
     await updateDocumentAlerts(

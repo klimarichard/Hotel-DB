@@ -81,6 +81,8 @@ export interface UserProfile {
   lastLogin: unknown;
   /** Assigned user type (defaults to `role` when unset). */
   roleType?: string | null;
+  /** Czech display name of the user's type (resolved server-side from roleType). */
+  roleTypeName?: string | null;
   /** Per-user permission grants/revokes on top of the type. */
   extraPermissions?: string[];
   revokedPermissions?: string[];
