@@ -77,6 +77,8 @@ export interface UserProfile {
   role: UserRole;
   active: boolean;
   employeeId: string | null;
+  /** Surname-first name of the linked employee (resolved server-side; null if none). */
+  employeeName?: string | null;
   createdAt: unknown;
   lastLogin: unknown;
   /** Assigned user type (defaults to `role` when unset). */
