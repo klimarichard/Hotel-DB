@@ -110,11 +110,28 @@ Every linked user gets `/muj-profil` ("Můj profil", menu item for all six roles
 
 ## Date-based active/terminated status + auto-move / reinstate (2026-05-28)
 
-The employee root `status` (`"active"` | `"terminated"`, which drives the Aktivní / Ukončení tabs) is now **derived from the employment sessions** rather than a static field set only at creation.
+The employee root `status` is now **derived from the employment sessions** rather than a static field set only at creation. The valid values are now a **three-way enum: `"active" | "before-start" | "terminated"`**, driving three tabs on the Employees page: Aktivní, Před nástupem, and Ukončení.
 
-- **`computeEffectiveStatus(rows, today)`** — exported, pure, in `functions/src/routes/employees.ts`. Folds the employment rows into sessions and returns `"active"` if at least one session is active, else `"terminated"`; returns `null` when there are no rows yet (a freshly-created employee keeps their status until onboarding, so a new hire isn't shown terminated). **Asymmetric, date-based boundaries:** a session is active when its Nástup `startDate <= today` AND its effective end date (the Ukončení row's `startDate`, or a fixed-term `endDate`, folded through any in-effect `délka smlouvy` Dodatek) is NOT before today. So a termination dated today or in the future leaves the employee active (the end date is the last active day), while a future-dated Nástup activates **on** its day, not before.
-- **`applyDerivedStatus(empRef, now, req?)`** recomputes + persists `status` (audited when `req` is supplied). Wired into all three employment write paths — `resyncRootFields` (POST/PATCH employment) and the DELETE employment handler — plus the nightly `refreshEffectiveRootForAllActive` sweep, which now scans **every** employee and re-derives status in **both directions** so date transitions flip on their day with no employment write. It is orthogonal to the denormalized current* fields (the list-blanking resync logic is untouched); `computeEffectiveRootFields` also date-gates the Ukončení row so a future-dated termination keeps the still-active employee's current* columns populated.
+- **`computeEffectiveStatus(rows, today)`** — exported, pure, in `functions/src/routes/employees.ts`. Returns:
+  - `"active"` — at least one session is currently active (Nástup `startDate <= today` AND effective end date is not before today).
+  - `"before-start"` — no session is currently active AND the most recent session's Nástup `startDate` is in the future. Covers upcoming new hires and returning past employees whose new Nástup hasn't arrived yet. Any future start qualifies — there is no time window.
+  - `"terminated"` — no session is active and the most recent Nástup is not in the future.
+  - `null` — no employment rows yet (freshly-created employee; status is left as-is so a new hire isn't shown terminated before onboarding).
+
+  **Asymmetric, date-based boundaries:** a session is active when its Nástup `startDate <= today` AND its effective end date (the Ukončení row's `startDate`, or a fixed-term `endDate`, folded through any in-effect `délka smlouvy` Dodatek) is NOT before today. So a termination dated today or in the future leaves the employee active (the end date is the last active day), while a future-dated Nástup activates **on** its day, not before.
+- **`applyDerivedStatus(empRef, now, req?)`** recomputes + persists `status` (audited when `req` is supplied). Wired into all three employment write paths — `resyncRootFields` (POST/PATCH employment) and the DELETE employment handler — plus the nightly `refreshEffectiveRootForAllActive` sweep, which now scans **every** employee and re-derives status in **all three directions** so date transitions flip on their day with no employment write (including `before-start → active` on the start day). It is orthogonal to the denormalized current* fields (the list-blanking resync logic is untouched); `computeEffectiveRootFields` also date-gates the Ukončení row so a future-dated termination keeps the still-active employee's current* columns populated.
 - **Reinstate-on-duplicate:** the new-employee form (`EmployeeFormPage`) matches the entered first+last name and `dateOfBirth` against terminated employees; on a match it offers — via `ConfirmModal`'s three-way layout — *Reaktivovat a upravit údaje* (navigate to the existing record's edit form; adding a fresh Nástup there reactivates them through the same derived status), *Přesto vytvořit nového*, or *Zrušit*. No separate status endpoint is needed.
+
+### Frontend — three-tab Employees page
+
+`EmployeesPage` fetches all three statuses in parallel on load (`/employees?status=active`, `/employees?status=before-start`, `/employees?status=terminated`) — three separate single-field queries, no composite index needed. The tab switcher shows three buttons: **Aktivní** / **Před nástupem** / **Ukončení**. The "Před nástupem" tab sits between Aktivní and Ukončení.
+
+Status badges in the employee list:
+- `"active"` → green **Aktivní** badge.
+- `"before-start"` → violet **Před nástupem** badge.
+- `"terminated"` → red **Ukončen** badge.
+
+Cross-tab search (entered when searching): matches from all three statuses are shown regardless of the selected tab.
 - **One-time backfill:** `scripts/_backfill-employee-status-staging.js` (local, ADC, `BACKFILL_PROJECT=<id>`, dry-run by default + `--apply`) brings existing `status` in line with the derived logic. Run dry-run first and review any `terminated → active` flips before applying.
 
 ## Employees list — search by birth name (2026-05-28)

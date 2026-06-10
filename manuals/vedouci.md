@@ -40,7 +40,7 @@ Aplikace je dostupná v prohlížeči. Přihlašujete se **uživatelským jméne
 
 > 📷 *(Místo pro snímek obrazovky: přihlašovací formulář)*
 
-Vlevo dole je vždy vidět **jméno přihlášeného uživatele**; tlačítkem *Odhlásit* se odhlásíte. Vedle je přepínač **světlého/tmavého režimu**.
+Vlevo dole je vždy vidět **jméno přihlášeného uživatele**. Pod ním jsou tři tlačítka v pořadí: přepínač **světlého/tmavého režimu** → **? Nápověda** → **Odhlásit**.
 
 ---
 
@@ -58,7 +58,7 @@ Vlevo dole je vždy vidět **jméno přihlášeného uživatele**; tlačítkem *
 
 ## Směny
 
-Měsíční plán směn (recepce, portýři, FOM).
+Měsíční plán směn (recepce, portýři, Management). Plán je rozčleněn do sekcí oddělených záhlavím; první sekce nese název **Management**. Souhrnné řádky Σ na konci sekcí byly odstraněny — sekce jsou odděleny pouze svým záhlavím.
 
 ### Životní cyklus plánu
 

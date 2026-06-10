@@ -46,7 +46,7 @@ Aplikace je dostupná v prohlížeči. Přihlašujete se **uživatelským jméne
 
 > 📷 *(Místo pro snímek obrazovky: přihlašovací formulář)*
 
-Vlevo dole je vždy vidět **jméno přihlášeného uživatele**; tlačítkem *Odhlásit* se odhlásíte. Vedle je přepínač **světlého/tmavého režimu**.
+Vlevo dole je vždy vidět **jméno přihlášeného uživatele**. Pod ním jsou tři tlačítka v pořadí: přepínač **světlého/tmavého režimu** → **? Nápověda** → **Odhlásit**.
 
 ---
 
@@ -64,11 +64,13 @@ Vlevo dole je vždy vidět **jméno přihlášeného uživatele**; tlačítkem *
 
 ## Zaměstnanci
 
-Evidence všech zaměstnanců. Záložky **Aktivní** a **Ukončení** přepínají mezi zaměstnanci v pracovním poměru a ukončenými.
+Evidence všech zaměstnanců. Záložky **Aktivní**, **Před nástupem** a **Ukončení** přepínají mezi zaměstnanci v pracovním poměru, nadcházejícími a ukončenými.
+
+- Záložka **Před nástupem** zobrazuje zaměstnance, jejichž datum nástupu teprve nastane — tedy ty, kteří do práce ještě nenastoupili. Patří sem nové nábory i vracející se zaměstnanci s budoucím nástupem. V den nástupu se zaměstnanec automaticky přesune do záložky **Aktivní** — bez nutnosti jakékoli ruční akce.
 
 ### Vyhledávání a seznam
 
-- Vyhledávací pole hledá podle jména, příjmení, **rodného příjmení**, pozice i národnosti. Při vyhledávání se prohledávají **obě záložky najednou** (Aktivní i Ukončení) — výsledky se zobrazí bez ohledu na to, kterou záložku máte vybranou. Prázdné hledání ukazuje jen aktuální záložku.
+- Vyhledávací pole hledá podle jména, příjmení, **rodného příjmení**, pozice i národnosti. Při vyhledávání se prohledávají **všechny tři záložky najednou** (Aktivní, Před nástupem i Ukončení) — výsledky se zobrazí bez ohledu na to, kterou záložku máte vybranou. Prázdné hledání ukazuje jen aktuální záložku.
 - Vedle jména je **odznak typu smlouvy** (HPP / PPP / DPP) — stejný jako ve mzdách. Řádky jsou navíc barevně odlišené podle typu smlouvy.
 - Tlačítko **Exportovat CSV** otevře dialog, kde vyberete sloupce a filtry a stáhnete data do tabulky.
 
@@ -105,7 +107,7 @@ Pracovní poměr je členěn na **sezení (sessions)** — každé začíná **N
 - **+ Přidat změnu** (Nástup / Dodatek / Ukončení).
 - U řádku **Nástup** se u smluv HPP a PPP zobrazuje **nástupní mzda** (skrytá, zobrazíte ji ikonou oka — stejně jako u mzdových Dodatků). U DPP a řádků bez mzdy se mzda nezobrazuje.
 - Mzda a pozice v záhlaví poměru se mění až **k datu platnosti Dodatku**.
-- **Automatický přesun do „Ukončení":** zaměstnanec se do záložky *Ukončení* přesune sám, jakmile **uplyne datum ukončení** (smlouva na dobu určitou nebo zadané ukončení). Den ukončení je ještě aktivní — přesun proběhne až následující den. Naopak **budoucí Nástup** zaměstnance aktivuje **až v den nástupu**.
+- **Automatický přesun do „Ukončení":** zaměstnanec se do záložky *Ukončení* přesune sám, jakmile **uplyne datum ukončení** (smlouva na dobu určitou nebo zadané ukončení). Den ukončení je ještě aktivní — přesun proběhne až následující den. Naopak zaměstnanec s budoucím nástupem se zobrazuje v záložce **Před nástupem** a do záložky **Aktivní** se přesune automaticky **v den nástupu**.
 - **Ukončení a Multisport:** má-li ukončovaný zaměstnanec aktivní Multisport, aplikace automaticky nastaví konec Multisportu na **konec měsíce ukončení** a upozorní, že je potřeba Multisport zrušit i v **extranetu Multisport**.
 - U každého řádku lze podle stavu **vygenerovat smlouvu**, zobrazit ji, nebo nahrát podepsanou kopii.
 - **Ad hoc dokumenty** (Multisport, Hmotná odpovědnost, vlastní šablony) se přidávají tlačítkem **+ Adhoc dokument**: zadáte datum podpisu a tlačítkem **Přidat** vznikne řádek dokumentu (zatím bez PDF). Řádek pak ukazuje **datum podpisu**, ne datum vytvoření. PDF se vygeneruje až dodatečně tlačítkem **Generovat smlouvu** — stejný postup jako u záznamů pracovního poměru.
@@ -128,7 +130,7 @@ Tlačítkem **Exportovat CSV** v seznamu zaměstnanců otevřete dialog, ve kter
 
 ## Směny
 
-Měsíční plán směn (recepce, portýři, FOM).
+Měsíční plán směn (recepce, portýři, Management). Plán je rozčleněn do sekcí oddělených záhlavím; první sekce nese název **Management**. Souhrnné řádky Σ na konci každé sekce byly odstraněny — plán je tak přehlednější a záhlaví sekcí slouží jako přirozené oddělovače.
 
 ### Životní cyklus plánu
 
@@ -262,6 +264,8 @@ Záložky:
 
 > 📷 *(Místo pro snímek obrazovky: Upozornění)*
 
+> 📝 Upozornění na **Doklady** a **Zkušební dobu** se nevytvářejí pro zaměstnance se statusem **Ukončení** (ukončený pracovní poměr). Zaměstnanci v záložce **Před nástupem** (budoucí nástup) upozornění dostávají normálně.
+
 Přečtené položky lze odbavit; stav přečtení je společný pro všechny administrátory a ředitele.
 
 ---
@@ -303,8 +307,8 @@ Historie změn konkrétního zaměstnance je i přímo na jeho detailu v sekci *
 - **Vzdělání** — stupně vzdělání pro výběr u zaměstnance.
 - **Mzdy** — sazba stravenky, maximální měsíční odměna DPP, **minimální mzda** a **základní cena Multisport** (výchozí 470 Kč/měsíc). U jednotlivých polí se zobrazuje jen vysvětlující text, nikoli již dřívější údaj *„Výchozí hodnota: …"*.
 - **Menu** — pořadí položek v levém menu pro jednotlivé **typy uživatelů**.
-- **Uživatelské typy** — správa typů uživatelů a jejich oprávnění (viz níže).
 - **Uživatelé** — vytváření a správa uživatelských účtů: vytvoření (i bez hesla s odkazem pro reset), úprava jména/e-mailu, volba **typu uživatele** (sloupec *Typ*), **úprava oprávnění** (viz níže), deaktivace a reaktivace, reset hesla, propojení účtu se zaměstnancem. Neaktivní účty jsou dole; při vytvoření účtu se stejným e-mailem jako neaktivní účet se nabídne jeho reaktivace.
+- **Uživatelské typy** — správa typů uživatelů a jejich oprávnění (viz níže); záložka je hned za **Uživatelé**.
 - **Úlohy** — ruční spuštění automatických denních úloh (viz níže).
 
 > 📷 *(Místo pro snímek obrazovky: Nastavení)*
@@ -333,6 +337,8 @@ Pojistky: **nemůžete si odebrat vlastní administrátorská práva** a **posle
 > 📷 *(Místo pro snímek obrazovky: Oprávnění uživatele)*
 
 > **Poznámka:** sloupec **„Typ"** rychle změní typ uživatele přímo v seznamu; tlačítko **„Oprávnění"** umožní navíc doladit jednotlivá práva (typ + individuální výjimky). Skutečná oprávnění uživatele určuje právě tato kombinace.
+
+> 📝 **Zobrazení v seznamu uživatelů:** Jméno propojeného zaměstnance se zobrazuje u každého uživatele vždy. Sloupec *Typ* zobrazuje buď rozbalovací seznam pro změnu typu (pokud máte oprávnění typ měnit), nebo prostý textový popisek aktuálního typu (pokud toto oprávnění nemáte). **Propojení účtu se zaměstnancem** (tlačítko v řádku uživatele) je nově podmíněno samostatným oprávněním **„Propojit zaměstnance s účtem"** — bez tohoto oprávnění tlačítko pro propojení/odpojení nevidíte.
 
 ### Úlohy
 
