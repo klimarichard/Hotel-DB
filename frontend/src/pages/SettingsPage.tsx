@@ -975,17 +975,23 @@ export default function SettingsPage() {
                       <td className={styles.name}>{u.name}</td>
                       <td className={styles.email}>{u.email}</td>
                       <td>
-                        <select
-                          data-tour="settings-user-type"
-                          className={styles.roleSelect}
-                          value={pendingType[u.uid] ?? u.roleType ?? u.role}
-                          disabled={roleChanging[u.uid] || (!can("users.setType") && !can("users.permissions.manage"))}
-                          onChange={(e) => handleTypeChange(u.uid, e.target.value)}
-                        >
-                          {roleTypes.map((t) => (
-                            <option key={t.id} value={t.id}>{t.name}</option>
-                          ))}
-                        </select>
+                        {can("users.setType") || can("users.permissions.manage") ? (
+                          <select
+                            data-tour="settings-user-type"
+                            className={styles.roleSelect}
+                            value={pendingType[u.uid] ?? u.roleType ?? u.role}
+                            disabled={roleChanging[u.uid]}
+                            onChange={(e) => handleTypeChange(u.uid, e.target.value)}
+                          >
+                            {roleTypes.map((t) => (
+                              <option key={t.id} value={t.id}>{t.name}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span className={styles.roleStatic}>
+                            {roleTypes.find((t) => t.id === (u.roleType ?? u.role))?.name ?? (u.roleType ?? u.role)}
+                          </span>
+                        )}
                       </td>
                       <td>
                         <span className={linkedEmp ? styles.employeeLinked : styles.employeeUnlinked}>

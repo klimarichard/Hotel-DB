@@ -160,6 +160,12 @@
   opacity: 0.6;
 }
 
+/* Static type label shown to viewers who can't change a user's type. */
+.roleStatic {
+  font-size: 0.8rem;
+  color: var(--color-text);
+}
+
 .badgeActive {
   display: inline-block;
   padding: 0.2rem 0.6rem;
