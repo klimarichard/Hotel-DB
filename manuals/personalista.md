@@ -24,7 +24,9 @@ Tato příručka popisuje práci s aplikací HPM Intranet z pohledu **personalis
 Při **prvním přihlášení** se automaticky spustí interaktivní **Prohlídka aplikace** — průvodce, který vás krok po kroku provede těmi částmi aplikace, ke kterým máte přístup. Průvodce je přizpůsobený právě vašim oprávněním: uvidíte jen kroky, které se týkají vašeho účtu.
 
 - Průvodce můžete kdykoli přerušit tlačítkem **Přeskočit**.
-- Chcete-li si prohlídku zopakovat nebo ji spustit znovu, klikněte vlevo dole na tlačítko **„? Nápověda"**. Otevře se stránka **Nápověda**, kde najdete tlačítko pro opětovné spuštění průvodce a přehled sekcí aplikace, ve kterém lze vyhledávat.
+- V záhlaví každého vyskakovacího okénka průvodce je vedle čítače kroků (např. „Krok 2 z 5") zobrazen název aktuální sekce. Pomocí tlačítek **„‹ Předchozí sekce"** a **„Další sekce ›"** můžete přeskočit celou sekci najednou — praktické, pokud chcete rychle přejít na jinou oblast.
+- Pokud se po přihlášení do aplikace přidají nové funkce, průvodce vás krátce uvítá oznámením **„Co je nového"** a ukáže jen kroky týkající se těchto novinek — celou prohlídku znovu absolvovat nemusíte.
+- Chcete-li si celou prohlídku zopakovat, klikněte vlevo dole na tlačítko **„? Nápověda"**. Otevře se stránka **Nápověda**, kde najdete tlačítko pro opětovné spuštění průvodce a přehled sekcí aplikace, ve kterém lze vyhledávat.
 
 > 📷 *(Místo pro snímek obrazovky: tlačítko Nápověda v levém dolním rohu)*
 
