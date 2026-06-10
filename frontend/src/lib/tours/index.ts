@@ -49,14 +49,52 @@ export function buildAppTour(
   can: (perm: Permission) => boolean,
   ctx: TourBuildContext = { hasEmployee: true }
 ): TourDefinition {
+  // Resolve each step's section by carry-forward over the MASTER list FIRST (only
+  // the first step of each group carries an explicit `section`), THEN filter — so
+  // a step keeps its section even if its group's lead step is filtered out.
+  let currentSection = "";
+  const withSection = APP_TOUR_STEPS.map((step) => {
+    if (step.section) currentSection = step.section;
+    return step.section === currentSection ? step : { ...step, section: currentSection };
+  });
   return {
     ...appTour,
-    steps: APP_TOUR_STEPS.filter((step) => {
+    steps: withSection.filter((step) => {
       if (step.hideInProd && IS_PROD) return false;
       if (step.requiresEmployee && !ctx.hasEmployee) return false;
       return userHasStepPermission(step, can);
     }),
   };
+}
+
+/**
+ * Targets for the "Předchozí/Další sekce" jump buttons, given the filtered step
+ * list and the current index. `next` is the first step of the following section
+ * (null on the last section); `prev` is the first step of the preceding section
+ * (null on the first section). Step-granular movement stays on Zpět/Další.
+ */
+export function sectionNavTargets(
+  steps: TourDefinition["steps"],
+  index: number
+): { prev: number | null; next: number | null } {
+  const cur = steps[index]?.section;
+  // First step of the NEXT section.
+  let next: number | null = null;
+  for (let i = index + 1; i < steps.length; i++) {
+    if (steps[i].section !== cur) { next = i; break; }
+  }
+  // Walk back to the start of the CURRENT section, then to the start of the one
+  // before it.
+  let start = index;
+  while (start > 0 && steps[start - 1].section === cur) start--;
+  let prev: number | null = null;
+  if (start > 0) {
+    const prevSection = steps[start - 1].section;
+    let p = start - 1;
+    while (p > 0 && steps[p - 1].section === prevSection) p--;
+    prev = p;
+  }
+  return { prev, next };
 }
 
 export { appTour, APP_TOUR_STEPS };

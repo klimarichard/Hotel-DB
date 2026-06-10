@@ -52,6 +52,14 @@ export interface TourStep {
    */
   hideInProd?: boolean;
   /**
+   * Section label this step belongs to (e.g. "Zaměstnanci", "Mzdy"). Set it only
+   * on the FIRST step of each section in the master list; buildAppTour resolves it
+   * onto every following step by carry-forward (BEFORE permission filtering, so it
+   * survives even when a section's first step is filtered out). Drives the
+   * "Předchozí/Další sekce" jump buttons in the overlay.
+   */
+  section?: string;
+  /**
    * Hide this step when the current user has NO linked employee record. Used for
    * steps that spotlight a control that only renders for employee-linked users —
    * e.g. the "Moje směny" overview tile (`!!employeeId`), which never appears for
