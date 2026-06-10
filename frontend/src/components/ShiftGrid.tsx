@@ -165,19 +165,6 @@ export default function ShiftGrid({
     return m;
   }, [plan.shifts, plan.employees]);
 
-  const sectionDayHours = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const emp of plan.employees) {
-      for (const shift of plan.shifts) {
-        if (shift.employeeId === emp.employeeId) {
-          const key = `${emp.section}_${shift.date}`;
-          m.set(key, (m.get(key) ?? 0) + shift.hoursComputed);
-        }
-      }
-    }
-    return m;
-  }, [plan.employees, plan.shifts]);
-
   const grouped = useMemo(() => {
     const map = new Map<Section, PlanEmployee[]>();
     for (const sec of SECTIONS) map.set(sec, []);
@@ -597,22 +584,6 @@ export default function ShiftGrid({
                   </tr>
                 );
               }),
-              <tr key={`footer-${section}`} className={styles.footerRow}>
-                <td className={styles.footerLabel}>Σ {SECTION_LABELS[section]}</td>
-                {days.map((d) => {
-                  const dateStr = formatDate(d);
-                  const hrs = sectionDayHours.get(`${section}_${dateStr}`) ?? 0;
-                  return (
-                    <td
-                      key={dateStr}
-                      className={`${styles.footerCell} ${dayClass(d)}`}
-                    >
-                      {hrs > 0 ? hrs : ""}
-                    </td>
-                  );
-                })}
-                <td className={styles.footerCell}></td>
-              </tr>,
             ];
 
             // Insert MOD row after the vedoucí section
