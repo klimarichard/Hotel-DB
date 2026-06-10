@@ -47,16 +47,15 @@ const SECTIONS = {
   overview: "Přehled",
   shifts: "Směny",
   vacation: "Dovolená",
+  // Zaměstnanci spans the list + the employee card (no separate "Karta" section).
   employees: "Zaměstnanci",
-  employeeCard: "Karta zaměstnance",
   profile: "Můj profil",
   templates: "Šablony smluv",
   payroll: "Mzdy",
   alerts: "Upozornění",
   audit: "Log změn",
-  users: "Uživatelé a oprávnění",
-  settings: "Číselníky a nastavení",
-  system: "Systém",
+  // Nastavení spans uživatelé/oprávnění + číselníky + systém as one section.
+  settings: "Nastavení",
   outro: "Závěr",
 } as const;
 
@@ -137,7 +136,7 @@ export const APP_TOUR_STEPS: TourStep[] = [
   // ── Zaměstnanec — karta: REAL detail page fed by mock data (/zamestnanci/tour-demo) ──
   // Detail-tab sections are expanded by default; history/docs controls live on
   // their tab, so those steps `reveal` (click) the tab button first.
-  { section: SECTIONS.employeeCard, permission: "employees.edit", anchor: "emp-hero-edit", route: DEMO_EMP, title: "Úprava zaměstnance", body: "Tlačítkem Upravit změníte údaje na kartě zaměstnance.", placement: "bottom" },
+  { permission: "employees.edit", anchor: "emp-hero-edit", route: DEMO_EMP, title: "Úprava zaměstnance", body: "Tlačítkem Upravit změníte údaje na kartě zaměstnance.", placement: "bottom" },
   { permission: "employees.delete", anchor: "emp-hero-delete", route: DEMO_EMP, title: "Smazání zaměstnance", body: "Tlačítkem Smazat nevratně odstraníte kartu zaměstnance (aplikace se zeptá na potvrzení).", placement: "bottom" },
   { permission: "sensitive.reveal", anchor: "emp-reveal", route: DEMO_EMP, reveal: ["emp-tab-detail"], title: "Zobrazení citlivých údajů", body: "Ikonou oka dočasně odhalíte citlivé údaje (např. rodné číslo, číslo účtu). Každé zobrazení je zaznamenáno v logu aplikace.", placement: "left" },
   { permission: "benefits.view", anchor: "emp-section-benefits", route: DEMO_EMP, reveal: ["emp-tab-detail"], title: "Benefity", body: "V sekci Benefity vidíte zaměstnanecké výhody, např. Multisport.", placement: "left" },
@@ -185,14 +184,14 @@ export const APP_TOUR_STEPS: TourStep[] = [
   { section: SECTIONS.audit, permission: "audit.view", anchor: "nav-audit", title: "Log změn", body: "V Logu změn dohledáte, kdo a kdy data změnil nebo zobrazil citlivé údaje.", placement: "right" },
 
   // ── Uživatelé a oprávnění (/nastaveni) — before the číselník tabs ──────────────────
-  { section: SECTIONS.users, permission: "users.view", anchor: "settings-tab-users", route: "/nastaveni", reveal: ["settings-tab-users"], title: "Uživatelé", body: "Na záložce Uživatelé vidíte uživatelské účty.", placement: "bottom" },
+  { section: SECTIONS.settings, permission: "users.view", anchor: "settings-tab-users", route: "/nastaveni", reveal: ["settings-tab-users"], title: "Uživatelé", body: "Na záložce Uživatelé vidíte uživatelské účty.", placement: "bottom" },
   { permission: "users.manage", anchor: "settings-add-user", route: "/nastaveni", reveal: ["settings-tab-users"], title: "Správa uživatelů", body: "Tlačítkem Přidat uživatele zakládáte účty, můžete je upravovat a deaktivovat.", placement: "bottom" },
   { permission: "users.setType", anchor: "settings-user-type", route: "/nastaveni", reveal: ["settings-tab-users"], title: "Přiřazení typu", body: "U každého uživatele zvolíte typ, který určuje jeho výchozí oprávnění.", placement: "left" },
   { permission: "users.permissions.manage", anchor: "settings-user-perms", route: "/nastaveni", reveal: ["settings-tab-users"], title: "Individuální oprávnění", body: "Tlačítkem Oprávnění uživateli nad rámec typu přidáte nebo odeberete konkrétní práva.", placement: "left" },
   { permission: "userTypes.manage", anchor: "settings-tab-userTypes", route: "/nastaveni", reveal: ["settings-tab-userTypes"], title: "Typy uživatelů", body: "Na záložce Uživatelské typy vytváříte a upravujete typy a jejich výchozí oprávnění.", placement: "bottom" },
 
   // ── Číselníky a nastavení (/nastaveni) ────────────────────────────────────────────
-  { section: SECTIONS.settings, permission: "settings.companies.manage", anchor: "settings-tab-companies", route: "/nastaveni", reveal: ["settings-tab-companies"], title: "Správa společností", body: "Na záložce Společnosti přidáváte a upravujete údaje o firmách.", placement: "bottom" },
+  { permission: "settings.companies.manage", anchor: "settings-tab-companies", route: "/nastaveni", reveal: ["settings-tab-companies"], title: "Správa společností", body: "Na záložce Společnosti přidáváte a upravujete údaje o firmách.", placement: "bottom" },
   { permission: "settings.departments.manage", anchor: "settings-tab-departments", route: "/nastaveni", reveal: ["settings-tab-departments"], title: "Správa oddělení", body: "Na záložce Oddělení spravujete seznam oddělení.", placement: "bottom" },
   { permission: "settings.jobPositions.manage", anchor: "settings-tab-jobPositions", route: "/nastaveni", reveal: ["settings-tab-jobPositions"], title: "Správa pozic", body: "Na záložce Pracovní pozice spravujete seznam pozic.", placement: "bottom" },
   { permission: "settings.educationLevels.manage", anchor: "settings-tab-education", route: "/nastaveni", reveal: ["settings-tab-education"], title: "Správa vzdělání", body: "Na záložce Vzdělání spravujete úrovně vzdělání.", placement: "bottom" },
@@ -200,7 +199,7 @@ export const APP_TOUR_STEPS: TourStep[] = [
   { permission: "settings.menuOrder.manage", anchor: "settings-tab-menu", route: "/nastaveni", reveal: ["settings-tab-menu"], title: "Pořadí menu", body: "Na záložce Menu můžete nastavit pořadí položek v bočním menu pro jednotlivé uživatelské role.", placement: "bottom" },
 
   // ── Systém ─────────────────────────────────────────────────────────────────────
-  { section: SECTIONS.system, permission: "system.triggers", anchor: "settings-tab-jobs", route: "/nastaveni", reveal: ["settings-tab-jobs"], title: "Ruční spuštění úloh", body: "Na záložce Úlohy v Nastavení můžete ručně spustit naplánované úlohy (přechody plánů směn, obnova upozornění, přepočet aktuálních údajů). Každé spuštění je zaznamenáno v Logu změn.", placement: "bottom" },
+  { permission: "system.triggers", anchor: "settings-tab-jobs", route: "/nastaveni", reveal: ["settings-tab-jobs"], title: "Ruční spuštění úloh", body: "Na záložce Úlohy v Nastavení můžete ručně spustit naplánované úlohy (přechody plánů směn, obnova upozornění, přepočet aktuálních údajů). Každé spuštění je zaznamenáno v Logu změn.", placement: "bottom" },
   { permission: "system.timeOverride", anchor: "tour-timeclock", hideInProd: true, title: "Testovací hodiny", body: "Mimo live verzi můžete nastavit testovací „nynější“ čas pro ověřování chování závislého na datu. V live verzi je funkce neaktivní.", placement: "top" },
   { permission: "system.admin", anchor: null, title: "Superadmin", body: "Máte oprávnění superadministrátora — přístup ke všem funkcím bez omezení. Používejte je obezřetně, zejména u nevratných operací.", placement: "bottom" },
 
