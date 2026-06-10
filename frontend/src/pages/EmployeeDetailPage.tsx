@@ -1448,8 +1448,20 @@ export default function EmployeeDetailPage() {
           <div className={styles.heroName}>{employeeDisplayName(employee)}</div>
           <div className={styles.heroMeta}>
             {employee.currentJobTitle || "—"} · {employee.currentDepartment || "—"} ·{" "}
-            <span className={employee.status === "active" ? styles.badgeActive : styles.badgeTerminated}>
-              {employee.status === "active" ? "Aktivní" : "Ukončen"}
+            <span
+              className={
+                employee.status === "active"
+                  ? styles.badgeActive
+                  : employee.status === "before-start"
+                    ? styles.badgeBeforeStart
+                    : styles.badgeTerminated
+              }
+            >
+              {employee.status === "active"
+                ? "Aktivní"
+                : employee.status === "before-start"
+                  ? "Před nástupem"
+                  : "Ukončen"}
             </span>
           </div>
         </div>
