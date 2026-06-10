@@ -122,6 +122,12 @@
   border-bottom: 1px solid var(--color-border);
 }
 
+/* Thick divider between sections — replaces the removed per-section Σ rows.
+   Skips the first section (it sits directly under the table header). */
+.sectionRow:not(:first-child) td {
+  border-top: 3px solid var(--color-text-muted);
+}
+
 /* ── Employee rows ────────────────────────────────────────────────────── */
 
 .empRow {
@@ -208,24 +214,7 @@
   white-space: nowrap;
 }
 
-/* ── Section footer row ───────────────────────────────────────────────── */
-
-.footerRow {
-  border-top: 2px solid var(--color-border);
-}
-
-.footerLabel {
-  position: sticky;
-  left: 0;
-  background: var(--color-surface-2);
-  z-index: 1;
-  font-size: 0.7rem;
-  font-weight: 600;
-  color: var(--color-text-secondary);
-  padding: 0.3rem 0.65rem;
-  white-space: nowrap;
-  border-right: 1px solid var(--color-border);
-}
+/* ── Counter / free-table cells (footerCell is reused by those tables) ──── */
 
 .footerCell {
   text-align: center;
@@ -240,7 +229,7 @@
 
 .modRow {
   border-bottom: 2px solid var(--color-border);
-  border-top: 1px solid var(--color-mod-border);
+  border-top: 3px solid var(--color-text-muted);
   background: var(--color-mod-bg);
 }
 
