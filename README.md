@@ -12,7 +12,7 @@ The application UI is in **Czech**. This README and the developer documentation 
 - **Vacation** — request/approval workflow with automatic shift-collision handling.
 - **Payroll** — monthly computation from the published shift plan, manual adjustments, notes, period locking, and PDF export.
 - **Dashboard, alerts & audit** — a per-role dashboard (Přehled), an alerts hub (Upozornění), and a complete change log (Log změn).
-- **Onboarding tour & help** — a guided first-login tour (auto-starts once, replayable) that spotlights controls based on each user's permissions; a searchable Nápověda reference page; both are permission-driven with no per-role duplicates.
+- **Onboarding tour & help** — a guided first-login tour (auto-starts once, fully replayable from Nápověda) that spotlights controls based on each user's permissions; section-jump navigation lets users skip ahead or back a whole page at a time; returning users who have already completed the tour see only a short "Co je nového" card for newly-added features rather than the full tour again; a searchable Nápověda reference page; all permission-driven with no per-role duplicates.
 - **Administration** — companies, job positions, departments, education levels, payroll settings, user management, per-role menu ordering, and manual job triggers (Settings → Úlohy).
 
 Granular permission-based access control gates every screen, route, and API endpoint.

@@ -23,6 +23,19 @@ Permissions are a **fixed vocabulary of ~90 granular keys** — a catalogue, not
 
 The special `system.admin` permission **expands to ALL permissions** and cannot be revoked.
 
+#### Dashboard permissions
+
+| Key | Label | Granted to (built-in types) |
+|---|---|---|
+| `dashboard.view` | Zobrazit vlastní přehled | all types (via BASE_SELF for self-service types; explicit for accountant) |
+| `dashboard.tasks.view` | Zobrazit úkoly ke schválení | director, admin (via system.admin) |
+| `dashboard.stats.view` | Zobrazit statistiky personálu | director, accountant, admin |
+| `dashboard.staffing.view` | Zobrazit obsazenost (sekce Dnes/Zítra) | director, manager, employee, hr, admin |
+
+**`dashboard.staffing.view`** gates the DNES / ZÍTRA staffing sections on the Přehled (`/prehled`) page (the blocks that show employees scheduled for day/night shifts and managers on vacation). It is deliberately **not** granted to `accountant` (finance viewer — those sections are operational, not financial). `admin` receives it via `system.admin` expansion.
+
+> **Deploy note:** `dashboard.staffing.view` was added as a new permission key. When deployed to an environment where the built-in `roleTypes` docs already exist in Firestore, those docs' `permissions` arrays won't contain the key, so the Dnes/Zítra sections will be **hidden for existing users** until it is backfilled. Backfill **additively** — either add the permission to each affected type in-app (Nastavení → Uživatelské typy), or run a targeted `arrayUnion` of just this key onto `director`, `manager`, `employee`, and `hr`. Do **not** re-run `seed-role-types.js` to fix this: it overwrites each type's whole `permissions` array from `BUILTIN_TYPE_PERMISSIONS`, discarding any in-app permission customisations. `admin` needs no backfill (`system.admin` expansion), and a type with no Firestore doc at all falls back to `BUILTIN_TYPE_PERMISSIONS`, which already includes the key.
+
 ### User types (editable data)
 
 What used to be hard-coded roles are now **editable user types** stored in Firestore at `roleTypes/{id}`:
