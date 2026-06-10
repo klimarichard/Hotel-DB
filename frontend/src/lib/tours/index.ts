@@ -1,6 +1,6 @@
 import type { TourDefinition } from "./types";
 import type { Permission } from "@/lib/permissions/catalog";
-import { appTour, APP_TOUR_STEPS } from "./appTour";
+import { appTour, APP_TOUR_STEPS, WHATS_NEW_INTRO } from "./appTour";
 
 /**
  * There is a single, permission-driven tour. `buildAppTour(can)` returns the
@@ -45,9 +45,22 @@ export interface TourBuildContext {
   hasEmployee: boolean;
 }
 
+export interface TourBuildOptions {
+  /**
+   * Delta ("what's new") mode: keep only steps INTRODUCED after this version
+   * (`addedInVersion > sinceVersion`), prefixed with the WHATS_NEW_INTRO card.
+   * Used for returning users who already saw an older version. Omit for the full
+   * tour (first-time users + manual replay from Nápověda). When no new step
+   * matches the user's permissions, the returned tour has an empty `steps` array
+   * — the caller should then skip firing and just record the seen-version.
+   */
+  sinceVersion?: number;
+}
+
 export function buildAppTour(
   can: (perm: Permission) => boolean,
-  ctx: TourBuildContext = { hasEmployee: true }
+  ctx: TourBuildContext = { hasEmployee: true },
+  opts: TourBuildOptions = {}
 ): TourDefinition {
   // Resolve each step's section by carry-forward over the MASTER list FIRST (only
   // the first step of each group carries an explicit `section`), THEN filter — so
@@ -57,14 +70,21 @@ export function buildAppTour(
     if (step.section) currentSection = step.section;
     return step.section === currentSection ? step : { ...step, section: currentSection };
   });
-  return {
-    ...appTour,
-    steps: withSection.filter((step) => {
-      if (step.hideInProd && IS_PROD) return false;
-      if (step.requiresEmployee && !ctx.hasEmployee) return false;
-      return userHasStepPermission(step, can);
-    }),
-  };
+  let steps = withSection.filter((step) => {
+    if (step.hideInProd && IS_PROD) return false;
+    if (step.requiresEmployee && !ctx.hasEmployee) return false;
+    return userHasStepPermission(step, can);
+  });
+
+  // Delta mode: restrict to steps added after the user's last-seen version, and
+  // lead with the "what's new" card (only when there's something new to show).
+  if (opts.sinceVersion !== undefined) {
+    const since = opts.sinceVersion;
+    const fresh = steps.filter((step) => (step.addedInVersion ?? 0) > since);
+    steps = fresh.length > 0 ? [WHATS_NEW_INTRO, ...fresh] : [];
+  }
+
+  return { ...appTour, steps };
 }
 
 /**

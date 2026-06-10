@@ -52,6 +52,15 @@ export interface TourStep {
    */
   hideInProd?: boolean;
   /**
+   * The tour `version` at which this step was INTRODUCED. Drives the "what's new"
+   * mini-tour: a returning user who already saw version N is shown only the steps
+   * whose `addedInVersion > N` (not the whole tour again). Leave UNSET for the
+   * original/baseline steps (treated as version 0 — never part of a delta). When
+   * you add a step for a new feature, set this to the new `appTour.version` and
+   * bump `appTour.version` to match. See buildAppTour({ sinceVersion }).
+   */
+  addedInVersion?: number;
+  /**
    * Section label this step belongs to (e.g. "Zaměstnanci", "Mzdy"). Set it only
    * on the FIRST step of each section in the master list; buildAppTour resolves it
    * onto every following step by carry-forward (BEFORE permission filtering, so it

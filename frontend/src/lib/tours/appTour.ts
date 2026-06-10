@@ -207,8 +207,23 @@ export const APP_TOUR_STEPS: TourStep[] = [
   { section: SECTIONS.outro, anchor: "help-button", title: "Průvodce dokončen", body: "To je vše! Průvodce i nápovědu kdykoliv znovu otevřete tlačítkem „? Nápověda“ vlevo dole.", placement: "right" },
 ];
 
+/**
+ * Synthetic lead card for the "what's new" mini-tour (delta mode). NOT part of
+ * APP_TOUR_STEPS — buildAppTour prepends it when `sinceVersion` is set and new
+ * steps exist, so an incremental tour feels intentional instead of dropping the
+ * returning user straight into an unfamiliar feature.
+ */
+export const WHATS_NEW_INTRO: TourStep = {
+  anchor: null,
+  title: "Co je nového",
+  body: "Od vašeho posledního přihlášení přibyly nové funkce. Tady je jejich krátké představení. Celého průvodce aplikací můžete kdykoliv spustit znovu z Nápovědy vlevo dole.",
+};
+
 export const appTour: TourDefinition = {
   id: "app",
+  // Highest step `addedInVersion` in the list. Bump it (and stamp the new steps'
+  // `addedInVersion`) whenever you add steps for a new feature — returning users
+  // then see ONLY those steps; first-time users still get the whole tour.
   version: 6,
   label: "Prohlídka aplikace",
   steps: APP_TOUR_STEPS,
