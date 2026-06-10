@@ -630,7 +630,7 @@ export default function SettingsPage() {
         email,
         password: form.password || undefined,
         roleType: form.roleType,
-        employeeId: form.employeeId || undefined,
+        employeeId: can("users.linkEmployee") ? form.employeeId || undefined : undefined,
       });
       setShowCreate(false);
       setForm(emptyForm);
@@ -663,7 +663,7 @@ export default function SettingsPage() {
       if (form.name && form.name !== target.name) ops.push(authApi.updateUser(target.uid, { name: form.name }));
       if (form.roleType && form.roleType !== (target.roleType ?? target.role)) ops.push(authApi.setUserPermissions(target.uid, { roleType: form.roleType }));
       const newEmp = form.employeeId || null;
-      if (newEmp !== (target.employeeId ?? null)) ops.push(authApi.linkEmployee(target.uid, newEmp));
+      if (can("users.linkEmployee") && newEmp !== (target.employeeId ?? null)) ops.push(authApi.linkEmployee(target.uid, newEmp));
       await Promise.all(ops);
       setShowCreate(false);
       setForm(emptyForm);
@@ -883,21 +883,23 @@ export default function SettingsPage() {
                   ))}
                 </select>
               </div>
-              <div className={styles.field}>
-                <label className={styles.label}>Zaměstnanec (volitelné)</label>
-                <select
-                  className={styles.input}
-                  value={form.employeeId}
-                  onChange={(e) => setForm({ ...form, employeeId: e.target.value })}
-                >
-                  <option value="">— Nepropojovat —</option>
-                  {sortedEmployees.map((emp) => (
-                    <option key={emp.id} value={emp.id}>
-                      {employeeSurnameFirst(emp)}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {can("users.linkEmployee") && (
+                <div className={styles.field}>
+                  <label className={styles.label}>Zaměstnanec (volitelné)</label>
+                  <select
+                    className={styles.input}
+                    value={form.employeeId}
+                    onChange={(e) => setForm({ ...form, employeeId: e.target.value })}
+                  >
+                    <option value="">— Nepropojovat —</option>
+                    {sortedEmployees.map((emp) => (
+                      <option key={emp.id} value={emp.id}>
+                        {employeeSurnameFirst(emp)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               {formError && <p className={styles.formError}>{formError}</p>}
               <div className={styles.formActions}>
                 <Button
@@ -997,21 +999,22 @@ export default function SettingsPage() {
                         <span className={linkedEmp ? styles.employeeLinked : styles.employeeUnlinked}>
                           {linkedEmp ? employeeSurnameFirst(linkedEmp) : "—"}
                         </span>
-                        {linkedEmp ? (
-                          <button
-                            className={styles.linkBtn}
-                            onClick={() => handleUnlinkEmployee(u.uid)}
-                          >
-                            Zrušit propojení
-                          </button>
-                        ) : (
-                          <button
-                            className={styles.linkBtn}
-                            onClick={() => openLinkModal(u.uid, u.employeeId ?? null)}
-                          >
-                            Propojit
-                          </button>
-                        )}
+                        {can("users.linkEmployee") &&
+                          (linkedEmp ? (
+                            <button
+                              className={styles.linkBtn}
+                              onClick={() => handleUnlinkEmployee(u.uid)}
+                            >
+                              Zrušit propojení
+                            </button>
+                          ) : (
+                            <button
+                              className={styles.linkBtn}
+                              onClick={() => openLinkModal(u.uid, u.employeeId ?? null)}
+                            >
+                              Propojit
+                            </button>
+                          ))}
                       </td>
                       <td>
                         <span className={u.active ? styles.badgeActive : styles.badgeInactive}>

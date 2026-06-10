@@ -170,6 +170,7 @@ export const PERMISSION_CATALOG = [
     items: [
       { key: "users.view", label: "Zobrazit uživatele" },
       { key: "users.manage", label: "Spravovat uživatele (vytvořit/upravit/deaktivovat)" },
+      { key: "users.linkEmployee", label: "Propojit zaměstnance s účtem" },
       { key: "users.setType", label: "Přiřadit typ uživatele" },
       { key: "users.permissions.manage", label: "Spravovat individuální oprávnění uživatele" },
       { key: "userTypes.manage", label: "Spravovat typy uživatelů" },
