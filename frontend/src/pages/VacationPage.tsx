@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
-import { api, ApiError } from "../lib/api";
+import { api, ApiError, errorMessage } from "../lib/api";
 import * as clock from "../lib/clock";
 import { useAuth } from "../hooks/useAuth";
 import { useVacationContext } from "@/context/VacationContext";
@@ -10,6 +10,7 @@ import VacationCollisionInfoModal, {
   type ShiftCollision,
 } from "../components/VacationCollisionInfoModal";
 import VacationCollisionResolutionModal from "../components/VacationCollisionResolutionModal";
+import ConfirmModal from "../components/ConfirmModal";
 import Button from "../components/Button";
 
 function extractCollisions(e: unknown): ShiftCollision[] | null {
@@ -105,6 +106,8 @@ export default function VacationPage() {
 
   // Collision modals
   const [infoCollisions, setInfoCollisions] = useState<ShiftCollision[] | null>(null);
+  // Error dialog for approve/reject/delete failures (previously failed silently).
+  const [actionError, setActionError] = useState<string | null>(null);
   const [resolution, setResolution] = useState<{
     requestId: string;
     employeeName: string;
@@ -204,7 +207,7 @@ export default function VacationPage() {
       if (collisions) {
         setInfoCollisions(collisions);
       } else {
-        setFormError(e instanceof Error ? e.message : "Chyba při odesílání");
+        setFormError(errorMessage(e, "Chyba při odesílání"));
       }
     } finally {
       setSubmitting(false);
@@ -256,6 +259,8 @@ export default function VacationPage() {
           collisions,
         });
       }
+    } catch (e) {
+      setActionError(errorMessage(e, "Schválení se nezdařilo."));
     } finally {
       setActionSaving(false);
     }
@@ -278,6 +283,8 @@ export default function VacationPage() {
       setRejectingId(null);
       setRejectionReason("");
       refreshVacationBadge();
+    } catch (e) {
+      setActionError(errorMessage(e, "Zamítnutí se nezdařilo."));
     } finally {
       setActionSaving(false);
     }
@@ -289,6 +296,8 @@ export default function VacationPage() {
       await api.delete(`/vacation/${id}`);
       setRequests((prev) => prev.filter((r) => r.id !== id));
       refreshVacationBadge();
+    } catch (e) {
+      setActionError(errorMessage(e, "Zrušení žádosti se nezdařilo."));
     } finally {
       setActionSaving(false);
     }
@@ -547,6 +556,17 @@ export default function VacationPage() {
             await persistApproval(resolution.requestId, excludeDates);
             setResolution(null);
           }}
+        />
+      )}
+
+      {actionError && (
+        <ConfirmModal
+          title="Chyba"
+          message={actionError}
+          confirmLabel="OK"
+          showCancel={false}
+          onConfirm={() => setActionError(null)}
+          onCancel={() => setActionError(null)}
         />
       )}
 
