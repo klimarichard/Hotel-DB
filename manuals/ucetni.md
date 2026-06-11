@@ -68,9 +68,10 @@ Evidence všech zaměstnanců — **vše jen pro čtení**. Záložky **Aktivní
 
 ### Detail zaměstnance
 
-Detail má dvě hlavní části — **Detail** (osobní a kontaktní údaje) a **Historie pracovního poměru**. Údaje pouze prohlížíte, nic neupravujete.
+Detail má tři záložky — **Detail** (osobní a kontaktní údaje), **Historie pracovního poměru** a **Další dokumenty**. Údaje pouze prohlížíte, nic neupravujete.
 
 - **Citlivé údaje** (rodné číslo, číslo OP, číslo pojištěnce, bankovní účet) jsou skryté; zobrazíte je kliknutím na ikonu oka. **Každé zobrazení se zaznamenává do logu změn.**
+- Tlačítko **Dotazník** v záhlaví okamžitě otevře v nové záložce prohlížeče vyplněný **Osobní dotazník zaměstnance** (PDF) se všemi aktuálními údaji zaměstnance připravenými k tisku. Soubor se nikam nestahuje — pouze se zobrazí v nové záložce. Dotazník obsahuje citlivé údaje (rodné číslo atp.) a jeho vygenerování se zaznamenává do **Logu změn**.
 
 > 📷 *(Místo pro snímek obrazovky: detail zaměstnance)*
 
@@ -81,3 +82,17 @@ Pracovní poměr je členěn na **sezení (sessions)** — každé začíná **N
 - Mzda a pozice v záhlaví poměru se mění až **k datu platnosti Dodatku**.
 - **Automatický přesun do „Ukončení":** zaměstnanec se do záložky *Ukončení* přesune sám, jakmile **uplyne datum ukončení** (smlouva na dobu určitou nebo zadané ukončení). Den ukončení je ještě aktivní — přesun proběhne až následující den. Naopak zaměstnanec s budoucím nástupem se zobrazuje v záložce **Před nástupem** a do záložky **Aktivní** se přesune automaticky **v den nástupu**.
 - U řádků historie si můžete **vygenerovanou smlouvu zobrazit a stáhnout** pod čitelným názvem.
+
+#### Další dokumenty
+
+Záložka **Další dokumenty** zobrazuje přílohy nahrané k zaměstnanci. Dokumenty zde pouze prohlížíte a stahujete, nic nenahráváte ani nemažete.
+
+##### Prohlášení poplatníka
+
+Tlačítko **Prohlášení poplatníka** (vlevo od **Nahrát dokument**) vygeneruje vyplněné **Prohlášení poplatníka daně** (formulář MFin 5457, PDF) a otevře ho v nové záložce prohlížeče.
+
+Po kliknutí se nejprve zobrazí malý dialog. Do pole **Zdaňovací období** zadejte příslušné období — například `2026` (celý rok) nebo `od září 2026` (část roku). Potvrdíte tlačítkem **Generovat** a PDF se otevře v nové záložce připravené k tisku.
+
+> 📝 **Upozornění:** Formulář je vyplněn z evidenčních údajů zaměstnance. Blok pro **daňového nerezidenta** (cizince, který nepodléhá zdanění v ČR) zůstane prázdný — tyto řádky musí zaměstnanec doplnit ručně. Dokument obsahuje citlivé údaje (rodné číslo atp.) a každé vygenerování se zaznamenává do **Logu změn**.
+
+> 📷 *(Místo pro snímek obrazovky: záložka Další dokumenty s tlačítkem Prohlášení poplatníka)*
