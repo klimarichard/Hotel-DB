@@ -39,6 +39,7 @@ export default function OtherDocumentsTab({ employeeId }: Props) {
   const canView = can("documents.view");
   const canUpload = can("documents.upload");
   const canDelete = can("documents.delete");
+  const canExportTaxDeclaration = can("documents.export.taxDeclaration");
   const [docs, setDocs] = useState<OtherDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -49,6 +50,35 @@ export default function OtherDocumentsTab({ employeeId }: Props) {
   const [uploadName, setUploadName] = useState("");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [taxLoading, setTaxLoading] = useState(false);
+
+  // Generate + download the filled "Prohlášení poplatníka daně" PDF. Server-side
+  // (decrypts rodné číslo + audits the export), so we stream the blob with auth.
+  async function handleGenerateTaxDeclaration() {
+    if (!user || taxLoading) return;
+    setTaxLoading(true);
+    try {
+      const token = await user.getIdToken();
+      const resp = await fetch(`/api/employees/${employeeId}/tax-declaration-pdf`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!resp.ok) throw new Error();
+      const filename = filenameFromDisposition(resp.headers.get("Content-Disposition"), "Prohlaseni.pdf");
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    } catch {
+      setError("Nepodařilo se vygenerovat prohlášení k dani.");
+    } finally {
+      setTaxLoading(false);
+    }
+  }
 
   const fetchDocs = useCallback(async () => {
     setLoading(true);
@@ -173,11 +203,24 @@ export default function OtherDocumentsTab({ employeeId }: Props) {
 
   return (
     <div className={styles.wrap}>
-      {canUpload && (
+      {(canUpload || canExportTaxDeclaration) && (
         <div className={styles.toolbar}>
-          <Button data-tour="emp-doc-upload" variant="primary" size="sm" onClick={openUpload}>
-            Nahrát dokument
-          </Button>
+          {canUpload && (
+            <Button data-tour="emp-doc-upload" variant="primary" size="sm" onClick={openUpload}>
+              Nahrát dokument
+            </Button>
+          )}
+          {canExportTaxDeclaration && (
+            <Button
+              data-tour="emp-doc-tax-declaration"
+              variant="secondary"
+              size="sm"
+              onClick={handleGenerateTaxDeclaration}
+              disabled={taxLoading}
+            >
+              {taxLoading ? "Generuji…" : "Prohlášení k dani"}
+            </Button>
+          )}
         </div>
       )}
 
