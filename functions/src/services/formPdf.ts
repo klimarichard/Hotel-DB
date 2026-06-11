@@ -13,7 +13,7 @@
  * Sensitive values (rodné číslo, číslo OP, číslo účtu, číslo pojištěnce) arrive
  * already DECRYPTED — the caller handles permission gating + audit logging.
  */
-import { PDFDocument } from "pdf-lib";
+import { PDFDocument, rgb } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import * as fs from "fs";
 import * as path from "path";
@@ -37,17 +37,15 @@ function formatDateCZ(iso?: string | null): string {
  * render appearances with the embedded Unicode font, flatten, and return bytes.
  * Unknown field names and empty values are skipped.
  */
-interface FillOptions {
-  /** PDF document title — drives the browser tab name + the save-as filename. */
-  title?: string;
-  /** Force a font size on filled fields (the prohlášení boxes default to tiny). */
-  fontSize?: number;
-}
-
+/**
+ * Fill via the AcroForm appearance pipeline: set each field's text, regenerate
+ * appearances with the embedded Unicode font, then flatten. Used for the
+ * dotazník, whose fields carry a sensible default font size.
+ */
 async function fillForm(
   pdfPath: string,
   values: Record<string, string>,
-  opts: FillOptions = {}
+  title?: string
 ): Promise<Buffer> {
   const doc = await PDFDocument.load(fs.readFileSync(pdfPath));
   doc.registerFontkit(fontkit);
@@ -57,21 +55,61 @@ async function fillForm(
   for (const [name, value] of Object.entries(values)) {
     if (!value) continue;
     try {
-      const field = form.getTextField(name);
-      field.setText(value);
-      if (opts.fontSize) field.setFontSize(opts.fontSize);
+      form.getTextField(name).setText(value);
     } catch {
       // Field not present in this PDF (or not a text field) — skip silently.
     }
   }
 
-  if (opts.title) doc.setTitle(opts.title);
-
-  // Regenerate every field's appearance with the Unicode font, then bake them in.
+  if (title) doc.setTitle(title);
   form.updateFieldAppearances(font);
   form.flatten();
-  const bytes = await doc.save({ updateFieldAppearances: false });
-  return Buffer.from(bytes);
+  return Buffer.from(await doc.save({ updateFieldAppearances: false }));
+}
+
+/**
+ * Fill by DRAWING text at each field's widget rectangle at a fixed font size,
+ * then removing the form. Used for the prohlášení, whose AcroForm fields have no
+ * font in their default appearance — so the normal pipeline can't set a size
+ * (`setFontSize` throws) and auto-fits the text far too small. Drawing gives full
+ * control of the size. All prohlášení fields sit on page 1.
+ */
+async function fillFormByDrawing(
+  pdfPath: string,
+  values: Record<string, string>,
+  opts: { title?: string; fontSize: number }
+): Promise<Buffer> {
+  const doc = await PDFDocument.load(fs.readFileSync(pdfPath));
+  doc.registerFontkit(fontkit);
+  const font = await doc.embedFont(fs.readFileSync(FONT_PATH), { subset: true });
+  const form = doc.getForm();
+  const page = doc.getPages()[0];
+  const size = opts.fontSize;
+
+  for (const [name, value] of Object.entries(values)) {
+    if (!value) continue;
+    let field;
+    try {
+      field = form.getTextField(name);
+    } catch {
+      continue; // field not present
+    }
+    for (const widget of field.acroField.getWidgets()) {
+      const { x, y, height } = widget.getRectangle();
+      // Vertically centre the text within the field box.
+      page.drawText(value, {
+        x: x + 2,
+        y: y + (height - size) / 2 + 1,
+        size,
+        font,
+        color: rgb(0, 0, 0),
+      });
+    }
+  }
+
+  if (opts.title) doc.setTitle(opts.title);
+  form.flatten(); // remove the (empty) interactive fields; our drawn text remains
+  return Buffer.from(await doc.save());
 }
 
 export interface QuestionnaireData {
@@ -137,7 +175,7 @@ export async function fillQuestionnairePdf(d: QuestionnaireData, title?: string)
     cislo_uctu: s(d.bankAccount),
     zdrav_pojistovna: s(d.insuranceCompany),
     cislo_pojistence: s(d.insuranceNumber),
-  }, { title });
+  }, title);
 }
 
 export interface ProhlaseniData {
@@ -160,7 +198,7 @@ export interface ProhlaseniData {
  * the employee to complete by hand.
  */
 export async function fillProhlaseniPdf(d: ProhlaseniData, title?: string): Promise<Buffer> {
-  return fillForm(PROHLASENI_PDF, {
+  return fillFormByDrawing(PROHLASENI_PDF, {
     zdanovaci_obdobi: s(d.taxPeriod),
     nazev_platce_dane: s(d.companyName),
     adresa_platce_dane: s(d.companyAddress),
@@ -168,5 +206,5 @@ export async function fillProhlaseniPdf(d: ProhlaseniData, title?: string): Prom
     jmeno: s(d.firstName),
     rodne_cislo: s(d.birthNumber),
     adresa_bydliste: s(d.residenceAddress),
-  }, { title, fontSize: 10 });
+  }, { title, fontSize: 11 });
 }

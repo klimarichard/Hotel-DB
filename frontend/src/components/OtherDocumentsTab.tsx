@@ -204,11 +204,6 @@ export default function OtherDocumentsTab({ employeeId }: Props) {
     <div className={styles.wrap}>
       {(canUpload || canExportTaxDeclaration) && (
         <div className={styles.toolbar}>
-          {canUpload && (
-            <Button data-tour="emp-doc-upload" variant="primary" size="sm" onClick={openUpload}>
-              Nahrát dokument
-            </Button>
-          )}
           {canExportTaxDeclaration && (
             <Button
               data-tour="emp-doc-tax-declaration"
@@ -218,6 +213,11 @@ export default function OtherDocumentsTab({ employeeId }: Props) {
               disabled={taxLoading}
             >
               {taxLoading ? "Generuji…" : "Prohlášení poplatníka"}
+            </Button>
+          )}
+          {canUpload && (
+            <Button data-tour="emp-doc-upload" variant="primary" size="sm" onClick={openUpload}>
+              Nahrát dokument
             </Button>
           )}
         </div>
