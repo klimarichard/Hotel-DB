@@ -37,7 +37,18 @@ function formatDateCZ(iso?: string | null): string {
  * render appearances with the embedded Unicode font, flatten, and return bytes.
  * Unknown field names and empty values are skipped.
  */
-async function fillForm(pdfPath: string, values: Record<string, string>): Promise<Buffer> {
+interface FillOptions {
+  /** PDF document title — drives the browser tab name + the save-as filename. */
+  title?: string;
+  /** Force a font size on filled fields (the prohlášení boxes default to tiny). */
+  fontSize?: number;
+}
+
+async function fillForm(
+  pdfPath: string,
+  values: Record<string, string>,
+  opts: FillOptions = {}
+): Promise<Buffer> {
   const doc = await PDFDocument.load(fs.readFileSync(pdfPath));
   doc.registerFontkit(fontkit);
   const font = await doc.embedFont(fs.readFileSync(FONT_PATH), { subset: true });
@@ -46,11 +57,15 @@ async function fillForm(pdfPath: string, values: Record<string, string>): Promis
   for (const [name, value] of Object.entries(values)) {
     if (!value) continue;
     try {
-      form.getTextField(name).setText(value);
+      const field = form.getTextField(name);
+      field.setText(value);
+      if (opts.fontSize) field.setFontSize(opts.fontSize);
     } catch {
       // Field not present in this PDF (or not a text field) — skip silently.
     }
   }
+
+  if (opts.title) doc.setTitle(opts.title);
 
   // Regenerate every field's appearance with the Unicode font, then bake them in.
   form.updateFieldAppearances(font);
@@ -93,7 +108,7 @@ export interface QuestionnaireData {
 const s = (v?: string | null): string => (v == null ? "" : String(v));
 
 /** Fill the "Osobní dotazník zaměstnance" form. */
-export async function fillQuestionnairePdf(d: QuestionnaireData): Promise<Buffer> {
+export async function fillQuestionnairePdf(d: QuestionnaireData, title?: string): Promise<Buffer> {
   return fillForm(QUESTIONNAIRE_PDF, {
     pracovni_pozice: s(d.jobTitle),
     den_nastupu: formatDateCZ(d.startDate),
@@ -122,7 +137,7 @@ export async function fillQuestionnairePdf(d: QuestionnaireData): Promise<Buffer
     cislo_uctu: s(d.bankAccount),
     zdrav_pojistovna: s(d.insuranceCompany),
     cislo_pojistence: s(d.insuranceNumber),
-  });
+  }, { title });
 }
 
 export interface ProhlaseniData {
@@ -144,7 +159,7 @@ export interface ProhlaseniData {
  * (foreigner) block is not an AcroForm field in the source PDF and is left for
  * the employee to complete by hand.
  */
-export async function fillProhlaseniPdf(d: ProhlaseniData): Promise<Buffer> {
+export async function fillProhlaseniPdf(d: ProhlaseniData, title?: string): Promise<Buffer> {
   return fillForm(PROHLASENI_PDF, {
     zdanovaci_obdobi: s(d.taxPeriod),
     nazev_platce_dane: s(d.companyName),
@@ -153,5 +168,5 @@ export async function fillProhlaseniPdf(d: ProhlaseniData): Promise<Buffer> {
     jmeno: s(d.firstName),
     rodne_cislo: s(d.birthNumber),
     adresa_bydliste: s(d.residenceAddress),
-  });
+  }, { title, fontSize: 10 });
 }

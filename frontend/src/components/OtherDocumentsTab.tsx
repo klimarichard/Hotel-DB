@@ -54,10 +54,10 @@ export default function OtherDocumentsTab({ employeeId }: Props) {
   const [periodOpen, setPeriodOpen] = useState(false);
   const [periodValue, setPeriodValue] = useState("");
 
-  // Generate + download the filled "Prohlášení poplatníka daně" PDF. Server-side
-  // (decrypts rodné číslo + audits the export), so we stream the blob with auth.
-  // The "zdaňovací období" (e.g. "2026" or "od září 2026") is entered in the
-  // dialog and passed through as a query param.
+  // Generate the filled "Prohlášení poplatníka" PDF and open it in a new tab.
+  // Server-side (decrypts rodné číslo + audits the export), so we fetch the blob
+  // with auth and open it as an object URL. The "zdaňovací období" (e.g. "2026"
+  // or "od září 2026") is entered in the dialog and passed as a query param.
   async function handleGenerateTaxDeclaration() {
     if (!user || taxLoading) return;
     const period = periodValue.trim();
@@ -68,18 +68,12 @@ export default function OtherDocumentsTab({ employeeId }: Props) {
       const reqUrl = `/api/employees/${employeeId}/tax-declaration-pdf${period ? `?period=${encodeURIComponent(period)}` : ""}`;
       const resp = await fetch(reqUrl, { headers: { Authorization: `Bearer ${token}` } });
       if (!resp.ok) throw new Error();
-      const filename = filenameFromDisposition(resp.headers.get("Content-Disposition"), "Prohlaseni.pdf");
       const blob = await resp.blob();
       const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      window.open(url, "_blank", "noopener,noreferrer");
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch {
-      setError("Nepodařilo se vygenerovat prohlášení k dani.");
+      setError("Nepodařilo se vygenerovat prohlášení poplatníka.");
     } finally {
       setTaxLoading(false);
     }
