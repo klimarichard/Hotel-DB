@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useAuth } from "@/hooks/useAuth";
 import { useAlertsContext } from "@/context/AlertsContext";
 import { useShiftOverridesContext } from "@/context/ShiftOverridesContext";
 import { useShiftChangeRequestsContext } from "@/context/ShiftChangeRequestsContext";
+import { useEmployeeChangeRequestsContext } from "@/context/EmployeeChangeRequestsContext";
 import { useVacationContext } from "@/context/VacationContext";
 import { useTheme } from "@/context/ThemeContext";
 import { api } from "@/lib/api";
@@ -37,17 +38,51 @@ const MoonIcon = () => (
 
 export default function Layout() {
   const { user, role, name, roleTypeName, can } = useAuth();
-  const { unreadCount, unreadProbationCount } = useAlertsContext();
-  const upozorneniBadge = unreadCount + unreadProbationCount;
-  const { pendingCount: pendingOverrideCount } = useShiftOverridesContext();
-  const { pendingCount: pendingChangeRequestCount } = useShiftChangeRequestsContext();
-  const { pendingCount: pendingVacationCount } = useVacationContext();
+  const { unreadCount, unreadProbationCount, refresh: refreshAlerts } = useAlertsContext();
+  const { pendingCount: pendingOverrideCount, refresh: refreshOverrides } = useShiftOverridesContext();
+  const { pendingCount: pendingChangeRequestCount, refresh: refreshChangeRequests } = useShiftChangeRequestsContext();
+  const { pendingCount: pendingDataChangeCount, refresh: refreshDataChanges } = useEmployeeChangeRequestsContext();
+  const { pendingCount: pendingVacationCount, refresh: refreshVacation } = useVacationContext();
+  // The "Upozornění" sidebar badge mirrors the Upozornění page total: it sums
+  // ALL six review queues shown there, each gated by the same permission that
+  // gates that page's tab. (Documents/probation are already 0 without
+  // alerts.view, since AlertsContext only fetches them then.) Vacation + shift
+  // queues ALSO keep their own dedicated badges below — the dedicated badge
+  // says WHERE, this total says overall outstanding load.
+  const upozorneniBadge =
+    unreadCount +
+    unreadProbationCount +
+    (can("vacation.review") ? pendingVacationCount : 0) +
+    (can("shifts.override.review") ? pendingOverrideCount : 0) +
+    (can("shifts.changeRequest.review") ? pendingChangeRequestCount : 0) +
+    (can("changeRequests.review") ? pendingDataChangeCount : 0);
   const shiftsBadgeCount =
     (can("shifts.override.review") ? pendingOverrideCount : 0) +
     (can("shifts.changeRequest.review") ? pendingChangeRequestCount : 0);
   const showVacationBadge = can("vacation.review") && pendingVacationCount > 0;
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Badge counts are otherwise fetched once on mount, so a request submitted by
+  // ANOTHER user never appears until a full reload. Re-pull all review-queue
+  // counts on every navigation (cheap) and on a 60s interval (covers a tab left
+  // open on one page). Each context's refresh() is a no-op without the relevant
+  // permission. A reviewer's own approve/reject still refreshes locally too.
+  useEffect(() => {
+    function refreshAll() {
+      refreshAlerts();
+      refreshOverrides();
+      refreshChangeRequests();
+      refreshDataChanges();
+      refreshVacation();
+    }
+    refreshAll();
+    const id = window.setInterval(refreshAll, 60_000);
+    return () => window.clearInterval(id);
+    // location.pathname change triggers a re-pull on navigation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
 
   // Per-type saved menu order (admin-configurable in Settings → Menu); the
   // endpoint keys by the user's type. null = default order from menuItems.ts.
