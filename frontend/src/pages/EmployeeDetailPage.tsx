@@ -1132,7 +1132,7 @@ interface AlertItem {
 export default function EmployeeDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { can } = useAuth();
+  const { can, user } = useAuth();
   // Per-area capabilities. Each action is gated by its own specific permission
   // so custom user types can be granted granular access. Built-in admin/director
   // hold all of these, so their behaviour is unchanged.
@@ -1140,6 +1140,7 @@ export default function EmployeeDetailPage() {
   const canDeleteEmployee = can("employees.delete");
   const canManageEmployment = can("employment.manage");
   const canGenerateContracts = can("contracts.generate");
+  const canExportQuestionnaire = can("employees.view.all") || can("employees.view.nonManagement");
 
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [employment, setEmployment] = useState<EmploymentRow[]>([]);
@@ -1201,6 +1202,36 @@ export default function EmployeeDetailPage() {
     onCancel?: () => void;
   } | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [questionnaireLoading, setQuestionnaireLoading] = useState(false);
+
+  // Open the filled "Osobní dotazník zaměstnance" PDF in a new tab. Generated
+  // server-side (it embeds decrypted sensitive fields and audits the export),
+  // so we fetch the blob with the auth token and open it as an object URL.
+  async function handleDownloadQuestionnaire() {
+    if (!user || !id || questionnaireLoading) return;
+    setQuestionnaireLoading(true);
+    try {
+      const token = await user.getIdToken();
+      const resp = await fetch(`/api/employees/${id}/questionnaire-pdf`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!resp.ok) throw new Error();
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank", "noopener,noreferrer");
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch {
+      setConfirmModal({
+        title: "Chyba",
+        message: "Nepodařilo se vygenerovat dotazník.",
+        confirmLabel: "OK",
+        showCancel: false,
+        onConfirm: () => setConfirmModal(null),
+      });
+    } finally {
+      setQuestionnaireLoading(false);
+    }
+  }
 
   // Track which sub-sections have been loaded
   const [loadedSections, setLoadedSections] = useState<Set<string>>(new Set());
@@ -1466,6 +1497,16 @@ export default function EmployeeDetailPage() {
           </div>
         </div>
         <div style={{ display: "flex", gap: "0.5rem" }}>
+          {canExportQuestionnaire && (
+            <Button
+              data-tour="emp-hero-questionnaire"
+              variant="secondary"
+              onClick={handleDownloadQuestionnaire}
+              disabled={questionnaireLoading}
+            >
+              {questionnaireLoading ? "Generuji…" : "Dotazník"}
+            </Button>
+          )}
           {canEditEmployee && (
             <Button data-tour="emp-hero-edit" variant="secondary" onClick={() => navigate(`/zamestnanci/${id}/upravit`)}>
               Upravit

@@ -39,6 +39,7 @@ export default function OtherDocumentsTab({ employeeId }: Props) {
   const canView = can("documents.view");
   const canUpload = can("documents.upload");
   const canDelete = can("documents.delete");
+  const canExportTaxDeclaration = can("employment.manage") || can("documents.view");
   const [docs, setDocs] = useState<OtherDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -49,6 +50,34 @@ export default function OtherDocumentsTab({ employeeId }: Props) {
   const [uploadName, setUploadName] = useState("");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [taxLoading, setTaxLoading] = useState(false);
+  const [periodOpen, setPeriodOpen] = useState(false);
+  const [periodValue, setPeriodValue] = useState("");
+
+  // Generate the filled "Prohlášení poplatníka" PDF and open it in a new tab.
+  // Server-side (decrypts rodné číslo + audits the export), so we fetch the blob
+  // with auth and open it as an object URL. The "zdaňovací období" (e.g. "2026"
+  // or "od září 2026") is entered in the dialog and passed as a query param.
+  async function handleGenerateTaxDeclaration() {
+    if (!user || taxLoading) return;
+    const period = periodValue.trim();
+    setPeriodOpen(false);
+    setTaxLoading(true);
+    try {
+      const token = await user.getIdToken();
+      const reqUrl = `/api/employees/${employeeId}/tax-declaration-pdf${period ? `?period=${encodeURIComponent(period)}` : ""}`;
+      const resp = await fetch(reqUrl, { headers: { Authorization: `Bearer ${token}` } });
+      if (!resp.ok) throw new Error();
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank", "noopener,noreferrer");
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch {
+      setError("Nepodařilo se vygenerovat prohlášení poplatníka.");
+    } finally {
+      setTaxLoading(false);
+    }
+  }
 
   const fetchDocs = useCallback(async () => {
     setLoading(true);
@@ -173,11 +202,24 @@ export default function OtherDocumentsTab({ employeeId }: Props) {
 
   return (
     <div className={styles.wrap}>
-      {canUpload && (
+      {(canUpload || canExportTaxDeclaration) && (
         <div className={styles.toolbar}>
-          <Button data-tour="emp-doc-upload" variant="primary" size="sm" onClick={openUpload}>
-            Nahrát dokument
-          </Button>
+          {canExportTaxDeclaration && (
+            <Button
+              data-tour="emp-doc-tax-declaration"
+              variant="secondary"
+              size="sm"
+              onClick={() => { setPeriodValue(String(new Date().getFullYear())); setPeriodOpen(true); }}
+              disabled={taxLoading}
+            >
+              {taxLoading ? "Generuji…" : "Prohlášení poplatníka"}
+            </Button>
+          )}
+          {canUpload && (
+            <Button data-tour="emp-doc-upload" variant="primary" size="sm" onClick={openUpload}>
+              Nahrát dokument
+            </Button>
+          )}
         </div>
       )}
 
@@ -250,6 +292,39 @@ export default function OtherDocumentsTab({ employeeId }: Props) {
               </Button>
               <Button variant="primary" onClick={submitUpload} disabled={!canSubmit}>
                 {uploading ? "Nahrávám…" : "Nahrát"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {periodOpen && (
+        <div className={styles.overlay}>
+          <div className={styles.modal}>
+            <div className={styles.modalHeader}>
+              <h2 className={styles.modalTitle}>Prohlášení poplatníka</h2>
+              <IconButton aria-label="Zavřít" onClick={() => setPeriodOpen(false)} disabled={taxLoading}>✕</IconButton>
+            </div>
+            <div className={styles.modalBody}>
+              <label className={styles.field}>
+                <span className={styles.fieldLabel}>Zdaňovací období</span>
+                <input
+                  type="text"
+                  className={styles.input}
+                  value={periodValue}
+                  onChange={(e) => setPeriodValue(e.target.value)}
+                  placeholder="např. 2026 nebo od září 2026"
+                  autoFocus
+                  disabled={taxLoading}
+                />
+              </label>
+            </div>
+            <div className={styles.modalFooter}>
+              <Button variant="secondary" onClick={() => setPeriodOpen(false)} disabled={taxLoading}>
+                Zrušit
+              </Button>
+              <Button variant="primary" onClick={handleGenerateTaxDeclaration} disabled={taxLoading || !periodValue.trim()}>
+                {taxLoading ? "Generuji…" : "Generovat"}
               </Button>
             </div>
           </div>

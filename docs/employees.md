@@ -69,6 +69,18 @@ Guards that prevent the orphaned-reference class (the "Kyrylo Tarasenko" bug, wh
 
 All three mirror the long-standing `departments` / `roleTypes` "still in use" block pattern. This prevents **new** orphans only; sweeping any pre-existing orphaned references is a separate operational task.
 
+### PDF form exports — Dotazník + Prohlášení (2026-06-11)
+Two official forms are filled from the employee's data and opened in a new tab (view, not download): the **"Osobní dotazník zaměstnance"** and the **"Prohlášení poplatníka daně"** (MFin 5457). Both are pre-supplied **fillable AcroForm PDFs** in `functions/assets/` (copied to `lib/assets/` by the functions `build` step), filled with `pdf-lib`. `functions/src/services/formPdf.ts`:
+- `fillQuestionnairePdf(data, title)` sets the 27 named text fields via the AcroForm appearance pipeline (`getTextField().setText()` → `updateFieldAppearances(DejaVu)` → `flatten`). DejaVu Sans is embedded because the fields' default WinAnsi font can't encode Czech diacritics.
+- `fillProhlaseniPdf(data, title)` instead **draws** the 7 values at each field's widget rectangle at a fixed 11 pt (`fillFormByDrawing`). Its AcroForm fields have no font in their DA, so `setFontSize` throws and the appearance pipeline auto-fits the text far too small — drawing gives full size control. The foreigner (daňový-nerezident) block has no fields and is left for hand-fill.
+- `doc.setTitle()` carries the human filename (`Dotazník <jméno> <příjmení>`, `Prohlášení <období> <jméno> <příjmení>`) — that drives the browser tab + save-as name (a blob-URL open ignores `Content-Disposition`, which is set to `inline`).
+
+Endpoints in `employees.ts` decrypt the sensitive fields they embed (rodné číslo / OP / účet / pojištěnec) and **audit-log the export** (`writeAudit` `action: "export"`, `extra.document`):
+- `GET /:id/questionnaire-pdf` — gated `employees.view.all` OR `employees.view.nonManagement`. `rodinný stav` is resolved to the M/F variant by `gender` (`displayGendered`, mirrors `frontend/src/lib/genderDisplay.ts`); `telefon` formatted `+420 XXX XXX XXX`; `nationality` shown as `CODE - Name` (`functions/src/services/nationalities.ts`, a backend copy of the frontend pure-data module).
+- `GET /:id/tax-declaration-pdf?period=…` — gated `employment.manage` OR `documents.view`. The free-text **zdaňovací období** (e.g. `2026` or `od září 2026`) is entered in a dialog; `adresa bydliště` is Czech employees' trvalá address, foreigners' resolved kontaktní address.
+
+UI: a **"Dotazník"** button in the employee hero (`EmployeeDetailPage`) and a **"Prohlášení poplatníka"** button in the Další-dokumenty toolbar (`OtherDocumentsTab`), each streaming the audited blob with the auth token and opening it in a new tab.
+
 ### Salary formatting in templates
 `{{salary}}` and `{{newSalary}}` template variables now resolve with Czech thousands-dots: `39000` → `"39.000"`. The literal `,- Kč` tail stays in the template HTML (`nastup_hpp`/`nastup_ppp`/`zmena_smlouvy`), so the helper emits only the formatted integer. Implemented via `formatSalaryCZ()` in `frontend/src/lib/contractVariables.ts`.
 
