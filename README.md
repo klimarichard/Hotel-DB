@@ -31,7 +31,9 @@ Granular permission-based access control gates every screen, route, and API endp
 
 ## Roles
 
-`admin` · `ředitel` (director) · `FOM` (manager / front office manager) · `zaměstnanec` (employee) · `účetní` (accountant) · `personalista` (HR)
+`admin` · `ředitel` (director) · `FOM` (manager / front office manager) · `zaměstnanec` (employee) · `účetní` (accountant)
+
+> Typy uživatelů jsou konfigurovatelná data — administrátor je spravuje v Nastavení → Uživatelské typy. Výše uvedené jsou výchozí vestavěné typy; lze přidávat vlastní (např. „Revenue & Rezervace“).
 
 ## User manuals (Czech)
 
@@ -41,7 +43,6 @@ Per-role manuals — each covers **only** what that role can do in the app. (The
 - [FOM (vedoucí)](manuals/vedouci.md)
 - [Zaměstnanec](manuals/zamestnanec.md)
 - [Účetní](manuals/ucetni.md)
-- [Personalista](manuals/personalista.md)
 
 > When a new role is added, add a matching manual under `manuals/`.
 
