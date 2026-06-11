@@ -51,17 +51,22 @@ export default function OtherDocumentsTab({ employeeId }: Props) {
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [taxLoading, setTaxLoading] = useState(false);
+  const [periodOpen, setPeriodOpen] = useState(false);
+  const [periodValue, setPeriodValue] = useState("");
 
   // Generate + download the filled "Prohlášení poplatníka daně" PDF. Server-side
   // (decrypts rodné číslo + audits the export), so we stream the blob with auth.
+  // The "zdaňovací období" (e.g. "2026" or "od září 2026") is entered in the
+  // dialog and passed through as a query param.
   async function handleGenerateTaxDeclaration() {
     if (!user || taxLoading) return;
+    const period = periodValue.trim();
+    setPeriodOpen(false);
     setTaxLoading(true);
     try {
       const token = await user.getIdToken();
-      const resp = await fetch(`/api/employees/${employeeId}/tax-declaration-pdf`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const reqUrl = `/api/employees/${employeeId}/tax-declaration-pdf${period ? `?period=${encodeURIComponent(period)}` : ""}`;
+      const resp = await fetch(reqUrl, { headers: { Authorization: `Bearer ${token}` } });
       if (!resp.ok) throw new Error();
       const filename = filenameFromDisposition(resp.headers.get("Content-Disposition"), "Prohlaseni.pdf");
       const blob = await resp.blob();
@@ -215,7 +220,7 @@ export default function OtherDocumentsTab({ employeeId }: Props) {
               data-tour="emp-doc-tax-declaration"
               variant="secondary"
               size="sm"
-              onClick={handleGenerateTaxDeclaration}
+              onClick={() => { setPeriodValue(String(new Date().getFullYear())); setPeriodOpen(true); }}
               disabled={taxLoading}
             >
               {taxLoading ? "Generuji…" : "Prohlášení k dani"}
@@ -293,6 +298,39 @@ export default function OtherDocumentsTab({ employeeId }: Props) {
               </Button>
               <Button variant="primary" onClick={submitUpload} disabled={!canSubmit}>
                 {uploading ? "Nahrávám…" : "Nahrát"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {periodOpen && (
+        <div className={styles.overlay}>
+          <div className={styles.modal}>
+            <div className={styles.modalHeader}>
+              <h2 className={styles.modalTitle}>Prohlášení k dani</h2>
+              <IconButton aria-label="Zavřít" onClick={() => setPeriodOpen(false)} disabled={taxLoading}>✕</IconButton>
+            </div>
+            <div className={styles.modalBody}>
+              <label className={styles.field}>
+                <span className={styles.fieldLabel}>Zdaňovací období</span>
+                <input
+                  type="text"
+                  className={styles.input}
+                  value={periodValue}
+                  onChange={(e) => setPeriodValue(e.target.value)}
+                  placeholder="např. 2026 nebo od září 2026"
+                  autoFocus
+                  disabled={taxLoading}
+                />
+              </label>
+            </div>
+            <div className={styles.modalFooter}>
+              <Button variant="secondary" onClick={() => setPeriodOpen(false)} disabled={taxLoading}>
+                Zrušit
+              </Button>
+              <Button variant="primary" onClick={handleGenerateTaxDeclaration} disabled={taxLoading || !periodValue.trim()}>
+                {taxLoading ? "Generuji…" : "Generovat"}
               </Button>
             </div>
           </div>

@@ -126,7 +126,8 @@ export async function fillQuestionnairePdf(d: QuestionnaireData): Promise<Buffer
 }
 
 export interface ProhlaseniData {
-  taxYear?: number | null;
+  // "Zdaňovací období" — free text entered by the user (e.g. "2026" or "od září 2026").
+  taxPeriod?: string | null;
   companyName?: string | null;
   companyAddress?: string | null;
   lastName?: string | null;
@@ -142,7 +143,7 @@ export interface ProhlaseniData {
  */
 export async function fillProhlaseniPdf(d: ProhlaseniData): Promise<Buffer> {
   return fillForm(PROHLASENI_PDF, {
-    zdanovaci_obdobi: d.taxYear ? String(d.taxYear) : "",
+    zdanovaci_obdobi: s(d.taxPeriod),
     nazev_platce_dane: s(d.companyName),
     adresa_platce_dane: s(d.companyAddress),
     prijmeni: s(d.lastName),

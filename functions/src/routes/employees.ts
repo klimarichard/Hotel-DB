@@ -909,8 +909,12 @@ employeesRouter.get(
       if (companySnap.exists) company = companySnap.data() as Record<string, unknown>;
     }
 
+    // "Zdaňovací období" is user-entered (free text, e.g. "2026" or "od září 2026")
+    // via the generate dialog; fall back to the current year if omitted.
+    const period = asStr(req.query.period).trim() || String(Number((clock.today() || "").slice(0, 4)) || "");
+
     const pdf = await fillProhlaseniPdf({
-      taxYear: Number((clock.today() || "").slice(0, 4)) || null,
+      taxPeriod: period,
       companyName: asStr(company.name),
       companyAddress: asStr(company.address),
       lastName: asStr(root.lastName),
@@ -924,7 +928,7 @@ employeesRouter.get(
       collection: "employees",
       resourceId: id,
       employeeId: id,
-      extra: { document: "taxDeclaration", companyId: companyId || null, fields: ["birthNumber"] },
+      extra: { document: "taxDeclaration", companyId: companyId || null, period, fields: ["birthNumber"] },
     });
 
     sendPdfAttachment(res, pdf, `Prohlaseni_${asStr(root.lastName) || id}`);
