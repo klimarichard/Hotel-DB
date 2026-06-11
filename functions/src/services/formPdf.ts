@@ -133,7 +133,10 @@ export interface ProhlaseniData {
   lastName?: string | null;
   firstName?: string | null;
   birthNumber?: string | null; // decrypted
-  permanentAddress?: string | null;
+  // "Adresa bydliště" — trvalá for Czech employees, the resolved Czech contact
+  // address for foreigners (whose trvalá address is often abroad). Resolved by
+  // the caller.
+  residenceAddress?: string | null;
 }
 
 /**
@@ -149,6 +152,6 @@ export async function fillProhlaseniPdf(d: ProhlaseniData): Promise<Buffer> {
     prijmeni: s(d.lastName),
     jmeno: s(d.firstName),
     rodne_cislo: s(d.birthNumber),
-    adresa_bydliste: s(d.permanentAddress),
+    adresa_bydliste: s(d.residenceAddress),
   });
 }

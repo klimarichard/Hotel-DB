@@ -223,7 +223,7 @@ export default function OtherDocumentsTab({ employeeId }: Props) {
               onClick={() => { setPeriodValue(String(new Date().getFullYear())); setPeriodOpen(true); }}
               disabled={taxLoading}
             >
-              {taxLoading ? "Generuji…" : "Prohlášení k dani"}
+              {taxLoading ? "Generuji…" : "Prohlášení poplatníka"}
             </Button>
           )}
         </div>
@@ -308,7 +308,7 @@ export default function OtherDocumentsTab({ employeeId }: Props) {
         <div className={styles.overlay}>
           <div className={styles.modal}>
             <div className={styles.modalHeader}>
-              <h2 className={styles.modalTitle}>Prohlášení k dani</h2>
+              <h2 className={styles.modalTitle}>Prohlášení poplatníka</h2>
               <IconButton aria-label="Zavřít" onClick={() => setPeriodOpen(false)} disabled={taxLoading}>✕</IconButton>
             </div>
             <div className={styles.modalBody}>

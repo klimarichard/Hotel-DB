@@ -913,6 +913,17 @@ employeesRouter.get(
     // via the generate dialog; fall back to the current year if omitted.
     const period = asStr(req.query.period).trim() || String(Number((clock.today() || "").slice(0, 4)) || "");
 
+    // adresa_bydliště: Czech employees (nationality "CZE") use their trvalá
+    // (permanent) address; foreigners use their resolved Czech contact address,
+    // since their permanent address is usually abroad. "Resolved" expands the
+    // "stejná jako trvalá" flag to the actual permanent-address value rather than
+    // leaving a placeholder.
+    const permanentAddress = asStr(contact.permanentAddress);
+    const resolvedContact = contact.contactAddressSameAsPermanent
+      ? permanentAddress
+      : asStr(contact.contactAddress);
+    const isCzech = asStr(root.nationality).trim() === "CZE";
+
     const pdf = await fillProhlaseniPdf({
       taxPeriod: period,
       companyName: asStr(company.name),
@@ -920,7 +931,7 @@ employeesRouter.get(
       lastName: asStr(root.lastName),
       firstName: asStr(root.firstName),
       birthNumber: asStr(root.birthNumber),
-      permanentAddress: asStr(contact.permanentAddress),
+      residenceAddress: isCzech ? permanentAddress : resolvedContact,
     });
 
     await writeAudit(ctxFromReq(req), {
