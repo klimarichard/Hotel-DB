@@ -41,21 +41,51 @@ function asStr(v: unknown): string {
 }
 
 /**
- * Stream a generated PDF buffer back as a download. Sets a UTF-8 filename with a
- * plain-ASCII fallback for legacy clients.
+ * Stream a generated PDF buffer back for in-browser viewing (inline). Sets a
+ * UTF-8 filename with a plain-ASCII fallback for legacy clients.
  */
-function sendPdfAttachment(res: Response, pdf: Buffer, filenameBase: string): void {
+function sendPdfInline(res: Response, pdf: Buffer, filenameBase: string): void {
   const asciiFallback = filenameBase
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
     .replace(/[^\x20-\x7e]/g, "_");
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Content-Length", pdf.length);
+  // inline so the frontend can open it in a new browser tab (view, not download).
   res.setHeader(
     "Content-Disposition",
-    `attachment; filename="${asciiFallback}.pdf"; filename*=UTF-8''${encodeURIComponent(filenameBase)}.pdf`
+    `inline; filename="${asciiFallback}.pdf"; filename*=UTF-8''${encodeURIComponent(filenameBase)}.pdf`
   );
   res.end(pdf);
+}
+
+/** Czech phone display: "+420" national numbers grouped "+420 XXX XXX XXX". */
+function formatPhoneCZ(phone: string): string {
+  const t = phone.trim();
+  if (t.startsWith("+420")) {
+    const digits = t.slice(4).replace(/\s+/g, "");
+    if (/^\d{9}$/.test(digits)) {
+      return `+420 ${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6, 9)}`;
+    }
+  }
+  return t;
+}
+
+/**
+ * Resolve a combined gendered Czech string ("svobodný/á", "ženatý/vdaná") to the
+ * variant for the employee's gender ("m"/"f"). Mirrors frontend genderDisplay.ts:
+ * a female part of ≤2 chars is a suffix replacing the male ending, else a full word.
+ */
+function displayGendered(value: string, gender: string): string {
+  if (!value) return "";
+  const slash = value.indexOf("/");
+  if (slash === -1) return value;
+  const male = value.slice(0, slash);
+  const female = value.slice(slash + 1);
+  const g = gender.trim().toLowerCase();
+  if (g === "m") return male;
+  if (g === "f") return female.length <= 2 ? male.slice(0, -female.length) + female : female;
+  return value;
 }
 
 /**
@@ -829,6 +859,7 @@ employeesRouter.get(
       ? permanentAddress
       : asStr(contact.contactAddress);
 
+    const title = `Dotazník ${asStr(root.firstName)} ${asStr(root.lastName)}`.replace(/\s+/g, " ").trim();
     const pdf = await fillQuestionnairePdf({
       jobTitle: asStr(root.currentJobTitle),
       startDate: asStr(employment.startDate),
@@ -839,7 +870,7 @@ employeesRouter.get(
       placeOfBirth: asStr(root.placeOfBirth),
       dateOfBirth: asStr(root.dateOfBirth),
       birthNumber: asStr(root.birthNumber),
-      maritalStatus: asStr(root.maritalStatus),
+      maritalStatus: displayGendered(asStr(root.maritalStatus), asStr(root.gender)),
       education: asStr(root.education),
       permanentAddress,
       contactAddress,
@@ -853,12 +884,12 @@ employeesRouter.get(
       passportAuthority: asStr(documents.passportAuthority),
       passportIssueDate: asStr(documents.passportIssueDate),
       passportExpiry: asStr(documents.passportExpiry),
-      phone: asStr(contact.phone),
+      phone: formatPhoneCZ(asStr(contact.phone)),
       email: asStr(contact.email),
       insuranceCompany: asStr(benefits.insuranceCompany),
       insuranceNumber: asStr(benefits.insuranceNumber),
       bankAccount: asStr(benefits.bankAccount),
-    });
+    }, title);
 
     await writeAudit(ctxFromReq(req), {
       action: "export",
@@ -871,7 +902,7 @@ employeesRouter.get(
       },
     });
 
-    sendPdfAttachment(res, pdf, `Dotaznik_${asStr(root.lastName) || id}`);
+    sendPdfInline(res, pdf, title);
   }
 );
 
@@ -924,6 +955,7 @@ employeesRouter.get(
       : asStr(contact.contactAddress);
     const isCzech = asStr(root.nationality).trim() === "CZE";
 
+    const title = `Prohlášení ${period} ${asStr(root.firstName)} ${asStr(root.lastName)}`.replace(/\s+/g, " ").trim();
     const pdf = await fillProhlaseniPdf({
       taxPeriod: period,
       companyName: asStr(company.name),
@@ -932,7 +964,7 @@ employeesRouter.get(
       firstName: asStr(root.firstName),
       birthNumber: asStr(root.birthNumber),
       residenceAddress: isCzech ? permanentAddress : resolvedContact,
-    });
+    }, title);
 
     await writeAudit(ctxFromReq(req), {
       action: "export",
@@ -942,7 +974,7 @@ employeesRouter.get(
       extra: { document: "taxDeclaration", companyId: companyId || null, period, fields: ["birthNumber"] },
     });
 
-    sendPdfAttachment(res, pdf, `Prohlaseni_${asStr(root.lastName) || id}`);
+    sendPdfInline(res, pdf, title);
   }
 );
 

@@ -1204,9 +1204,9 @@ export default function EmployeeDetailPage() {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [questionnaireLoading, setQuestionnaireLoading] = useState(false);
 
-  // Download the filled "Osobní dotazník zaměstnance" PDF. Generated server-side
-  // (it embeds decrypted sensitive fields and audits the export), so we stream
-  // the blob with the auth token.
+  // Open the filled "Osobní dotazník zaměstnance" PDF in a new tab. Generated
+  // server-side (it embeds decrypted sensitive fields and audits the export),
+  // so we fetch the blob with the auth token and open it as an object URL.
   async function handleDownloadQuestionnaire() {
     if (!user || !id || questionnaireLoading) return;
     setQuestionnaireLoading(true);
@@ -1218,13 +1218,8 @@ export default function EmployeeDetailPage() {
       if (!resp.ok) throw new Error();
       const blob = await resp.blob();
       const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `Dotaznik_${employee?.lastName || id}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      window.open(url, "_blank", "noopener,noreferrer");
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch {
       setConfirmModal({
         title: "Chyba",
