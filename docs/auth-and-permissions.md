@@ -103,6 +103,7 @@ The endpoint→permission mapping is **aligned to the UI**. Where the API was hi
 A second layer is still applied at the router level on `employees.ts` and `contracts.ts` (`enforceEmpAccess` / `enforceContractAccess`):
 
 - **read-only viewers** (callers holding no write permission for the resource, e.g. built-in `accountant`) are blocked from any mutation — a **permission-based** safety net (contracts: any non-GET requires one of `contracts.generate/edit/delete/sign`), not a role check.
+  - ⚠️ `contractsRouter` is mounted at the **app root** (`app.use("/", contractsRouter)`) because its routes span two prefixes with no common base (`/contracts/render-pdf` and `/employees/:id/contracts/...`). A router-level guard therefore runs for **every** request in the app, so `enforceContractAccess` first short-circuits via `isContractPath()` and only governs its own contract endpoints. Without that guard it rejected any non-GET from callers lacking a contract-write permission (vacation, self-service change requests, shifts, …) — latent until the first low-privilege employee logins existed (fixed v2.1.1).
 - A **non-management-scoped caller** — one who holds `employees.view.nonManagement` but NOT `employees.view.all` (e.g. built-in `hr`) — is blocked from any record whose linked login's **type is management**. The list + export handlers filter management records out for such callers.
 - `getManagementEmployeeIds` resolves each user's type (`roleType`) against the per-type `management` flag.
 
