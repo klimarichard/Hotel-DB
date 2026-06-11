@@ -23,7 +23,7 @@ import { AuthRequest } from "../middleware/auth";
  * default permissions + management flag live in code so they can be seeded and
  * so the resolver has a fallback when a roleTypes doc is missing/unreachable.
  */
-export type BuiltinTypeId = "admin" | "director" | "manager" | "employee" | "accountant" | "hr";
+export type BuiltinTypeId = "admin" | "director" | "manager" | "employee" | "accountant";
 
 // ─── Catalog ──────────────────────────────────────────────────────────────────
 // Grouped for the in-app permission matrix; granularity is preserved.
@@ -301,24 +301,6 @@ export const BUILTIN_TYPE_PERMISSIONS: Record<BuiltinTypeId, Permission[]> = {
     "benefits.view",
     "masterData.view",
   ],
-
-  // Personalista — people manager minus management-linked records (row-level scope).
-  hr: [
-    ...BASE_SELF,
-    "nav.shifts.view", "nav.vacation.view", "nav.employees.view",
-    "employees.view.nonManagement", "employees.create", "employees.edit", "employees.delete",
-    "employees.export", "employees.export.sensitive",
-    "sensitive.reveal",
-    "employment.view", "employment.manage",
-    "contracts.view", "contracts.generate", "contracts.edit", "contracts.delete", "contracts.sign",
-    "documents.view", "documents.upload", "documents.delete",
-    "benefits.view", "benefits.edit",
-    // hr sees the shift plan read-only in the UI (no edit/create/publish controls).
-    "shifts.view.all",
-    "dashboard.staffing.view",
-    "vacation.view.approvedUpcoming",
-    "masterData.view",
-  ],
 };
 
 // ─── Resolver + middleware ──────────────────────────────────────────────────────
@@ -369,7 +351,7 @@ export interface RoleTypeData {
 /** Built-in management classification — the fallback when a roleTypes doc is
  *  missing (unseeded / Firestore down). Matches the legacy role-based query. */
 const BUILTIN_TYPE_MANAGEMENT: Record<BuiltinTypeId, boolean> = {
-  admin: true, director: true, manager: true, employee: false, accountant: false, hr: false,
+  admin: true, director: true, manager: true, employee: false, accountant: false,
 };
 
 let roleTypeCache: { at: number; map: Map<string, RoleTypeData> } | null = null;

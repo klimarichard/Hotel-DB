@@ -4,7 +4,7 @@ import { auth } from "@/lib/firebase";
 import { api } from "@/lib/api";
 import { hasPermission, type Permission } from "@/lib/permissions/catalog";
 
-export type UserRole = "admin" | "director" | "manager" | "employee" | "accountant" | "hr";
+export type UserRole = "admin" | "director" | "manager" | "employee" | "accountant";
 
 interface AuthState {
   user: User | null;
