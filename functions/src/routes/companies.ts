@@ -171,7 +171,7 @@ companiesRouter.delete(
     // company inline and are unaffected.
     const empHit = await db().collection("employees").where("currentCompanyId", "==", req.params.id).limit(1).get();
     if (!empHit.empty) {
-      res.status(400).json({ error: "Nelze smazat společnost, kterou používají zaměstnanci." });
+      res.status(400).json({ error: "Nelze smazat společnost, ve které jsou aktivní zaměstnanci." });
       return;
     }
     const ref = db().collection("companies").doc(req.params.id);
