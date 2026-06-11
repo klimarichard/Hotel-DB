@@ -16,6 +16,22 @@ const CONTRACT_WRITE_PERMS: Permission[] = [
   "contracts.generate", "contracts.edit", "contracts.delete", "contracts.sign",
 ];
 
+// This router is mounted at the app root ("/") because its routes span two
+// path families with no shared prefix: "/contracts/render-pdf" and
+// "/employees/:id/contracts/...". A router-level guard therefore runs for
+// EVERY request in the app, so it must first short-circuit on non-contract
+// paths — otherwise it would reject unrelated writes (vacation, self-service
+// change requests, shifts, …) from any caller without a contract-write
+// permission. Returns true only for the router's own contract endpoints.
+function isContractPath(reqPath: string): boolean {
+  const parts = reqPath.split("/"); // leading "" from the leading slash
+  // "/contracts/..." (e.g. render-pdf)
+  if (parts[1] === "contracts") return true;
+  // "/employees/:id/contracts[/...]"
+  if (parts[1] === "employees" && parts[3] === "contracts") return true;
+  return false;
+}
+
 // Row-level access refinements layered on the per-route requirePermission gates
 // (mirrors employees.ts), driven by PERMISSIONS, not the legacy role:
 //   • read-only viewers (no contract-write permission) — only GET is allowed.
@@ -23,6 +39,12 @@ const CONTRACT_WRITE_PERMS: Permission[] = [
 //     management employee's record.
 // requireAuth is router-level so req.permissions is set before this guard runs.
 async function enforceContractAccess(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  // Mounted at root — ignore anything that isn't one of this router's own
+  // contract routes so we never block unrelated (non-contract) writes.
+  if (!isContractPath(req.path)) {
+    next();
+    return;
+  }
   const perms = req.permissions ?? new Set<string>();
   if (req.method !== "GET" && !CONTRACT_WRITE_PERMS.some((p) => hasPermission(perms, p))) {
     res.status(403).json({ error: "Pouze náhledový přístup ke smlouvám." });
