@@ -1737,14 +1737,26 @@ employeesRouter.delete(
     // Such employees must be TERMINATED ("Ukončit smlouvu"), not deleted —
     // deleting them orphans payrollPeriods entries and shiftPlans rows (the
     // "Kyrylo Tarasenko" orphan class that produced phantom 0-hour rows). Only
-    // genuine mis-entries with no footprint may be removed. Both checks are
-    // single-field collection-group equality queries (auto-indexed — no
-    // composite index required).
-    const [payrollHit, planHit] = await Promise.all([
-      db().collectionGroup("entries").where("employeeId", "==", id).limit(1).get(),
-      db().collectionGroup("planEmployees").where("employeeId", "==", id).limit(1).get(),
+    // genuine mis-entries with no footprint may be removed.
+    //
+    // Index-free by design: a collectionGroup("entries"/"planEmployees").where()
+    // would require dedicated COLLECTION_GROUP indexes, which the emulator does
+    // NOT enforce → silent prod 500s. Instead we iterate the (few, monthly)
+    // period/plan parents and use a doc-id lookup / collection-scope query,
+    // both backed by automatic single-field indexes that always exist.
+    const [periodsSnap, plansSnap] = await Promise.all([
+      db().collection("payrollPeriods").get(),
+      db().collection("shiftPlans").get(),
     ]);
-    if (!payrollHit.empty || !planHit.empty) {
+    const [payrollEntries, planMembers] = await Promise.all([
+      Promise.all(periodsSnap.docs.map((p) => p.ref.collection("entries").doc(id).get())),
+      Promise.all(plansSnap.docs.map((pl) =>
+        pl.ref.collection("planEmployees").where("employeeId", "==", id).limit(1).get()
+      )),
+    ]);
+    const hasHistory =
+      payrollEntries.some((e) => e.exists) || planMembers.some((m) => !m.empty);
+    if (hasHistory) {
       res.status(400).json({
         error:
           "Zaměstnance nelze smazat, protože má záznamy ve mzdách nebo směnách. " +

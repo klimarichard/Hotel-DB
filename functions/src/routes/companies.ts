@@ -162,15 +162,16 @@ companiesRouter.delete(
   requireAuth,
   requirePermission("settings.companies.manage"),
   async (req: AuthRequest, res: Response) => {
-    // Block delete if any employee (current company) or employment row still
-    // references this company — otherwise they're left pointing at a dead
-    // companyId. Mirrors the departments "still in use" guard.
-    const [empHit, emplHit] = await Promise.all([
-      db().collection("employees").where("currentCompanyId", "==", req.params.id).limit(1).get(),
-      db().collectionGroup("employment").where("companyId", "==", req.params.id).limit(1).get(),
-    ]);
-    if (!empHit.empty || !emplHit.empty) {
-      res.status(400).json({ error: "Nelze smazat společnost, kterou používají zaměstnanci nebo jejich smlouvy." });
+    // Block delete if any employee currently belongs to this company —
+    // otherwise they're left pointing at a dead companyId. Collection-scope
+    // query (automatic index); a collectionGroup over employment rows would
+    // need a COLLECTION_GROUP index the emulator wouldn't enforce. currentCompanyId
+    // is the denormalised current company on every employee (incl. terminated),
+    // so it catches active references; past generated contracts store the
+    // company inline and are unaffected.
+    const empHit = await db().collection("employees").where("currentCompanyId", "==", req.params.id).limit(1).get();
+    if (!empHit.empty) {
+      res.status(400).json({ error: "Nelze smazat společnost, kterou používají zaměstnanci." });
       return;
     }
     const ref = db().collection("companies").doc(req.params.id);
