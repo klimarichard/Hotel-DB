@@ -176,20 +176,20 @@ This replaces the former `{ "app": 5 }` example. The `PUT /api/auth/me/tours` bo
 
 ## Tour sections
 
-The master step list is organised into **12 active sections** defined in the `SECTIONS` const in `appTour.ts`. (A thirteenth key, `audit`, remains in the const but is not referenced by any step — "Log změn" is covered inside the Navigace section as a nav-item step.) The section label is set only on the first step of each group; `buildAppTour` carries it forward to every subsequent step before filtering.
+The master step list is organised into **12 active sections** defined in the `SECTIONS` const in `appTour.ts`. The section label is set only on the first step of each group; `buildAppTour` carries it forward to every subsequent step before filtering. **Each section opens with its sidebar nav-item step** (gated on the matching `nav.*.view` permission) — e.g. `nav.employees.view` leads the Zaměstnanci section and `nav.payroll.view` leads Mzdy. There is no separate "Navigace" section; "Log změn" (`audit`) is a standalone single-step section, since the audit page has no further walkthrough steps.
 
 | Section label | Content covered |
 |---|---|
 | Úvod | Welcome card, přihlášený uživatel, světlý/tmavý režim |
-| Navigace | Sidebar nav items (one step per permission: Přehled, Směny, Dovolená, Zaměstnanci, Mzdy, Upozornění, Šablony smluv, Log změn, Nastavení, Můj profil) |
-| Přehled | Dnešní datum header, Dnes/Zítra staffing, Moje směny tile, Úkoly, Statistiky |
+| Přehled | Nav-item step (Přehled) + dnešní datum header, Dnes/Zítra staffing, Moje směny tile, Úkoly, Statistiky |
 | Směny | All shift-plan steps (view, edit, create, transitions, free shifts, export, …) |
 | Dovolená | Vacation request form, all-requests panel, approved-colleagues view |
 | Zaměstnanci | Employee list + filters + create/export; employee card (edit, delete, sensitive reveal, benefits, employment history, contracts, documents) |
 | Můj profil | Self-page title, Navrhnout úpravu, own sensitive reveal, pending requests |
 | Šablony smluv | Template list, new template |
 | Mzdy | Payroll table, create, edit, recalculate, hard-recalculate, lock, delete, export, notes |
-| Upozornění | Alerts tabs, mark-read, manual refresh |
+| Upozornění | Nav-item step (Upozornění) + alerts tabs, mark-read, manual refresh |
+| Log změn | Nav-item step only (standalone single-step section — the audit log page has no further walkthrough steps) |
 | Nastavení | Users tab, add/edit/assign-type/per-user-perms; user types tab; all číselník tabs (companies, departments, positions, education, payroll settings, menu order); system triggers; test clock; superadmin card |
 | Závěr | Outro card pointing to the Nápověda button |
 
