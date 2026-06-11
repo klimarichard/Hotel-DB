@@ -1730,6 +1730,28 @@ employeesRouter.delete(
   async (req, res) => {
     const { id } = req.params;
     const deleteUser = req.query.deleteUser === "true";
+    const empRef = db().collection("employees").doc(id);
+
+    // ── Delete protection ────────────────────────────────────────────────
+    // Block hard-delete if the employee has ANY payroll or shift history.
+    // Such employees must be TERMINATED ("Ukončit smlouvu"), not deleted —
+    // deleting them orphans payrollPeriods entries and shiftPlans rows (the
+    // "Kyrylo Tarasenko" orphan class that produced phantom 0-hour rows). Only
+    // genuine mis-entries with no footprint may be removed. Both checks are
+    // single-field collection-group equality queries (auto-indexed — no
+    // composite index required).
+    const [payrollHit, planHit] = await Promise.all([
+      db().collectionGroup("entries").where("employeeId", "==", id).limit(1).get(),
+      db().collectionGroup("planEmployees").where("employeeId", "==", id).limit(1).get(),
+    ]);
+    if (!payrollHit.empty || !planHit.empty) {
+      res.status(400).json({
+        error:
+          "Zaměstnance nelze smazat, protože má záznamy ve mzdách nebo směnách. " +
+          "Místo smazání ho ukončete (Ukončit smlouvu).",
+      });
+      return;
+    }
 
     // Handle linked user account
     const usersSnap = await db()
@@ -1751,10 +1773,31 @@ employeesRouter.delete(
       }
     }
 
-    const empRef = db().collection("employees").doc(id);
+    // Best-effort: remove Storage blobs for contracts + other documents before
+    // deleting their Firestore records (the records carry the storage paths).
+    // Previously these blobs were orphaned in Storage on employee delete.
+    const storagePaths: string[] = [];
+    const [contractsSnap, otherDocsSnap] = await Promise.all([
+      empRef.collection("contracts").get(),
+      empRef.collection("otherDocuments").get(),
+    ]);
+    contractsSnap.docs.forEach((d) => {
+      const c = d.data() as Record<string, unknown>;
+      if (typeof c.unsignedStoragePath === "string" && c.unsignedStoragePath) storagePaths.push(c.unsignedStoragePath);
+      if (typeof c.signedStoragePath === "string" && c.signedStoragePath) storagePaths.push(c.signedStoragePath);
+    });
+    otherDocsSnap.docs.forEach((d) => {
+      const o = d.data() as Record<string, unknown>;
+      if (typeof o.storagePath === "string" && o.storagePath) storagePaths.push(o.storagePath);
+    });
+    if (storagePaths.length) {
+      const bucket = admin.storage().bucket();
+      await Promise.all(storagePaths.map((p) => bucket.file(p).delete().catch(() => undefined)));
+    }
 
-    // Delete sub-collections
-    for (const col of ["contact", "employment", "documents", "benefits", "contracts"]) {
+    // Delete sub-collections ("otherDocuments" was previously omitted here,
+    // orphaning its Firestore records).
+    for (const col of ["contact", "employment", "documents", "benefits", "contracts", "otherDocuments"]) {
       const snap = await empRef.collection(col).get();
       if (!snap.empty) {
         const batch = db().batch();
@@ -1775,6 +1818,14 @@ employeesRouter.delete(
     if (!vacSnap.empty) {
       const batch = db().batch();
       vacSnap.docs.forEach((d) => batch.delete(d.ref));
+      await batch.commit();
+    }
+
+    // Pending self-service change requests (previously orphaned)
+    const ecrSnap = await db().collection("employeeChangeRequests").where("employeeId", "==", id).get();
+    if (!ecrSnap.empty) {
+      const batch = db().batch();
+      ecrSnap.docs.forEach((d) => batch.delete(d.ref));
       await batch.commit();
     }
 
