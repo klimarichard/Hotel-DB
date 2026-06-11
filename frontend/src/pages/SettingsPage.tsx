@@ -233,6 +233,9 @@ export default function SettingsPage() {
   const [companyCreateForm, setCompanyCreateForm] = useState<{ abbreviation: string; name: string; address: string; ic: string; dic: string; fileNo: string }>({ abbreviation: "", name: "", address: "", ic: "", dic: "", fileNo: "" });
   const [companyDeleteId, setCompanyDeleteId] = useState<string | null>(null);
   const [companyError, setCompanyError] = useState<string | null>(null);
+  // Generic error dialog (e.g. a delete blocked by referential integrity) —
+  // shown via ConfirmModal for consistency with the rest of the app.
+  const [errorModal, setErrorModal] = useState<string | null>(null);
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
@@ -477,8 +480,8 @@ export default function SettingsPage() {
     try {
       await api.delete(`/jobPositions/${id}`);
       await loadPositions();
-    } catch {
-      // silent
+    } catch (e: unknown) {
+      setErrorModal((e as Error)?.message || "Nelze smazat pozici.");
     }
   }
 
@@ -532,7 +535,7 @@ export default function SettingsPage() {
       await api.delete(`/companies/${id}`);
       await loadCompanies();
     } catch (e: unknown) {
-      setCompanyError((e as Error).message ?? "Nelze smazat společnost.");
+      setErrorModal((e as Error)?.message || "Nelze smazat společnost.");
     }
   }
 
@@ -1832,6 +1835,17 @@ export default function SettingsPage() {
           danger
           onConfirm={confirmDeleteCompany}
           onCancel={() => setCompanyDeleteId(null)}
+        />
+      )}
+
+      {errorModal && (
+        <ConfirmModal
+          title="Chyba"
+          message={errorModal}
+          confirmLabel="OK"
+          showCancel={false}
+          onConfirm={() => setErrorModal(null)}
+          onCancel={() => setErrorModal(null)}
         />
       )}
 
