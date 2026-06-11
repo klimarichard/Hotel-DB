@@ -154,7 +154,6 @@ const settings: FieldLabelMap = {
   manager: "Pořadí menu – FOM",
   employee: "Pořadí menu – zaměstnanec",
   accountant: "Pořadí menu – účetní",
-  hr: "Pořadí menu – personalista",
   updatedAt: "Upraveno",
   updatedBy: "Upravil",
 };

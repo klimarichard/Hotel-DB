@@ -2,7 +2,7 @@
 
 This document covers how users authenticate (login + password reset), the **configurable permission model** that gates routes, menus, and API endpoints across the frontend/backend layers, and how the per-user-type sidebar menu order is configured and stored.
 
-> **History.** The app originally hard-coded a fixed six-role model (`admin`/`director`/`manager`/`employee` + `accountant`/`hr`) where every gate was a `requireRole(...)`/`RequireRole` check. That has been replaced by a **configurable RBAC** model: a fixed catalogue of ~90 granular permissions, editable **user types** stored as Firestore data, and per-user grants/revokes on top. The six former roles survive as **seeded built-in types** with the same effective access, so behaviour is identical until an admin edits a type.
+> **History.** The app originally hard-coded a fixed six-role model (`admin`/`director`/`manager`/`employee` + `accountant`/`hr`) where every gate was a `requireRole(...)`/`RequireRole` check. That has been replaced by a **configurable RBAC** model: a fixed catalogue of ~90 granular permissions, editable **user types** stored as Firestore data, and per-user grants/revokes on top. The former roles survive as **seeded built-in types** with the same effective access, so behaviour is identical until an admin edits a type. (`hr`/Personalista was later removed in v2.1.2 — see below — leaving five built-ins.)
 
 ## Auth — Login & Password Reset
 
@@ -30,7 +30,7 @@ The special `system.admin` permission **expands to ALL permissions** and cannot 
 | `dashboard.view` | Zobrazit vlastní přehled | all types (via BASE_SELF for self-service types; explicit for accountant) |
 | `dashboard.tasks.view` | Zobrazit úkoly ke schválení | director, admin (via system.admin) |
 | `dashboard.stats.view` | Zobrazit statistiky personálu | director, accountant, admin |
-| `dashboard.staffing.view` | Zobrazit obsazenost (sekce Dnes/Zítra) | director, manager, employee, hr, admin |
+| `dashboard.staffing.view` | Zobrazit obsazenost (sekce Dnes/Zítra) | director, manager, employee, admin |
 
 **`dashboard.staffing.view`** gates the DNES / ZÍTRA staffing sections on the Přehled (`/prehled`) page (the blocks that show employees scheduled for day/night shifts and managers on vacation). It is deliberately **not** granted to `accountant` (finance viewer — those sections are operational, not financial). `admin` receives it via `system.admin` expansion.
 
@@ -64,11 +64,11 @@ roleTypes/{id} = {
 }
 ```
 
-Six built-ins are seeded: `admin`, `director`, `manager`, `employee`, `accountant`, `hr`.
+Five built-ins are seeded: `admin`, `director`, `manager`, `employee`, `accountant`. (A sixth, `hr`/Personalista, was seeded historically but **removed in v2.1.2** — it was unused, with no assigned users and no `roleTypes/hr` doc on any environment. The non-management record-scoping capability it exercised stays available to any custom type via `employees.view.nonManagement` + `management: false`.)
 
 - **Only `admin` is `system: true`** — protected: it can't be edited or deleted and always has all permissions.
-- The other five (`director`, `manager`, `employee`, `accountant`, `hr`) are **fully editable AND deletable**.
-- **`management: true`** means holders count as "management" for employee-record scoping (this replaces the old hard-coded admin/director/manager list). Built-ins `admin`/`director`/`manager` are management; `employee`/`accountant`/`hr` are not.
+- The other four (`director`, `manager`, `employee`, `accountant`) are **fully editable AND deletable**.
+- **`management: true`** means holders count as "management" for employee-record scoping (this replaces the old hard-coded admin/director/manager list). Built-ins `admin`/`director`/`manager` are management; `employee`/`accountant` are not.
 
 ### Per-user assignment & overrides
 
@@ -103,8 +103,8 @@ The endpoint→permission mapping is **aligned to the UI**. Where the API was hi
 A second layer is still applied at the router level on `employees.ts` and `contracts.ts` (`enforceEmpAccess` / `enforceContractAccess`):
 
 - **read-only viewers** (callers holding no write permission for the resource, e.g. built-in `accountant`) are blocked from any mutation — a **permission-based** safety net (contracts: any non-GET requires one of `contracts.generate/edit/delete/sign`), not a role check.
-  - ⚠️ `contractsRouter` is mounted at the **app root** (`app.use("/", contractsRouter)`) because its routes span two prefixes with no common base (`/contracts/render-pdf` and `/employees/:id/contracts/...`). A router-level guard therefore runs for **every** request in the app, so `enforceContractAccess` first short-circuits via `isContractPath()` and only governs its own contract endpoints. Without that guard it rejected any non-GET from callers lacking a contract-write permission (vacation, self-service change requests, shifts, …) — latent until the first low-privilege employee logins existed (fixed v2.1.1).
-- A **non-management-scoped caller** — one who holds `employees.view.nonManagement` but NOT `employees.view.all` (e.g. built-in `hr`) — is blocked from any record whose linked login's **type is management**. The list + export handlers filter management records out for such callers.
+  - ⚠️ `contractsRouter` is mounted at the **app root** (`app.use("/", contractsRouter)`) because its routes span two prefixes with no common base (`/contracts/render-pdf` and `/employees/:id/contracts/...`). A router-level guard therefore runs for **every** request in the app, so **both** of the router's guards short-circuit on non-contract paths via `isContractPath()` and only govern the router's own contract endpoints: `enforceContractAccess` (added v2.1.1 — without it, any non-GET from callers lacking a contract-write permission was rejected app-wide: vacation, self-service change requests, shifts, …; latent until the first low-privilege employee logins existed) and `requireAuth` (extended v2.1.2 — without it the root-mounted `requireAuth` 401-gated the public `GET /health` and double-authenticated every request to routers mounted after the contracts router).
+- A **non-management-scoped caller** — one who holds `employees.view.nonManagement` but NOT `employees.view.all` (e.g. a custom non-management type) — is blocked from any record whose linked login's **type is management**. The list + export handlers filter management records out for such callers.
 - `getManagementEmployeeIds` resolves each user's type (`roleType`) against the per-type `management` flag.
 
 ## Frontend

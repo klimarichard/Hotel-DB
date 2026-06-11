@@ -27,6 +27,30 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Maps any error from the api helper to a user-facing message.
+ *
+ * For **403** we deliberately show a generic permission message instead of the
+ * backend's concern-specific string: that string can belong to an unrelated
+ * endpoint (a misrouted/global guard), which is exactly how a contracts-guard
+ * message once surfaced on the vacation form. The raw error is logged so the
+ * real reason stays diagnosable. 401 maps to a re-login hint. For other statuses
+ * the backend message is normally action-appropriate, so it is used when
+ * present; `fallback` covers the no-message case.
+ */
+export function errorMessage(err: unknown, fallback = "Operace se nezdařila."): string {
+  if (err instanceof ApiError) {
+    if (err.status === 403) {
+      console.error("[api] 403 Forbidden:", err.message, err.body);
+      return "K této akci nemáte oprávnění.";
+    }
+    if (err.status === 401) return "Vaše přihlášení vypršelo. Přihlaste se prosím znovu.";
+    return err.message || fallback;
+  }
+  if (err instanceof Error && err.message) return err.message;
+  return fallback;
+}
+
 async function request<T>(
   method: string,
   path: string,

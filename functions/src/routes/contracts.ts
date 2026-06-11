@@ -63,7 +63,20 @@ async function enforceContractAccess(req: AuthRequest, res: Response, next: Next
   next();
 }
 
-contractsRouter.use(requireAuth);
+// This router is mounted at the app root ("/"), so this guard chain sees EVERY
+// request in the app. Skip it entirely for non-contract paths: those requests
+// are authenticated by their own routers, and public endpoints (e.g. GET
+// /health) must stay reachable WITHOUT a token. Contract routes still require
+// auth. (enforceContractAccess independently short-circuits non-contract paths
+// via isContractPath, but requireAuth must be skipped here too or it would 401
+// unauthenticated public routes and double-authenticate everything else.)
+contractsRouter.use((req: AuthRequest, res: Response, next: NextFunction) => {
+  if (!isContractPath(req.path)) {
+    next();
+    return;
+  }
+  requireAuth(req, res, next);
+});
 contractsRouter.use(enforceContractAccess);
 
 /**
@@ -107,23 +120,8 @@ const db = () => admin.firestore();
 
 type ContractStatus = "unsigned" | "signed" | "archived";
 
-/**
- * GET /api/employees/:employeeId/contracts
- * List all contracts for an employee. Admin/director/manager only.
- */
-contractsRouter.get(
-  "/employees/:employeeId/contracts",
-  requirePermission("contracts.view"),
-  async (req: AuthRequest, res: Response) => {
-    const snap = await db()
-      .collection("employees")
-      .doc(req.params.employeeId)
-      .collection("contracts")
-      .orderBy("generatedAt", "desc")
-      .get();
-    res.json(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-  }
-);
+// NOTE: GET /employees/:id/contracts (list) lives in employees.ts; that router
+// is mounted before this one, so a copy here would be dead code. Do not re-add.
 
 /**
  * POST /api/employees/:employeeId/contracts
