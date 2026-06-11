@@ -296,7 +296,7 @@ jobPositionsRouter.delete(
     if (typeof posName === "string" && posName) {
       const empHit = await db().collection("employees").where("currentJobTitle", "==", posName).limit(1).get();
       if (!empHit.empty) {
-        res.status(400).json({ error: "Nelze smazat pozici, kterou používají zaměstnanci (ovlivnilo by to výpočet mezd)." });
+        res.status(400).json({ error: "Nelze smazat pracovní pozici, kterou mají aktivní zaměstnanci ve smlouvě." });
         return;
       }
     }
