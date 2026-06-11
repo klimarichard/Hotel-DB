@@ -39,7 +39,7 @@ export default function OtherDocumentsTab({ employeeId }: Props) {
   const canView = can("documents.view");
   const canUpload = can("documents.upload");
   const canDelete = can("documents.delete");
-  const canExportTaxDeclaration = can("documents.export.taxDeclaration");
+  const canExportTaxDeclaration = can("employment.manage") || can("documents.view");
   const [docs, setDocs] = useState<OtherDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

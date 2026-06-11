@@ -828,7 +828,7 @@ employeesRouter.post(
  */
 employeesRouter.get(
   "/:id/questionnaire-pdf",
-  requirePermission("employees.export.questionnaire"),
+  requirePermission("employees.view.all", "employees.view.nonManagement"),
   async (req: AuthRequest, res) => {
     const id = req.params.id;
     const empRef = db().collection("employees").doc(id);
@@ -916,7 +916,7 @@ employeesRouter.get(
  */
 employeesRouter.get(
   "/:id/tax-declaration-pdf",
-  requirePermission("documents.export.taxDeclaration"),
+  requirePermission("employment.manage", "documents.view"),
   async (req: AuthRequest, res) => {
     const id = req.params.id;
     const empRef = db().collection("employees").doc(id);

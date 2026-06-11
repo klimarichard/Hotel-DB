@@ -127,6 +127,7 @@ export const APP_TOUR_STEPS: TourStep[] = [
   // ── Zaměstnanec — karta: REAL detail page fed by mock data (/zamestnanci/tour-demo) ──
   // Detail-tab sections are expanded by default; history/docs controls live on
   // their tab, so those steps `reveal` (click) the tab button first.
+  { permission: ["employees.view.all", "employees.view.nonManagement"], addedInVersion: 7, anchor: "emp-hero-questionnaire", route: DEMO_EMP, title: "Osobní dotazník", body: "Tlačítkem Dotazník otevřete v novém okně vyplněný osobní dotazník zaměstnance (PDF) k vytištění.", placement: "bottom" },
   { permission: "employees.edit", anchor: "emp-hero-edit", route: DEMO_EMP, title: "Úprava zaměstnance", body: "Tlačítkem Upravit změníte údaje na kartě zaměstnance.", placement: "bottom" },
   { permission: "employees.delete", anchor: "emp-hero-delete", route: DEMO_EMP, title: "Smazání zaměstnance", body: "Tlačítkem Smazat nevratně odstraníte kartu zaměstnance (aplikace se zeptá na potvrzení). Nelze smazat zaměstnance, který má záznamy v tabulce směn.", placement: "bottom" },
   { permission: "sensitive.reveal", anchor: "emp-reveal", route: DEMO_EMP, reveal: ["emp-tab-detail"], title: "Zobrazení citlivých údajů", body: "Ikonou oka dočasně odhalíte citlivé údaje (např. rodné číslo, číslo účtu). Každé zobrazení je zaznamenáno v logu aplikace.", placement: "left" },
@@ -141,6 +142,7 @@ export const APP_TOUR_STEPS: TourStep[] = [
   { permission: "contracts.delete", anchor: "emp-contract-delete", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Smazání smlouvy", body: "Tlačítkem Smazat smlouvu odstraníte vygenerovanou smlouvu (aplikace se zeptá na potvrzení).", placement: "left" },
   { permission: "contracts.sign", anchor: "emp-contract-sign", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Podepsaná smlouva", body: "Tlačítkem Nahrát podepsanou smlouvu označíte smlouvu jako podepsanou a nahrajete naskenovanou podepsanou verzi.", placement: "left" },
   { permission: "documents.view", anchor: "emp-tab-docs", route: DEMO_EMP, reveal: ["emp-tab-docs"], title: "Další dokumenty", body: "Na záložce Další dokumenty vidíte nahrané dokumenty zaměstnance.", placement: "left" },
+  { permission: ["employment.manage", "documents.view"], addedInVersion: 7, anchor: "emp-doc-tax-declaration", route: DEMO_EMP, reveal: ["emp-tab-docs"], title: "Prohlášení poplatníka", body: "Tlačítkem Prohlášení poplatníka vygenerujete vyplněné prohlášení poplatníka daně (PDF) — nejprve zadáte zdaňovací období.", placement: "bottom" },
   { permission: "documents.upload", anchor: "emp-doc-upload", route: DEMO_EMP, reveal: ["emp-tab-docs"], title: "Nahrání dokumentu", body: "Tlačítkem Nahrát dokument přidáte k zaměstnanci další dokument.", placement: "bottom" },
   { permission: "documents.delete", anchor: "emp-doc-delete", route: DEMO_EMP, reveal: ["emp-tab-docs"], title: "Smazání dokumentu", body: "Tlačítkem Smazat odstraníte nahraný dokument (aplikace se zeptá na potvrzení).", placement: "left" },
 
@@ -219,7 +221,7 @@ export const appTour: TourDefinition = {
   // Highest step `addedInVersion` in the list. Bump it (and stamp the new steps'
   // `addedInVersion`) whenever you add steps for a new feature — returning users
   // then see ONLY those steps; first-time users still get the whole tour.
-  version: 6,
+  version: 7,
   label: "Prohlídka aplikace",
   steps: APP_TOUR_STEPS,
 };
