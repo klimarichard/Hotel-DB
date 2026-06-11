@@ -162,6 +162,17 @@ companiesRouter.delete(
   requireAuth,
   requirePermission("settings.companies.manage"),
   async (req: AuthRequest, res: Response) => {
+    // Block delete if any employee (current company) or employment row still
+    // references this company — otherwise they're left pointing at a dead
+    // companyId. Mirrors the departments "still in use" guard.
+    const [empHit, emplHit] = await Promise.all([
+      db().collection("employees").where("currentCompanyId", "==", req.params.id).limit(1).get(),
+      db().collectionGroup("employment").where("companyId", "==", req.params.id).limit(1).get(),
+    ]);
+    if (!empHit.empty || !emplHit.empty) {
+      res.status(400).json({ error: "Nelze smazat společnost, kterou používají zaměstnanci nebo jejich smlouvy." });
+      return;
+    }
     const ref = db().collection("companies").doc(req.params.id);
     const beforeSnap = await ref.get();
     const beforeData = beforeSnap.exists ? (beforeSnap.data() as Record<string, unknown>) : {};
