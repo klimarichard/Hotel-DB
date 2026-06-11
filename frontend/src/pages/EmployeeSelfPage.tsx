@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { api, errorMessage } from "@/lib/api";
 import { tourDemo } from "@/lib/tours/demoData";
 import { useAuth } from "@/hooks/useAuth";
 import Button from "@/components/Button";
@@ -296,7 +296,7 @@ export default function EmployeeSelfPage() {
         showCancel: false,
       });
     } catch (e) {
-      setDialog({ title: "Chyba", message: (e as Error).message || "Odeslání se nezdařilo.", showCancel: false });
+      setDialog({ title: "Chyba", message: errorMessage(e, "Odeslání se nezdařilo."), showCancel: false });
     } finally {
       setSubmitting(false);
     }
