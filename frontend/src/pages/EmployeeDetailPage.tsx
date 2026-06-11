@@ -1140,7 +1140,7 @@ export default function EmployeeDetailPage() {
   const canDeleteEmployee = can("employees.delete");
   const canManageEmployment = can("employment.manage");
   const canGenerateContracts = can("contracts.generate");
-  const canExportQuestionnaire = can("employees.export.questionnaire");
+  const canExportQuestionnaire = can("employees.view.all") || can("employees.view.nonManagement");
 
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [employment, setEmployment] = useState<EmploymentRow[]>([]);
