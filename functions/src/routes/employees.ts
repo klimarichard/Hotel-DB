@@ -17,6 +17,7 @@ import {
 } from "../services/probationAlerts";
 import * as clock from "../services/clock";
 import { fillQuestionnairePdf, fillProhlaseniPdf } from "../services/formPdf";
+import { formatNationality } from "../services/nationalities";
 import { randomUUID } from "crypto";
 import {
   anyPeriodActiveOn,
@@ -866,7 +867,7 @@ employeesRouter.get(
       firstName: asStr(root.firstName),
       lastName: asStr(root.lastName),
       birthSurname: asStr(root.birthSurname),
-      nationality: asStr(root.nationality),
+      nationality: formatNationality(asStr(root.nationality)),
       placeOfBirth: asStr(root.placeOfBirth),
       dateOfBirth: asStr(root.dateOfBirth),
       birthNumber: asStr(root.birthNumber),
