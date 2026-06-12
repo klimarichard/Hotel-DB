@@ -175,8 +175,11 @@ export function computeEffectiveState(
       } else if (ch.changeKind === "úvazek" && ch.value) {
         const mapped = uvazekToContractType(ch.value);
         if (mapped) contractType = mapped;
-      } else if (ch.changeKind === "délka smlouvy" && ch.value) {
-        endDate = ch.value;
+      } else if (ch.changeKind === "délka smlouvy") {
+        // Empty value = "změna na dobu neurčitou": a Dodatek can clear a fixed
+        // end date. The falsy guard used to drop this, leaving the original end
+        // date (employee wrongly shown as terminated).
+        endDate = ch.value || null;
       }
     }
   }

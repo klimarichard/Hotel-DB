@@ -26,6 +26,7 @@ doc_templates/
 # Local working notes & screenshots (not tracked)
 TODO_change_log.md
 tour_notes.md
+PERMISSIONS_LIST.md
 screenshots/
 
 # Editor / IDE settings (machine-specific)

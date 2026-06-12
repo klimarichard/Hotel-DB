@@ -140,7 +140,9 @@ function buildSessions(rows: EmploymentRowLite[]): SessionLite[] {
     let end = cur.nastup.endDate ?? null;
     for (const dod of cur.dodatky) {
       for (const ch of dod.changes ?? []) {
-        if (ch.changeKind === "délka smlouvy" && ch.value) end = ch.value;
+        // Empty value = change to doba neurčitá: a Dodatek clears a fixed end
+        // date, so proration must not treat the session as ending (don't drop null).
+        if (ch.changeKind === "délka smlouvy") end = ch.value || null;
       }
     }
     if (cur.ukonceni && cur.ukonceni.startDate) end = cur.ukonceni.startDate;
@@ -216,9 +218,10 @@ export function effectiveCompFromRows(
   rows: EmploymentRowLite[],
   year: number,
   month: number
-): { salary: number | null; hourlyRate: number | null; contractType: string; jobTitle: string } | null {
+): { salary: number | null; hourlyRate: number | null; contractType: string; jobTitle: string; positionChanged: boolean } | null {
   const relevant = relevantSessionForMonth(buildSessions(rows), year, month);
   if (!relevant) return null;
+  const nastupJobTitle = relevant.nastup.jobTitle ?? "";
   const { monthEnd } = monthBounds(year, month);
 
   let salary: number | null = null;
@@ -246,7 +249,10 @@ export function effectiveCompFromRows(
       }
     }
   }
-  return { salary, hourlyRate, contractType, jobTitle };
+  // positionChanged: a "pracovní pozice" Dodatek moved the employee off the
+  // Nástup position, so the Nástup's folded hourlyRate is stale for navíc.
+  const positionChanged = normalizePositionName(jobTitle) !== normalizePositionName(nastupJobTitle);
+  return { salary, hourlyRate, contractType, jobTitle, positionChanged };
 }
 
 function normalizePositionName(name: string): string {
@@ -273,23 +279,37 @@ async function loadPositionHourlyRates(): Promise<Map<string, number>> {
 }
 
 /**
- * Effective hourly rate for the payroll entry. DPP is paid totalHours × the
- * position's hourly rate, so when the employment session carries no rate (DPP
- * rows never do) we fall back to the rate on the matching jobPosition. Non-DPP
- * contracts keep the rate folded from the employment row — unchanged behaviour.
+ * Effective hourly rate for the payroll entry (drives navíc = rate × extraHours).
+ * DPP is paid totalHours × the position's hourly rate, so when the employment
+ * session carries no rate (DPP rows never do) we fall back to the rate on the
+ * matching jobPosition.
+ *
+ * For HPP/PPP the rate is the one folded from the Nástup row — EXCEPT when a
+ * Dodatek changed the position (`positionChanged`): the Nástup's stored rate
+ * then belongs to the old position, so the navíc rate must follow the new
+ * position's configured rate (TODO item 28 — Chebatar: bell-boy → receptionist
+ * navíc still paid at the old 150 Kč). Employees without a position change are
+ * untouched (the position fallback only fires when a rate exists for the new
+ * position, never zeroing an otherwise-valid rate).
  * Pure + exported for unit testing.
  */
 export function resolveHourlyRate(
   contractType: string,
   jobTitle: string,
   effHourlyRate: number | null | undefined,
-  positionRates: Map<string, number>
+  positionRates: Map<string, number>,
+  positionChanged = false
 ): number | null {
-  if (effHourlyRate != null) return effHourlyRate;
   if (contractType === "DPP") {
     return positionRates.get(normalizePositionName(jobTitle)) ?? null;
   }
-  return null;
+  // HPP/PPP: a Dodatek position change makes the folded Nástup rate stale —
+  // prefer the new position's rate when one is configured.
+  if (positionChanged) {
+    const posRate = positionRates.get(normalizePositionName(jobTitle));
+    if (posRate != null) return posRate;
+  }
+  return effHourlyRate ?? null;
 }
 
 /**
@@ -411,7 +431,10 @@ export function calculateEntry(
   baseHours: number,
   foodVoucherRate: number,
   year: number,
-  month: number
+  month: number,
+  // Min shift length (hours) that earns a food voucher. Default 3 keeps callers
+  // that don't pass it (smoke tests) on the new behaviour (TODO item 10).
+  mealAllowanceMinHours = 3
 ): EmployeeEntry {
   const myShifts = shifts.filter((s) => s.employeeId === employee.employeeId);
   const isDpp = employee.contractType === "DPP";
@@ -428,8 +451,9 @@ export function calculateEntry(
 
     if (shift.status === "assigned" && h > 0) {
       totalHours += h;
-      // Food vouchers: only days worked more than 6 hours (HO at 6h does NOT count)
-      if (h > 6) workingDays++;
+      // Food vouchers: a shift earns one when it is at least mealAllowanceMinHours
+      // long (configurable in Settings → Mzdy; default 3 h, was a hardcoded >6 h).
+      if (h >= mealAllowanceMinHours) workingDays++;
       if (isWeekend(shift.date)) weekendHours += h;
       if (holidays.has(shift.date)) holidayHours += h;
       // Night hours: 8h per night segment (each 12h night shift → 8 night hours)
@@ -558,6 +582,16 @@ export async function getMultisportBasePrice(): Promise<number> {
   return snap.exists ? ((snap.data()?.multisportBasePrice as number) ?? 470) : 470;
 }
 
+/**
+ * Read mealAllowanceMinHours (min shift length, in hours, that earns a food
+ * voucher) from settings/payroll, fallback to 3 if not set. TODO item 10:
+ * the threshold used to be a hardcoded 6 h; it is now configurable (default 3).
+ */
+async function getMealAllowanceMinHours(): Promise<number> {
+  const snap = await db().collection("settings").doc("payroll").get();
+  return snap.exists ? ((snap.data()?.mealAllowanceMinHours as number) ?? 3) : 3;
+}
+
 /** Load an employee's Multisport periods + companions (legacy single-window aware). */
 async function loadMultisport(
   employeeId: string
@@ -681,6 +715,11 @@ export async function createOrUpdatePayrollPeriod(
   const multisportBasePrice = existing.empty
     ? await getMultisportBasePrice()
     : ((existing.docs[0].data().multisportBasePrice as number | undefined) ?? await getMultisportBasePrice());
+  // Same freeze-at-creation semantics: lock the food-voucher min-shift-length on
+  // the period so a later settings change can't retroactively alter past payrolls.
+  const mealAllowanceMinHours = existing.empty
+    ? await getMealAllowanceMinHours()
+    : ((existing.docs[0].data().mealAllowanceMinHours as number | undefined) ?? await getMealAllowanceMinHours());
 
   let periodRef: admin.firestore.DocumentReference;
   const periodData = {
@@ -692,6 +731,7 @@ export async function createOrUpdatePayrollPeriod(
     maxHolidayHours,
     foodVoucherRate,
     multisportBasePrice,
+    mealAllowanceMinHours,
     updatedAt: FieldValue.serverTimestamp(),
   };
 
@@ -780,7 +820,7 @@ export async function createOrUpdatePayrollPeriod(
       displayName: planEmp.displayName as string ?? "",
       contractType,
       salary: eff?.salary ?? null,
-      hourlyRate: resolveHourlyRate(contractType, jobTitle, eff?.hourlyRate, positionRates),
+      hourlyRate: resolveHourlyRate(contractType, jobTitle, eff?.hourlyRate, positionRates, eff?.positionChanged ?? false),
       jobTitle,
       section: planEmp.section as string ?? "",
       sickLeaveHours: sickLeaveMap.get(employeeId) ?? 0,
@@ -792,7 +832,7 @@ export async function createOrUpdatePayrollPeriod(
     const proratedBase = proratedBaseFromRows(empRows, year, month);
     const empBaseHours = proratedBase ?? baseHours;
 
-    const entry = calculateEntry(employee, allShifts, holidays, empBaseHours, foodVoucherRate, year, month);
+    const entry = calculateEntry(employee, allShifts, holidays, empBaseHours, foodVoucherRate, year, month, mealAllowanceMinHours);
     const { price: multisportPrice, startNotes: multisportStart } =
       await getMultisportForMonth(employeeId, year, month, multisportBasePrice);
     const multisportActive = multisportPrice > 0;
@@ -874,6 +914,7 @@ export async function recomputeEntryForEmployee(
   if (!planId || year == null || month == null) return false;
   const foodVoucherRate = (pdata.foodVoucherRate as number | undefined) ?? (await getFoodVoucherRate());
   const multisportBasePrice = (pdata.multisportBasePrice as number | undefined) ?? (await getMultisportBasePrice());
+  const mealAllowanceMinHours = (pdata.mealAllowanceMinHours as number | undefined) ?? (await getMealAllowanceMinHours());
 
   const holidays = getCzechHolidays(year);
 
@@ -926,7 +967,7 @@ export async function recomputeEntryForEmployee(
   const proratedBase = proratedBaseFromRows(empRows, year, month);
   const empBaseHours = proratedBase ?? getBaseHours(year, month);
 
-  const entry = calculateEntry(employee, shifts, holidays, empBaseHours, foodVoucherRate, year, month);
+  const entry = calculateEntry(employee, shifts, holidays, empBaseHours, foodVoucherRate, year, month, mealAllowanceMinHours);
   const { price: multisportPrice, startNotes: multisportStart } =
     await getMultisportForMonth(employeeId, year, month, multisportBasePrice);
   const multisportActive = multisportPrice > 0;
