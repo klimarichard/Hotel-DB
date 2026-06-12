@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import Button from "./Button";
 import IconButton from "./IconButton";
 import { authApi, roleTypesApi, type RoleType, type UserProfile } from "@/lib/api";
-import { GRANTABLE_CATALOG } from "@/lib/permissions/catalog";
+import PermissionMatrix from "@/components/permissions/PermissionMatrix";
+import { resolveToggle } from "@/lib/permissions/hierarchy";
 import { useAuth } from "@/hooks/useAuth";
 import styles from "./UserPermissionsModal.module.css";
 
@@ -55,22 +56,16 @@ export default function UserPermissionsModal({ user, onClose, onSaved }: Props) 
 
   function toggle(key: string) {
     if (matrixReadOnly) return;
-    const inBaseline = baseline.has(key);
-    const on = effectiveHas(key);
-    const ex = new Set(extra);
-    const rv = new Set(revoked);
-    if (on) {
-      // turn off
-      if (inBaseline) rv.add(key);
-      ex.delete(key);
-    } else {
-      // turn on
-      if (inBaseline) rv.delete(key);
-      else ex.add(key);
-      rv.delete(key);
-    }
-    setExtra(ex);
-    setRevoked(rv);
+    // The matrix shows the EFFECTIVE set (baseline ∪ extra − revoked); run the
+    // hierarchy cascade/exclusion on that, then re-decompose into deltas from the
+    // type baseline. A cascade/exclusion removal of a BASELINE perm becomes a
+    // revoke (●); removal of an EXTRA perm just drops from extra.
+    const eff = new Set<string>(baseline);
+    for (const k of extra) eff.add(k);
+    for (const k of revoked) eff.delete(k);
+    const next = resolveToggle(eff, key);
+    setExtra(new Set([...next].filter((k) => !baseline.has(k))));
+    setRevoked(new Set([...baseline].filter((k) => !next.has(k))));
   }
 
   function changeType(id: string) {
@@ -135,29 +130,19 @@ export default function UserPermissionsModal({ user, onClose, onSaved }: Props) 
               </p>
             )}
 
-            <div className={styles.matrix}>
-              {GRANTABLE_CATALOG.map((group) => (
-                <fieldset key={group.group} className={styles.group} disabled={matrixReadOnly}>
-                  <legend className={styles.groupLegend}>{group.group}</legend>
-                  <div className={styles.groupItems}>
-                    {group.items.map((item) => {
-                      const overridden = extra.has(item.key) || revoked.has(item.key);
-                      return (
-                        <label key={item.key} className={styles.permItem}>
-                          <input
-                            type="checkbox"
-                            checked={effectiveHas(item.key)}
-                            disabled={matrixReadOnly}
-                            onChange={() => toggle(item.key)}
-                          />
-                          <span>{item.label}</span>
-                          {overridden && <span className={styles.overrideDot} title="Individuální úprava">●</span>}
-                        </label>
-                      );
-                    })}
-                  </div>
-                </fieldset>
-              ))}
+            <div className={styles.matrixScroll}>
+              <PermissionMatrix
+                isChecked={effectiveHas}
+                onToggle={toggle}
+                readOnly={matrixReadOnly}
+                forceAllOn={adminBaseline}
+                gridLayout
+                decorate={(key) =>
+                  extra.has(key) || revoked.has(key) ? (
+                    <span className={styles.overrideDot} title="Individuální úprava">●</span>
+                  ) : null
+                }
+              />
             </div>
 
             {err && <p className={styles.err}>{err}</p>}

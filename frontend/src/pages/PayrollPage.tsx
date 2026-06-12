@@ -358,7 +358,7 @@ export default function PayrollPage() {
   useEffect(() => { loadPeriod(); }, [loadPeriod]);
 
   if (authLoading) return <div className={styles.state}>Načítám…</div>;
-  if (!can("payroll.view")) return <Navigate to="/" replace />;
+  if (!can("nav.payroll.view")) return <Navigate to="/" replace />;
 
   const isLocked = period?.locked === true;
   // Permission-derived (Phase 3). Same coverage as before: payroll.edit =

@@ -16,10 +16,20 @@ Two password-reset flows using Firebase Auth built-in email:
 
 ### Permission catalogue (fixed vocabulary)
 
-Permissions are a **fixed vocabulary of ~90 granular keys** — a catalogue, not free-form strings. Keys are grouped by area: navigation, employees, sensitive data, employment, contracts, documents, benefits, payroll, shifts, vacation, alerts, change-requests, audit, dashboard, master-data/settings, users, system, and self-profile.
+Permissions are a **fixed vocabulary of ~87 granular keys** — a catalogue, not free-form strings.
 
-- **Backend source of truth**: `functions/src/auth/permissions.ts` (`PERMISSION_CATALOG`).
-- **Frontend mirror**: `frontend/src/lib/permissions/catalog.ts` — the keys must stay in sync with the backend catalogue.
+- **Backend source of truth**: `functions/src/auth/permissions.ts` (`PERMISSION_CATALOG`) — a **flat** list of `{ group, items: [{ key, label }] }`. The backend stores and validates a flat permission array and is unaware of the frontend hierarchy.
+- **Frontend mirror**: `frontend/src/lib/permissions/catalog.ts` — keys must stay in sync with the backend (a manual mirror; `scripts/_smoke-permissions-hierarchy.js` asserts the two key sets are equal). Since **v2.2.0** the frontend catalogue is **hierarchical** (`PERMISSION_SECTIONS`, one section per app page) — see "Hierarchical permission matrix" below.
+
+> **v2.2.0 — significant RBAC redesign.** The in-app matrix became a page-based **dependency hierarchy** (see below), and **six redundant keys were removed**, each folded into its `nav.X.view` master: `payroll.view`, `alerts.view`, `contractTemplates.view`, `audit.view` (the matching `nav.*` master now gates both menu/route AND the backend data endpoints + in-page sections); `self.profile.view` (was never enforced anywhere); and `masterData.view` (the číselník GETs — companies/departments/jobPositions — are now `requireAuth`-only, like `educationLevels`, so any authenticated user can read the reference lists that populate form dropdowns). A one-time data migration (`scripts/migrate-permission-keys.js`) remaps the removed keys onto their survivors across `roleTypes`, user docs, and custom claims. The catalogue went 93 → 87 keys.
+
+### Hierarchical permission matrix (frontend, v2.2.0)
+
+The frontend catalogue is a tree: **section → subsection → item**, where each item carries a `level` (0 = the section's `nav.X.view` master; 1–4 = nesting depth), an optional `exclusiveGroup`, and a `spaceBefore` flag. The structure is authored to match `PERMISSIONS_LIST.md` (a local working file).
+
+- **`frontend/src/lib/permissions/hierarchy.ts`** (pure, unit-tested) drives the UI affordance: `computeEnabled` (a child checkbox is clickable only when its parent is checked), `resolveToggle` (unchecking a parent cascades its descendants off; checking a mutually-exclusive item clears its siblings), and `normalize` (**repair-upward** — on save, a child whose parent is missing gains the missing ancestors rather than being dropped, since a parent is an enabling prerequisite; mutual-exclusion conflicts resolve keep-first).
+- **`frontend/src/components/permissions/PermissionMatrix.tsx`** is the shared renderer used by both editors; mutually-exclusive items render as **radio-style** controls. The hierarchy is a **frontend-only** affordance — the backend never sees it and remains the real gate (a flat-array membership check). `ALL_PERMISSIONS`, the `Permission` union, and a flat `PERMISSION_CATALOG` (group = section title) are still derived from `PERMISSION_SECTIONS` for back-compat (e.g. the Nápověda HelpPage).
+- The **Systém** section's master is `system.access` ("Přístup k systémovým funkcím") — an umbrella key that is **inert server-side** (no `requirePermission` checks it); it only organises the three system rights in the matrix.
 
 The special `system.admin` permission **expands to ALL permissions** and cannot be revoked. It is also **non-grantable through the RBAC editors**: `sanitizePermissionList` (in `permissions.ts`, backed by `NON_GRANTABLE_PERMISSIONS`) strips `system.admin` from every grant path — a user type's `permissions` array (create + edit) and a per-user `extraPermissions` grant. The **only** way to confer superadmin is to assign the protected built-in `admin` type itself. This stops a delegated user-manager (a custom type holding `userTypes.manage` or `users.permissions.manage` but not `system.admin`) from editing `system.admin` onto its own type / its own user and self-escalating.
 
@@ -121,16 +131,16 @@ The route guard is the source of truth — the menu is just for discoverability.
 
 ### Settings → Uživatelské typy
 
-Visible to users who can manage types (`userTypes.manage`). Lists all user types with badges (**systém** / **vedení** / **počet oprávnění**). Selecting a type shows an **editable matrix of permissions grouped by area**, plus a **"Vedení"** (management) toggle and the type name.
+Visible to users who can manage types (`userTypes.manage`). Lists all user types with badges (**systém** / **vedení** / **počet oprávnění**). Selecting a type shows the **hierarchical permission matrix** (page-based sections with dependency gating; see "Hierarchical permission matrix" above), plus a **"Vedení"** (management) toggle and the type name.
 
 - **Create** a new type by cloning an existing one or starting blank ("Prázdný (bez práv)", behind a confirmation).
 - **Delete** a type — except the system **"Administrátor"** type (blocked), and a type still assigned to users can't be deleted until those users are reassigned.
-- The **Administrátor** type is **read-only**.
-- The matrix is driven by `GRANTABLE_CATALOG` (the catalogue minus `NON_GRANTABLE_PERMISSIONS`), so **`system.admin` is not offered as a togglable permission** in either this editor or the per-user "Oprávnění" modal — it can't be granted, only conferred by assigning the `admin` type. The backend strips it regardless.
+- The **Administrátor** type is **read-only** (matrix rendered all-on, locked).
+- The matrix (`PermissionMatrix`, shared with the per-user modal) renders `system.admin` **disabled** in its Systém section — it can't be granted, only conferred by assigning the `admin` type; the backend strips it regardless. On save, the type's set is `normalize()`d (repair-upward + exclusivity).
 
 ### Settings → Uživatelé → per-user "Oprávnění"
 
-The per-user **"Oprávnění"** button lets an admin choose the user's **type** from a dropdown and fine-tune individual permissions on top of it. Ticking/unticking a box that differs from the type is saved as an individual **grant/revoke** (marked ●).
+The per-user **"Oprávnění"** button lets an admin choose the user's **type** from a dropdown and fine-tune individual permissions on top of it. Ticking/unticking a box that differs from the type is saved as an individual **grant/revoke** (marked ●). It uses the same hierarchical `PermissionMatrix` (single-column, scrollable in the modal): the dependency cascade runs on the **effective** set (`baseline ∪ extra − revoked`), then re-decomposes into `extra = next − baseline` / `revoked = baseline − next` — so cascading off a type-inherited permission becomes a revoke (●), while removing a per-user grant just drops it.
 
 **`users.setType` vs `users.permissions.manage` are enforced separately.** `PATCH /api/auth/users/:uid/permissions` is reachable with *either* permission, but they are not equivalent: changing a user's **`roleType`** is the lower-trust action (`users.setType`), while writing per-user **`extraPermissions`/`revokedPermissions`** is the higher-trust one and requires **`users.permissions.manage`** specifically. A caller holding only `users.setType` may change the type but the backend rejects (403) any attempt to write grants/revokes; the frontend mirrors this — the permission matrix in the modal is **read-only** for such a caller and `save()` sends only `roleType`. (Previously the OR-gate honoured grant/revoke fields from a setType-only caller, which let them self-grant anything — now closed.)
 

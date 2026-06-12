@@ -148,7 +148,7 @@ export default function AuditLogPage() {
   // Přehled even though the route guard already passed. Mirrors PayrollPage /
   // SettingsPage.
   if (authLoading) return null;
-  if (!can("audit.view")) return <Navigate to="/" replace />;
+  if (!can("nav.audit.view")) return <Navigate to="/" replace />;
 
   return (
     <div>

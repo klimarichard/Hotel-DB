@@ -24,7 +24,7 @@ const DEFAULT_LIMIT = 100;
 auditLogRouter.get(
   "/",
   requireAuth,
-  requirePermission("audit.view"),
+  requirePermission("nav.audit.view"),
   async (req: AuthRequest, res: Response) => {
     const {
       employeeId,
@@ -89,7 +89,7 @@ auditLogRouter.get(
 auditLogRouter.get(
   "/:id",
   requireAuth,
-  requirePermission("audit.view"),
+  requirePermission("nav.audit.view"),
   async (req: AuthRequest, res: Response) => {
     const doc = await db().collection("auditLog").doc(req.params.id).get();
     if (!doc.exists) {
@@ -109,7 +109,7 @@ auditLogRouter.get(
 auditLogRouter.get(
   "/meta/collections",
   requireAuth,
-  requirePermission("audit.view"),
+  requirePermission("nav.audit.view"),
   async (_req: AuthRequest, res: Response) => {
     const snap = await db()
       .collection("auditLog")

@@ -78,7 +78,6 @@ export const PERMISSION_CATALOG = [
       { key: "contracts.edit", label: "Upravit smlouvu" },
       { key: "contracts.delete", label: "Smazat smlouvu" },
       { key: "contracts.sign", label: "Označit/nahrát podepsanou" },
-      { key: "contractTemplates.view", label: "Zobrazit šablony" },
       { key: "contractTemplates.manage", label: "Spravovat šablony" },
     ],
   },
@@ -100,7 +99,6 @@ export const PERMISSION_CATALOG = [
   {
     group: "Mzdy",
     items: [
-      { key: "payroll.view", label: "Zobrazit mzdy" },
       { key: "payroll.create", label: "Vytvořit mzdové období" },
       { key: "payroll.edit", label: "Upravit mzdy (odemčené)" },
       { key: "payroll.recalculate", label: "Přepočítat (měkce)" },
@@ -148,7 +146,6 @@ export const PERMISSION_CATALOG = [
   {
     group: "Upozornění",
     items: [
-      { key: "alerts.view", label: "Zobrazit upozornění" },
       { key: "alerts.read", label: "Označit upozornění jako přečtené" },
     ],
   },
@@ -157,10 +154,6 @@ export const PERMISSION_CATALOG = [
     items: [
       { key: "changeRequests.review", label: "Schvalovat úpravy údajů" },
     ],
-  },
-  {
-    group: "Log změn",
-    items: [{ key: "audit.view", label: "Zobrazit log změn" }],
   },
   {
     group: "Přehled",
@@ -174,7 +167,6 @@ export const PERMISSION_CATALOG = [
   {
     group: "Číselníky a nastavení",
     items: [
-      { key: "masterData.view", label: "Číst číselníky (firmy/oddělení/pozice/vzdělání)" },
       { key: "settings.companies.manage", label: "Spravovat společnosti" },
       { key: "settings.departments.manage", label: "Spravovat oddělení" },
       { key: "settings.jobPositions.manage", label: "Spravovat pracovní pozice" },
@@ -197,6 +189,10 @@ export const PERMISSION_CATALOG = [
   {
     group: "Systém",
     items: [
+      // Umbrella gate for the "Systém" matrix section (frontend hierarchy master).
+      // Inert server-side — no requirePermission checks it; it only organises the
+      // three system rights below in the in-app permission matrix.
+      { key: "system.access", label: "Přístup k systémovým funkcím" },
       { key: "system.admin", label: "Superadmin (vše)" },
       { key: "system.timeOverride", label: "Testovací hodiny (mimo produkci)" },
       { key: "system.triggers", label: "Ruční spuštění naplánovaných úloh" },
@@ -205,7 +201,6 @@ export const PERMISSION_CATALOG = [
   {
     group: "Vlastní profil",
     items: [
-      { key: "self.profile.view", label: "Zobrazit vlastní profil" },
       { key: "self.profile.requestEdit", label: "Navrhnout úpravu vlastního profilu" },
     ],
   },
@@ -230,7 +225,6 @@ const BASE_SELF: Permission[] = [
   "nav.dashboard.view",
   "nav.profile.view",
   "dashboard.view",
-  "self.profile.view",
   "self.profile.requestEdit",
   "sensitive.reveal.self",
   "vacation.request.self",
@@ -248,10 +242,10 @@ export const BUILTIN_TYPE_PERMISSIONS: Record<BuiltinTypeId, Permission[]> = {
     "sensitive.reveal",
     "employment.view", "employment.manage",
     "contracts.view", "contracts.generate", "contracts.edit", "contracts.delete", "contracts.sign",
-    "contractTemplates.view", "contractTemplates.manage",
+    "contractTemplates.manage",
     "documents.view", "documents.upload", "documents.delete",
     "benefits.view", "benefits.edit",
-    "payroll.view", "payroll.create", "payroll.edit", "payroll.recalculate",
+    "payroll.create", "payroll.edit", "payroll.recalculate",
     "payroll.export", "payroll.notes.manage",
     // plan.delete + counterTable are admin-only in the UI today; revert is too.
     "shifts.view.all", "shifts.plan.create", "shifts.plan.edit",
@@ -259,11 +253,9 @@ export const BUILTIN_TYPE_PERMISSIONS: Record<BuiltinTypeId, Permission[]> = {
     "shifts.mod.manage", "shifts.xAllowance.manage", "shifts.freeShift.manage",
     "shifts.changeRequest.review", "shifts.override.review", "shifts.export",
     "vacation.view.all", "vacation.review",
-    "alerts.view", "alerts.read",
+    "alerts.read",
     "changeRequests.review",
-    "audit.view",
     "dashboard.tasks.view", "dashboard.stats.view", "dashboard.staffing.view",
-    "masterData.view",
     "settings.companies.manage", "settings.departments.manage",
     "settings.jobPositions.manage",
   ],
@@ -299,7 +291,6 @@ export const BUILTIN_TYPE_PERMISSIONS: Record<BuiltinTypeId, Permission[]> = {
     "contracts.view",
     "documents.view",
     "benefits.view",
-    "masterData.view",
   ],
 };
 

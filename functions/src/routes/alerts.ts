@@ -50,7 +50,7 @@ async function setAlertsRead(
 alertsRouter.get(
   "/",
   requireAuth,
-  requirePermission("alerts.view"),
+  requirePermission("nav.alerts.view"),
   async (_req: AuthRequest, res) => {
     const snap = await db()
       .collection("alerts")
@@ -67,7 +67,7 @@ alertsRouter.get(
 alertsRouter.get(
   "/probation",
   requireAuth,
-  requirePermission("alerts.view"),
+  requirePermission("nav.alerts.view"),
   async (_req: AuthRequest, res) => {
     const snap = await db()
       .collection("probationAlerts")
