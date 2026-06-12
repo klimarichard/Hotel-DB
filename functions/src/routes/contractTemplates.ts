@@ -47,7 +47,7 @@ function extractVariables(html: string): string[] {
 contractTemplatesRouter.get(
   "/",
   requireAuth,
-  requirePermission("contractTemplates.view"),
+  requirePermission("nav.contractTemplates.view"),
   async (_req: AuthRequest, res: Response) => {
     const snap = await db().collection("contractTemplates").get();
     const docs = snap.docs.map((d) => {
@@ -138,7 +138,7 @@ contractTemplatesRouter.post(
 contractTemplatesRouter.get(
   "/:id",
   requireAuth,
-  requirePermission("contractTemplates.view"),
+  requirePermission("nav.contractTemplates.view"),
   async (req: AuthRequest, res: Response) => {
     const doc = await db().collection("contractTemplates").doc(req.params.id).get();
     if (!doc.exists) {

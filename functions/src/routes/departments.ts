@@ -16,10 +16,8 @@ const db = () => admin.firestore();
 departmentsRouter.get(
   "/",
   requireAuth,
-  // Read access for everyone who works with employee records — hr needs the
-  // list to pick a department when adding a contract; accountant reads it on
-  // the employee detail view. Mutations below stay admin/director.
-  requirePermission("masterData.view"),
+  // Read is open to any authenticated user — the department list populates form
+  // dropdowns. Mutations below stay admin/director (mirrors educationLevels).
   async (_req: AuthRequest, res: Response) => {
     const snap = await db().collection("departments").orderBy("displayOrder", "asc").get();
     res.json(snap.docs.map((d) => ({ id: d.id, ...d.data() })));

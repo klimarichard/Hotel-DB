@@ -43,7 +43,7 @@ export function AlertsProvider({ children }: { children: ReactNode }) {
   const [probationAlerts, setProbationAlerts] = useState<AlertFlag[]>([]);
 
   function fetchAll() {
-    if (!can("alerts.view")) return;
+    if (!can("nav.alerts.view")) return;
     api.get<AlertFlag[]>("/alerts").then(setAlerts).catch(() => {});
     api.get<AlertFlag[]>("/alerts/probation").then(setProbationAlerts).catch(() => {});
   }

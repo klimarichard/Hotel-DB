@@ -1978,7 +1978,7 @@ export default function EmployeeDetailPage() {
         )}
       </Section>
 
-      {can("audit.view") && id && (
+      {can("nav.audit.view") && id && (
         <Section title="Historie změn" sectionKey="audit" expanded={expanded.has("audit")} onToggle={toggle}>
           {expanded.has("audit") ? <EmployeeAuditHistory employeeId={id} employmentRows={employment} /> : null}
         </Section>

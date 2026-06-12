@@ -407,7 +407,7 @@ payrollRouter.delete(
 payrollRouter.get(
   "/settings",
   requireAuth,
-  requirePermission("payroll.view"),
+  requirePermission("nav.payroll.view"),
   async (_req: AuthRequest, res: Response) => {
     const snap = await db().collection("settings").doc("payroll").get();
     const data = snap.exists ? snap.data() : undefined;
@@ -492,7 +492,7 @@ payrollRouter.patch(
 payrollRouter.get(
   "/periods",
   requireAuth,
-  requirePermission("payroll.view"),
+  requirePermission("nav.payroll.view"),
   async (_req: AuthRequest, res: Response) => {
     const snap = await db()
       .collection("payrollPeriods")
@@ -527,7 +527,7 @@ async function hydrateMultisport(
 payrollRouter.get(
   "/periods/:id",
   requireAuth,
-  requirePermission("payroll.view"),
+  requirePermission("nav.payroll.view"),
   async (req: AuthRequest, res: Response) => {
     const periodRef = db().collection("payrollPeriods").doc(req.params.id);
     const [periodSnap, entriesSnap] = await Promise.all([
@@ -556,7 +556,7 @@ payrollRouter.get(
 payrollRouter.get(
   "/periods/by-month/:year/:month",
   requireAuth,
-  requirePermission("payroll.view"),
+  requirePermission("nav.payroll.view"),
   async (req: AuthRequest, res: Response) => {
     const year = parseInt(req.params.year);
     const month = parseInt(req.params.month);
