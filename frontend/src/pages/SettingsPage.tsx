@@ -808,6 +808,11 @@ export default function SettingsPage() {
             + Přidat vzdělání
           </Button>
         )}
+        {settingsTab === "companies" && can("settings.companies.manage") && (
+          <Button data-tour="settings-add-company" variant="primary" onClick={() => { setCompanyError(null); setCompanyCreateForm({ abbreviation: "", name: "", address: "", ic: "", dic: "", fileNo: "" }); setCompanyCreateOpen(true); }}>
+            + Přidat společnost
+          </Button>
+        )}
       </div>
 
       <div className={styles.tabs}>
@@ -1088,19 +1093,6 @@ export default function SettingsPage() {
       {settingsTab === "companies" && can("settings.companies.manage") && (
         <>
           {companyError && <p className={styles.errorState}>{companyError}</p>}
-          <div style={{ marginBottom: "1rem" }}>
-            <Button
-              data-tour="settings-add-company"
-              variant="primary"
-              onClick={() => {
-                setCompanyError(null);
-                setCompanyCreateForm({ abbreviation: "", name: "", address: "", ic: "", dic: "", fileNo: "" });
-                setCompanyCreateOpen(true);
-              }}
-            >
-              + Nová společnost
-            </Button>
-          </div>
           <div className={styles.companyList}>
           {Object.values(companyForms).map((c) => {
             const isEditing = companyEditId === c.id;
