@@ -268,7 +268,9 @@ export function computeEffectiveStatus(
       if (((d.startDate as string | undefined) ?? "") > today) continue;
       const changes = (d.changes as Array<{ changeKind?: string; value?: string }> | undefined) ?? [];
       for (const ch of changes) {
-        if (ch.changeKind === "délka smlouvy" && ch.value) endDate = ch.value;
+        // Empty value = change to doba neurčitá: a Dodatek clears a fixed end
+        // date, so the session is no longer terminated (don't drop the null).
+        if (ch.changeKind === "délka smlouvy") endDate = ch.value || null;
       }
     }
     if (s.ukonceniDate) endDate = s.ukonceniDate;

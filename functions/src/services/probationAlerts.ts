@@ -240,7 +240,9 @@ function sessionFlagsByNastup(
         (r.data.changes as Array<{ changeKind?: string; value?: string }> | undefined) ?? [];
       for (const ch of changes) {
         if (ch.changeKind === "mzda" && ch.value) current.hasSalaryDodatek = true;
-        else if (ch.changeKind === "délka smlouvy" && ch.value) current.endDate = ch.value;
+        // Empty value = change to doba neurčitá: a Dodatek clears a fixed end
+        // date, so the session stays active (don't drop the null and keep alerting).
+        else if (ch.changeKind === "délka smlouvy") current.endDate = ch.value || null;
       }
     } else if (ct === "ukončení" && current) {
       current.ukonceni = true;

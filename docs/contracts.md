@@ -172,7 +172,7 @@ Two changes to how DPP rows behave on the employment-history modal:
 
    Typing in the input flips an `agreedRewardManual` flag and freezes the value; a small "↻ auto" link beside the label re-engages auto-compute. Editing an existing row that already has a saved reward starts in manual mode so historical values are never overwritten silently. Switching contract type clears the reward and resets the manual flag.
 
-`GET/PATCH /payroll/settings` now reads/writes `dppMaxMonthlyReward` alongside `foodVoucherRate`; PATCH validates and accepts each field independently so editing one sub-section doesn't require sending the other. The Mzdy settings page (`SettingsPage.tsx`) renders the new value in its own sub-block under the existing meal-voucher controls — same "Upravit" → ConfirmModal pattern.
+`GET/PATCH /payroll/settings` reads/writes `foodVoucherRate`, `dppMaxMonthlyReward`, `minimumWage`, `multisportBasePrice` and `mealAllowanceMinHours`; PATCH validates and accepts each field independently (each `> 0`) so editing one sub-section doesn't require sending the others. The Mzdy settings page (`SettingsPage.tsx`) renders each as its own sub-block — same "Upravit" → ConfirmModal pattern. `mealAllowanceMinHours` (default 3) is the minimum shift length in hours that earns a stravenkový paušál; it is frozen onto each `payrollPeriods/{id}` at creation (like `foodVoucherRate`) so a settings change never alters already-generated periods.
 
 ### DPP template variables — Rozsah práce + Odměna (2026-04-30)
 Two new keys exposed under "Pracovní podmínky" in the contract-template variable picker:
