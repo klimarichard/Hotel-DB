@@ -1,15 +1,30 @@
-/* Masonry-style flow: section cards keep their hierarchy intact and fill columns. */
+/* Default (page context, e.g. UserTypesTab): CSS-columns masonry packs the
+   variable-height section cards densely. */
 .matrix {
   column-width: 320px;
   column-gap: 1rem;
   padding: 0.5rem 0 1rem;
 }
 
-.section {
+.matrix .section {
   break-inside: avoid;
   display: inline-block;
   width: 100%;
   margin: 0 0 1rem;
+}
+
+/* Grid variant (height-constrained containers, e.g. the per-user modal): grows
+   vertically by adding rows, so it scrolls cleanly — masonry would overflow
+   horizontally inside a capped, scrollable box. */
+.matrixGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 0.85rem;
+  align-items: start;
+  padding: 0.5rem 0 1rem;
+}
+
+.section {
   border: 1px solid var(--color-border-strong);
   border-radius: 6px;
   padding: 0.4rem 0.7rem 0.7rem;

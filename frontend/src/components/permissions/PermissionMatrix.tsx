@@ -13,6 +13,9 @@ interface Props {
   decorate?: (key: string) => ReactNode;
   /** Admin target: render everything checked + locked (system.admin confers all). */
   forceAllOn?: boolean;
+  /** Use a vertical grid instead of masonry — for height-constrained, scrollable
+   *  containers (the per-user modal) where masonry would overflow horizontally. */
+  gridLayout?: boolean;
 }
 
 /**
@@ -28,6 +31,7 @@ export default function PermissionMatrix({
   readOnly = false,
   decorate,
   forceAllOn = false,
+  gridLayout = false,
 }: Props) {
   // Build the checked set once, then the enabled map (skipped when all forced on).
   const checked = new Set<string>();
@@ -39,7 +43,7 @@ export default function PermissionMatrix({
   const enabled = forceAllOn ? null : computeEnabled(checked);
 
   return (
-    <div className={styles.matrix}>
+    <div className={gridLayout ? styles.matrixGrid : styles.matrix}>
       {RENDER_MODEL.map((section) => (
         <fieldset key={section.title} className={styles.section} disabled={readOnly}>
           <legend className={styles.sectionTitle}>{section.title}</legend>
