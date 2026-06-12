@@ -1964,14 +1964,23 @@ employeesRouter.delete(
       db().collection("payrollPeriods").get(),
       db().collection("shiftPlans").get(),
     ]);
-    const [payrollEntries, planMembers] = await Promise.all([
+    const [payrollEntries, planMembers, planCells] = await Promise.all([
       Promise.all(periodsSnap.docs.map((p) => p.ref.collection("entries").doc(id).get())),
       Promise.all(plansSnap.docs.map((pl) =>
         pl.ref.collection("planEmployees").where("employeeId", "==", id).limit(1).get()
       )),
+      // Also block on stray shift CELLS: a cell (shiftPlans/*/shifts) can outlive
+      // its planEmployees row (removed-from-plan without clearing cells, or legacy
+      // data), so checking membership alone let an employee with orphan-prone
+      // cells through the guard. Same index-free per-plan pattern.
+      Promise.all(plansSnap.docs.map((pl) =>
+        pl.ref.collection("shifts").where("employeeId", "==", id).limit(1).get()
+      )),
     ]);
     const hasHistory =
-      payrollEntries.some((e) => e.exists) || planMembers.some((m) => !m.empty);
+      payrollEntries.some((e) => e.exists) ||
+      planMembers.some((m) => !m.empty) ||
+      planCells.some((c) => !c.empty);
     if (hasHistory) {
       res.status(400).json({
         error:
@@ -2059,6 +2068,22 @@ employeesRouter.delete(
 
     // Cascade-delete probation alerts for this employee
     await deleteProbationAlertsForEmployee(id);
+
+    // Cascade-clean any stray shift-plan request docs (unavailability / override /
+    // change requests). The guard above blocks delete when the employee has plan
+    // membership or cells, but a pending request could linger without either
+    // (e.g. submitted, then the membership row was removed), so they'd otherwise
+    // dangle. Reuses plansSnap from the guard (plans are few/monthly).
+    for (const pl of plansSnap.docs) {
+      for (const col of ["unavailabilityRequests", "shiftOverrideRequests", "shiftChangeRequests"]) {
+        const rs = await pl.ref.collection(col).where("employeeId", "==", id).get();
+        if (!rs.empty) {
+          const batch = db().batch();
+          rs.docs.forEach((d) => batch.delete(d.ref));
+          await batch.commit();
+        }
+      }
+    }
 
     // Capture summary before delete for the audit log
     const empSnap = await empRef.get();
