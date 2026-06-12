@@ -240,10 +240,17 @@ export const PERMISSION_SECTIONS = [
           { key: "settings.menuOrder.manage", label: "Spravovat pořadí menu", level: 1 },
         ],
       },
+    ],
+  },
+  {
+    title: "Systém",
+    subsections: [
       {
-        title: "Systém",
         items: [
-          { key: "system.admin", label: "Superadmin (vše)", level: 1, spaceBefore: true },
+          // Umbrella master — inert server-side (no requirePermission checks it);
+          // it only gates the three system rights below in the matrix hierarchy.
+          { key: "system.access", label: "Přístup k systémovým funkcím", level: 0 },
+          { key: "system.admin", label: "Superadmin (vše)", level: 1 },
           { key: "system.triggers", label: "Ruční spuštění naplánovaných úloh", level: 1 },
           { key: "system.timeOverride", label: "Testovací hodiny (mimo produkci)", level: 1 },
         ],

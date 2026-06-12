@@ -74,3 +74,35 @@
   margin-top: 0.15rem;
   flex-shrink: 0;
 }
+
+/* Mutually-exclusive permissions render as a radio (round) control — the
+   one-of-many affordance — while keeping checkbox semantics (clicking the
+   selected one clears it). The cascade/exclusion itself lives in resolveToggle. */
+.radio input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid var(--color-border-strong);
+  border-radius: 50%;
+  background: var(--color-input-bg);
+  position: relative;
+  cursor: pointer;
+}
+
+.radio input[type="checkbox"]:checked {
+  border-color: var(--color-active-text);
+}
+
+.radio input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  inset: 2.5px;
+  border-radius: 50%;
+  background: var(--color-active-text);
+}
+
+.radio input[type="checkbox"]:disabled {
+  cursor: default;
+  opacity: 0.7;
+}

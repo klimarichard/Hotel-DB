@@ -197,6 +197,10 @@ export const PERMISSION_CATALOG = [
   {
     group: "Systém",
     items: [
+      // Umbrella gate for the "Systém" matrix section (frontend hierarchy master).
+      // Inert server-side — no requirePermission checks it; it only organises the
+      // three system rights below in the in-app permission matrix.
+      { key: "system.access", label: "Přístup k systémovým funkcím" },
       { key: "system.admin", label: "Superadmin (vše)" },
       { key: "system.timeOverride", label: "Testovací hodiny (mimo produkci)" },
       { key: "system.triggers", label: "Ruční spuštění naplánovaných úloh" },
