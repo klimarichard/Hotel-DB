@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import Button from "@/components/Button";
 import ConfirmModal from "@/components/ConfirmModal";
 import { roleTypesApi, type RoleType } from "@/lib/api";
-import { GRANTABLE_CATALOG } from "@/lib/permissions/catalog";
+import PermissionMatrix from "@/components/permissions/PermissionMatrix";
+import { resolveToggle, normalize } from "@/lib/permissions/hierarchy";
 import styles from "./UserTypesTab.module.css";
 
 interface Draft {
@@ -73,26 +74,8 @@ export default function UserTypesTab() {
 
   function togglePerm(key: string) {
     if (!draft || isSystem) return;
-    setDraft((prev) => {
-      if (!prev) return prev;
-      const next = new Set(prev.perms);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return { ...prev, perms: next };
-    });
-  }
-
-  function toggleGroup(keys: string[], on: boolean) {
-    if (!draft || isSystem) return;
-    setDraft((prev) => {
-      if (!prev) return prev;
-      const next = new Set(prev.perms);
-      for (const k of keys) {
-        if (on) next.add(k);
-        else next.delete(k);
-      }
-      return { ...prev, perms: next };
-    });
+    // resolveToggle applies the dependency cascade + mutual exclusion.
+    setDraft((prev) => (prev ? { ...prev, perms: resolveToggle(prev.perms, key) } : prev));
   }
 
   async function save() {
@@ -102,7 +85,9 @@ export default function UserTypesTab() {
     try {
       await roleTypesApi.update(selected.id, {
         name: draft.name.trim() || selected.name,
-        permissions: [...draft.perms],
+        // normalize cleans any legacy hierarchy violations (orphan child / double
+        // mutual-exclusion) on save; conforming sets pass through unchanged.
+        permissions: [...normalize(draft.perms)],
         management: draft.management,
       });
       setSaveMsg("Uloženo");
@@ -230,37 +215,12 @@ export default function UserTypesTab() {
               <span>Vedení — záznamy zaměstnanců s tímto typem se skryjí personalistovi (a podobným).</span>
             </label>
 
-            <div className={styles.matrix}>
-              {GRANTABLE_CATALOG.map((group) => {
-                const keys = group.items.map((i) => i.key);
-                const allOn = keys.every((k) => draft.perms.has(k));
-                return (
-                  <fieldset key={group.group} className={styles.group} disabled={isSystem}>
-                    <legend className={styles.groupLegend}>
-                      <span>{group.group}</span>
-                      {!isSystem && (
-                        <button type="button" className={styles.groupToggle} onClick={() => toggleGroup(keys, !allOn)}>
-                          {allOn ? "Zrušit vše" : "Vybrat vše"}
-                        </button>
-                      )}
-                    </legend>
-                    <div className={styles.groupItems}>
-                      {group.items.map((item) => (
-                        <label key={item.key} className={styles.permItem}>
-                          <input
-                            type="checkbox"
-                            checked={isSystem ? true : draft.perms.has(item.key)}
-                            disabled={isSystem}
-                            onChange={() => togglePerm(item.key)}
-                          />
-                          <span>{item.label}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </fieldset>
-                );
-              })}
-            </div>
+            <PermissionMatrix
+              isChecked={(k) => draft.perms.has(k)}
+              onToggle={togglePerm}
+              readOnly={isSystem}
+              forceAllOn={isSystem}
+            />
 
             {!isSystem && (
               <div className={styles.footer}>
