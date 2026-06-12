@@ -73,6 +73,9 @@
 .row input[type="checkbox"] {
   margin-top: 0.15rem;
   flex-shrink: 0;
+  /* Square and round controls share the theme accent so a ticked radio matches
+     a ticked checkbox; disabled state greys out to match (admin view). */
+  accent-color: var(--color-primary);
 }
 
 /* Mutually-exclusive permissions render as a radio (round) control — the
@@ -81,28 +84,43 @@
 .radio input[type="checkbox"] {
   appearance: none;
   -webkit-appearance: none;
+  box-sizing: border-box;
   width: 14px;
   height: 14px;
   border: 1.5px solid var(--color-border-strong);
   border-radius: 50%;
   background: var(--color-input-bg);
-  position: relative;
+  display: inline-grid;
+  place-content: center;
   cursor: pointer;
 }
 
+.radio input[type="checkbox"]::after {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: transparent;
+}
+
 .radio input[type="checkbox"]:checked {
-  border-color: var(--color-active-text);
+  border-color: var(--color-primary);
 }
 
 .radio input[type="checkbox"]:checked::after {
-  content: "";
-  position: absolute;
-  inset: 2.5px;
-  border-radius: 50%;
-  background: var(--color-active-text);
+  background: var(--color-primary);
 }
 
+/* Disabled (admin / read-only) — grey, matching the disabled square boxes. */
 .radio input[type="checkbox"]:disabled {
   cursor: default;
-  opacity: 0.7;
+  border-color: var(--color-border-strong);
+}
+
+.radio input[type="checkbox"]:disabled:checked {
+  border-color: var(--color-text-muted);
+}
+
+.radio input[type="checkbox"]:disabled:checked::after {
+  background: var(--color-text-muted);
 }
