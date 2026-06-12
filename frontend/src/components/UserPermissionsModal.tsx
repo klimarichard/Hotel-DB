@@ -130,17 +130,20 @@ export default function UserPermissionsModal({ user, onClose, onSaved }: Props) 
               </p>
             )}
 
-            <PermissionMatrix
-              isChecked={effectiveHas}
-              onToggle={toggle}
-              readOnly={matrixReadOnly}
-              forceAllOn={adminBaseline}
-              decorate={(key) =>
-                extra.has(key) || revoked.has(key) ? (
-                  <span className={styles.overrideDot} title="Individuální úprava">●</span>
-                ) : null
-              }
-            />
+            <div className={styles.matrixScroll}>
+              <PermissionMatrix
+                isChecked={effectiveHas}
+                onToggle={toggle}
+                readOnly={matrixReadOnly}
+                forceAllOn={adminBaseline}
+                gridLayout
+                decorate={(key) =>
+                  extra.has(key) || revoked.has(key) ? (
+                    <span className={styles.overrideDot} title="Individuální úprava">●</span>
+                  ) : null
+                }
+              />
+            </div>
 
             {err && <p className={styles.err}>{err}</p>}
 

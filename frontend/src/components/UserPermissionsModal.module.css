@@ -75,12 +75,13 @@
   color: var(--color-text-muted);
 }
 
-.matrix {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 0.7rem;
-  padding: 0.5rem 1.25rem 1rem;
+/* Scroll region for the hierarchical matrix: fills the space between the type
+   selector and the footer, scrolls vertically when the matrix is taller. */
+.matrixScroll {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  padding: 0 1.25rem;
 }
 
 .group {
