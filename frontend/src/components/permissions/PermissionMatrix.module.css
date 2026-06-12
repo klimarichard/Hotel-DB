@@ -13,14 +13,14 @@
   margin: 0 0 1rem;
 }
 
-/* Grid variant (height-constrained containers, e.g. the per-user modal): grows
-   vertically by adding rows, so it scrolls cleanly — masonry would overflow
-   horizontally inside a capped, scrollable box. */
+/* Single-column variant (height-constrained containers, e.g. the per-user modal):
+   sections stack vertically and scroll cleanly. A multi-column grid here looked
+   uneven because adjacent sections differ a lot in height (Přehled vs Směny), and
+   masonry would overflow horizontally inside a capped, scrollable box. */
 .matrixGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  display: flex;
+  flex-direction: column;
   gap: 0.85rem;
-  align-items: start;
   padding: 0.5rem 0 1rem;
 }
 
