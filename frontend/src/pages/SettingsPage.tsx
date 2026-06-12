@@ -222,6 +222,10 @@ export default function SettingsPage() {
   const [multisportBasePriceDraft, setMultisportBasePriceDraft] = useState<string>("");
   const [showMultisportConfirm, setShowMultisportConfirm] = useState(false);
   const [multisportSaving, setMultisportSaving] = useState(false);
+  const [mealAllowanceMinHours, setMealAllowanceMinHours] = useState<number>(3);
+  const [mealAllowanceMinHoursDraft, setMealAllowanceMinHoursDraft] = useState<string>("");
+  const [showMealAllowanceConfirm, setShowMealAllowanceConfirm] = useState(false);
+  const [mealAllowanceSaving, setMealAllowanceSaving] = useState(false);
   const [showPosCreate, setShowPosCreate] = useState(false);
 
   // Companies
@@ -315,7 +319,7 @@ export default function SettingsPage() {
   useEffect(() => { loadDepartments(); loadPositions(); loadEducationLevels(); }, [loadDepartments, loadPositions, loadEducationLevels]);
 
   useEffect(() => {
-    api.get<{ foodVoucherRate: number; dppMaxMonthlyReward: number; minimumWage: number; multisportBasePrice: number }>("/payroll/settings")
+    api.get<{ foodVoucherRate: number; dppMaxMonthlyReward: number; minimumWage: number; multisportBasePrice: number; mealAllowanceMinHours: number }>("/payroll/settings")
       .then((s) => {
         setFoodVoucherRate(s.foodVoucherRate);
         setFoodVoucherRateDraft(String(s.foodVoucherRate));
@@ -325,6 +329,8 @@ export default function SettingsPage() {
         setMinimumWageDraft(String(s.minimumWage));
         setMultisportBasePrice(s.multisportBasePrice);
         setMultisportBasePriceDraft(String(s.multisportBasePrice));
+        setMealAllowanceMinHours(s.mealAllowanceMinHours);
+        setMealAllowanceMinHoursDraft(String(s.mealAllowanceMinHours));
       })
       .catch(() => {});
   }, []);
@@ -1695,6 +1701,63 @@ export default function SettingsPage() {
                     }}
                   >
                     {multisportSaving ? "Ukládám…" : "Uložit"}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <h2 style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--color-text-heading)", marginTop: "2rem", marginBottom: "1rem" }}>
+            Stravenkový paušál — minimální délka směny
+          </h2>
+          <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "0.5rem" }}>
+            <span style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--color-text)" }}>
+              {mealAllowanceMinHours.toLocaleString("cs-CZ")} h
+            </span>
+            <button className={styles.linkBtn} onClick={() => { setMealAllowanceMinHoursDraft(String(mealAllowanceMinHours)); setShowMealAllowanceConfirm(true); }}>
+              Upravit
+            </button>
+          </div>
+          <p style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>
+            Minimální délka odpracované směny (v hodinách), za kterou náleží stravenkový paušál.
+          </p>
+
+          {showMealAllowanceConfirm && (
+            <div className={styles.modal}>
+              <div className={styles.modalBox} style={{ maxWidth: 400 }}>
+                <h2 className={styles.modalTitle}>Změnit minimální délku směny pro stravenku</h2>
+                <div className={styles.field}>
+                  <label className={styles.label}>Minimální délka směny (h)</label>
+                  <input
+                    className={styles.input}
+                    type="number"
+                    step="0.5"
+                    value={mealAllowanceMinHoursDraft}
+                    onChange={(e) => setMealAllowanceMinHoursDraft(e.target.value)}
+                    autoFocus
+                  />
+                </div>
+                <div className={styles.formActions}>
+                  <Button variant="secondary" onClick={() => setShowMealAllowanceConfirm(false)} disabled={mealAllowanceSaving}>
+                    Zrušit
+                  </Button>
+                  <Button
+                    variant="primary"
+                    disabled={mealAllowanceSaving || !mealAllowanceMinHoursDraft || Number(mealAllowanceMinHoursDraft) <= 0}
+                    onClick={async () => {
+                      setMealAllowanceSaving(true);
+                      try {
+                        await api.patch("/payroll/settings", { mealAllowanceMinHours: Number(mealAllowanceMinHoursDraft) });
+                        setMealAllowanceMinHours(Number(mealAllowanceMinHoursDraft));
+                        setShowMealAllowanceConfirm(false);
+                      } catch {
+                        // silent
+                      } finally {
+                        setMealAllowanceSaving(false);
+                      }
+                    }}
+                  >
+                    {mealAllowanceSaving ? "Ukládám…" : "Uložit"}
                   </Button>
                 </div>
               </div>

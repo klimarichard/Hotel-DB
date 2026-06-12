@@ -415,7 +415,8 @@ payrollRouter.get(
     const dppMaxMonthlyReward = (data?.dppMaxMonthlyReward as number | undefined) ?? 11999;
     const minimumWage = (data?.minimumWage as number | undefined) ?? 22400;
     const multisportBasePrice = (data?.multisportBasePrice as number | undefined) ?? 470;
-    res.json({ foodVoucherRate, dppMaxMonthlyReward, minimumWage, multisportBasePrice });
+    const mealAllowanceMinHours = (data?.mealAllowanceMinHours as number | undefined) ?? 3;
+    res.json({ foodVoucherRate, dppMaxMonthlyReward, minimumWage, multisportBasePrice, mealAllowanceMinHours });
   }
 );
 
@@ -426,11 +427,12 @@ payrollRouter.patch(
   requireAuth,
   requirePermission("settings.payroll.manage"),
   async (req: AuthRequest, res: Response) => {
-    const { foodVoucherRate, dppMaxMonthlyReward, minimumWage, multisportBasePrice } = req.body as {
+    const { foodVoucherRate, dppMaxMonthlyReward, minimumWage, multisportBasePrice, mealAllowanceMinHours } = req.body as {
       foodVoucherRate?: number;
       dppMaxMonthlyReward?: number;
       minimumWage?: number;
       multisportBasePrice?: number;
+      mealAllowanceMinHours?: number;
     };
     const update: Record<string, unknown> = {
       updatedAt: FieldValue.serverTimestamp(),
@@ -463,6 +465,13 @@ payrollRouter.patch(
         return;
       }
       update.multisportBasePrice = multisportBasePrice;
+    }
+    if (mealAllowanceMinHours !== undefined) {
+      if (typeof mealAllowanceMinHours !== "number" || mealAllowanceMinHours <= 0) {
+        res.status(400).json({ error: "Neplatná minimální délka směny pro stravenku." });
+        return;
+      }
+      update.mealAllowanceMinHours = mealAllowanceMinHours;
     }
     const settingsRef = db().collection("settings").doc("payroll");
     const beforeSnap = await settingsRef.get();
