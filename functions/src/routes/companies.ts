@@ -20,10 +20,9 @@ const db = () => admin.firestore();
 companiesRouter.get(
   "/",
   requireAuth,
-  // Read access for everyone who works with employee/contract records — hr needs
-  // the list to pick a company on a Nástup, accountant reads it on employee views.
-  // Mutations below stay admin/director.
-  requirePermission("masterData.view"),
+  // Read is open to any authenticated user — the company list populates form
+  // dropdowns (Nástup, employee views). Mutations below stay admin/director.
+  // Mirrors educationLevels (číselníky are non-sensitive reference data).
   async (_req: AuthRequest, res: Response) => {
     const snap = await db().collection("companies").get();
     const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -39,12 +38,11 @@ companiesRouter.get(
 
 /**
  * GET /api/companies/:id
- * Fetch a single company by code (e.g. "HPM", "STP"). Admin + director only.
+ * Fetch a single company by code (e.g. "HPM", "STP"). Any authenticated user.
  */
 companiesRouter.get(
   "/:id",
   requireAuth,
-  requirePermission("masterData.view"),
   async (req: AuthRequest, res: Response) => {
     const doc = await db().collection("companies").doc(req.params.id).get();
     if (!doc.exists) {

@@ -148,19 +148,19 @@ export const APP_TOUR_STEPS: TourStep[] = [
 
   // ── Můj profil — REAL self page fed by mock data (/napoveda/ukazka-profil) ──────
   { section: SECTIONS.profile, permission: "nav.profile.view", anchor: "nav-mujProfil", title: "Můj profil", body: "Můj profil zobrazuje vaše zaměstnanecké údaje.", placement: "right" },
-  { permission: "self.profile.view", anchor: "selfpage-title", route: DEMO_SELF, title: "Můj profil", body: "Tato stránka zobrazuje vaši kartu zaměstnance — osobní údaje, kontakt, doklady a historii pracovního poměru. Slouží ke čtení. (Ukázková data pouze pro průvodce.)", placement: "bottom" },
+  { permission: "nav.profile.view", anchor: "selfpage-title", route: DEMO_SELF, title: "Můj profil", body: "Tato stránka zobrazuje vaši kartu zaměstnance — osobní údaje, kontakt, doklady a historii pracovního poměru. Slouží ke čtení. (Ukázková data pouze pro průvodce.)", placement: "bottom" },
   { permission: "self.profile.requestEdit", anchor: "selfpage-edit-btn", route: DEMO_SELF, title: "Navrhnout úpravu", body: "Tlačítkem Navrhnout úpravu můžete upravit svoje údaje a odeslat změny ke schválení. Změněné údaje se objeví až po schválení administrátorem nebo ředitelem.", placement: "left" },
   { permission: "sensitive.reveal.self", anchor: "selfpage-reveal", route: DEMO_SELF, title: "Zobrazení vlastních citlivých údajů", body: "Pole označená ikonou oka (např. rodné číslo) jsou skryta. Kliknutím je dočasně zobrazíte. Každé zobrazení je zaznamenáno v logu aplikace.", placement: "left" },
   { permission: "self.profile.requestEdit", anchor: "selfpage-requests", route: DEMO_SELF, title: "Vaše návrhy na změnu", body: "Zde vidíte odeslané návrhy na úpravu profilu a jejich stav. Změny čekající na schválení jde zrušit.", placement: "top" },
 
   // ── Šablony smluv (/smlouvy) ──────────────────────────────────────────────────
   { section: SECTIONS.templates, permission: "nav.contractTemplates.view", anchor: "nav-smlouvy", title: "Šablony smluv", body: "Zde se spravují šablony pracovních smluv a dodatků.", placement: "right" },
-  { permission: "contractTemplates.view", anchor: "templates-list", route: "/smlouvy", title: "Zobrazení šablon", body: "V seznamu vlevo si vyberete a prohlédnete dostupné šablony.", placement: "right" },
+  { permission: "nav.contractTemplates.view", anchor: "templates-list", route: "/smlouvy", title: "Zobrazení šablon", body: "V seznamu vlevo si vyberete a prohlédnete dostupné šablony.", placement: "right" },
   { permission: "contractTemplates.manage", anchor: "templates-new", route: "/smlouvy", title: "Nová šablona", body: "Tlačítkem Nová šablona vytvoříte šablonu. Její obsah upravíte v editoru a uložíte.", placement: "bottom" },
 
   // ── Mzdy (/mzdy) ──────────────────────────────────────────────────────────────
   { section: SECTIONS.payroll, permission: "nav.payroll.view", anchor: "nav-mzdy", title: "Mzdy", body: "V sekci Mzdy se vytvářejí a spravují mzdová období a provádějí přepočty mezd.", placement: "right" },
-  { permission: "payroll.view", anchor: "payroll-table", route: DEMO_PAYROLL, title: "Zobrazení mezd", body: "Tabulka zobrazuje vypočtené mzdy zaměstnanců pro zvolené období. Mzdy se počítají automaticky z plánu směn a výpočet se aktualizuje každý den.", placement: "top" },
+  { permission: "nav.payroll.view", anchor: "payroll-table", route: DEMO_PAYROLL, title: "Zobrazení mezd", body: "Tabulka zobrazuje vypočtené mzdy zaměstnanců pro zvolené období. Mzdy se počítají automaticky z plánu směn a výpočet se aktualizuje každý den.", placement: "top" },
   { permission: "payroll.create", anchor: "payroll-create", route: DEMO_PAYROLL_EMPTY, title: "Vytvoření mzdového období", body: "Tlačítkem Vytvořit mzdy ručně založíte období pro zvolený měsíc. K tomu je nutné, aby existoval publikovaný plán směn na daný měsíc.", placement: "bottom" },
   { permission: "payroll.edit", anchor: "payroll-table", route: DEMO_PAYROLL, title: "Úprava mezd", body: "V odemčeném období upravíte jednotlivé položky dvojklikem na buňku.", placement: "top" },
   { permission: "payroll.notes.manage", anchor: "payroll-notes-col", route: DEMO_PAYROLL, title: "Poznámky ke mzdám", body: "Ve sloupci poznámek přidáváte a spravujete poznámky k jednotlivým mzdám.", placement: "top" },
@@ -172,7 +172,7 @@ export const APP_TOUR_STEPS: TourStep[] = [
 
   // ── Upozornění (/upozorneni) ────────────────────────────────────────────────────
   { section: SECTIONS.alerts, permission: "nav.alerts.view", anchor: "nav-upozorneni", title: "Upozornění", body: "Sekce Upozornění shromažďuje důležité termíny a úkoly ke schválení.", placement: "right" },
-  { permission: "alerts.view", anchor: "alerts-tabs", route: "/upozorneni", title: "Zobrazení upozornění", body: "Záložky člení upozornění (doklady, zkušební doba, dovolená, výjimky, žádosti).", placement: "bottom" },
+  { permission: "nav.alerts.view", anchor: "alerts-tabs", route: "/upozorneni", title: "Zobrazení upozornění", body: "Záložky člení upozornění (doklady, zkušební doba, dovolená, výjimky, žádosti).", placement: "bottom" },
   { permission: "alerts.read", anchor: "alerts-mark-read", route: "/upozorneni", title: "Označení jako přečtené", body: "Upozornění označíte jako přečtené jednotlivě nebo hromadně. Tento stav je sdílený pro všechny uživatele, kteří upozornění vidí.", placement: "bottom" },
   { permission: "system.triggers", anchor: "alerts-refresh", route: "/upozorneni", title: "Ruční obnovení", body: "Můžete ručně aktualizovat upozornění.", placement: "bottom" },
 

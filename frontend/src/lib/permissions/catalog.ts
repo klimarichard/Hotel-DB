@@ -147,15 +147,14 @@ export const PERMISSION_SECTIONS = [
       {
         items: [
           { key: "nav.payroll.view", label: "Zobrazit Mzdy", level: 0 },
-          { key: "payroll.view", label: "Zobrazit mzdy", level: 1 },
-          { key: "payroll.edit", label: "Upravit mzdy (odemčené)", level: 2 },
-          { key: "payroll.notes.manage", label: "Spravovat poznámky ke mzdám", level: 3 },
-          { key: "payroll.lock", label: "Zamknout/odemknout období", level: 2 },
-          { key: "payroll.recalculate", label: "Přepočítat mzdy (zachovává ruční úpravy)", level: 2 },
-          { key: "payroll.recalculate.hard", label: "Tvrdý přepočet (zahodit veškeré úpravy)", level: 3 },
-          { key: "payroll.create", label: "Vytvořit mzdové období", level: 2, spaceBefore: true },
-          { key: "payroll.period.delete", label: "Smazat mzdové období", level: 2 },
-          { key: "payroll.export", label: "Export mezd (PDF/CSV)", level: 2, spaceBefore: true },
+          { key: "payroll.edit", label: "Upravit mzdy (odemčené)", level: 1 },
+          { key: "payroll.notes.manage", label: "Spravovat poznámky ke mzdám", level: 2 },
+          { key: "payroll.lock", label: "Zamknout/odemknout období", level: 1 },
+          { key: "payroll.recalculate", label: "Přepočítat mzdy (zachovává ruční úpravy)", level: 1 },
+          { key: "payroll.recalculate.hard", label: "Tvrdý přepočet (zahodit veškeré úpravy)", level: 2 },
+          { key: "payroll.create", label: "Vytvořit mzdové období", level: 1, spaceBefore: true },
+          { key: "payroll.period.delete", label: "Smazat mzdové období", level: 1 },
+          { key: "payroll.export", label: "Export mezd (PDF/CSV)", level: 1, spaceBefore: true },
         ],
       },
     ],
@@ -166,9 +165,8 @@ export const PERMISSION_SECTIONS = [
       {
         items: [
           { key: "nav.alerts.view", label: "Zobrazit Upozornění", level: 0 },
-          { key: "alerts.view", label: "Zobrazit upozornění", level: 1 },
-          { key: "alerts.read", label: "Označit upozornění jako přečtené", level: 2 },
-          { key: "changeRequests.review", label: "Schvalovat úpravy údajů", level: 2 },
+          { key: "alerts.read", label: "Označit upozornění jako přečtené", level: 1 },
+          { key: "changeRequests.review", label: "Schvalovat úpravy údajů", level: 1 },
         ],
       },
     ],
@@ -179,8 +177,7 @@ export const PERMISSION_SECTIONS = [
       {
         items: [
           { key: "nav.contractTemplates.view", label: "Zobrazit Šablony smluv", level: 0 },
-          { key: "contractTemplates.view", label: "Zobrazit šablony", level: 1 },
-          { key: "contractTemplates.manage", label: "Spravovat šablony", level: 2 },
+          { key: "contractTemplates.manage", label: "Spravovat šablony", level: 1 },
         ],
       },
     ],
@@ -191,7 +188,6 @@ export const PERMISSION_SECTIONS = [
       {
         items: [
           { key: "nav.audit.view", label: "Zobrazit Log změn", level: 0 },
-          { key: "audit.view", label: "Zobrazit log změn", level: 1 },
         ],
       },
     ],
@@ -202,9 +198,8 @@ export const PERMISSION_SECTIONS = [
       {
         items: [
           { key: "nav.profile.view", label: "Zobrazit Můj profil", level: 0 },
-          { key: "self.profile.view", label: "Zobrazit vlastní profil", level: 1 },
-          { key: "sensitive.reveal.self", label: "Odhalit vlastní citlivé údaje", level: 2 },
-          { key: "self.profile.requestEdit", label: "Navrhnout úpravu vlastního profilu", level: 2 },
+          { key: "sensitive.reveal.self", label: "Odhalit vlastní citlivé údaje", level: 1 },
+          { key: "self.profile.requestEdit", label: "Navrhnout úpravu vlastního profilu", level: 1 },
         ],
       },
     ],
@@ -215,7 +210,6 @@ export const PERMISSION_SECTIONS = [
       {
         items: [
           { key: "nav.settings.view", label: "Zobrazit Nastavení", level: 0 },
-          { key: "masterData.view", label: "Číst číselníky (firmy/oddělení/pozice/vzdělání)", level: 1, spaceBefore: true },
         ],
       },
       {
