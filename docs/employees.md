@@ -49,7 +49,7 @@ The existing `GenerateContractModal` is unchanged — only the call sites moved.
   - `mzda` → `salary` (or `agreedReward` for DPP)
   - `pracovní pozice` → `jobTitle`
   - `úvazek` → `contractType` via `uvazekToContractType()` ("poloviční"/"zkrácený"/"částečný" → PPP, "plný" → HPP, otherwise unchanged)
-  - `délka smlouvy` → `endDate`
+  - `délka smlouvy` → `endDate` — an **empty** value means "změna na dobu neurčitou" and clears a fixed end date (`endDate = null`); a non-empty value sets it. (The fold is mirrored server-side in `routes/employees.ts`, `services/payrollCalculator.ts` and `services/probationAlerts.ts` — all four honour the empty-clears-to-indefinite case.)
   - Ukončení's `startDate` overrides `endDate` (the actual end of the session)
 - `mapContractsToRows(rows, contracts)` — `rowId → ContractRecord`, picking the most recent generation per row.
 - `expectedContractTypesForRow(row)` — the template id(s) appropriate for a given row's `changeType` + `contractType`. Used both for matching existing contracts and as the default type for upload-without-generate.
