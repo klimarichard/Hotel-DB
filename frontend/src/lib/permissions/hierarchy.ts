@@ -158,31 +158,40 @@ export function resolveToggle(checked: ReadonlySet<string>, key: string): Set<st
 }
 
 /**
- * Coerce a possibly-non-conforming set into a hierarchy-valid one: drop any item
- * whose parent isn't present (cascades, since flat order has parents first), and
- * for each exclusive group keep only the first-in-order checked member. Unknown
- * keys (not in the catalog) pass through untouched — the backend is the real gate
- * and a frontend/backend key gap must not silently drop a stored grant. Used on save.
+ * Coerce a possibly-non-conforming set into a hierarchy-valid one. Used on save
+ * (e.g. cleaning a legacy type whose stored set predates the hierarchy).
+ *
+ * Repair is capability-PRESERVING: rather than dropping a child whose parent is
+ * missing, we add the missing ancestors (a parent is an enabling prerequisite,
+ * never more privileged than its child — so adding it can't grant unintended
+ * power). Mutual-exclusion conflicts are then resolved by keeping the first-in-
+ * order member and dropping the rest with their subtrees. Unknown keys (not in
+ * the catalog) pass through untouched — a frontend/backend key gap must never
+ * silently drop a stored grant.
  */
 export function normalize(set: ReadonlySet<string>): Set<string> {
-  const result = new Set<string>();
-  const usedGroups = new Set<string>();
+  const work = new Set<string>(set); // keeps unknown keys as-is
+  // Pass A — repair upward: ensure every present item's full ancestor chain.
   for (const it of FLAT) {
-    if (!set.has(it.key)) continue;
-    if (it.level === 0) {
-      result.add(it.key);
-      continue;
+    if (!work.has(it.key)) continue;
+    let p = it.parentIdx;
+    while (p != null) {
+      work.add(FLAT[p].key);
+      p = FLAT[p].parentIdx;
     }
-    const pk = parentKeyOf(it);
-    if (pk == null || !result.has(pk)) continue; // parent absent → drop (cascades)
-    if (it.exclusiveGroup) {
-      if (usedGroups.has(it.exclusiveGroup)) continue;
-      usedGroups.add(it.exclusiveGroup);
-    }
-    result.add(it.key);
   }
-  for (const k of set) if (!BY_KEY.has(k)) result.add(k); // keep unknown keys as-is
-  return result;
+  // Pass B — mutual exclusion: per group keep the first-in-order member, drop the
+  // rest + their now-orphaned subtrees (runs after A so an ancestor A added into a
+  // group joins the contest).
+  for (const idxs of GROUPS.values()) {
+    const present = idxs.filter((i) => work.has(FLAT[i].key));
+    if (present.length <= 1) continue;
+    for (const i of present.slice(1)) {
+      work.delete(FLAT[i].key);
+      for (const d of FLAT[i].descendantIdxs) work.delete(FLAT[d].key);
+    }
+  }
+  return work;
 }
 
 // ── Render model for the matrix component (optional fields safely normalized) ──

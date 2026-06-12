@@ -50,10 +50,12 @@ export default function PermissionMatrix({
                 const checkedNow = forceAllOn ? true : isChecked(it.key);
                 const rowEnabled = it.level === 0 ? true : !!enabled?.get(it.key);
                 const disabled = readOnly || forceAllOn || !it.grantable || !rowEnabled;
+                const exclusive = !!it.exclusiveGroup;
                 const rowClass = [
                   styles.row,
                   it.level === 0 ? styles.master : "",
                   it.spaceBefore ? styles.gap : "",
+                  exclusive ? styles.radio : "",
                   disabled && !checkedNow ? styles.dim : "",
                 ]
                   .filter(Boolean)
@@ -63,6 +65,7 @@ export default function PermissionMatrix({
                     key={it.key}
                     className={rowClass}
                     style={it.level > 0 ? { paddingLeft: `${it.level * 1.1}rem` } : undefined}
+                    title={exclusive ? "Vyberte jednu z těchto možností (vzájemně se vylučují)" : undefined}
                   >
                     <input
                       type="checkbox"
