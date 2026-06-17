@@ -287,6 +287,34 @@ contractsRouter.patch(
 );
 
 /**
+ * Resolve a contract's effective date as ISO `YYYY-MM-DD`, for filename
+ * disambiguation. Mirrors the year buildContractName uses (the employment row's
+ * startDate), falling back to the signing/validity date and finally the
+ * generation timestamp. Returns null when no date can be determined.
+ */
+function contractDateIso(d: Record<string, unknown>): string | null {
+  const snap = d.rowSnapshot as Record<string, unknown> | undefined;
+  const candidates = [
+    snap && typeof snap.startDate === "string" ? snap.startDate : "",
+    typeof d.signingDate === "string" ? d.signingDate : "",
+    typeof d.validFrom === "string" ? d.validFrom : "",
+  ];
+  for (const c of candidates) {
+    if (/^\d{4}-\d{2}-\d{2}/.test(c)) return c.slice(0, 10);
+  }
+  const g = d.generatedAt as { seconds?: number; _seconds?: number } | undefined;
+  const secs = g?.seconds ?? g?._seconds;
+  if (typeof secs === "number") {
+    const dt = new Date(secs * 1000);
+    const y = dt.getFullYear();
+    const mo = String(dt.getMonth() + 1).padStart(2, "0");
+    const day = String(dt.getDate()).padStart(2, "0");
+    return `${y}-${mo}-${day}`;
+  }
+  return null;
+}
+
+/**
  * GET /api/employees/:employeeId/contracts/:contractId/download?kind=unsigned|signed
  * Streams the requested PDF back to the client. storage.rules deny direct
  * client access, so reads must go through the Admin SDK here.
@@ -325,12 +353,41 @@ contractsRouter.get(
 
     // Prefer the human-readable displayName persisted on the contract
     // doc; fall back to the contractId for older contracts that don't
-    // have one. Signed copies get a " - podepsaná" suffix to distinguish
-    // them in the user's Downloads folder.
+    // have one.
     const displayBase = typeof data.displayName === "string" && data.displayName
       ? data.displayName
       : `${req.params.contractId}_${kind}`;
-    const filenameBase = kind === "signed" ? `${displayBase} - podepsaná` : displayBase;
+    // Disambiguate when another of this employee's contracts carries the EXACT
+    // same display name (e.g. two "DODATEK2026 navýšení Jan Novák" in one year):
+    // append the month, or the full date when the month also collides, so the
+    // two land in the Downloads folder under distinct names. ISO-style qualifier
+    // (YYYY-MM / YYYY-MM-DD) — carries the year and has no "/" (illegal in a
+    // filename).
+    let nameBase = displayBase;
+    if (typeof data.displayName === "string" && data.displayName) {
+      const siblings = (await ref.parent.get()).docs.map((d) => ({
+        id: d.id,
+        data: d.data() as Record<string, unknown>,
+      }));
+      const colliding = siblings.filter((s) => s.data.displayName === data.displayName);
+      if (colliding.length > 1) {
+        const myIso = contractDateIso(data);
+        if (myIso) {
+          const monthClash = colliding.some(
+            (s) =>
+              s.id !== req.params.contractId &&
+              contractDateIso(s.data)?.slice(0, 7) === myIso.slice(0, 7)
+          );
+          nameBase = `${displayBase} (${monthClash ? myIso : myIso.slice(0, 7)})`;
+        } else {
+          // No usable date to disambiguate — fall back to a short id suffix.
+          nameBase = `${displayBase} (${req.params.contractId.slice(0, 4)})`;
+        }
+      }
+    }
+    // Signed copies get a " - podepsaná" suffix to distinguish them from the
+    // unsigned PDF in the user's Downloads folder.
+    const filenameBase = kind === "signed" ? `${nameBase} - podepsaná` : nameBase;
     // Browsers accept UTF-8 filenames via filename*=UTF-8''<percent-encoded>;
     // include a plain-ASCII fallback for legacy clients via the standard
     // `filename=` parameter (diacritics replaced).
