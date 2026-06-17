@@ -229,14 +229,15 @@ const EMPTY_ROOT_FIELDS = {
  *     startDate, or a fixed-term endDate) is the last ACTIVE day — so a
  *     termination dated today or in the future leaves the employee active.
  * Status is "active" when at least one started-and-not-yet-ended session
- * exists, else "terminated". Returns null when there are no employment rows yet
- * (freshly created, awaiting Nástup) so callers leave the existing status alone
- * — a new hire must not show as terminated before onboarding.
+ * exists, else "terminated". Returns "before-start" when there are no employment
+ * rows yet (a freshly-created / name-only employee, awaiting their first Nástup):
+ * no session means they have not started, so they belong in the Před nástupem tab
+ * — never "active" before onboarding, and never "terminated" either.
  */
 export function computeEffectiveStatus(
   rows: Array<Record<string, unknown>>,
   today: string
-): "active" | "before-start" | "terminated" | null {
+): "active" | "before-start" | "terminated" {
   type S = { nastup: Record<string, unknown>; dodatky: Record<string, unknown>[]; ukonceniDate: string | null };
   const sorted = [...rows].sort((a, b) =>
     String(a.startDate ?? "").localeCompare(String(b.startDate ?? ""))
@@ -255,7 +256,10 @@ export function computeEffectiveStatus(
     }
   }
   if (cur) sessions.push(cur);
-  if (sessions.length === 0) return null;
+  // No employment session at all → the employee has not started yet, so they
+  // belong in the Před nástupem tab (e.g. a name-only employee added before any
+  // contract exists), not "active".
+  if (sessions.length === 0) return "before-start";
 
   const isActive = (s: S): boolean => {
     // Not started yet — a future Nástup only activates ON its day.
@@ -304,7 +308,6 @@ async function applyDerivedStatus(
   const snap = await empRef.collection("employment").orderBy("startDate", "asc").get();
   const rows = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, unknown>) }));
   const status = computeEffectiveStatus(rows, clock.today());
-  if (!status) return;
   const before = (await empRef.get()).data() as Record<string, unknown> | undefined;
   if (!before || before.status === status) return;
   await empRef.update({ status, updatedAt: now });
@@ -667,7 +670,11 @@ employeesRouter.post(
         education: body.education ?? "",
         nationality: body.nationality ?? "",
         placeOfBirth: body.placeOfBirth ?? "",
-        status: "active",
+        // A brand-new employee has no employment session yet (the first Nástup is
+        // added afterwards), so they start in the Před nástupem tab — matching
+        // computeEffectiveStatus()'s empty-rows result. Adding a Nástup re-derives
+        // this to "active" (started) or keeps "before-start" (future start).
+        status: "before-start",
         currentCompanyId: body.currentCompanyId ?? null,
         currentDepartment: body.currentDepartment ?? "",
         currentContractType: body.currentContractType ?? "",
