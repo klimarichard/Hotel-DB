@@ -1038,14 +1038,18 @@ export default function SettingsPage() {
                         </span>
                       </td>
                       <td>
-                        <button
-                          className={styles.linkBtn}
-                          onClick={() => openEditUser(u)}
-                          title="Upravit jméno a e-mail"
-                        >
-                          Upravit
-                        </button>
-                        {" "}
+                        {can("users.manage") && (
+                          <>
+                            <button
+                              className={styles.linkBtn}
+                              onClick={() => openEditUser(u)}
+                              title="Upravit jméno a e-mail"
+                            >
+                              Upravit
+                            </button>
+                            {" "}
+                          </>
+                        )}
                         {(can("users.permissions.manage") || can("users.setType")) && (
                           <>
                             <button
@@ -1059,26 +1063,30 @@ export default function SettingsPage() {
                             {" "}
                           </>
                         )}
-                        <button
-                          className={u.active ? styles.deactivateBtn : styles.activateBtn}
-                          disabled={togglingUid === u.uid}
-                          onClick={() => handleToggleActive(u)}
-                        >
-                          {togglingUid === u.uid ? "…" : u.active ? "Deaktivovat" : "Aktivovat"}
-                        </button>
-                        {" "}
-                        <button
-                          className={styles.resetBtn}
-                          disabled={resetingUid === u.uid || !u.email}
-                          onClick={() => handleResetPassword(u)}
-                          title="Odeslat uživateli odkaz pro obnovu hesla"
-                        >
-                          {resetingUid === u.uid ? "…" : "Resetovat heslo"}
-                        </button>
-                        {resetMsg?.uid === u.uid && (
-                          <span className={resetMsg.isError ? styles.resetError : styles.resetOk}>
-                            {resetMsg.msg}
-                          </span>
+                        {can("users.manage") && (
+                          <>
+                            <button
+                              className={u.active ? styles.deactivateBtn : styles.activateBtn}
+                              disabled={togglingUid === u.uid}
+                              onClick={() => handleToggleActive(u)}
+                            >
+                              {togglingUid === u.uid ? "…" : u.active ? "Deaktivovat" : "Aktivovat"}
+                            </button>
+                            {" "}
+                            <button
+                              className={styles.resetBtn}
+                              disabled={resetingUid === u.uid || !u.email}
+                              onClick={() => handleResetPassword(u)}
+                              title="Odeslat uživateli odkaz pro obnovu hesla"
+                            >
+                              {resetingUid === u.uid ? "…" : "Resetovat heslo"}
+                            </button>
+                            {resetMsg?.uid === u.uid && (
+                              <span className={resetMsg.isError ? styles.resetError : styles.resetOk}>
+                                {resetMsg.msg}
+                              </span>
+                            )}
+                          </>
                         )}
                       </td>
                     </tr>

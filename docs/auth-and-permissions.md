@@ -181,6 +181,8 @@ Both fields are resolved server-side so the Settings → Uživatelé tab shows r
 
 **Type column in Settings → Uživatelé:** if the viewer holds `users.setType` or `users.permissions.manage`, the type column renders as an editable `<select>`. Otherwise it renders as a static `<span>` showing `roleTypeName` (with a fallback to the resolved name from the locally-loaded types list, then the raw id). No editability bleeds through to users who lack the relevant permissions.
 
+**Per-row action buttons in Settings → Uživatelé (2026-06-17):** each action is gated by its own permission so a `users.view`-only viewer sees a read-only row — **Upravit** (edit name + e-mail), **Deaktivovat/Aktivovat**, and **Resetovat heslo** require `users.manage`; **Oprávnění** (type + per-user permissions) requires `users.setType` or `users.permissions.manage`; **Propojit/Zrušit** (link employee) requires `users.linkEmployee`. The backend already enforces all of these — this is defense-in-depth that stops showing affordances that would otherwise 403 (notably "Resetovat heslo", which fires a client-side `sendPasswordResetEmail` rather than a gated endpoint).
+
 ## Per-type menu order
 
 Settings → **Menu** (admin-only) lets admin configure the sidebar order independently for each **user type**. Each type renders as a card showing the items that type can see (its permissions), with ▲▼ buttons to reorder, plus a "Kopírovat z…" dropdown that overwrites the draft with another type's order (filtered to ids the target type can access). Single Uložit commits all lists.
