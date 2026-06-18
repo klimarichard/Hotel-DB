@@ -16,7 +16,7 @@ Developer documentation for the employee module: the core employee record and fo
 - Shift plan export: "Exportovat ▾" button opens a PDF/CSV dropdown. CSV is semicolon-delimited UTF-8 BOM, one row per employee (name, rawInput per day, monthly shift count), section separator rows, MOD row after vedoucí. All employees included regardless of active flag. Filename: `smeny_{year}_{month}.csv`.
 - Shift plan page: month nav and plan bar are individually sticky (`position: sticky`) within `.main`; ShiftGrid thead sticks within the wrapper (`overflow-y: auto`, bounded `max-height`). Layout `.shell` uses `height: 100vh` so `.main` is the real scroll container.
 - Czech date formatting: `frontend/src/lib/dateFormat.ts` — `formatDateCZ(iso)`, `formatTimestampCZ(ts)`, `formatDatetimeCZ(ts)`.
-- Gendered marital status: `frontend/src/lib/genderDisplay.ts` — `displayGendered(value, gender)`.
+- Gendered marital status: `frontend/src/lib/genderDisplay.ts` — `displayGendered(value, gender)`. Values are stored combined ("ženatý/vdaná") and resolved on read; passing a `null`/unknown gender returns the combined form unchanged. The per-employee root flag **`genderNeutralDisplay`** (boolean) opts an employee out of resolution everywhere they're displayed — see "Per-employee neutral gender display" below.
 
 ---
 
@@ -76,7 +76,7 @@ Two official forms are filled from the employee's data and opened in a new tab (
 - `doc.setTitle()` carries the human filename (`Dotazník <jméno> <příjmení>`, `Prohlášení <období> <jméno> <příjmení>`) — that drives the browser tab + save-as name (a blob-URL open ignores `Content-Disposition`, which is set to `inline`).
 
 Endpoints in `employees.ts` decrypt the sensitive fields they embed (rodné číslo / OP / účet / pojištěnec) and **audit-log the export** (`writeAudit` `action: "export"`, `extra.document`):
-- `GET /:id/questionnaire-pdf` — gated `employees.view.all` OR `employees.view.nonManagement`. `rodinný stav` is resolved to the M/F variant by `gender` (`displayGendered`, mirrors `frontend/src/lib/genderDisplay.ts`); `telefon` formatted `+420 XXX XXX XXX`; `nationality` shown as `CODE - Name` (`functions/src/services/nationalities.ts`, a backend copy of the frontend pure-data module).
+- `GET /:id/questionnaire-pdf` — gated `employees.view.all` OR `employees.view.nonManagement`. `rodinný stav` is resolved to the M/F variant by `gender` (`displayGendered`, mirrors `frontend/src/lib/genderDisplay.ts`) — unless the employee's `genderNeutralDisplay` flag is set, in which case `""` is passed as the gender so the combined form is printed; `telefon` formatted `+420 XXX XXX XXX`; `nationality` shown as `CODE - Name` (`functions/src/services/nationalities.ts`, a backend copy of the frontend pure-data module).
 - `GET /:id/tax-declaration-pdf?period=…` — gated `employment.manage` OR `documents.view`. The free-text **zdaňovací období** (e.g. `2026` or `od září 2026`) is entered in a dialog; `adresa bydliště` is Czech employees' trvalá address, foreigners' resolved kontaktní address.
 
 UI: a **"Dotazník"** button in the employee hero (`EmployeeDetailPage`) and a **"Prohlášení poplatníka"** button in the Další-dokumenty toolbar (`OtherDocumentsTab`), each streaming the audited blob with the auth token and opening it in a new tab.
@@ -119,13 +119,29 @@ Every linked user gets `/muj-profil` ("Můj profil", menu item for all six roles
 
 - **Self-scoped read API** (mounted at `/me`, any authenticated user): `GET /me/employee[/contact|/documents|/benefits|/employment]` and `POST /me/employee/reveal`. The employee id is resolved server-side from `users/{uid}.employeeId` — never from the URL — so a caller can only ever read their own record. Backend in `functions/src/routes/selfService.ts`.
 - **Edit-by-approval workflow** — new top-level collection `employeeChangeRequests/{id}` (Admin-SDK only; no `firestore.rules`/index changes, queries are single-field). Employee submits a diff via `POST /me/change-requests` (sensitive proposed values are **encrypted on submit** so plaintext never rests on the request doc); they can list/cancel their own pending requests. Admin/director review in a new Upozornění tab **"Žádosti o úpravu údajů"** (`GET /employee-change-requests/pending` + `/pending-count`, `POST /:id/reveal` (gated `changeRequests.review` **+ `sensitive.reveal`** — revealing a proposed sensitive value needs sensitive-reveal rights, not just review), `PATCH /:id`). **Approve** applies the diff to the live record (encrypting sensitive fields, refreshing document-expiry alerts, audit-logging every applied field) via `functions/src/services/employeeChangeRequests.ts`; **reject** takes an optional reason.
-- **Editable-field whitelist** lives in two mirrored places — backend `EDITABLE_FIELDS` (`functions/src/services/employeeChangeRequests.ts`) and frontend `frontend/src/lib/selfEditFields.ts` — covering root/contact/documents/benefits incl. sensitive fields (rodné číslo, OP, pojištěnec, účet). Employment/contract terms are excluded (those stay in the Nástup/Dodatek flow). Read display reuses `displayGendered` (Pohlaví/Rodinný stav); edit mode uses the same dropdowns as the employee form for Rodinný stav + Vzdělání.
+- **Editable-field whitelist** lives in two mirrored places — backend `EDITABLE_FIELDS` (`functions/src/services/employeeChangeRequests.ts`) and frontend `frontend/src/lib/selfEditFields.ts` — covering root/contact/documents/benefits incl. sensitive fields (rodné číslo, OP, pojištěnec, účet). Employment/contract terms are excluded (those stay in the Nástup/Dodatek flow). Read display reuses `displayGendered` for Rodinný stav (respecting `genderNeutralDisplay`); edit mode uses the same dropdowns as the employee form for Rodinný stav + Vzdělání. **Pohlaví itself is not shown on Můj profil** (view or edit) — employees don't see their own gender; it remains on the manager-facing employee detail page. `emp.gender` is still fetched (it drives the Rodinný stav resolution) — only the row is hidden.
 - Page: `frontend/src/pages/EmployeeSelfPage.tsx`; admin tab: `frontend/src/pages/upozorneni/EmployeeDataChangeRequestsTab.tsx`; badge context: `frontend/src/context/EmployeeChangeRequestsContext.tsx`.
 
 ### Promotion-batch fixes (2026-05-22)
 - **create-user** (`functions/src/routes/auth.ts`): the handler had no try/catch and the Express app had no error middleware, so a rejected `admin.auth().createUser` (e.g. duplicate email, or the project's password policy) left the request hanging. Now wrapped in try/catch with mapped Firebase error codes → clean Czech messages, incl. translating `PASSWORD_DOES_NOT_MEET_REQUIREMENTS`; a global error-handler middleware was added in `index.ts` as a safety net. The create-user form also shows a password-policy hint (≥8 chars, upper+lower+digit).
 - **MOD row** (`frontend/src/components/ModCell.tsx` + `ShiftGrid.tsx`): the MOD row validated typed letters against a hardcoded `MOD_PERSONS` list; it now accepts the letters actually assigned to managers in the current plan.
 - **Vacation pending-count** (`functions/src/routes/vacation.ts`): `GET /vacation/pending-count` combined `status == "approved"` with `pendingEdit != null`, which needs a composite index that isn't in `firestore.indexes.json` — on real Firestore the query 500'd and the frontend swallowed it, so the "Dovolená" badge stayed 0 everywhere. Rewritten to two single-field equality queries + a JS filter (no composite index).
+
+---
+
+## Per-employee neutral gender display (2026-06-18)
+
+The only gender-resolved employee field is `maritalStatus` (rodinný stav), stored combined ("ženatý/vdaná") and resolved on read by `displayGendered()`. A per-employee root boolean **`genderNeutralDisplay`** opts an individual out of that resolution: when set, the combined form is shown wherever the employee appears.
+
+- **Toggle**: a checkbox ("Nerozlišovat tvary podle pohlaví") sits under the Pohlaví selector on `EmployeeFormPage.tsx`. Default off/absent.
+- **Mechanism — no new branching in the resolver.** `displayGendered()` already returns the combined form for a `null`/unknown gender (the path used by employees with no gender set), so the three resolution sites simply pass `null`/`""` instead of the real gender when the flag is set:
+  - `EmployeeDetailPage.tsx` (Rodinný stav row)
+  - `EmployeeSelfPage.tsx` (`renderReadValue`, view mode)
+  - backend Dotazník PDF — `functions/src/routes/employees.ts` `GET /:id/questionnaire-pdf`
+  Edit controls always edit the raw combined value, so edit mode needs no change. Contract generation does not resolve gender, so contracts are unaffected.
+- **Persistence is additive.** The create handler (`POST /employees`) seeds `genderNeutralDisplay: false`; `PATCH /employees/:id` spreads the request body (no whitelist) so updates persist automatically. Both read endpoints (`GET /employees/:id` and the self-scoped `GET /me/employee`) return all non-sensitive root fields, so the flag surfaces with no endpoint change. Legacy records without the field read as `false` (normal resolution) — **no migration needed**. Audit label added in `frontend/src/lib/audit/fields.employee.ts`; the boolean renders as Ano/Ne via the existing formatter.
+
+Also shipped alongside: **Pohlaví is no longer displayed on Můj profil** (view + edit) — see the self-service section above.
 
 ---
 
