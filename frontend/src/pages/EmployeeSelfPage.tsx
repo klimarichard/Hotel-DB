@@ -489,10 +489,9 @@ export default function EmployeeSelfPage() {
                       <span className={styles.fieldLabel}>Datum narození</span>
                       <span className={styles.fieldValue}>{emp?.dateOfBirth ? formatDateCZ(emp.dateOfBirth) : "—"}</span>
                     </div>
-                    <div className={styles.field}>
-                      <span className={styles.fieldLabel}>Pohlaví</span>
-                      <span className={styles.fieldValue}>{emp?.gender === "m" ? "Muž" : emp?.gender === "f" ? "Žena" : "—"}</span>
-                    </div>
+                    {/* Pohlaví is intentionally not shown on Můj profil — employees don't need
+                        to see their own gender. It remains on the Employee detail page, and
+                        emp.gender is still used here to pick the maritalStatus variant. */}
                   </>
                 )}
                 {SELF_EDIT_FIELDS.filter((f) => f.section === section && isFieldVisible(f)).map((f) => (
