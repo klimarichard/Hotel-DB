@@ -664,6 +664,9 @@ employeesRouter.post(
         displayName: body.displayName ?? "",
         dateOfBirth: body.dateOfBirth ?? null,
         gender: body.gender ?? null,
+        // When true, gendered Czech strings (e.g. maritalStatus) are shown in
+        // their combined form instead of resolved to the gender variant.
+        genderNeutralDisplay: body.genderNeutralDisplay ?? false,
         birthSurname: body.birthSurname ?? "",
         birthNumber: body.birthNumber ?? "",
         maritalStatus: body.maritalStatus ?? "",
@@ -880,7 +883,10 @@ employeesRouter.get(
       placeOfBirth: asStr(root.placeOfBirth),
       dateOfBirth: asStr(root.dateOfBirth),
       birthNumber: asStr(root.birthNumber),
-      maritalStatus: displayGendered(asStr(root.maritalStatus), asStr(root.gender)),
+      // genderNeutralDisplay employees keep the combined form ("ženatý/vdaná").
+      // displayGendered() returns the combined value for any non-m/f gender, so
+      // passing "" suppresses resolution.
+      maritalStatus: displayGendered(asStr(root.maritalStatus), root.genderNeutralDisplay ? "" : asStr(root.gender)),
       education: asStr(root.education),
       permanentAddress,
       contactAddress,

@@ -81,6 +81,7 @@ Evidence všech zaměstnanců. Záložky **Aktivní**, **Před nástupem** a **U
 Tlačítko **+ Přidat zaměstnance**. Vyplníte osobní údaje, kontakt, doklady a benefity. Podle **národnosti** se zobrazí buď sekce *OP* (občané ČR), nebo *Pas + Povolení k pobytu* (cizinci).
 
 - **Reaktivace ukončeného zaměstnance:** pokud zadáte jméno a datum narození, které odpovídá již existujícímu **ukončenému** zaměstnanci, aplikace nabídne *„Reaktivovat a upravit údaje"* (otevře profil existujícího zaměstnance k úpravě — pracovní poměr *Nástup* pak přidáte ručně v historii), *„Přesto vytvořit nového"*, nebo *Zrušit*. Tím se zabrání duplicitám.
+- **Nerozlišovat tvary podle pohlaví:** pod výběrem *Pohlaví* je zaškrtávátko. Když ho zapnete, údaje, které se běžně skloňují podle pohlaví (dnes **Rodinný stav**), se u tohoto zaměstnance zobrazují v kombinovaném tvaru (např. *„ženatý/vdaná"*) — na detailu zaměstnance, v jeho *Mém profilu* i v *Dotazníku* (PDF). Pohlaví u zaměstnance přitom zůstává vyplněné, jen se nepoužije ke skloňování.
 
 ### Detail zaměstnance
 
