@@ -46,7 +46,7 @@ Aplikace je dostupná v prohlížeči. Přihlašujete se **uživatelským jméne
 
 > 📷 *(Místo pro snímek obrazovky: přihlašovací formulář)*
 
-Vlevo dole je vždy vidět **jméno přihlášeného uživatele**. Pod ním jsou tři tlačítka v pořadí: přepínač **světlého/tmavého režimu** → **? Nápověda** → **Odhlásit**.
+Vlevo dole je vždy vidět **jméno přihlášeného uživatele**. Pod ním jsou tři tlačítka v pořadí: přepínač **světlého/tmavého režimu** → **? Nápověda** → **Odhlásit**. Úplně dole je uvedena **verze aplikace** (např. `v2.2.7`). Tu ve výchozím stavu vidí jen administrátor; ostatním ji můžete zpřístupnit oprávněním **„Zobrazit verzi aplikace"** (sekce *Systém* v matici oprávnění).
 
 ---
 
