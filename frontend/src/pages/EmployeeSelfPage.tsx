@@ -51,6 +51,9 @@ interface EmployeeRoot {
   lastName?: string;
   dateOfBirth?: string;
   gender?: string;
+  // When true, gendered Czech strings (e.g. maritalStatus) are shown combined
+  // ("ženatý/vdaná") instead of resolved to the gender variant.
+  genderNeutralDisplay?: boolean;
   currentJobTitle?: string;
   currentDepartment?: string;
   currentContractType?: string;
@@ -342,7 +345,7 @@ export default function EmployeeSelfPage() {
     if (f.kind === "date") return <span>{formatDateCZ(String(raw))}</span>;
     // maritalStatus is stored combined ("ženatý/vdaná"); show the gender variant.
     if (f.key === "maritalStatus") {
-      return <span>{displayGendered(String(raw), (emp?.gender as "m" | "f" | null) ?? null)}</span>;
+      return <span>{displayGendered(String(raw), emp?.genderNeutralDisplay ? null : ((emp?.gender as "m" | "f" | null) ?? null))}</span>;
     }
     // nationality is stored as an ISO code; show the Czech country name (TODO 63).
     if (f.key === "nationality") {

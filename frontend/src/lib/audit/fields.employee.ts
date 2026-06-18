@@ -18,6 +18,7 @@ const employees: FieldLabelMap = {
   displayName: "Zobrazované jméno",
   dateOfBirth: "Datum narození",
   gender: "Pohlaví",
+  genderNeutralDisplay: "Nerozlišovat tvary podle pohlaví",
   maritalStatus: "Rodinný stav",
   education: "Vzdělání",
   nationality: "Státní příslušnost",
