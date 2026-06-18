@@ -247,6 +247,7 @@ export const PERMISSION_SECTIONS = [
           { key: "system.admin", label: "Superadmin (vše)", level: 1 },
           { key: "system.triggers", label: "Ruční spuštění naplánovaných úloh", level: 1 },
           { key: "system.timeOverride", label: "Testovací hodiny (mimo produkci)", level: 1 },
+          { key: "system.version.view", label: "Zobrazit verzi aplikace", level: 1 },
         ],
       },
     ],

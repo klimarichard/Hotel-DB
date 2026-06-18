@@ -196,6 +196,9 @@ export const PERMISSION_CATALOG = [
       { key: "system.admin", label: "Superadmin (vše)" },
       { key: "system.timeOverride", label: "Testovací hodiny (mimo produkci)" },
       { key: "system.triggers", label: "Ruční spuštění naplánovaných úloh" },
+      // Display-only: gates whether the app version ("vX.Y.Z") shows in the
+      // sidebar footer. Inert server-side (no requirePermission checks it).
+      { key: "system.version.view", label: "Zobrazit verzi aplikace" },
     ],
   },
   {

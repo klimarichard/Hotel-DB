@@ -166,6 +166,11 @@ export default function Layout() {
           <button className={styles.logoutBtn} onClick={handleLogout}>
             Odhlásit
           </button>
+          {/* App version (vX.Y.Z) — gated by system.version.view; admins see it by
+              default (system.admin), others only if granted the permission. */}
+          {can("system.version.view") && (
+            <span className={styles.version}>v{__APP_VERSION__}</span>
+          )}
           {/* Test-clock control — renders only where faking time is allowed
               (staging / emulator), never in production. */}
           <TimeOverrideControl />
