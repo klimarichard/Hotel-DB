@@ -86,6 +86,12 @@
   letter-spacing: 0.05em;
 }
 
+.version {
+  font-size: 0.7rem;
+  color: #64748b;
+  letter-spacing: 0.03em;
+}
+
 .logoutBtn {
   background: none;
   border: 1px solid #2d3f54;

@@ -1,9 +1,19 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { resolve } from "path";
+import { readFileSync } from "fs";
+
+// Bake the package version into the bundle so the app can show "vX.Y.Z" without
+// a runtime call. Read from disk (not a JSON import) to avoid module-assert quirks.
+const pkgVersion = JSON.parse(
+  readFileSync(resolve(__dirname, "package.json"), "utf-8")
+).version as string;
 
 export default defineConfig({
   plugins: [react()],
+  define: {
+    __APP_VERSION__: JSON.stringify(pkgVersion),
+  },
   resolve: {
     alias: {
       "@": resolve(__dirname, "src"),
