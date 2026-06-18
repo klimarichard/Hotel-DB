@@ -51,6 +51,9 @@ interface EmployeeRoot {
   lastName?: string;
   dateOfBirth?: string;
   gender?: string;
+  // When true, gendered Czech strings (e.g. maritalStatus) are shown combined
+  // ("ženatý/vdaná") instead of resolved to the gender variant.
+  genderNeutralDisplay?: boolean;
   currentJobTitle?: string;
   currentDepartment?: string;
   currentContractType?: string;
@@ -342,7 +345,7 @@ export default function EmployeeSelfPage() {
     if (f.kind === "date") return <span>{formatDateCZ(String(raw))}</span>;
     // maritalStatus is stored combined ("ženatý/vdaná"); show the gender variant.
     if (f.key === "maritalStatus") {
-      return <span>{displayGendered(String(raw), (emp?.gender as "m" | "f" | null) ?? null)}</span>;
+      return <span>{displayGendered(String(raw), emp?.genderNeutralDisplay ? null : ((emp?.gender as "m" | "f" | null) ?? null))}</span>;
     }
     // nationality is stored as an ISO code; show the Czech country name (TODO 63).
     if (f.key === "nationality") {
@@ -489,10 +492,9 @@ export default function EmployeeSelfPage() {
                       <span className={styles.fieldLabel}>Datum narození</span>
                       <span className={styles.fieldValue}>{emp?.dateOfBirth ? formatDateCZ(emp.dateOfBirth) : "—"}</span>
                     </div>
-                    <div className={styles.field}>
-                      <span className={styles.fieldLabel}>Pohlaví</span>
-                      <span className={styles.fieldValue}>{emp?.gender === "m" ? "Muž" : emp?.gender === "f" ? "Žena" : "—"}</span>
-                    </div>
+                    {/* Pohlaví is intentionally not shown on Můj profil — employees don't need
+                        to see their own gender. It remains on the Employee detail page, and
+                        emp.gender is still used here to pick the maritalStatus variant. */}
                   </>
                 )}
                 {SELF_EDIT_FIELDS.filter((f) => f.section === section && isFieldVisible(f)).map((f) => (

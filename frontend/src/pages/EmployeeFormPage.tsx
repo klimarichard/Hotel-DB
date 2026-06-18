@@ -35,6 +35,10 @@ interface PersonalForm {
   displayName: string;
   dateOfBirth: string;
   gender: string;
+  // When true, gendered Czech strings (e.g. rodinný stav "ženatý/vdaná") are
+  // shown in their combined/unresolved form everywhere this employee is
+  // displayed, instead of being resolved to the gender variant.
+  genderNeutralDisplay: boolean;
   birthSurname: string;
   birthNumber: string;
   maritalStatus: string;
@@ -73,7 +77,7 @@ interface AdditionalForm {
 }
 
 const emptyPersonal: PersonalForm = {
-  firstName: "", lastName: "", displayName: "", dateOfBirth: "", gender: "", birthSurname: "",
+  firstName: "", lastName: "", displayName: "", dateOfBirth: "", gender: "", genderNeutralDisplay: false, birthSurname: "",
   birthNumber: "", maritalStatus: "", education: "", nationality: "",
   placeOfBirth: "",
 };
@@ -425,6 +429,15 @@ export default function EmployeeFormPage() {
                 <option value="m">Muž</option>
                 <option value="f">Žena</option>
               </select>
+              <label style={{ marginTop: "0.5rem", display: "flex", flexDirection: "row", alignItems: "center", gap: "0.5rem", cursor: "pointer", fontWeight: 400 }}>
+                <input
+                  type="checkbox"
+                  checked={personal.genderNeutralDisplay}
+                  onChange={(e) => setPersonal((f) => ({ ...f, genderNeutralDisplay: e.target.checked }))}
+                />
+                Nerozlišovat tvary podle pohlaví
+              </label>
+              <span style={{ marginTop: "0.25rem", fontSize: "0.8rem", color: "var(--color-text-muted)" }}>Rodinný stav se zobrazí v kombinovaném tvaru (např. „ženatý/vdaná").</span>
             </Field>
             <Field label="Rodné příjmení">
               <input className={styles.input} value={personal.birthSurname} onChange={(e) => setP("birthSurname", e.target.value)} />

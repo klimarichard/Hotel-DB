@@ -242,6 +242,9 @@ interface Employee {
   displayName?: string;
   dateOfBirth: string;
   gender: string;
+  // When true, gendered Czech strings (e.g. maritalStatus) are shown combined
+  // ("ženatý/vdaná") instead of resolved to the gender variant.
+  genderNeutralDisplay?: boolean;
   birthSurname: string;
   birthNumber?: string;
   maritalStatus: string;
@@ -1859,7 +1862,7 @@ export default function EmployeeDetailPage() {
           <div className={styles.field}><span className={styles.fieldLabel}>Pohlaví</span><span className={styles.fieldValue}>{employee.gender === "m" ? "Muž" : employee.gender === "f" ? "Žena" : "—"}</span></div>
           <div className={styles.field}><span className={styles.fieldLabel}>Rodné příjmení</span><span className={styles.fieldValue}>{val(employee.birthSurname)}</span></div>
           <SensitiveField employeeId={id!} field="birthNumber" label="Rodné číslo" apiValue={employee.birthNumber} />
-          <div className={styles.field}><span className={styles.fieldLabel}>Rodinný stav</span><span className={styles.fieldValue}>{val(displayGendered(employee.maritalStatus, employee.gender as "m" | "f"))}</span></div>
+          <div className={styles.field}><span className={styles.fieldLabel}>Rodinný stav</span><span className={styles.fieldValue}>{val(displayGendered(employee.maritalStatus, employee.genderNeutralDisplay ? null : (employee.gender as "m" | "f")))}</span></div>
           <div className={styles.field}><span className={styles.fieldLabel}>Vzdělání</span><span className={styles.fieldValue}>{val(employee.education)}</span></div>
           <div className={styles.field}><span className={styles.fieldLabel}>Státní příslušnost</span><span className={styles.fieldValue}>{val(employee.nationality ? nationalityName(employee.nationality) : "")}</span></div>
           <div className={styles.field}><span className={styles.fieldLabel}>Místo narození</span><span className={styles.fieldValue}>{val(employee.placeOfBirth)}</span></div>
