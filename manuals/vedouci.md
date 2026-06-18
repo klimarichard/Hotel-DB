@@ -101,6 +101,7 @@ Tlačítko **Exportovat ▾** nabízí **PDF** (plán na jednu stránku A4). Tla
 Vlastní karta zaměstnance.
 
 - Vidíte své osobní údaje, kontakt, doklady a **historii pracovního poměru** (stejný formát jako na detailu zaměstnance).
+- **Pohlaví** se na vašem profilu nezobrazuje (ani v náhledu, ani při úpravě).
 - **Navrhnout úpravu** — změny se odešlou ke schválení administrátorovi/řediteli. Citlivá pole se při úpravě zobrazí, abyste viděli, co měníte (zobrazení se loguje).
 
 > 📷 *(Místo pro snímek obrazovky: Můj profil)*

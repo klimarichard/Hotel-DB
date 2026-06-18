@@ -1,6 +1,6 @@
 {
   "name": "hotel-hr-functions",
-  "version": "2.2.5",
+  "version": "2.2.6",
   "private": true,
   "main": "lib/index.js",
   "scripts": {
