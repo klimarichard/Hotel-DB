@@ -33,51 +33,217 @@ Managed in Settings → Společnosti tab. Only one card in edit mode at a time.
 
 ---
 
-## Audit log
+## Audit log / Log změn
 
 **Goal:** every business-data write is recorded so an admin can answer "who changed what, when" — most often "show me every change ever made to employee X."
 
-**Storage** — the existing `auditLog/` collection. Pre-existing actions (`reveal`, `export`, `manual-trigger`) keep their original shapes and are preserved. New per-mutation entries are written by `functions/src/services/auditLog.ts`:
+### Firestore schema
+
+The `auditLog/` collection stores one document per changed field for `update` actions, and one document per event for `create`, `delete`, `reveal`, `export`, and `manual-trigger` actions. The full shape after the v2.3.0 overhaul:
 
 ```
 {
-  userId, userEmail, userRole,
+  userId,          // Firebase Auth UID, or "system" for automated actions
+  userEmail,       // at time of write; "" for system actions
+  userRole,        // user-type id at time of write (stored as "userRole" for back-compat)
   action: "create" | "update" | "delete" | "reveal" | "export" | "manual-trigger",
-  collection,                 // e.g. "employees", "shiftPlans/shifts", "settings"
-  resourceId, subResourceId?,
-  fieldPath?, oldValue?, newValue?, redacted?,   // for update entries (one entry per changed field)
-  summary?,                                      // for create / delete entries
-  employeeId?,                               // denormalized for "all changes for X" filtering
-  timestamp                                  // serverTimestamp
+  collection,      // e.g. "employees", "shiftPlans/shifts", "employees/contact"
+  resourceId?,     // top-level doc id
+  subResourceId?,  // e.g. employeeId_YYYY-MM-DD for shift cells
+  fieldPath?,      // for update entries: changed field (one entry per field)
+  oldValue?,       // absent for sensitive fields
+  newValue?,       // absent for sensitive fields
+  redacted?,       // true when fieldPath is a sensitive field; oldValue/newValue omitted
+  summary?,        // create/delete: redacted snapshot of the document
+  extra?,          // reveal/export/manual-trigger: free-form extras
+  employeeId?,     // denormalized: present whenever the change concerns an employee
+  // Change-log overhaul additions (v2.3.0) — all optional; absent on legacy entries
+  event?,          // semantic event id, e.g. "vacation.approve", "plan.autoTransition"
+  category?,       // page bucket: smeny|dovolena|zamestnanci|mzdy|sablony|mujProfil|nastaveni|system
+  year?,           // period filter for smeny/mzdy/dovolena
+  month?,
+  templateId?,     // sablony filter — auto-derived from resourceId for contractTemplates
+  settingsArea?,   // nastaveni sub-tab: uzivatele|spolecnosti|oddeleni|pozice|vzdelani|mzdy
+  timestamp        // serverTimestamp
 }
 ```
 
-**Helper module** — `functions/src/services/auditLog.ts` exposes `logCreate`, `logUpdate`, `logDelete`, and `writeAudit`. `logUpdate` deep-diffs the pre/post snapshots and writes one entry per changed top-level field. Routes capture the pre-write doc, perform their normal write, then call the helper. **Every helper call is wrapped in try/catch internally** — an audit-log write failure must never abort the user's write. `IGNORED_FIELD_SUFFIXES` skips bookkeeping fields (`updatedAt`, `createdAt`, `lastLogin`).
+All new fields are additive. Legacy entries lack them and fall back to client-side render-derivation (see `deriveLegacyEventId` below).
 
-**Sensitive-field handling** — `birthNumber`, `idCardNumber`, `idCardExpiry`, `insuranceNumber`, `bankAccount` are recognized by leaf name. When one of these changes, the entry has `redacted: true` and **no** `oldValue` / `newValue` — never plaintext, never ciphertext. Routes can pass an additional `sensitiveFields` list when the field name doesn't make the redaction rule obvious. Snapshots in `summary` get sensitive keys replaced with the literal `"[redacted]"`.
+### Backend helper — `functions/src/services/auditLog.ts`
 
-**Auth context** — `functions/src/middleware/auth.ts` was extended to populate `req.userEmail` from the verified Firebase ID token, so audit writes don't need an extra Firestore lookup per call. Helper consumes `ctxFromReq(req)`.
+Public API:
 
-**Instrumented surface** — every PATCH/PUT/POST/DELETE in: `employees` (root + contact + employment + documents + benefits + delete + the legacy reveal/export, now migrated through the helper), `contracts` (CRUD + signed PDF upload/delete), `shifts` (~22 mutations: plans, planEmployees, per-shift cells, rules, unavailability, overrides, change requests, MOD row), `vacationRequests`, `payroll` (period create/lock/copy, per-entry edits, notes, recalc, **stravenkový paušál at PATCH /payroll/settings**), `auth` (set-role, create-user, deactivate, reactivate, employee link), `contractTemplates` (create + put), `departments`, `jobPositions`, `educationLevels`, `companies`. **Skipped on purpose:** `PUT /api/auth/me/theme` — cosmetic per-user preference, not worth the noise.
+| Export | Purpose |
+|---|---|
+| `logCreate(ctx, args)` | Write a `create` entry with a redacted summary snapshot. |
+| `logUpdate(ctx, args)` | Deep-diff `before`/`after`; write one entry per changed field. |
+| `logDelete(ctx, args)` | Write a `delete` entry with a redacted summary snapshot. |
+| `writeAudit(ctx, args)` | Free-form entry — used for `reveal`, `export`, `manual-trigger`. |
+| `logSystemEvent(args)` | Automated actions with no human actor. Writes with `SYSTEM_CONTEXT` (userId `"system"`) and defaults `category` to `"system"`. |
+| `ctxFromReq(req)` | Build an `AuditContext` from an `AuthRequest`. Routes call this once per handler. |
+| `categoryForCollection(collection, override?)` | Resolves `AuditCategory` from the `COLLECTION_CATEGORY` map. Tries the full path first, then the parent segment, so sub-doc collections (e.g. `shiftPlans/unavailabilityRequests`) inherit their parent's category without explicit enumeration. |
+| `settingsAreaForCollection(collection)` | Resolves `SettingsArea` from `SETTINGS_AREA_BY_COLLECTION`; same full-path-then-parent lookup. |
 
-**Per-shift edits** — `PUT /shifts/plans/:planId/shifts/:employeeId/:date` only logs when `rawInput` actually changed; re-saves with the same value are silently no-op for the audit log (otherwise a tab-out-tab-in flow would generate spam). The shift entry denormalizes `employeeId`, so per-shift edits are filterable by employee in the same `employeeId` query as employee-doc edits.
+`filterKeyFields` is an internal helper called by all four write functions. It auto-derives `category`, `settingsArea`, and `templateId` from the collection and resourceId, so call sites only pass the values that their handler has explicitly in hand (`year`, `month`, `event`, and `category` overrides). Callers never have to pass `settingsArea` or `templateId` — those default centrally.
 
-**Read endpoint** — `functions/src/routes/auditLog.ts` mounts `GET /api/audit` (admin + director). Filters: `employeeId`, `userId`, `collection`, `action`, `from`, `to`. Cursor pagination via `cursor=<lastDocId>`, default page 100, max 500. `GET /api/audit/meta/collections` returns the distinct `collection` values seen in the most recent 5000 entries to populate the filter dropdown without enumerating all docs.
+`SYSTEM_CONTEXT` is a sentinel `AuditContext` with `uid: "system"`. Use `logSystemEvent(...)` for all automated ("Systém") writes; it handles the context internally.
 
-**Composite indexes** — `firestore.indexes.json` declares `(employeeId, timestamp desc)`, `(userId, timestamp desc)`, `(collection, timestamp desc)`, `(action, timestamp desc)`. The combined-filter case (e.g. employee + date range) is served by these indexes plus the inequality on `timestamp`.
+**Write safety:** every helper call is `try/catch`-wrapped. An audit-log write failure prints to console but never aborts the caller's response.
 
-**Frontend** — `frontend/src/pages/AuditLogPage.tsx` (admin + director, `/audit`) shows a filterable, paginated table modeled on `EmployeesPage`. Filter state is mirrored to URL query params so deep-links work. Each row shows actor + action + collection + resource (linked to `/zamestnanci/:id` when `employeeId` is present) + field + old → new diff. Sensitive-field updates render as italic "citlivé pole změněno" without values. Clicking a row expands the full JSON entry. `EmployeeDetailPage` gains a "Historie změn" section (admin + director) with the 10 most recent entries for that employee plus a "Zobrazit všechny změny →" link to `/audit?employeeId=…`.
+**Bookkeeping fields skipped:** `updatedAt`, `createdAt`, `lastLogin` are listed in `IGNORED_FIELD_SUFFIXES` and never diff'd by `logUpdate`. The `id` field is also excluded (it's the document path, not data).
 
-**Nav** — added under `adminItems` in `Layout.tsx` (visible to both admin and director, like the other admin items).
+**Null-equivalence in `logUpdate`:** `null`, `undefined`, and `""` are all treated as "absent" by `isNullish()`, so saving an unchanged form with blank optional fields produces no audit entries.
 
-**Retention** — none. Entries persist forever per the user's choice. If volume becomes a problem later, add a scheduled prune in `functions/src/index.ts`.
+### Sensitive-field handling
 
-### Log změn — human-readable redesign (2026-05-28)
+`SENSITIVE_FIELD_NAMES` = `{ birthNumber, idCardNumber, idCardExpiry, insuranceNumber, bankAccount }`. Matched by leaf name so nested paths (`documents.idCardNumber`) are caught automatically. When a sensitive field changes, the entry has `redacted: true` with no `oldValue`/`newValue` — never plaintext, never ciphertext. Routes may also pass an explicit `sensitiveFields` override list. Create/delete `summary` snapshots get sensitive keys replaced with `"[redacted]"`.
 
-The `/audit` page ("Log změn") was reworked from a flat one-row-per-changed-field table (the "Frontend" paragraph above describes the old layout) into a **date-sectioned timeline of grouped event cards**. The backend stream is unchanged — still one doc per changed field — so the grouping is done **client-side**, making this a frontend-only change with no schema or data impact.
+### Category and settings-area mapping
 
-- **Label layer** (`frontend/src/lib/audit/`): `labels.ts` (collection + field labels, action verbs/glyphs, section derivation, and the `fieldLabel`/`collectionLabel`/`subjectNoun` resolvers — `fieldLabel` walks the collection path most-specific-first so `employees/contracts` resolves the contract field map, not the employee one); `fields.employee/payroll/shifts/misc.ts` (Czech field-label maps per collection family, ~255 fields total); `format.ts` (value formatters — ISO dates, Ano/Ne, enums, generic, with sensitive values kept redacted); `grouping.ts` (`groupEntries` folds the flat per-field stream into one event per author + record + action within a ~20s window, sub-grouped by area; `bucketByDate` → Dnes / Včera / explicit date; `eventTitle`).
-- **`AuditEventCard`** (`frontend/src/components/AuditEventCard.tsx`): one collapsed-by-default line per event (chevron, verb + accusative subject noun e.g. "Vytvořil dokument", record title/link, change count, author, time); expands to the changed fields as `popisek: old → new` grouped by area, plus a "Technický detail" raw-JSON escape hatch. The filter bar (now with Czech collection labels) and cursor pagination are retained. `EmployeeDetailPage`'s "Historie změn" reuses the same card (compact); there a `resolveRef` prop turns the contract's `employmentRowId` into the human employment-session header.
+`COLLECTION_CATEGORY` maps root collections and select sub-paths to `AuditCategory`. `categoryForCollection` exports this so the one-time backfill derives the same value as live writes:
+
+| Collections | Category |
+|---|---|
+| `shiftPlans`, `shiftPlans/*` | `smeny` |
+| `vacationRequests` | `dovolena` |
+| `employees`, `employees/*`, `contracts`, `otherDocuments` | `zamestnanci` |
+| `payrollPeriods`, `payrollPeriods/*` | `mzdy` |
+| `contractTemplates` | `sablony` |
+| `employeeChangeRequests` | `mujProfil` |
+| `users`, `roleTypes`, `companies`, `departments`, `jobPositions`, `educationLevels`, `settings` | `nastaveni` |
+| (written via `logSystemEvent`) | `system` |
+
+`employeeChangeRequests` is in `mujProfil` by default (the submit side). The approve/reject handlers in `routes/employeeChangeRequests.ts` pass `category: "zamestnanci"` as an override so review actions land in the Zaměstnanci bucket, not Můj profil.
+
+`SETTINGS_AREA_BY_COLLECTION` drives the `settingsArea` sub-filter within the `nastaveni` category:
+
+| Collections | SettingsArea |
+|---|---|
+| `users`, `roleTypes`, `settings/menuOrder` | `uzivatele` |
+| `companies` | `spolecnosti` |
+| `departments` | `oddeleni` |
+| `jobPositions` | `pozice` |
+| `educationLevels` | `vzdelani` |
+| `settings` (payroll settings) | `mzdy` |
+
+### Semantic events
+
+When a route performs a workflow action (approve/reject/claim) or an automated job runs, it passes an `event` string alongside the normal audit fields. The frontend maps these to Czech header phrases in `EVENT_LABELS`. Defined events:
+
+| Event id | Trigger |
+|---|---|
+| `vacation.approve` / `.reject` | Vacation request approve/reject |
+| `vacation.approveEdit` / `.rejectEdit` | Vacation edit approve/reject |
+| `shift.unavailability.approve` / `.reject` | Unavailability request approve/reject |
+| `shift.override.approve` / `.reject` | Shift override request approve/reject |
+| `shift.change.approve` / `.reject` | Shift change request approve/reject |
+| `shift.freeClaim.approve` / `.reject` | Free-shift claim approve/reject |
+| `shift.freeClaim.autoReject` | Competing free-shift claim auto-rejected by the system (previously silent) |
+| `employeeChange.approve` / `.reject` | Employee self-edit change-request approve/reject |
+| `plan.autoTransition` | Automatic shift-plan lifecycle transition |
+| `multisport.autoStart` / `.autoEnd` | Multisport period automatic start/end |
+| `employee.autoTerminate` / `.autoReactivate` | Nightly derived-status sweep |
+| `employee.autoStatusChange` | Generic automatic employee status change |
+
+Event ids are emitted by: `routes/vacation.ts`, `routes/shifts.ts` (including the previously-silent competing-claim auto-rejection, now `shift.freeClaim.autoReject` via `SYSTEM_CONTEXT`), `routes/employeeChangeRequests.ts`, `services/planTransitions.ts`, `services/multisportSweep.ts`, and the nightly `applyDerivedStatus` sweep.
+
+Note: auto-fill of manager "R" shifts does not emit a system event because that feature is not yet built (open TODO #12).
+
+### Shift-cell year/month denormalization
+
+`PUT /shifts/plans/:planId/shifts/:employeeId/:date` now writes `year` and `month` alongside the existing `employeeId` on each shift-cell audit entry. The cell date is encoded in `subResourceId` as `employeeId_YYYY-MM-DD`. Only logs when `rawInput` actually changed (no-op re-saves are skipped to avoid tab-in/tab-out spam).
+
+### Instrumented surface
+
+Every PATCH/PUT/POST/DELETE in: `employees` (root + contact + employment + documents + benefits + delete + reveal/export), `contracts` (CRUD + signed PDF upload/delete), `shifts` (~22 mutations: plans, planEmployees, per-shift cells, rules, unavailability, overrides, change requests, MOD row), `vacationRequests`, `payroll` (period create/lock/copy, per-entry edits, notes, recalc, stravenkový paušál at `PATCH /payroll/settings`), `auth` (set-role, create-user, deactivate, reactivate, employee link), `contractTemplates` (create + put), `departments`, `jobPositions`, `educationLevels`, `companies`, `settings`.
+
+Skipped on purpose: `PUT /api/auth/me/theme` — cosmetic per-user preference, not business data.
+
+### Read endpoint — `GET /api/audit`
+
+`functions/src/routes/auditLog.ts`, gated by `nav.audit.view` (admin + director).
+
+Query parameters (all optional):
+
+| Param | Type | Notes |
+|---|---|---|
+| `category` | comma-separated | Multi-value → Firestore `in` (≤10 values) |
+| `userId` | comma-separated | Multi-value → Firestore `in` (≤10 values) |
+| `employeeId` | equality | |
+| `collection` | equality | |
+| `action` | equality | |
+| `event` | equality | |
+| `templateId` | equality | |
+| `settingsArea` | equality | |
+| `year` | numeric equality | |
+| `month` | numeric equality | |
+| `from` / `to` | ISO datetime | Timestamp range |
+| `limit` | number | Default 100, max 500 |
+| `cursor` | last doc id | Cursor-based pagination |
+
+At most one multi-valued facet per request (Firestore allows only one `in` per query). If both `userId` and `category` are multi-valued, the endpoint returns `400` rather than hanging — this is the fix for the historical "combined filters 500/hang" prod bug. A missing composite index (`FAILED_PRECONDITION`) also returns a clean `400` instead of hanging.
+
+Results are ordered `timestamp desc`. Response: `{ entries: AuditEntry[], nextCursor?: string }`.
+
+`GET /api/audit/:id` — fetch a single entry by id (for the card raw-detail escape hatch).
+
+`GET /api/audit/meta/collections` — still present for backward compat; returns distinct `collection` values from the most recent 5000 entries. (The overhauled UI no longer uses the collection dropdown, but the endpoint is retained.)
+
+### Composite indexes (`firestore.indexes.json`)
+
+Pre-overhaul indexes (still in place):
+
+- `(employeeId, timestamp desc)`
+- `(userId, timestamp desc)`
+- `(collection, timestamp desc)`
+- `(action, timestamp desc)`
+
+Added in v2.3.0 for the "pick a page (category), then one sub-filter" query model:
+
+- `(category, timestamp desc)`
+- `(event, timestamp desc)`
+- `(category, employeeId, timestamp desc)`
+- `(category, year, timestamp desc)`
+- `(category, year, month, timestamp desc)`
+- `(category, settingsArea, timestamp desc)`
+- `(category, templateId, timestamp desc)`
+
+These seven cover every filter combination the UI exposes. Any unsupported combination (no matching index) surfaces the clean `400` described above.
+
+### One-time backfill
+
+`scripts/_backfill-audit-categories.js` (gitignored, local) back-fills `category`, `settingsArea`, and `templateId` onto existing `auditLog` docs that predate the v2.3.0 schema. It calls `categoryForCollection` and `settingsAreaForCollection` directly, so it derives identical values to live writes. Only fills absent fields (idempotent). It does NOT back-fill `year`/`month` onto shift/period entries where the `resourceId` is not a `YYYY-MM` string (plan and period ids are not always month strings, so the backfill cannot reliably derive them). Run on staging before promotion; run on prod at promotion time.
+
+### Frontend — `frontend/src/lib/audit/` and `AuditLogPage.tsx`
+
+The page (`/audit`) is a date-sectioned timeline of grouped event cards. The backend stream is unchanged (one doc per changed field). All grouping is client-side.
+
+**Label layer** (`frontend/src/lib/audit/`):
+
+- `labels.ts` — all type definitions (`AuditCategory`, `SettingsArea`, `AuditAction`) mirroring the backend; `CATEGORIES`/`CATEGORY_LABELS`; `SETTINGS_AREAS`/`SETTINGS_AREA_LABELS`; `COLLECTION_LABELS`/`SUBAREA_LABELS`; `ACTION_LABELS`; `EVENT_LABELS` (event id → full Czech phrase, e.g. `"vacation.approve"` → `"Schválení žádosti o dovolenou"`); `eventLabel(event)` → phrase or `undefined`; `deriveLegacyEventId(collection, statusValue)` → render-derives an event id for pre-v2.3.0 entries from their `status` field change (no data migration required); `fieldLabel(collection, fieldPath)` walks the label map most-specific-path-first; `subjectNoun(collection)` → Czech genitive noun for the generic header phrase; `actionVerb(action)` → verbal noun (Vytvoření / Upravení / Smazání / Zobrazení citlivého údaje / Export dat / Spuštění úlohy).
+- `fields.employee.ts`, `fields.payroll.ts`, `fields.shifts.ts`, `fields.misc.ts` — Czech field-label maps per collection family (~255 fields total). Merged into `FIELD_LABELS` in `labels.ts`, keyed by root collection name.
+- `format.ts` — value formatters: ISO dates, Ano/Ne booleans, enum display strings, generic fallback. Sensitive values remain redacted (no formatting applied).
+- `grouping.ts` — `groupEntries(entries)` folds the flat per-field stream into one `AuditEvent` per (author + action + record) within a 20-second window, with field changes sub-grouped by section (area label). Employee sections are sorted in canonical order (Osobní údaje → Kontakt → Doklady → Pojištění a banka → Pracovní poměr → Smlouvy). `bucketByDate(events)` partitions events into date headers (Dnes / Včera / explicit Czech date). `eventTitle(ev, employeeName?)` derives the record identifier (employee name with link, payroll month, snapshot name, or empty).
+
+**Shift-cell label:** `grouping.ts` parses the date from `subResourceId` (`employeeId_YYYY-MM-DD`) and labels each shift-cell change row with its formatted date (e.g. `"5. 5. 2025"`) instead of the generic field name. A grouped multi-day edit reads as one dated row per day.
+
+**Filter UI:** multi-select "Stránka" (category) chip group + "Autor změny" (userId) chip group. Selecting a category reveals per-page sub-filters: Zaměstnanec (employeeId) for Zaměstnanci/Směny/Dovolená/Mzdy; Rok/Měsíc for Směny/Mzdy; Šablona for Šablony smluv; Oblast nastavení for Nastavení. Date-range picker applies to all. The old collection/action dropdowns are removed from the UI (the backend still accepts `collection` and `action` as query params for direct API use). Filter state is mirrored to URL query params.
+
+**`AuditEventCard`** (`frontend/src/components/AuditEventCard.tsx`):
+
+- Collapsed-by-default: chevron + header phrase + record title (linked) + change count (suppressed for semantic events) + author + time.
+- Header phrase: uses `eventLabel(event.event)` when a semantic event id is present; falls back to `actionVerb(action) + " " + subjectNoun(collection)` otherwise. Multi-area employee edits use the root collection noun; single-area edits use the specific area noun.
+- Expanded body: changed fields as `label: old → new` rows within section sub-headers; create/delete snapshot rows; reveal/export/trigger `extra` rows; "Technický detail" toggle revealing raw JSON.
+- Sensitive-field rows render as `"citlivý údaj změněn"` without values.
+- Reused by `EmployeeDetailPage`'s "Historie změn" section in compact mode; the `resolveRef` prop resolves internal foreign keys (e.g. `employmentRowId`) to human labels before display.
+- `HIDDEN_FIELDS` (`rowSnapshot`, `htmlContent`, `htmlContentLength`, `unsignedStoragePath`, `signedStoragePath`, `hasUnsignedPdf`) are suppressed from the readable view but visible in the raw-JSON escape hatch.
+
+**Deferred (not yet shipped):** permission-key add/remove diff rendering. Permission changes on `roleTypes` entries currently render as labelled key arrays without a human-readable +/- diff.
+
+**Nav / gating** — `nav.audit.view` permission (admin + director by default). Route is `/audit`. `EmployeeDetailPage` "Historie změn" section is also gated by `nav.audit.view`.
+
+**Retention** — none. Entries persist forever. If volume becomes a problem, add a scheduled prune in `functions/src/index.ts`.
 
 ---
 
