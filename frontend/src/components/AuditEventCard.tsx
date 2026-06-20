@@ -27,6 +27,8 @@ interface Props {
   /** Resolve an internal-reference value (e.g. employmentRowId) to a human
    *  label. Returns null to fall back to default rendering / hiding. */
   resolveRef?: RefResolver;
+  /** Resolve a user-type id → its display name (for roleType / role fields). */
+  resolveType?: (id: string) => string | undefined;
 }
 
 // Bulky or internal fields hidden from the readable view (still in raw detail).
@@ -51,7 +53,12 @@ function formatTime(d: Date | null, withDate: boolean): string {
 }
 
 /** Display string for a value, or null when the field should be hidden. */
-function displayValue(fieldPath: string | undefined, value: unknown, resolveRef?: RefResolver): string | null {
+function displayValue(
+  fieldPath: string | undefined,
+  value: unknown,
+  resolveRef?: RefResolver,
+  resolveType?: (id: string) => string | undefined
+): string | null {
   const leaf = (fieldPath ?? "").split(".").pop() ?? "";
   if (HIDDEN_FIELDS.has(leaf)) return null;
   if (resolveRef) {
@@ -59,7 +66,7 @@ function displayValue(fieldPath: string | undefined, value: unknown, resolveRef?
     if (resolved != null) return resolved;
   }
   if (REF_FIELDS.has(leaf)) return null;
-  return renderAuditFieldValue(fieldPath, value);
+  return renderAuditFieldValue(fieldPath, value, { resolveType });
 }
 
 export default function AuditEventCard({
@@ -71,6 +78,7 @@ export default function AuditEventCard({
   hideAuthor = false,
   hideTitle = false,
   resolveRef,
+  resolveType,
 }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [showRaw, setShowRaw] = useState(false);
@@ -100,12 +108,12 @@ export default function AuditEventCard({
   // Visible summary / extra entries (create/delete snapshot, reveal/export/trigger extras)
   const summaryRows = event.summary
     ? Object.entries(event.summary)
-        .map(([k, v]) => ({ k, label: fieldLabel(event.primaryCollection, k), disp: displayValue(k, v, resolveRef) }))
+        .map(([k, v]) => ({ k, label: fieldLabel(event.primaryCollection, k), disp: displayValue(k, v, resolveRef, resolveType) }))
         .filter((r) => r.disp != null)
     : [];
   const extraRows = event.extra
     ? Object.entries(event.extra)
-        .map(([k, v]) => ({ k, label: fieldLabel(event.primaryCollection, k), disp: displayValue(k, v, resolveRef) }))
+        .map(([k, v]) => ({ k, label: fieldLabel(event.primaryCollection, k), disp: displayValue(k, v, resolveRef, resolveType) }))
         .filter((r) => r.disp != null)
     : [];
 
@@ -118,8 +126,8 @@ export default function AuditEventCard({
     const c = flatChanges[0];
     if (c.redacted) compactSummary = c.label;
     else {
-      const o = displayValue(c.fieldPath, c.oldValue, resolveRef);
-      const n = displayValue(c.fieldPath, c.newValue, resolveRef);
+      const o = displayValue(c.fieldPath, c.oldValue, resolveRef, resolveType);
+      const n = displayValue(c.fieldPath, c.newValue, resolveRef, resolveType);
       if (o != null || n != null) compactSummary = `${c.label}: ${o ?? "—"} → ${n ?? "—"}`;
     }
   } else if (!semanticHeader && flatChanges.length > 1) {
@@ -167,8 +175,8 @@ export default function AuditEventCard({
               const rows = section.changes
                 .map((c) => ({
                   c,
-                  oldDisp: displayValue(c.fieldPath, c.oldValue, resolveRef),
-                  newDisp: displayValue(c.fieldPath, c.newValue, resolveRef),
+                  oldDisp: displayValue(c.fieldPath, c.oldValue, resolveRef, resolveType),
+                  newDisp: displayValue(c.fieldPath, c.newValue, resolveRef, resolveType),
                 }))
                 .filter((r) => r.c.redacted || r.oldDisp != null || r.newDisp != null);
               if (rows.length === 0) return null;

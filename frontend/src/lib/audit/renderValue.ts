@@ -142,11 +142,21 @@ function isMenuOrderArray(v: unknown): v is string[] {
   return Array.isArray(v) && v.length > 0 && v.every((x) => typeof x === "string" && MENU_LABELS.has(x));
 }
 
+/** Live lookups the caller injects (data the static maps can't know). */
+export interface RenderOpts {
+  /** user-type id → its display name (for roleType / legacy role fields). */
+  resolveType?: (id: string) => string | undefined;
+}
+
 /**
  * Render an audit value for display, or null to hide the field row entirely.
  * Dispatch is by field leaf, so each identifier class resolves to in-app text.
  */
-export function renderAuditFieldValue(fieldPath: string | undefined, value: unknown): string | null {
+export function renderAuditFieldValue(
+  fieldPath: string | undefined,
+  value: unknown,
+  opts?: RenderOpts
+): string | null {
   const leaf = (fieldPath ?? "").split(".").pop() ?? "";
   if (HIDDEN_ID_LEAVES.has(leaf)) return null;
   switch (leaf) {
@@ -180,6 +190,12 @@ export function renderAuditFieldValue(fieldPath: string | undefined, value: unkn
     case "nationality":
       // App shows the resolved country name (nationalityName), not the code.
       return typeof value === "string" && value ? nationalityName(value) : formatAuditValue(value);
+    case "roleType":
+    case "role":
+      // User-type id → its display name (matches user management).
+      return typeof value === "string" && value
+        ? opts?.resolveType?.(value) ?? value
+        : formatAuditValue(value);
     default:
       if (isMenuOrderArray(value)) return resolveKeys(value, (k) => MENU_LABELS.get(k) ?? k);
       return formatAuditValue(value, leaf);
