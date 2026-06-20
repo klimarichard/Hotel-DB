@@ -75,7 +75,10 @@ const COLLECTION_CATEGORY: Record<string, AuditCategory> = {
 };
 
 function resolveCategory(collection: string, override?: AuditCategory): AuditCategory | undefined {
-  return override ?? COLLECTION_CATEGORY[collection];
+  // Try the full path first, then fall back to the parent segment so sub-doc
+  // collections ("shiftPlans/unavailabilityRequests", "employees/benefits", …)
+  // inherit their parent's page category without enumerating every sub-path.
+  return override ?? COLLECTION_CATEGORY[collection] ?? COLLECTION_CATEGORY[collection.split("/")[0]];
 }
 
 export interface AuditContext {
@@ -366,6 +369,7 @@ export async function logSystemEvent(args: {
   event: string;
   collection: string;
   resourceId?: string;
+  subResourceId?: string;
   employeeId?: string;
   action?: AuditAction;
   category?: AuditCategory;
@@ -380,11 +384,13 @@ export async function logSystemEvent(args: {
       args.action ?? "update",
       args.collection,
       args.resourceId,
-      undefined,
+      args.subResourceId,
       args.employeeId
     ),
     ...filterKeyFields(args.collection, {
-      category: args.category ?? resolveCategory(args.collection) ?? "system",
+      // Automatic actions land in the "Systém" page-filter bucket by default;
+      // they stay findable by employee / month via the denormalized keys below.
+      category: args.category ?? "system",
       event: args.event,
       year: args.year,
       month: args.month,

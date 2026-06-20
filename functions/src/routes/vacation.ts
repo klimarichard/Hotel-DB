@@ -474,10 +474,24 @@ vacationRouter.patch("/:id", requireAuth, async (req: AuthRequest, res) => {
   // Re-read for the after-snapshot
   const afterSnap = await docRef.get();
   const afterData = afterSnap.exists ? (afterSnap.data() as Record<string, unknown>) : {};
+  // Semantic event for the change log: distinguish approve/reject of a pending
+  // request from approve/reject of an EDIT to an already-approved request.
+  const vacationEvent = pendingEdit
+    ? status === "approved"
+      ? "vacation.approveEdit"
+      : "vacation.rejectEdit"
+    : status === "approved"
+      ? "vacation.approve"
+      : "vacation.reject";
+  // Year (Dovolená page filter) from the request's start date.
+  const vacationYear =
+    Number(String(afterData.startDate ?? data.startDate ?? "").slice(0, 4)) || undefined;
   await logUpdate(ctxFromReq(req), {
     collection: "vacationRequests",
     resourceId: id,
     employeeId: data.employeeId as string,
+    event: vacationEvent,
+    year: vacationYear,
     before: beforeForLog,
     after: {
       status: afterData.status,
