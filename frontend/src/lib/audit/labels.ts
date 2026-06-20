@@ -122,6 +122,69 @@ export function collectionLabel(collection: string): string {
   return `${rootLabel} · ${subLabel}`;
 }
 
+// ─── Page categories (change-log overhaul) ───────────────────────────────────
+
+/** Page bucket an audit entry belongs to — mirrors the backend AuditCategory. */
+export type AuditCategory =
+  | "smeny"
+  | "dovolena"
+  | "zamestnanci"
+  | "mzdy"
+  | "sablony"
+  | "mujProfil"
+  | "nastaveni"
+  | "system";
+
+/** Categories in display order for the "stránka" multi-select filter. */
+export const CATEGORIES: AuditCategory[] = [
+  "smeny",
+  "dovolena",
+  "zamestnanci",
+  "mzdy",
+  "sablony",
+  "mujProfil",
+  "nastaveni",
+  "system",
+];
+
+export const CATEGORY_LABELS: Record<AuditCategory, string> = {
+  smeny: "Směny",
+  dovolena: "Dovolená",
+  zamestnanci: "Zaměstnanci",
+  mzdy: "Mzdy",
+  sablony: "Šablony smluv",
+  mujProfil: "Můj profil",
+  nastaveni: "Nastavení",
+  system: "Systém",
+};
+
+/** Nastavení sub-area — mirrors the backend SettingsArea. */
+export type SettingsArea =
+  | "uzivatele"
+  | "spolecnosti"
+  | "oddeleni"
+  | "pozice"
+  | "vzdelani"
+  | "mzdy";
+
+export const SETTINGS_AREAS: SettingsArea[] = [
+  "uzivatele",
+  "spolecnosti",
+  "oddeleni",
+  "pozice",
+  "vzdelani",
+  "mzdy",
+];
+
+export const SETTINGS_AREA_LABELS: Record<SettingsArea, string> = {
+  uzivatele: "Uživatelé a oprávnění",
+  spolecnosti: "Společnosti",
+  oddeleni: "Oddělení",
+  pozice: "Pracovní pozice",
+  vzdelani: "Vzdělání",
+  mzdy: "Mzdová nastavení",
+};
+
 /**
  * Section label used to sub-group fields inside one event card. For employee
  * edits this is the sub-doc area ("Osobní údaje" / "Kontakt" / …); the root

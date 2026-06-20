@@ -33,6 +33,13 @@ export interface AuditEntry {
   redacted?: boolean;
   summary?: Record<string, unknown>;
   employeeId?: string;
+  // Change-log overhaul: semantic event id + denormalized filter keys.
+  event?: string;
+  category?: string;
+  year?: number;
+  month?: number;
+  templateId?: string;
+  settingsArea?: string;
   extra?: Record<string, unknown>;
   timestamp?: { _seconds?: number; seconds?: number } | string | null;
 }
