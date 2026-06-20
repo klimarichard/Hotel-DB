@@ -9,7 +9,7 @@ Developer documentation for the employee module: the core employee record and fo
 - Employment history modal: linked dropdowns (Oddělení → Pracovní pozice), auto-fills `salary` and `hourlyRate` from position defaults.
 - `jobPositions` docs carry optional `clothingAllowance` and `homeOfficeAllowance` (Kč/h, nullable). Seeded from `pozice.csv` columns "Náhrady - oblečení" and "Náhrady - HO"; editable in Settings → Pracovní pozice. Displayed as `N Kč/h` behind the same eye-toggle as salary + hourly rate.
 - Settings → Pracovní pozice: editing `hourlyRate` cascades the new value to every active employment record where `currentJobTitle === position.name` AND `currentDepartment === position.department.name` (denormalized fields on `employees/{id}`). PATCH `/jobPositions/:id` returns `409 { requiresConfirmation, fieldChange, affectedEmployees, affectedUnlockedPayrolls }` when the change would touch employees; the UI shows a confirmation dialog flagging employees whose current rate already differs from the position default (`isManualOverride`), plus any unlocked `payrollPeriods` that contain those employees and would need a manual Recount. On confirm, re-PATCH with `confirmCascade: true`. Cascade only covers `hourlyRate` — `defaultSalary` is intentionally excluded (driven by signed contracts), and `clothingAllowance`/`homeOfficeAllowance` are not yet snapshotted onto employment records.
-- Employee list always sorted by `lastName` then `firstName` (Czech locale) — new employees appear in correct position immediately.
+- Employee list default order: `lastName` then `firstName` (Czech locale). Column headers are now clickable to sort — see [Employees list — Datum nástupu / Datum ukončení columns + sortable columns (2026-06-20)](#employees-list--datum-nástupu--datum-ukončení-columns--sortable-columns-2026-06-20).
 - Settings → Oddělení: clickable "Název" header sorts asc/desc. Settings → Pracovní pozice: clickable "Název" and "Oddělení" headers with asc/desc toggle. Active column shows ▲/▼, inactive ⇅.
 - **Education levels (`educationLevels`)**: admin-managed catalogue used by the EmployeeFormPage Vzdělání dropdown. Each doc carries `code` (e.g. `K`) + `name` (e.g. `úplné střední všeobecné vzdělání`) + `displayOrder`. Backend route `/api/educationLevels`: GET open to any authenticated user (form needs the list); POST/PATCH/DELETE admin-only. Settings → Vzdělání tab shows two sortable columns (Název, Kód) with inline edit + create modal + delete confirm. Seeded from `scripts/seeds/vzdelani.csv` (one `"<code> - <name>"` line per level) by `scripts/seed-education-levels.js`. EmployeeFormPage composes the option label as `${code} - ${name}` to match the legacy hardcoded format, so already-saved `employee.education` values keep selecting the right option; a saved value not in the catalogue is still rendered as an extra option to avoid silent loss on save.
 - **CSV export** (admin + director): "Exportovat CSV" button on `EmployeesPage` opens `ExportEmployeesModal`. Users pick which of 36 seed-compatible columns to include, filter by status / company / contract type / nationality / job title, and name the output file (defaults to `zamestnanci_YYYY-MM-DD.csv`; `sanitizeFilename()` strips Windows-illegal characters and appends `.csv` on blur and at submit). Backend endpoint `GET /api/employees/export` merges each employee with their `contact`, `documents`, `benefits`, and latest `employment` sub-docs in parallel, redacting the five encrypted fields (`birthNumber`, `idCardNumber`, `insuranceNumber`, `bankAccount`, `idCardExpiry`) by default. Opting in via `?includeSensitive=true` decrypts them and writes ONE `auditLog/` entry per export (action `"export"`), not one per field per employee. **The sensitive opt-in is permission-gated server-side:** `?includeSensitive=true` requires `employees.export.sensitive` (separate from the `employees.export` gate on the route); the handler returns 403 without it. The frontend already hides the toggle for callers lacking the permission, but the backend is the real gate — a direct API call (or a custom type granted plain `employees.export` only) can't dump plaintext PII. CSV assembly lives client-side in `frontend/src/lib/csvExport.ts` — semicolon-delimited, CRLF, UTF-8 BOM, dates `"DD. MM. YYYY"`, booleans `"ANO"`/empty, salary with space thousands separator. Column order mirrors `scripts/seeds/employees.csv` so a full-column export is round-trip compatible with the seed loader. **Excel text-literal escape:** columns flagged `forceText` (`idCardNumber`, `passportNumber`, `visaNumber`, `birthNumber`, `insuranceNumber`, `bankAccount`, `phone`) emit as `="value"` so Excel preserves leading zeros on visa numbers, keeps `+420` phone prefixes, and doesn't interpret `/` in bank accounts as division. Future: the `accountant` role is in the plan for this allow list but not yet in `UserRole`; a TODO at `functions/src/routes/employees.ts` tags the handler.
@@ -212,3 +212,86 @@ Payroll shows the monthly Multisport **price** (basic + active companions) inste
 - **`nepodepiseProhlaseni` (boolean).** New "Nepodepíše prohlášení poplatníka" checkbox in the employee edit form (Doplňující údaje → Benefity), stored on the `benefits` sub-doc. When `true`, the employee **detail** page shows a "Nepodepsané prohlášení" banner under the header.
 - **"Platnost OP" (`idCardExpiry`) removed from Můj profil self-service** — both the displayed value and the "Navrhnout úpravu" change-request form (it was unused there). Stored data is untouched; the admin-side `documents` sub-collection still keeps `idCardExpiry` for expiry alerts. **Decoupling:** `refreshDocumentExpiryAlerts` no longer derives a field's encryption flag from the self-edit `EDITABLE_FIELDS` whitelist — encryption is now declared on `EXPIRY_FIELDS` itself (`sensitive: boolean`), so dropping a field from the self-edit whitelist can't break decryption of stored values.
 - **Phone +420 grouping.** Numbers starting with `+420` display as `+420 XXX XXX XXX` on the employee detail page and Můj profil (display only; storage unchanged). Shared helper `frontend/src/lib/phoneFormat.ts` → `formatPhoneDisplay`. Other country codes are shown unchanged for now.
+
+---
+
+## Employees list — Datum nástupu / Datum ukončení columns + sortable columns (2026-06-20)
+
+Two changes to `frontend/src/pages/EmployeesPage.tsx` shipped together in v2.2.8.
+
+### New columns: Datum nástupu and Datum ukončení
+
+The Employees table now shows a **fixed column set for ALL users** — the set was deliberately chosen and is not a per-user picker:
+
+| Column | Notes |
+|---|---|
+| Jméno (+ HPP/PPP/DPP badge) | |
+| Pozice | |
+| Oddělení | |
+| Národnost | |
+| **Datum nástupu** | new |
+| **Datum ukončení** | new |
+| Stav | |
+
+Společnost was deliberately omitted to keep the table width manageable.
+
+Both new columns are backed by **root-denormalized fields** on `employees/{id}` maintained by `applyDerivedStatus`:
+
+- **`employmentStartDate`** (`string` ISO `YYYY-MM-DD` | `null`) — the start of the employee's **current continuous run** at the company. This is NOT necessarily their latest Nástup date: a returning employee whose new Nástup begins within one calendar month of their previous session's end is treated as continuous, and `employmentStartDate` reflects the original run's start. Example: if Richard Klíma's latest Nástup is 1. 1. 2026 but he has worked unbroken since Nov 2022, the stored value is `"2022-11-01"`. `null` for name-only employees with no employment rows.
+- **`employmentEndDate`** (`string` ISO `YYYY-MM-DD` | `null`) — the effective end date of the latest session. `null` means open-ended (renders as "—" in the UI). Populated for terminated employees (their exit date) and still-active employees with a known future end (fixed-term contract or an in-advance departure). Mirrors the same end-date resolution as `computeEffectiveStatus`: Nástup `endDate`, overridden by any in-effect `délka smlouvy` Dodatek (empty value = doba neurčitá clears it to `null`), then by the Ukončení row's `startDate`.
+
+#### Backend — `computeEmploymentDates(rows, today)` in `functions/src/routes/employees.ts`
+
+A new exported pure function placed immediately after `computeEffectiveStatus` in the same file. It folds employment sessions oldest-to-newest using the same session-building loop (`nástup` opens, `změna smlouvy` appends, `ukončení` closes), and returns `{ employmentStartDate, employmentEndDate }`.
+
+**Continuous-run rule:** a new Nástup continues the SAME run when it starts in the **same calendar month** as, or the calendar month **immediately after**, the previous session's effective end (gap ≤ 1 whole calendar month). Dec-31 end → Jan-1 start is therefore continuous. A gap of 2+ months (terminated, rehired later) starts a fresh run and `employmentStartDate` resets to that new Nástup's `startDate`.
+
+**Gap measurement — `isoMonthIndex(dateStr)`:** a module-level helper that parses a date string by substring (never `new Date()` — avoids the UTC-shift-to-previous-day bug) and returns an absolute month index (`year * 12 + (month - 1)`). Comparing two `isoMonthIndex` values is year-boundary-safe (Dec 2025 → Jan 2026 differ by exactly 1). An unmeasurable boundary (missing/garbled date, or an open-ended prior session) is treated as **continuous** (forgiving default — keeps the run going).
+
+#### Backend — `applyDerivedStatus` persistence
+
+Both `employmentStartDate` and `employmentEndDate` are computed and written inside **`applyDerivedStatus(empRef, now, req?)`**. Previously this function early-returned when the derived status was unchanged; it now writes whenever **either** status **or** a date changed, which allows the nightly `refreshEmployeeEffective` sweep (and the admin-triggered `trigger-effective-refresh` manual run) to backfill both fields onto existing employees without churning `updatedAt` when nothing moved.
+
+Key design decisions:
+- The two date fields are **pure derived denormalizations** — no audit log entry is written when they change (only the status transition is audited), to avoid log noise.
+- They apply to **both active and terminated employees**. This is why they live in `applyDerivedStatus` rather than `computeEffectiveRootFields` (the latter returns `null` for terminated employees and would skip the write for exited staff).
+- `POST /employees` seeds both fields as `null` for name-only employees.
+- **No schema migration needed.** Existing employees backfill automatically on the next nightly sweep or manual trigger-effective-refresh call. The change is purely additive.
+- `GET /employees` already returns the entire root doc, so no endpoint change was required — the fields flow through to the list automatically.
+
+#### Frontend
+
+Two new `<th>` / `<td>` pairs inserted between Národnost and Stav in `EmployeesPage.tsx`. Values are formatted with `formatDateCZ(value) || "—"`, so `null` / missing renders as a dash.
+
+---
+
+### Sortable columns
+
+Every column header **except Stav** is now clickable to toggle sort order. Clicking an inactive header sorts ascending; clicking the active header toggles asc ↔ desc. The active column shows ▲ (asc) or ▼ (desc).
+
+| Column | Sort key | Sort comparator |
+|---|---|---|
+| Jméno | surname then first name | Czech `Intl.Collator("cs", {sensitivity:"base", numeric:true})` |
+| Pozice | `currentJobTitle` | same Czech collator |
+| Oddělení | `currentDepartment` | same Czech collator |
+| Národnost | **resolved display name** (e.g. "Ukrajina") | same Czech collator |
+| Datum nástupu | `employmentStartDate` | ISO string lexicographic (chronological) |
+| Datum ukončení | `employmentEndDate` | ISO string lexicographic (chronological) |
+| Stav | — | **not sortable** |
+
+Nationality sorts on the human-readable resolved name, not the stored 3-letter code, so the sort order matches what the user sees.
+
+**Missing values always sink to the bottom** regardless of sort direction (e.g. open-ended employees with no `employmentEndDate` always appear last when sorting by that column).
+
+**Default** remains `lastName` → `firstName` ascending — identical to the previous hard-coded order, so the initial render is unchanged.
+
+#### Implementation
+
+All sorting is **client-side in `EmployeesPage.tsx`**:
+
+- State: `sortKey: string | null` and `sortDir: "asc" | "desc"`.
+- `toggleSort(key)` — sets `sortDir = "asc"` when the key changes, flips it when the same key is clicked.
+- `sortValue(employee, key)` — module-level pure helper that maps a sort key to the comparable string/null for a given employee record.
+- `.sortable` / `.sortArrow` — CSS classes in `EmployeesPage.module.css` for header hover styling and the ▲/▼ indicator.
+
+No backend changes were required.

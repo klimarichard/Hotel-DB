@@ -4,6 +4,7 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { employeeDisplayName, employeeSurnameFirst } from "@/lib/employeeName";
 import { nationalityName } from "@/lib/nationalities";
+import { formatDateCZ } from "@/lib/dateFormat";
 import Button from "@/components/Button";
 import ExportEmployeesModal from "@/components/ExportEmployeesModal";
 import styles from "./EmployeesPage.module.css";
@@ -20,6 +21,36 @@ interface Employee {
   currentDepartment: string;
   currentContractType: string;
   currentJobTitle: string;
+  // Continuous-employment start (NOT the latest Nástup) + effective end (or null).
+  employmentStartDate?: string | null;
+  employmentEndDate?: string | null;
+}
+
+// Every column is sortable except Stav (which mirrors the three tabs, so a sort
+// would be redundant). "name" sorts by surname then first name.
+type SortKey = "name" | "jobTitle" | "department" | "nationality" | "startDate" | "endDate";
+
+// Reused Czech collator (numeric so any digits inside a value sort naturally).
+const csCollator = new Intl.Collator("cs", { sensitivity: "base", numeric: true });
+
+// The string a row contributes for a given sort key. Date keys return the raw
+// ISO string (lexicographic === chronological); text keys return the displayed
+// text so the sort matches what the user reads (e.g. resolved nationality name).
+function sortValue(e: Employee, key: SortKey): string {
+  switch (key) {
+    case "jobTitle":
+      return e.currentJobTitle ?? "";
+    case "department":
+      return e.currentDepartment ?? "";
+    case "nationality":
+      return e.nationality ? nationalityName(e.nationality) : "";
+    case "startDate":
+      return e.employmentStartDate ?? "";
+    case "endDate":
+      return e.employmentEndDate ?? "";
+    default:
+      return "";
+  }
 }
 
 export default function EmployeesPage() {
@@ -30,6 +61,18 @@ export default function EmployeesPage() {
   const [statusFilter, setStatusFilter] = useState<"active" | "before-start" | "terminated">("active");
   const [search, setSearch] = useState("");
   const [showExport, setShowExport] = useState(false);
+  // Default sort: surname A→Z (matches the previous hard-coded order).
+  const [sortKey, setSortKey] = useState<SortKey>("name");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  // Click a header: same column toggles direction; a new column starts at asc.
+  const toggleSort = (key: SortKey) => {
+    if (key === sortKey) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  };
 
   useEffect(() => {
     setLoading(true);
@@ -60,8 +103,21 @@ export default function EmployeesPage() {
       );
     })
     .sort((a, b) => {
-      const last = (a.lastName ?? "").localeCompare(b.lastName ?? "", "cs");
-      return last !== 0 ? last : (a.firstName ?? "").localeCompare(b.firstName ?? "", "cs");
+      const mul = sortDir === "asc" ? 1 : -1;
+      if (sortKey === "name") {
+        const last = csCollator.compare(a.lastName ?? "", b.lastName ?? "");
+        const r = last !== 0 ? last : csCollator.compare(a.firstName ?? "", b.firstName ?? "");
+        return r * mul;
+      }
+      const av = sortValue(a, sortKey);
+      const bv = sortValue(b, sortKey);
+      // Missing values (e.g. blank Datum ukončení) always sink to the bottom,
+      // regardless of sort direction.
+      if (!av && !bv) return 0;
+      if (!av) return 1;
+      if (!bv) return -1;
+      if (sortKey === "startDate" || sortKey === "endDate") return av.localeCompare(bv) * mul;
+      return csCollator.compare(av, bv) * mul;
     });
 
   return (
@@ -121,17 +177,37 @@ export default function EmployeesPage() {
         <table className={styles.table} data-tour="emp-list">
           <thead>
             <tr>
-              <th>Jméno</th>
-              <th>Pozice</th>
-              <th>Oddělení</th>
-              <th>Národnost</th>
+              {(
+                [
+                  ["name", "Jméno"],
+                  ["jobTitle", "Pozice"],
+                  ["department", "Oddělení"],
+                  ["nationality", "Národnost"],
+                  ["startDate", "Datum nástupu"],
+                  ["endDate", "Datum ukončení"],
+                ] as [SortKey, string][]
+              ).map(([key, label]) => (
+                <th
+                  key={key}
+                  className={styles.sortable}
+                  onClick={() => toggleSort(key)}
+                  aria-sort={
+                    sortKey === key ? (sortDir === "asc" ? "ascending" : "descending") : "none"
+                  }
+                >
+                  {label}
+                  {sortKey === key && (
+                    <span className={styles.sortArrow}>{sortDir === "asc" ? "▲" : "▼"}</span>
+                  )}
+                </th>
+              ))}
               <th>Stav</th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={5} className={styles.empty}>
+                <td colSpan={7} className={styles.empty}>
                   Žádní zaměstnanci nenalezeni.
                 </td>
               </tr>
@@ -158,6 +234,8 @@ export default function EmployeesPage() {
                   <td>{emp.currentJobTitle || "—"}</td>
                   <td>{emp.currentDepartment || "—"}</td>
                   <td>{emp.nationality ? nationalityName(emp.nationality) : "—"}</td>
+                  <td>{formatDateCZ(emp.employmentStartDate) || "—"}</td>
+                  <td>{formatDateCZ(emp.employmentEndDate) || "—"}</td>
                   <td>
                     <span
                       className={
