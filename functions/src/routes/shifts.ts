@@ -1138,6 +1138,8 @@ shiftsRouter.put(
         resourceId: planId,
         subResourceId: `${employeeId}_${date}`,
         employeeId,
+        year: Number(String(date).slice(0, 4)) || undefined,
+        month: Number(String(date).slice(5, 7)) || undefined,
         before: { rawInput: beforeRaw },
         after: { rawInput: parsed.rawInput },
       });
@@ -1181,6 +1183,8 @@ shiftsRouter.delete(
         resourceId: planId,
         subResourceId: `${employeeId}_${date}`,
         employeeId,
+        year: Number(String(date).slice(0, 4)) || undefined,
+        month: Number(String(date).slice(5, 7)) || undefined,
         summary: { date, rawInput: beforeData.rawInput },
       });
     }
