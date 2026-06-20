@@ -13,6 +13,7 @@
 
 import {
   type AuditAction,
+  deriveLegacyEventId,
   fieldLabel,
   rootCollection,
   sectionLabel,
@@ -33,6 +34,13 @@ export interface AuditEntry {
   redacted?: boolean;
   summary?: Record<string, unknown>;
   employeeId?: string;
+  // Change-log overhaul: semantic event id + denormalized filter keys.
+  event?: string;
+  category?: string;
+  year?: number;
+  month?: number;
+  templateId?: string;
+  settingsArea?: string;
   extra?: Record<string, unknown>;
   timestamp?: { _seconds?: number; seconds?: number } | string | null;
 }
@@ -63,6 +71,8 @@ export interface AuditEvent {
   primaryCollection: string;
   resourceId?: string;
   employeeId?: string;
+  /** Semantic event id (set, or render-derived for legacy entries). */
+  event?: string;
   /** update events: changed fields grouped by area. */
   sections: AuditEventSection[];
   /** create/delete events: redacted snapshot of the record. */
@@ -142,6 +152,14 @@ function buildEvent(entries: AuditEntry[]): AuditEvent {
     Array.from(sectionMap.entries()).map(([label, changes]) => ({ label, changes }))
   );
 
+  // Semantic event: carried on the entry, or render-derived for legacy entries
+  // from a status field change (so old approvals/rejections read correctly).
+  let event = first.event;
+  if (!event) {
+    const statusEntry = entries.find((e) => e.fieldPath?.split(".").pop() === "status");
+    if (statusEntry) event = deriveLegacyEventId(first.collection, statusEntry.newValue);
+  }
+
   return {
     id: first.id,
     action: first.action,
@@ -153,6 +171,7 @@ function buildEvent(entries: AuditEntry[]): AuditEvent {
     primaryCollection: first.collection,
     resourceId: first.resourceId,
     employeeId: first.employeeId,
+    event,
     sections,
     summary: first.summary,
     extra: first.extra,

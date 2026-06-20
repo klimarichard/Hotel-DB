@@ -25,6 +25,9 @@ const employees: FieldLabelMap = {
   placeOfBirth: "Místo narození",
   birthNumber: "Rodné číslo",
   status: "Stav",
+  // Systém auto status-change summary (employee.autoTerminate / autoReactivate)
+  from: "Původní stav",
+  to: "Nový stav",
   // Denormalized "current*" fields kept on the root doc
   currentJobTitle: "Pracovní pozice (aktuální)",
   currentDepartment: "Oddělení (aktuální)",
