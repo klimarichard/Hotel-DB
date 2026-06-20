@@ -187,6 +187,16 @@ export default function AuditLogPage() {
     return m;
   }, [roleTypes, companies, departments, positions, eduLevels, templates]);
 
+  // user-type id → display name (for roleType / legacy role fields in the body).
+  const roleTypeNameMap = useMemo(() => {
+    const m = new Map<string, string>();
+    roleTypes.forEach((r) => {
+      const name = r.name || r.displayName;
+      if (name) m.set(r.id, name);
+    });
+    return m;
+  }, [roleTypes]);
+
   // Month label ("Květen 2025") by `${collectionRoot}:${id}` for plans + periods.
   const monthMap = useMemo(() => {
     const m = new Map<string, string>();
@@ -517,6 +527,7 @@ export default function AuditLogPage() {
                     }
                     title={t.text}
                     titleHref={t.href}
+                    resolveType={(rtid) => roleTypeNameMap.get(rtid)}
                   />
                 );
               })}
