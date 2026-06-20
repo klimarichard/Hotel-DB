@@ -81,12 +81,16 @@ export default function AuditLogPage() {
   const [templates, setTemplates] = useState<TemplateMini[]>([]);
 
   useEffect(() => {
+    // Load ALL statuses (incl. "before-start") so every audited employee
+    // resolves to a name in the card title — a Před-nástupem employee's edits
+    // were otherwise nameless.
     Promise.all([
       api.get<EmployeeMini[]>("/employees?status=active"),
+      api.get<EmployeeMini[]>("/employees?status=before-start"),
       api.get<EmployeeMini[]>("/employees?status=terminated"),
     ])
-      .then(([active, terminated]) => {
-        const all = [...active, ...terminated].sort((a, b) =>
+      .then(([active, beforeStart, terminated]) => {
+        const all = [...active, ...beforeStart, ...terminated].sort((a, b) =>
           (a.lastName ?? "").localeCompare(b.lastName ?? "", "cs")
         );
         setEmployees(all);

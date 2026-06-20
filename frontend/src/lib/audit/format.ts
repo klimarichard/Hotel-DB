@@ -54,6 +54,35 @@ const ENUM_LABELS: Record<string, Record<string, string>> = {
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}/;
 
+/**
+ * Czech labels for common NESTED object keys, so an object-valued field renders
+ * readably (never JSON). Covers vacation pendingEdit, Systém from/to, Dodatek
+ * changes[], Multisport periods/companions, etc.
+ */
+const NESTED_KEY_LABELS: Record<string, string> = {
+  startDate: "od",
+  endDate: "do",
+  from: "z",
+  to: "na",
+  reason: "důvod",
+  value: "hodnota",
+  changeKind: "typ změny",
+  name: "jméno",
+  price: "cena",
+  date: "datum",
+  code: "kód",
+  hotel: "hotel",
+};
+
+function nestedKeyLabel(key: string): string {
+  if (NESTED_KEY_LABELS[key]) return NESTED_KEY_LABELS[key];
+  // Generic prettifier (no external import to avoid a cycle with labels.ts).
+  return key
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[._-]+/g, " ")
+    .trim();
+}
+
 /** "YYYY-MM-DD" (optionally with time) → "DD.MM.YYYY", split-based (no UTC shift). */
 function formatIsoDate(value: string): string {
   const datePart = value.slice(0, 10);
@@ -105,12 +134,15 @@ export function formatAuditValue(value: unknown, fieldLeaf?: string): string {
         year: "numeric",
       });
     }
-    try {
-      const json = JSON.stringify(value);
-      return json.length > 200 ? json.slice(0, 197) + "…" : json;
-    } catch {
-      return "(objekt)";
-    }
+    // NEVER render JSON in the change log. Render a plain object as a readable
+    // "label: value" list (recursively formatted), skipping empty values.
+    const entries = Object.entries(value as Record<string, unknown>).filter(
+      ([, v]) => !isNullish(v)
+    );
+    if (entries.length === 0) return "—";
+    return entries
+      .map(([k, v]) => `${nestedKeyLabel(k)}: ${formatAuditValue(v)}`)
+      .join(", ");
   }
 
   return String(value);
