@@ -46,6 +46,14 @@ const MONTHS = [
   "červenec", "srpen", "září", "říjen", "listopad", "prosinec",
 ];
 
+// Pull a human name from a create/delete snapshot — the only place a deleted
+// entity's name survives once it's gone from the live lookup lists.
+function summaryName(summary?: Record<string, unknown>): string | undefined {
+  if (!summary) return undefined;
+  const v = summary.name ?? summary.displayName ?? summary.abbreviation ?? summary.title;
+  return typeof v === "string" && v.trim() ? v.trim() : undefined;
+}
+
 // Which per-page sub-filters a selected set of categories reveals. With no
 // category selected ("all pages"), only the broadly-useful employee filter
 // shows; page-specific facets appear once their page is selected.
@@ -197,10 +205,12 @@ export default function AuditLogPage() {
   // show the name (+ month where the record is period-scoped); plan/period-level
   // records show the month; the rest show their entity name. Empty when there is
   // no meaningful identifier (e.g. a settings change — shown in the body).
-  function recordTitle(ev: { collectionRoot: string; resourceId?: string; employeeId?: string }): {
-    text: string;
-    href?: string;
-  } {
+  function recordTitle(ev: {
+    collectionRoot: string;
+    resourceId?: string;
+    employeeId?: string;
+    summary?: Record<string, unknown>;
+  }): { text: string; href?: string } {
     const root = ev.collectionRoot;
     const rid = ev.resourceId ?? "";
     const month = monthMap.get(`${root}:${rid}`);
@@ -210,8 +220,12 @@ export default function AuditLogPage() {
       return { text, href: name ? `/zamestnanci/${ev.employeeId}` : undefined };
     }
     if (month) return { text: month };
-    if (root === "users") return { text: userNameMap.get(rid) ?? "" };
-    return { text: entityNameMap.get(`${root}:${rid}`) ?? "" };
+    if (root === "users") {
+      return { text: userNameMap.get(rid) || summaryName(ev.summary) || "" };
+    }
+    // Live entity name, then the create/delete snapshot name (so a DELETED
+    // entity — gone from the lookup lists — still shows its name).
+    return { text: entityNameMap.get(`${root}:${rid}`) || summaryName(ev.summary) || "" };
   }
 
   // Recent years for the period filter (descending), client year is fine here.
