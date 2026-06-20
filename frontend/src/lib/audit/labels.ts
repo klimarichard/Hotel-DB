@@ -122,6 +122,69 @@ export function collectionLabel(collection: string): string {
   return `${rootLabel} · ${subLabel}`;
 }
 
+// ─── Page categories (change-log overhaul) ───────────────────────────────────
+
+/** Page bucket an audit entry belongs to — mirrors the backend AuditCategory. */
+export type AuditCategory =
+  | "smeny"
+  | "dovolena"
+  | "zamestnanci"
+  | "mzdy"
+  | "sablony"
+  | "mujProfil"
+  | "nastaveni"
+  | "system";
+
+/** Categories in display order for the "stránka" multi-select filter. */
+export const CATEGORIES: AuditCategory[] = [
+  "smeny",
+  "dovolena",
+  "zamestnanci",
+  "mzdy",
+  "sablony",
+  "mujProfil",
+  "nastaveni",
+  "system",
+];
+
+export const CATEGORY_LABELS: Record<AuditCategory, string> = {
+  smeny: "Směny",
+  dovolena: "Dovolená",
+  zamestnanci: "Zaměstnanci",
+  mzdy: "Mzdy",
+  sablony: "Šablony smluv",
+  mujProfil: "Můj profil",
+  nastaveni: "Nastavení",
+  system: "Systém",
+};
+
+/** Nastavení sub-area — mirrors the backend SettingsArea. */
+export type SettingsArea =
+  | "uzivatele"
+  | "spolecnosti"
+  | "oddeleni"
+  | "pozice"
+  | "vzdelani"
+  | "mzdy";
+
+export const SETTINGS_AREAS: SettingsArea[] = [
+  "uzivatele",
+  "spolecnosti",
+  "oddeleni",
+  "pozice",
+  "vzdelani",
+  "mzdy",
+];
+
+export const SETTINGS_AREA_LABELS: Record<SettingsArea, string> = {
+  uzivatele: "Uživatelé a oprávnění",
+  spolecnosti: "Společnosti",
+  oddeleni: "Oddělení",
+  pozice: "Pracovní pozice",
+  vzdelani: "Vzdělání",
+  mzdy: "Mzdová nastavení",
+};
+
 /**
  * Section label used to sub-group fields inside one event card. For employee
  * edits this is the sub-doc area ("Osobní údaje" / "Kontakt" / …); the root
@@ -154,65 +217,66 @@ export const ACTION_LABELS: Record<AuditAction, string> = {
 export const ACTIONS: AuditAction[] = ["create", "update", "delete", "reveal", "export", "manual-trigger"];
 
 /**
- * Verb phrase for the card header, e.g. "Upravil — Zaměstnanec".
- * `subject` is the Czech collection label so the phrase reads
- * "Vytvořil zaměstnance".
+ * Action noun for the card header. Verbal-noun form (matches the event labels
+ * "Schválení / Zamítnutí …"); for create/update/delete it pairs with the
+ * GENITIVE subject from subjectNoun() so the phrase reads "Vytvoření
+ * zaměstnance", "Upravení společnosti", "Smazání dokumentu".
  */
 export function actionVerb(action: AuditAction): string {
   switch (action) {
     case "create":
-      return "Vytvořil";
+      return "Vytvoření";
     case "update":
-      return "Upravil";
+      return "Upravení";
     case "delete":
-      return "Smazal";
+      return "Smazání";
     case "reveal":
-      return "Zobrazil citlivý údaj";
+      return "Zobrazení citlivého údaje";
     case "export":
-      return "Exportoval data";
+      return "Export dat";
     case "manual-trigger":
-      return "Spustil úlohu";
+      return "Spuštění úlohy";
     default:
       return action;
   }
 }
 
 /**
- * The thing an action acted on, in Czech ACCUSATIVE (reads after the verb:
- * "Vytvořil dokument", "Upravil kontaktní údaje", "Smazal dokument").
+ * The thing an action acted on, in Czech GENITIVE (reads after the action noun:
+ * "Vytvoření dokumentu", "Upravení kontaktních údajů", "Smazání dokumentu").
  * Keyed by collection — sub-area wins over root (so employees/contracts is a
  * "dokument", not a "zaměstnanec"). Lower-cased: common noun mid-phrase.
  */
-const SUBJECT_ACC: Record<string, string> = {
+const SUBJECT_GEN: Record<string, string> = {
   employees: "zaměstnance",
-  "employees/contact": "kontaktní údaje",
-  "employees/documents": "doklady",
-  "employees/benefits": "benefity",
-  "employees/employment": "pracovní poměr",
-  "employees/contracts": "dokument",
-  payrollPeriods: "mzdy",
-  "payrollPeriods/entries": "mzdový záznam",
-  "payrollPeriods/entries/notes": "poznámku ke mzdě",
-  shiftPlans: "plán směn",
-  vacationRequests: "žádost o dovolenou",
-  employeeChangeRequests: "žádost o změnu údajů",
-  contractTemplates: "šablonu smlouvy",
-  companies: "společnost",
+  "employees/contact": "kontaktních údajů",
+  "employees/documents": "dokladů",
+  "employees/benefits": "benefitů",
+  "employees/employment": "pracovního poměru",
+  "employees/contracts": "dokumentu",
+  payrollPeriods: "mezd",
+  "payrollPeriods/entries": "mzdového záznamu",
+  "payrollPeriods/entries/notes": "poznámky ke mzdě",
+  shiftPlans: "plánu směn",
+  vacationRequests: "žádosti o dovolenou",
+  employeeChangeRequests: "žádosti o změnu údajů",
+  contractTemplates: "šablony smlouvy",
+  companies: "společnosti",
   users: "uživatele",
-  jobPositions: "pracovní pozici",
+  jobPositions: "pracovní pozice",
   departments: "oddělení",
-  educationLevels: "stupeň vzdělání",
+  educationLevels: "stupně vzdělání",
   settings: "nastavení",
   alerts: "upozornění",
   documentAlerts: "upozornění",
   probationAlerts: "upozornění",
 };
 
-/** Accusative noun for the "<verb> <noun>" header phrase. */
+/** Genitive noun for the "<action noun> <noun>" header phrase. */
 export function subjectNoun(collection: string): string {
-  if (SUBJECT_ACC[collection]) return SUBJECT_ACC[collection];
+  if (SUBJECT_GEN[collection]) return SUBJECT_GEN[collection];
   const root = rootCollection(collection);
-  if (SUBJECT_ACC[root]) return SUBJECT_ACC[root];
+  if (SUBJECT_GEN[root]) return SUBJECT_GEN[root];
   return (COLLECTION_LABELS[root] ?? humanizeKey(root)).toLowerCase();
 }
 
@@ -233,5 +297,76 @@ export function actionGlyph(action: AuditAction): string {
       return "⚙";
     default:
       return "•";
+  }
+}
+
+// ─── Semantic events (change-log overhaul) ───────────────────────────────────
+
+/**
+ * Full Czech header phrase for a semantic `event` id. When an entry carries one
+ * of these (approvals/rejections, free-shift claims, automatic Systém actions),
+ * the card uses this phrase INSTEAD of the generic "<verb> <noun>" header.
+ */
+export const EVENT_LABELS: Record<string, string> = {
+  // Dovolená
+  "vacation.approve": "Schválení žádosti o dovolenou",
+  "vacation.reject": "Zamítnutí žádosti o dovolenou",
+  "vacation.approveEdit": "Schválení úpravy dovolené",
+  "vacation.rejectEdit": "Zamítnutí úpravy dovolené",
+  // Směny — žádosti
+  "shift.unavailability.approve": "Schválení nedostupnosti",
+  "shift.unavailability.reject": "Zamítnutí nedostupnosti",
+  "shift.override.approve": "Schválení žádosti o výjimku",
+  "shift.override.reject": "Zamítnutí žádosti o výjimku",
+  "shift.change.approve": "Schválení žádosti o změnu směny",
+  "shift.change.reject": "Zamítnutí žádosti o změnu směny",
+  "shift.freeClaim.approve": "Schválení nároku na volnou směnu",
+  "shift.freeClaim.reject": "Zamítnutí nároku na volnou směnu",
+  "shift.freeClaim.autoReject": "Automatické zamítnutí nároku na volnou směnu",
+  // Můj profil → Zaměstnanci
+  "employeeChange.approve": "Schválení žádosti o úpravu profilu",
+  "employeeChange.reject": "Zamítnutí žádosti o úpravu profilu",
+  // Systém — automatické akce
+  "plan.autoTransition": "Automatický přechod plánu",
+  "multisport.autoStart": "Automatické zahájení Multisportu",
+  "multisport.autoEnd": "Automatické ukončení Multisportu",
+  "employee.autoTerminate": "Automatické ukončení zaměstnance",
+  "employee.autoReactivate": "Automatické obnovení zaměstnance",
+  "employee.autoStatusChange": "Automatická změna stavu zaměstnance",
+};
+
+/** Header phrase for a semantic event id, or undefined if unknown. */
+export function eventLabel(event: string | undefined): string | undefined {
+  if (!event) return undefined;
+  return EVENT_LABELS[event];
+}
+
+/**
+ * Render-derive a semantic event id for a LEGACY entry that predates the
+ * `event` field — from its (collection, status newValue). Lets old approvals /
+ * rejections render as "Schválení / Zamítnutí" instead of a bare status change.
+ * Returns undefined when nothing maps (falls back to the generic header).
+ */
+export function deriveLegacyEventId(
+  collection: string,
+  statusValue: unknown
+): string | undefined {
+  const v = typeof statusValue === "string" ? statusValue : "";
+  if (v !== "approved" && v !== "rejected") return undefined;
+  const suffix = v === "approved" ? "approve" : "reject";
+  switch (collection) {
+    case "vacationRequests":
+      return `vacation.${suffix}`;
+    case "shiftPlans/unavailabilityRequests":
+      return `shift.unavailability.${suffix}`;
+    case "shiftPlans/shiftOverrideRequests":
+      return `shift.override.${suffix}`;
+    case "shiftPlans/shiftChangeRequests":
+      // Legacy can't distinguish free-claim from change → default to change.
+      return `shift.change.${suffix}`;
+    case "employeeChangeRequests":
+      return `employeeChange.${suffix}`;
+    default:
+      return undefined;
   }
 }

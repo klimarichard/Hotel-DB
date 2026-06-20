@@ -310,17 +310,70 @@ Vlastní karta zaměstnance.
 
 ## Log změn
 
-Historie všech změn v systému (kdo, co a kdy změnil).
-
-- Změny jsou seskupené do **karet podle jedné akce** (jedno uložení = jedna karta), řazené pod hlavičky **Dnes / Včera / datum**.
-- Každá karta je ve výchozím stavu **sbalená na jeden řádek**; rozkliknutím zobrazíte změněná pole ve tvaru *popisek: původní → nová hodnota*, u zaměstnanců rozdělená podle oblastí (Osobní údaje / Kontakt / …).
-- Filtrovat lze podle **zaměstnance, autora, oblasti, akce a data**.
-- Citlivé údaje se v logu nikdy nezobrazují (pouze informace, že se pole změnilo).
-- Tlačítkem **Technický detail** lze u karty zobrazit surová data.
-
-Historie změn konkrétního zaměstnance je i přímo na jeho detailu v sekci **Historie změn**.
+Úplná historie všech akcí v systému — kdo co udělal a kdy. Slouží jako auditní záznam pro dohledání jakékoli změny.
 
 > 📷 *(Místo pro snímek obrazovky: Log změn)*
+
+### Co je zaznamenáno
+
+Log zachycuje všechny typy akcí, nejen ruční úpravy:
+
+- **Vytvoření, úprava a smazání** — přidání nebo změna zaměstnance, záznamu pracovního poměru, šablony smlouvy, nastavení apod.
+- **Schválení a zamítnutí** — schválení nebo zamítnutí žádosti o dovolenou, žádosti o změnu směny nebo žádosti o úpravu profilu zaměstnance.
+- **Převzetí volné směny** — kdy a kdo si vyžádal a obdržel volnou směnu portýrů.
+- **Odhalení citlivých údajů** — každé zobrazení rodného čísla, čísla OP, bankovního účtu apod. (citlivý obsah se v záznamu nikdy neobjeví, jen informace, že k odhalení došlo).
+- **Akce systému** — automatické přechody stavů plánů, automatické ukončení pracovního poměru, automatické uzavření Multisportu a podobné operace prováděné systémem bez zásahu člověka. Tyto záznamy mají autora **„Systém"**.
+- **Ruční spuštění úloh** — každé ruční spuštění automatické úlohy ze záložky *Nastavení → Úlohy*.
+- **Export dat** — každý export CSV se zaznamenává.
+
+### Jak záznamy vypadají
+
+Záznamy jsou seskupené do **karet** — jedna karta odpovídá jedné akci (např. jedno uložení zaměstnance, jedno schválení dovolené). Karty jsou řazeny od nejnovějších a sdruženy pod hlavičky **Dnes / Včera / datum**.
+
+Každá karta zobrazuje jedním řádkem stručný popis akce, například:
+
+- *Schválení žádosti o dovolenou — Jan Novák*
+- *Upravení zaměstnance — Eva Procházková*
+- *Systém — Automatické ukončení pracovního poměru*
+
+Kliknutím na kartu ji **rozbalíte** a zobrazíte podrobnosti: u úprav se zobrazují změněná pole ve tvaru *popisek: původní hodnota → nová hodnota*. U zaměstnanců jsou pole rozdělena podle oblastí (Osobní údaje / Kontakt / …). Záznamy o úpravách směn navíc uvádějí **konkrétní datum každého změněného dne**.
+
+Tlačítkem **Technický detail** na kartě zobrazíte surová data záznamu (pro technické účely).
+
+> 📝 Citlivé hodnoty (rodné číslo, číslo OP, bankovní účet) se v logu nikdy nezobrazují — karta pouze uvede, že k odhalení nebo změně citlivého pole došlo.
+
+### Filtrování
+
+Nad seznamem karet je panel filtrů. Filtry lze libovolně kombinovat; tlačítkem **Vymazat filtry** je všechny najednou zrušíte.
+
+#### Stránka
+
+Kliknutím na jedno nebo více tlačítek zvolíte **část aplikace**, ve které ke změně došlo. Dostupné stránky:
+
+**Směny** · **Dovolená** · **Zaměstnanci** · **Mzdy** · **Šablony smluv** · **Můj profil** · **Nastavení** · **Systém**
+
+Po výběru stránky se automaticky zobrazí **doplňkové filtry** relevantní pro danou oblast. Příklady:
+
+| Vybraná stránka | Doplňkové filtry, které se zobrazí |
+|---|---|
+| Zaměstnanci | Zaměstnanec (jméno), Oblast nastavení, Od / Do (rozsah dat) |
+| Mzdy | Rok, Měsíc, Od / Do |
+| Směny | Rok, Měsíc, Od / Do |
+| Šablony smluv | Šablona |
+| Nastavení | Oblast nastavení |
+| Ostatní | Od / Do (rozsah dat) |
+
+#### Autor změny
+
+Kliknutím na jméno jednoho nebo více uživatelů ze seznamu zobrazíte pouze záznamy, které vytvořili ti konkrétní lidé. Automatické akce systému jsou označeny autorem **„Systém"** a je možné je takto odfiltrovat samostatně.
+
+#### Rozsah dat (Od / Do)
+
+Pole **Od** a **Do** omezí zobrazené záznamy na zvolené časové období.
+
+### Historie změn konkrétního zaměstnance
+
+Pokud vás zajímají pouze změny týkající se jednoho zaměstnance, nemusíte procházet celý Log změn. Přejděte na **detail zaměstnance** a v sekci **Historie změn** najdete všechny záznamy vztahující se k tomuto zaměstnanci přímo na jednom místě.
 
 ---
 

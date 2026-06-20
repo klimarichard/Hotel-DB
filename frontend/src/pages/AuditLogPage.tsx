@@ -6,7 +6,14 @@ import { employeeDisplayName } from "@/lib/employeeName";
 import Button from "@/components/Button";
 import AuditEventCard from "@/components/AuditEventCard";
 import type { UserProfile } from "@/lib/api";
-import { ACTIONS, ACTION_LABELS, collectionLabel } from "@/lib/audit/labels";
+import {
+  type AuditCategory,
+  type SettingsArea,
+  CATEGORIES,
+  CATEGORY_LABELS,
+  SETTINGS_AREAS,
+  SETTINGS_AREA_LABELS,
+} from "@/lib/audit/labels";
 import { type AuditEntry, bucketByDate, eventTitle, groupEntries } from "@/lib/audit/grouping";
 import styles from "./AuditLogPage.module.css";
 
@@ -17,17 +24,51 @@ interface EmployeeMini {
   displayName?: string;
 }
 
+interface TemplateMini {
+  id: string;
+  displayName?: string;
+  name?: string;
+}
+
+const MONTHS = [
+  "leden", "únor", "březen", "duben", "květen", "červen",
+  "červenec", "srpen", "září", "říjen", "listopad", "prosinec",
+];
+
+// Which per-page sub-filters a selected set of categories reveals. With no
+// category selected ("all pages"), only the broadly-useful employee filter
+// shows; page-specific facets appear once their page is selected.
+function subFilterVisibility(cats: Set<string>) {
+  const any = (...c: AuditCategory[]) => c.some((x) => cats.has(x));
+  return {
+    employee: cats.size === 0 || any("smeny", "dovolena", "zamestnanci", "mzdy", "mujProfil"),
+    year: any("smeny", "dovolena", "mzdy"),
+    month: any("smeny", "mzdy"),
+    template: cats.has("sablony"),
+    settingsArea: cats.has("nastaveni"),
+  };
+}
+
 export default function AuditLogPage() {
   const { can, loading: authLoading } = useAuth();
   const [params, setParams] = useSearchParams();
 
   // Filter state mirrors the URL so deep-links from EmployeeDetailPage work.
+  // category + userId are multi-value (comma-separated); the rest are single.
+  const categoryParam = params.get("category") ?? "";
+  const userIdParam = params.get("userId") ?? "";
   const employeeId = params.get("employeeId") ?? "";
-  const userId = params.get("userId") ?? "";
-  const collectionFilter = params.get("collection") ?? "";
-  const actionFilter = params.get("action") ?? "";
+  const yearFilter = params.get("year") ?? "";
+  const monthFilter = params.get("month") ?? "";
+  const templateId = params.get("templateId") ?? "";
+  const settingsArea = params.get("settingsArea") ?? "";
   const fromDate = params.get("from") ?? "";
   const toDate = params.get("to") ?? "";
+
+  const categories = useMemo(() => categoryParam.split(",").filter(Boolean), [categoryParam]);
+  const userIds = useMemo(() => userIdParam.split(",").filter(Boolean), [userIdParam]);
+  const catSet = useMemo(() => new Set(categories), [categories]);
+  const vis = useMemo(() => subFilterVisibility(catSet), [catSet]);
 
   const [entries, setEntries] = useState<AuditEntry[]>([]);
   const [nextCursor, setNextCursor] = useState<string | undefined>(undefined);
@@ -37,7 +78,7 @@ export default function AuditLogPage() {
   // Lookup tables for nicer display + filter dropdowns
   const [employees, setEmployees] = useState<EmployeeMini[]>([]);
   const [users, setUsers] = useState<UserProfile[]>([]);
-  const [collections, setCollections] = useState<string[]>([]);
+  const [templates, setTemplates] = useState<TemplateMini[]>([]);
 
   useEffect(() => {
     Promise.all([
@@ -64,8 +105,14 @@ export default function AuditLogPage() {
       .catch(() => undefined);
 
     api
-      .get<string[]>("/audit/meta/collections")
-      .then(setCollections)
+      .get<TemplateMini[]>("/contractTemplates")
+      .then((list) =>
+        setTemplates(
+          [...list].sort((a, b) =>
+            (a.displayName || a.name || "").localeCompare(b.displayName || b.name || "", "cs")
+          )
+        )
+      )
       .catch(() => undefined);
   }, []);
 
@@ -81,12 +128,23 @@ export default function AuditLogPage() {
     return m;
   }, [users]);
 
+  // Recent years for the period filter (descending), client year is fine here.
+  const years = useMemo(() => {
+    const y = new Date().getFullYear();
+    return [y + 1, y, y - 1, y - 2];
+  }, []);
+
   const buildQuery = (cursor?: string) => {
     const q = new URLSearchParams();
-    if (employeeId) q.set("employeeId", employeeId);
-    if (userId) q.set("userId", userId);
-    if (collectionFilter) q.set("collection", collectionFilter);
-    if (actionFilter) q.set("action", actionFilter);
+    if (categories.length) q.set("category", categories.join(","));
+    if (userIds.length) q.set("userId", userIds.join(","));
+    // Send page-specific facets only while their sub-filter is visible, so
+    // deselecting a page drops its filter even if a stale value lingers in URL.
+    if (vis.employee && employeeId) q.set("employeeId", employeeId);
+    if (vis.year && yearFilter) q.set("year", yearFilter);
+    if (vis.month && monthFilter) q.set("month", monthFilter);
+    if (vis.template && templateId) q.set("templateId", templateId);
+    if (vis.settingsArea && settingsArea) q.set("settingsArea", settingsArea);
     if (fromDate) q.set("from", new Date(fromDate + "T00:00:00").toISOString());
     if (toDate) q.set("to", new Date(toDate + "T23:59:59").toISOString());
     if (cursor) q.set("cursor", cursor);
@@ -107,7 +165,17 @@ export default function AuditLogPage() {
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [employeeId, userId, collectionFilter, actionFilter, fromDate, toDate]);
+  }, [
+    categoryParam,
+    userIdParam,
+    employeeId,
+    yearFilter,
+    monthFilter,
+    templateId,
+    settingsArea,
+    fromDate,
+    toDate,
+  ]);
 
   function loadMore() {
     if (!nextCursor) return;
@@ -129,12 +197,30 @@ export default function AuditLogPage() {
     setParams(next, { replace: true });
   }
 
+  // Toggle a value in a comma-separated multi-value param (category / userId).
+  function toggleMulti(key: string, value: string) {
+    const cur = (params.get(key) ?? "").split(",").filter(Boolean);
+    const next = cur.includes(value) ? cur.filter((v) => v !== value) : [...cur, value];
+    const p = new URLSearchParams(params);
+    if (next.length) p.set(key, next.join(","));
+    else p.delete(key);
+    setParams(p, { replace: true });
+  }
+
   function clearFilters() {
     setParams(new URLSearchParams(), { replace: true });
   }
 
   const hasAnyFilter =
-    !!employeeId || !!userId || !!collectionFilter || !!actionFilter || !!fromDate || !!toDate;
+    categories.length > 0 ||
+    userIds.length > 0 ||
+    !!employeeId ||
+    !!yearFilter ||
+    !!monthFilter ||
+    !!templateId ||
+    !!settingsArea ||
+    !!fromDate ||
+    !!toDate;
 
   // Group flat per-field entries into events, then bucket by day. Re-runs over
   // the full accumulated list so groups re-form correctly across pagination.
@@ -143,10 +229,7 @@ export default function AuditLogPage() {
 
   // Wait for this component's own useAuth instance to finish loading before
   // gating — useAuth is a per-component hook (no shared context), so on first
-  // render permissions are still empty. Without this, the page would redirect
-  // to "/" before /auth/me resolves, bouncing every user (incl. admin) to
-  // Přehled even though the route guard already passed. Mirrors PayrollPage /
-  // SettingsPage.
+  // render permissions are still empty. Mirrors PayrollPage / SettingsPage.
   if (authLoading) return null;
   if (!can("nav.audit.view")) return <Navigate to="/" replace />;
 
@@ -161,90 +244,155 @@ export default function AuditLogPage() {
         )}
       </div>
 
-      <div className={styles.filters}>
-        <label className={styles.field}>
-          <span className={styles.label}>Zaměstnanec</span>
-          <select
-            value={employeeId}
-            onChange={(e) => setFilter("employeeId", e.target.value)}
-            className={styles.select}
-          >
-            <option value="">Všichni</option>
-            {employees.map((e) => (
-              <option key={e.id} value={e.id}>
-                {employeeDisplayName(e)}
-              </option>
+      <div className={styles.filterPanel}>
+        {/* Stránka (page category) — multi-select chips */}
+        <div className={styles.filterGroup}>
+          <span className={styles.groupLabel}>Stránka</span>
+          <div className={styles.chipRow}>
+            {CATEGORIES.map((c) => (
+              <button
+                key={c}
+                type="button"
+                className={catSet.has(c) ? styles.chipActive : styles.chip}
+                onClick={() => toggleMulti("category", c)}
+              >
+                {CATEGORY_LABELS[c]}
+              </button>
             ))}
-          </select>
-        </label>
+          </div>
+        </div>
 
-        <label className={styles.field}>
-          <span className={styles.label}>Autor změny</span>
-          <select
-            value={userId}
-            onChange={(e) => setFilter("userId", e.target.value)}
-            className={styles.select}
-          >
-            <option value="">Všichni</option>
-            {users.map((u) => (
-              <option key={u.uid} value={u.uid}>
-                {u.name || u.email} ({u.role})
-              </option>
-            ))}
-          </select>
-        </label>
+        {/* Autor změny (user) — multi-select chips */}
+        {users.length > 0 && (
+          <div className={styles.filterGroup}>
+            <span className={styles.groupLabel}>Autor změny</span>
+            <div className={styles.chipRow}>
+              {users.map((u) => (
+                <button
+                  key={u.uid}
+                  type="button"
+                  className={userIds.includes(u.uid) ? styles.chipActive : styles.chip}
+                  onClick={() => toggleMulti("userId", u.uid)}
+                >
+                  {u.name || u.email}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
-        <label className={styles.field}>
-          <span className={styles.label}>Oblast</span>
-          <select
-            value={collectionFilter}
-            onChange={(e) => setFilter("collection", e.target.value)}
-            className={styles.select}
-          >
-            <option value="">Všechny</option>
-            {collections.map((c) => (
-              <option key={c} value={c}>
-                {collectionLabel(c)}
-              </option>
-            ))}
-          </select>
-        </label>
+        {/* Sub-filters revealed by the selected page(s) + the date range */}
+        <div className={styles.subFilters}>
+          {vis.employee && (
+            <label className={styles.field}>
+              <span className={styles.label}>Zaměstnanec</span>
+              <select
+                value={employeeId}
+                onChange={(e) => setFilter("employeeId", e.target.value)}
+                className={styles.select}
+              >
+                <option value="">Všichni</option>
+                {employees.map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {employeeDisplayName(e)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
 
-        <label className={styles.field}>
-          <span className={styles.label}>Akce</span>
-          <select
-            value={actionFilter}
-            onChange={(e) => setFilter("action", e.target.value)}
-            className={styles.select}
-          >
-            <option value="">Všechny</option>
-            {ACTIONS.map((a) => (
-              <option key={a} value={a}>
-                {ACTION_LABELS[a]}
-              </option>
-            ))}
-          </select>
-        </label>
+          {vis.year && (
+            <label className={styles.field}>
+              <span className={styles.label}>Rok</span>
+              <select
+                value={yearFilter}
+                onChange={(e) => setFilter("year", e.target.value)}
+                className={styles.select}
+              >
+                <option value="">Všechny</option>
+                {years.map((y) => (
+                  <option key={y} value={String(y)}>
+                    {y}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
 
-        <label className={styles.field}>
-          <span className={styles.label}>Od</span>
-          <input
-            type="date"
-            value={fromDate}
-            onChange={(e) => setFilter("from", e.target.value)}
-            className={styles.dateInput}
-          />
-        </label>
+          {vis.month && (
+            <label className={styles.field}>
+              <span className={styles.label}>Měsíc</span>
+              <select
+                value={monthFilter}
+                onChange={(e) => setFilter("month", e.target.value)}
+                className={styles.select}
+              >
+                <option value="">Všechny</option>
+                {MONTHS.map((name, i) => (
+                  <option key={i} value={String(i + 1)}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
 
-        <label className={styles.field}>
-          <span className={styles.label}>Do</span>
-          <input
-            type="date"
-            value={toDate}
-            onChange={(e) => setFilter("to", e.target.value)}
-            className={styles.dateInput}
-          />
-        </label>
+          {vis.template && (
+            <label className={styles.field}>
+              <span className={styles.label}>Šablona</span>
+              <select
+                value={templateId}
+                onChange={(e) => setFilter("templateId", e.target.value)}
+                className={styles.select}
+              >
+                <option value="">Všechny</option>
+                {templates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.displayName || t.name || t.id}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+
+          {vis.settingsArea && (
+            <label className={styles.field}>
+              <span className={styles.label}>Oblast nastavení</span>
+              <select
+                value={settingsArea}
+                onChange={(e) => setFilter("settingsArea", e.target.value)}
+                className={styles.select}
+              >
+                <option value="">Všechny</option>
+                {SETTINGS_AREAS.map((a) => (
+                  <option key={a} value={a}>
+                    {SETTINGS_AREA_LABELS[a as SettingsArea]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+
+          <label className={styles.field}>
+            <span className={styles.label}>Od</span>
+            <input
+              type="date"
+              value={fromDate}
+              onChange={(e) => setFilter("from", e.target.value)}
+              className={styles.dateInput}
+            />
+          </label>
+
+          <label className={styles.field}>
+            <span className={styles.label}>Do</span>
+            <input
+              type="date"
+              value={toDate}
+              onChange={(e) => setFilter("to", e.target.value)}
+              className={styles.dateInput}
+            />
+          </label>
+        </div>
       </div>
 
       {error && <div className={styles.errorState}>{error}</div>}
@@ -263,7 +411,11 @@ export default function AuditLogPage() {
                   <AuditEventCard
                     key={ev.id}
                     event={ev}
-                    authorName={userNameMap.get(ev.userId) ?? ev.userEmail ?? ev.userId}
+                    authorName={
+                      ev.userId === "system"
+                        ? "Systém"
+                        : userNameMap.get(ev.userId) || ev.userEmail || ev.userId
+                    }
                     title={t.text}
                     titleHref={t.href}
                   />

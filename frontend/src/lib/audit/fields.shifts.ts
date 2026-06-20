@@ -17,6 +17,9 @@ const shiftPlans: FieldLabelMap = {
   year: "Rok",
   status: "Stav",
   state: "Stav",
+  // Systém auto-transition summary (plan.autoTransition)
+  from: "Původní stav",
+  to: "Nový stav",
   createdBy: "Vytvořil",
   createdAt: "Vytvořeno",
   updatedAt: "Naposledy upraveno",

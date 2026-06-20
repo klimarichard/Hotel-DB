@@ -1,6 +1,6 @@
 # Příručka — Účetní
 
-Jako **účetní** máte v systému HPM Intranet **přístup pouze pro čtení**. Vidíte dvě oblasti — **Přehled** (statistiky personálu) a **Zaměstnance** (náhled, odhalení citlivých údajů, stažení smluv a export dat). Nic neupravujete ani nepřidáváte.
+Jako **účetní** máte v systému HPM Intranet **přístup pouze pro čtení**. Vidíte tři oblasti — **Přehled** (statistiky personálu), **Zaměstnance** (náhled, odhalení citlivých údajů, stažení smluv a export dat) a **Log změn** (auditní historie akcí v systému). Nic neupravujete ani nepřidáváte.
 
 > 📷 *(Místo pro snímek obrazovky: úvodní obrazovka aplikace)*
 
@@ -12,6 +12,7 @@ Jako **účetní** máte v systému HPM Intranet **přístup pouze pro čtení**
 - [Přihlášení](#přihlášení)
 - [Přehled](#přehled)
 - [Zaměstnanci](#zaměstnanci)
+- [Log změn](#log-změn)
 
 ---
 
@@ -113,3 +114,65 @@ Po kliknutí se nejprve zobrazí malý dialog. Do pole **Zdaňovací období** z
 > 📝 **Upozornění:** Formulář je vyplněn z evidenčních údajů zaměstnance. Blok pro **daňového nerezidenta** (cizince, který nepodléhá zdanění v ČR) zůstane prázdný — tyto řádky musí zaměstnanec doplnit ručně. Dokument obsahuje citlivé údaje (rodné číslo atp.) a každé vygenerování se zaznamenává do **Logu změn**.
 
 > 📷 *(Místo pro snímek obrazovky: záložka Další dokumenty s tlačítkem Prohlášení poplatníka)*
+
+---
+
+## Log změn
+
+Úplná auditní historie všech akcí v systému — kdo co udělal a kdy. Jako účetní máte do Logu změn **přístup pouze pro čtení**: záznamy prohlížíte a filtrujete, ale nic v nich neupravujete.
+
+> 📷 *(Místo pro snímek obrazovky: Log změn)*
+
+### Co je zaznamenáno
+
+Log zachycuje všechny typy akcí:
+
+- **Vytvoření, úprava a smazání** zaměstnanců, pracovních poměrů, šablon smluv, nastavení apod.
+- **Schválení a zamítnutí** — žádosti o dovolenou, o změnu směny nebo o úpravu profilu.
+- **Převzetí volné směny**.
+- **Odhalení citlivých údajů** — každé zobrazení rodného čísla, čísla OP, bankovního účtu apod. (citlivý obsah se v záznamu nikdy nezobrazuje, jen informace, že k odhalení došlo).
+- **Akce systému** — automatické přechody stavů plánů, automatické ukončení pracovního poměru, automatické uzavření Multisportu a podobné operace prováděné na pozadí bez zásahu člověka. Tyto záznamy mají autora **„Systém"**.
+- **Export dat** — každý export CSV se zaznamenává.
+
+### Jak záznamy vypadají
+
+Záznamy jsou seskupeny do **karet** — jedna karta odpovídá jedné akci. Karty jsou řazeny od nejnovějších a sdruženy pod hlavičky **Dnes / Včera / datum**.
+
+Každá karta zobrazuje jedním řádkem stručný popis akce, například:
+
+- *Schválení žádosti o dovolenou — Jan Novák*
+- *Upravení zaměstnance — Eva Procházková*
+- *Systém — Automatické ukončení pracovního poměru*
+
+Kliknutím na kartu ji **rozbalíte** a zobrazíte podrobnosti: u úprav se zobrazují změněná pole ve tvaru *popisek: původní hodnota → nová hodnota*. U zaměstnanců jsou pole rozdělena podle oblastí (Osobní údaje / Kontakt / …). Záznamy o úpravách směn uvádějí **konkrétní datum každého změněného dne**.
+
+> 📝 Citlivé hodnoty (rodné číslo, číslo OP, bankovní účet) se v logu nikdy nezobrazují — karta pouze uvede, že k odhalení nebo změně citlivého pole došlo.
+
+### Filtrování
+
+Nad seznamem karet je panel filtrů. Filtry lze libovolně kombinovat; tlačítkem **Vymazat filtry** je všechny najednou zrušíte.
+
+#### Stránka
+
+Kliknutím na jedno nebo více tlačítek zvolíte **část aplikace**, ve které ke změně došlo. Dostupné stránky:
+
+**Směny** · **Dovolená** · **Zaměstnanci** · **Mzdy** · **Šablony smluv** · **Můj profil** · **Nastavení** · **Systém**
+
+Po výběru stránky se automaticky zobrazí **doplňkové filtry** relevantní pro danou oblast. Příklady:
+
+| Vybraná stránka | Doplňkové filtry, které se zobrazí |
+|---|---|
+| Zaměstnanci | Zaměstnanec (jméno), Oblast nastavení, Od / Do (rozsah dat) |
+| Mzdy | Rok, Měsíc, Od / Do |
+| Směny | Rok, Měsíc, Od / Do |
+| Šablony smluv | Šablona |
+| Nastavení | Oblast nastavení |
+| Ostatní | Od / Do (rozsah dat) |
+
+#### Autor změny
+
+Kliknutím na jméno jednoho nebo více uživatelů ze seznamu zobrazíte pouze záznamy, které vytvořili ti konkrétní lidé. Automatické akce systému jsou označeny autorem **„Systém"** a lze je takto odfiltrovat samostatně.
+
+#### Rozsah dat (Od / Do)
+
+Pole **Od** a **Do** omezí zobrazené záznamy na zvolené časové období.

@@ -6,8 +6,28 @@
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import * as clock from "./clock";
+import { logSystemEvent } from "./auditLog";
 
 const db = () => admin.firestore();
+
+// Log an automatic plan phase change as a "Systém" change-log event. The render
+// layer maps `plan.autoTransition` + summary.from/to → the Czech line
+// ("Systém — Automatické otevření plánu …: Vytvořený → Otevřený").
+async function logPlanAutoTransition(
+  doc: admin.firestore.QueryDocumentSnapshot,
+  from: string,
+  to: string
+): Promise<void> {
+  const data = doc.data();
+  await logSystemEvent({
+    event: "plan.autoTransition",
+    collection: "shiftPlans",
+    resourceId: doc.id,
+    year: typeof data.year === "number" ? data.year : undefined,
+    month: typeof data.month === "number" ? data.month : undefined,
+    summary: { from, to },
+  });
+}
 
 // ─── Batch-delete a sub-collection ────────────────────────────────────────────
 
@@ -64,6 +84,7 @@ export async function transitionPlanDeadlines(): Promise<{ transitioned: string[
       new Date(data.openedAt).getTime() <= now
     ) {
       await planRef.update({ status: "opened", updatedAt: FieldValue.serverTimestamp() });
+      await logPlanAutoTransition(doc, "created", "opened");
       transitioned.push(`${doc.id}: created → opened`);
       continue;
     }
@@ -76,6 +97,7 @@ export async function transitionPlanDeadlines(): Promise<{ transitioned: string[
     ) {
       await snapshotShifts(planRef);
       await planRef.update({ status: "closed", updatedAt: FieldValue.serverTimestamp() });
+      await logPlanAutoTransition(doc, "opened", "closed");
       transitioned.push(`${doc.id}: opened → closed`);
       continue;
     }
@@ -88,6 +110,7 @@ export async function transitionPlanDeadlines(): Promise<{ transitioned: string[
     ) {
       await deleteCollection(planRef.collection("shiftsSnapshot"));
       await planRef.update({ status: "published", updatedAt: FieldValue.serverTimestamp() });
+      await logPlanAutoTransition(doc, "closed", "published");
       transitioned.push(`${doc.id}: closed → published`);
     }
   }

@@ -13,10 +13,12 @@
 
 import {
   type AuditAction,
+  deriveLegacyEventId,
   fieldLabel,
   rootCollection,
   sectionLabel,
 } from "./labels";
+import { formatAuditValue } from "./format";
 
 export interface AuditEntry {
   id: string;
@@ -33,6 +35,13 @@ export interface AuditEntry {
   redacted?: boolean;
   summary?: Record<string, unknown>;
   employeeId?: string;
+  // Change-log overhaul: semantic event id + denormalized filter keys.
+  event?: string;
+  category?: string;
+  year?: number;
+  month?: number;
+  templateId?: string;
+  settingsArea?: string;
   extra?: Record<string, unknown>;
   timestamp?: { _seconds?: number; seconds?: number } | string | null;
 }
@@ -63,6 +72,8 @@ export interface AuditEvent {
   primaryCollection: string;
   resourceId?: string;
   employeeId?: string;
+  /** Semantic event id (set, or render-derived for legacy entries). */
+  event?: string;
   /** update events: changed fields grouped by area. */
   sections: AuditEventSection[];
   /** create/delete events: redacted snapshot of the record. */
@@ -118,6 +129,18 @@ function orderIndex(order: string[], label: string): number {
   return i === -1 ? order.length : i;
 }
 
+// Shift-cell audit entries (collection "shiftPlans/shifts") store the date only
+// in the doc id (`employeeId_YYYY-MM-DD`), so the changed field is "rawInput"
+// with no visible day. Label each such change row with its formatted date (e.g.
+// "5. 5. 2025") instead of the generic "Směna (zápis)", so a grouped multi-day
+// edit reads one row per day. Works for legacy entries too (render-derived from
+// subResourceId, which existing docs already carry).
+function shiftCellDateLabel(entry: AuditEntry): string | null {
+  if (entry.collection !== "shiftPlans/shifts") return null;
+  const m = /(\d{4}-\d{2}-\d{2})$/.exec(entry.subResourceId ?? "");
+  return m ? formatAuditValue(m[1], "date") : null;
+}
+
 function buildEvent(entries: AuditEntry[]): AuditEvent {
   const first = entries[0];
   const root = rootCollection(first.collection);
@@ -130,7 +153,7 @@ function buildEvent(entries: AuditEntry[]): AuditEvent {
     if (!sectionMap.has(label)) sectionMap.set(label, []);
     sectionMap.get(label)!.push({
       fieldPath: e.fieldPath,
-      label: fieldLabel(e.collection, e.fieldPath),
+      label: shiftCellDateLabel(e) ?? fieldLabel(e.collection, e.fieldPath),
       leaf: e.fieldPath?.split(".").pop(),
       redacted: e.redacted,
       oldValue: e.oldValue,
@@ -141,6 +164,14 @@ function buildEvent(entries: AuditEntry[]): AuditEvent {
     root,
     Array.from(sectionMap.entries()).map(([label, changes]) => ({ label, changes }))
   );
+
+  // Semantic event: carried on the entry, or render-derived for legacy entries
+  // from a status field change (so old approvals/rejections read correctly).
+  let event = first.event;
+  if (!event) {
+    const statusEntry = entries.find((e) => e.fieldPath?.split(".").pop() === "status");
+    if (statusEntry) event = deriveLegacyEventId(first.collection, statusEntry.newValue);
+  }
 
   return {
     id: first.id,
@@ -153,6 +184,7 @@ function buildEvent(entries: AuditEntry[]): AuditEvent {
     primaryCollection: first.collection,
     resourceId: first.resourceId,
     employeeId: first.employeeId,
+    event,
     sections,
     summary: first.summary,
     extra: first.extra,

@@ -30,6 +30,26 @@ const ENUM_LABELS: Record<string, Record<string, string>> = {
     "změna smlouvy": "Dodatek",
     ukončení: "Ukončení",
   },
+  // Systém transition summaries store the before/after state under from/to —
+  // covers both plan lifecycle states and employee lifecycle statuses.
+  from: {
+    created: "Vytvořený",
+    opened: "Otevřený",
+    closed: "Uzavřený",
+    published: "Publikovaný",
+    active: "Aktivní",
+    terminated: "Ukončený",
+    "before-start": "Před nástupem",
+  },
+  to: {
+    created: "Vytvořený",
+    opened: "Otevřený",
+    closed: "Uzavřený",
+    published: "Publikovaný",
+    active: "Aktivní",
+    terminated: "Ukončený",
+    "before-start": "Před nástupem",
+  },
 };
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}/;
