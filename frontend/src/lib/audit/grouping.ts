@@ -18,6 +18,7 @@ import {
   rootCollection,
   sectionLabel,
 } from "./labels";
+import { formatAuditValue } from "./format";
 
 export interface AuditEntry {
   id: string;
@@ -128,6 +129,18 @@ function orderIndex(order: string[], label: string): number {
   return i === -1 ? order.length : i;
 }
 
+// Shift-cell audit entries (collection "shiftPlans/shifts") store the date only
+// in the doc id (`employeeId_YYYY-MM-DD`), so the changed field is "rawInput"
+// with no visible day. Label each such change row with its formatted date (e.g.
+// "5. 5. 2025") instead of the generic "Směna (zápis)", so a grouped multi-day
+// edit reads one row per day. Works for legacy entries too (render-derived from
+// subResourceId, which existing docs already carry).
+function shiftCellDateLabel(entry: AuditEntry): string | null {
+  if (entry.collection !== "shiftPlans/shifts") return null;
+  const m = /(\d{4}-\d{2}-\d{2})$/.exec(entry.subResourceId ?? "");
+  return m ? formatAuditValue(m[1], "date") : null;
+}
+
 function buildEvent(entries: AuditEntry[]): AuditEvent {
   const first = entries[0];
   const root = rootCollection(first.collection);
@@ -140,7 +153,7 @@ function buildEvent(entries: AuditEntry[]): AuditEvent {
     if (!sectionMap.has(label)) sectionMap.set(label, []);
     sectionMap.get(label)!.push({
       fieldPath: e.fieldPath,
-      label: fieldLabel(e.collection, e.fieldPath),
+      label: shiftCellDateLabel(e) ?? fieldLabel(e.collection, e.fieldPath),
       leaf: e.fieldPath?.split(".").pop(),
       redacted: e.redacted,
       oldValue: e.oldValue,
