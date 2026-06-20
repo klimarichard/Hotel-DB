@@ -74,11 +74,37 @@ const COLLECTION_CATEGORY: Record<string, AuditCategory> = {
   settings: "nastaveni",
 };
 
-function resolveCategory(collection: string, override?: AuditCategory): AuditCategory | undefined {
-  // Try the full path first, then fall back to the parent segment so sub-doc
-  // collections ("shiftPlans/unavailabilityRequests", "employees/benefits", …)
-  // inherit their parent's page category without enumerating every sub-path.
+/**
+ * Page category for a collection — exported so the one-time backfill derives the
+ * same value as live writes. Tries the full path, then the parent segment.
+ */
+export function categoryForCollection(
+  collection: string,
+  override?: AuditCategory
+): AuditCategory | undefined {
+  // Sub-doc collections ("shiftPlans/unavailabilityRequests", "employees/benefits",
+  // …) inherit their parent's page category without enumerating every sub-path.
   return override ?? COLLECTION_CATEGORY[collection] ?? COLLECTION_CATEGORY[collection.split("/")[0]];
+}
+
+/** Default Nastavení sub-area per collection (the Nastavení per-tab filter). */
+const SETTINGS_AREA_BY_COLLECTION: Record<string, SettingsArea> = {
+  users: "uzivatele",
+  roleTypes: "uzivatele",
+  "settings/menuOrder": "uzivatele",
+  companies: "spolecnosti",
+  departments: "oddeleni",
+  jobPositions: "pozice",
+  educationLevels: "vzdelani",
+  settings: "mzdy", // settings/payroll
+};
+
+/**
+ * Nastavení sub-area for a collection — exported for the backfill. Full path
+ * first (so "settings/menuOrder" beats the "settings"→mzdy parent fallback).
+ */
+export function settingsAreaForCollection(collection: string): SettingsArea | undefined {
+  return SETTINGS_AREA_BY_COLLECTION[collection] ?? SETTINGS_AREA_BY_COLLECTION[collection.split("/")[0]];
 }
 
 export interface AuditContext {
@@ -212,20 +238,25 @@ function baseEntry(
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 // Spread the resolved page category + the denormalized filter keys onto an
-// entry. `category` defaults from the collection; undefined keys are dropped by
+// entry. `category`, `settingsArea` and `templateId` default from the collection
+// (+ resourceId) so call sites never have to pass them; `year`/`month`/`event`
+// are passed by handlers that have them. Undefined keys are dropped by
 // stripUndefined at write time, so legacy call sites that pass nothing are
 // unaffected.
 function filterKeyFields(
   collection: string,
+  resourceId: string | undefined,
   keys?: AuditFilterKeys
 ): Partial<AuditEntry> {
   return {
-    category: resolveCategory(collection, keys?.category),
+    category: categoryForCollection(collection, keys?.category),
     event: keys?.event,
     year: keys?.year,
     month: keys?.month,
-    templateId: keys?.templateId,
-    settingsArea: keys?.settingsArea,
+    // The contract-template id IS the doc id, so derive it from resourceId.
+    templateId:
+      keys?.templateId ?? (collection === "contractTemplates" ? resourceId : undefined),
+    settingsArea: keys?.settingsArea ?? settingsAreaForCollection(collection),
   };
 }
 
@@ -242,7 +273,7 @@ export async function logCreate(
 ): Promise<void> {
   await writeEntry({
     ...baseEntry(ctx, "create", args.collection, args.resourceId, args.subResourceId, args.employeeId),
-    ...filterKeyFields(args.collection, args),
+    ...filterKeyFields(args.collection, args.resourceId, args),
     summary: redactSnapshot(args.summary, args.sensitiveFields),
   });
 }
@@ -260,7 +291,7 @@ export async function logDelete(
 ): Promise<void> {
   await writeEntry({
     ...baseEntry(ctx, "delete", args.collection, args.resourceId, args.subResourceId, args.employeeId),
-    ...filterKeyFields(args.collection, args),
+    ...filterKeyFields(args.collection, args.resourceId, args),
     summary: redactSnapshot(args.summary, args.sensitiveFields),
   });
 }
@@ -299,7 +330,7 @@ export async function logUpdate(
   const before = args.before ?? {};
   const after = args.after;
   const keys = new Set<string>([...Object.keys(before), ...Object.keys(after)]);
-  const filterFields = filterKeyFields(args.collection, args);
+  const filterFields = filterKeyFields(args.collection, args.resourceId, args);
 
   for (const key of keys) {
     if (IGNORED_FIELD_NAMES.has(key)) continue;
@@ -353,7 +384,7 @@ export async function writeAudit(
       undefined,
       args.employeeId
     ),
-    ...filterKeyFields(args.collection ?? "", args),
+    ...filterKeyFields(args.collection ?? "", args.resourceId, args),
     extra: args.extra,
   });
 }
@@ -387,7 +418,7 @@ export async function logSystemEvent(args: {
       args.subResourceId,
       args.employeeId
     ),
-    ...filterKeyFields(args.collection, {
+    ...filterKeyFields(args.collection, args.resourceId, {
       // Automatic actions land in the "Systém" page-filter bucket by default;
       // they stay findable by employee / month via the denormalized keys below.
       category: args.category ?? "system",
