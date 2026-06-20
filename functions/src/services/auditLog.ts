@@ -5,12 +5,96 @@ const db = () => admin.firestore();
 
 export type AuditAction = "create" | "update" | "delete" | "reveal" | "export" | "manual-trigger";
 
+/**
+ * Page category — which area of the app the action was performed in. Drives the
+ * change-log page's per-page filter (see TODO_change_log.md). Written at log time
+ * from a `collection → category` default map (override per call where the same
+ * collection serves two pages, e.g. employeeChangeRequests is `mujProfil` on
+ * submit but `zamestnanci` on review). `system` is the automatic-actions bucket.
+ */
+export type AuditCategory =
+  | "smeny"
+  | "dovolena"
+  | "zamestnanci"
+  | "mzdy"
+  | "sablony"
+  | "mujProfil"
+  | "nastaveni"
+  | "system";
+
+/** Settings sub-area, for the Nastavení per-tab filter. */
+export type SettingsArea =
+  | "uzivatele"
+  | "spolecnosti"
+  | "oddeleni"
+  | "pozice"
+  | "vzdelani"
+  | "mzdy";
+
+/**
+ * Denormalized filter keys the change-log page needs but that aren't already on
+ * the entry. Stored so Firestore can filter on them server-side (it can't filter
+ * on values derived in the render layer). All optional — callers pass what their
+ * handler has in hand.
+ */
+export interface AuditFilterKeys {
+  /** Page bucket; defaults from COLLECTION_CATEGORY when omitted. */
+  category?: AuditCategory;
+  /** Semantic event id (e.g. "vacation.approve") — the render layer maps it to a Czech verb. */
+  event?: string;
+  /** Year/month for Směny / Mzdy / Dovolená period filters. */
+  year?: number;
+  month?: number;
+  /** Šablony filter. */
+  templateId?: string;
+  /** Nastavení sub-tab filter. */
+  settingsArea?: SettingsArea;
+}
+
+/** Default page category per top-level collection. Overridable per call. */
+const COLLECTION_CATEGORY: Record<string, AuditCategory> = {
+  shiftPlans: "smeny",
+  vacationRequests: "dovolena",
+  employees: "zamestnanci",
+  "employees/employment": "zamestnanci",
+  "employees/contact": "zamestnanci",
+  "employees/documents": "zamestnanci",
+  "employees/benefits": "zamestnanci",
+  contracts: "zamestnanci",
+  otherDocuments: "zamestnanci",
+  payrollPeriods: "mzdy",
+  contractTemplates: "sablony",
+  employeeChangeRequests: "mujProfil",
+  users: "nastaveni",
+  roleTypes: "nastaveni",
+  companies: "nastaveni",
+  departments: "nastaveni",
+  jobPositions: "nastaveni",
+  educationLevels: "nastaveni",
+  settings: "nastaveni",
+};
+
+function resolveCategory(collection: string, override?: AuditCategory): AuditCategory | undefined {
+  return override ?? COLLECTION_CATEGORY[collection];
+}
+
 export interface AuditContext {
   uid: string;
   email: string;
   /** The actor's user-type id at the time of the change (for forensics). */
   roleType: string;
 }
+
+/**
+ * Sentinel context for automatic ("Systém") actions — scheduled jobs and
+ * date-driven transitions with no human actor. The render layer shows the
+ * `system` userId as "Systém".
+ */
+export const SYSTEM_CONTEXT: AuditContext = {
+  uid: "system",
+  email: "",
+  roleType: "system",
+};
 
 export interface AuditEntry {
   userId: string;
@@ -27,6 +111,15 @@ export interface AuditEntry {
   redacted?: boolean;
   summary?: Record<string, unknown>;
   employeeId?: string;
+  // Change-log overhaul (TODO #27) — semantic event id + denormalized page
+  // category and per-page filter keys. All optional; legacy entries lack them
+  // and are render-derived on the frontend.
+  event?: string;
+  category?: AuditCategory;
+  year?: number;
+  month?: number;
+  templateId?: string;
+  settingsArea?: SettingsArea;
   // Action-specific extras kept for backwards compatibility with the original
   // inline writers (reveal/export). Free-form bag preserved verbatim.
   extra?: Record<string, unknown>;
@@ -115,6 +208,24 @@ function baseEntry(
 
 // ─── Public API ──────────────────────────────────────────────────────────────
 
+// Spread the resolved page category + the denormalized filter keys onto an
+// entry. `category` defaults from the collection; undefined keys are dropped by
+// stripUndefined at write time, so legacy call sites that pass nothing are
+// unaffected.
+function filterKeyFields(
+  collection: string,
+  keys?: AuditFilterKeys
+): Partial<AuditEntry> {
+  return {
+    category: resolveCategory(collection, keys?.category),
+    event: keys?.event,
+    year: keys?.year,
+    month: keys?.month,
+    templateId: keys?.templateId,
+    settingsArea: keys?.settingsArea,
+  };
+}
+
 export async function logCreate(
   ctx: AuditContext,
   args: {
@@ -124,10 +235,11 @@ export async function logCreate(
     employeeId?: string;
     summary?: Record<string, unknown>;
     sensitiveFields?: readonly string[];
-  }
+  } & AuditFilterKeys
 ): Promise<void> {
   await writeEntry({
     ...baseEntry(ctx, "create", args.collection, args.resourceId, args.subResourceId, args.employeeId),
+    ...filterKeyFields(args.collection, args),
     summary: redactSnapshot(args.summary, args.sensitiveFields),
   });
 }
@@ -141,10 +253,11 @@ export async function logDelete(
     employeeId?: string;
     summary?: Record<string, unknown>;
     sensitiveFields?: readonly string[];
-  }
+  } & AuditFilterKeys
 ): Promise<void> {
   await writeEntry({
     ...baseEntry(ctx, "delete", args.collection, args.resourceId, args.subResourceId, args.employeeId),
+    ...filterKeyFields(args.collection, args),
     summary: redactSnapshot(args.summary, args.sensitiveFields),
   });
 }
@@ -178,11 +291,12 @@ export async function logUpdate(
     after: Record<string, unknown>;
     sensitiveFields?: readonly string[];
     fieldPathPrefix?: string; // e.g. "documents." for sub-doc edits
-  }
+  } & AuditFilterKeys
 ): Promise<void> {
   const before = args.before ?? {};
   const after = args.after;
   const keys = new Set<string>([...Object.keys(before), ...Object.keys(after)]);
+  const filterFields = filterKeyFields(args.collection, args);
 
   for (const key of keys) {
     if (IGNORED_FIELD_NAMES.has(key)) continue;
@@ -206,6 +320,7 @@ export async function logUpdate(
         args.subResourceId,
         args.employeeId
       ),
+      ...filterFields,
       fieldPath,
       oldValue: sensitive ? undefined : sanitizeForLog(oldVal),
       newValue: sensitive ? undefined : sanitizeForLog(newVal),
@@ -224,7 +339,7 @@ export async function writeAudit(
     resourceId?: string;
     employeeId?: string;
     extra?: Record<string, unknown>;
-  }
+  } & AuditFilterKeys
 ): Promise<void> {
   await writeEntry({
     ...baseEntry(
@@ -235,7 +350,46 @@ export async function writeAudit(
       undefined,
       args.employeeId
     ),
+    ...filterKeyFields(args.collection ?? "", args),
     extra: args.extra,
+  });
+}
+
+/**
+ * Audit a fully-automatic ("Systém") action — scheduled jobs and date-driven
+ * transitions with no human actor. Writes with the SYSTEM_CONTEXT sentinel and
+ * a semantic `event` id; `action` defaults to "update" (the render layer keys
+ * off `event`, not `action`, for system rows). Use for plan auto-transitions,
+ * auto-termination, Multisport auto-end, etc.
+ */
+export async function logSystemEvent(args: {
+  event: string;
+  collection: string;
+  resourceId?: string;
+  employeeId?: string;
+  action?: AuditAction;
+  category?: AuditCategory;
+  year?: number;
+  month?: number;
+  summary?: Record<string, unknown>;
+  sensitiveFields?: readonly string[];
+}): Promise<void> {
+  await writeEntry({
+    ...baseEntry(
+      SYSTEM_CONTEXT,
+      args.action ?? "update",
+      args.collection,
+      args.resourceId,
+      undefined,
+      args.employeeId
+    ),
+    ...filterKeyFields(args.collection, {
+      category: args.category ?? resolveCategory(args.collection) ?? "system",
+      event: args.event,
+      year: args.year,
+      month: args.month,
+    }),
+    summary: redactSnapshot(args.summary, args.sensitiveFields),
   });
 }
 
