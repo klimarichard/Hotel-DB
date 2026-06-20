@@ -217,65 +217,66 @@ export const ACTION_LABELS: Record<AuditAction, string> = {
 export const ACTIONS: AuditAction[] = ["create", "update", "delete", "reveal", "export", "manual-trigger"];
 
 /**
- * Verb phrase for the card header, e.g. "Upravil — Zaměstnanec".
- * `subject` is the Czech collection label so the phrase reads
- * "Vytvořil zaměstnance".
+ * Action noun for the card header. Verbal-noun form (matches the event labels
+ * "Schválení / Zamítnutí …"); for create/update/delete it pairs with the
+ * GENITIVE subject from subjectNoun() so the phrase reads "Vytvoření
+ * zaměstnance", "Upravení společnosti", "Smazání dokumentu".
  */
 export function actionVerb(action: AuditAction): string {
   switch (action) {
     case "create":
-      return "Vytvořil";
+      return "Vytvoření";
     case "update":
-      return "Upravil";
+      return "Upravení";
     case "delete":
-      return "Smazal";
+      return "Smazání";
     case "reveal":
-      return "Zobrazil citlivý údaj";
+      return "Zobrazení citlivého údaje";
     case "export":
-      return "Exportoval data";
+      return "Export dat";
     case "manual-trigger":
-      return "Spustil úlohu";
+      return "Spuštění úlohy";
     default:
       return action;
   }
 }
 
 /**
- * The thing an action acted on, in Czech ACCUSATIVE (reads after the verb:
- * "Vytvořil dokument", "Upravil kontaktní údaje", "Smazal dokument").
+ * The thing an action acted on, in Czech GENITIVE (reads after the action noun:
+ * "Vytvoření dokumentu", "Upravení kontaktních údajů", "Smazání dokumentu").
  * Keyed by collection — sub-area wins over root (so employees/contracts is a
  * "dokument", not a "zaměstnanec"). Lower-cased: common noun mid-phrase.
  */
-const SUBJECT_ACC: Record<string, string> = {
+const SUBJECT_GEN: Record<string, string> = {
   employees: "zaměstnance",
-  "employees/contact": "kontaktní údaje",
-  "employees/documents": "doklady",
-  "employees/benefits": "benefity",
-  "employees/employment": "pracovní poměr",
-  "employees/contracts": "dokument",
-  payrollPeriods: "mzdy",
-  "payrollPeriods/entries": "mzdový záznam",
-  "payrollPeriods/entries/notes": "poznámku ke mzdě",
-  shiftPlans: "plán směn",
-  vacationRequests: "žádost o dovolenou",
-  employeeChangeRequests: "žádost o změnu údajů",
-  contractTemplates: "šablonu smlouvy",
-  companies: "společnost",
+  "employees/contact": "kontaktních údajů",
+  "employees/documents": "dokladů",
+  "employees/benefits": "benefitů",
+  "employees/employment": "pracovního poměru",
+  "employees/contracts": "dokumentu",
+  payrollPeriods: "mezd",
+  "payrollPeriods/entries": "mzdového záznamu",
+  "payrollPeriods/entries/notes": "poznámky ke mzdě",
+  shiftPlans: "plánu směn",
+  vacationRequests: "žádosti o dovolenou",
+  employeeChangeRequests: "žádosti o změnu údajů",
+  contractTemplates: "šablony smlouvy",
+  companies: "společnosti",
   users: "uživatele",
-  jobPositions: "pracovní pozici",
+  jobPositions: "pracovní pozice",
   departments: "oddělení",
-  educationLevels: "stupeň vzdělání",
+  educationLevels: "stupně vzdělání",
   settings: "nastavení",
   alerts: "upozornění",
   documentAlerts: "upozornění",
   probationAlerts: "upozornění",
 };
 
-/** Accusative noun for the "<verb> <noun>" header phrase. */
+/** Genitive noun for the "<action noun> <noun>" header phrase. */
 export function subjectNoun(collection: string): string {
-  if (SUBJECT_ACC[collection]) return SUBJECT_ACC[collection];
+  if (SUBJECT_GEN[collection]) return SUBJECT_GEN[collection];
   const root = rootCollection(collection);
-  if (SUBJECT_ACC[root]) return SUBJECT_ACC[root];
+  if (SUBJECT_GEN[root]) return SUBJECT_GEN[root];
   return (COLLECTION_LABELS[root] ?? humanizeKey(root)).toLowerCase();
 }
 
