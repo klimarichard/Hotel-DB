@@ -9,6 +9,7 @@ import {
   logCreate,
   logUpdate,
   logDelete,
+  logSystemEvent,
   writeAudit,
 } from "../services/auditLog";
 import {
@@ -419,16 +420,35 @@ async function applyDerivedStatus(
   // nightly sweep / Úlohy refresh, without churning updatedAt when nothing moved.
   if (!statusChanged && !datesChanged) return;
   await empRef.update({ status, employmentStartDate, employmentEndDate, updatedAt: now });
-  // Only the lifecycle status transition is audited (as before); the date fields
-  // are pure derived denormalizations and would only add noise.
-  if (statusChanged && req) {
-    await logUpdate(ctxFromReq(req), {
-      collection: "employees",
-      resourceId: empRef.id,
-      employeeId: empRef.id,
-      before: { status: before.status ?? null },
-      after: { status },
-    });
+  // Only the lifecycle status transition is audited; the date fields are pure
+  // derived denormalizations and would only add noise (decision 2026-06-20).
+  if (statusChanged) {
+    if (req) {
+      // Status change driven by a user action (e.g. adding an Ukončení row).
+      await logUpdate(ctxFromReq(req), {
+        collection: "employees",
+        resourceId: empRef.id,
+        employeeId: empRef.id,
+        before: { status: before.status ?? null },
+        after: { status },
+      });
+    } else {
+      // Nightly, date-driven transition with no human actor → Systém event:
+      // a contract end date passing (auto-terminate) or a future Nástup arriving
+      // (auto-reactivate). Previously the nightly sweep flipped status silently.
+      await logSystemEvent({
+        event:
+          status === "terminated"
+            ? "employee.autoTerminate"
+            : status === "active"
+              ? "employee.autoReactivate"
+              : "employee.autoStatusChange",
+        collection: "employees",
+        resourceId: empRef.id,
+        employeeId: empRef.id,
+        summary: { from: before.status ?? null, to: status },
+      });
+    }
   }
 }
 
