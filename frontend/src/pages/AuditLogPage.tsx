@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 import { employeeDisplayName } from "@/lib/employeeName";
 import Button from "@/components/Button";
 import AuditEventCard from "@/components/AuditEventCard";
-import type { UserProfile } from "@/lib/api";
+import { roleTypesApi, type UserProfile } from "@/lib/api";
 import {
   type AuditCategory,
   type SettingsArea,
@@ -14,7 +14,18 @@ import {
   SETTINGS_AREAS,
   SETTINGS_AREA_LABELS,
 } from "@/lib/audit/labels";
-import { type AuditEntry, bucketByDate, eventTitle, groupEntries } from "@/lib/audit/grouping";
+import { type AuditEntry, bucketByDate, groupEntries } from "@/lib/audit/grouping";
+
+interface NamedRec {
+  id: string;
+  name?: string;
+  displayName?: string;
+}
+interface MonthRec {
+  id: string;
+  year: number;
+  month: number;
+}
 import styles from "./AuditLogPage.module.css";
 
 interface EmployeeMini {
@@ -75,10 +86,19 @@ export default function AuditLogPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Lookup tables for nicer display + filter dropdowns
+  // Lookup tables for nicer display + filter dropdowns + record-title resolution
   const [employees, setEmployees] = useState<EmployeeMini[]>([]);
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [templates, setTemplates] = useState<TemplateMini[]>([]);
+  // Entity-name lookups so a record's resourceId resolves to a human identifier
+  // in the card title (the spec wants each record type to be identifiable).
+  const [roleTypes, setRoleTypes] = useState<NamedRec[]>([]);
+  const [companies, setCompanies] = useState<NamedRec[]>([]);
+  const [departments, setDepartments] = useState<NamedRec[]>([]);
+  const [positions, setPositions] = useState<NamedRec[]>([]);
+  const [eduLevels, setEduLevels] = useState<NamedRec[]>([]);
+  const [plans, setPlans] = useState<MonthRec[]>([]);
+  const [periods, setPeriods] = useState<MonthRec[]>([]);
 
   useEffect(() => {
     // Load ALL statuses (incl. "before-start") so every audited employee
@@ -118,6 +138,16 @@ export default function AuditLogPage() {
         )
       )
       .catch(() => undefined);
+
+    // Entity-name + month lookups for record-title resolution. Each is
+    // best-effort (catch → empty) so a missing permission never breaks the log.
+    roleTypesApi.list().then(setRoleTypes).catch(() => undefined);
+    api.get<NamedRec[]>("/companies").then(setCompanies).catch(() => undefined);
+    api.get<NamedRec[]>("/departments").then(setDepartments).catch(() => undefined);
+    api.get<NamedRec[]>("/jobPositions").then(setPositions).catch(() => undefined);
+    api.get<NamedRec[]>("/educationLevels").then(setEduLevels).catch(() => undefined);
+    api.get<MonthRec[]>("/shifts/plans").then(setPlans).catch(() => undefined);
+    api.get<MonthRec[]>("/payroll/periods").then(setPeriods).catch(() => undefined);
   }, []);
 
   const employeeNameMap = useMemo(() => {
@@ -131,6 +161,58 @@ export default function AuditLogPage() {
     users.forEach((u) => m.set(u.uid, u.name || u.email));
     return m;
   }, [users]);
+
+  // Entity name by `${collectionRoot}:${id}` (collision-free across collections).
+  const entityNameMap = useMemo(() => {
+    const m = new Map<string, string>();
+    const add = (root: string, recs: NamedRec[]) =>
+      recs.forEach((r) => {
+        const name = r.name || r.displayName;
+        if (name) m.set(`${root}:${r.id}`, name);
+      });
+    add("roleTypes", roleTypes);
+    add("companies", companies);
+    add("departments", departments);
+    add("jobPositions", positions);
+    add("educationLevels", eduLevels);
+    add("contractTemplates", templates);
+    return m;
+  }, [roleTypes, companies, departments, positions, eduLevels, templates]);
+
+  // Month label ("Květen 2025") by `${collectionRoot}:${id}` for plans + periods.
+  const monthMap = useMemo(() => {
+    const m = new Map<string, string>();
+    const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+    const add = (root: string, recs: MonthRec[]) =>
+      recs.forEach((r) => {
+        if (r.month >= 1 && r.month <= 12) m.set(`${root}:${r.id}`, `${cap(MONTHS[r.month - 1])} ${r.year}`);
+      });
+    add("shiftPlans", plans);
+    add("payrollPeriods", periods);
+    return m;
+  }, [plans, periods]);
+
+  // The human identifier shown after the "—" in the card header, resolved per
+  // collection. Employee-scoped records (incl. shift cells + payroll entries)
+  // show the name (+ month where the record is period-scoped); plan/period-level
+  // records show the month; the rest show their entity name. Empty when there is
+  // no meaningful identifier (e.g. a settings change — shown in the body).
+  function recordTitle(ev: { collectionRoot: string; resourceId?: string; employeeId?: string }): {
+    text: string;
+    href?: string;
+  } {
+    const root = ev.collectionRoot;
+    const rid = ev.resourceId ?? "";
+    const month = monthMap.get(`${root}:${rid}`);
+    if (ev.employeeId) {
+      const name = employeeNameMap.get(ev.employeeId);
+      const text = [name, month].filter(Boolean).join(", ");
+      return { text, href: name ? `/zamestnanci/${ev.employeeId}` : undefined };
+    }
+    if (month) return { text: month };
+    if (root === "users") return { text: userNameMap.get(rid) ?? "" };
+    return { text: entityNameMap.get(`${root}:${rid}`) ?? "" };
+  }
 
   // Recent years for the period filter (descending), client year is fine here.
   const years = useMemo(() => {
@@ -409,8 +491,7 @@ export default function AuditLogPage() {
             <h2 className={styles.dateHeader}>{bucket.label}</h2>
             <div className={styles.eventList}>
               {bucket.events.map((ev) => {
-                const empName = ev.employeeId ? employeeNameMap.get(ev.employeeId) : undefined;
-                const t = eventTitle(ev, empName);
+                const t = recordTitle(ev);
                 return (
                   <AuditEventCard
                     key={ev.id}
