@@ -293,6 +293,101 @@ export function computeEffectiveStatus(
 }
 
 /**
+ * Absolute month index of an ISO date ("YYYY-MM-DD") → year*12 + (month-1).
+ * Used to measure the gap between employment sessions in WHOLE CALENDAR MONTHS
+ * so the comparison is year-boundary-safe (Dec 2025 = …, Jan 2026 = …+1).
+ * Parses by substring, never `new Date()`, to dodge the UTC-shift gotcha.
+ */
+function isoMonthIndex(dateStr: string | null | undefined): number | null {
+  if (!dateStr) return null;
+  const m = /^(\d{4})-(\d{2})/.exec(dateStr);
+  if (!m) return null;
+  return Number(m[1]) * 12 + (Number(m[2]) - 1);
+}
+
+/**
+ * Derive the two denormalized date columns shown on the Zaměstnanci list:
+ *
+ *   • `employmentStartDate` — the start of the employee's CURRENT CONTINUOUS run
+ *     at the company, NOT their latest Nástup. Sessions are folded oldest→newest;
+ *     a new Nástup continues the same run when it starts in the SAME calendar
+ *     month as, or the month immediately AFTER, the previous session's effective
+ *     end (gap ≤ 1 whole month — confirmed rule 2026-06-20). Dec-31-end →
+ *     Jan-1-start is therefore continuous. A larger gap (terminated, rehired
+ *     months later) starts a fresh run, and the continuous start is that latest
+ *     run's start. Worked example: Richard Klíma's latest Nástup is 1. 1. 2026
+ *     but he has worked unbroken since Nov 2022 → this returns Nov 2022.
+ *
+ *   • `employmentEndDate` — the effective end of the LATEST session, or null when
+ *     open-ended. Mirrors `computeEffectiveStatus`'s isActive end-date resolution
+ *     (Nástup endDate, overridden by any in-effect "délka smlouvy" Dodatek, then
+ *     by the Ukončení row's startDate). Null for ordinary open-ended staff (→ "—"
+ *     in the UI), filled for terminated employees and for still-active staff with
+ *     a known future end (fixed-term / signed-ahead exit).
+ *
+ * Computed for EVERY employee regardless of active/terminated status, so it sits
+ * apart from `computeEffectiveRootFields` (which returns null when terminated).
+ */
+export function computeEmploymentDates(
+  rows: Array<Record<string, unknown>>,
+  today: string
+): { employmentStartDate: string | null; employmentEndDate: string | null } {
+  type S = { nastup: Record<string, unknown>; dodatky: Record<string, unknown>[]; ukonceniDate: string | null };
+  const sorted = [...rows].sort((a, b) =>
+    String(a.startDate ?? "").localeCompare(String(b.startDate ?? ""))
+  );
+  const sessions: S[] = [];
+  let cur: S | null = null;
+  for (const r of sorted) {
+    const ct = r.changeType as string | undefined;
+    if (ct === "nástup") {
+      if (cur) sessions.push(cur);
+      cur = { nastup: r, dodatky: [], ukonceniDate: null };
+    } else if (cur && ct === "změna smlouvy") {
+      cur.dodatky.push(r);
+    } else if (cur && ct === "ukončení") {
+      cur.ukonceniDate = (r.startDate as string | undefined) ?? null;
+    }
+  }
+  if (cur) sessions.push(cur);
+  if (sessions.length === 0) return { employmentStartDate: null, employmentEndDate: null };
+
+  // Effective end of a session: Nástup endDate, overridden by an in-effect "délka
+  // smlouvy" Dodatek (empty value = doba neurčitá clears it), then by Ukončení.
+  // The today-filter only matters for the latest session (a past session's
+  // Dodatky are all already in effect), so it is safe to apply uniformly.
+  const effectiveEnd = (s: S): string | null => {
+    let endDate = (s.nastup.endDate as string | null | undefined) ?? null;
+    for (const d of s.dodatky) {
+      if (((d.startDate as string | undefined) ?? "") > today) continue;
+      const changes = (d.changes as Array<{ changeKind?: string; value?: string }> | undefined) ?? [];
+      for (const ch of changes) {
+        if (ch.changeKind === "délka smlouvy") endDate = ch.value || null;
+      }
+    }
+    if (s.ukonceniDate) endDate = s.ukonceniDate;
+    return endDate;
+  };
+
+  // Walk oldest→newest; reset the run start only on a real (>1 month) gap.
+  let runStart = (sessions[0].nastup.startDate as string | undefined) ?? null;
+  for (let i = 1; i < sessions.length; i++) {
+    const prevIdx = isoMonthIndex(effectiveEnd(sessions[i - 1]));
+    const curStart = (sessions[i].nastup.startDate as string | undefined) ?? null;
+    const curIdx = isoMonthIndex(curStart);
+    // Unmeasurable boundary (missing/garbled date, or an open-ended prior
+    // session) → treat as continuous (forgiving: keep the run going).
+    const continuous = prevIdx === null || curIdx === null ? true : curIdx - prevIdx <= 1;
+    if (!continuous) runStart = curStart;
+  }
+
+  return {
+    employmentStartDate: runStart,
+    employmentEndDate: effectiveEnd(sessions[sessions.length - 1]),
+  };
+}
+
+/**
  * Recompute + persist the employee's active/terminated status from their
  * employment sessions, so terminating (Ukončení row or a fixed-term contract
  * expiring) auto-moves them to the Ukončení tab, and a fresh Nástup brings them
@@ -307,11 +402,26 @@ async function applyDerivedStatus(
 ): Promise<void> {
   const snap = await empRef.collection("employment").orderBy("startDate", "asc").get();
   const rows = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, unknown>) }));
-  const status = computeEffectiveStatus(rows, clock.today());
+  const today = clock.today();
+  const status = computeEffectiveStatus(rows, today);
+  // Denormalized Zaměstnanci-list date columns — folded from the same session
+  // read, persisted alongside status (both apply to active AND terminated
+  // employees, so they live here rather than in computeEffectiveRootFields).
+  const { employmentStartDate, employmentEndDate } = computeEmploymentDates(rows, today);
   const before = (await empRef.get()).data() as Record<string, unknown> | undefined;
-  if (!before || before.status === status) return;
-  await empRef.update({ status, updatedAt: now });
-  if (req) {
+  if (!before) return;
+  const statusChanged = before.status !== status;
+  const datesChanged =
+    (before.employmentStartDate ?? null) !== employmentStartDate ||
+    (before.employmentEndDate ?? null) !== employmentEndDate;
+  // Write when EITHER status or a date changed — so existing employees (whose
+  // status is already correct) still backfill the new date fields on the next
+  // nightly sweep / Úlohy refresh, without churning updatedAt when nothing moved.
+  if (!statusChanged && !datesChanged) return;
+  await empRef.update({ status, employmentStartDate, employmentEndDate, updatedAt: now });
+  // Only the lifecycle status transition is audited (as before); the date fields
+  // are pure derived denormalizations and would only add noise.
+  if (statusChanged && req) {
     await logUpdate(ctxFromReq(req), {
       collection: "employees",
       resourceId: empRef.id,
@@ -682,6 +792,11 @@ employeesRouter.post(
         currentDepartment: body.currentDepartment ?? "",
         currentContractType: body.currentContractType ?? "",
         currentJobTitle: body.currentJobTitle ?? "",
+        // Denormalized list-date columns — null until the first Nástup is added
+        // (which re-derives them via applyDerivedStatus). Seeded so the doc never
+        // carries undefined fields.
+        employmentStartDate: null,
+        employmentEndDate: null,
         createdAt: now,
         updatedAt: now,
       },
