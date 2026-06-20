@@ -83,6 +83,18 @@
   color: var(--color-text-muted);
 }
 
+/* Compact one-line change summary on the collapsed card — ellipsizes so the
+   author/time stay aligned on the right. */
+.summary {
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 0 1 auto;
+  min-width: 3rem;
+}
+
 .spacer {
   flex: 1 1 auto;
 }
