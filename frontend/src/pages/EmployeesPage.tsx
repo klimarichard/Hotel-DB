@@ -4,6 +4,7 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { employeeDisplayName, employeeSurnameFirst } from "@/lib/employeeName";
 import { nationalityName } from "@/lib/nationalities";
+import { formatDateCZ } from "@/lib/dateFormat";
 import Button from "@/components/Button";
 import ExportEmployeesModal from "@/components/ExportEmployeesModal";
 import styles from "./EmployeesPage.module.css";
@@ -20,6 +21,9 @@ interface Employee {
   currentDepartment: string;
   currentContractType: string;
   currentJobTitle: string;
+  // Continuous-employment start (NOT the latest Nástup) + effective end (or null).
+  employmentStartDate?: string | null;
+  employmentEndDate?: string | null;
 }
 
 export default function EmployeesPage() {
@@ -125,13 +129,15 @@ export default function EmployeesPage() {
               <th>Pozice</th>
               <th>Oddělení</th>
               <th>Národnost</th>
+              <th>Datum nástupu</th>
+              <th>Datum ukončení</th>
               <th>Stav</th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={5} className={styles.empty}>
+                <td colSpan={7} className={styles.empty}>
                   Žádní zaměstnanci nenalezeni.
                 </td>
               </tr>
@@ -158,6 +164,8 @@ export default function EmployeesPage() {
                   <td>{emp.currentJobTitle || "—"}</td>
                   <td>{emp.currentDepartment || "—"}</td>
                   <td>{emp.nationality ? nationalityName(emp.nationality) : "—"}</td>
+                  <td>{formatDateCZ(emp.employmentStartDate) || "—"}</td>
+                  <td>{formatDateCZ(emp.employmentEndDate) || "—"}</td>
                   <td>
                     <span
                       className={
