@@ -14,6 +14,7 @@ import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import * as clock from "./clock";
 import { readMultisport, anyPeriodActiveOn } from "./multisport";
+import { logSystemEvent } from "./auditLog";
 
 const db = () => admin.firestore();
 
@@ -30,6 +31,17 @@ export async function sweepExpiredMultisport(): Promise<{ unticked: number }> {
       await doc.ref.update({
         multisport: desired,
         updatedAt: FieldValue.serverTimestamp(),
+      });
+      // Log the automatic flip as a Systém change-log event. The benefits doc
+      // lives at employees/{empId}/benefits/{docId}; the employee id is its
+      // grandparent so the entry stays findable by employee name.
+      const empId = doc.ref.parent.parent?.id;
+      await logSystemEvent({
+        event: desired ? "multisport.autoStart" : "multisport.autoEnd",
+        collection: "employees/benefits",
+        resourceId: empId,
+        employeeId: empId,
+        summary: { multisport: desired },
       });
       unticked++;
     }

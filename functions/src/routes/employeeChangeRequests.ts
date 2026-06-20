@@ -129,6 +129,10 @@ employeeChangeRequestsRouter.patch("/:id", async (req: AuthRequest, res) => {
     collection: "employeeChangeRequests",
     resourceId: req.params.id,
     employeeId: data.employeeId as string | undefined,
+    // Reviewing a Můj-profil request belongs to the Zaměstnanci page (the submit
+    // is logged under mujProfil); event distinguishes approve from reject.
+    category: "zamestnanci",
+    event: status === "approved" ? "employeeChange.approve" : "employeeChange.reject",
     before: { status: "pending" },
     after: { status },
   });

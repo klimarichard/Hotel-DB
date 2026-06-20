@@ -11,6 +11,7 @@ import {
   logCreate,
   logUpdate,
   logDelete,
+  logSystemEvent,
   writeAudit,
 } from "../services/auditLog";
 
@@ -1337,11 +1338,15 @@ shiftsRouter.patch(
       reviewedAt: FieldValue.serverTimestamp(),
       rejectionReason: status === "rejected" ? ((body.rejectionReason as string) ?? null) : null,
     });
+    const uaYmSrc = String(before.date ?? "");
     await logUpdate(ctxFromReq(req), {
       collection: "shiftPlans/unavailabilityRequests",
       resourceId: planId,
       subResourceId: reqId,
       employeeId: before.employeeId as string | undefined,
+      event: status === "approved" ? "shift.unavailability.approve" : "shift.unavailability.reject",
+      year: Number(uaYmSrc.slice(0, 4)) || undefined,
+      month: Number(uaYmSrc.slice(5, 7)) || undefined,
       before: { status: before.status },
       after: { status },
     });
@@ -1561,11 +1566,15 @@ shiftsRouter.patch(
       rejectionReason: status === "rejected" ? ((body.rejectionReason as string) ?? null) : null,
     });
     await db().collection("shiftPlans").doc(planId).update({ updatedAt: FieldValue.serverTimestamp() });
+    const ovYmSrc = String(overrideData.date ?? "");
     await logUpdate(ctxFromReq(req), {
       collection: "shiftPlans/shiftOverrideRequests",
       resourceId: planId,
       subResourceId: reqId,
       employeeId: overrideData.employeeId as string | undefined,
+      event: status === "approved" ? "shift.override.approve" : "shift.override.reject",
+      year: Number(ovYmSrc.slice(0, 4)) || undefined,
+      month: Number(ovYmSrc.slice(5, 7)) || undefined,
       before: { status: overrideData.status },
       after: { status },
     });
@@ -1856,11 +1865,15 @@ shiftsRouter.patch(
         status: "assigned",
         updatedAt: FieldValue.serverTimestamp(),
       });
+      const claimYear = Number(String(claimDate).slice(0, 4)) || undefined;
+      const claimMonth = Number(String(claimDate).slice(5, 7)) || undefined;
       await logUpdate(ctxFromReq(req), {
         collection: "shiftPlans/shifts",
         resourceId: planId,
         subResourceId: shiftDocId,
         employeeId: claimEmployeeId,
+        year: claimYear,
+        month: claimMonth,
         before: { rawInput: "" },
         after: { rawInput: parsed.rawInput },
       });
@@ -1868,6 +1881,7 @@ shiftsRouter.patch(
       // Auto-reject sibling pending claims for the same slot.
       const sameDay = await planRef.collection("shiftChangeRequests").where("date", "==", claimDate).get();
       const batch = db().batch();
+      const autoRejected: { id: string; employeeId?: string }[] = [];
       for (const d of sameDay.docs) {
         if (d.id === reqId) continue;
         const x = d.data();
@@ -1878,9 +1892,25 @@ shiftsRouter.patch(
             reviewedAt: FieldValue.serverTimestamp(),
             rejectionReason: "Směnu převzal jiný zaměstnanec.",
           });
+          autoRejected.push({ id: d.id, employeeId: x.employeeId as string | undefined });
         }
       }
       await batch.commit();
+
+      // Audit each competing claim that lost the slot as a Systém action
+      // (previously these batch rejections were silent — change-log gap).
+      for (const loser of autoRejected) {
+        await logSystemEvent({
+          event: "shift.freeClaim.autoReject",
+          collection: "shiftPlans/shiftChangeRequests",
+          resourceId: planId,
+          subResourceId: loser.id,
+          employeeId: loser.employeeId,
+          year: claimYear,
+          month: claimMonth,
+          summary: { rejectionReason: "Směnu převzal jiný zaměstnanec." },
+        });
+      }
     }
 
     await changeReqRef.update({
@@ -1890,11 +1920,23 @@ shiftsRouter.patch(
       rejectionReason: status === "rejected" ? ((body.rejectionReason as string) ?? null) : null,
     });
     await planRef.update({ updatedAt: FieldValue.serverTimestamp() });
+    const crYmSrc = String(beforeData.date ?? "");
+    const isFreeClaim = beforeData.kind === "free-claim";
+    const crEvent = isFreeClaim
+      ? status === "approved"
+        ? "shift.freeClaim.approve"
+        : "shift.freeClaim.reject"
+      : status === "approved"
+        ? "shift.change.approve"
+        : "shift.change.reject";
     await logUpdate(ctxFromReq(req), {
       collection: "shiftPlans/shiftChangeRequests",
       resourceId: planId,
       subResourceId: reqId,
       employeeId: beforeData.employeeId as string | undefined,
+      event: crEvent,
+      year: Number(crYmSrc.slice(0, 4)) || undefined,
+      month: Number(crYmSrc.slice(5, 7)) || undefined,
       before: { status: beforeData.status },
       after: { status },
     });
