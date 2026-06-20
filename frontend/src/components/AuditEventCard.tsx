@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  actionGlyph,
   actionVerb,
+  eventLabel,
   fieldLabel,
   subjectNoun,
 } from "@/lib/audit/labels";
@@ -89,10 +89,16 @@ export default function AuditEventCard({
     event.action === "update" && event.sections.length > 1
       ? event.collectionRoot
       : event.primaryCollection;
-  const headerVerb = actionVerb(event.action) + (hasSubject ? ` ${subjectNoun(subjectColl)}` : "");
+  // A semantic event (approval/rejection/free-claim/Systém auto-action) carries
+  // its own full phrase; otherwise fall back to the generic "<verb> <noun>".
+  const semanticHeader = eventLabel(event.event);
+  const headerVerb =
+    semanticHeader ?? actionVerb(event.action) + (hasSubject ? ` ${subjectNoun(subjectColl)}` : "");
 
+  // Suppress the "· N změny" meta for semantic events — the status change is
+  // already conveyed by the phrase ("Schválení …"), so the count is noise.
   const changeCount =
-    event.action === "update"
+    !semanticHeader && event.action === "update"
       ? event.sections.reduce((n, s) => n + s.changes.length, 0)
       : 0;
 
@@ -134,7 +140,6 @@ export default function AuditEventCard({
         }}
       >
         <span className={styles.chev} aria-hidden="true">{expanded ? "▾" : "▸"}</span>
-        <span className={styles.glyph} aria-hidden="true">{actionGlyph(event.action)}</span>
         <span className={styles.action}>{headerVerb}</span>
         {!hideTitle && title && (
           <>
