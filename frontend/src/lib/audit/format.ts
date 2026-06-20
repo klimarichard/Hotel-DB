@@ -6,7 +6,7 @@
 
 /** Enum value → Czech label, keyed by field leaf name. */
 const ENUM_LABELS: Record<string, Record<string, string>> = {
-  gender: { M: "Muž", F: "Žena", male: "Muž", female: "Žena" },
+  gender: { M: "Muž", F: "Žena", m: "Muž", f: "Žena", male: "Muž", female: "Žena" },
   maritalStatus: {
     single: "Svobodný/á",
     married: "Ženatý / vdaná",

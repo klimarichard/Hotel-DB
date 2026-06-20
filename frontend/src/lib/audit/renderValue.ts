@@ -11,6 +11,7 @@
  */
 import { formatAuditValue } from "./format";
 import { fieldLabel } from "./labels";
+import { nationalityName } from "@/lib/nationalities";
 import { PERMISSION_SECTIONS } from "@/lib/permissions/catalog";
 import { MENU_ITEMS } from "@/lib/menuItems";
 import { VARIABLE_GROUPS } from "@/lib/contractVariables";
@@ -134,8 +135,12 @@ const HIDDEN_ID_LEAVES = new Set([
   "sourceNoteId",
   "deletedDueToEmploymentRowDelete",
 ]);
-// settings/menuOrder stores the per-role page order under these leaf names.
-const MENU_ORDER_LEAVES = new Set(["admin", "director", "manager", "employee", "accountant"]);
+// An array is a menu-order list iff every element is a known menu page key —
+// detected by shape (not leaf name) so CUSTOM role types (e.g. "rezervace")
+// are covered too, not just the built-in roles.
+function isMenuOrderArray(v: unknown): v is string[] {
+  return Array.isArray(v) && v.length > 0 && v.every((x) => typeof x === "string" && MENU_LABELS.has(x));
+}
 
 /**
  * Render an audit value for display, or null to hide the field row entirely.
@@ -172,10 +177,11 @@ export function renderAuditFieldValue(fieldPath: string | undefined, value: unkn
       return typeof value === "string" ? DOC_TYPE_LABELS[value] ?? value : formatAuditValue(value);
     case "trigger":
       return typeof value === "string" ? TRIGGER_LABELS[value] ?? value : formatAuditValue(value);
+    case "nationality":
+      // App shows the resolved country name (nationalityName), not the code.
+      return typeof value === "string" && value ? nationalityName(value) : formatAuditValue(value);
     default:
-      if (MENU_ORDER_LEAVES.has(leaf) && Array.isArray(value)) {
-        return resolveKeys(value, (k) => MENU_LABELS.get(k) ?? k);
-      }
+      if (isMenuOrderArray(value)) return resolveKeys(value, (k) => MENU_LABELS.get(k) ?? k);
       return formatAuditValue(value, leaf);
   }
 }
