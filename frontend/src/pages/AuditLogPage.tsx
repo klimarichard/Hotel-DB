@@ -411,7 +411,11 @@ export default function AuditLogPage() {
                   <AuditEventCard
                     key={ev.id}
                     event={ev}
-                    authorName={userNameMap.get(ev.userId) ?? ev.userEmail ?? ev.userId}
+                    authorName={
+                      ev.userId === "system"
+                        ? "Systém"
+                        : userNameMap.get(ev.userId) || ev.userEmail || ev.userId
+                    }
                     title={t.text}
                     titleHref={t.href}
                   />
