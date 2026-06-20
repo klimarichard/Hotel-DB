@@ -1,19 +1,19 @@
 /**
- * Bespoke, human-readable rendering for audit field values that would otherwise
- * surface as machine output (objects / arrays of objects). Dispatch is by field
- * leaf name. Returns a display string, or `null` to HIDE the row entirely.
+ * Human-readable rendering for audit field values. THE RULE: the change log must
+ * never show a raw identifier (field key, permission key, page key, doc/job code,
+ * internal doc-id) — every value resolves to the same Czech text the app shows.
  *
- * Decisions (2026-06-20, with the user):
- * - Payroll entry edits: show only the manual `overrides` (Czech labels from the
- *   payroll field map); HIDE `autoOverrides` (system recompute noise).
- * - Multisport periods/companions: human summary, internal `id` hidden, dates
- *   formatted, price in Kč.
- * - Employment Dodatek `changes[]`: "Mzda: 28 000" style.
- * - Job-run results (`extra.result`): a Czech sentence ("Aktualizováno 107 záznamů").
- * - Everything else falls through to formatAuditValue (which never emits JSON).
+ * Resolution is TARGETED per field leaf (a blanket "humanise camelCase" would
+ * wrongly mangle real values like the insurer code "VoZP"), reusing the app's
+ * own label sources: field-label maps, the RBAC catalogue, the menu registry,
+ * the contract-variable defs, plus small maps for doc/job codes mirrored from
+ * the UI. Returns a string, or null to HIDE the row (internal-only fields).
  */
 import { formatAuditValue } from "./format";
 import { fieldLabel } from "./labels";
+import { PERMISSION_SECTIONS } from "@/lib/permissions/catalog";
+import { MENU_ITEMS } from "@/lib/menuItems";
+import { VARIABLE_GROUPS } from "@/lib/contractVariables";
 
 function isObj(v: unknown): v is Record<string, unknown> {
   return !!v && typeof v === "object" && !Array.isArray(v);
@@ -22,8 +22,47 @@ function isNullish(v: unknown): boolean {
   return v === null || v === undefined || v === "";
 }
 
-// Payroll manual overrides {vacationHours:24, extraPay:500} →
-// "Dovolená: 24, Navíc: 500" (labels from the payroll field map).
+// ── Flat label maps built from the app's own sources ─────────────────────────
+const PERMISSION_LABELS = (() => {
+  const m = new Map<string, string>();
+  for (const sec of PERMISSION_SECTIONS)
+    for (const sub of sec.subsections) for (const it of sub.items) m.set(it.key, it.label);
+  return m;
+})();
+const MENU_LABELS = new Map(MENU_ITEMS.map((i) => [i.id, i.label] as const));
+const VARIABLE_LABELS = (() => {
+  const m = new Map<string, string>();
+  for (const g of VARIABLE_GROUPS) for (const v of g.vars) m.set(v.key, v.label);
+  return m;
+})();
+
+// Document codes (audit extra.document) — mirrors the UI buttons.
+const DOC_TYPE_LABELS: Record<string, string> = {
+  taxDeclaration: "Prohlášení poplatníka",
+  questionnaire: "Osobní dotazník",
+};
+// Manual-trigger job codes (audit extra.trigger) — mirrors Settings → Úlohy titles.
+const TRIGGER_LABELS: Record<string, string> = {
+  refreshDocumentAlerts: "Upozornění na doklady",
+  updateDocumentAlerts: "Upozornění na doklady",
+  refreshAllProbationAlerts: "Upozornění na zkušební doby",
+  refreshEffectiveRootForAllActive: "Aktuální údaje zaměstnanců",
+  sweepMultisport: "Údržba Multisportu",
+  sweepExpiredMultisport: "Údržba Multisportu",
+  checkPlanDeadlines: "Přechody plánů směn",
+  transitionPlanDeadlines: "Přechody plánů směn",
+  refreshPayroll: "Aktualizace mezd",
+};
+
+// Resolve a value that is a KEY (or array of keys) via a key→label function.
+// Unknown keys still go through the fn (e.g. fieldLabel humanises), never raw.
+function resolveKeys(value: unknown, label: (k: string) => string): string {
+  const arr = Array.isArray(value) ? value : [value];
+  const out = arr.filter((x) => typeof x === "string" && x).map((x) => label(x as string));
+  return out.length ? out.join(", ") : formatAuditValue(value);
+}
+
+// ── Per-shape renderers ──────────────────────────────────────────────────────
 function renderOverrides(v: unknown): string {
   if (!isObj(v)) return formatAuditValue(v);
   const parts = Object.entries(v)
@@ -31,22 +70,15 @@ function renderOverrides(v: unknown): string {
     .map(([k, val]) => `${fieldLabel("payrollPeriods/entries", k)}: ${formatAuditValue(val, k)}`);
   return parts.length ? parts.join(", ") : "—";
 }
-
-// Multisport periods [{from,to}] → "1.1.2026 – trvá; 1.6.2025 – 1.11.2025".
 function renderPeriods(v: unknown): string {
   if (!Array.isArray(v) || !v.length) return "—";
   return v
     .map((p) => {
       const o = isObj(p) ? p : {};
-      const from = o.from ? formatAuditValue(o.from) : "?";
-      const to = o.to ? formatAuditValue(o.to) : "trvá";
-      return `${from} – ${to}`;
+      return `${o.from ? formatAuditValue(o.from) : "?"} – ${o.to ? formatAuditValue(o.to) : "trvá"}`;
     })
     .join("; ");
 }
-
-// Multisport companions [{name,from,to,price,id}] →
-// "Patrik Valenta (1.1.2026 – trvá, 1 800 Kč)" — internal id hidden.
 function renderCompanions(v: unknown): string {
   if (!Array.isArray(v) || !v.length) return "—";
   return v
@@ -60,28 +92,22 @@ function renderCompanions(v: unknown): string {
     })
     .join("; ");
 }
-
 const CHANGE_KIND_LABELS: Record<string, string> = {
   mzda: "Mzda",
   "pracovní pozice": "Pozice",
   úvazek: "Úvazek",
   "délka smlouvy": "Délka smlouvy",
 };
-
-// Employment Dodatek changes[] [{changeKind,value}] → "Mzda: 28 000; Pozice: Recepční".
 function renderChanges(v: unknown): string {
   if (!Array.isArray(v) || !v.length) return "—";
   return v
     .map((c) => {
       const o = isObj(c) ? c : {};
       const kind = typeof o.changeKind === "string" ? o.changeKind : "";
-      const label = CHANGE_KIND_LABELS[kind] ?? kind ?? "Změna";
-      return `${label}: ${formatAuditValue(o.value)}`;
+      return `${CHANGE_KIND_LABELS[kind] ?? kind ?? "Změna"}: ${formatAuditValue(o.value)}`;
     })
     .join("; ");
 }
-
-// Manual job-run results → a Czech sentence. Numeric or array-length values.
 const JOB_RESULT_PHRASES: Record<string, (n: number) => string> = {
   refreshed: (n) => `Aktualizováno ${n} záznamů`,
   scanned: (n) => `Zkontrolováno ${n} záznamů`,
@@ -94,22 +120,33 @@ function renderJobResult(v: unknown): string {
   const num = (x: unknown) => (typeof x === "number" ? x : Array.isArray(x) ? x.length : undefined);
   const parts = Object.entries(v).map(([k, val]) => {
     const n = num(val);
-    return n !== undefined && JOB_RESULT_PHRASES[k]
-      ? JOB_RESULT_PHRASES[k](n)
-      : `${k}: ${formatAuditValue(val)}`;
+    return n !== undefined && JOB_RESULT_PHRASES[k] ? JOB_RESULT_PHRASES[k](n) : `${k}: ${formatAuditValue(val)}`;
   });
   return parts.length ? parts.join(", ") : "—";
 }
 
+// Internal foreign-key / bookkeeping fields with no human-meaningful value —
+// the record's identity is already in the card title, so hide these rows.
+const HIDDEN_ID_LEAVES = new Set([
+  "departmentId",
+  "employeeId",
+  "sourcePlanId",
+  "sourceNoteId",
+  "deletedDueToEmploymentRowDelete",
+]);
+// settings/menuOrder stores the per-role page order under these leaf names.
+const MENU_ORDER_LEAVES = new Set(["admin", "director", "manager", "employee", "accountant"]);
+
 /**
- * Render an audit value for display, or return null to hide the field entirely.
- * `fieldPath` drives the special-case dispatch (by leaf name).
+ * Render an audit value for display, or null to hide the field row entirely.
+ * Dispatch is by field leaf, so each identifier class resolves to in-app text.
  */
 export function renderAuditFieldValue(fieldPath: string | undefined, value: unknown): string | null {
   const leaf = (fieldPath ?? "").split(".").pop() ?? "";
+  if (HIDDEN_ID_LEAVES.has(leaf)) return null;
   switch (leaf) {
     case "autoOverrides":
-      return null; // system recompute noise — hidden per decision
+      return null; // system recompute noise (hidden per decision)
     case "overrides":
       return renderOverrides(value);
     case "multisportPeriods":
@@ -119,8 +156,26 @@ export function renderAuditFieldValue(fieldPath: string | undefined, value: unkn
     case "changes":
       return renderChanges(value);
     case "result":
-      return renderJobResult(value); // manual-trigger extra.result
+      return renderJobResult(value);
+    case "extraPermissions":
+    case "revokedPermissions":
+    case "permissions":
+      return resolveKeys(value, (k) => PERMISSION_LABELS.get(k) ?? k);
+    case "recalculatedFields":
+      return resolveKeys(value, (k) => fieldLabel("payrollPeriods", k));
+    case "fields":
+    case "fieldName":
+      return resolveKeys(value, (k) => fieldLabel("employees", k));
+    case "variables":
+      return resolveKeys(value, (k) => VARIABLE_LABELS.get(k) ?? k);
+    case "document":
+      return typeof value === "string" ? DOC_TYPE_LABELS[value] ?? value : formatAuditValue(value);
+    case "trigger":
+      return typeof value === "string" ? TRIGGER_LABELS[value] ?? value : formatAuditValue(value);
     default:
+      if (MENU_ORDER_LEAVES.has(leaf) && Array.isArray(value)) {
+        return resolveKeys(value, (k) => MENU_LABELS.get(k) ?? k);
+      }
       return formatAuditValue(value, leaf);
   }
 }
