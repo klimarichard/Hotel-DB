@@ -14,7 +14,19 @@ The `benefits` sub-doc carries the insurance/bank/Multisport fields plus `nepode
 
 **Sub-collections under `payrollPeriods/{id}`:** `entries`
 
-**Denormalized fields on `employees` root doc** (for querying): `currentCompanyId`, `currentDepartment`, `currentContractType`, `currentJobTitle`
+**Denormalized fields on `employees` root doc** (for querying and list display):
+
+| Field | Type | Maintained by | Description |
+|---|---|---|---|
+| `currentCompanyId` | string | `resyncRootFields` (per employment write) + nightly sweep | ID of the company in the employee's current active session |
+| `currentDepartment` | string | same | Department name from the latest in-effect session |
+| `currentContractType` | string | same | Contract type (`HPP`/`PPP`/`DPP`) from the latest in-effect session |
+| `currentJobTitle` | string | same | Job title from the latest in-effect session |
+| `status` | `"active"\|"before-start"\|"terminated"` | `applyDerivedStatus` (per employment write) + nightly sweep | Derived from employment rows; see [employees.md](employees.md) |
+| `employmentStartDate` | string (ISO `YYYY-MM-DD`) \| null | `applyDerivedStatus` (per employment write) + nightly sweep | Start of the employee's **current continuous run** — NOT necessarily the latest Nástup date; a rehire within one calendar month of the prior session's end extends the previous run (see continuous-run rule in [employees.md](employees.md)) |
+| `employmentEndDate` | string (ISO `YYYY-MM-DD`) \| null | `applyDerivedStatus` (per employment write) + nightly sweep | Effective end date of the latest session (`null` = open-ended); mirrors the same end-date fold as `computeEffectiveStatus` |
+
+`employmentStartDate` and `employmentEndDate` were added in v2.2.8. Both are pure derived denormalizations (no audit log on change). They are computed in `computeEmploymentDates(rows, today)` (`functions/src/routes/employees.ts`) and persisted in `applyDerivedStatus`. Existing employees backfill on the next nightly `refreshEmployeeEffective` sweep or `trigger-effective-refresh` manual call; `POST /employees` seeds both as `null` for name-only employees. No migration script needed — additive, data-safe.
 
 ### `roleTypes/{id}` — configurable user types
 

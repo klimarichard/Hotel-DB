@@ -64,6 +64,23 @@ Evidence všech zaměstnanců — **vše jen pro čtení**. Záložky **Aktivní
 - Řádky jsou barevně odlišené podle typu smlouvy (HPP / PPP / DPP).
 - Tlačítko **Exportovat CSV** otevře dialog, kde vyberete sloupce a filtry a stáhnete data do tabulky.
 
+#### Sloupce tabulky
+
+Tabulka zaměstnanců zobrazuje tyto sloupce (zleva doprava):
+
+**Jméno** (s odznakem HPP / PPP / DPP) · **Pozice** · **Oddělení** · **Národnost** · **Datum nástupu** · **Datum ukončení** · **Stav**
+
+Dva sloupce stojí za bližší vysvětlení:
+
+- **Datum nástupu** — zobrazuje, odkdy zaměstnanec **nepřetržitě** pracuje ve společnosti. Jde o začátek jeho nejdelšího nynějšího nepřerušeného pracovního poměru, nikoli datum poslední podepsané smlouvy. Příklad: zaměstnanec nastoupil v listopadu 2022 a od té doby pracuje bez přestávky (smlouvy na sebe navazovaly bez reálné mezery), sloupec zobrazí **listopad 2022** i v případě, že aktuální smlouva začala tento rok. Pokud ale zaměstnanec odešel a po čase nastoupil znovu po delší přestávce, zobrazí se datum **nového** nástupu.
+- **Datum ukončení** — zobrazuje datum konce pracovního poměru, je-li známé. Sloupec je vyplněn u zaměstnanců v záložce **Ukončení** i u stále zaměstnaných osob s pevně sjednaným koncem smlouvy nebo předem zadaným ukončením. Zaměstnanci na dobu neurčitou bez zadaného ukončení mají v tomto sloupci pomlčku „—".
+
+#### Řazení tabulky
+
+Kliknutím na záhlaví sloupce seznam seřadíte. Opětovným kliknutím na stejné záhlaví pořadí obrátíte (vzestupně ↔ sestupně). Aktuálně aktivní řazení poznáte podle šipky **▲** nebo **▼** zobrazené přímo v záhlaví sloupce.
+
+Řadit lze podle těchto sloupců: **Jméno** (podle příjmení), **Pozice**, **Oddělení**, **Národnost**, **Datum nástupu**, **Datum ukončení**. Sloupec **Stav** řaditelný není. Záznamy s prázdnou hodnotou se vždy zobrazují na konci seznamu. Ve výchozím stavu je seznam seřazen podle příjmení A→Z.
+
 > 📷 *(Místo pro snímek obrazovky: seznam zaměstnanců)*
 
 ### Detail zaměstnance

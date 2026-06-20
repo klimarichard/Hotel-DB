@@ -74,6 +74,23 @@ Evidence všech zaměstnanců. Záložky **Aktivní**, **Před nástupem** a **U
 - Vedle jména je **odznak typu smlouvy** (HPP / PPP / DPP) — stejný jako ve mzdách. Řádky jsou navíc barevně odlišené podle typu smlouvy.
 - Tlačítko **Exportovat CSV** otevře dialog, kde vyberete sloupce a filtry a stáhnete data do tabulky.
 
+#### Sloupce tabulky
+
+Tabulka zaměstnanců zobrazuje tyto sloupce (zleva doprava):
+
+**Jméno** (s odznakem HPP / PPP / DPP) · **Pozice** · **Oddělení** · **Národnost** · **Datum nástupu** · **Datum ukončení** · **Stav**
+
+Dva sloupce stojí za bližší vysvětlení:
+
+- **Datum nástupu** — zobrazuje, odkdy zaměstnanec **nepřetržitě** pracuje ve společnosti. Jde o začátek jeho nejdelšího nynějšího nepřerušeného pracovního poměru, nikoli datum poslední podepsané smlouvy. Příklad: zaměstnanec nastoupil v listopadu 2022 a od té doby pracuje bez přestávky (smlouvy na sebe navazovaly bez reálné mezery — tj. jedna skončila 31. 12. a hned 1. 1. začala nová), sloupec zobrazí **listopad 2022** i v případě, že aktuální smlouva začala tento rok. Pokud ale zaměstnanec odešel a po čase nastoupil znovu po delší přestávce, zobrazí se datum **nového** nástupu.
+- **Datum ukončení** — zobrazuje datum konce pracovního poměru, je-li známé. Sloupec je vyplněn u zaměstnanců v záložce **Ukončení** (jejich datum odchodu) i u stále zaměstnaných osob, které mají sjednaný pevný konec smlouvy nebo mají předem zadané ukončení. Díky tomu snadno poznáte, komu pracovní poměr brzy vyprší. Zaměstnanci na dobu neurčitou bez zadaného ukončení mají v tomto sloupci pomlčku „—".
+
+#### Řazení tabulky
+
+Kliknutím na záhlaví sloupce seznam seřadíte. Opětovným kliknutím na stejné záhlaví pořadí obrátíte (vzestupně ↔ sestupně). Aktuálně aktivní řazení poznáte podle šipky **▲** (A→Z / nejdříve) nebo **▼** (Z→A / nejpozději) zobrazené přímo v záhlaví sloupce.
+
+Řadit lze podle těchto sloupců: **Jméno** (podle příjmení), **Pozice**, **Oddělení**, **Národnost**, **Datum nástupu**, **Datum ukončení**. Sloupec **Stav** řaditelný není. Záznamy s prázdnou hodnotou (např. prázdné **Datum ukončení**) se vždy zobrazují na konci seznamu. Ve výchozím stavu je seznam seřazen podle příjmení A→Z.
+
 > 📷 *(Místo pro snímek obrazovky: seznam zaměstnanců)*
 
 ### Nový zaměstnanec
