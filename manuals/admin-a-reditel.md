@@ -108,6 +108,11 @@ Detail má tři záložky — **Detail** (osobní a kontaktní údaje), **Histor
 - **Telefon** začínající `+420` se zobrazuje po skupinách jako `+420 XXX XXX XXX` (jen zobrazení, uložené číslo se nemění).
 - Má-li zaměstnanec ve formuláři zaškrtnuto **„Nepodepíše prohlášení poplatníka"**, pod záhlavím detailu se zobrazí informační pruh **„Nepodepsané prohlášení"**.
 - **Upravit** otevře editaci údajů. V sekci **Benefity** je zaškrtávátko **„Nepodepíše prohlášení poplatníka"**.
+- **Zaučování (zácvik nového zaměstnance):** ve formuláři úprav, v sekci **Doplňující údaje → Benefity**, je zaškrtávátko **„Zaučování"**. Zaškrtněte ho, pokud je zaměstnanec teprve v zácviku. Jakmile ho zaškrtnete, zobrazí se datové pole **„Zaučování do"** — sem zadejte plánovaný konec zácviku (datum). Pole nemusíte vyplnit; bez data platí příznak do doby, než ho ručně odškrtnete. Dokud je příznak aktivní a datum ještě nenastalo, zobrazují se dva viditelné indikátory:
+  - Na **detailu zaměstnance** se pod záhlavím zobrazí barevný informační pruh **„Zaučování (do …)"** s datem konce zácviku.
+  - V **seznamu zaměstnanců** (stránka Zaměstnanci) se vedle jména a odznaku HPP/PPP/DPP zobrazí zelený odznak **„V zácviku"**.
+
+  Jakmile datum **„Zaučování do"** uplyne, pruh i odznak automaticky zmizí. Pokud datum nevyplníte, příznak zůstane aktivní dokud ho ručně neodškrtnete ve formuláři úprav.
 - Tlačítko **Dotazník** v záhlaví (vedle **Upravit** a **Smazat**) okamžitě otevře v nové záložce prohlížeče vyplněný **Osobní dotazník zaměstnance** (PDF) se všemi aktuálními údaji zaměstnance připravenými k tisku. Soubor se nikam nestahuje — pouze se zobrazí v nové záložce. Dotazník obsahuje citlivé údaje (rodné číslo atp.) a jeho vygenerování se zaznamenává do **Logu změn**.
 
 > 📷 *(Místo pro snímek obrazovky: detail zaměstnance)*
@@ -167,6 +172,7 @@ Plán prochází stavy **Vytvořený → Otevřený → Uzavřený → Publikova
 - **Termíny všech tří přechodů (Otevření, Uzavření, Publikování) můžete nastavit už ve stavu *Vytvořený*** — plán se pak postupně posune sám, jak jednotlivé termíny nastanou. Termíny musí jít po sobě (Otevření ≤ Uzavření ≤ Publikování).
 - Plán ve stavu *Vytvořený* zaměstnanci nevidí; objeví se až po otevření.
 - FOM vidí všechny stavy a může vyplňovat směny v otevřeném plánu, ale plán neposouvá dál — to děláte vy.
+- **Automatické vyplnění „R" pro vedoucí (FOM) při publikování:** v okamžiku, kdy plán přejde do stavu **Publikovaný**, aplikace automaticky doplní kód **„R"** (denní směna vedoucího) každému zaměstnanci ze sekce **Vedoucí / FOM** na každý pracovní den (pondělí–pátek), který v jejich řádku ještě zůstal prázdný. Dny označené **„X"** (volno) a dny, kde je již vyplněn jakýkoli jiný kód, se ponechají beze změny. Státní svátky jsou přeskočeny — ve svátky vedoucí automaticky dostávají náhradu za svátek, nikoliv „R". Nemusíte tedy ručně procházet každou buňku vedoucích — systém zajistí, že všechny pracovní dny jsou pokryté.
 
 > 📷 *(Místo pro snímek obrazovky: měsíční plán směn)*
 
@@ -217,6 +223,7 @@ Tlačítko **Exportovat ▾** nabízí **PDF** (plán na jednu stránku A4) a **
 ### Vlastní žádosti a přehled
 
 - **Nová žádost** — zadáte termín a důvod; v sekci **Moje žádosti** vidíte stav svých žádostí.
+- **Podat žádost za jiného zaměstnance:** máte-li oprávnění **„Podat žádost za kohokoli"** (nastavuje se v *Nastavení → Uživatelské typy*, sekce Dovolená), zobrazí se ve formuláři **Nová žádost** navíc rozbalovací seznam **„Zaměstnanec"**. Ve výchozím stavu je nastaven na **„Já"** (žádost za sebe); vyberte konkrétního zaměstnance ze seznamu, zadejte termín a důvod, a žádost se podá **jeho jménem** — zaměstnanci se objeví jako jeho vlastní žádost. Tuto možnost využijete například tehdy, kdy zaměstnanec nemá přístup do systému, ale potřebuje dovolenou zaevidovat.
 - Pokud termín koliduje s již naplánovanou směnou, žádost je **zablokována** s upozorněním.
 
 > **Poznámka:** Přehled **Schválené dovolené (všichni zaměstnanci)** se vám nezobrazuje — jako administrátor/ředitel vidíte veškeré schválené dovolené (včetně vedení) přímo v tabulce **Všechny žádosti** výše. Tato samostatná tabulka se zobrazuje pouze uživatelům, kteří nemají přístup ke všem žádostem.
