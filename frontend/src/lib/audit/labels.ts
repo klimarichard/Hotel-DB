@@ -330,6 +330,7 @@ export const EVENT_LABELS: Record<string, string> = {
   "employeeChange.reject": "Zamítnutí žádosti o úpravu profilu",
   // Systém — automatické akce
   "plan.autoTransition": "Automatický přechod plánu",
+  "plan.autoFillManagerR": "Automatické doplnění směn R vedoucím",
   "multisport.autoStart": "Automatické zahájení Multisportu",
   "multisport.autoEnd": "Automatické ukončení Multisportu",
   "employee.autoTerminate": "Automatické ukončení zaměstnance",
