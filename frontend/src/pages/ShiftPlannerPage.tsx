@@ -1641,14 +1641,22 @@ export default function ShiftPlannerPage() {
                     }
                   : undefined
               }
-              showFreeShifts={plan.status === "published" && canSeeFreeShifts}
+              showFreeShifts={
+                (plan.status === "published" && canSeeFreeShifts) ||
+                (plan.status === "closed" && can("shifts.freeShift.manage"))
+              }
               freeShiftDpaDays={plan.freeShiftDpaDays ?? []}
               onClaimFreeShift={
                 can("shifts.freeShift.claim") && plan.status === "published"
                   ? (date, code, hotel) => setPendingFreeClaim({ date, code, hotel })
                   : undefined
               }
-              onToggleDpaDay={can("shifts.freeShift.manage") && plan.status === "published" ? handleToggleDpaDay : undefined}
+              onToggleDpaDay={
+                can("shifts.freeShift.manage") &&
+                (plan.status === "published" || plan.status === "closed")
+                  ? handleToggleDpaDay
+                  : undefined
+              }
               stickyTop={stickyTop}
             />
             </div>
