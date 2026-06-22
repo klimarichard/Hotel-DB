@@ -164,6 +164,7 @@ function BarTile({ title, data, palette, orientation }: BarTileProps) {
         {empty ? (
           <div className={styles.state}>Žádná data</div>
         ) : (
+          <div className={styles.chartFill}>
           <ResponsiveContainer width="100%" height="100%">
             {orientation === "horizontal" ? (
               <BarChart
@@ -208,6 +209,7 @@ function BarTile({ title, data, palette, orientation }: BarTileProps) {
               </BarChart>
             )}
           </ResponsiveContainer>
+          </div>
         )}
       </div>
     </div>

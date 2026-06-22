@@ -30,6 +30,10 @@
   flex-direction: column;
   gap: 0.5rem;
   min-height: 300px;
+  /* Grid items default to min-width:auto (= min-content). An SVG chart's
+     min-content width is large, so without this the column refuses to shrink,
+     the chart overflows its track and recharts squashes the axis text. */
+  min-width: 0;
 }
 
 .tileTitle {
@@ -62,6 +66,15 @@
 .chartArea {
   flex: 1;
   min-height: 240px;
+  /* Give recharts a definite box to measure: the ResponsiveContainer lives in
+     an absolutely-positioned fill (below) so it reads THIS element's resolved
+     size instead of feeding its own intrinsic SVG width back into the layout. */
+  position: relative;
+}
+
+.chartFill {
+  position: absolute;
+  inset: 0;
 }
 
 .state {
