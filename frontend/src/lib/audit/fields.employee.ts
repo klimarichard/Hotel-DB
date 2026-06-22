@@ -62,6 +62,9 @@ const employees: FieldLabelMap = {
   multisport: "Multisport",
   homeOffice: "Home office",
   allowances: "Náhrady",
+  nepodepiseProhlaseni: "Nepodepíše prohlášení poplatníka",
+  zaucovani: "Zaučování",
+  zaucovaniDo: "Zaučování do",
 
   // ── Pracovní poměr (employment session rows) ──
   type: "Typ záznamu",

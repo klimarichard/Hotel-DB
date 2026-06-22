@@ -1120,6 +1120,8 @@ interface AdditionalData {
   homeOffice?: number | null;
   allowances?: boolean;
   nepodepiseProhlaseni?: boolean;
+  zaucovani?: boolean;
+  zaucovaniDo?: string | null;
 }
 
 interface AlertItem {
@@ -1532,6 +1534,20 @@ export default function EmployeeDetailPage() {
         <div className={styles.alertBanner}>
           <div className={styles.alertItemExpiring}>
             <strong>Nepodepsané prohlášení</strong>
+          </div>
+        </div>
+      )}
+
+      {/* "Zaučování" badge — only while training is still active (no end date,
+          or end date today/in the future). Auto-disappears once it passes. */}
+      {additional?.zaucovani === true &&
+        (!additional.zaucovaniDo || additional.zaucovaniDo >= clock.today()) && (
+        <div className={styles.alertBanner}>
+          <div className={styles.alertItemExpiring}>
+            <strong>
+              Zaučování
+              {additional.zaucovaniDo ? ` (do ${formatDateCZ(additional.zaucovaniDo)})` : ""}
+            </strong>
           </div>
         </div>
       )}
