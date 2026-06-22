@@ -385,10 +385,11 @@ export default function VacationPage() {
           <>
             <div className={styles.formRow}>
               {canForAny && (
-                <div className={styles.formField} data-tour="vacation-employee-picker">
+                <div className={styles.formField}>
                   <label className={styles.label}>Zaměstnanec</label>
                   <select
                     className={styles.input}
+                    data-tour="vacation-employee-picker"
                     value={targetEmployeeId}
                     onChange={(e) => { setTargetEmployeeId(e.target.value); setFormSuccess(false); }}
                   >
