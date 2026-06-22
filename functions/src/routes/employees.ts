@@ -1712,6 +1712,17 @@ employeesRouter.put(
       await snap.docs[0].ref.update(data);
     }
 
+    // Denormalize the "Zaučování" (training) flag + end date onto the root
+    // employee doc so the Employees list (which reads only root docs) can render
+    // the "V zácviku" badge without joining the benefits sub-doc. The badge's
+    // auto-expiry is computed live from zaucovaniDo on read — no nightly job.
+    const zaucovani = payload.zaucovani === true;
+    const zaucovaniDo = zaucovani && typeof payload.zaucovaniDo === "string" ? payload.zaucovaniDo : "";
+    await db().collection("employees").doc(req.params.id).set(
+      { zaucovani, zaucovaniDo, updatedAt: FieldValue.serverTimestamp() },
+      { merge: true }
+    );
+
     const afterForLog: Record<string, unknown> = { ...before, ...payload };
     for (const f of clearFields) afterForLog[f] = null;
     await logUpdate(ctxFromReq(req), {
