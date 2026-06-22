@@ -6,7 +6,7 @@ import {
   fieldLabel,
   subjectNoun,
 } from "@/lib/audit/labels";
-import { formatAuditValue } from "@/lib/audit/format";
+import { renderAuditFieldValue } from "@/lib/audit/renderValue";
 import type { AuditEvent } from "@/lib/audit/grouping";
 import styles from "./AuditEventCard.module.css";
 
@@ -27,6 +27,8 @@ interface Props {
   /** Resolve an internal-reference value (e.g. employmentRowId) to a human
    *  label. Returns null to fall back to default rendering / hiding. */
   resolveRef?: RefResolver;
+  /** Resolve a user-type id → its display name (for roleType / role fields). */
+  resolveType?: (id: string) => string | undefined;
 }
 
 // Bulky or internal fields hidden from the readable view (still in raw detail).
@@ -50,22 +52,21 @@ function formatTime(d: Date | null, withDate: boolean): string {
   });
 }
 
-function czChangeCount(n: number): string {
-  if (n === 1) return "1 změna";
-  if (n >= 2 && n <= 4) return `${n} změny`;
-  return `${n} změn`;
-}
-
 /** Display string for a value, or null when the field should be hidden. */
-function displayValue(leaf: string | undefined, value: unknown, resolveRef?: RefResolver): string | null {
-  const key = leaf ?? "";
-  if (HIDDEN_FIELDS.has(key)) return null;
+function displayValue(
+  fieldPath: string | undefined,
+  value: unknown,
+  resolveRef?: RefResolver,
+  resolveType?: (id: string) => string | undefined
+): string | null {
+  const leaf = (fieldPath ?? "").split(".").pop() ?? "";
+  if (HIDDEN_FIELDS.has(leaf)) return null;
   if (resolveRef) {
-    const resolved = resolveRef(key, value);
+    const resolved = resolveRef(leaf, value);
     if (resolved != null) return resolved;
   }
-  if (REF_FIELDS.has(key)) return null;
-  return formatAuditValue(value, leaf);
+  if (REF_FIELDS.has(leaf)) return null;
+  return renderAuditFieldValue(fieldPath, value, { resolveType });
 }
 
 export default function AuditEventCard({
@@ -77,6 +78,7 @@ export default function AuditEventCard({
   hideAuthor = false,
   hideTitle = false,
   resolveRef,
+  resolveType,
 }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [showRaw, setShowRaw] = useState(false);
@@ -95,13 +97,6 @@ export default function AuditEventCard({
   const headerVerb =
     semanticHeader ?? actionVerb(event.action) + (hasSubject ? ` ${subjectNoun(subjectColl)}` : "");
 
-  // Suppress the "· N změny" meta for semantic events — the status change is
-  // already conveyed by the phrase ("Schválení …"), so the count is noise.
-  const changeCount =
-    !semanticHeader && event.action === "update"
-      ? event.sections.reduce((n, s) => n + s.changes.length, 0)
-      : 0;
-
   const titleNode = titleHref ? (
     <Link to={titleHref} className={styles.titleLink} onClick={(e) => e.stopPropagation()}>
       {title}
@@ -113,14 +108,33 @@ export default function AuditEventCard({
   // Visible summary / extra entries (create/delete snapshot, reveal/export/trigger extras)
   const summaryRows = event.summary
     ? Object.entries(event.summary)
-        .map(([k, v]) => ({ k, label: fieldLabel(event.primaryCollection, k), disp: displayValue(k.split(".").pop(), v, resolveRef) }))
+        .map(([k, v]) => ({ k, label: fieldLabel(event.primaryCollection, k), disp: displayValue(k, v, resolveRef, resolveType) }))
         .filter((r) => r.disp != null)
     : [];
   const extraRows = event.extra
     ? Object.entries(event.extra)
-        .map(([k, v]) => ({ k, label: fieldLabel(event.primaryCollection, k), disp: displayValue(k.split(".").pop(), v, resolveRef) }))
+        .map(([k, v]) => ({ k, label: fieldLabel(event.primaryCollection, k), disp: displayValue(k, v, resolveRef, resolveType) }))
         .filter((r) => r.disp != null)
     : [];
+
+  // Compact one-line summary for the COLLAPSED card; the full per-field detail
+  // shows on expand. Single change → "Pole: staré → nové"; multiple → the list
+  // of changed field labels. Semantic events (Schválení …) need no summary.
+  const flatChanges = event.action === "update" ? event.sections.flatMap((s) => s.changes) : [];
+  let compactSummary = "";
+  if (!semanticHeader && flatChanges.length === 1) {
+    const c = flatChanges[0];
+    if (c.redacted) compactSummary = c.label;
+    else {
+      const o = displayValue(c.fieldPath, c.oldValue, resolveRef, resolveType);
+      const n = displayValue(c.fieldPath, c.newValue, resolveRef, resolveType);
+      if (o != null || n != null) compactSummary = `${c.label}: ${o ?? "—"} → ${n ?? "—"}`;
+    }
+  } else if (!semanticHeader && flatChanges.length > 1) {
+    const labels = flatChanges.map((c) => c.label).filter(Boolean);
+    compactSummary = labels.slice(0, 4).join(", ") + (labels.length > 4 ? "…" : "");
+  }
+  if (compactSummary.length > 110) compactSummary = compactSummary.slice(0, 109) + "…";
 
   const toggle = () => setExpanded((e) => !e);
 
@@ -147,7 +161,7 @@ export default function AuditEventCard({
             {titleNode}
           </>
         )}
-        {changeCount > 0 && <span className={styles.meta}>· {czChangeCount(changeCount)}</span>}
+        {compactSummary && <span className={styles.summary}>· {compactSummary}</span>}
         <span className={styles.spacer} />
         {!hideAuthor && <span className={styles.author}>{authorName}</span>}
         <time className={styles.time}>{formatTime(event.timestamp, !compact)}</time>
@@ -161,8 +175,8 @@ export default function AuditEventCard({
               const rows = section.changes
                 .map((c) => ({
                   c,
-                  oldDisp: displayValue(c.leaf, c.oldValue, resolveRef),
-                  newDisp: displayValue(c.leaf, c.newValue, resolveRef),
+                  oldDisp: displayValue(c.fieldPath, c.oldValue, resolveRef, resolveType),
+                  newDisp: displayValue(c.fieldPath, c.newValue, resolveRef, resolveType),
                 }))
                 .filter((r) => r.c.redacted || r.oldDisp != null || r.newDisp != null);
               if (rows.length === 0) return null;
