@@ -109,6 +109,7 @@ export const APP_TOUR_STEPS: TourStep[] = [
   // ── Dovolená (/dovolena) ─────────────────────────────────────────────────────
   { section: SECTIONS.vacation, permission: "nav.vacation.view", anchor: "nav-dovolena", title: "Dovolená", body: "Sekce Dovolená slouží k podávání a sledování žádostí o dovolenou.", placement: "right" },
   { permission: "vacation.request.self", anchor: "vacation-request-form", route: "/dovolena", title: "Nová žádost o dovolenou", body: "Zadejte termín a důvod dovolené (důvod můžete nechat i prázdný). Odesláním žádosti ji předáte ke schválení řediteli nebo adminovi. Pokud máte v daném termínu už naplánovanou nějakou směnu, aplikace vás na to upozorní.", placement: "right" },
+  { permission: "vacation.request.forAny", anchor: "vacation-employee-picker", route: "/dovolena", title: "Podání žádosti za zaměstnance", body: "V rozevíracím seznamu Zaměstnanec můžete vybrat, za koho žádost o dovolenou podáváte. Žádost se danému zaměstnanci zobrazí mezi jeho vlastními žádostmi. Ponecháte-li volbu „Já“, podáte žádost sami za sebe.", placement: "right", addedInVersion: 8 },
   // Two variants of the all-requests panel: reviewers also get the approve/reject
   // line; view-only holders (vacation.view.all without vacation.review) see the
   // list described without it. The inverse gate keeps reviewers on the first only.
@@ -221,7 +222,7 @@ export const appTour: TourDefinition = {
   // Highest step `addedInVersion` in the list. Bump it (and stamp the new steps'
   // `addedInVersion`) whenever you add steps for a new feature — returning users
   // then see ONLY those steps; first-time users still get the whole tour.
-  version: 7,
+  version: 8,
   label: "Prohlídka aplikace",
   steps: APP_TOUR_STEPS,
 };

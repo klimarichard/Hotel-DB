@@ -89,6 +89,7 @@ export const PERMISSION_SECTIONS = [
           { key: "vacation.view.approvedUpcoming", label: "Zobrazit schválené dovolené kolegů", level: 1, exclusiveGroup: "vacation.view" },
           { key: "vacation.view.all", label: "Zobrazit všechny žádosti", level: 1, exclusiveGroup: "vacation.view" },
           { key: "vacation.review", label: "Schvalovat dovolenou", level: 2 },
+          { key: "vacation.request.forAny", label: "Podat žádost za kohokoli", level: 3 },
         ],
       },
     ],

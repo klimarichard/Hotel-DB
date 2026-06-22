@@ -75,6 +75,7 @@ export default function VacationPage() {
   const { refresh: refreshVacationBadge } = useVacationContext();
   const canReview = can("vacation.review");
   const canRequestSelf = can("vacation.request.self");
+  const canForAny = can("vacation.request.forAny");
   const canViewAll = can("vacation.view.all");
   // "Schválené dovolené kolegů" is redundant for anyone who can see ALL requests
   // (the "Všechny žádosti" table below already lists every approved request), so
@@ -92,6 +93,12 @@ export default function VacationPage() {
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [formSuccess, setFormSuccess] = useState(false);
+
+  // "File vacation for anyone" (vacation.request.forAny): an employee picker in
+  // the new-request form. Empty = file the caller's own request (when they have
+  // an employee link); a selected id files on that employee's behalf.
+  const [roster, setRoster] = useState<{ id: string; firstName: string; lastName: string }[]>([]);
+  const [targetEmployeeId, setTargetEmployeeId] = useState("");
 
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectionReason, setRejectionReason] = useState("");
@@ -134,6 +141,16 @@ export default function VacationPage() {
     return () => { cancelled = true; };
   }, [canViewApprovedUpcoming]);
 
+  useEffect(() => {
+    if (!canForAny) return;
+    let cancelled = false;
+    api
+      .get<{ id: string; firstName: string; lastName: string }[]>("/vacation/employees")
+      .then((data) => { if (!cancelled) setRoster(data); })
+      .catch(() => { if (!cancelled) setRoster([]); });
+    return () => { cancelled = true; };
+  }, [canForAny]);
+
   // Match my requests by my stable employeeId (migrated requests carry stale
   // staging uids; the auth uid only matches requests created in prod). Fall back
   // to uid for users without an employee link.
@@ -172,31 +189,46 @@ export default function VacationPage() {
       setFormError("Datum začátku musí být před datem konce");
       return;
     }
-    if (!employeeId) {
-      setFormError("Váš účet není spojen se záznamem zaměstnance");
+    // Filing for another employee (forAny + a picked target) doesn't need the
+    // caller's own employee link; filing one's own request still does.
+    const filingForOther = canForAny && !!targetEmployeeId;
+    if (!filingForOther && !employeeId) {
+      setFormError(
+        canForAny
+          ? "Vyberte zaměstnance, za kterého žádost podáváte"
+          : "Váš účet není spojen se záznamem zaměstnance"
+      );
       return;
     }
     setSubmitting(true);
     try {
       const result = await api.post<{ id: string; firstName: string; lastName: string }>(
         "/vacation",
-        { startDate, endDate, reason },
+        filingForOther ? { startDate, endDate, reason, employeeId: targetEmployeeId } : { startDate, endDate, reason },
       );
-      const newRequest: VacationRequest = {
-        id: result.id,
-        employeeId: employeeId,
-        firstName: result.firstName,
-        lastName: result.lastName,
-        uid: user!.uid,
-        startDate,
-        endDate,
-        reason,
-        status: "pending",
-        requestedAt: null,
-        rejectionReason: null,
-        pendingEdit: null,
-      };
-      setRequests((prev) => [newRequest, ...prev]);
+      if (filingForOther) {
+        // The request belongs to the selected employee, not the caller. Refetch
+        // so it appears in the "Všechny žádosti" table (when visible); resetting
+        // the picker to avoid accidentally re-filing for the same person.
+        api.get<VacationRequest[]>("/vacation").then(setRequests).catch(() => {});
+        setTargetEmployeeId("");
+      } else {
+        const newRequest: VacationRequest = {
+          id: result.id,
+          employeeId: employeeId!,
+          firstName: result.firstName,
+          lastName: result.lastName,
+          uid: user!.uid,
+          startDate,
+          endDate,
+          reason,
+          status: "pending",
+          requestedAt: null,
+          rejectionReason: null,
+          pendingEdit: null,
+        };
+        setRequests((prev) => [newRequest, ...prev]);
+      }
       setStartDate("");
       setEndDate("");
       setReason("");
@@ -341,17 +373,36 @@ export default function VacationPage() {
       <h1 className={styles.title}>Dovolená</h1>
 
       {/* New request form */}
-      {canRequestSelf && (
+      {(canRequestSelf || canForAny) && (
       <div className={styles.card} data-tour="vacation-request-form">
         <h2 className={styles.cardTitle}>Nová žádost o dovolenou</h2>
 
-        {!employeeId && !loading ? (
+        {!employeeId && !canForAny && !loading ? (
           <p className={styles.noEmployee}>
             Váš účet není spojen se záznamem zaměstnance. Požádejte správce o propojení.
           </p>
         ) : (
           <>
             <div className={styles.formRow}>
+              {canForAny && (
+                <div className={styles.formField} data-tour="vacation-employee-picker">
+                  <label className={styles.label}>Zaměstnanec</label>
+                  <select
+                    className={styles.input}
+                    value={targetEmployeeId}
+                    onChange={(e) => { setTargetEmployeeId(e.target.value); setFormSuccess(false); }}
+                  >
+                    <option value="">
+                      {employeeId ? "Já (vlastní žádost)" : "— vyberte zaměstnance —"}
+                    </option>
+                    {roster.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {`${r.lastName} ${r.firstName}`.trim()}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div className={styles.formField}>
                 <label className={styles.label}>Od</label>
                 <input
