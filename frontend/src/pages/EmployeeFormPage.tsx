@@ -5,6 +5,7 @@ import Button from "@/components/Button";
 import ConfirmModal from "@/components/ConfirmModal";
 import { NATIONALITIES, nationalityName } from "@/lib/nationalities";
 import { isCzechNationality } from "@/lib/contractVariables";
+import * as clock from "@/lib/clock";
 import styles from "./EmployeeFormPage.module.css";
 
 // Nationality is a free-text searchable field (datalist) storing the alpha-3 code.
@@ -74,6 +75,8 @@ interface AdditionalForm {
   homeOffice: string;
   allowances: boolean;
   nepodepiseProhlaseni: boolean;
+  zaucovani: boolean;
+  zaucovaniDo: string;
 }
 
 const emptyPersonal: PersonalForm = {
@@ -94,6 +97,7 @@ const emptyDocuments: DocumentsForm = {
 const emptyAdditional: AdditionalForm = {
   insuranceNumber: "", insuranceCompany: "", bankAccount: "",
   homeOffice: "", allowances: false, nepodepiseProhlaseni: false,
+  zaucovani: false, zaucovaniDo: "",
 };
 
 // ─── SensitiveInput ───────────────────────────────────────────────────────────
@@ -210,12 +214,19 @@ export default function EmployeeFormPage() {
         ...(docs ?? {}),
         idCardNumber: "",
       } as DocumentsForm);
+      // Auto-untick "Zaučování" once its end date has passed: load it as
+      // unticked when zaucovaniDo is set and in the past (saving then persists
+      // the cleared flag). No end date = stays ticked until manually cleared.
+      const zDo = typeof bens?.zaucovaniDo === "string" ? (bens.zaucovaniDo as string) : "";
+      const zStillActive = bens?.zaucovani === true && (zDo === "" || zDo >= clock.today());
       setAdditional({
         ...emptyAdditional,
         ...(bens ?? {}),
         insuranceNumber: "",
         bankAccount: "",
         homeOffice: bens?.homeOffice != null ? String(bens.homeOffice) : "",
+        zaucovani: zStillActive,
+        zaucovaniDo: zDo,
       } as AdditionalForm);
     }).finally(() => setLoadingData(false));
   }, [id, isEdit]);
@@ -644,6 +655,28 @@ export default function EmployeeFormPage() {
               Nepodepíše prohlášení poplatníka
             </label>
           </div>
+          <div className={styles.checkboxRow}>
+            <label className={styles.checkboxLabel}>
+              <input
+                type="checkbox"
+                checked={additional.zaucovani}
+                onChange={(e) => setA("zaucovani", e.target.checked)}
+              />
+              Zaučování
+            </label>
+          </div>
+          {additional.zaucovani && (
+            <div className={styles.grid}>
+              <Field label="Zaučování do">
+                <input
+                  className={styles.input}
+                  type="date"
+                  value={additional.zaucovaniDo}
+                  onChange={(e) => setA("zaucovaniDo", e.target.value)}
+                />
+              </Field>
+            </div>
+          )}
         </section>
 
         {error && <p className={styles.error}>{error}</p>}

@@ -43,6 +43,37 @@ vacationRouter.get("/check", requireAuth, async (req: AuthRequest, res) => {
   res.json({ hasVacation });
 });
 
+// ─── GET /vacation/employees — roster for "file vacation for anyone" ──────────
+// Lightweight {id, firstName, lastName} list of non-terminated employees, gated
+// by vacation.request.forAny so the capability is self-contained (the holder
+// need not also have employees.view.all). Sorted by surname then first name.
+
+vacationRouter.get(
+  "/employees",
+  requireAuth,
+  requirePermission("vacation.request.forAny"),
+  async (_req: AuthRequest, res) => {
+    const snap = await db().collection("employees").get();
+    const employees = snap.docs
+      .map((d) => {
+        const data = d.data() as Record<string, unknown>;
+        return {
+          id: d.id,
+          firstName: (data.firstName as string) ?? "",
+          lastName: (data.lastName as string) ?? "",
+          status: (data.status as string) ?? "active",
+        };
+      })
+      .filter((e) => e.status !== "terminated")
+      .sort((a, b) =>
+        (a.lastName || "").localeCompare(b.lastName || "", "cs") ||
+        (a.firstName || "").localeCompare(b.firstName || "", "cs")
+      )
+      .map(({ id, firstName, lastName }) => ({ id, firstName, lastName }));
+    res.json(employees);
+  }
+);
+
 // ─── GET /vacation/pending-count — dashboard tile count ───────────────────────
 // Sums requests needing admin/director attention: still-pending originals plus
 // approved-but-edited requests whose edit hasn't been reviewed.
@@ -194,7 +225,7 @@ vacationRouter.get("/", requireAuth, async (req: AuthRequest, res) => {
 // A user submits a vacation request for themselves. Gated on vacation.request.self
 // (mirrors the frontend form gate; closes the front↔back enforcement gap).
 
-vacationRouter.post("/", requireAuth, requirePermission("vacation.request.self"), async (req: AuthRequest, res) => {
+vacationRouter.post("/", requireAuth, requirePermission("vacation.request.self", "vacation.request.forAny"), async (req: AuthRequest, res) => {
   const body = req.body as Record<string, unknown>;
   const startDate = (body.startDate as string) ?? "";
   const endDate = (body.endDate as string) ?? "";
@@ -209,23 +240,45 @@ vacationRouter.post("/", requireAuth, requirePermission("vacation.request.self")
     return;
   }
 
-  // Fetch user profile to get employeeId, firstName, lastName
-  const userDoc = await db().collection("users").doc(req.uid!).get();
-  if (!userDoc.exists) {
-    res.status(404).json({ error: "Uživatelský profil nenalezen" });
-    return;
-  }
-  const userData = userDoc.data() as Record<string, unknown>;
-  const employeeId = (userData.employeeId as string | null) ?? null;
-  if (!employeeId) {
-    res.status(400).json({ error: "Uživatel nemá přiřazeného zaměstnance" });
-    return;
+  // Determine WHO the request is for. A vacation.request.forAny holder may pass a
+  // target employeeId to file on someone else's behalf; otherwise it's their own.
+  const canForAny = req.permissions?.has("vacation.request.forAny") ?? false;
+  const targetId =
+    typeof body.employeeId === "string" && body.employeeId.trim() ? (body.employeeId as string).trim() : null;
+
+  let employeeId: string;
+  let ownerUid: string | null;
+  if (canForAny && targetId) {
+    // Filing on behalf of another employee.
+    employeeId = targetId;
+    // Link to that employee's own user account (if any) so the request shows up
+    // as theirs in "Moje žádosti" (which also matches by employeeId).
+    const linkedSnap = await db().collection("users").where("employeeId", "==", targetId).limit(1).get();
+    ownerUid = linkedSnap.empty ? null : linkedSnap.docs[0].id;
+  } else {
+    // Filing the caller's own request — resolve their linked employeeId.
+    const userDoc = await db().collection("users").doc(req.uid!).get();
+    if (!userDoc.exists) {
+      res.status(404).json({ error: "Uživatelský profil nenalezen" });
+      return;
+    }
+    const ownEid = ((userDoc.data() as Record<string, unknown>).employeeId as string | null) ?? null;
+    if (!ownEid) {
+      res.status(400).json({ error: "Uživatel nemá přiřazeného zaměstnance" });
+      return;
+    }
+    employeeId = ownEid;
+    ownerUid = req.uid ?? null;
   }
 
-  // Fetch employee name for denormalization
+  // Fetch employee name for denormalization (+ validate the employee exists).
   const empDoc = await db().collection("employees").doc(employeeId).get();
-  const empData = empDoc.exists ? (empDoc.data() as Record<string, unknown>) : {};
-  const firstName = (empData.firstName as string) ?? (userData.name as string) ?? "";
+  if (!empDoc.exists) {
+    res.status(404).json({ error: "Zaměstnanec nenalezen" });
+    return;
+  }
+  const empData = empDoc.data() as Record<string, unknown>;
+  const firstName = (empData.firstName as string) ?? "";
   const lastName = (empData.lastName as string) ?? "";
 
   // Hard-block if any non-X shift already exists in the requested date range.
@@ -250,7 +303,7 @@ vacationRouter.post("/", requireAuth, requirePermission("vacation.request.self")
     employeeId,
     firstName,
     lastName,
-    uid: req.uid,
+    uid: ownerUid,
     startDate,
     endDate,
     reason,

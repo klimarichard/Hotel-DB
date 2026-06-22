@@ -4,7 +4,7 @@ import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { requireAuth, AuthRequest } from "../middleware/auth";
 import { requirePermission } from "../auth/permissions";
 import { parseShiftExpression, HOTEL_CODES } from "../services/shiftParser";
-import { snapshotShifts, deleteCollection } from "../services/planTransitions";
+import { snapshotShifts, deleteCollection, autoFillManagerRShifts } from "../services/planTransitions";
 import { createOrUpdatePayrollPeriod } from "../services/payrollCalculator";
 import {
   ctxFromReq,
@@ -565,10 +565,14 @@ shiftsRouter.patch(
       await snapshotShifts(planRef);
     }
 
-    // On publish: delete the snapshot (no longer needed) + create payroll
+    // On publish: delete the snapshot (no longer needed) + auto-fill manager R
+    // + create payroll
     if (newStatus === "published") {
       await deleteCollection(planRef.collection("shiftsSnapshot"));
       const planData = planDoc.data() as { year: number; month: number };
+      // Auto-fill "R" for FOM/managers on empty Mon–Fri non-holiday workdays.
+      // Must run BEFORE payroll so the filled hours are picked up by the calc.
+      await autoFillManagerRShifts(planRef, planData.year, planData.month);
       // Fire-and-forget: don't block the response on payroll calculation
       createOrUpdatePayrollPeriod(planId, planData.year, planData.month).catch((e) =>
         console.error("Payroll creation failed after publish:", e)

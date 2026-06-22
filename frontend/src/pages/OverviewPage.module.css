@@ -311,8 +311,12 @@
   transform: translateY(1px);
 }
 
+/* Definite min-height instead of aspect-ratio:1/1 — Safari resolves a flex/grid
+   item's cross-size from (empty) content BEFORE applying aspect-ratio, which
+   collapsed these tiles to near-zero. A min-height keeps near-square tiles
+   without depending on intrinsic sizing. */
 .taskTile {
-  aspect-ratio: 1 / 1;
+  min-height: 120px;
   align-items: center;
   justify-content: center;
   gap: 0.4rem;
@@ -323,7 +327,7 @@
   flex: 1 1 200px;
   min-width: 0;
   max-width: 240px;
-  aspect-ratio: 1 / 1;
+  min-height: 140px;
   gap: 0.4rem;
   padding: 0.7rem 0.75rem;
 }

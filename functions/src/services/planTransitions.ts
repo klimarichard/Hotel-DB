@@ -7,6 +7,8 @@ import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import * as clock from "./clock";
 import { logSystemEvent } from "./auditLog";
+import { parseShiftExpression } from "./shiftParser";
+import { getCzechHolidays } from "./payrollCalculator";
 
 const db = () => admin.firestore();
 
@@ -61,6 +63,103 @@ export async function snapshotShifts(
   }
 }
 
+// ─── Auto-fill "R" for managers (FOM) on Closed → Published ───────────────────
+
+/**
+ * On a plan's Closed → Published transition, auto-fill "R" (8 h day shift) for
+ * every FOM / manager row (section "vedoucí") on each Mon–Fri **non-holiday**
+ * workday whose cell is currently EMPTY.
+ *
+ * Data-safe by design:
+ *  - X (days off) and any existing entry (HO, a covered DA/N shift, …) are
+ *    NEVER overwritten — only genuinely empty cells are filled.
+ *  - Public holidays are skipped: the payroll calculator already grants managers
+ *    Mon–Fri holiday credit (`countMonFriHolidays`), so an R on a holiday would
+ *    double-count VÝKAZ.
+ *
+ * Logs a single "Systém" audit event summarising the fill (never per cell, to
+ * avoid flooding the change log on publish). Shared by the manual transition
+ * route and the scheduled deadline transition.
+ */
+export async function autoFillManagerRShifts(
+  planRef: admin.firestore.DocumentReference,
+  year: number,
+  month: number
+): Promise<{ filled: number; managers: number }> {
+  // Active manager (vedoucí) rows only.
+  const empSnap = await planRef
+    .collection("planEmployees")
+    .where("section", "==", "vedoucí")
+    .get();
+  const managers = empSnap.docs
+    .map((d) => d.data() as Record<string, unknown>)
+    .filter((e) => e.active !== false)
+    .map((e) => e.employeeId as string);
+  if (managers.length === 0) return { filled: 0, managers: 0 };
+
+  // Any cell with a non-empty rawInput is "occupied" and must be preserved.
+  const shiftsSnap = await planRef.collection("shifts").get();
+  const occupied = new Set<string>();
+  for (const d of shiftsSnap.docs) {
+    const data = d.data() as Record<string, unknown>;
+    if (((data.rawInput as string) ?? "").trim() !== "") occupied.add(d.id);
+  }
+
+  // Workdays = Mon–Fri, excluding Czech public holidays.
+  const holidays = getCzechHolidays(year);
+  const lastDay = new Date(year, month, 0).getDate();
+  const workdays: string[] = [];
+  for (let day = 1; day <= lastDay; day++) {
+    const dow = new Date(year, month - 1, day).getDay(); // 0=Sun, 6=Sat
+    if (dow === 0 || dow === 6) continue;
+    const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    if (holidays.has(dateStr)) continue;
+    workdays.push(dateStr);
+  }
+
+  const r = parseShiftExpression("R"); // segments [{R,null,8}], 8 h, assigned
+  let filled = 0;
+  let batch = db().batch();
+  let ops = 0;
+  for (const employeeId of managers) {
+    for (const date of workdays) {
+      const docId = `${employeeId}_${date}`;
+      if (occupied.has(docId)) continue;
+      batch.set(planRef.collection("shifts").doc(docId), {
+        employeeId,
+        date,
+        rawInput: r.rawInput,
+        segments: r.segments,
+        hoursComputed: r.hoursComputed,
+        isDouble: r.isDouble,
+        status: "assigned",
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+      filled++;
+      if (++ops >= 400) {
+        await batch.commit();
+        batch = db().batch();
+        ops = 0;
+      }
+    }
+  }
+  if (ops > 0) await batch.commit();
+
+  if (filled > 0) {
+    await planRef.update({ updatedAt: FieldValue.serverTimestamp() });
+    await logSystemEvent({
+      event: "plan.autoFillManagerR",
+      collection: "shiftPlans",
+      resourceId: planRef.id,
+      year,
+      month,
+      summary: { filled, managers: managers.length },
+    });
+  }
+
+  return { filled, managers: managers.length };
+}
+
 // ─── Check all plans and apply deadline transitions ───────────────────────────
 
 export async function transitionPlanDeadlines(): Promise<{ transitioned: string[] }> {
@@ -109,6 +208,9 @@ export async function transitionPlanDeadlines(): Promise<{ transitioned: string[
       new Date(data.publishedAt).getTime() <= now
     ) {
       await deleteCollection(planRef.collection("shiftsSnapshot"));
+      if (typeof data.year === "number" && typeof data.month === "number") {
+        await autoFillManagerRShifts(planRef, data.year, data.month);
+      }
       await planRef.update({ status: "published", updatedAt: FieldValue.serverTimestamp() });
       await logPlanAutoTransition(doc, "closed", "published");
       transitioned.push(`${doc.id}: closed → published`);

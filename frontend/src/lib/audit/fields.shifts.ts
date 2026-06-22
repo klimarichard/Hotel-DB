@@ -20,6 +20,9 @@ const shiftPlans: FieldLabelMap = {
   // Systém auto-transition summary (plan.autoTransition)
   from: "Původní stav",
   to: "Nový stav",
+  // Systém auto-fill manager R summary (plan.autoFillManagerR)
+  filled: "Doplněno směn R",
+  managers: "Počet vedoucích",
   createdBy: "Vytvořil",
   createdAt: "Vytvořeno",
   updatedAt: "Naposledy upraveno",

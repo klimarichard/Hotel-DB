@@ -66,6 +66,7 @@ Plán prochází stavy **Vytvořený → Otevřený → Uzavřený → Publikova
 
 - **Vidíte plán ve všech stavech** a v **otevřeném** plánu můžete vyplňovat směny. Plán ale **neposouváte dál** — vytvoření plánu, přechody mezi stavy, nastavení termínů a kopírování zaměstnanců z předchozího plánu provádí pouze administrátor nebo ředitel.
 - Plán ve stavu *Vytvořený* zaměstnanci nevidí; objeví se až po otevření.
+- **Automatické vyplnění „R" při publikování:** v okamžiku, kdy administrátor/ředitel plán **publikuje**, aplikace automaticky doplní **„R"** (denní směna vedoucího) do každého pracovního dne (Po–Pá), který ve vašem řádku ještě zůstal prázdný. Dny označené **„X"** (volno) a dny s jiným vyplněným kódem se nemění. Státní svátky jsou přeskočeny. Díky tomu nemusíte ručně doplňovat „R" za každý zbývající pracovní den — systém to zajistí při publikování.
 
 > 📷 *(Místo pro snímek obrazovky: měsíční plán směn)*
 

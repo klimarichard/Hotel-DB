@@ -141,6 +141,7 @@ export const PERMISSION_CATALOG = [
       { key: "vacation.view.all", label: "Zobrazit všechny žádosti" },
       { key: "vacation.view.approvedUpcoming", label: "Zobrazit schválené dovolené kolegů" },
       { key: "vacation.review", label: "Schvalovat dovolenou" },
+      { key: "vacation.request.forAny", label: "Podat žádost za kohokoli" },
     ],
   },
   {
@@ -255,7 +256,7 @@ export const BUILTIN_TYPE_PERMISSIONS: Record<BuiltinTypeId, Permission[]> = {
     "shifts.plan.transition", "shifts.cells.edit", "shifts.planEmployees.manage",
     "shifts.mod.manage", "shifts.xAllowance.manage", "shifts.freeShift.manage",
     "shifts.changeRequest.review", "shifts.override.review", "shifts.export",
-    "vacation.view.all", "vacation.review",
+    "vacation.view.all", "vacation.review", "vacation.request.forAny",
     "alerts.read",
     "changeRequests.review",
     "dashboard.tasks.view", "dashboard.stats.view", "dashboard.staffing.view",

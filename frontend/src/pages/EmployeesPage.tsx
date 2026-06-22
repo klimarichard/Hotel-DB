@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { employeeDisplayName, employeeSurnameFirst } from "@/lib/employeeName";
 import { nationalityName } from "@/lib/nationalities";
 import { formatDateCZ } from "@/lib/dateFormat";
+import * as clock from "@/lib/clock";
 import Button from "@/components/Button";
 import ExportEmployeesModal from "@/components/ExportEmployeesModal";
 import styles from "./EmployeesPage.module.css";
@@ -24,6 +25,15 @@ interface Employee {
   // Continuous-employment start (NOT the latest Nástup) + effective end (or null).
   employmentStartDate?: string | null;
   employmentEndDate?: string | null;
+  // "Zaučování" (training) — denormalized from the benefits sub-doc onto root.
+  zaucovani?: boolean;
+  zaucovaniDo?: string | null;
+}
+
+// In training = flag set AND (no end date, or end date today/in the future).
+// Mirrors the EmployeeDetailPage banner so the badge auto-clears once it passes.
+function isInTraining(emp: Employee): boolean {
+  return emp.zaucovani === true && (!emp.zaucovaniDo || emp.zaucovaniDo >= clock.today());
 }
 
 // Every column is sortable except Stav (which mirrors the three tabs, so a sort
@@ -229,6 +239,9 @@ export default function EmployeesPage() {
                     </Link>
                     {emp.currentContractType && (
                       <span className={styles.contractBadge}>{emp.currentContractType}</span>
+                    )}
+                    {isInTraining(emp) && (
+                      <span className={styles.trainingBadge}>V zácviku</span>
                     )}
                   </td>
                   <td>{emp.currentJobTitle || "—"}</td>
