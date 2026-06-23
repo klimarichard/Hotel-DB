@@ -36,6 +36,8 @@ interface Props {
    */
   onDeleteRow: (row: EmploymentRow) => void;
   onAddDodatek: () => void;
+  /** Open the dialog to add a parental-leave (RODIČOVSKÁ) period to this session. */
+  onAddRodicovska: () => void;
   onTerminate: () => void;
   onContractsChanged: () => void;
 }
@@ -60,6 +62,7 @@ export default function EmploymentSessionCard({
   onEditRow,
   onDeleteRow,
   onAddDodatek,
+  onAddRodicovska,
   onTerminate,
   onContractsChanged,
 }: Props) {
@@ -137,12 +140,42 @@ export default function EmploymentSessionCard({
         {canManageEmployment && !session.ukonceni && (
           <div className={styles.headerActions} onClick={(e) => e.stopPropagation()}>
             {!session.terminated && (
-              <Button variant="secondary" size="sm" onClick={onAddDodatek}>+ Dodatek</Button>
+              <>
+                <Button variant="secondary" size="sm" onClick={onAddDodatek}>+ Dodatek</Button>
+                <Button variant="secondary" size="sm" onClick={onAddRodicovska}>+ Rodičovská</Button>
+              </>
             )}
             <Button variant="secondary" size="sm" onClick={onTerminate}>Ukončit smlouvu</Button>
           </div>
         )}
       </div>
+
+      {/* Parental-leave periods — informational header band, always visible. */}
+      {session.rodicovska.length > 0 && (
+        <div className={styles.rodicovskaBand}>
+          {session.rodicovska.map((rd) => (
+            <div key={rd.id} className={styles.rodicovskaItem}>
+              <span className={styles.rodicovskaTag}>Rodičovská</span>
+              <span className={styles.rodicovskaDates}>
+                {formatDateCZ(rd.startDate) ?? rd.startDate}
+                {" – "}
+                {rd.endDate ? formatDateCZ(rd.endDate) : "—"}
+              </span>
+              {canManageEmployment && (
+                <button
+                  type="button"
+                  className={styles.rodicovskaDelete}
+                  onClick={() => onDeleteRow(rd)}
+                  aria-label="Odebrat rodičovskou"
+                  title="Odebrat rodičovskou"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       {open && (
         <div className={styles.body}>

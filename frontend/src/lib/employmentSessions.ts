@@ -72,6 +72,12 @@ export interface EmploymentSession {
   ukonceni: EmploymentRow | null;
   /** All rows in the session in chronological order (for rendering). */
   rows: EmploymentRow[];
+  /**
+   * Parental-leave (RODIČOVSKÁ) periods that fall within this session.
+   * Purely informational — they never fold into `effective` or affect
+   * `terminated`; shown in the session header with their start–end dates.
+   */
+  rodicovska: EmploymentRow[];
   effective: EffectiveState;
   /**
    * Session has ended — either an explicit Ukončení row exists, or the
@@ -97,6 +103,7 @@ export function groupBySession(rows: EmploymentRow[]): EmploymentSession[] {
     nastup: EmploymentRow;
     dodatky: EmploymentRow[];
     ukonceni: EmploymentRow | null;
+    rodicovska: EmploymentRow[];
   } | null = null;
 
   // Today as YYYY-MM-DD in local time — both startDate / endDate are
@@ -117,6 +124,7 @@ export function groupBySession(rows: EmploymentRow[]): EmploymentSession[] {
       dodatky: current.dodatky,
       ukonceni: current.ukonceni,
       rows: rowsInOrder,
+      rodicovska: current.rodicovska,
       effective,
       terminated: !!current.ukonceni || expired,
     });
@@ -126,11 +134,14 @@ export function groupBySession(rows: EmploymentRow[]): EmploymentSession[] {
   for (const r of sorted) {
     if (r.changeType === "nástup") {
       flush();
-      current = { nastup: r, dodatky: [], ukonceni: null };
+      current = { nastup: r, dodatky: [], ukonceni: null, rodicovska: [] };
     } else if (r.changeType === "změna smlouvy" && current) {
       current.dodatky.push(r);
     } else if (r.changeType === "ukončení" && current) {
       current.ukonceni = r;
+    } else if (r.changeType === "rodičovská" && current) {
+      // Informational only — collected for header display, never folded.
+      current.rodicovska.push(r);
     }
     // Orphan rows (no preceding Nástup) are silently dropped — rare in practice
     // and would indicate dirty data; the row still persists in Firestore.

@@ -561,6 +561,7 @@ export default function EmployeeSelfPage() {
                       onEditRow={() => {}}
                       onDeleteRow={() => {}}
                       onAddDodatek={() => {}}
+                      onAddRodicovska={() => {}}
                       onTerminate={() => {}}
                       onContractsChanged={() => {}}
                     />
