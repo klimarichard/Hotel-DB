@@ -288,3 +288,24 @@
   font-size: 0.8rem;
   color: var(--color-text-muted);
 }
+
+/* ── Phone: full-screen grid (see index.css for the breakpoint convention) ──
+   Hide the legend outright, and collapse the month nav + plan bar while the
+   grid is scrolled (the .chromeHidden class is toggled from JS based on the
+   grid's scroll position; --sticky-top is zeroed in parallel so the grid grows
+   into the freed space). The collapse uses !important to beat the elements'
+   inline sticky/padding styles. */
+@media (max-width: 559.98px), (orientation: landscape) and (max-height: 480px) {
+  .legend {
+    display: none;
+  }
+  .chromeHidden {
+    max-height: 0 !important;
+    margin: 0 !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    overflow: hidden;
+    opacity: 0;
+    pointer-events: none;
+  }
+}
