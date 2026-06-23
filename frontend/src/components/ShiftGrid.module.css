@@ -126,6 +126,11 @@
 
 .sectionRow td,
 .sectionCell {
+  /* Pin the full-width section label to the left so it stays put during
+     horizontal scroll, matching the sticky employee-name column. Default
+     z-index (auto) keeps it under the sticky day-header on vertical scroll. */
+  position: sticky;
+  left: 0;
   background: var(--color-surface-3);
   font-size: 0.65rem;
   font-weight: 700;
@@ -264,6 +269,8 @@
 }
 
 .counterSeparatorCell {
+  position: sticky;
+  left: 0;
   background: var(--color-surface-3);
   font-size: 0.65rem;
   font-weight: 700;
@@ -331,6 +338,8 @@
 }
 
 .freeSeparatorCell {
+  position: sticky;
+  left: 0;
   background: var(--color-surface-3);
   font-size: 0.65rem;
   font-weight: 700;
