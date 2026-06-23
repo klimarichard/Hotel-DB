@@ -295,7 +295,7 @@
 
 /* Phone: let the tab bar scroll horizontally instead of wrapping/squishing
    (see index.css for the breakpoint convention). */
-@media (max-width: 559.98px) {
+@media (max-width: 559.98px), (orientation: landscape) and (max-height: 480px) {
   .tabs {
     flex-wrap: nowrap;
     overflow-x: auto;

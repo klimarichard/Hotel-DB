@@ -5,7 +5,7 @@
   display: none;
 }
 
-@media (max-width: 559.98px) {
+@media (max-width: 559.98px), (orientation: landscape) and (max-height: 480px) {
   .bar {
     position: fixed;
     left: 0;

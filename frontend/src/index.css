@@ -92,14 +92,19 @@
   --radius-lg: 10px;
 
   /* Layout
-     Responsive breakpoint convention (reuse these two verbatim in every @media;
-     OverviewPage.module.css already does). CSS Modules can't share JS vars inside
-     @media, so this is a documented convention, not a token:
+     Responsive breakpoint convention (reuse verbatim in every @media). CSS
+     Modules can't share JS vars inside @media, so this is a documented
+     convention, not a token:
        >= 900px        desktop  — sidebar, multi-column (unchanged)
        560px - 900px   tablet   — minor padding adjustments
-       < 560px         phone    — bottom tab bar, single-column, scrollable tables
-     Phone-only rules use `max-width: 559.98px` to avoid a 560px double-match seam.
-     Target down to 360px. */
+       phone           — bottom tab bar, single-column, card layouts
+     The PHONE condition must catch a phone in BOTH orientations. Portrait is
+     narrow (caught by width); landscape is WIDE but SHORT, so width alone lets
+     the desktop sidebar reappear. The canonical phone query is therefore:
+       @media (max-width: 559.98px), (orientation: landscape) and (max-height: 480px)
+     i.e. narrow width OR (landscape AND short). 559.98px avoids the 560px
+     double-match seam; max-height:480 catches landscape phones (≈320–430px tall)
+     while excluding landscape tablets (≥768px tall). Target down to 360px. */
   --bottom-nav-height: 56px; /* phone bottom tab bar; consumed only in phone @media */
 
   /* Font weights */
