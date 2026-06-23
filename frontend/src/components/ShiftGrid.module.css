@@ -18,6 +18,8 @@
       100dvh - var(--sticky-top, 0px) - var(--bottom-nav-height, 56px) - 1.5rem
     );
     margin-bottom: 0.75rem;
+    /* Grow/shrink in sync with the chrome collapse (--sticky-top change). */
+    transition: max-height 0.28s ease;
   }
 }
 
