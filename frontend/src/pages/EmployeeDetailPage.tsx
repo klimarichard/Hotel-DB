@@ -380,7 +380,10 @@ function findOldSalary(
 }
 
 const CHANGE_TYPES = ["nástup", "ukončení", "změna smlouvy"] as const;
-type ChangeType = typeof CHANGE_TYPES[number];
+// "rodičovská" is added only via the dedicated "+ Rodičovská" button (always a
+// locked changeType), so it stays out of the generic dropdown above but is a
+// valid change type for the form/payload.
+type ChangeType = typeof CHANGE_TYPES[number] | "rodičovská";
 
 const CONTRACT_TYPES_NASTUP = ["HPP", "PPP", "DPP"] as const;
 type ContractType = typeof CONTRACT_TYPES_NASTUP[number] | "";
@@ -774,6 +777,9 @@ function AddEntryModal({
     if (form.changeType === "nástup" && !form.contractType) {
       setError("Vyberte typ smlouvy."); return;
     }
+    if (form.changeType === "rodičovská" && !form.endDate) {
+      setError("Vyplňte konec rodičovské dovolené."); return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -812,6 +818,13 @@ function AddEntryModal({
           status: "inactive",
           signingDate: form.signingDate || null,
         };
+      } else if (form.changeType === "rodičovská") {
+        // Informational period — start + end only, no salary/position/contract.
+        payload = {
+          changeType: "rodičovská",
+          startDate: form.startDate,
+          endDate: form.endDate || null,
+        };
       } else {
         payload = {
           changeType: "změna smlouvy",
@@ -843,7 +856,9 @@ function AddEntryModal({
         ? "Nový dodatek"
         : lockedChangeType === "ukončení"
           ? "Ukončit smlouvu"
-          : "Přidat záznam do historie";
+          : lockedChangeType === "rodičovská"
+            ? "Rodičovská dovolená"
+            : "Přidat záznam do historie";
 
   return (
     <div className={styles.modalOverlay}>
@@ -866,9 +881,24 @@ function AddEntryModal({
                 </div>
               )}
               <div className={styles.modalField}>
-                <label className={styles.modalLabel}>Datum *</label>
+                <label className={styles.modalLabel}>
+                  {form.changeType === "rodičovská" ? "Začátek *" : "Datum *"}
+                </label>
                 <input className={styles.modalInput} type="date" value={form.startDate} onChange={(e) => setField("startDate", e.target.value)} required />
               </div>
+              {form.changeType === "rodičovská" && (
+                <div className={styles.modalField}>
+                  <label className={styles.modalLabel}>Konec *</label>
+                  <input
+                    className={styles.modalInput}
+                    type="date"
+                    value={form.endDate}
+                    min={form.startDate || undefined}
+                    onChange={(e) => setField("endDate", e.target.value)}
+                    required
+                  />
+                </div>
+              )}
             </div>
 
             {/* ── nástup branch ── */}
@@ -1333,6 +1363,26 @@ export default function EmployeeDetailPage() {
    */
   async function deleteEmploymentRow(row: EmploymentRow) {
     if (!id) return;
+    // The parental-leave × has no prior confirm (unlike the row-item delete),
+    // so confirm here before removing the informational period.
+    if (row.changeType === "rodičovská") {
+      setConfirmModal({
+        title: "Odebrat rodičovskou",
+        message: `Opravdu odebrat rodičovskou dovolenou (${formatDateCZ(row.startDate)} – ${row.endDate ? formatDateCZ(row.endDate) : "—"})?`,
+        confirmLabel: "Odebrat",
+        danger: true,
+        onConfirm: () => {
+          setConfirmModal(null);
+          void doDeleteEmploymentRow(row);
+        },
+      });
+      return;
+    }
+    await doDeleteEmploymentRow(row);
+  }
+
+  async function doDeleteEmploymentRow(row: EmploymentRow) {
+    if (!id) return;
     try {
       await api.delete(`/employees/${id}/employment/${row.id}`);
     } catch (e) {
@@ -1688,6 +1738,12 @@ export default function EmployeeDetailPage() {
                     parentRowId: session.nastup.id,
                   })
                 }
+                onAddRodicovska={() =>
+                  setNewEntryMode({
+                    lockedChangeType: "rodičovská",
+                    parentRowId: session.nastup.id,
+                  })
+                }
                 onTerminate={() =>
                   setNewEntryMode({
                     lockedChangeType: "ukončení",
@@ -1729,7 +1785,7 @@ export default function EmployeeDetailPage() {
                 // Dodatek may have changed root denormalized fields server-side
                 // (currentJobTitle etc.) — re-fetch the employee to keep the
                 // Detail tab in sync without a full page reload.
-                if (row.changeType === "změna smlouvy" && id) {
+                if ((row.changeType === "změna smlouvy" || row.changeType === "rodičovská") && id) {
                   api.get<Employee>(`/employees/${id}`).then(setEmployee).catch(() => {});
                 }
                 // Terminating someone with an active Multisport: the backend has

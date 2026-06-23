@@ -28,12 +28,28 @@ interface Employee {
   // "Zaučování" (training) — denormalized from the benefits sub-doc onto root.
   zaucovani?: boolean;
   zaucovaniDo?: string | null;
+  // Parental-leave window — denormalized from the employment rows onto root
+  // (the active-or-next "rodičovská" period). Badge shows only while today is
+  // within it; the live check below makes appearance/clearing automatic.
+  parentalLeaveFrom?: string | null;
+  parentalLeaveTo?: string | null;
 }
 
 // In training = flag set AND (no end date, or end date today/in the future).
 // Mirrors the EmployeeDetailPage banner so the badge auto-clears once it passes.
 function isInTraining(emp: Employee): boolean {
   return emp.zaucovani === true && (!emp.zaucovaniDo || emp.zaucovaniDo >= clock.today());
+}
+
+// On parental leave = today falls within the denormalized [from, to] window.
+function isOnParentalLeave(emp: Employee): boolean {
+  const today = clock.today();
+  return (
+    !!emp.parentalLeaveFrom &&
+    !!emp.parentalLeaveTo &&
+    emp.parentalLeaveFrom <= today &&
+    today <= emp.parentalLeaveTo
+  );
 }
 
 // Every column is sortable except Stav (which mirrors the three tabs, so a sort
@@ -243,6 +259,9 @@ export default function EmployeesPage() {
                     )}
                     {isInTraining(emp) && (
                       <span className={styles.trainingBadge}>V zácviku</span>
+                    )}
+                    {isOnParentalLeave(emp) && (
+                      <span className={styles.parentalBadge}>Rodičovská</span>
                     )}
                   </td>
                   <td>{emp.currentJobTitle || "—"}</td>
