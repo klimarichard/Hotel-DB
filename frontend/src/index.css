@@ -91,6 +91,17 @@
   --radius-md: 6px;
   --radius-lg: 10px;
 
+  /* Layout
+     Responsive breakpoint convention (reuse these two verbatim in every @media;
+     OverviewPage.module.css already does). CSS Modules can't share JS vars inside
+     @media, so this is a documented convention, not a token:
+       >= 900px        desktop  — sidebar, multi-column (unchanged)
+       560px - 900px   tablet   — minor padding adjustments
+       < 560px         phone    — bottom tab bar, single-column, scrollable tables
+     Phone-only rules use `max-width: 559.98px` to avoid a 560px double-match seam.
+     Target down to 360px. */
+  --bottom-nav-height: 56px; /* phone bottom tab bar; consumed only in phone @media */
+
   /* Font weights */
   --font-weight-regular: 400;
   --font-weight-medium: 500;
