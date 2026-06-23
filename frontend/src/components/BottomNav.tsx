@@ -1,0 +1,241 @@
+import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import type { MenuItem } from "@/lib/menuItems";
+import styles from "./BottomNav.module.css";
+
+/**
+ * Phone-only bottom tab bar (hidden ≥560px; the sidebar takes over there).
+ *
+ * Single source of truth: it consumes the SAME permission-gated, ordered
+ * `items` and the SAME `badgeFor` that Layout already computed for the sidebar —
+ * it never re-derives permissions. Four fixed anchors map to registry ids; the
+ * fifth tab "Více" opens a slide-up sheet with every remaining permitted item
+ * plus the footer utilities (theme / help / logout / clock / version) that
+ * normally live in the dark sidebar `.userBar` (rendered here in theme-aware
+ * styling so they're legible on the light surface).
+ */
+
+const ANCHOR_IDS = ["prehled", "smeny", "dovolena", "mujProfil"] as const;
+
+// Bottom-bar display labels only — the registry label stays authoritative for
+// the sidebar. "Můj profil" is too wide for a 360px tab slot.
+const LABEL_OVERRIDE: Record<string, string> = {
+  mujProfil: "Profil",
+};
+
+interface BottomNavProps {
+  items: MenuItem[];
+  badgeFor: (id: string) => number;
+  theme: "light" | "dark";
+  onToggleTheme: () => void;
+  onLogout: () => void;
+  /** Pre-gated version string (e.g. "v2.3.4") or null when not permitted. */
+  versionLabel: string | null;
+  /** <TimeOverrideControl/> — self-styled; only renders where allowed. */
+  timeControl?: ReactNode;
+}
+
+const ICONS: Record<string, ReactNode> = {
+  prehled: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 9.5 12 3l9 6.5" />
+      <path d="M5 10v10h14V10" />
+    </svg>
+  ),
+  smeny: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4.5" width="18" height="16" rx="2" />
+      <line x1="3" y1="9" x2="21" y2="9" />
+      <line x1="8" y1="2.5" x2="8" y2="6" />
+      <line x1="16" y1="2.5" x2="16" y2="6" />
+    </svg>
+  ),
+  dovolena: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="4" />
+      <line x1="12" y1="2" x2="12" y2="4.5" />
+      <line x1="12" y1="19.5" x2="12" y2="22" />
+      <line x1="2" y1="12" x2="4.5" y2="12" />
+      <line x1="19.5" y1="12" x2="22" y2="12" />
+      <line x1="4.9" y1="4.9" x2="6.7" y2="6.7" />
+      <line x1="17.3" y1="17.3" x2="19.1" y2="19.1" />
+      <line x1="4.9" y1="19.1" x2="6.7" y2="17.3" />
+      <line x1="17.3" y1="6.7" x2="19.1" y2="4.9" />
+    </svg>
+  ),
+  mujProfil: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="8" r="4" />
+      <path d="M4 21c0-4 3.5-6 8-6s8 2 8 6" />
+    </svg>
+  ),
+  more: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="5" cy="12" r="1.6" />
+      <circle cx="12" cy="12" r="1.6" />
+      <circle cx="19" cy="12" r="1.6" />
+    </svg>
+  ),
+};
+
+export default function BottomNav({
+  items,
+  badgeFor,
+  theme,
+  onToggleTheme,
+  onLogout,
+  versionLabel,
+  timeControl,
+}: BottomNavProps) {
+  const [moreOpen, setMoreOpen] = useState(false);
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const byId = new Map(items.map((i) => [i.id, i] as const));
+  const anchors = ANCHOR_IDS.map((id) => byId.get(id)).filter(
+    (i): i is MenuItem => Boolean(i)
+  );
+  const anchorIds = new Set(anchors.map((a) => a.id));
+  const moreItems = items.filter((i) => !anchorIds.has(i.id));
+  const showMore = moreItems.length > 0;
+
+  // "Více" is the active tab whenever the current route belongs to a non-anchor
+  // page (incl. nested routes like /zamestnanci/:id).
+  const moreActive = moreItems.some(
+    (m) =>
+      location.pathname === m.path ||
+      location.pathname.startsWith(m.path + "/")
+  );
+  const moreBadgeTotal = moreItems.reduce((sum, m) => sum + badgeFor(m.id), 0);
+
+  // Body-scroll lock while the sheet is open; restore cleanly on close/unmount.
+  useEffect(() => {
+    if (!moreOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [moreOpen]);
+
+  return (
+    <>
+      <nav className={styles.bar} aria-label="Hlavní navigace (mobil)">
+        {anchors.map((item) => {
+          const badge = badgeFor(item.id);
+          return (
+            <NavLink
+              key={item.id}
+              to={item.path}
+              className={({ isActive }) =>
+                [styles.tab, isActive ? styles.tabActive : ""].join(" ")
+              }
+            >
+              <span className={styles.tabIcon}>
+                {ICONS[item.id]}
+                {badge > 0 && <span className={styles.dot} />}
+              </span>
+              <span className={styles.tabLabel}>
+                {LABEL_OVERRIDE[item.id] ?? item.label}
+              </span>
+            </NavLink>
+          );
+        })}
+        {showMore && (
+          <button
+            type="button"
+            className={[styles.tab, moreActive ? styles.tabActive : ""].join(" ")}
+            onClick={() => setMoreOpen(true)}
+            aria-haspopup="dialog"
+            aria-expanded={moreOpen}
+          >
+            <span className={styles.tabIcon}>
+              {ICONS.more}
+              {moreBadgeTotal > 0 && <span className={styles.dot} />}
+            </span>
+            <span className={styles.tabLabel}>Více</span>
+          </button>
+        )}
+      </nav>
+
+      {moreOpen && (
+        <div
+          className={styles.sheetOverlay}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Více"
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setMoreOpen(false);
+          }}
+        >
+          {/* No backdrop onClick — project rule: overlays dismiss only via the
+              explicit close button or by selecting an item. */}
+          <div className={styles.sheet}>
+            <div className={styles.sheetHeader}>
+              <span className={styles.sheetTitle}>Více</span>
+              <button
+                type="button"
+                className={styles.sheetClose}
+                onClick={() => setMoreOpen(false)}
+                aria-label="Zavřít"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className={styles.sheetList}>
+              {moreItems.map((item) => {
+                const badge = badgeFor(item.id);
+                return (
+                  <NavLink
+                    key={item.id}
+                    to={item.path}
+                    className={({ isActive }) =>
+                      [styles.sheetItem, isActive ? styles.sheetItemActive : ""].join(" ")
+                    }
+                    onClick={() => setMoreOpen(false)}
+                  >
+                    <span>{item.label}</span>
+                    {badge > 0 && <span className={styles.sheetBadge}>{badge}</span>}
+                  </NavLink>
+                );
+              })}
+            </div>
+
+            <div className={styles.sheetFooter}>
+              <button
+                type="button"
+                className={styles.footerBtn}
+                onClick={onToggleTheme}
+              >
+                {theme === "dark" ? "Světlý režim" : "Tmavý režim"}
+              </button>
+              <button
+                type="button"
+                className={styles.footerBtn}
+                onClick={() => {
+                  setMoreOpen(false);
+                  navigate("/napoveda");
+                }}
+              >
+                Nápověda
+              </button>
+              <button
+                type="button"
+                className={`${styles.footerBtn} ${styles.footerLogout}`}
+                onClick={onLogout}
+              >
+                Odhlásit
+              </button>
+              {timeControl}
+              {versionLabel && (
+                <span className={styles.sheetVersion}>{versionLabel}</span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
