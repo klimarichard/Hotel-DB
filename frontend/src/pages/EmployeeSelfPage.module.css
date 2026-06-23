@@ -64,6 +64,13 @@
   gap: 0.85rem 1.5rem;
 }
 
+/* Phone: one field per row (see index.css for the breakpoint convention). */
+@media (max-width: 559.98px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Edit mode: one field per row for readability while proposing changes. */
 .editGrid {
   display: grid;

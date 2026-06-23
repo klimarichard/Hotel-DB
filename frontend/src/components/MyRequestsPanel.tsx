@@ -105,7 +105,7 @@ export default function MyRequestsPanel({ planId }: Props) {
             {overrides.length === 0 ? (
               <div className={styles.empty}>Žádné žádosti o výjimku X.</div>
             ) : (
-              <table className={styles.table}>
+              <table className={`${styles.table} ${styles.cardsOnMobile}`}>
                 <thead>
                   <tr>
                     <th>Datum</th>
@@ -120,18 +120,18 @@ export default function MyRequestsPanel({ planId }: Props) {
                 <tbody>
                   {overrides.map((req) => (
                     <tr key={req.id} className={req.status !== "pending" ? styles.rowDone : ""}>
-                      <td>{formatDateCZ(req.date)}</td>
-                      <td>{req.requestedInput || "—"}</td>
-                      <td>{(req.violationTypes ?? []).map((v) => VIOLATION_LABELS[v] ?? v).join(", ") || "—"}</td>
-                      <td>{req.reason || "—"}</td>
-                      <td>{formatDatetimeCZ(req.requestedAt)}</td>
-                      <td>
+                      <td data-label="Datum">{formatDateCZ(req.date)}</td>
+                      <td data-label="Požadovaná směna">{req.requestedInput || "—"}</td>
+                      <td data-label="Důvod porušení">{(req.violationTypes ?? []).map((v) => VIOLATION_LABELS[v] ?? v).join(", ") || "—"}</td>
+                      <td data-label="Důvod žádosti">{req.reason || "—"}</td>
+                      <td data-label="Odesláno">{formatDatetimeCZ(req.requestedAt)}</td>
+                      <td data-label="Stav">
                         <StatusBadge status={req.status} />
                         {req.status === "rejected" && req.rejectionReason && (
                           <div className={styles.rejectionNote}>{req.rejectionReason}</div>
                         )}
                       </td>
-                      <td>
+                      <td className={styles.actionCell}>
                         {req.status === "pending" && (
                           <Button
                             variant="secondary"
@@ -158,7 +158,7 @@ export default function MyRequestsPanel({ planId }: Props) {
             {changes.length === 0 ? (
               <div className={styles.empty}>Žádné žádosti o změnu směny.</div>
             ) : (
-              <table className={styles.table}>
+              <table className={`${styles.table} ${styles.cardsOnMobile}`}>
                 <thead>
                   <tr>
                     <th>Datum</th>
@@ -172,21 +172,21 @@ export default function MyRequestsPanel({ planId }: Props) {
                 <tbody>
                   {changes.map((req) => (
                     <tr key={req.id} className={req.status !== "pending" ? styles.rowDone : ""}>
-                      <td>{formatDateCZ(req.date)}</td>
-                      <td>
+                      <td data-label="Datum">{formatDateCZ(req.date)}</td>
+                      <td data-label="Aktuální směna">
                         {req.kind === "free-claim"
                           ? `Volná směna ${req.code ?? ""}${req.hotel ?? ""}`
                           : (req.currentRawInput || "—")}
                       </td>
-                      <td>{req.reason || "—"}</td>
-                      <td>{formatDatetimeCZ(req.requestedAt)}</td>
-                      <td>
+                      <td data-label="Důvod žádosti">{req.reason || "—"}</td>
+                      <td data-label="Odesláno">{formatDatetimeCZ(req.requestedAt)}</td>
+                      <td data-label="Stav">
                         <StatusBadge status={req.status} />
                         {req.status === "rejected" && req.rejectionReason && (
                           <div className={styles.rejectionNote}>{req.rejectionReason}</div>
                         )}
                       </td>
-                      <td>
+                      <td className={styles.actionCell}>
                         {req.status === "pending" && (
                           <Button
                             variant="secondary"

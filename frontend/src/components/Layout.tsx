@@ -13,6 +13,7 @@ import { api } from "@/lib/api";
 import { resolveOrderByPermission } from "@/lib/menuItems";
 import TimeOverrideBanner from "@/components/TimeOverrideBanner";
 import TimeOverrideControl from "@/components/TimeOverrideControl";
+import BottomNav from "@/components/BottomNav";
 import logoMark from "@/assets/logo.svg";
 import styles from "./Layout.module.css";
 
@@ -181,6 +182,19 @@ export default function Layout() {
         <TimeOverrideBanner />
         <Outlet />
       </main>
+      {/* Phone-only bottom tab bar (hidden ≥560px via CSS). Reuses the same
+          permission-gated `items` + `badgeFor` as the sidebar — single source of
+          truth. Footer utilities are passed as values/handlers (not the dark
+          sidebar JSX) so BottomNav can render them in theme-aware sheet styling. */}
+      <BottomNav
+        items={items}
+        badgeFor={badgeFor}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+        onLogout={handleLogout}
+        versionLabel={can("system.version.view") ? `v${__APP_VERSION__}` : null}
+        timeControl={<TimeOverrideControl />}
+      />
     </div>
   );
 }

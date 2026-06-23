@@ -159,3 +159,29 @@
   font-weight: 700;
   line-height: 1;
 }
+
+/* ── Responsive (see index.css for the breakpoint convention) ─────────────── */
+
+/* Tablet: keep the sidebar, trim the generous desktop padding. */
+@media (min-width: 560px) and (max-width: 900px) {
+  .main {
+    padding: 1.5rem;
+  }
+}
+
+/* Phone: sidebar → bottom tab bar (rendered by <BottomNav>). Pad the content
+   bottom so it isn't hidden behind the fixed bar (+ iOS safe-area). */
+@media (max-width: 559.98px) {
+  .shell {
+    height: 100dvh;
+  }
+  .sidebar {
+    display: none;
+  }
+  .main {
+    padding: 1rem;
+    padding-bottom: calc(
+      var(--bottom-nav-height) + env(safe-area-inset-bottom) + 1rem
+    );
+  }
+}

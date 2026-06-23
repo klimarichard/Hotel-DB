@@ -247,56 +247,76 @@ function StaffingTable({
     );
   };
 
+  const renderCell = (items: StaffItem[]) =>
+    items.length === 0 ? (
+      <span className={styles.dash}>—</span>
+    ) : (
+      <div className={styles.nameList}>{items.map((item) => renderName(item))}</div>
+    );
+
   return (
-    <table className={styles.hotelTable}>
-      <thead>
-        <tr>
-          <th></th>
-          {staffing.visibleHotels.map((h) => {
-            const c = hotelColor(h, isDark);
-            return (
-              <th
-                key={h}
-                className={styles.hotelHeader}
+    <>
+      {/* Desktop/tablet: hotels as columns, day/night as rows. */}
+      <table className={styles.hotelTable}>
+        <thead>
+          <tr>
+            <th></th>
+            {staffing.visibleHotels.map((h) => {
+              const c = hotelColor(h, isDark);
+              return (
+                <th
+                  key={h}
+                  className={styles.hotelHeader}
+                  style={{ background: c.bg, color: c.text }}
+                >
+                  {HOTEL_NAMES[h]}
+                </th>
+              );
+            })}
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>DENNÍ</td>
+            {staffing.visibleHotels.map((h) => (
+              <td key={h}>{renderCell(staffing.day[h])}</td>
+            ))}
+          </tr>
+          <tr>
+            <td>NOČNÍ</td>
+            {staffing.visibleHotels.map((h) => (
+              <td key={h}>{renderCell(staffing.night[h])}</td>
+            ))}
+          </tr>
+        </tbody>
+      </table>
+
+      {/* Phone: one card per hotel, day/night stacked — the fixed-layout table
+          crams the hotel columns to ~60px each and mangles the names. */}
+      <div className={styles.staffingCards}>
+        {staffing.visibleHotels.map((h) => {
+          const c = hotelColor(h, isDark);
+          return (
+            <div key={h} className={styles.staffingCard}>
+              <div
+                className={styles.staffingCardHeader}
                 style={{ background: c.bg, color: c.text }}
               >
                 {HOTEL_NAMES[h]}
-              </th>
-            );
-          })}
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>DENNÍ</td>
-          {staffing.visibleHotels.map((h) => (
-            <td key={h}>
-              {staffing.day[h].length === 0 ? (
-                <span className={styles.dash}>—</span>
-              ) : (
-                <div className={styles.nameList}>
-                  {staffing.day[h].map((item) => renderName(item))}
-                </div>
-              )}
-            </td>
-          ))}
-        </tr>
-        <tr>
-          <td>NOČNÍ</td>
-          {staffing.visibleHotels.map((h) => (
-            <td key={h}>
-              {staffing.night[h].length === 0 ? (
-                <span className={styles.dash}>—</span>
-              ) : (
-                <div className={styles.nameList}>
-                  {staffing.night[h].map((item) => renderName(item))}
-                </div>
-              )}
-            </td>
-          ))}
-        </tr>
-      </tbody>
-    </table>
+              </div>
+              <div className={styles.staffingCardRow}>
+                <span className={styles.staffingCardLabel}>DENNÍ</span>
+                {renderCell(staffing.day[h])}
+              </div>
+              <div className={styles.staffingCardRow}>
+                <span className={styles.staffingCardLabel}>NOČNÍ</span>
+                {renderCell(staffing.night[h])}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </>
   );
 }
 
