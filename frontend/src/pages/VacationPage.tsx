@@ -460,7 +460,7 @@ export default function VacationPage() {
         ) : myRequests.length === 0 ? (
           <div className={styles.empty}>Žádné žádosti.</div>
         ) : (
-          <table className={styles.table}>
+          <table className={`${styles.table} ${styles.cardsOnMobile}`}>
             <thead>
               <tr>
                 <th>Od</th>
@@ -474,10 +474,10 @@ export default function VacationPage() {
               {myRequests.map((req) => (
                 <>
                   <tr key={req.id} className={req.status === "approved" && !req.pendingEdit ? styles.rowDone : ""}>
-                    <td>{formatDateCZ(req.startDate)}</td>
-                    <td>{formatDateCZ(req.endDate)}</td>
-                    <td>{req.reason || "—"}</td>
-                    <td>
+                    <td data-label="Od">{formatDateCZ(req.startDate)}</td>
+                    <td data-label="Do">{formatDateCZ(req.endDate)}</td>
+                    <td data-label="Poznámka">{req.reason || "—"}</td>
+                    <td data-label="Stav">
                       <StatusBadge status={req.status} />
                       {req.pendingEdit && (
                         <span className={styles.badgePendingEdit}>Čeká na schválení úpravy</span>
@@ -486,7 +486,7 @@ export default function VacationPage() {
                         <div className={styles.rejectionNote}>{req.rejectionReason}</div>
                       )}
                     </td>
-                    <td>
+                    <td data-label="Akce" className={styles.actionCell}>
                       {canRequestSelf && !req.pendingEdit && req.status !== "rejected" && (
                         <div className={styles.actions}>
                           <button
