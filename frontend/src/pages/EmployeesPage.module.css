@@ -102,7 +102,7 @@
 
 /* Keep readable column widths when the table overflows on a phone — without a
    min, auto-layout squeezes 7 columns into 360px and wraps every cell. */
-@media (max-width: 559.98px) {
+@media (max-width: 559.98px), (orientation: landscape) and (max-height: 480px) {
   .table {
     min-width: 640px;
   }

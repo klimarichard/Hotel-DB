@@ -20,7 +20,7 @@
 
 /* Phone: pad the page so the card doesn't touch the screen edges, and trim the
    card's own padding (see index.css for the breakpoint convention). */
-@media (max-width: 559.98px) {
+@media (max-width: 559.98px), (orientation: landscape) and (max-height: 480px) {
   .page {
     padding: 1rem;
   }

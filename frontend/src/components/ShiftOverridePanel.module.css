@@ -157,7 +157,7 @@
    to .cardsOnMobile (applied only by MyRequestsPanel) so the manager review
    panel that shares this stylesheet keeps its table. Uses the classic
    data-label pattern: each <td> carries data-label="…" surfaced via ::before. */
-@media (max-width: 559.98px) {
+@media (max-width: 559.98px), (orientation: landscape) and (max-height: 480px) {
   .cardsOnMobile thead {
     display: none;
   }
