@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { api } from "../lib/api";
@@ -188,6 +189,27 @@ export default function ShiftPlannerPage() {
   const planBarRef = useRef<HTMLDivElement>(null);
   const [headerHeight, setHeaderHeight] = useState(0);
   const [stickyTop, setStickyTop] = useState(0);
+
+  // Full-screen grid on phones: collapse the month nav + plan bar while the
+  // grid is scrolled, restore them at the top (the legend is hidden outright via
+  // CSS). isPhone mirrors the CSS phone breakpoint (incl. landscape) so the
+  // behaviour only applies there; chromeHidden also zeroes --sticky-top so the
+  // grid claims the freed height.
+  const [isPhone, setIsPhone] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia(
+      "(max-width: 559.98px), (orientation: landscape) and (max-height: 480px)"
+    );
+    const update = () => setIsPhone(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+  const [gridAtTop, setGridAtTop] = useState(true);
+  const chromeHidden = isPhone && !gridAtTop;
+  // Exact heights drive the collapse animation (max-height auto can't transition);
+  // capping to the measured height means a clean ease with no dead-zone.
+  const planBarHeight = Math.max(0, stickyTop - headerHeight);
 
   // Permission-derived (Phase 3). Coverage is identical to the previous role
   // checks: cells.edit = {admin,director,manager}; plan.transition = {admin,director}.
@@ -1121,9 +1143,13 @@ export default function ShiftPlannerPage() {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div>
+    <div style={{ "--sticky-top": `${chromeHidden ? 0 : stickyTop}px` } as CSSProperties}>
       {/* Header — month nav centred as the page's primary control */}
-      <div className={styles.header} ref={headerRef} style={{ position: "sticky", top: 0, zIndex: 10, background: "var(--color-bg)" }}>
+      <div
+        className={`${styles.header}${chromeHidden ? ` ${styles.chromeHidden}` : ""}`}
+        ref={headerRef}
+        style={{ position: "sticky", top: 0, zIndex: 10, background: "var(--color-bg)", maxHeight: isPhone ? (headerHeight || undefined) : undefined }}
+      >
         <div />
         <div className={styles.monthNav} data-tour="shift-month-nav">
           <button className={styles.navBtn} onClick={prevMonth}>‹</button>
@@ -1145,7 +1171,7 @@ export default function ShiftPlannerPage() {
       {!loading && !error && (
         <>
           {/* Plan bar */}
-          <div ref={planBarRef} className={styles.planBar} style={{ position: "sticky", top: headerHeight, zIndex: 10, background: "var(--color-bg)", paddingBottom: "0.5rem" }}>
+          <div ref={planBarRef} className={`${styles.planBar}${chromeHidden ? ` ${styles.chromeHidden}` : ""}`} style={{ position: "sticky", top: headerHeight, zIndex: 10, background: "var(--color-bg)", paddingBottom: "0.5rem", maxHeight: isPhone ? (planBarHeight || undefined) : undefined }}>
             {plan ? (
               <StatusBadge status={plan.status} />
             ) : (
@@ -1657,7 +1683,7 @@ export default function ShiftPlannerPage() {
                   ? handleToggleDpaDay
                   : undefined
               }
-              stickyTop={stickyTop}
+              onAtTopChange={setGridAtTop}
             />
             </div>
           )}

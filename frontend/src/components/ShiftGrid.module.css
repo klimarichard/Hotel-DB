@@ -9,6 +9,20 @@
   margin-bottom: 1.5rem;
 }
 
+/* Phone: fill the viewport (dvh handles the mobile address bar) minus the bottom
+   tab bar. --sticky-top drops to 0 when the page collapses its chrome, so the
+   grid grows for a full-screen view. See index.css for the breakpoint. */
+@media (max-width: 559.98px), (orientation: landscape) and (max-height: 480px) {
+  .wrapper {
+    max-height: calc(
+      100dvh - var(--sticky-top, 0px) - var(--bottom-nav-height, 56px) - 1.5rem
+    );
+    margin-bottom: 0.75rem;
+    /* Grow/shrink in sync with the chrome collapse (--sticky-top change). */
+    transition: max-height 0.28s ease;
+  }
+}
+
 .grid {
   border-collapse: collapse;
   min-width: 100%;

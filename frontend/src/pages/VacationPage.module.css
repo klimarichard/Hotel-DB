@@ -288,7 +288,7 @@
    5-column table overflowed the surface and squashed the Upravit/Zrušit
    actions; the data-label/::before pattern turns each request into a card, and
    the inline edit row becomes its own info-tinted card with stacked inputs. */
-@media (max-width: 559.98px) {
+@media (max-width: 559.98px), (orientation: landscape) and (max-height: 480px) {
   .cardsOnMobile thead {
     display: none;
   }

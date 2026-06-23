@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as clock from "../lib/clock";
 import type { PlanDetail, PlanEmployee, ShiftDoc, ModShiftDoc } from "../pages/ShiftPlannerPage";
 import { SECTION_LABELS, SECTIONS, type Section, getCzechHolidays, MOD_PERSONS, parseShiftExpression, getCellColor, isNightShiftType, sortSectionEmployees } from "../lib/shiftConstants";
@@ -52,7 +52,9 @@ interface Props {
   onToggleDpaDay?: (date: string, enabled: boolean) => void;
   alwaysReadOnlySections?: string[];
   currentEmployeeId?: string | null;
-  stickyTop?: number;
+  /** Reports whether the grid's internal scroll is at the top. Used on mobile to
+   *  collapse the page chrome (month nav + plan bar) for a full-screen grid. */
+  onAtTopChange?: (atTop: boolean) => void;
 }
 
 // Volné směny rows. DPQ/NPQ/NPA are standing daily requirements (auto:true);
@@ -116,7 +118,7 @@ export default function ShiftGrid({
   onToggleDpaDay,
   alwaysReadOnlySections = [],
   currentEmployeeId,
-  stickyTop = 0,
+  onAtTopChange,
 }: Props) {
   const { theme } = useTheme();
   const dark = theme === "dark";
@@ -354,8 +356,31 @@ export default function ShiftGrid({
   const [editingModEmployee, setEditingModEmployee] = useState<string | null>(null);
   const [editingXEmployee, setEditingXEmployee] = useState<string | null>(null);
 
+  // Report the wrapper's vertical scroll position (at-top vs scrolled) so the
+  // page can collapse its chrome on mobile. Hysteresis (>40 hide / <8 show)
+  // avoids flapping near the boundary; we only fire on a state flip.
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const atTopRef = useRef(true);
+  const handleScroll = useCallback(() => {
+    const el = wrapperRef.current;
+    if (!el || !onAtTopChange) return;
+    const st = el.scrollTop;
+    if (atTopRef.current && st > 40) {
+      atTopRef.current = false;
+      onAtTopChange(false);
+    } else if (!atTopRef.current && st < 8) {
+      atTopRef.current = true;
+      onAtTopChange(true);
+    }
+  }, [onAtTopChange]);
+  // A fresh grid (remounted on membership change) always starts at the top.
+  useEffect(() => {
+    atTopRef.current = true;
+    onAtTopChange?.(true);
+  }, [onAtTopChange]);
+
   return (
-    <div className={styles.wrapper} style={{ "--sticky-top": `${stickyTop}px` } as React.CSSProperties}>
+    <div className={styles.wrapper} ref={wrapperRef} onScroll={handleScroll}>
       <table className={styles.grid}>
         <colgroup>
           <col className={styles.nameCol} />

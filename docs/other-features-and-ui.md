@@ -438,6 +438,27 @@ Two employee data forms collapse their two-column grid to one column on phones:
 
 `LoginPage.module.css` adds `padding: 1rem` to `.page` and trims `.card` to `padding: 1.75rem 1.25rem` at `max-width: 559.98px` so the card does not touch screen edges on small phones.
 
+### Landscape phones (v3.0.1)
+
+A phone in landscape is **wide but short** (≈667–930 px wide, ≤430 px tall), so a width-only query let the desktop sidebar reappear on rotation. Every phone `@media` block was therefore extended from `(max-width: 559.98px)` to:
+
+```
+@media (max-width: 559.98px), (orientation: landscape) and (max-height: 480px)
+```
+
+i.e. **narrow width OR (landscape AND short)**. `max-height: 480px` catches landscape phones while excluding landscape tablets (≥768 px tall). This is now the canonical phone query (documented in the `index.css` `:root` comment) and is applied to all 10 phone-aware stylesheets so the *whole* mobile layout — not just the nav — survives rotation. Components that need the breakpoint in JS (see below) mirror the same string via `window.matchMedia`.
+
+### Full-screen shift grid on phones (v3.0.1)
+
+On phones the Shift Planner (`ShiftPlannerPage.tsx` + `ShiftGrid`) maximizes grid space:
+
+- **Legend hidden** outright (`.legend { display: none }` in the phone `@media`).
+- **Chrome auto-collapse** — the month-nav header and plan bar collapse while the grid is scrolled and reappear at the top. The grid owns its own internal scroll (`.wrapper` is `overflow: auto` on both axes — horizontal scroll can't be decoupled from vertical), so the chrome can't scroll away on its own. `ShiftGrid` reports its wrapper's scroll-at-top state via an `onAtTopChange` callback (hysteresis: hide past 40 px, show under 8 px; fires only on a flip). `ShiftPlannerPage` holds `gridAtTop`, derives `chromeHidden = isPhone && !gridAtTop`, and:
+  - adds a `.chromeHidden` class that collapses the header/plan-bar (`max-height: 0`, `opacity: 0`, `overflow: hidden` — the last applied **only** in the collapsed state so the export-menu dropdown isn't clipped at rest);
+  - zeroes `--sticky-top`, which is set on the **page root** (not passed as a prop) and inherited by `ShiftGrid`'s wrapper `max-height`, so the heavy grid does not re-render on collapse — only the parent's style changes — and the grid grows into the freed space.
+- **Animated** — collapse/expand eases over 0.28 s. `max-height: auto` can't transition, so the visible `max-height` is set inline to each element's **measured** pixel height (`headerHeight` / `stickyTop - headerHeight`) and transitions to 0; the grid wrapper transitions its `max-height` on the same curve so the two move in sync.
+- Mobile grid wrapper height uses `100dvh - var(--sticky-top) - var(--bottom-nav-height) - 1.5rem`.
+
 ### Scope / priority
 
 This pass prioritized **employee-facing screens**: Přehled, Můj profil, Dovolená (own requests), viewing shifts (not editing the plan grid), Upozornění (read view), and Login. Admin-heavy pages (ShiftGrid editor, Payroll, full Employees table, Settings sub-panels) are "works but may scroll" and are targeted for future refinement.

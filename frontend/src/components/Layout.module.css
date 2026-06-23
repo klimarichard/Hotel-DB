@@ -171,7 +171,7 @@
 
 /* Phone: sidebar → bottom tab bar (rendered by <BottomNav>). Pad the content
    bottom so it isn't hidden behind the fixed bar (+ iOS safe-area). */
-@media (max-width: 559.98px) {
+@media (max-width: 559.98px), (orientation: landscape) and (max-height: 480px) {
   .shell {
     height: 100dvh;
   }
