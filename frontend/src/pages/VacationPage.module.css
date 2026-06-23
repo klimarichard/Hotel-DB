@@ -300,8 +300,10 @@
     width: 100%;
   }
 
-  /* Request row → card */
+  /* Request row → card. width:auto (not the inherited 100%) so the horizontal
+     margins inset the card instead of overflowing past the screen edge. */
   .cardsOnMobile tbody tr:not(.editRow) {
+    width: auto;
     background: var(--color-surface-2);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
@@ -341,8 +343,10 @@
     display: none;
   }
 
-  /* Inline edit row → its own info-tinted card; inputs stacked for touch. */
+  /* Inline edit row → its own info-tinted card; inputs stacked for touch.
+     width:auto so the margins inset it rather than overflowing the screen. */
   .cardsOnMobile tr.editRow {
+    width: auto;
     margin: -0.25rem 1rem 0.75rem;
     border: 1px solid var(--color-info-border);
     border-radius: var(--radius-md);
