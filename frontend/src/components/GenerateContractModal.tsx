@@ -73,9 +73,22 @@ export default function GenerateContractModal({
   const [loadingTemplate, setLoadingTemplate] = useState(true);
   const [companyData, setCompanyData] = useState<CompanyData>({});
   const [loadingCompany, setLoadingCompany] = useState(false);
+  // Per-field manual overrides of the automatic values (ad-hoc / back-dated
+  // contracts). Held as a sparse patch so each field can be reverted to auto.
+  const [editedVars, setEditedVars] = useState<Record<string, string>>({});
 
-  const vars = resolveVariables(employeeData, companyData);
+  const autoVars = resolveVariables(employeeData, companyData);
+  // Working copy: automatic values with any manual edits applied on top.
+  const vars = { ...autoVars, ...editedVars };
   const missing = template ? getMissingVariables(template, vars) : [];
+
+  function revertField(key: string) {
+    setEditedVars((prev) => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  }
 
   useEffect(() => {
     if (!user) return;
@@ -194,19 +207,57 @@ export default function GenerateContractModal({
                   )}
 
                   <div className={styles.varTable}>
-                    <p className={styles.varTableTitle}>Hodnoty proměnných</p>
+                    <div className={styles.varTableHead}>
+                      <p className={styles.varTableTitle}>Hodnoty proměnných</p>
+                      {Object.keys(editedVars).length > 0 && (
+                        <button
+                          type="button"
+                          className={styles.revertAllBtn}
+                          onClick={() => setEditedVars({})}
+                        >
+                          Vrátit vše na automatické
+                        </button>
+                      )}
+                    </div>
+                    <p className={styles.varTableHint}>
+                      Hodnoty lze upravit pro tuto smlouvu (např. zpětně datovaná
+                      smlouva). Úpravy se nikam neukládají — ovlivní jen toto generování.
+                    </p>
                     <table>
                       <tbody>
                         {allVars
                           .filter((v) => template.includes(`{{${v.key}}}`))
-                          .map((v) => (
-                            <tr key={v.key}>
-                              <td className={styles.varKey}>{v.label}</td>
-                              <td className={styles.varVal}>
-                                {vars[v.key] || <span className={styles.empty}>–</span>}
-                              </td>
-                            </tr>
-                          ))}
+                          .map((v) => {
+                            const edited = editedVars[v.key] !== undefined;
+                            return (
+                              <tr key={v.key}>
+                                <td className={styles.varKey}>{v.label}</td>
+                                <td className={styles.varVal}>
+                                  <div className={styles.varValRow}>
+                                    <input
+                                      type="text"
+                                      className={`${styles.varInput} ${edited ? styles.varInputEdited : ""}`}
+                                      value={vars[v.key] ?? ""}
+                                      placeholder={autoVars[v.key] || "–"}
+                                      onChange={(e) =>
+                                        setEditedVars((prev) => ({ ...prev, [v.key]: e.target.value }))
+                                      }
+                                    />
+                                    {edited && (
+                                      <button
+                                        type="button"
+                                        className={styles.revertBtn}
+                                        title="Vrátit na automatickou hodnotu"
+                                        onClick={() => revertField(v.key)}
+                                      >
+                                        Vrátit
+                                      </button>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
                       </tbody>
                     </table>
                   </div>

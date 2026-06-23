@@ -7,7 +7,8 @@ import ConfirmModal from "@/components/ConfirmModal";
 import { formatDateCZ, formatDatetimeCZ } from "@/lib/dateFormat";
 import { displayGendered } from "@/lib/genderDisplay";
 import { nationalityName } from "@/lib/nationalities";
-import { formatPhoneDisplay } from "@/lib/phoneFormat";
+import { formatPhoneDisplay, needsPhoneFormatPrompt } from "@/lib/phoneFormat";
+import PhoneFormatModal from "@/components/PhoneFormatModal";
 import { isCzechNationality } from "@/lib/contractVariables";
 import { groupBySession } from "@/lib/employmentSessions";
 import EmploymentSessionCard from "@/components/EmploymentSession";
@@ -105,6 +106,11 @@ export default function EmployeeSelfPage() {
   const [revealed, setRevealed] = useState<Record<string, string>>({});
   const [editMode, setEditMode] = useState(false);
   const [editValues, setEditValues] = useState<Record<string, string>>({});
+  // Holds the pending change-set while the user picks a non-+420 phone display
+  // format; on confirm the phone change's newValue is replaced and submitted.
+  const [phonePromptChanges, setPhonePromptChanges] = useState<
+    { field: string; label: string; newValue: string; oldValue?: string }[] | null
+  >(null);
   // Decrypted values of sensitive fields pre-loaded on entering edit (TODO 41),
   // so buildChanges() only submits a sensitive field that the user actually changed.
   const [sensitiveOriginals, setSensitiveOriginals] = useState<Record<string, string>>({});
@@ -285,6 +291,16 @@ export default function EmployeeSelfPage() {
       setDialog({ title: "Žádné změny", message: "Neprovedli jste žádné změny k odeslání.", showCancel: false });
       return;
     }
+    // A changed non-+420 phone gets a display-format prompt before submitting.
+    const phoneChange = changes.find((c) => c.field === "phone");
+    if (phoneChange && needsPhoneFormatPrompt(phoneChange.newValue, phoneChange.oldValue ?? "")) {
+      setPhonePromptChanges(changes);
+      return;
+    }
+    await submitChanges(changes);
+  }
+
+  async function submitChanges(changes: ReturnType<typeof buildChanges>) {
     setSubmitting(true);
     try {
       await api.post("/me/change-requests", { changes });
@@ -616,6 +632,19 @@ export default function EmployeeSelfPage() {
           showCancel={dialog.showCancel ?? false}
           onConfirm={() => setDialog(null)}
           onCancel={() => setDialog(null)}
+        />
+      )}
+      {phonePromptChanges && (
+        <PhoneFormatModal
+          phone={(phonePromptChanges.find((c) => c.field === "phone")?.newValue ?? "").trim()}
+          onConfirm={(display) => {
+            const updated = phonePromptChanges.map((c) =>
+              c.field === "phone" ? { ...c, newValue: display } : c
+            );
+            setPhonePromptChanges(null);
+            void submitChanges(updated);
+          }}
+          onCancel={() => setPhonePromptChanges(null)}
         />
       )}
     </div>
