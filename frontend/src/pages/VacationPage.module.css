@@ -282,6 +282,91 @@
   min-width: 160px;
 }
 
+/* ── Phone: 'Moje žádosti' rows as stacked cards ──────────────────────────
+   Scoped to .cardsOnMobile (applied only to the user's own-requests table) so
+   the colleague + review tables on this page keep their table layout. The
+   5-column table overflowed the surface and squashed the Upravit/Zrušit
+   actions; the data-label/::before pattern turns each request into a card, and
+   the inline edit row becomes its own info-tinted card with stacked inputs. */
+@media (max-width: 559.98px) {
+  .cardsOnMobile thead {
+    display: none;
+  }
+  .cardsOnMobile,
+  .cardsOnMobile tbody,
+  .cardsOnMobile tr,
+  .cardsOnMobile td {
+    display: block;
+    width: 100%;
+  }
+
+  /* Request row → card */
+  .cardsOnMobile tbody tr:not(.editRow) {
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 0.25rem 0.75rem;
+    margin: 0 1rem 0.625rem;
+  }
+  .cardsOnMobile tbody tr:not(.editRow) td {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.25rem 1rem;
+    padding: 0.4rem 0;
+    border-bottom: 1px solid var(--color-border-subtle);
+    text-align: right;
+  }
+  .cardsOnMobile tbody tr:not(.editRow) td:last-child {
+    border-bottom: none;
+  }
+  .cardsOnMobile tbody tr:not(.editRow) td::before {
+    content: attr(data-label);
+    flex: 0 0 auto;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-text-muted);
+    text-align: left;
+  }
+  /* Actions right-aligned, wrapping if both buttons don't fit on one line. */
+  .cardsOnMobile .actionCell .actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  /* Hide the action cell on rows that render no buttons (approved/rejected). */
+  .cardsOnMobile .actionCell:empty {
+    display: none;
+  }
+
+  /* Inline edit row → its own info-tinted card; inputs stacked for touch. */
+  .cardsOnMobile tr.editRow {
+    margin: -0.25rem 1rem 0.75rem;
+    border: 1px solid var(--color-info-border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+  }
+  .cardsOnMobile tr.editRow td {
+    padding: 0.6rem 0.75rem !important;
+  }
+  .cardsOnMobile tr.editRow td::before {
+    content: none;
+  }
+  .cardsOnMobile .editRowInner {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .cardsOnMobile .editRowInner .rejectInput {
+    width: 100%;
+    margin-right: 0;
+  }
+  .cardsOnMobile .editSep {
+    display: none;
+  }
+}
+
 /* ── Pending edit badge ───────────────────────────────────────────────────── */
 
 .badgePendingEdit {
