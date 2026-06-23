@@ -65,7 +65,7 @@
   --color-input-focus: #3b82f6;
 
   /* Shift grid */
-  --color-weekend-bg: #f0f4ff;
+  --color-weekend-bg: #cfe0ff;
   --color-holiday-bg: #f0f0f0;
   --color-mod-bg: #faf5ff;
   --color-mod-border: #ddd6fe;
@@ -176,7 +176,7 @@
   --shadow-md: rgba(0, 0, 0, 0.5);
   --shadow-lg: rgba(0, 0, 0, 0.4);
 
-  --color-weekend-bg: #1a2d4a;
+  --color-weekend-bg: #2b466f;
   --color-holiday-bg: #2a3244;
   --color-mod-bg: #1a0533;
   --color-mod-border: #4c1d95;

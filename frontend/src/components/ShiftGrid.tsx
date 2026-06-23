@@ -414,9 +414,8 @@ export default function ShiftGrid({
 
             const rows = [
               <tr key={`sec-${section}`} className={styles.sectionRow}>
-                <td className={styles.sectionCell} colSpan={days.length + 2}>
-                  {SECTION_LABELS[section]}
-                </td>
+                <td className={styles.sectionCell}>{SECTION_LABELS[section]}</td>
+                <td colSpan={days.length + 1} />
               </tr>,
               ...emps.map((emp, i) => {
                 const rowIdx = empRowIndex.get(emp.employeeId) ?? 0;
@@ -651,9 +650,8 @@ export default function ShiftGrid({
         {shiftCounts && (
           <tbody data-tour="shift-counter">
               <tr className={styles.counterSeparatorRow}>
-                <td colSpan={days.length + 2} className={styles.counterSeparatorCell}>
-                  Přehled obsazení
-                </td>
+                <td className={styles.counterSeparatorCell}>Přehled obsazení</td>
+                <td colSpan={days.length + 1} />
               </tr>
               {COUNTER_ROWS.map((row) => (
                 <tr key={row.label} className={styles.counterRow}>
@@ -679,9 +677,8 @@ export default function ShiftGrid({
         {showFreeShifts && (
           <tbody data-tour="shift-free">
               <tr className={styles.freeSeparatorRow}>
-                <td colSpan={days.length + 2} className={styles.freeSeparatorCell}>
-                  Volné směny
-                </td>
+                <td className={styles.freeSeparatorCell}>Volné směny</td>
+                <td colSpan={days.length + 1} />
               </tr>
               {FREE_SHIFT_ROWS.map((row) => {
                 // Match the colour the shift gets in the plan (per code+hotel, theme-aware).
