@@ -82,6 +82,15 @@
   background: var(--color-surface-3);
 }
 
+/* Bounds the table to the content column so a wide row scrolls horizontally
+   inside this container instead of widening the page (which would break the
+   phone fixed bottom bar). */
+.tableScroll {
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 .table {
   width: 100%;
   border-collapse: collapse;
@@ -89,6 +98,14 @@
   border-radius: 8px;
   overflow: hidden;
   box-shadow: 0 1px 4px var(--shadow-sm);
+}
+
+/* Keep readable column widths when the table overflows on a phone — without a
+   min, auto-layout squeezes 7 columns into 360px and wraps every cell. */
+@media (max-width: 559.98px) {
+  .table {
+    min-width: 640px;
+  }
 }
 
 .table th {

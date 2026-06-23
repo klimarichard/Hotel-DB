@@ -1,6 +1,7 @@
 .wrapper {
   overflow-x: auto;
   overflow-y: auto;
+  max-width: 100%; /* bound the scroll so the wide grid never widens the page */
   max-height: calc(100vh - 4rem - var(--sticky-top, 0px) - 4rem);
   border-radius: 8px;
   box-shadow: 0 1px 4px var(--shadow-sm);

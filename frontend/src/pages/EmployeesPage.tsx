@@ -184,6 +184,7 @@ export default function EmployeesPage() {
       {error && <div className={styles.errorState}>{error}</div>}
 
       {!loading && !error && (
+        <div className={styles.tableScroll}>
         <table className={styles.table} data-tour="emp-list">
           <thead>
             <tr>
@@ -271,6 +272,7 @@ export default function EmployeesPage() {
             )}
           </tbody>
         </table>
+        </div>
       )}
     </div>
   );
