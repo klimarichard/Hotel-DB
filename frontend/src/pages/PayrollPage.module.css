@@ -160,6 +160,7 @@
   box-shadow: 0 1px 4px var(--shadow-sm);
   overflow: hidden;
   overflow-x: auto;
+  max-width: 100%; /* bound the scroll so the wide table never widens the page */
 }
 
 .table {
