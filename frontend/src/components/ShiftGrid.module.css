@@ -124,22 +124,26 @@
 
 /* ── Section divider row ──────────────────────────────────────────────── */
 
-.sectionRow td,
+/* Both cells (label + filler) carry the bar background + divider borders so the
+   line spans the full width; only the narrow label cell is sticky-left. A
+   full-width colSpan cell can't stick (it fills its row → no slack), so the
+   label lives in its own first-column cell with slack, like .nameCell. */
+.sectionRow td {
+  background: var(--color-surface-3);
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+}
 .sectionCell {
-  /* Pin the full-width section label to the left so it stays put during
-     horizontal scroll, matching the sticky employee-name column. Default
-     z-index (auto) keeps it under the sticky day-header on vertical scroll. */
   position: sticky;
   left: 0;
-  background: var(--color-surface-3);
+  z-index: 1;
   font-size: 0.65rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--color-text-secondary);
   padding: 0.3rem 0.65rem;
-  border-top: 1px solid var(--color-border);
-  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
 }
 
 /* ── Employee rows ────────────────────────────────────────────────────── */
@@ -268,18 +272,22 @@
   border-top: 2px solid var(--color-border);
 }
 
+.counterSeparatorRow td {
+  background: var(--color-surface-3);
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+}
 .counterSeparatorCell {
   position: sticky;
   left: 0;
-  background: var(--color-surface-3);
+  z-index: 1;
   font-size: 0.65rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--color-text-secondary);
   padding: 0.3rem 0.65rem;
-  border-top: 1px solid var(--color-border);
-  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
 }
 
 .counterRow {
@@ -337,17 +345,21 @@
   border-top: 2px solid var(--color-border);
 }
 
+.freeSeparatorRow td {
+  background: var(--color-surface-3);
+  border-top: 1px solid var(--color-border);
+}
 .freeSeparatorCell {
   position: sticky;
   left: 0;
-  background: var(--color-surface-3);
+  z-index: 1;
   font-size: 0.65rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--color-text-secondary);
   padding: 0.3rem 0.65rem;
-  border-top: 1px solid var(--color-border);
+  white-space: nowrap;
 }
 
 .freeRow {
