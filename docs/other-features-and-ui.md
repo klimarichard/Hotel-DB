@@ -320,6 +320,130 @@ The distinction matters because the employment-row `status` field can lag the de
 
 ---
 
+---
+
+## Mobile responsiveness / responsive layout (v3.0.0)
+
+The app targets down to 360 px width. The three canonical breakpoints are documented as a comment in the `frontend/src/index.css` `:root` block (CSS Modules cannot share JS variables inside `@media`, so the convention is prose rather than a token):
+
+| Breakpoint | Range | Navigation |
+|---|---|---|
+| Desktop | ≥ 900 px | 220 px sidebar, multi-column layouts |
+| Tablet | 560–900 px | Sidebar; minor padding trim (`1.5rem`) |
+| Phone | < 560 px | Fixed bottom tab bar; single-column layouts; scrollable tables |
+
+Phone-only media queries use `max-width: 559.98px` (not `559px`) to avoid a 560 px double-match seam.
+
+The `--bottom-nav-height` CSS token (`56px`) is defined in `index.css` `:root`. It is consumed only inside phone `@media` blocks and by `BottomNav.module.css` for the bar's height calculation.
+
+### Shell switch: sidebar ↔ BottomNav
+
+`frontend/src/components/Layout.tsx` always mounts **both** the 220 px sidebar (`<nav className={styles.sidebar}>`) and `<BottomNav>`. The switch is CSS-only:
+
+- `Layout.module.css` hides `.sidebar` (`display: none`) at `max-width: 559.98px` and adds bottom padding to `.main` (`var(--bottom-nav-height) + env(safe-area-inset-bottom) + 1rem`) so content clears the fixed bar.
+- `BottomNav.module.css` hides `.bar` (`display: none`) by default and makes it `position: fixed; bottom: 0` at `max-width: 559.98px`.
+- At phone width, `Layout.module.css` also switches `.shell` to `height: 100dvh` (dynamic viewport height — avoids the mobile browser chrome gap).
+
+### BottomNav component
+
+`frontend/src/components/BottomNav.tsx` + `BottomNav.module.css`.
+
+**Single source of truth.** `Layout.tsx` computes the permission-gated, user-ordered `items` (from `resolveOrderByPermission`) and the `badgeFor` function, then passes them into both the sidebar render loop and `<BottomNav>` as props. `BottomNav` never re-derives permissions.
+
+**Four fixed anchors** — registry ids `prehled`, `smeny`, `dovolena`, `mujProfil`. Their bottom-bar labels are: Přehled, Směny, Dovolená, Profil (the full "Můj profil" label is too wide for a 360 px tab slot — see `LABEL_OVERRIDE` in `BottomNav.tsx`). Anchors are filtered from the incoming `items` list and silently drop out if a user lacks the permission for that item.
+
+**"Více" tab** — any permitted items not in the four anchor slots appear in a slide-up sheet. The "Více" tab is omitted entirely if there are no such items. "Více" is marked active whenever the current route belongs to any non-anchor page, including nested routes (e.g. `/zamestnanci/:id`). It shows an aggregate pending dot when any non-anchor item has a non-zero badge.
+
+**"Více" sheet** (`styles.sheetOverlay` / `styles.sheet`):
+- Slides up from the bottom (`align-items: flex-end`). Max height `80dvh`, scrollable item list.
+- Header with "Více" title and a ✕ close button; sheet footer with theme toggle, Nápověda, Odhlásit, `<TimeOverrideControl>` (renders only in emulator/staging), and the version string (gated by `system.version.view`).
+- Dismisses via the ✕ button, selecting a list item, or Escape key. **Not on backdrop click** — consistent with the project modal-dismissal rule. The overlay `<div>` has no `onClick` handler.
+- Body scroll is locked (`document.body.style.overflow = "hidden"`) while the sheet is open; restored (to whatever the previous value was) on close/unmount.
+- Footer utilities are passed to `BottomNav` as plain values and handlers (`theme`, `onToggleTheme`, `onLogout`, `versionLabel`, `timeControl`) rather than reusing the dark sidebar JSX — this lets the sheet render them against the themed `--color-surface` background instead of the always-dark sidebar palette.
+
+**Badge dots** — a small red dot (`styles.dot`, 8 px, `--color-danger` fill) floats top-right of the icon when `badgeFor(id) > 0`. The bottom bar uses a dot (not a count) because there is no room for a number in a compact tab slot. The "Više" sheet does display numeric badge counts next to each item label (`styles.sheetBadge`).
+
+**Props:**
+
+```ts
+interface BottomNavProps {
+  items: MenuItem[];
+  badgeFor: (id: string) => number;
+  theme: "light" | "dark";
+  onToggleTheme: () => void;
+  onLogout: () => void;
+  versionLabel: string | null; // e.g. "v3.0.0"; null when not permitted
+  timeControl?: ReactNode;      // <TimeOverrideControl/> — self-styled
+}
+```
+
+### Card-on-mobile pattern
+
+Two approaches are used, for different reasons:
+
+**1. CSS `data-label` + `.cardsOnMobile` modifier (two surfaces)**
+
+Used when CSS can restyle rows without changing markup topology:
+
+- **`MyRequestsPanel.tsx`** (Shifts "Moje žádosti" table) — table gets `className={styles.cardsOnMobile}` alongside its base class. Scoped to `.cardsOnMobile` in `ShiftOverridePanel.module.css` so the manager-review table on the same page (sharing the stylesheet) keeps its normal table layout.
+- **`VacationPage.tsx`** (Vacation "Moje žádosti" table) — same pattern, scoped in `VacationPage.module.css`. Handles an extra case: the inline edit row (`.editRow`) becomes its own info-tinted card with stacked inputs and no `::before` labels.
+
+The CSS pattern: at `max-width: 559.98px`, `.cardsOnMobile thead` is hidden; table / tbody / tr / td are all set to `display: block`. Each `tr` becomes a bordered, rounded card. Each `td` renders as a flex row with `td::before { content: attr(data-label) }` as the label on the left and the value right-aligned. Every `<td>` in these tables carries a `data-label="…"` attribute with its column name.
+
+**2. Explicit second markup block (Overview StaffingTable)**
+
+Used when CSS alone cannot restructure the data:
+
+`OverviewPage.tsx` renders **two** elements for the staffing table:
+- `<table className={styles.hotelTable}>` — hotels as columns, DENNÍ/NOČNÍ as rows (desktop/tablet).
+- `<div className={styles.staffingCards}>` — one card per hotel, DENNÍ and NOČNÍ stacked vertically (phone).
+
+`OverviewPage.module.css` hides `.hotelTable` and shows `.staffingCards` at `max-width: 559.98px`.
+
+**Why different techniques?** CSS can restyle a table's `tr` rows into cards, but it cannot transpose the data — the staffing table's column dimension (hotels) would need to become cards, which CSS cannot do without duplicating or reordering the DOM. The two-block approach lets each markup block be semantically correct for its viewport. The tradeoff is maintaining two render paths in sync; the single-block `data-label` trick is preferred whenever the transposition problem does not arise.
+
+### Best-effort table scroll (admin-heavy pages)
+
+Wide admin tables are bounded with `max-width: 100%` + `overflow-x: auto` scroll wrappers so they scroll horizontally inside their container rather than widening the page (which would push content behind the fixed bottom bar):
+
+- **`EmployeesPage.module.css`** — `.tableScroll` wrapper (newly added in this pass).
+- **`PayrollPage.module.css`** — the table container already had `overflow-x: auto; max-width: 100%`.
+- **`ShiftGrid.module.css`** — existing horizontal scroll retained.
+
+These pages are not redesigned into cards. Admin-heavy, fixed-layout tables benefit more from scrollability than from a card reflow. They are "works but may scroll" — a later pass will refine them if needed.
+
+### Modal width caps
+
+Fixed-width modal panels use `width: min(Npx, 100vw - 2rem)` so they always keep a 1 rem gutter on phones:
+
+| Modal / element | Width |
+|---|---|
+| `ConfirmModal.module.css` | `min(380px, 100vw - 2rem)` |
+| `AddEmployeeToPlanModal.module.css` | `min(480px, 100vw - 2rem)` |
+| `GenerateContractModal.module.css` | `min(560px, 100vw - 2rem)` |
+| `SettingsPage.module.css` (inner panel) | `min(420px, 100vw - 2rem)` |
+| `UserPermissionsModal.module.css` | `min(760px, 100vw - 2rem)` |
+| `VacationCollisionResolutionModal.tsx` | inline `min(560px, 95vw)` |
+
+Settings page tab strip scrolls horizontally at `max-width: 559.98px` (`flex-wrap: nowrap; overflow-x: auto`) so tabs do not wrap or squish.
+
+### Form single-column collapse
+
+Two employee data forms collapse their two-column grid to one column on phones:
+
+- `EmployeeFormPage.module.css` — `.grid` changes from `grid-template-columns: 1fr 1fr` to `1fr` at `max-width: 559.98px`.
+- `EmployeeSelfPage.module.css` — same pattern for the self-edit form.
+
+### Login card
+
+`LoginPage.module.css` adds `padding: 1rem` to `.page` and trims `.card` to `padding: 1.75rem 1.25rem` at `max-width: 559.98px` so the card does not touch screen edges on small phones.
+
+### Scope / priority
+
+This pass prioritized **employee-facing screens**: Přehled, Můj profil, Dovolená (own requests), viewing shifts (not editing the plan grid), Upozornění (read view), and Login. Admin-heavy pages (ShiftGrid editor, Payroll, full Employees table, Settings sub-panels) are "works but may scroll" and are targeted for future refinement.
+
+---
+
 ## UI tweaks (2026-06-10)
 
 - **Shift-plan section labels** — the first shift section (formerly labelled "FOM") is now labelled **"Management"** in `SECTION_LABELS` in `frontend/src/lib/shiftConstants.ts`. The three sections remain `vedoucí`, `recepce`, `portýři`; only the display name of `vedoucí` changed. (The audit-log label in `frontend/src/lib/audit/fields.misc.ts` still says "FOM" for the `manager` menu-order field — a separate label not tied to shift sections.)
