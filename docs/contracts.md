@@ -272,6 +272,21 @@ The "load template into editor" effect depends on `templates[selected]?.id` (com
 - `{{passportNumber}}`, `{{visaNumber}}`: from `documents` sub-collection.
 - `{{companyFileNo}}`: Spisová značka from `company.fileNo` (new field, editable in Settings → Společnosti).
 
+### Editable "Hodnoty proměnných" overview (v3.1.0)
+
+Before generating, `GenerateContractModal` shows a **"Hodnoty proměnných"** table listing every template variable that appears in the selected template. Every cell is now an editable `<input>` so the generator can override individual values — useful for back-dated contracts or ad-hoc corrections.
+
+**How it works (`frontend/src/components/GenerateContractModal.tsx`):**
+
+- `autoVars` — the full output of `resolveVariables(employeeData, companyData)`, computed on every render from the props.
+- `editedVars` — React state (`Record<string, string>`), sparse patch. Starts empty; gains an entry whenever the user types in a cell.
+- `vars = { ...autoVars, ...editedVars }` — the working copy passed to both `getMissingVariables()` and `fillTemplate()`. Auto-values win when no override is set; the override wins when one exists.
+- **Per-field "Vrátit"** button appears beside any edited cell. Clicking it calls `revertField(key)`, which deletes that key from `editedVars` (restoring the auto-value). The button is hidden when the field has not been manually changed.
+- **"Vrátit vše na automatické"** header button clears the entire `editedVars` map at once. Visible only when `Object.keys(editedVars).length > 0`.
+- Edited cells receive the CSS class `.varInputEdited` (highlighted visually).
+
+**Scope:** purely transient — overrides are held only in component state and are lost when the modal closes. Nothing is persisted; the backend is unaffected. The `missing` warnings re-evaluate on every keystroke against the overridden `vars`, so clearing a previously-empty field with a typed value removes it from the warning list immediately.
+
 ### Ad-hoc documents are row-first; signing date shown (2026-05-29)
 Ad-hoc / standalone documents (the *Adhoc smlouvy* section on the Employee detail page — Multisport, Hmotná odpovědnost, custom standalone templates) now follow the **same row-first workflow as employment-history entries**: clicking **+ Adhoc dokument** and confirming the signing-date prompt no longer generates a PDF. Instead it creates the contract **record with no PDF** and the row displays the **signing date** entered in the prompt (not the generation date). The PDF is generated later, on demand, from the row.
 

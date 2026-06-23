@@ -213,6 +213,7 @@ Payroll shows the monthly Multisport **price** (basic + active companions) inste
 - **`zaucovani` (boolean) + `zaucovaniDo` (YYYY-MM-DD) — "Zaučování" (training).** Checkbox in the employee edit form (Doplňující údaje → Benefity); ticking it reveals a "Zaučování do" date field. Stored on the `benefits` sub-doc. While active, the employee **detail** page shows a "Zaučování (do …)" banner under the header. **Auto-untick:** the flag is treated as off once `zaucovaniDo` is in the past — computed on read via `clock.today()` (no nightly job): the detail banner hides, and the edit form loads the checkbox unticked (so the next save persists the cleared flag). A ticked flag with no end date stays active until cleared manually. The same flag also renders a green **"V zácviku"** badge next to the employee's name on the **Employees list** (beside the HPP/PPP/DPP contract badge) — `PUT /employees/:id/benefits` denormalizes `zaucovani` + `zaucovaniDo` onto the root employee doc so the list needs no benefits join, and `isInTraining()` in `EmployeesPage.tsx` recomputes the live state (using `clock.today()`) so the badge auto-clears the same way the banner does.
 - **"Platnost OP" (`idCardExpiry`) removed from Můj profil self-service** — both the displayed value and the "Navrhnout úpravu" change-request form (it was unused there). Stored data is untouched; the admin-side `documents` sub-collection still keeps `idCardExpiry` for expiry alerts. **Decoupling:** `refreshDocumentExpiryAlerts` no longer derives a field's encryption flag from the self-edit `EDITABLE_FIELDS` whitelist — encryption is now declared on `EXPIRY_FIELDS` itself (`sensitive: boolean`), so dropping a field from the self-edit whitelist can't break decryption of stored values.
 - **Phone +420 grouping.** Numbers starting with `+420` display as `+420 XXX XXX XXX` on the employee detail page and Můj profil (display only; storage unchanged). Shared helper `frontend/src/lib/phoneFormat.ts` → `formatPhoneDisplay`. Other country codes are shown unchanged for now.
+- **Non-+420 phone display format (v3.1.0).** When a save involves a changed phone number that does NOT start with `+420`, a `PhoneFormatModal` prompts the user to choose how it should be displayed. The confirmed string is stored verbatim in `contact.phone` and shown as-is everywhere (`formatPhoneDisplay` only reformats the `+420` case). This is a frontend-only change — no schema change, no backend endpoint. See [Non-+420 phone display format](#non420-phone-display-format-v310) below.
 
 ---
 
@@ -296,3 +297,99 @@ All sorting is **client-side in `EmployeesPage.tsx`**:
 - `.sortable` / `.sortArrow` — CSS classes in `EmployeesPage.module.css` for header hover styling and the ▲/▼ indicator.
 
 No backend changes were required.
+
+---
+
+## Non-+420 phone display format (v3.1.0)
+
+Czech numbers (`+420`) are auto-formatted by `formatPhoneDisplay` on read. Non-Czech numbers (any phone that does not begin with `+420`) present a different problem: there is no universal grouping rule, so the app asks the user to choose.
+
+### Trigger condition — `needsPhoneFormatPrompt`
+
+`frontend/src/lib/phoneFormat.ts` exports:
+
+```ts
+needsPhoneFormatPrompt(phone: string, previous: string): boolean
+```
+
+Returns `true` when ALL of these hold:
+1. `phone` is non-empty after trimming.
+2. `phone` (whitespace-collapsed) does NOT start with `+420`.
+3. `phone` differs from `previous` (the already-stored value) — a round-trip save of an unchanged foreign number must not re-prompt.
+
+### Save gate in `EmployeeFormPage`
+
+`frontend/src/pages/EmployeeFormPage.tsx` stores the previously-loaded phone in `initialPhone` (a `useRef`, populated when the employee data loads). The main save path calls `doSave()` with no argument; `doSave` checks `needsPhoneFormatPrompt(contact.phone, initialPhone.current)` and, if true, sets `phonePrompt = true` and returns — suspending the save.
+
+`PhoneFormatModal` renders when `phonePrompt` is set. On confirm it calls `doSave(display)` with the user's chosen string as `phoneOverride`; the contact payload substitutes `phoneOverride` for the raw input value before posting. On cancel the save is simply abandoned.
+
+### Self-service gate in `EmployeeSelfPage`
+
+`frontend/src/pages/EmployeeSelfPage.tsx` builds a `changes` array from `buildChanges()` and, before submitting, checks whether the phone change entry satisfies `needsPhoneFormatPrompt`. If so it holds the entire pending change-set in `phonePromptChanges` state. `PhoneFormatModal` renders; on confirm it mutates the phone change's `newValue` in the held array and then calls `submitChanges` — so the correct display string goes out in the change-request payload, not the raw input.
+
+### `PhoneFormatModal` (`frontend/src/components/PhoneFormatModal.tsx`)
+
+A small modal (overlay/modal/header/body/footer; standard project modal pattern, no backdrop dismissal) with:
+- A read-only "Zadané číslo" display of the raw input.
+- An editable "Zobrazit jako" text input pre-seeded with the raw value (the user can add spaces/dashes for readability).
+- **Uložit** confirms with `display.trim() || phone.trim()` — falls back to the original if the user clears the field.
+- **Zrušit** / ✕ cancel without saving.
+
+### Storage and display
+
+The confirmed string is stored verbatim in `contact.phone`. `formatPhoneDisplay` returns it unchanged (it only reformats `+420` numbers). No database schema change; no backend endpoint.
+
+---
+
+## Parental leave — RODIČOVSKÁ employment row (v3.1.0)
+
+A new informational employment-row `changeType: "rodičovská"` records a parental-leave period on an employee's history. It carries `startDate` and `endDate` only — no salary, position, or contract data.
+
+### Data model
+
+Stored as a regular doc in `employees/{id}/employment` with the shape:
+
+```json
+{ "changeType": "rodičovská", "startDate": "YYYY-MM-DD", "endDate": "YYYY-MM-DD" }
+```
+
+Backend (`functions/src/routes/employees.ts`) enforces this in two ways:
+
+- `POST /api/employees/:id/employment` whitelists `changeType: "rodičovská"` in `VALID_CHANGE_TYPES` and validates that both `startDate` and `endDate` are present; any request missing either is rejected 400.
+- `PATCH /api/employees/:id/employment/:rowId` on a row whose stored `changeType` is `"rodičovská"` strips every employment-contract field (`changeType`, `salary`, `hourlyRate`, `contractType`, `jobTitle`, `department`, `companyId`, `changes`, `agreedReward`, `agreedWorkScope`, `workLocation`, `probationPeriod`, `status`) from the PATCH body before writing — a `rodičovská` row can never be mutated into employment-contract data.
+
+### Session grouping
+
+`frontend/src/lib/employmentSessions.ts` — `groupBySession()` now collects `rodičovská` rows into `session.rodicovska: EmploymentRow[]` instead of silently dropping them (the previous "orphan drop" path for unrecognised `changeType` values). They are never folded into `effective` state or into `session.terminated`.
+
+### UI — EmploymentSession card
+
+`frontend/src/components/EmploymentSession.tsx`:
+
+- Session header shows a **"+ Rodičovská"** button (beside "+ Dodatek") when the session is not terminated and the user holds `employment.manage`. Clicking it fires `onAddRodicovska` → `EmployeeDetailPage` opens `AddEntryModal` with `lockedChangeType: "rodičovská"`.
+- `AddEntryModal` in `rodičovská` mode shows only **Začátek** and **Konec** date fields (no contract type, no salary, no changes). Title: "Rodičovská dovolená". Both dates are required — the form validates `endDate` before submitting.
+- Active periods render in a **"rodicovskaBand"** — a header sub-row showing "Rodičovská | start – end" with a ✕ delete button per period (gated `employment.manage`). The band is outside the collapsible body so it is always visible on collapsed sessions.
+- `rodičovská` rows are **not** included in the session's `rows[]` list and therefore do not appear as EmploymentRowItem entries in the expanded body.
+
+### Denormalized badge — `parentalLeaveFrom` / `parentalLeaveTo`
+
+Two new root-level fields on `employees/{id}` hold the next-or-current parental-leave window:
+
+| Field | Type | Value |
+|---|---|---|
+| `parentalLeaveFrom` | `string` YYYY-MM-DD \| `null` | Start of the earliest not-yet-ended `rodičovská` period |
+| `parentalLeaveTo` | `string` YYYY-MM-DD \| `null` | End of the same period |
+
+`computeParentalLeave(rows, today)` in `functions/src/routes/employees.ts` filters `rodičovská` rows whose `endDate >= today`, sorts by `startDate`, and takes the first. Written by `applyDerivedStatus` on every employment write that involves a `rodičovská` row (no root-field fold, just the parental-leave window update), and on every nightly sweep.
+
+`isOnParentalLeave(emp)` in `frontend/src/pages/EmployeesPage.tsx` does a live containment check: `parentalLeaveFrom <= today <= parentalLeaveTo`. When true, a **"Rodičovská"** badge renders next to the employee's name in the Employees list. The badge appears/clears automatically with no server round-trip once the date lands within or exits the stored window.
+
+No migration required — `parentalLeaveFrom` / `parentalLeaveTo` backfill automatically on the next nightly `refreshEmployeeEffective` sweep or a manual `POST /api/employees/trigger-effective-refresh`.
+
+### Data-safety design
+
+Every existing consumer of employment rows (salary fold in `computeEffectiveState`, probation alerts, payroll calculator, CSV export, Dotazník PDF, Prohlášení PDF) either ignores unknown `changeType` values (silent drop via the orphan path) or explicitly skips `changeType !== "rodičovská"` when picking the "latest employment row". This means:
+
+- A `rodičovská` row can never affect salary, position, contract type, status, start/end dates, or payroll.
+- The server-side PATCH strip ensures a `rodičovská` row can never carry contract data even through direct API calls.
+- Adding the feature is purely additive — no existing employee record is modified, and no existing query result changes.
