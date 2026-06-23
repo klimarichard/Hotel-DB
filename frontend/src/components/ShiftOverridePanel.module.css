@@ -151,3 +151,59 @@
   border-color: var(--color-danger-text-strong);
 }
 
+/* ── Phone: render request rows as stacked cards ──────────────────────────
+   The multi-column request tables are wider than the panel surface, so on a
+   phone they overflow it (no background behind the scrolled-off part). Scoped
+   to .cardsOnMobile (applied only by MyRequestsPanel) so the manager review
+   panel that shares this stylesheet keeps its table. Uses the classic
+   data-label pattern: each <td> carries data-label="…" surfaced via ::before. */
+@media (max-width: 559.98px) {
+  .cardsOnMobile thead {
+    display: none;
+  }
+  .cardsOnMobile,
+  .cardsOnMobile tbody,
+  .cardsOnMobile tr,
+  .cardsOnMobile td {
+    display: block;
+    width: 100%;
+  }
+  .cardsOnMobile tr {
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 0.25rem 0.75rem;
+    margin-bottom: 0.625rem;
+  }
+  .cardsOnMobile td {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.25rem 1rem;
+    padding: 0.4rem 0;
+    border-bottom: 1px solid var(--color-border-subtle);
+    text-align: right;
+  }
+  .cardsOnMobile td::before {
+    content: attr(data-label);
+    flex: 0 0 auto;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-text-muted);
+    text-align: left;
+  }
+  /* Action cell carries no label; drop the divider and right-align the button.
+     Hide it entirely on non-pending rows (it renders empty there). */
+  .cardsOnMobile td.actionCell {
+    justify-content: flex-end;
+    border-bottom: none;
+    padding-top: 0.5rem;
+  }
+  .cardsOnMobile td.actionCell:empty {
+    display: none;
+  }
+}
+

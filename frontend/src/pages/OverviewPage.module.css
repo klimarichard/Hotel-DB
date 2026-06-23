@@ -128,6 +128,56 @@
   gap: 0.15rem;
 }
 
+/* ── DNES/ZÍTRA staffing: per-hotel cards on phones ───────────────────────
+   The fixed-layout hotel table squeezes each hotel column to ~60px on a phone
+   and the names wrap into an unreadable stack. Below 560px we hide the table
+   and show one card per hotel with day/night stacked instead. */
+.staffingCards {
+  display: none;
+}
+
+@media (max-width: 559.98px) {
+  .hotelTable {
+    display: none;
+  }
+  .staffingCards {
+    display: flex;
+    flex-direction: column;
+    gap: 0.625rem;
+  }
+}
+
+.staffingCard {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.staffingCardHeader {
+  padding: 0.4rem 0.7rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.staffingCardRow {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 0.5rem 0.7rem;
+  border-top: 1px solid var(--color-border-subtle);
+  font-size: 0.9375rem;
+}
+
+.staffingCardLabel {
+  flex: 0 0 3.25rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+
 .flag {
   color: var(--color-text-subtle);
   font-size: 0.75rem;
