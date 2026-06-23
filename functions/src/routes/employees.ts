@@ -396,6 +396,34 @@ export function computeEmploymentDates(
  * `status`. Audits the change when a req context is supplied (the nightly sweep
  * passes none).
  */
+/**
+ * Denormalized parental-leave window for the Zaměstnanci-list "RODIČOVSKÁ"
+ * badge. Among the employee's `rodičovská` rows, pick the earliest period that
+ * hasn't ended yet (endDate >= today) — the active or next-upcoming one — and
+ * store its from/to on the root. The list does a live containment check
+ * (from <= today <= to), so a future period shows nothing until its start and
+ * an ended one drops off, without needing a same-day recompute.
+ */
+function computeParentalLeave(
+  rows: Array<Record<string, unknown>>,
+  today: string
+): { parentalLeaveFrom: string | null; parentalLeaveTo: string | null } {
+  const periods = rows
+    .filter(
+      (r) =>
+        r.changeType === "rodičovská" &&
+        typeof r.startDate === "string" &&
+        typeof r.endDate === "string" &&
+        (r.endDate as string) >= today
+    )
+    .sort((a, b) => String(a.startDate).localeCompare(String(b.startDate)));
+  const p = periods[0];
+  return {
+    parentalLeaveFrom: p ? (p.startDate as string) : null,
+    parentalLeaveTo: p ? (p.endDate as string) : null,
+  };
+}
+
 async function applyDerivedStatus(
   empRef: admin.firestore.DocumentReference,
   now: FirebaseFirestore.FieldValue,
@@ -409,17 +437,28 @@ async function applyDerivedStatus(
   // read, persisted alongside status (both apply to active AND terminated
   // employees, so they live here rather than in computeEffectiveRootFields).
   const { employmentStartDate, employmentEndDate } = computeEmploymentDates(rows, today);
+  const { parentalLeaveFrom, parentalLeaveTo } = computeParentalLeave(rows, today);
   const before = (await empRef.get()).data() as Record<string, unknown> | undefined;
   if (!before) return;
   const statusChanged = before.status !== status;
   const datesChanged =
     (before.employmentStartDate ?? null) !== employmentStartDate ||
     (before.employmentEndDate ?? null) !== employmentEndDate;
-  // Write when EITHER status or a date changed — so existing employees (whose
-  // status is already correct) still backfill the new date fields on the next
-  // nightly sweep / Úlohy refresh, without churning updatedAt when nothing moved.
-  if (!statusChanged && !datesChanged) return;
-  await empRef.update({ status, employmentStartDate, employmentEndDate, updatedAt: now });
+  const parentalChanged =
+    (before.parentalLeaveFrom ?? null) !== parentalLeaveFrom ||
+    (before.parentalLeaveTo ?? null) !== parentalLeaveTo;
+  // Write when status, a date, OR the parental-leave window changed — so existing
+  // employees still backfill the new fields on the next nightly sweep / Úlohy
+  // refresh, without churning updatedAt when nothing moved.
+  if (!statusChanged && !datesChanged && !parentalChanged) return;
+  await empRef.update({
+    status,
+    employmentStartDate,
+    employmentEndDate,
+    parentalLeaveFrom,
+    parentalLeaveTo,
+    updatedAt: now,
+  });
   // Only the lifecycle status transition is audited; the date fields are pure
   // derived denormalizations and would only add noise (decision 2026-06-20).
   if (statusChanged) {
@@ -688,7 +727,9 @@ employeesRouter.get(
           empRef.collection("contact").limit(1).get(),
           empRef.collection("documents").limit(1).get(),
           empRef.collection("benefits").limit(1).get(),
-          empRef.collection("employment").orderBy("startDate", "desc").limit(1).get(),
+          // A few latest rows so we can skip informational "rodičovská" periods
+          // and export the latest actual employment-contract row.
+          empRef.collection("employment").orderBy("startDate", "desc").limit(5).get(),
         ]);
 
         let root = empDoc.data() as Record<string, unknown>;
@@ -701,9 +742,12 @@ employeesRouter.get(
         const contact = contactSnap.empty
           ? {}
           : (contactSnap.docs[0].data() as Record<string, unknown>);
-        const employment = employmentSnap.empty
-          ? {}
-          : (employmentSnap.docs[0].data() as Record<string, unknown>);
+        const employmentDoc = employmentSnap.docs.find(
+          (d) => (d.data() as Record<string, unknown>).changeType !== "rodičovská"
+        );
+        const employment = employmentDoc
+          ? (employmentDoc.data() as Record<string, unknown>)
+          : {};
 
         if (includeSensitive) {
           root = decryptFields(root, [...SENSITIVE_FIELDS]);
@@ -989,7 +1033,7 @@ employeesRouter.get(
       empRef.collection("contact").limit(1).get(),
       empRef.collection("documents").limit(1).get(),
       empRef.collection("benefits").limit(1).get(),
-      empRef.collection("employment").orderBy("startDate", "desc").limit(1).get(),
+      empRef.collection("employment").orderBy("startDate", "desc").limit(5).get(),
     ]);
 
     const root = decryptFields(empSnap.data() as Record<string, unknown>, [...SENSITIVE_FIELDS]);
@@ -1000,7 +1044,10 @@ employeesRouter.get(
       ? {}
       : decryptFields(benefitsSnap.docs[0].data() as Record<string, unknown>, [...BENEFITS_SENSITIVE_FIELDS]);
     const contact = contactSnap.empty ? {} : (contactSnap.docs[0].data() as Record<string, unknown>);
-    const employment = employmentSnap.empty ? {} : (employmentSnap.docs[0].data() as Record<string, unknown>);
+    const employmentDoc = employmentSnap.docs.find(
+      (d) => (d.data() as Record<string, unknown>).changeType !== "rodičovská"
+    );
+    const employment = employmentDoc ? (employmentDoc.data() as Record<string, unknown>) : {};
 
     const permanentAddress = asStr(contact.permanentAddress);
     const contactAddress = contact.contactAddressSameAsPermanent
@@ -1078,11 +1125,14 @@ employeesRouter.get(
 
     const [contactSnap, employmentSnap] = await Promise.all([
       empRef.collection("contact").limit(1).get(),
-      empRef.collection("employment").orderBy("startDate", "desc").limit(1).get(),
+      empRef.collection("employment").orderBy("startDate", "desc").limit(5).get(),
     ]);
     const root = decryptFields(empSnap.data() as Record<string, unknown>, [...SENSITIVE_FIELDS]);
     const contact = contactSnap.empty ? {} : (contactSnap.docs[0].data() as Record<string, unknown>);
-    const employment = employmentSnap.empty ? {} : (employmentSnap.docs[0].data() as Record<string, unknown>);
+    const employmentDoc = employmentSnap.docs.find(
+      (d) => (d.data() as Record<string, unknown>).changeType !== "rodičovská"
+    );
+    const employment = employmentDoc ? (employmentDoc.data() as Record<string, unknown>) : {};
 
     const companyId = asStr(employment.companyId) || asStr(root.currentCompanyId);
     let company: Record<string, unknown> = {};
@@ -1260,6 +1310,28 @@ employeesRouter.post(
     const now = FieldValue.serverTimestamp();
     const empRef = db().collection("employees").doc(req.params.id);
 
+    // Whitelist changeType; "rodičovská" (parental leave) is informational —
+    // start + end only, never employment-contract data, so it can't be folded
+    // into salary/position/status/payroll (which ignore unknown change types).
+    const VALID_CHANGE_TYPES = ["nástup", "změna smlouvy", "ukončení", "rodičovská"];
+    if (typeof body.changeType !== "string" || !VALID_CHANGE_TYPES.includes(body.changeType)) {
+      res.status(400).json({ error: "Neplatný typ změny." });
+      return;
+    }
+    if (body.changeType === "rodičovská") {
+      if (!body.startDate || !body.endDate) {
+        res.status(400).json({ error: "Rodičovská vyžaduje začátek i konec." });
+        return;
+      }
+      for (const k of [
+        "salary", "hourlyRate", "contractType", "jobTitle", "department",
+        "companyId", "changes", "agreedReward", "agreedWorkScope",
+        "workLocation", "probationPeriod", "status",
+      ]) {
+        delete body[k];
+      }
+    }
+
     const employmentData = {
       ...body,
       createdBy: req.uid,
@@ -1274,6 +1346,10 @@ employeesRouter.post(
     // wipe the root. Applies to both new Nástup and new Dodatek rows.
     if (body.changeType === "nástup" || body.changeType === "změna smlouvy") {
       await resyncRootFields(empRef, req, now);
+    } else if (body.changeType === "rodičovská") {
+      // No root-field fold (no salary/position), but refresh the denormalized
+      // parental-leave window for the Zaměstnanci-list badge.
+      await applyDerivedStatus(empRef, now, req);
     }
 
     // Terminating an employee ends their Multisport: cap every basic period and
@@ -1858,6 +1934,17 @@ employeesRouter.patch(
     }
 
     const before = rowSnap.data() as Record<string, unknown>;
+    // A parental-leave row stays informational — never let an edit turn it into
+    // employment-contract data (which would then fold into salary/position).
+    if (before.changeType === "rodičovská") {
+      for (const k of [
+        "changeType", "salary", "hourlyRate", "contractType", "jobTitle",
+        "department", "companyId", "changes", "agreedReward", "agreedWorkScope",
+        "workLocation", "probationPeriod", "status",
+      ]) {
+        delete body[k];
+      }
+    }
     await rowRef.update({ ...body, updatedAt: now });
 
     // Re-sync the denormalized root fields by folding the whole session — NOT by

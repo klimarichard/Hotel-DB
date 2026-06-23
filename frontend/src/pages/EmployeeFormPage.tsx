@@ -1,8 +1,10 @@
-import { useState, useEffect, FormEvent } from "react";
+import { useState, useEffect, useRef, FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "@/lib/api";
 import Button from "@/components/Button";
 import ConfirmModal from "@/components/ConfirmModal";
+import PhoneFormatModal from "@/components/PhoneFormatModal";
+import { needsPhoneFormatPrompt } from "@/lib/phoneFormat";
 import { NATIONALITIES, nationalityName } from "@/lib/nationalities";
 import { isCzechNationality } from "@/lib/contractVariables";
 import * as clock from "@/lib/clock";
@@ -172,6 +174,10 @@ export default function EmployeeFormPage() {
   const [contact, setContact] = useState<ContactForm>(emptyContact);
   const [documents, setDocuments] = useState<DocumentsForm>(emptyDocuments);
   const [additional, setAdditional] = useState<AdditionalForm>(emptyAdditional);
+  // Previously-stored phone, to detect a changed non-+420 number on save (then
+  // prompt for its display format). Empty for a brand-new employee.
+  const initialPhone = useRef("");
+  const [phonePrompt, setPhonePrompt] = useState(false);
 
   const [educationOptions, setEducationOptions] = useState<string[]>([]);
   // Display text for the searchable nationality field (the code lives in personal.nationality).
@@ -208,6 +214,7 @@ export default function EmployeeFormPage() {
       setNatQuery(emp.nationality ? natLabel(emp.nationality as string) : "");
       setEmployeeName(`${emp.lastName ?? ""} ${emp.firstName ?? ""}`.trim());
       setContact({ ...emptyContact, ...(cont ?? {}) } as ContactForm);
+      initialPhone.current = ((cont?.phone as string) ?? "").trim();
       // Sensitive fields start blank in edit mode (blank = keep existing encrypted value)
       setDocuments({
         ...emptyDocuments,
@@ -295,7 +302,14 @@ export default function EmployeeFormPage() {
     await doSave();
   }
 
-  async function doSave() {
+  async function doSave(phoneOverride?: string) {
+    // Non-+420 numbers get a one-time "how should this display?" prompt; the
+    // confirmed string comes back as phoneOverride and is stored verbatim.
+    if (phoneOverride === undefined && needsPhoneFormatPrompt(contact.phone, initialPhone.current)) {
+      setPhonePrompt(true);
+      return;
+    }
+
     setSaving(true);
     setError(null);
 
@@ -317,6 +331,7 @@ export default function EmployeeFormPage() {
 
       // ── Contact ───────────────────────────────────────────────────────────
       const contactPayload = { ...contact };
+      if (phoneOverride !== undefined) contactPayload.phone = phoneOverride;
       if (contactPayload.contactAddressSameAsPermanent) {
         contactPayload.contactAddress = contactPayload.permanentAddress;
       }
@@ -368,6 +383,17 @@ export default function EmployeeFormPage() {
 
   return (
     <div className={styles.page}>
+      {phonePrompt && (
+        <PhoneFormatModal
+          phone={contact.phone.trim()}
+          onConfirm={(display) => {
+            setPhonePrompt(false);
+            setContact((c) => ({ ...c, phone: display }));
+            void doSave(display);
+          }}
+          onCancel={() => setPhonePrompt(false)}
+        />
+      )}
       {dupMatch && (
         <ConfirmModal
           title={dupMatch.dobMatched ? "Nalezen ukončený zaměstnanec" : "Možná shoda se zaměstnancem"}

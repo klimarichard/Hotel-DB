@@ -18,3 +18,16 @@ export function formatPhoneDisplay(phone?: string | null): string {
   }
   return trimmed;
 }
+
+/**
+ * Whether saving `phone` should prompt the user to choose a display format.
+ * True only for a non-empty, non-+420 number that differs from `previous`
+ * (its previously-stored value) — +420 numbers auto-format, and an unchanged
+ * number shouldn't re-prompt. The chosen string is then stored verbatim.
+ */
+export function needsPhoneFormatPrompt(phone: string, previous: string): boolean {
+  const trimmed = (phone ?? "").trim();
+  if (!trimmed) return false;
+  if (trimmed.replace(/\s+/g, "").startsWith("+420")) return false;
+  return trimmed !== (previous ?? "").trim();
+}
