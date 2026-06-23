@@ -299,6 +299,16 @@
   .legend {
     display: none;
   }
+  /* Animate the collapse/expand. max-height comes from the measured pixel
+     height (set inline), so this eases cleanly with no dead-zone. overflow is
+     hidden only in the collapsed state (below) so the export dropdown isn't
+     clipped at rest. */
+  .header,
+  .planBar {
+    transition: max-height 0.28s ease, opacity 0.22s ease, padding 0.28s ease,
+      margin 0.28s ease;
+    will-change: max-height;
+  }
   .chromeHidden {
     max-height: 0 !important;
     margin: 0 !important;

@@ -207,6 +207,9 @@ export default function ShiftPlannerPage() {
   }, []);
   const [gridAtTop, setGridAtTop] = useState(true);
   const chromeHidden = isPhone && !gridAtTop;
+  // Exact heights drive the collapse animation (max-height auto can't transition);
+  // capping to the measured height means a clean ease with no dead-zone.
+  const planBarHeight = Math.max(0, stickyTop - headerHeight);
 
   // Permission-derived (Phase 3). Coverage is identical to the previous role
   // checks: cells.edit = {admin,director,manager}; plan.transition = {admin,director}.
@@ -1145,7 +1148,7 @@ export default function ShiftPlannerPage() {
       <div
         className={`${styles.header}${chromeHidden ? ` ${styles.chromeHidden}` : ""}`}
         ref={headerRef}
-        style={{ position: "sticky", top: 0, zIndex: 10, background: "var(--color-bg)" }}
+        style={{ position: "sticky", top: 0, zIndex: 10, background: "var(--color-bg)", maxHeight: isPhone ? (headerHeight || undefined) : undefined }}
       >
         <div />
         <div className={styles.monthNav} data-tour="shift-month-nav">
@@ -1168,7 +1171,7 @@ export default function ShiftPlannerPage() {
       {!loading && !error && (
         <>
           {/* Plan bar */}
-          <div ref={planBarRef} className={`${styles.planBar}${chromeHidden ? ` ${styles.chromeHidden}` : ""}`} style={{ position: "sticky", top: headerHeight, zIndex: 10, background: "var(--color-bg)", paddingBottom: "0.5rem" }}>
+          <div ref={planBarRef} className={`${styles.planBar}${chromeHidden ? ` ${styles.chromeHidden}` : ""}`} style={{ position: "sticky", top: headerHeight, zIndex: 10, background: "var(--color-bg)", paddingBottom: "0.5rem", maxHeight: isPhone ? (planBarHeight || undefined) : undefined }}>
             {plan ? (
               <StatusBadge status={plan.status} />
             ) : (
