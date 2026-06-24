@@ -136,8 +136,10 @@ export const APP_TOUR_STEPS: TourStep[] = [
   { permission: "benefits.edit", anchor: "emp-benefits", route: DEMO_EMP, reveal: ["emp-tab-detail"], title: "Úprava Multisport", body: "Zde můžete upravit Multisport benefity zaměstnance (platnost, doprovodné osoby, atd.).", placement: "left" },
   { permission: "employment.view", anchor: "emp-tab-history", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Historie pracovního poměru", body: "Zde vidíte historii pracovního poměru zaměstnance.", placement: "bottom" },
   { permission: "employment.manage", anchor: "emp-employment-add", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Správa pracovního poměru", body: "Můžete spravovat pracovní poměr zaměstnance (nástup, dodatky, ukončení).", placement: "bottom" },
+  { permission: "employment.manage", addedInVersion: 9, anchor: "emp-employment-rodicovska", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Rodičovská dovolená", body: "Tlačítkem + Rodičovská zaznamenáte u pracovního poměru období rodičovské dovolené (začátek a konec). Jde o informativní záznam — zobrazí se jako barevný pruh u daného poměru a po dobu jejího trvání i jako odznak v seznamu zaměstnanců. Nemění mzdy ani stav smlouvy.", placement: "bottom" },
   // Contracts ordered: generate → view → edit → delete → sign (per user verdict 2026-06-09).
   { permission: "contracts.generate", anchor: "emp-contract-generate", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Generování smlouvy", body: "Z šablony vygenerujete smlouvu nebo dodatek pro zaměstnance.", placement: "left" },
+  { permission: "contracts.generate", addedInVersion: 9, anchor: "emp-contract-generate", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Úprava údajů smlouvy", body: "Při generování uvidíte přehled hodnot proměnných, které se do smlouvy doplní. Kteroukoli z nich lze pro tuto konkrétní smlouvu ručně upravit (např. u zpětně datované smlouvy). Úpravy se nikam neukládají — ovlivní jen tento dokument. Změněné pole vrátíte tlačítkem Vrátit, vše najednou tlačítkem pro vrácení všech hodnot na automatické.", placement: "left" },
   { permission: "contracts.view", anchor: "emp-contract-view", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Zobrazení smluv", body: "Vygenerované smlouvy a dodatky lze zobrazit a stáhnout.", placement: "left" },
   { permission: "contracts.edit", anchor: "emp-contract-edit", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Úprava smlouvy", body: "Údaje v tomto záznamu můžete upravit. Pokud už jste měli vygenerovanou smlouvu s původními údaji, aplikace vám umožní ji generovat znovu s pozměněnými údaji.", placement: "left" },
   { permission: "contracts.delete", anchor: "emp-contract-delete", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Smazání smlouvy", body: "Tlačítkem Smazat smlouvu odstraníte vygenerovanou smlouvu (aplikace se zeptá na potvrzení).", placement: "left" },
@@ -222,7 +224,7 @@ export const appTour: TourDefinition = {
   // Highest step `addedInVersion` in the list. Bump it (and stamp the new steps'
   // `addedInVersion`) whenever you add steps for a new feature — returning users
   // then see ONLY those steps; first-time users still get the whole tour.
-  version: 8,
+  version: 9,
   label: "Prohlídka aplikace",
   steps: APP_TOUR_STEPS,
 };
