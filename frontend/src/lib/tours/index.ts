@@ -43,6 +43,14 @@ const IS_PROD = import.meta.env.MODE === "production";
  */
 export interface TourBuildContext {
   hasEmployee: boolean;
+  /**
+   * Whether the current viewport is the phone (bottom-nav) layout. When true,
+   * `buildAppTour` drops `hideOnMobile` steps and rewrites each step's
+   * `anchor`/`body` from its `mobileAnchor`/`mobileBody` overrides. Defaults to
+   * false so the desktop tour — and the Nápověda page, which lists content
+   * regardless of viewport — is unaffected.
+   */
+  isPhone?: boolean;
 }
 
 export interface TourBuildOptions {
@@ -73,8 +81,23 @@ export function buildAppTour(
   let steps = withSection.filter((step) => {
     if (step.hideInProd && IS_PROD) return false;
     if (step.requiresEmployee && !ctx.hasEmployee) return false;
+    if (step.hideOnMobile && ctx.isPhone) return false;
     return userHasStepPermission(step, can);
   });
+
+  // Phone layout: rewrite sidebar-anchored steps onto their bottom-nav
+  // equivalents. Done here (not in TourOverlay) so the overlay stays
+  // viewport-agnostic and the desktop tour is byte-for-byte unchanged.
+  if (ctx.isPhone) {
+    steps = steps.map((step) => {
+      if (step.mobileAnchor === undefined && step.mobileBody === undefined) return step;
+      return {
+        ...step,
+        anchor: step.mobileAnchor !== undefined ? step.mobileAnchor : step.anchor,
+        body: step.mobileBody !== undefined ? step.mobileBody : step.body,
+      };
+    });
+  }
 
   // Delta mode: restrict to steps added after the user's last-seen version, and
   // lead with the "what's new" card (only when there's something new to show).
