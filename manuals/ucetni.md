@@ -64,6 +64,7 @@ Evidence všech zaměstnanců — **vše jen pro čtení**. Záložky **Aktivní
 - Vyhledávací pole hledá podle jména, příjmení, **rodného příjmení**, pozice i národnosti.
 - Řádky jsou barevně odlišené podle typu smlouvy (HPP / PPP / DPP).
 - Vedle odznaku HPP/PPP/DPP může být u jména zaměstnance zobrazen zelený odznak **„V zácviku"** — ten signalizuje, že zaměstnanec je aktuálně v období zácviku. Odznak zmizí automaticky po uplynutí nastaveného data konce zácviku.
+- U jména zaměstnance může být zobrazen i odznak **„Rodičovská"** — ten signalizuje, že zaměstnanec je aktuálně na rodičovské dovolené. Odznak se zobrazuje jen po dobu trvání zadaného období a poté automaticky zmizí.
 - Tlačítko **Exportovat CSV** otevře dialog, kde vyberete sloupce a filtry a stáhnete data do tabulky.
 
 #### Sloupce tabulky

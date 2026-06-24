@@ -103,6 +103,7 @@ Vlastní karta zaměstnance.
 
 - Vidíte své osobní údaje, kontakt, doklady a **historii pracovního poměru**.
 - **Telefon** začínající `+420` se zobrazuje po skupinách jako `+420 XXX XXX XXX`.
+- **Zahraniční telefon (jiný než +420):** pokud při úpravě profilu zadáte telefonní číslo, které není české (nezačíná `+420`), zobrazí se při odeslání okno **„Formát telefonního čísla"**. V něm určíte, jak se má číslo zobrazovat (např. s mezerami pro lepší čitelnost) — uloží a zobrazí se přesně v tom tvaru, který zadáte. Česká čísla (`+420`) se formátují automaticky a okno se u nich neukazuje.
 - Pole **„Platnost OP"** se zde už nezobrazuje ani nenavrhuje k úpravě.
 - **Pohlaví** se na vašem profilu nezobrazuje (ani v náhledu, ani při úpravě).
 - **Navrhnout úpravu** — změny se odešlou ke schválení administrátorovi/řediteli.

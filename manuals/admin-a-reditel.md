@@ -106,6 +106,7 @@ Detail má tři záložky — **Detail** (osobní a kontaktní údaje), **Histor
 
 - **Citlivé údaje** (rodné číslo, číslo OP, číslo pojištěnce, bankovní účet) jsou skryté; zobrazíte je kliknutím na ikonu oka. **Každé zobrazení se zaznamenává do Logu změn.**
 - **Telefon** začínající `+420` se zobrazuje po skupinách jako `+420 XXX XXX XXX` (jen zobrazení, uložené číslo se nemění).
+- **Zahraniční telefon (jiný než +420):** zadáte-li telefonní číslo, které není české (nezačíná `+420`), zobrazí se při uložení zaměstnance okno **„Formát telefonního čísla"**. V něm určíte, jak se má číslo zobrazovat (např. s mezerami pro lepší čitelnost) — číslo se uloží a zobrazí **přesně v tom tvaru**, který zadáte. U českých čísel (`+420`) se okno neukazuje, ta se formátují automaticky. Okno se objeví jen tehdy, když se číslo oproti dříve uloženému změnilo.
 - Má-li zaměstnanec ve formuláři zaškrtnuto **„Nepodepíše prohlášení poplatníka"**, pod záhlavím detailu se zobrazí informační pruh **„Nepodepsané prohlášení"**.
 - **Upravit** otevře editaci údajů. V sekci **Benefity** je zaškrtávátko **„Nepodepíše prohlášení poplatníka"**.
 - **Zaučování (zácvik nového zaměstnance):** ve formuláři úprav, v sekci **Doplňující údaje → Benefity**, je zaškrtávátko **„Zaučování"**. Zaškrtněte ho, pokud je zaměstnanec teprve v zácviku. Jakmile ho zaškrtnete, zobrazí se datové pole **„Zaučování do"** — sem zadejte plánovaný konec zácviku (datum). Pole nemusíte vyplnit; bez data platí příznak do doby, než ho ručně odškrtnete. Dokud je příznak aktivní a datum ještě nenastalo, zobrazují se dva viditelné indikátory:
@@ -133,6 +134,7 @@ Pracovní poměr je členěn na **sezení (sessions)** — každé začíná **N
 - Mzda a pozice v záhlaví poměru se mění až **k datu platnosti Dodatku**.
 - **Automatický přesun do „Ukončení":** zaměstnanec se do záložky *Ukončení* přesune sám, jakmile **uplyne datum ukončení** (smlouva na dobu určitou nebo zadané ukončení). Den ukončení je ještě aktivní — přesun proběhne až následující den. Naopak zaměstnanec s budoucím nástupem se zobrazuje v záložce **Před nástupem** a do záložky **Aktivní** se přesune automaticky **v den nástupu**.
 - **Ukončení a Multisport:** má-li ukončovaný zaměstnanec aktivní Multisport, aplikace automaticky nastaví konec Multisportu na **konec měsíce ukončení** a upozorní, že je potřeba Multisport zrušit i v **extranetu Multisport**.
+- **Rodičovská dovolená:** tlačítkem **+ Rodičovská** (v záhlaví pracovního poměru, vedle **+ Dodatek** a **Ukončit smlouvu**) zaznamenáte období rodičovské dovolené. V okně **Rodičovská dovolená** zadáte **Začátek** a **Konec** období (obě data jsou povinná). Jde o čistě **informativní** záznam — **nemění mzdy, výpočty ani stav smlouvy**. Zobrazí se jako barevný pruh **„Rodičovská"** s daty přímo u příslušného pracovního poměru; odebrat jej lze křížkem **✕**. Po dobu, kdy rodičovská právě probíhá (dnešní datum spadá do zadaného období), se navíc u zaměstnance v **seznamu zaměstnanců** zobrazí vedle jména odznak **„Rodičovská"**.
 - U každého řádku lze podle stavu **vygenerovat smlouvu**, zobrazit ji, nebo nahrát podepsanou kopii.
 - **Ad hoc dokumenty** (Multisport, Hmotná odpovědnost, vlastní šablony) se přidávají tlačítkem **+ Adhoc dokument**: zadáte datum podpisu a tlačítkem **Přidat** vznikne řádek dokumentu (zatím bez PDF). Řádek pak ukazuje **datum podpisu**, ne datum vytvoření. PDF se vygeneruje až dodatečně tlačítkem **Generovat smlouvu** — stejný postup jako u záznamů pracovního poměru.
 
@@ -268,6 +270,7 @@ Měsíční mzdové podklady.
 Smlouvy se generují z **Historie pracovního poměru** (Nástup, Dodatek, Ukončení) nebo jako samostatné dokumenty (Hmotná odpovědnost, Multisport).
 
 - **Vygenerovat** smlouvu z řádku historie → vytvoří se PDF podle šablony.
+- **Úprava údajů před vygenerováním:** v okně generování je přehled **Hodnoty proměnných** se všemi údaji, které se do smlouvy doplní (jméno, mzda, data…). Kteroukoli hodnotu můžete pro tuto konkrétní smlouvu **ručně přepsat** — využijete to např. u **zpětně datované** smlouvy. Upravené pole se zvýrazní; vrátíte jej na automatickou hodnotu tlačítkem **Vrátit**, všechny úpravy najednou zrušíte tlačítkem **Vrátit vše na automatické**. **Úpravy se nikam neukládají** — ovlivní pouze tento vygenerovaný dokument, nikoli evidenční údaje zaměstnance.
 - Vygenerovanou smlouvu lze **zobrazit** (otevře se v nové záložce) a **stáhnout** pod čitelným názvem.
 - **Nahrát podepsanou** kopii, případně ji smazat a vrátit do stavu „nepodepsáno".
 - Pokud po vygenerování změníte parametry řádku, nabídne se **Znovu vygenerovat smlouvu**.
