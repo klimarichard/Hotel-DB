@@ -39,6 +39,18 @@ function isDemoRoute(pathname: string): boolean {
   return pathname.startsWith("/napoveda/ukazka") || pathname === "/zamestnanci/tour-demo";
 }
 
+/**
+ * Phone (bottom-nav) layout test — mirrors the exact media query Layout uses to
+ * swap the sidebar for the bottom tab bar. When true, the tour retargets its
+ * sidebar-anchored steps onto the bottom nav (see buildAppTour → ctx.isPhone).
+ * Read at tour-start time; rotating mid-tour is a rare edge we don't re-resolve.
+ */
+const PHONE_MEDIA_QUERY =
+  "(max-width: 559.98px), (orientation: landscape) and (max-height: 480px)";
+function isPhoneViewport(): boolean {
+  return typeof window !== "undefined" && window.matchMedia(PHONE_MEDIA_QUERY).matches;
+}
+
 export function OnboardingProvider({ children }: { children: ReactNode }) {
   const { user, can, employeeId, loading } = useAuth();
   const location = useLocation();
@@ -102,7 +114,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   // permissions, regardless of what they've already seen.
   const startTour = useCallback(() => {
     setStepIndex(0);
-    setActiveTour(buildAppTour(can, { hasEmployee: !!employeeId }));
+    setActiveTour(buildAppTour(can, { hasEmployee: !!employeeId, isPhone: isPhoneViewport() }));
   }, [can, employeeId]);
 
   // Auto-start once per session, after the landing redirect resolves to a real
@@ -122,7 +134,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     if (typeof seenVersion === "number" && seenVersion >= APP_TOUR_VERSION) return;
 
     autoStartedRef.current = true;
-    const ctx = { hasEmployee: !!employeeId };
+    const ctx = { hasEmployee: !!employeeId, isPhone: isPhoneViewport() };
 
     if (typeof seenVersion !== "number") {
       setStepIndex(0);

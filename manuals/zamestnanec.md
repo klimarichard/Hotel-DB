@@ -14,6 +14,7 @@ HPM Intranet je interní HR systém společností Special Tours Prague (STP) a H
 - [Směny](#směny)
 - [Dovolená](#dovolená)
 - [Můj profil](#můj-profil)
+- [Na mobilu (telefon)](#na-mobilu-telefon)
 
 ---
 
@@ -109,3 +110,16 @@ Vlastní karta zaměstnance.
 - **Navrhnout úpravu** — změny se odešlou ke schválení administrátorovi/řediteli.
 
 > 📷 *(Místo pro snímek obrazovky: Můj profil)*
+
+---
+
+## Na mobilu (telefon)
+
+Aplikaci můžete používat i v mobilním prohlížeči — rozložení se na malé obrazovce automaticky přizpůsobí:
+
+- **Spodní lišta místo bočního menu:** boční menu vlevo se na telefonu skryje a nahradí ho **lišta se záložkami u spodního okraje obrazovky**. Obsahuje vaše nejpoužívanější sekce (Přehled, Směny, Dovolená, Profil) a navíc záložku **„Více"**.
+- **Záložka „Více":** klepnutím na **Více** se zespodu vysune panel, kde najdete tlačítka pro **přepnutí světlého/tmavého režimu**, **Nápovědu** a **Odhlášení** (na telefonu nejsou u jména jako na počítači, ale právě zde). Panel zavřete křížkem **✕**.
+- **Karty místo širokých tabulek:** přehledy, které jsou na počítači v široké tabulce (např. **Moje žádosti** v Směnách a Dovolené nebo dlaždice **Dnes/Zítra** na Přehledu), se na telefonu zobrazují jako **karty pod sebou** — nemusíte se tak posouvat do stran.
+- **Plán směn přes celou obrazovku:** tabulka směn se na telefonu zobrazuje přes celou obrazovku a při posouvání se horní lišta automaticky skryje, abyste viděli co nejvíce plánu. Legenda pod tabulkou je na telefonu skrytá.
+
+> 📷 *(Místo pro snímek obrazovky: spodní lišta a panel „Více" na telefonu)*

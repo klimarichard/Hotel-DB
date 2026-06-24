@@ -83,6 +83,29 @@ export interface TourStep {
    * so the user lands on the TOP of the element rather than its middle.
    */
   scrollBlock?: ScrollLogicalPosition;
+  /**
+   * Phone-only anchor override. On phones (the app's bottom-nav layout) the
+   * sidebar is `display:none`, so steps that spotlight a sidebar control
+   * (`nav-*`, footer utilities) would anchor to a zero-size hidden element.
+   * Set `mobileAnchor` to the equivalent `data-tour` on the bottom nav (e.g.
+   * `"bottomnav-smeny"`, `"bottomnav-more"`). Resolved in `buildAppTour` only
+   * when `ctx.isPhone` — desktop is never affected. Leave unset to reuse
+   * `anchor`; `null` forces a centered card on phones.
+   */
+  mobileAnchor?: string | null;
+  /**
+   * Phone-only body override (e.g. to say a section lives under the "Více"
+   * sheet). Resolved in `buildAppTour` when `ctx.isPhone`; leave unset to reuse
+   * `body`. Desktop copy is never changed.
+   */
+  mobileBody?: string;
+  /**
+   * Drop this step entirely on phones — for steps with no bottom-nav equivalent
+   * (e.g. the logged-in-user footer line, the theme toggle, which live in the
+   * "Více" sheet rather than as a spotlightable control). Filtered in
+   * `buildAppTour` when `ctx.isPhone`.
+   */
+  hideOnMobile?: boolean;
   title: string;
   body: string;
   placement?: TourPlacement;

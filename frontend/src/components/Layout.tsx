@@ -194,6 +194,8 @@ export default function Layout() {
         onLogout={handleLogout}
         versionLabel={can("system.version.view") ? `v${__APP_VERSION__}` : null}
         timeControl={<TimeOverrideControl />}
+        userLabel={name?.trim() || user?.email}
+        userRole={roleTypeName ?? role}
       />
     </div>
   );

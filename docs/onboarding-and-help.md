@@ -60,6 +60,13 @@ There is a **single master list** covering every permission in the catalogue. Th
 
 **`scrollBlock?: ScrollLogicalPosition`** — controls the `block` argument passed to `scrollIntoView({ block })` when the overlay scrolls the anchor into view. Defaults to `"center"`. Set to `"start"` for tall elements (e.g. the employees table) so the user lands at the top of the element rather than its middle.
 
+**`mobileAnchor?: string | null` / `mobileBody?: string` / `hideOnMobile?: boolean`** — phone-layout overrides. On phones the sidebar is `display:none`, so a step that spotlights a sidebar control (`nav-*`, footer utilities) would otherwise anchor to a zero-size hidden element. These fields are resolved **only when `ctx.isPhone`** (see `buildAppTour` below) — the desktop tour and the Nápověda page are never affected:
+- `mobileAnchor` — the `data-tour` to spotlight instead of `anchor` on phones, pointing at the bottom nav (`BottomNav.tsx` exposes `data-tour="bottomnav-<id>"` on the four fixed tabs and `data-tour="bottomnav-more"` on the "Více" button). `null` forces a centered card.
+- `mobileBody` — body text used instead of `body` on phones (e.g. to note a section lives under the "Více" sheet).
+- `hideOnMobile` — drop the step entirely on phones (used for the logged-in-user footer line and the theme toggle, which on phones live inside the "Více" sheet rather than as a spotlightable control; the logged-in user is shown in that sheet via `BottomNav`'s `userLabel` prop).
+
+`OnboardingContext` computes `isPhone` from the same media query Layout uses to swap in the bottom nav (`(max-width: 559.98px), (orientation: landscape) and (max-height: 480px)`) and passes it into every `buildAppTour` call. The overlay itself stays viewport-agnostic — all phone resolution happens at build time.
+
 ---
 
 ## Permission gating
