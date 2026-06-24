@@ -14,6 +14,7 @@ Tato příručka popisuje práci s aplikací HPM Intranet z pohledu **FOM** (Fro
 - [Směny](#směny)
 - [Dovolená](#dovolená)
 - [Můj profil](#můj-profil)
+- [Na mobilu (telefon)](#na-mobilu-telefon)
 
 ---
 
@@ -107,3 +108,16 @@ Vlastní karta zaměstnance.
 - **Zahraniční telefon (jiný než +420):** zadáte-li při úpravě profilu telefonní číslo, které není české (nezačíná `+420`), zobrazí se při odeslání okno **„Formát telefonního čísla"**, kde určíte, jak se má číslo zobrazovat (např. s mezerami). Uloží a zobrazí se přesně v zadaném tvaru. Česká čísla (`+420`) se formátují automaticky.
 
 > 📷 *(Místo pro snímek obrazovky: Můj profil)*
+
+---
+
+## Na mobilu (telefon)
+
+Aplikaci můžete používat i v mobilním prohlížeči — rozložení se na malé obrazovce automaticky přizpůsobí:
+
+- **Spodní lišta místo bočního menu:** boční menu vlevo se na telefonu skryje a nahradí ho **lišta se záložkami u spodního okraje obrazovky**. Obsahuje vaše nejpoužívanější sekce (Přehled, Směny, Dovolená, Profil) a navíc záložku **„Více"**.
+- **Záložka „Více":** klepnutím na **Více** se zespodu vysune panel, kde najdete tlačítka pro **přepnutí světlého/tmavého režimu**, **Nápovědu** a **Odhlášení** (na telefonu nejsou u jména jako na počítači, ale právě zde). Panel zavřete křížkem **✕**.
+- **Karty místo širokých tabulek:** přehledy, které jsou na počítači v široké tabulce (např. **Moje žádosti** v Dovolené nebo dlaždice **Dnes/Zítra** na Přehledu), se na telefonu zobrazují jako **karty pod sebou** — nemusíte se tak posouvat do stran.
+- **Plán směn přes celou obrazovku:** tabulka směn se na telefonu zobrazuje přes celou obrazovku a při posouvání se horní lišta automaticky skryje, abyste viděli co nejvíce plánu. Legenda pod tabulkou je na telefonu skrytá.
+
+> 📷 *(Místo pro snímek obrazovky: spodní lišta a panel „Více" na telefonu)*

@@ -13,6 +13,7 @@ Jako **účetní** máte v systému HPM Intranet **přístup pouze pro čtení**
 - [Přehled](#přehled)
 - [Zaměstnanci](#zaměstnanci)
 - [Log změn](#log-změn)
+- [Na mobilu (telefon)](#na-mobilu-telefon)
 
 ---
 
@@ -178,3 +179,11 @@ Kliknutím na jméno jednoho nebo více uživatelů ze seznamu zobrazíte pouze 
 #### Rozsah dat (Od / Do)
 
 Pole **Od** a **Do** omezí zobrazené záznamy na zvolené časové období.
+
+---
+
+## Na mobilu (telefon)
+
+Aplikaci lze otevřít i v mobilním prohlížeči. Na telefonu se boční menu vlevo skryje a nahradí ho **lišta se záložkami u spodního okraje obrazovky**; sekce, které se na lištu nevejdou (např. Zaměstnanci, Log změn), najdete pod záložkou **„Více"**, kde jsou i tlačítka pro přepnutí **světlého/tmavého režimu**, **Nápovědu** a **Odhlášení**. Seznam zaměstnanců a Log změn jsou nejpřehlednější na větší obrazovce.
+
+> 📷 *(Místo pro snímek obrazovky: spodní lišta a panel „Více" na telefonu)*
