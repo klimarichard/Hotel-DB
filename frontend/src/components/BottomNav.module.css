@@ -205,3 +205,22 @@
   color: var(--color-text-subtle);
   letter-spacing: 0.03em;
 }
+
+/* Logged-in user — the phone equivalent of the sidebar footer's user line. */
+.sheetUser {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.35rem 0.1rem 0;
+}
+
+.sheetUserName {
+  font-size: 0.85rem;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+}
+
+.sheetUserRole {
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+}

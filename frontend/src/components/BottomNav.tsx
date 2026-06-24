@@ -34,6 +34,11 @@ interface BottomNavProps {
   versionLabel: string | null;
   /** <TimeOverrideControl/> — self-styled; only renders where allowed. */
   timeControl?: ReactNode;
+  /** Logged-in user's display name/email — shown in the "Více" sheet (the phone
+   *  equivalent of the sidebar footer's logged-in-user line). */
+  userLabel?: string | null;
+  /** Logged-in user's role/type label, shown under `userLabel`. */
+  userRole?: string | null;
 }
 
 const ICONS: Record<string, ReactNode> = {
@@ -87,6 +92,8 @@ export default function BottomNav({
   onLogout,
   versionLabel,
   timeControl,
+  userLabel,
+  userRole,
 }: BottomNavProps) {
   const [moreOpen, setMoreOpen] = useState(false);
   const location = useLocation();
@@ -128,6 +135,7 @@ export default function BottomNav({
             <NavLink
               key={item.id}
               to={item.path}
+              data-tour={`bottomnav-${item.id}`}
               className={({ isActive }) =>
                 [styles.tab, isActive ? styles.tabActive : ""].join(" ")
               }
@@ -145,6 +153,7 @@ export default function BottomNav({
         {showMore && (
           <button
             type="button"
+            data-tour="bottomnav-more"
             className={[styles.tab, moreActive ? styles.tabActive : ""].join(" ")}
             onClick={() => setMoreOpen(true)}
             aria-haspopup="dialog"
@@ -228,6 +237,12 @@ export default function BottomNav({
               >
                 Odhlásit
               </button>
+              {userLabel && (
+                <div className={styles.sheetUser}>
+                  <span className={styles.sheetUserName}>{userLabel}</span>
+                  {userRole && <span className={styles.sheetUserRole}>{userRole}</span>}
+                </div>
+              )}
               {timeControl}
               {versionLabel && (
                 <span className={styles.sheetVersion}>{versionLabel}</span>
