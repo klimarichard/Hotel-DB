@@ -143,14 +143,14 @@ When `anchor` is `null` (welcome, outro, or fallback) the overlay dims the full 
 
 ## Tour version & "what's new" delta
 
-`appTour.version` (currently **6**) is the highest `addedInVersion` value present in the step list. It lives in `frontend/src/lib/tours/appTour.ts`:
+`appTour.version` (currently **9**) is the highest `addedInVersion` value present in the step list. It lives in `frontend/src/lib/tours/appTour.ts`:
 
 ```ts
 export const appTour: TourDefinition = {
   id: "app",
   // Highest step `addedInVersion` in the list. Bump it (and stamp the new steps'
   // `addedInVersion`) whenever you add steps for a new feature.
-  version: 6,
+  version: 9,
   ...
 };
 ```
@@ -167,7 +167,7 @@ If a user's permissions don't include any of the new steps, the delta is empty a
 **`toursSeen` Firestore field:**
 
 ```
-users/{uid}.toursSeen = { "app": 6 }   // tourId → last seen version
+users/{uid}.toursSeen = { "app": 9 }   // tourId → last seen version
 ```
 
 This replaces the former `{ "app": 5 }` example. The `PUT /api/auth/me/tours` body is `{ tourId, version }` and uses `merge: true` so other tour entries are preserved.
@@ -204,7 +204,7 @@ Sections are used only for the overlay's "Předchozí/Další sekce" navigation 
 The backend stores one Firestore field on the user document:
 
 ```
-users/{uid}.toursSeen = { "app": 6 }   // tourId → last seen version
+users/{uid}.toursSeen = { "app": 9 }   // tourId → last seen version
 ```
 
 Two endpoints in `functions/src/routes/auth.ts`:
