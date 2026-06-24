@@ -9,6 +9,7 @@ import PayrollRecalcModal from "./PayrollRecalcModal";
 import { computeBalance } from "@/lib/payrollBalance";
 import ConfirmModal from "@/components/ConfirmModal";
 import { employeeDisplayName, employeeSurnameFirst } from "@/lib/employeeName";
+import { escapeHtml } from "@/lib/escapeHtml";
 import styles from "./PayrollPage.module.css";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -530,9 +531,10 @@ export default function PayrollPage() {
         rowsHtml += `<tr><td colspan="11" style="${cs.sectionRow}">${group.label}</td></tr>`;
         for (const entry of entries) {
           const isDpp = entry.contractType === "DPP";
+          const safeName = escapeHtml(employeeSurnameFirst(entry));
           const nameHtml = entry.contractType
-            ? `${employeeSurnameFirst(entry)}<span style="${cs.badge}">${entry.contractType}</span>`
-            : `${employeeSurnameFirst(entry)}`;
+            ? `${safeName}<span style="${cs.badge}">${entry.contractType}</span>`
+            : safeName;
           const hours = effNum(entry, "totalHours");
           const report = effNum(entry, "reportHours");
           const vacation = effNum(entry, "vacationHours");

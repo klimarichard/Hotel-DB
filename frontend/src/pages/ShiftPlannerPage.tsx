@@ -7,6 +7,7 @@ import * as clock from "../lib/clock";
 import { useAuth } from "../hooks/useAuth";
 import { parseShiftExpression, getCellColor, SECTIONS, SECTION_LABELS, getCzechHolidays, MOD_PERSONS, sortSectionEmployees } from "../lib/shiftConstants";
 import { employeeDisplayName } from "../lib/employeeName";
+import { escapeHtml } from "../lib/escapeHtml";
 import ShiftGrid from "../components/ShiftGrid";
 import AddEmployeeToPlanModal from "../components/AddEmployeeToPlanModal";
 import EditEmployeeInPlanModal from "../components/EditEmployeeInPlanModal";
@@ -748,9 +749,10 @@ export default function ShiftPlannerPage() {
         for (const emp of emps) {
           html += "<tr>";
           const modBadge = section === "vedouc\u00ed" ? modLetterByEmpId.get(emp.employeeId) : undefined;
+          const safeName = escapeHtml(employeeDisplayName(emp));
           const nameHtml = modBadge
-            ? `${employeeDisplayName(emp)} <span style="display:inline-block;background:#e5e7eb;border-radius:3px;padding:0 2px;font-weight:700;font-size:5.5pt;margin-left:2px;">${modBadge}</span>`
-            : `${employeeDisplayName(emp)}`;
+            ? `${safeName} <span style="display:inline-block;background:#e5e7eb;border-radius:3px;padding:0 2px;font-weight:700;font-size:5.5pt;margin-left:2px;">${escapeHtml(modBadge)}</span>`
+            : safeName;
           html += `<td style="${cs.nameCell}">${nameHtml}</td>`;
           let shiftCount = 0;
           for (const day of daysInMonth) {
