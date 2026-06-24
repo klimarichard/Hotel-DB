@@ -142,7 +142,7 @@ export default function EmploymentSessionCard({
             {!session.terminated && (
               <>
                 <Button variant="secondary" size="sm" onClick={onAddDodatek}>+ Dodatek</Button>
-                <Button variant="secondary" size="sm" onClick={onAddRodicovska}>+ Rodičovská</Button>
+                <Button variant="secondary" size="sm" data-tour="emp-employment-rodicovska" onClick={onAddRodicovska}>+ Rodičovská</Button>
               </>
             )}
             <Button variant="secondary" size="sm" onClick={onTerminate}>Ukončit smlouvu</Button>

@@ -136,6 +136,7 @@ export const APP_TOUR_STEPS: TourStep[] = [
   { permission: "benefits.edit", anchor: "emp-benefits", route: DEMO_EMP, reveal: ["emp-tab-detail"], title: "Úprava Multisport", body: "Zde můžete upravit Multisport benefity zaměstnance (platnost, doprovodné osoby, atd.).", placement: "left" },
   { permission: "employment.view", anchor: "emp-tab-history", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Historie pracovního poměru", body: "Zde vidíte historii pracovního poměru zaměstnance.", placement: "bottom" },
   { permission: "employment.manage", anchor: "emp-employment-add", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Správa pracovního poměru", body: "Můžete spravovat pracovní poměr zaměstnance (nástup, dodatky, ukončení).", placement: "bottom" },
+  { permission: "employment.manage", addedInVersion: 9, anchor: "emp-employment-rodicovska", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Rodičovská dovolená", body: "U pracovního poměru můžete zaznamenat období rodičovské dovolené (začátek a konec). Jde o informativní záznam - zobrazí se jako barevný pruh u daného pracovního poměru a po dobu jejího trvání i jako odznak v seznamu zaměstnanců.", placement: "bottom" },
   // Contracts ordered: generate → view → edit → delete → sign (per user verdict 2026-06-09).
   { permission: "contracts.generate", anchor: "emp-contract-generate", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Generování smlouvy", body: "Z šablony vygenerujete smlouvu nebo dodatek pro zaměstnance.", placement: "left" },
   { permission: "contracts.view", anchor: "emp-contract-view", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Zobrazení smluv", body: "Vygenerované smlouvy a dodatky lze zobrazit a stáhnout.", placement: "left" },
@@ -222,7 +223,7 @@ export const appTour: TourDefinition = {
   // Highest step `addedInVersion` in the list. Bump it (and stamp the new steps'
   // `addedInVersion`) whenever you add steps for a new feature — returning users
   // then see ONLY those steps; first-time users still get the whole tour.
-  version: 8,
+  version: 9,
   label: "Prohlídka aplikace",
   steps: APP_TOUR_STEPS,
 };

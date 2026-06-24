@@ -104,5 +104,6 @@ Vlastní karta zaměstnance.
 - Vidíte své osobní údaje, kontakt, doklady a **historii pracovního poměru** (stejný formát jako na detailu zaměstnance).
 - **Pohlaví** se na vašem profilu nezobrazuje (ani v náhledu, ani při úpravě).
 - **Navrhnout úpravu** — změny se odešlou ke schválení administrátorovi/řediteli. Citlivá pole se při úpravě zobrazí, abyste viděli, co měníte (zobrazení se loguje).
+- **Zahraniční telefon (jiný než +420):** zadáte-li při úpravě profilu telefonní číslo, které není české (nezačíná `+420`), zobrazí se při odeslání okno **„Formát telefonního čísla"**, kde určíte, jak se má číslo zobrazovat (např. s mezerami). Uloží a zobrazí se přesně v zadaném tvaru. Česká čísla (`+420`) se formátují automaticky.
 
 > 📷 *(Místo pro snímek obrazovky: Můj profil)*
