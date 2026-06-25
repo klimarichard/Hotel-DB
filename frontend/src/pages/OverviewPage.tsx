@@ -654,7 +654,11 @@ export default function OverviewPage() {
                 )}
 
                 {taskTiles.length > 0 && (
-                  <div className={styles.taskTilesGroup} data-tour="overview-task-tiles">
+                  <div
+                    className={styles.taskTilesGroup}
+                    data-tour="overview-task-tiles"
+                    style={{ "--tile-count": taskTiles.length } as React.CSSProperties}
+                  >
                     {taskTiles.map((t) => (
                       <Link
                         key={t.label}
