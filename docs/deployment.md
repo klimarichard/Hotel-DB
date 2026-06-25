@@ -53,6 +53,19 @@ All Cloud Functions run in `europe-west3` to co-locate with Firestore (`eur3` mu
 ### API dual mount
 Express is mounted at both `/api` and `/` in `functions/src/index.ts`. Firebase Hosting forwards `/api/**` verbatim through the rewrite (so the function sees `/api/employees/...`), but the direct function URL and the Vite dev proxy deliver paths without the prefix (`/employees/...`). Mounting at both keeps every entry path resolving to the same routes.
 
+### CORS allowlist (v3.2.1)
+The Express `cors` middleware was changed from `origin: true` (reflect every origin) to an **allowlist of known app domains**:
+
+```
+http://localhost:<port>   http://127.0.0.1:<port>
+https://hotel-hr-app-75581.web.app
+https://hotel-hr-app-75581.firebaseapp.com
+https://hote-hr-app-staging.web.app
+https://hote-hr-app-staging.firebaseapp.com
+```
+
+Requests with **no `Origin` header** — the typical case for the SPA hitting `/api` through the Hosting rewrite, curl, and server-to-server calls — are still allowed. Any browser request from an unlisted origin receives `Access-Control-Allow-Origin: false`. This is defense in depth on top of the per-route Firebase ID-token check, which remains the real access gate.
+
 ### Server-side PDF rendering
 Contract PDFs are rendered server-side via Puppeteer with `@sparticuz/chromium` — the bundled Chromium binary is too heavy for the default function runtime (~500 MB resident, ~3–5 s cold start). The `api` export bumps memory to 1 GB and timeout to 60 s; the rest of the API rides the same instance and amortizes the cost.
 

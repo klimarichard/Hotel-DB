@@ -453,3 +453,31 @@ The context is mounted at the app root (inside `SelfDocAlertsProvider`) and ther
 ### Můj profil sidebar badge
 
 `Layout.tsx` `badgeFor("mujProfil")` now returns `selfDocAlertCount` from `useSelfDocAlertsContext()`. A non-zero count renders as a red badge on the "Můj profil" menu item in both the desktop sidebar and the mobile `BottomNav` (which receives `badgeFor` as a prop). Users without a linked employee get a count of 0 and see no badge.
+
+---
+
+## Employee write security hardening (v3.2.1)
+
+Two complementary guards protect the employee root document from crafted write requests.
+
+### Mass-assignment guard — `PATCH /employees/:id`
+
+A constant `PROTECTED_ROOT_FIELDS` lists every server-derived / denormalized field on the root `employees/{id}` document:
+
+```
+status, currentJobTitle, currentDepartment, currentContractType, currentCompanyId,
+employmentStartDate, employmentEndDate, parentalLeaveFrom, parentalLeaveTo,
+zaucovani, zaucovaniDo, createdAt, createdBy
+```
+
+`PATCH /:id` strips every key in this list from the request body before writing. A crafted payload cannot corrupt the status, position, company, employment dates, or training flag — all of which are derived by server-side computation (`applyDerivedStatus`, `computeEffectiveRootFields`, `applyDerivedStatus`, etc.) and must never be written by a client directly.
+
+### Redaction-mask round-trip guard
+
+`functions/src/services/encryption.ts` exports `REDACTION_MASK = "••••••••"` — the placeholder shown to clients in place of a sensitive field value. Three write handlers check for it before encrypting:
+
+- `PATCH /:id` — drops any field in `SENSITIVE_FIELDS` whose submitted value equals `REDACTION_MASK`.
+- `PUT /:id/documents` — drops fields in `DOCUMENT_SENSITIVE_FIELDS` that are empty or equal the mask.
+- `PUT /:id/benefits` — drops fields in `BENEFITS_SENSITIVE_FIELDS` that are empty or equal the mask.
+
+Without this guard, a frontend that re-submits the redacted display value (the placeholder string) would encrypt it and overwrite the real ciphertext. The dropped field is simply skipped on the `update()` call, preserving the stored encrypted value unchanged.
