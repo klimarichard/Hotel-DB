@@ -585,8 +585,14 @@ export default function OverviewPage() {
                   { count: alertsCount, label: "Neplatné doklady", to: "/upozorneni" },
                   { count: overridesCount, label: "Výjimky ve směnách", to: "/smeny" },
                   { count: changesCount, label: "Změny ve směnách", to: "/smeny" },
-                  { count: dataChangesCount, label: "Změny údajů", to: "/upozorneni" },
                   { count: vacationCount, label: "Dovolenky", to: "/dovolena" },
+                  // Personal-data change requests are admin/director-only; hide
+                  // the tile entirely for anyone who can't review them rather
+                  // than showing a muted 0 (the count is already 0 without the
+                  // permission, but a non-reviewer has no reason to see it).
+                  ...(can("changeRequests.review")
+                    ? [{ count: dataChangesCount, label: "Změny údajů", to: "/upozorneni" }]
+                    : []),
                 ]
               : [];
 
