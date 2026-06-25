@@ -7,6 +7,7 @@ import * as clock from "@/lib/clock";
 import { useAlertsContext } from "@/context/AlertsContext";
 import { useShiftOverridesContext } from "@/context/ShiftOverridesContext";
 import { useShiftChangeRequestsContext } from "@/context/ShiftChangeRequestsContext";
+import { useEmployeeChangeRequestsContext } from "@/context/EmployeeChangeRequestsContext";
 import { useVacationContext } from "@/context/VacationContext";
 import {
   HOTEL_CODES,
@@ -366,6 +367,7 @@ export default function OverviewPage() {
   const { unreadCount: alertsCount } = useAlertsContext();
   const { pendingCount: overridesCount } = useShiftOverridesContext();
   const { pendingCount: changesCount } = useShiftChangeRequestsContext();
+  const { pendingCount: dataChangesCount } = useEmployeeChangeRequestsContext();
   const { pendingCount: vacationCount } = useVacationContext();
   const [myVacations, setMyVacations] = useState<MyVacation[] | null>(null);
 
@@ -581,8 +583,9 @@ export default function OverviewPage() {
             const taskTiles: { count: number; label: string; to: string }[] = showTasks
               ? [
                   { count: alertsCount, label: "Neplatné doklady", to: "/upozorneni" },
-                  { count: overridesCount, label: "Úpravy směn", to: "/smeny" },
-                  { count: changesCount, label: "Výměny směn", to: "/smeny" },
+                  { count: overridesCount, label: "Výjimky ve směnách", to: "/smeny" },
+                  { count: changesCount, label: "Změny ve směnách", to: "/smeny" },
+                  { count: dataChangesCount, label: "Změny údajů", to: "/upozorneni" },
                   { count: vacationCount, label: "Dovolenky", to: "/dovolena" },
                 ]
               : [];
