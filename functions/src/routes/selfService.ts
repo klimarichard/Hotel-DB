@@ -72,6 +72,23 @@ selfServiceRouter.get("/employee/employment", async (req: AuthRequest, res) => {
   res.json(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
 });
 
+/**
+ * GET /me/employee/alerts
+ * Self-scoped mirror of GET /employees/:id/alerts: returns the caller's own
+ * document-expiry alerts from the shared `alerts` collection — the SAME data
+ * (and 30-day expiring/expired logic) the Upozornění feature shows to
+ * alerts.view users. No extra permission: a linked employee sees only its own.
+ */
+selfServiceRouter.get("/employee/alerts", async (req: AuthRequest, res) => {
+  const empId = await getCallerEmployeeId(req.uid!);
+  if (!empId) { res.json([]); return; }
+  const snap = await db()
+    .collection("alerts")
+    .where("employeeId", "==", empId)
+    .get();
+  res.json(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+});
+
 // ─── Reveal own sensitive field ──────────────────────────────────────────────
 
 selfServiceRouter.post("/employee/reveal", async (req: AuthRequest, res) => {

@@ -8,6 +8,8 @@ import { useAlertsContext } from "@/context/AlertsContext";
 import { useShiftOverridesContext } from "@/context/ShiftOverridesContext";
 import { useShiftChangeRequestsContext } from "@/context/ShiftChangeRequestsContext";
 import { useEmployeeChangeRequestsContext } from "@/context/EmployeeChangeRequestsContext";
+import { useSelfDocAlertsContext } from "@/context/SelfDocAlertsContext";
+import DocumentExpiryBar from "@/components/DocumentExpiryBar";
 import { useVacationContext } from "@/context/VacationContext";
 import {
   HOTEL_CODES,
@@ -368,6 +370,7 @@ export default function OverviewPage() {
   const { pendingCount: overridesCount } = useShiftOverridesContext();
   const { pendingCount: changesCount } = useShiftChangeRequestsContext();
   const { pendingCount: dataChangesCount } = useEmployeeChangeRequestsContext();
+  const { alerts: selfDocAlerts } = useSelfDocAlertsContext();
   const { pendingCount: vacationCount } = useVacationContext();
   const [myVacations, setMyVacations] = useState<MyVacation[] | null>(null);
 
@@ -486,6 +489,8 @@ export default function OverviewPage() {
           {shiftCode === "D" ? "DENNÍ" : "NOČNÍ"}
         </span>
       </div>
+
+      <DocumentExpiryBar alerts={selfDocAlerts} />
 
       {loading && <div className={styles.state}>Načítám…</div>}
       {error && <div className={styles.errorState}>{error}</div>}
