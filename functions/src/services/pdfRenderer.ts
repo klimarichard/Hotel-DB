@@ -143,6 +143,22 @@ export async function renderPdf(
   const browser = await getBrowser();
   const page = await browser.newPage();
   try {
+    // SSRF guard: the rendered HTML originates from admin-editable contract
+    // templates, so block the headless browser from fetching ANY remote
+    // resource. Only inline data: URIs (base64 images) and about:blank are
+    // allowed; http/https/file requests are aborted, preventing reads of
+    // internal services or the GCP metadata endpoint. Templates embed images as
+    // base64, so legitimate rendering is unaffected.
+    await page.setRequestInterception(true);
+    page.on("request", (request) => {
+      const url = request.url();
+      if (url.startsWith("data:") || url === "about:blank") {
+        request.continue();
+      } else {
+        request.abort();
+      }
+    });
+
     const fullHtml = `<!doctype html>
 <html lang="cs">
 <head>

@@ -161,7 +161,10 @@ authRouter.patch(
       }
     }
 
-    // ── Apply: merge claims (take effect on next token refresh) + mirror doc ──
+    // ── Apply: merge claims + mirror doc, then revoke refresh tokens ──────────
+    // Revoking forces the user to re-authenticate, so a type/permission change
+    // (especially a downgrade) takes effect on their next request instead of
+    // lingering until their current token happens to refresh (≤1h).
     await mergeCustomClaims(uid, {
       roleType: nextRoleType,
       extraPermissions: nextExtra,
@@ -173,6 +176,7 @@ authRouter.patch(
       revokedPermissions: nextRevoked,
       updatedAt: FieldValue.serverTimestamp(),
     });
+    await admin.auth().revokeRefreshTokens(uid);
     await logUpdate(ctxFromReq(req), {
       collection: "users",
       resourceId: uid,
@@ -311,6 +315,10 @@ authRouter.patch(
   async (req: AuthRequest, res) => {
     const { uid } = req.params;
     await admin.auth().updateUser(uid, { disabled: true });
+    // Revoke refresh tokens so the disabled account can't silently refresh into
+    // a new session. The user's CURRENT ID token still verifies until it expires
+    // (≤1h); checkRevoked is intentionally left off to avoid a per-request lookup.
+    await admin.auth().revokeRefreshTokens(uid);
     await admin.firestore().collection("users").doc(uid).update({
       active: false,
       updatedAt: FieldValue.serverTimestamp(),
