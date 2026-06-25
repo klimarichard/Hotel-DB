@@ -73,8 +73,12 @@ export function decryptFields<T extends Record<string, unknown>>(
     if (typeof val === "string" && val.length > 0) {
       try {
         (result as Record<string, unknown>)[field as string] = decrypt(val);
-      } catch {
-        // Leave as-is if decryption fails (corrupted or not encrypted)
+      } catch (err) {
+        // Leave as-is if decryption fails (corrupted or not encrypted). Log the
+        // field + reason (never the value) so a key/encryption regression — which
+        // would otherwise silently drop sensitive fields to ciphertext app-wide —
+        // is visible in the function logs instead of failing invisibly.
+        console.warn(`[encryption] decryptFields: could not decrypt "${field}":`, (err as Error)?.message);
       }
     }
   }
@@ -82,7 +86,14 @@ export function decryptFields<T extends Record<string, unknown>>(
 }
 
 /**
- * Redacts an object's specified fields, replacing with "••••••••".
+ * Placeholder written over a sensitive field when redacting it for the
+ * frontend. Exported so write handlers can recognise a round-tripped mask and
+ * skip re-encrypting it (which would destroy the real value).
+ */
+export const REDACTION_MASK = "••••••••";
+
+/**
+ * Redacts an object's specified fields, replacing with the redaction mask.
  * Used when returning data to the frontend without revealing sensitive values.
  */
 export function redactFields<T extends Record<string, unknown>>(
@@ -92,7 +103,7 @@ export function redactFields<T extends Record<string, unknown>>(
   const result = { ...obj };
   for (const field of fields) {
     if (result[field] != null && result[field] !== "") {
-      (result as Record<string, unknown>)[field as string] = "••••••••";
+      (result as Record<string, unknown>)[field as string] = REDACTION_MASK;
     }
   }
   return result;

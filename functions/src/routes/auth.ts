@@ -161,7 +161,10 @@ authRouter.patch(
       }
     }
 
-    // ── Apply: merge claims (take effect on next token refresh) + mirror doc ──
+    // ── Apply: merge claims + mirror doc, then revoke refresh tokens ──────────
+    // Revoking forces the user to re-authenticate, so a type/permission change
+    // (especially a downgrade) takes effect on their next request instead of
+    // lingering until their current token happens to refresh (≤1h).
     await mergeCustomClaims(uid, {
       roleType: nextRoleType,
       extraPermissions: nextExtra,
@@ -173,6 +176,7 @@ authRouter.patch(
       revokedPermissions: nextRevoked,
       updatedAt: FieldValue.serverTimestamp(),
     });
+    await admin.auth().revokeRefreshTokens(uid);
     await logUpdate(ctxFromReq(req), {
       collection: "users",
       resourceId: uid,
@@ -216,6 +220,22 @@ authRouter.post(
       res.status(400).json({ error: "Zvolený typ uživatele neexistuje." });
       return;
     }
+
+    // Linking an employee record at creation must satisfy the SAME gate as the
+    // dedicated PATCH /users/:uid/employee endpoint (users.linkEmployee). Without
+    // this, a users.manage holder lacking users.linkEmployee could attach an
+    // employee here, bypassing that gate.
+    const linkedEmployeeId = typeof employeeId === "string" && employeeId ? employeeId : null;
+    if (linkedEmployeeId) {
+      const canLink =
+        (req.permissions?.has("users.linkEmployee") || req.permissions?.has("system.admin")) ?? false;
+      if (!canLink) {
+        res.status(403).json({
+          error: "K propojení uživatele se zaměstnancem je třeba oprávnění „Propojit uživatele se zaměstnancem“.",
+        });
+        return;
+      }
+    }
     // New users are purely type-based — no legacy `role` is set. Everything reads
     // roleType: permissions resolve from it, the sidebar + menu config key off it
     // (req.roleType), management scoping reads the type's flag, and the resolver
@@ -239,7 +259,7 @@ authRouter.post(
         name,
         email,
         roleType: typeId,
-        employeeId: employeeId ?? null,
+        employeeId: linkedEmployeeId,
         active: true,
         createdAt: FieldValue.serverTimestamp(),
         lastLogin: null,
@@ -248,8 +268,8 @@ authRouter.post(
       await logCreate(ctxFromReq(req), {
         collection: "users",
         resourceId: userRecord.uid,
-        employeeId: employeeId ?? undefined,
-        summary: { name, email, roleType: typeId, employeeId: employeeId ?? null },
+        employeeId: linkedEmployeeId ?? undefined,
+        summary: { name, email, roleType: typeId, employeeId: linkedEmployeeId },
       });
 
       // No password set → return a reset link the admin can send (there is no
@@ -311,6 +331,10 @@ authRouter.patch(
   async (req: AuthRequest, res) => {
     const { uid } = req.params;
     await admin.auth().updateUser(uid, { disabled: true });
+    // Revoke refresh tokens so the disabled account can't silently refresh into
+    // a new session. The user's CURRENT ID token still verifies until it expires
+    // (≤1h); checkRevoked is intentionally left off to avoid a per-request lookup.
+    await admin.auth().revokeRefreshTokens(uid);
     await admin.firestore().collection("users").doc(uid).update({
       active: false,
       updatedAt: FieldValue.serverTimestamp(),

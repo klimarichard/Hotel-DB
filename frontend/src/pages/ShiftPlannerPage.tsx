@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
-import { doc, onSnapshot } from "firebase/firestore";
-import { db } from "../lib/firebase";
 import { api } from "../lib/api";
 import * as clock from "../lib/clock";
 import { useAuth } from "../hooks/useAuth";
@@ -313,28 +311,10 @@ export default function ShiftPlannerPage() {
     loadPlan();
   }, [loadPlan]);
 
-  // ── Real-time plan reload via Firestore onSnapshot ────────────────────────
-  // Listens to the plan document. Every mutation in shifts.ts bumps the plan's
-  // updatedAt, so any change by any user triggers a full reload here.
-
-  const lastUpdatedAtRef = useRef<string | undefined>(undefined);
-
-  useEffect(() => {
-    if (!plan?.id) return;
-    const unsub = onSnapshot(doc(db, "shiftPlans", plan.id), (snap) => {
-      const updatedAt = snap.data()?.updatedAt?.toMillis?.()?.toString() ?? snap.data()?.updatedAt;
-      if (lastUpdatedAtRef.current === undefined) {
-        // First fire — just record the baseline, don't reload
-        lastUpdatedAtRef.current = updatedAt;
-        return;
-      }
-      if (updatedAt !== lastUpdatedAtRef.current) {
-        lastUpdatedAtRef.current = updatedAt;
-        loadPlan(true);
-      }
-    });
-    return () => { unsub(); lastUpdatedAtRef.current = undefined; };
-  }, [plan?.id, loadPlan]);
+  // No client-side real-time listener: firestore.rules block direct client SDK
+  // reads (all data flows through /api), so an onSnapshot on shiftPlans was
+  // permission-denied and silently never fired. Plan changes refresh via the
+  // explicit loadPlan() calls after each API mutation / navigation.
 
   // ── Frontend deadline timer ───────────────────────────────────────────────
   // The scheduled Cloud Function runs every 5 min in production but never in

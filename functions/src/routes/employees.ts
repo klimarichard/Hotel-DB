@@ -3,7 +3,7 @@ import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireAuth, AuthRequest } from "../middleware/auth";
 import { requirePermission, hasPermission, getManagementTypeIds } from "../auth/permissions";
-import { encryptFields, redactFields, decrypt, decryptFields } from "../services/encryption";
+import { encryptFields, redactFields, decrypt, decryptFields, REDACTION_MASK } from "../services/encryption";
 import {
   ctxFromReq,
   logCreate,
@@ -36,6 +36,30 @@ const db = () => admin.firestore();
 const SENSITIVE_FIELDS = ["birthNumber"] as const;
 const DOCUMENT_SENSITIVE_FIELDS = ["idCardNumber", "idCardExpiry"] as const;
 const BENEFITS_SENSITIVE_FIELDS = ["insuranceNumber", "bankAccount"] as const;
+
+// Root-employee fields the client must never set directly: they are derived /
+// denormalized server-side and feed the Employees list, status logic, and
+// payroll. `status` + `current*` come from folding the latest employment
+// session (applyDerivedStatus / computeEffectiveRootFields), `employment*Date`
+// and `parentalLeave*` from the session fold, and `zaucovani*` from the
+// benefits doc. Stripped from the PATCH /:id body so a crafted request can't
+// corrupt them (mass-assignment hardening). These live ONLY on the root doc, so
+// the subdoc/employment-row writes don't need them.
+const PROTECTED_ROOT_FIELDS = [
+  "status",
+  "currentJobTitle",
+  "currentDepartment",
+  "currentContractType",
+  "currentCompanyId",
+  "employmentStartDate",
+  "employmentEndDate",
+  "parentalLeaveFrom",
+  "parentalLeaveTo",
+  "zaucovani",
+  "zaucovaniDo",
+  "createdAt",
+  "createdBy",
+] as const;
 
 /** Coerce any Firestore value to a plain string ("" for null/undefined). */
 function asStr(v: unknown): string {
@@ -901,6 +925,15 @@ employeesRouter.patch(
     const clearFields = Array.isArray(body.clearFields) ? body.clearFields as string[] : [];
     const payload = { ...body };
     delete payload.clearFields;
+    // Mass-assignment guard: drop any server-derived / denormalized field so a
+    // crafted body can't overwrite status, current position/company, employment
+    // dates, parental-leave window, or the training flag (all recomputed
+    // elsewhere). updatedAt is set just below.
+    for (const f of PROTECTED_ROOT_FIELDS) delete payload[f];
+    // Never re-encrypt a round-tripped redaction mask — that would overwrite the
+    // real encrypted value with ciphertext of "••••••••". Drop it so update()
+    // preserves the stored value.
+    for (const f of SENSITIVE_FIELDS) if (payload[f] === REDACTION_MASK) delete payload[f];
 
     const updated = encryptFields(
       { ...payload, updatedAt: FieldValue.serverTimestamp() },
@@ -1506,10 +1539,12 @@ employeesRouter.put(
       );
     }
 
-    // Strip blank sensitive fields — existing encrypted values will be preserved via update()
+    // Strip blank or still-masked sensitive fields — the existing encrypted
+    // value is preserved via update(). Dropping the redaction mask prevents a
+    // round-trip from re-encrypting "••••••••" over the real value.
     const payload: Record<string, unknown> = { ...body };
     delete payload.clearFields;
-    for (const f of DOCUMENT_SENSITIVE_FIELDS) { if (!payload[f]) delete payload[f]; }
+    for (const f of DOCUMENT_SENSITIVE_FIELDS) { if (!payload[f] || payload[f] === REDACTION_MASK) delete payload[f]; }
 
     const data = encryptFields(
       { ...payload, updatedAt: FieldValue.serverTimestamp() },
@@ -1765,7 +1800,9 @@ employeesRouter.put(
     const clearFields = Array.isArray(body.clearFields) ? body.clearFields as string[] : [];
     const payload: Record<string, unknown> = { ...body };
     delete payload.clearFields;
-    for (const f of BENEFITS_SENSITIVE_FIELDS) { if (!payload[f]) delete payload[f]; }
+    // Drop blank or still-masked sensitive fields so update() preserves the
+    // stored encrypted value and a round-tripped mask isn't re-encrypted.
+    for (const f of BENEFITS_SENSITIVE_FIELDS) { if (!payload[f] || payload[f] === REDACTION_MASK) delete payload[f]; }
 
     const data = encryptFields(
       { ...payload, updatedAt: FieldValue.serverTimestamp() },

@@ -15,7 +15,7 @@ Implementation notes for the Phase 5 Shift Planner: the shift expression parser,
 - Employee `status` field: `"active"` | `"before-start"` | `"terminated"` (string). Shift plans include employees of all three statuses.
 - X limits: HPP = 8/month, PPP = 13/month, DPP = unlimited. Day/night recepce coverage minimum = 5 active employees.
 - **Consecutive X limit**: max 6 X in a row for employees/managers (hard block, no override). Admins/directors exempt.
-- **Real-time reload**: `ShiftPlannerPage` uses Firestore `onSnapshot` on the plan doc. Every mutation bumps `updatedAt`, triggering a full `loadPlan()` on all clients within ~1 s.
+- **Real-time reload**: every mutation bumps `updatedAt` on the plan doc; `loadPlan()` is called after each API response so the UI refreshes immediately. There is no client-side `onSnapshot` listener — `firestore.rules` block direct client SDK reads (all data flows through `/api`), so the listener was permission-denied and silently never fired. It was removed in v3.2.1.
 - `ShiftOverridesContext` provides global pending override count for the "Směny" nav badge.
 - **Shift legend**: mandatory work-law legend (shift types D/N/R/ZD/ZN, hotel codes A/S/Q/K, break rule) displayed below the grid on `ShiftPlannerPage`. Hidden on phones (v3.0.1) where the planner runs full-screen.
 - **PDF export** (admin/director): "Exportovat PDF" button builds a standalone HTML table from plan data with inline light-mode styles (6pt compact fonts, `table-layout:fixed`, colgroup percentages) and renders to single-page landscape A4 via `html2pdf.js`. Includes title, full grid with cell colors, MOD badges on vedoucí names, and legend. No DOM cloning — built programmatically from `plan.shifts`, `plan.employees`, `plan.modShifts`.
@@ -25,7 +25,7 @@ Implementation notes for the Phase 5 Shift Planner: the shift expression parser,
 ### MOD badge + shift counts
 - `showModCounts` prop (admin/director): shows `MOD: N (X PD, Y V+S)` below vedoucí name. PD = Mon–Fri non-holiday; V+S = weekend or holiday (counted once).
 - MOD letter per manager is per-plan: stored in `shiftPlans/{id}.modPersons` (letter → employeeId). Falls back to static `MOD_PERSONS` name match.
-- Editable badge: click → inline text input (1 char, any A–Z not taken by another manager in the plan). `PATCH /shifts/plans/:planId/mod-persons` batch-renames all `modRow` entries for the old letter.
+- Editable badge: click → inline text input (1 char, any A–Z not taken by another manager in the plan). `PATCH /shifts/plans/:planId/mod-persons` batch-renames all `modRow` entries for the old letter. The handler wraps the read + modPersons-map update + modRow renames in a **`runTransaction`** (v3.2.1) so concurrent letter reassignments cannot clobber each other's map entries.
 - `VALID_MOD_CODE = /^[A-Z]$/` in `shifts.ts`.
 - Badge only shown for `vedoucí` section (not recepce/portýři).
 - Name cell layout: `[nameLines: name + MOD count] [badge] [edit/delete actions on hover]`.
@@ -37,6 +37,7 @@ Implementation notes for the Phase 5 Shift Planner: the shift expression parser,
 - `ShiftChangeRequestsContext` mirrors `ShiftOverridesContext`; fetches `GET /shifts/changeRequests/pending-count`.
 - `alwaysReadOnlySections` prop on `ShiftGrid` locks specified sections. Employees get `["vedoucí"]`.
 - Employees can set/delete **X only** (enforced frontend + backend).
+- **Approval idempotency (v3.2.1).** The three approval endpoints (unavailability, shift-override, shift-change-request `PATCH`) now return **404** when the request doc is missing and **409** when its `status` is not `"pending"`. A re-approval race therefore cannot run a second `.set()` on the shift cell and clobber a later manual edit. Free-claim approval additionally re-checks `isSlotCovered` and 409s if the slot has been filled in the meantime.
 
 ### Shift types
 - Bare `D` and `N` are invalid — hotel code required (e.g. `DA`, `NS`). `R` and `X` are valid standalone.

@@ -1339,7 +1339,16 @@ shiftsRouter.patch(
       .collection("unavailabilityRequests")
       .doc(reqId);
     const beforeSnap = await reqRef.get();
-    const before = beforeSnap.exists ? (beforeSnap.data() as Record<string, unknown>) : {};
+    if (!beforeSnap.exists) {
+      res.status(404).json({ error: "Žádost nenalezena" });
+      return;
+    }
+    const before = beforeSnap.data() as Record<string, unknown>;
+    // Only a still-pending request can be decided — blocks double-review races.
+    if (before.status !== "pending") {
+      res.status(409).json({ error: "Tato žádost už byla vyřízena." });
+      return;
+    }
     await reqRef.update({
       status,
       reviewedBy: req.uid ?? null,
@@ -1535,6 +1544,13 @@ shiftsRouter.patch(
     }
 
     const overrideData = overrideDoc.data() as Record<string, unknown>;
+    // Only a still-pending request can be decided. Without this, re-PATCHing an
+    // already-approved request re-runs the cell .set() below and clobbers any
+    // manual edit made to that cell in the meantime.
+    if (overrideData.status !== "pending") {
+      res.status(409).json({ error: "Tato žádost už byla vyřízena." });
+      return;
+    }
 
     // On approval: save the shift to Firestore
     if (status === "approved") {
@@ -1846,6 +1862,14 @@ shiftsRouter.patch(
     }
 
     const beforeData = changeReqDoc.data() as Record<string, unknown>;
+    // Only a still-pending request can be decided. Without this, re-PATCHing an
+    // approved request re-assigns the cell and re-runs the auto-reject sweep.
+    // (The free-claim path below also re-checks isSlotCovered, so the remaining
+    // window for two competing claims approved at the same instant is tiny.)
+    if (beforeData.status !== "pending") {
+      res.status(409).json({ error: "Tato žádost už byla vyřízena." });
+      return;
+    }
     const planRef = db().collection("shiftPlans").doc(planId);
 
     // Volné směny: approving a free-claim ASSIGNS the porter shift to the employee
@@ -2020,43 +2044,58 @@ shiftsRouter.patch(
     }
 
     const planRef = db().collection("shiftPlans").doc(planId);
-    const planDoc = await planRef.get();
-    if (!planDoc.exists) {
-      res.status(404).json({ error: "Plán nenalezen" });
-      return;
-    }
 
-    const currentModPersons = (planDoc.data()!.modPersons as Record<string, string>) ?? {};
+    // Transactional read-modify-write: modPersons is a single map on the plan,
+    // so two concurrent reassignments (different letters) would each rebuild it
+    // from a stale read and the second commit would clobber the first. The
+    // transaction re-reads inside the commit, and the modRow rename/delete is
+    // folded in so the letter and its cells move atomically.
+    let currentModPersons: Record<string, string> = {};
+    let updated: Record<string, string> = {};
+    try {
+      await db().runTransaction(async (txn) => {
+        const planDoc = await txn.get(planRef);
+        if (!planDoc.exists) {
+          const e = new Error("plan-not-found") as Error & { httpStatus?: number };
+          e.httpStatus = 404;
+          throw e;
+        }
+        currentModPersons = (planDoc.data()!.modPersons as Record<string, string>) ?? {};
 
-    // Build updated modPersons: remove any entry for this employee, then add new one
-    const updated: Record<string, string> = {};
-    for (const [letter, empId] of Object.entries(currentModPersons)) {
-      if (letter !== oldLetter && empId !== employeeId) updated[letter] = empId;
-    }
-    if (newLetter) updated[newLetter] = employeeId;
+        // Reads before writes: pull the affected modRow docs up front.
+        const renameOrDelete = !!oldLetter && oldLetter !== newLetter;
+        const modDocs = renameOrDelete
+          ? (await txn.get(planRef.collection("modRow").where("code", "==", oldLetter))).docs
+          : [];
 
-    const batch = db().batch();
+        // Rebuild from the freshly-read map: drop this employee + the old letter,
+        // then add the new assignment.
+        updated = {};
+        for (const [letter, empId] of Object.entries(currentModPersons)) {
+          if (letter !== oldLetter && empId !== employeeId) updated[letter] = empId;
+        }
+        if (newLetter) updated[newLetter] = employeeId;
 
-    if (oldLetter && newLetter && oldLetter !== newLetter) {
-      // Rename all modRow entries with the old letter to the new letter
-      const modSnap = await planRef.collection("modRow").where("code", "==", oldLetter).get();
-      for (const d of modSnap.docs) {
-        batch.update(d.ref, { code: newLetter, updatedAt: FieldValue.serverTimestamp() });
+        if (oldLetter && newLetter && oldLetter !== newLetter) {
+          for (const d of modDocs) {
+            txn.update(d.ref, { code: newLetter, updatedAt: FieldValue.serverTimestamp() });
+          }
+        } else if (oldLetter && !newLetter) {
+          for (const d of modDocs) {
+            txn.delete(d.ref);
+          }
+        }
+
+        txn.update(planRef, { modPersons: updated, updatedAt: FieldValue.serverTimestamp() });
+      });
+    } catch (e) {
+      if ((e as { httpStatus?: number }).httpStatus === 404) {
+        res.status(404).json({ error: "Plán nenalezen" });
+        return;
       }
-    } else if (oldLetter && !newLetter) {
-      // Unassign: delete all modRow entries for the old letter
-      const modSnap = await planRef.collection("modRow").where("code", "==", oldLetter).get();
-      for (const d of modSnap.docs) {
-        batch.delete(d.ref);
-      }
+      throw e;
     }
 
-    batch.update(planRef, {
-      modPersons: updated,
-      updatedAt: FieldValue.serverTimestamp(),
-    });
-
-    await batch.commit();
     await logUpdate(ctxFromReq(req), {
       collection: "shiftPlans",
       resourceId: planId,
