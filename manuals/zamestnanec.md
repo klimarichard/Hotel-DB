@@ -51,6 +51,8 @@ Vlevo dole v přihlášené aplikaci je vždy vidět **jméno přihlášeného u
 - kdo má dnes směnu (recepce i portýři), kdo je MOD,
 - kteří manažeři mají dovolenou.
 
+Máte-li propojený zaměstnanecký záznam, zobrazí se na Přehledu **barevný pruh** (banner) s upozorněním na vaše vlastní doklady — pas nebo povolení k pobytu — u nichž platnost uplynula nebo vyprší do 30 dnů. Stejný pruh vidíte i na stránce **Můj profil**. Pokud jsou všechny vaše doklady v pořádku, pruh se nezobrazí.
+
 > 📷 *(Místo pro snímek obrazovky: Přehled)*
 
 ---
@@ -108,6 +110,7 @@ Vlastní karta zaměstnance.
 - Pole **„Platnost OP"** se zde už nezobrazuje ani nenavrhuje k úpravě.
 - **Pohlaví** se na vašem profilu nezobrazuje (ani v náhledu, ani při úpravě).
 - **Navrhnout úpravu** — změny se odešlou ke schválení administrátorovi/řediteli.
+- **Upozornění na doklady:** máte-li propojený zaměstnanecký záznam, zobrazí se v horní části stránky **barevný pruh** s upozorněním na vaše doklady (pas nebo povolení k pobytu), u nichž platnost uplynula nebo vyprší do 30 dnů. Zároveň se u položky **Můj profil** v menu zobrazí **červený odznak** s počtem těchto dokladů. Platnost OP (občanského průkazu) se zde nezobrazuje — tu kontroluje jen administrátor. Jsou-li všechny vaše sledované doklady v pořádku, pruh ani odznak se neobjeví.
 
 > 📷 *(Místo pro snímek obrazovky: Můj profil)*
 

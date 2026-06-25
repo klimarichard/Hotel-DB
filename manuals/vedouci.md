@@ -53,6 +53,20 @@ Vlevo dole je vždy vidět **jméno přihlášeného uživatele**. Pod ním jsou
 - kteří FOM jsou nepřítomní,
 - rychlé statistiky personálu (počty, věkové složení, národnosti, pozice).
 
+### Dlaždice úkolů
+
+V horní části Přehledu se zobrazují dlaždice s počty položek čekajících na vaše rozhodnutí (zobrazují se jen ty dlaždice, ke kterým máte oprávnění):
+
+- **Výjimky ve směnách** — žádosti o výjimku ze směnových pravidel, které čekají na schválení.
+- **Změny ve směnách** — žádosti zaměstnanců o změnu směny v publikovaném plánu, které čekají na schválení.
+- **Dovolená** — žádosti o dovolenou čekající na vyřízení.
+
+Kliknutím na dlaždici přejdete přímo na příslušnou sekci.
+
+### Upozornění na doklady
+
+Máte-li propojený zaměstnanecký záznam, zobrazí se na Přehledu **barevný pruh** (banner) s upozorněním na vaše vlastní doklady — pas nebo povolení k pobytu — u nichž platnost uplynula nebo vyprší do 30 dnů. Stejný pruh vidíte i na stránce **Můj profil**. Pokud jsou všechny vaše doklady v pořádku, pruh se nezobrazí.
+
 > 📷 *(Místo pro snímek obrazovky: Přehled)*
 
 ---
@@ -106,6 +120,7 @@ Vlastní karta zaměstnance.
 - **Pohlaví** se na vašem profilu nezobrazuje (ani v náhledu, ani při úpravě).
 - **Navrhnout úpravu** — změny se odešlou ke schválení administrátorovi/řediteli. Citlivá pole se při úpravě zobrazí, abyste viděli, co měníte (zobrazení se loguje).
 - **Zahraniční telefon (jiný než +420):** zadáte-li při úpravě profilu telefonní číslo, které není české (nezačíná `+420`), zobrazí se při odeslání okno **„Formát telefonního čísla"**, kde určíte, jak se má číslo zobrazovat (např. s mezerami). Uloží a zobrazí se přesně v zadaném tvaru. Česká čísla (`+420`) se formátují automaticky.
+- **Upozornění na doklady:** máte-li propojený zaměstnanecký záznam, zobrazí se v horní části stránky **barevný pruh** s upozorněním na vaše doklady (pas nebo povolení k pobytu), u nichž platnost uplynula nebo vyprší do 30 dnů. Zároveň se u položky **Můj profil** v menu zobrazí **červený odznak** s počtem těchto dokladů. Platnost OP (občanského průkazu) se zde nezobrazuje. Jsou-li všechny vaše doklady v pořádku, pruh ani odznak se neobjeví.
 
 > 📷 *(Místo pro snímek obrazovky: Můj profil)*
 
