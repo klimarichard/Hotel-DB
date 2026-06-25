@@ -382,7 +382,7 @@
   max-width: 240px;
   /* Holds 7 day-rows (next7Days); taller min-height keeps each row legible
      and, via the parent's align-items: stretch, raises the task tiles to match. */
-  min-height: 200px;
+  min-height: 300px;
   gap: 0.4rem;
   padding: 0.7rem 0.75rem;
 }
