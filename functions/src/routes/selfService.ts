@@ -2,6 +2,7 @@ import { Router } from "express";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireAuth, AuthRequest } from "../middleware/auth";
+import { requirePermission } from "../auth/permissions";
 import { redactFields, decrypt } from "../services/encryption";
 import { ctxFromReq, writeAudit, logCreate, logDelete } from "../services/auditLog";
 import {
@@ -86,12 +87,19 @@ selfServiceRouter.get("/employee/alerts", async (req: AuthRequest, res) => {
     .collection("alerts")
     .where("employeeId", "==", empId)
     .get();
-  res.json(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+  // Exclude OP (idCardExpiry): "platnost OP" was deliberately hidden from the
+  // employee's own view, kept admin-only. Employees see only passport +
+  // residence-permit alerts; admins still see all three on the detail page.
+  res.json(
+    snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .filter((a) => (a as { field?: string }).field !== "idCardExpiry")
+  );
 });
 
 // ─── Reveal own sensitive field ──────────────────────────────────────────────
 
-selfServiceRouter.post("/employee/reveal", async (req: AuthRequest, res) => {
+selfServiceRouter.post("/employee/reveal", requirePermission("sensitive.reveal.self"), async (req: AuthRequest, res) => {
   const empId = await getCallerEmployeeId(req.uid!);
   if (!empId) { res.status(400).json({ error: "Váš účet není propojen se zaměstnaneckým záznamem." }); return; }
 
