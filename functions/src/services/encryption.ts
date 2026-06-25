@@ -73,8 +73,12 @@ export function decryptFields<T extends Record<string, unknown>>(
     if (typeof val === "string" && val.length > 0) {
       try {
         (result as Record<string, unknown>)[field as string] = decrypt(val);
-      } catch {
-        // Leave as-is if decryption fails (corrupted or not encrypted)
+      } catch (err) {
+        // Leave as-is if decryption fails (corrupted or not encrypted). Log the
+        // field + reason (never the value) so a key/encryption regression — which
+        // would otherwise silently drop sensitive fields to ciphertext app-wide —
+        // is visible in the function logs instead of failing invisibly.
+        console.warn(`[encryption] decryptFields: could not decrypt "${field}":`, (err as Error)?.message);
       }
     }
   }

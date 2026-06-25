@@ -43,7 +43,30 @@ admin.initializeApp();
 
 const app = express();
 
-app.use(cors({ origin: true }));
+// CORS: the SPA calls /api through a same-origin Hosting rewrite, so normal
+// traffic carries no Origin header (allowed below). Genuine cross-origin browser
+// calls are restricted to the known app domains + localhost dev — defense in
+// depth on top of the Firebase ID-token check every route already enforces.
+const ALLOWED_ORIGIN_PATTERNS = [
+  /^http:\/\/localhost:\d+$/,
+  /^http:\/\/127\.0\.0\.1:\d+$/,
+  /^https:\/\/hotel-hr-app-75581\.web\.app$/,
+  /^https:\/\/hotel-hr-app-75581\.firebaseapp\.com$/,
+  /^https:\/\/hote-hr-app-staging\.web\.app$/,
+  /^https:\/\/hote-hr-app-staging\.firebaseapp\.com$/,
+];
+app.use(
+  cors({
+    origin(origin, cb) {
+      // No Origin = same-origin (Hosting rewrite), curl, or server-to-server.
+      if (!origin || ALLOWED_ORIGIN_PATTERNS.some((re) => re.test(origin))) {
+        cb(null, true);
+      } else {
+        cb(null, false);
+      }
+    },
+  })
+);
 // 10mb covers contract PDFs that contain embedded base64 images
 // (logos, scanned signatures). Base64-encoded blob is ~33% larger
 // than the raw PDF, so a 3 MB PDF lands around 4 MB of JSON body.
@@ -232,6 +255,7 @@ export const checkPlanDeadlines = onSchedule("every 5 minutes", async () => {
 //   curl -X POST http://127.0.0.1:5002/.../api/payroll/trigger
 
 export const refreshPayroll = onSchedule("every 24 hours", async () => {
+  await clock.refresh(true);
   const db = admin.firestore();
   const snap = await db.collection("shiftPlans").where("status", "==", "published").get();
   for (const doc of snap.docs) {
