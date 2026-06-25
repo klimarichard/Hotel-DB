@@ -12,6 +12,8 @@ import PhoneFormatModal from "@/components/PhoneFormatModal";
 import { isCzechNationality } from "@/lib/contractVariables";
 import { groupBySession } from "@/lib/employmentSessions";
 import EmploymentSessionCard from "@/components/EmploymentSession";
+import DocumentExpiryBar from "@/components/DocumentExpiryBar";
+import { useSelfDocAlertsContext } from "@/context/SelfDocAlertsContext";
 import {
   SELF_EDIT_FIELDS,
   SELF_EDIT_SECTIONS,
@@ -94,6 +96,7 @@ interface Dialog {
 
 export default function EmployeeSelfPage() {
   const { employeeId, loading: authLoading, can } = useAuth();
+  const { alerts: docAlerts } = useSelfDocAlertsContext();
   const canRequestEdit = can("self.profile.requestEdit");
   const canRevealSelf = can("sensitive.reveal.self");
   const [loading, setLoading] = useState(true);
@@ -441,6 +444,8 @@ export default function EmployeeSelfPage() {
       <p className={styles.subtitle}>
         Změny osobních údajů odešlete ke schválení — projeví se až po schválení administrátorem.
       </p>
+
+      <DocumentExpiryBar alerts={docAlerts} />
 
       {hasPending && !editMode && (
         <div className={styles.pendingHint}>Máte čekající žádost o úpravu údajů.</div>
