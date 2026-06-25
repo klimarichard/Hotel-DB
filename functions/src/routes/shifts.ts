@@ -2044,43 +2044,58 @@ shiftsRouter.patch(
     }
 
     const planRef = db().collection("shiftPlans").doc(planId);
-    const planDoc = await planRef.get();
-    if (!planDoc.exists) {
-      res.status(404).json({ error: "Plán nenalezen" });
-      return;
-    }
 
-    const currentModPersons = (planDoc.data()!.modPersons as Record<string, string>) ?? {};
+    // Transactional read-modify-write: modPersons is a single map on the plan,
+    // so two concurrent reassignments (different letters) would each rebuild it
+    // from a stale read and the second commit would clobber the first. The
+    // transaction re-reads inside the commit, and the modRow rename/delete is
+    // folded in so the letter and its cells move atomically.
+    let currentModPersons: Record<string, string> = {};
+    let updated: Record<string, string> = {};
+    try {
+      await db().runTransaction(async (txn) => {
+        const planDoc = await txn.get(planRef);
+        if (!planDoc.exists) {
+          const e = new Error("plan-not-found") as Error & { httpStatus?: number };
+          e.httpStatus = 404;
+          throw e;
+        }
+        currentModPersons = (planDoc.data()!.modPersons as Record<string, string>) ?? {};
 
-    // Build updated modPersons: remove any entry for this employee, then add new one
-    const updated: Record<string, string> = {};
-    for (const [letter, empId] of Object.entries(currentModPersons)) {
-      if (letter !== oldLetter && empId !== employeeId) updated[letter] = empId;
-    }
-    if (newLetter) updated[newLetter] = employeeId;
+        // Reads before writes: pull the affected modRow docs up front.
+        const renameOrDelete = !!oldLetter && oldLetter !== newLetter;
+        const modDocs = renameOrDelete
+          ? (await txn.get(planRef.collection("modRow").where("code", "==", oldLetter))).docs
+          : [];
 
-    const batch = db().batch();
+        // Rebuild from the freshly-read map: drop this employee + the old letter,
+        // then add the new assignment.
+        updated = {};
+        for (const [letter, empId] of Object.entries(currentModPersons)) {
+          if (letter !== oldLetter && empId !== employeeId) updated[letter] = empId;
+        }
+        if (newLetter) updated[newLetter] = employeeId;
 
-    if (oldLetter && newLetter && oldLetter !== newLetter) {
-      // Rename all modRow entries with the old letter to the new letter
-      const modSnap = await planRef.collection("modRow").where("code", "==", oldLetter).get();
-      for (const d of modSnap.docs) {
-        batch.update(d.ref, { code: newLetter, updatedAt: FieldValue.serverTimestamp() });
+        if (oldLetter && newLetter && oldLetter !== newLetter) {
+          for (const d of modDocs) {
+            txn.update(d.ref, { code: newLetter, updatedAt: FieldValue.serverTimestamp() });
+          }
+        } else if (oldLetter && !newLetter) {
+          for (const d of modDocs) {
+            txn.delete(d.ref);
+          }
+        }
+
+        txn.update(planRef, { modPersons: updated, updatedAt: FieldValue.serverTimestamp() });
+      });
+    } catch (e) {
+      if ((e as { httpStatus?: number }).httpStatus === 404) {
+        res.status(404).json({ error: "Plán nenalezen" });
+        return;
       }
-    } else if (oldLetter && !newLetter) {
-      // Unassign: delete all modRow entries for the old letter
-      const modSnap = await planRef.collection("modRow").where("code", "==", oldLetter).get();
-      for (const d of modSnap.docs) {
-        batch.delete(d.ref);
-      }
+      throw e;
     }
 
-    batch.update(planRef, {
-      modPersons: updated,
-      updatedAt: FieldValue.serverTimestamp(),
-    });
-
-    await batch.commit();
     await logUpdate(ctxFromReq(req), {
       collection: "shiftPlans",
       resourceId: planId,

@@ -3,7 +3,7 @@ import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireAuth, AuthRequest } from "../middleware/auth";
 import { requirePermission, hasPermission, getManagementTypeIds } from "../auth/permissions";
-import { encryptFields, redactFields, decrypt, decryptFields } from "../services/encryption";
+import { encryptFields, redactFields, decrypt, decryptFields, REDACTION_MASK } from "../services/encryption";
 import {
   ctxFromReq,
   logCreate,
@@ -930,6 +930,10 @@ employeesRouter.patch(
     // dates, parental-leave window, or the training flag (all recomputed
     // elsewhere). updatedAt is set just below.
     for (const f of PROTECTED_ROOT_FIELDS) delete payload[f];
+    // Never re-encrypt a round-tripped redaction mask — that would overwrite the
+    // real encrypted value with ciphertext of "••••••••". Drop it so update()
+    // preserves the stored value.
+    for (const f of SENSITIVE_FIELDS) if (payload[f] === REDACTION_MASK) delete payload[f];
 
     const updated = encryptFields(
       { ...payload, updatedAt: FieldValue.serverTimestamp() },
@@ -1535,10 +1539,12 @@ employeesRouter.put(
       );
     }
 
-    // Strip blank sensitive fields — existing encrypted values will be preserved via update()
+    // Strip blank or still-masked sensitive fields — the existing encrypted
+    // value is preserved via update(). Dropping the redaction mask prevents a
+    // round-trip from re-encrypting "••••••••" over the real value.
     const payload: Record<string, unknown> = { ...body };
     delete payload.clearFields;
-    for (const f of DOCUMENT_SENSITIVE_FIELDS) { if (!payload[f]) delete payload[f]; }
+    for (const f of DOCUMENT_SENSITIVE_FIELDS) { if (!payload[f] || payload[f] === REDACTION_MASK) delete payload[f]; }
 
     const data = encryptFields(
       { ...payload, updatedAt: FieldValue.serverTimestamp() },
@@ -1794,7 +1800,9 @@ employeesRouter.put(
     const clearFields = Array.isArray(body.clearFields) ? body.clearFields as string[] : [];
     const payload: Record<string, unknown> = { ...body };
     delete payload.clearFields;
-    for (const f of BENEFITS_SENSITIVE_FIELDS) { if (!payload[f]) delete payload[f]; }
+    // Drop blank or still-masked sensitive fields so update() preserves the
+    // stored encrypted value and a round-tripped mask isn't re-encrypted.
+    for (const f of BENEFITS_SENSITIVE_FIELDS) { if (!payload[f] || payload[f] === REDACTION_MASK) delete payload[f]; }
 
     const data = encryptFields(
       { ...payload, updatedAt: FieldValue.serverTimestamp() },
