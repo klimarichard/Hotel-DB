@@ -1,0 +1,28 @@
+/* Document-expiry banner shared by the employee detail page, the self profile
+   page and the dashboard. Moved here verbatim from EmployeeDetailPage so the
+   three surfaces stay visually identical. */
+
+.alertBanner {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.alertItemExpired {
+  padding: 0.6rem 1rem;
+  background: var(--color-danger-bg);
+  color: var(--color-danger-text);
+  border-radius: 6px;
+  font-size: 0.875rem;
+  border-left: 3px solid var(--color-danger-text-strong);
+}
+
+.alertItemExpiring {
+  padding: 0.6rem 1rem;
+  background: var(--color-warning-bg);
+  color: var(--color-warning-text);
+  border-radius: 6px;
+  font-size: 0.875rem;
+  border-left: 3px solid var(--color-warning-border);
+}

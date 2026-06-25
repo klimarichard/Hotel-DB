@@ -310,14 +310,17 @@
   align-items: stretch;
 }
 
-/* The 4 task tiles live in their own group (so the tour can spotlight only
+/* The task tiles live in their own group (so the tour can spotlight only
    them). On desktop the group takes the remaining ~4/5 width next to the
-   square "Moje směny" tile; the group is itself a 4-column grid. */
+   square "Moje směny" tile; the group is a single-row grid whose column count
+   follows the number of tiles actually shown (4 or 5), set inline via the
+   --tile-count custom property so all tiles fit side by side. The media
+   queries below override grid-template-columns outright for narrow screens. */
 .taskTilesGroup {
   flex: 4 1 0;
   min-width: 0;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(var(--tile-count, 4), 1fr);
   gap: 0.75rem;
   align-items: stretch;
 }
@@ -377,7 +380,9 @@
   flex: 1 1 200px;
   min-width: 0;
   max-width: 240px;
-  min-height: 140px;
+  /* Holds 7 day-rows (next7Days); taller min-height keeps each row legible
+     and, via the parent's align-items: stretch, raises the task tiles to match. */
+  min-height: 300px;
   gap: 0.4rem;
   padding: 0.7rem 0.75rem;
 }
@@ -440,28 +445,28 @@
 
 .myShiftDay {
   display: inline-block;
-  width: 1.2rem;
+  width: 1.5rem;
   text-align: center;
   color: var(--color-text-muted);
   font-weight: 600;
   text-transform: uppercase;
-  font-size: 0.6875rem;
+  font-size: 0.8125rem;
 }
 
 .myShiftDate {
   color: var(--color-text);
   font-variant-numeric: tabular-nums;
-  font-size: 0.75rem;
+  font-size: 0.9375rem;
 }
 
 .myShiftBadge {
   display: inline-block;
-  min-width: 2.25rem;
+  min-width: 2.5rem;
   text-align: center;
-  padding: 0.05rem 0.35rem;
+  padding: 0.1rem 0.4rem;
   border-radius: 3px;
   font-weight: 700;
-  font-size: 0.6875rem;
+  font-size: 0.8125rem;
   letter-spacing: 0.02em;
   background: var(--color-surface-3);
   color: var(--color-text);
@@ -469,24 +474,24 @@
 
 .myShiftFree {
   color: var(--color-text-subtle);
-  font-size: 0.75rem;
+  font-size: 0.875rem;
 }
 
 .myShiftBlank {
   display: inline-block;
-  min-width: 2.25rem;
+  min-width: 2.5rem;
 }
 
 .myShiftVacation {
   color: var(--color-info-text);
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   font-weight: 600;
   font-style: italic;
 }
 
 .myShiftVacationPending {
   color: var(--color-text-muted);
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   font-style: italic;
   text-align: right;
   line-height: 1.1;

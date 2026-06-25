@@ -393,3 +393,63 @@ Every existing consumer of employment rows (salary fold in `computeEffectiveStat
 - A `rodičovská` row can never affect salary, position, contract type, status, start/end dates, or payroll.
 - The server-side PATCH strip ensures a `rodičovská` row can never carry contract data even through direct API calls.
 - Adding the feature is purely additive — no existing employee record is modified, and no existing query result changes.
+
+---
+
+## Self document-expiry alerts + Můj profil badge (v3.2.0)
+
+Employees now see their own expiring/expired document alerts on the dashboard and on Můj profil, mirroring the same `alerts` collection data that admin users see on the Upozornění page. A red badge also appears next to the "Můj profil" sidebar item when the signed-in user has at least one active alert.
+
+### Backend — `GET /me/employee/alerts`
+
+New endpoint in `functions/src/routes/selfService.ts`, mounted alongside the existing `/me` self-service routes and therefore covered by `selfServiceRouter.use(requireAuth)`. No extra permission is required: a user linked to an employee sees only their own alerts.
+
+```
+GET /me/employee/alerts
+→ DocumentExpiryAlert[]
+```
+
+Queries `alerts` where `employeeId == <caller's employeeId>` (resolved server-side from `users/{uid}.employeeId` via `getCallerEmployeeId`) and **excludes** the `idCardExpiry` (`platnost OP`) field from the result. Employees see only `passportExpiry` and `visaExpiry` alerts; admins still see all three (including OP) on the Employee detail page. If the caller has no linked `employeeId`, returns `[]`.
+
+The 30-day expiring/expired classification and alert lifecycle are identical to those on the admin side (`updateDocumentAlerts` in `functions/src/routes/employees.ts`, `EXPIRY_FIELDS`, `EXPIRY_ALERT_DAYS = 30`). This endpoint is a self-scoped read; it does not trigger regeneration.
+
+### Security hardening — `POST /me/employee/reveal`
+
+`POST /me/employee/reveal` now requires `requirePermission("sensitive.reveal.self")` (was auth-only in prior releases). The audit entry written on a successful reveal carries `extra.self: true` so it is distinguishable from an admin-side reveal in the audit log. Permission key `sensitive.reveal.self` is seeded into the default employee role and is separate from the admin/director `sensitive.reveal` key.
+
+### Frontend — `DocumentExpiryBar` shared component
+
+`frontend/src/components/DocumentExpiryBar.tsx` (+ `DocumentExpiryBar.module.css`) is a **pure display component** extracted from the previously-inline banner in `EmployeeDetailPage.tsx`. It accepts a list of `DocumentExpiryAlert` objects and renders nothing when the list is empty.
+
+```ts
+export interface DocumentExpiryAlert {
+  id: string;
+  fieldLabel: string;
+  expiryDate: string;          // ISO YYYY-MM-DD
+  daysUntilExpiry: number;     // negative when already expired
+  status: "expiring" | "expired";
+}
+```
+
+Alert items are styled as `.alertItemExpiring` or `.alertItemExpired` and display a Czech phrase (`"Prošlé o N dní"` / `"Vyprší dnes"` / `"Vyprší za N dní"`). The component is now used in three places:
+
+| Page | Data source |
+|---|---|
+| `EmployeeDetailPage` (admin view) | Employee-specific alerts already fetched for the page |
+| `EmployeeSelfPage` (Můj profil) | `useSelfDocAlertsContext()` — excludes OP |
+| `OverviewPage` (dashboard) | `useSelfDocAlertsContext()` — excludes OP |
+
+### Frontend — `SelfDocAlertsContext`
+
+`frontend/src/context/SelfDocAlertsContext.tsx` — a React context that fetches `GET /me/employee/alerts` whenever the signed-in user has a linked `employeeId`. Provides `{ alerts, count, refresh }`.
+
+```ts
+// Expose via:
+export function useSelfDocAlertsContext(): { alerts: DocumentExpiryAlert[]; count: number; refresh: () => void }
+```
+
+The context is mounted at the app root (inside `SelfDocAlertsProvider`) and therefore available to any component. `Layout.tsx` calls `refresh` on every navigation and on its existing 60-second interval tick (the same loop that refreshes all other sidebar badge contexts), so the badge stays current without a dedicated timer.
+
+### Můj profil sidebar badge
+
+`Layout.tsx` `badgeFor("mujProfil")` now returns `selfDocAlertCount` from `useSelfDocAlertsContext()`. A non-zero count renders as a red badge on the "Můj profil" menu item in both the desktop sidebar and the mobile `BottomNav` (which receives `badgeFor` as a prop). Users without a linked employee get a count of 0 and see no badge.

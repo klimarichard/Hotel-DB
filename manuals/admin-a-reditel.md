@@ -59,6 +59,21 @@ Vlevo dole je vždy vidět **jméno přihlášeného uživatele**. Pod ním jsou
 - kteří FOM jsou nepřítomní,
 - rychlé statistiky personálu (počty, věkové složení, národnosti, pozice).
 
+### Dlaždice úkolů
+
+V horní části Přehledu se zobrazují dlaždice s počty položek čekajících na vaše rozhodnutí:
+
+- **Výjimky ve směnách** — žádosti o výjimku ze směnových pravidel, které čekají na schválení.
+- **Změny ve směnách** — žádosti zaměstnanců o změnu směny v publikovaném plánu, které čekají na schválení.
+- **Dovolená** — žádosti o dovolenou čekající na vyřízení.
+- **Změny údajů** — žádosti zaměstnanců o změnu osobních údajů odeslaných z *Můj profil*, které čekají na schválení. Tato dlaždice se zobrazí pouze vám, protože máte oprávnění tyto žádosti schvalovat.
+
+Kliknutím na dlaždici přejdete přímo na příslušnou sekci.
+
+### Upozornění na doklady
+
+Máte-li propojený zaměstnanecký záznam, zobrazí se na Přehledu **barevný pruh** (banner) s upozorněním na vaše vlastní doklady — pas nebo povolení k pobytu — u nichž platnost uplynula nebo vyprší do 30 dnů. Stejný pruh vidíte i na stránce **Můj profil**. Pokud jsou všechny vaše doklady v pořádku, pruh se nezobrazí.
+
 > 📷 *(Místo pro snímek obrazovky: Přehled)*
 
 ---
@@ -314,6 +329,7 @@ Vlastní karta zaměstnance.
 
 - Vidíte své osobní údaje, kontakt, doklady a **historii pracovního poměru** (stejný formát jako na detailu zaměstnance).
 - **Navrhnout úpravu** — změny se odešlou ke schválení (objeví se v *Upozornění → Žádosti o změny*). Citlivá pole se při úpravě zobrazí, abyste viděli, co měníte (zobrazení se loguje).
+- **Upozornění na doklady:** máte-li propojený zaměstnanecký záznam, zobrazí se v horní části stránky **barevný pruh** s upozorněním na vaše doklady (pas nebo povolení k pobytu), u nichž platnost uplynula nebo vyprší do 30 dnů. Zároveň se u položky **Můj profil** v menu zobrazí **červený odznak** s počtem těchto dokladů. Platnost OP (občanského průkazu) se zde nezobrazuje. Jsou-li všechny vaše doklady v pořádku, pruh ani odznak se neobjeví.
 
 > 📷 *(Místo pro snímek obrazovky: Můj profil)*
 

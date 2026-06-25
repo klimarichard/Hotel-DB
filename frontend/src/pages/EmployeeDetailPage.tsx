@@ -15,6 +15,7 @@ import AdhocContractsSection from "@/components/AdhocContractsSection";
 import OtherDocumentsTab from "@/components/OtherDocumentsTab";
 import MultisportEditor from "@/components/MultisportEditor";
 import AuditEventCard from "@/components/AuditEventCard";
+import DocumentExpiryBar from "@/components/DocumentExpiryBar";
 import { type AuditEntry, groupEntries } from "@/lib/audit/grouping";
 import {
   ContractType as SmlouvaContractType,
@@ -1602,21 +1603,7 @@ export default function EmployeeDetailPage() {
         </div>
       )}
 
-      {alerts.length > 0 && (
-        <div className={styles.alertBanner}>
-          {alerts.map((a) => (
-            <div key={a.id} className={a.status === "expired" ? styles.alertItemExpired : styles.alertItemExpiring}>
-              <strong>{a.fieldLabel}</strong>
-              {" — "}
-              {a.daysUntilExpiry < 0
-                ? `Prošlé o ${Math.abs(a.daysUntilExpiry)} dní (${formatDateCZ(a.expiryDate)})`
-                : a.daysUntilExpiry === 0
-                ? `Vyprší dnes (${formatDateCZ(a.expiryDate)})`
-                : `Vyprší za ${a.daysUntilExpiry} dní (${formatDateCZ(a.expiryDate)})`}
-            </div>
-          ))}
-        </div>
-      )}
+      <DocumentExpiryBar alerts={alerts} />
 
       <div className={styles.tabs}>
         <button data-tour="emp-tab-detail" className={page === "detail" ? styles.tabActive : styles.tabBtn} onClick={() => setPage("detail")}>Detail</button>

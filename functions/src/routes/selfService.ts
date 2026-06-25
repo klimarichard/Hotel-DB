@@ -2,6 +2,7 @@ import { Router } from "express";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireAuth, AuthRequest } from "../middleware/auth";
+import { requirePermission } from "../auth/permissions";
 import { redactFields, decrypt } from "../services/encryption";
 import { ctxFromReq, writeAudit, logCreate, logDelete } from "../services/auditLog";
 import {
@@ -72,9 +73,33 @@ selfServiceRouter.get("/employee/employment", async (req: AuthRequest, res) => {
   res.json(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
 });
 
+/**
+ * GET /me/employee/alerts
+ * Self-scoped mirror of GET /employees/:id/alerts: returns the caller's own
+ * document-expiry alerts from the shared `alerts` collection — the SAME data
+ * (and 30-day expiring/expired logic) the Upozornění feature shows to
+ * alerts.view users. No extra permission: a linked employee sees only its own.
+ */
+selfServiceRouter.get("/employee/alerts", async (req: AuthRequest, res) => {
+  const empId = await getCallerEmployeeId(req.uid!);
+  if (!empId) { res.json([]); return; }
+  const snap = await db()
+    .collection("alerts")
+    .where("employeeId", "==", empId)
+    .get();
+  // Exclude OP (idCardExpiry): "platnost OP" was deliberately hidden from the
+  // employee's own view, kept admin-only. Employees see only passport +
+  // residence-permit alerts; admins still see all three on the detail page.
+  res.json(
+    snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .filter((a) => (a as { field?: string }).field !== "idCardExpiry")
+  );
+});
+
 // ─── Reveal own sensitive field ──────────────────────────────────────────────
 
-selfServiceRouter.post("/employee/reveal", async (req: AuthRequest, res) => {
+selfServiceRouter.post("/employee/reveal", requirePermission("sensitive.reveal.self"), async (req: AuthRequest, res) => {
   const empId = await getCallerEmployeeId(req.uid!);
   if (!empId) { res.status(400).json({ error: "Váš účet není propojen se zaměstnaneckým záznamem." }); return; }
 

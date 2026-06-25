@@ -22,6 +22,7 @@ import { AlertsProvider } from "@/context/AlertsContext";
 import { ShiftOverridesProvider } from "@/context/ShiftOverridesContext";
 import { ShiftChangeRequestsProvider } from "@/context/ShiftChangeRequestsContext";
 import { EmployeeChangeRequestsProvider } from "@/context/EmployeeChangeRequestsContext";
+import { SelfDocAlertsProvider } from "@/context/SelfDocAlertsContext";
 import { VacationProvider } from "@/context/VacationContext";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { TimeOverrideProvider } from "@/context/TimeOverrideContext";
@@ -77,9 +78,11 @@ export default function App() {
                   <ShiftOverridesProvider>
                     <ShiftChangeRequestsProvider>
                       <EmployeeChangeRequestsProvider>
-                        <VacationProvider>
-                          <Layout />
-                        </VacationProvider>
+                        <SelfDocAlertsProvider>
+                          <VacationProvider>
+                            <Layout />
+                          </VacationProvider>
+                        </SelfDocAlertsProvider>
                       </EmployeeChangeRequestsProvider>
                     </ShiftChangeRequestsProvider>
                   </ShiftOverridesProvider>

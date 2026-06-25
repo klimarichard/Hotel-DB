@@ -7,6 +7,7 @@ import { useAlertsContext } from "@/context/AlertsContext";
 import { useShiftOverridesContext } from "@/context/ShiftOverridesContext";
 import { useShiftChangeRequestsContext } from "@/context/ShiftChangeRequestsContext";
 import { useEmployeeChangeRequestsContext } from "@/context/EmployeeChangeRequestsContext";
+import { useSelfDocAlertsContext } from "@/context/SelfDocAlertsContext";
 import { useVacationContext } from "@/context/VacationContext";
 import { useTheme } from "@/context/ThemeContext";
 import { api } from "@/lib/api";
@@ -43,6 +44,7 @@ export default function Layout() {
   const { pendingCount: pendingOverrideCount, refresh: refreshOverrides } = useShiftOverridesContext();
   const { pendingCount: pendingChangeRequestCount, refresh: refreshChangeRequests } = useShiftChangeRequestsContext();
   const { pendingCount: pendingDataChangeCount, refresh: refreshDataChanges } = useEmployeeChangeRequestsContext();
+  const { count: selfDocAlertCount, refresh: refreshSelfDocAlerts } = useSelfDocAlertsContext();
   const { pendingCount: pendingVacationCount, refresh: refreshVacation } = useVacationContext();
   // The "Upozornění" sidebar badge mirrors the Upozornění page total: it sums
   // ALL six review queues shown there, each gated by the same permission that
@@ -76,6 +78,7 @@ export default function Layout() {
       refreshOverrides();
       refreshChangeRequests();
       refreshDataChanges();
+      refreshSelfDocAlerts();
       refreshVacation();
     }
     refreshAll();
@@ -103,6 +106,8 @@ export default function Layout() {
     if (id === "smeny") return shiftsBadgeCount;
     if (id === "dovolena") return showVacationBadge ? pendingVacationCount : 0;
     if (id === "upozorneni") return upozorneniBadge;
+    // "Můj profil" badge = the user's own expired / soon-to-expire documents.
+    if (id === "mujProfil") return selfDocAlertCount;
     return 0;
   }
 
