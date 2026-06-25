@@ -7,6 +7,7 @@ import * as clock from "@/lib/clock";
 import { useAlertsContext } from "@/context/AlertsContext";
 import { useShiftOverridesContext } from "@/context/ShiftOverridesContext";
 import { useShiftChangeRequestsContext } from "@/context/ShiftChangeRequestsContext";
+import { useEmployeeChangeRequestsContext } from "@/context/EmployeeChangeRequestsContext";
 import { useVacationContext } from "@/context/VacationContext";
 import {
   HOTEL_CODES,
@@ -366,6 +367,7 @@ export default function OverviewPage() {
   const { unreadCount: alertsCount } = useAlertsContext();
   const { pendingCount: overridesCount } = useShiftOverridesContext();
   const { pendingCount: changesCount } = useShiftChangeRequestsContext();
+  const { pendingCount: dataChangesCount } = useEmployeeChangeRequestsContext();
   const { pendingCount: vacationCount } = useVacationContext();
   const [myVacations, setMyVacations] = useState<MyVacation[] | null>(null);
 
@@ -581,9 +583,16 @@ export default function OverviewPage() {
             const taskTiles: { count: number; label: string; to: string }[] = showTasks
               ? [
                   { count: alertsCount, label: "Neplatné doklady", to: "/upozorneni" },
-                  { count: overridesCount, label: "Úpravy směn", to: "/smeny" },
-                  { count: changesCount, label: "Výměny směn", to: "/smeny" },
+                  { count: overridesCount, label: "Výjimky ve směnách", to: "/smeny" },
+                  { count: changesCount, label: "Změny ve směnách", to: "/smeny" },
                   { count: vacationCount, label: "Dovolenky", to: "/dovolena" },
+                  // Personal-data change requests are admin/director-only; hide
+                  // the tile entirely for anyone who can't review them rather
+                  // than showing a muted 0 (the count is already 0 without the
+                  // permission, but a non-reviewer has no reason to see it).
+                  ...(can("changeRequests.review")
+                    ? [{ count: dataChangesCount, label: "Změny údajů", to: "/upozorneni" }]
+                    : []),
                 ]
               : [];
 
