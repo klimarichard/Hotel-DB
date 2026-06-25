@@ -341,6 +341,66 @@ export function autoNotesFromRows(
   return notes;
 }
 
+/**
+ * True when the employee worked shifts in a month that falls entirely BEFORE
+ * their contract starts (the trainee / pre-contract case, TODO #9): no
+ * employment session overlaps the month AND their earliest session begins after
+ * the month ends. Post-termination / between-contract gaps return false — only
+ * the pre-start case is handled. Pure + exported for unit testing.
+ */
+export function isPreContractMonth(rows: EmploymentRowLite[], year: number, month: number): boolean {
+  const sessions = buildSessions(rows);
+  if (sessions.length === 0) return false;
+  if (relevantSessionForMonth(sessions, year, month)) return false; // employed some of the month
+  const { monthEnd } = monthBounds(year, month);
+  const earliestStart = sessions.reduce((min, s) => (s.start < min ? s.start : min), sessions[0].start);
+  return earliestStart > monthEnd;
+}
+
+/** Czech note text for pre-contract worked hours: "XX hod. odpracováno MM/YY". */
+export function precontractNoteText(workedHours: number, year: number, month: number): string {
+  const mm = String(month).padStart(2, "0");
+  const yy = String(year % 100).padStart(2, "0");
+  return `${workedHours} hod. odpracováno ${mm}/${yy}`;
+}
+
+/**
+ * Insert / refresh the pre-contract carry-forward note for THIS month, dropping
+ * any stale copy whose origin IS this month first (idempotent across recomputes).
+ * Carried-forward copies that originated in OTHER months are left untouched. The
+ * note is `auto:false` + `carryForward:true` so the standard seeding propagates
+ * it to later periods until an admin marks it read; `createdBy:"system"` so the
+ * UI shows it read-only. (TODO #9.)
+ */
+function withPrecontractNote(
+  notes: Record<string, unknown>[],
+  active: boolean,
+  workedHours: number,
+  year: number,
+  month: number,
+  stamp: Timestamp
+): Record<string, unknown>[] {
+  const kept = notes.filter(
+    (n) => !(n.kind === "precontract" && n.sourceYear === year && n.sourceMonth === month)
+  );
+  if (!active) return kept;
+  const note: Record<string, unknown> = {
+    id: randomUUID(),
+    sourceNoteId: `precontract_${year}_${month}`,
+    text: precontractNoteText(workedHours, year, month),
+    kind: "precontract",
+    auto: false,
+    carryForward: true,
+    sourceYear: year,
+    sourceMonth: month,
+    createdBy: "system",
+    createdByName: "Systém",
+    createdAt: stamp,
+    read: false,
+  };
+  return [note, ...kept];
+}
+
 /** Count holidays in the given month that fall on Mon–Fri (used for manager holiday credit). */
 function countMonFriHolidays(year: number, month: number, holidays: Set<string>): number {
   const prefix = `${year}-${String(month).padStart(2, "0")}-`;
@@ -833,6 +893,15 @@ export async function createOrUpdatePayrollPeriod(
     const empBaseHours = proratedBase ?? baseHours;
 
     const entry = calculateEntry(employee, allShifts, holidays, empBaseHours, foodVoucherRate, year, month, mealAllowanceMinHours);
+    // Pre-contract month (TODO #9): worked shifts before the contract started —
+    // keep the hours visible but zero the pay (NAVÍC/DPP/stravenky); a
+    // carry-forward note records the hours so they're paid in the first real month.
+    const preContract = entry.totalHours > 0 && isPreContractMonth(empRows, year, month);
+    if (preContract) {
+      entry.extraPay = 0;
+      entry.foodVouchers = 0;
+      if (entry.dppAmount != null) entry.dppAmount = 0;
+    }
     const { price: multisportPrice, startNotes: multisportStart } =
       await getMultisportForMonth(employeeId, year, month, multisportBasePrice);
     const multisportActive = multisportPrice > 0;
@@ -878,6 +947,9 @@ export async function createOrUpdatePayrollPeriod(
       createdAt: autoStamp,
     }));
     notes = [...autoNotes, ...notes.filter((n) => (n as Record<string, unknown>).auto !== true)];
+    // Pre-contract worked-hours note (TODO #9): idempotent for this month, carries
+    // forward until marked read.
+    notes = withPrecontractNote(notes as Record<string, unknown>[], preContract, entry.totalHours, year, month, autoStamp);
 
     const entryRef = periodRef.collection("entries").doc(employeeId);
     batch.set(entryRef, { ...entry, multisportActive, multisportPrice, notes });
@@ -968,6 +1040,13 @@ export async function recomputeEntryForEmployee(
   const empBaseHours = proratedBase ?? getBaseHours(year, month);
 
   const entry = calculateEntry(employee, shifts, holidays, empBaseHours, foodVoucherRate, year, month, mealAllowanceMinHours);
+  // Pre-contract month (TODO #9) — mirror the orchestrator: zero the pay, keep hours.
+  const preContract = entry.totalHours > 0 && isPreContractMonth(empRows, year, month);
+  if (preContract) {
+    entry.extraPay = 0;
+    entry.foodVouchers = 0;
+    if (entry.dppAmount != null) entry.dppAmount = 0;
+  }
   const { price: multisportPrice, startNotes: multisportStart } =
     await getMultisportForMonth(employeeId, year, month, multisportBasePrice);
   const multisportActive = multisportPrice > 0;
@@ -991,7 +1070,7 @@ export async function recomputeEntryForEmployee(
     createdByName: "Systém",
     createdAt: autoStamp,
   }));
-  const notes = [...autoNotes, ...userNotes];
+  const notes = withPrecontractNote([...autoNotes, ...userNotes], preContract, entry.totalHours, year, month, autoStamp);
 
   await entryRef.set({ ...entry, multisportActive, multisportPrice, notes });
   return true;

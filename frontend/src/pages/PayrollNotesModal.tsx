@@ -217,20 +217,26 @@ export default function PayrollNotesModal({
                                   Označit přečteno
                                 </button>
                               )}
-                              <button
-                                className={styles.iconBtn}
-                                onClick={() => startEdit(n)}
-                                disabled={busy}
-                              >
-                                Upravit
-                              </button>
-                              <button
-                                className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
-                                onClick={() => setDeleteTarget(n)}
-                                disabled={busy}
-                              >
-                                Smazat
-                              </button>
+                              {/* System-generated notes (e.g. pre-contract worked
+                                  hours) are read-only — only "mark read" applies. */}
+                              {n.createdBy !== "system" && (
+                                <>
+                                  <button
+                                    className={styles.iconBtn}
+                                    onClick={() => startEdit(n)}
+                                    disabled={busy}
+                                  >
+                                    Upravit
+                                  </button>
+                                  <button
+                                    className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
+                                    onClick={() => setDeleteTarget(n)}
+                                    disabled={busy}
+                                  >
+                                    Smazat
+                                  </button>
+                                </>
+                              )}
                             </span>
                           )}
                         </div>
