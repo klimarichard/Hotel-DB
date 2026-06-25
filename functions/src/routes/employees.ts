@@ -37,6 +37,30 @@ const SENSITIVE_FIELDS = ["birthNumber"] as const;
 const DOCUMENT_SENSITIVE_FIELDS = ["idCardNumber", "idCardExpiry"] as const;
 const BENEFITS_SENSITIVE_FIELDS = ["insuranceNumber", "bankAccount"] as const;
 
+// Root-employee fields the client must never set directly: they are derived /
+// denormalized server-side and feed the Employees list, status logic, and
+// payroll. `status` + `current*` come from folding the latest employment
+// session (applyDerivedStatus / computeEffectiveRootFields), `employment*Date`
+// and `parentalLeave*` from the session fold, and `zaucovani*` from the
+// benefits doc. Stripped from the PATCH /:id body so a crafted request can't
+// corrupt them (mass-assignment hardening). These live ONLY on the root doc, so
+// the subdoc/employment-row writes don't need them.
+const PROTECTED_ROOT_FIELDS = [
+  "status",
+  "currentJobTitle",
+  "currentDepartment",
+  "currentContractType",
+  "currentCompanyId",
+  "employmentStartDate",
+  "employmentEndDate",
+  "parentalLeaveFrom",
+  "parentalLeaveTo",
+  "zaucovani",
+  "zaucovaniDo",
+  "createdAt",
+  "createdBy",
+] as const;
+
 /** Coerce any Firestore value to a plain string ("" for null/undefined). */
 function asStr(v: unknown): string {
   return typeof v === "string" ? v : v == null ? "" : String(v);
@@ -901,6 +925,11 @@ employeesRouter.patch(
     const clearFields = Array.isArray(body.clearFields) ? body.clearFields as string[] : [];
     const payload = { ...body };
     delete payload.clearFields;
+    // Mass-assignment guard: drop any server-derived / denormalized field so a
+    // crafted body can't overwrite status, current position/company, employment
+    // dates, parental-leave window, or the training flag (all recomputed
+    // elsewhere). updatedAt is set just below.
+    for (const f of PROTECTED_ROOT_FIELDS) delete payload[f];
 
     const updated = encryptFields(
       { ...payload, updatedAt: FieldValue.serverTimestamp() },

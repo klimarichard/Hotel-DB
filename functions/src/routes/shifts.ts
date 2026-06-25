@@ -1339,7 +1339,16 @@ shiftsRouter.patch(
       .collection("unavailabilityRequests")
       .doc(reqId);
     const beforeSnap = await reqRef.get();
-    const before = beforeSnap.exists ? (beforeSnap.data() as Record<string, unknown>) : {};
+    if (!beforeSnap.exists) {
+      res.status(404).json({ error: "Žádost nenalezena" });
+      return;
+    }
+    const before = beforeSnap.data() as Record<string, unknown>;
+    // Only a still-pending request can be decided — blocks double-review races.
+    if (before.status !== "pending") {
+      res.status(409).json({ error: "Tato žádost už byla vyřízena." });
+      return;
+    }
     await reqRef.update({
       status,
       reviewedBy: req.uid ?? null,
@@ -1535,6 +1544,13 @@ shiftsRouter.patch(
     }
 
     const overrideData = overrideDoc.data() as Record<string, unknown>;
+    // Only a still-pending request can be decided. Without this, re-PATCHing an
+    // already-approved request re-runs the cell .set() below and clobbers any
+    // manual edit made to that cell in the meantime.
+    if (overrideData.status !== "pending") {
+      res.status(409).json({ error: "Tato žádost už byla vyřízena." });
+      return;
+    }
 
     // On approval: save the shift to Firestore
     if (status === "approved") {
@@ -1846,6 +1862,14 @@ shiftsRouter.patch(
     }
 
     const beforeData = changeReqDoc.data() as Record<string, unknown>;
+    // Only a still-pending request can be decided. Without this, re-PATCHing an
+    // approved request re-assigns the cell and re-runs the auto-reject sweep.
+    // (The free-claim path below also re-checks isSlotCovered, so the remaining
+    // window for two competing claims approved at the same instant is tiny.)
+    if (beforeData.status !== "pending") {
+      res.status(409).json({ error: "Tato žádost už byla vyřízena." });
+      return;
+    }
     const planRef = db().collection("shiftPlans").doc(planId);
 
     // Volné směny: approving a free-claim ASSIGNS the porter shift to the employee
