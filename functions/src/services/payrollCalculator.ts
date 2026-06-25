@@ -401,6 +401,28 @@ function withPrecontractNote(
   return [note, ...kept];
 }
 
+/**
+ * Pre-contract trainee row (TODO #9): show ONLY the worked hours (HODINY) and
+ * zero every distributed/derived column, clearing autoOverrides so the balance
+ * cascade can't spill the worked hours into Svátek/Navíc (the reported bug). Pay
+ * is zero — the hours are paid in the first real contract month, flagged by the
+ * carry-forward note. `totalHours` (and the ZÁKLAD metadata) are left intact.
+ * Mutates the entry in place.
+ */
+function zeroPreContractEntry(entry: ReturnType<typeof calculateEntry>): void {
+  entry.reportHours = 0;
+  entry.vacationHours = 0;
+  entry.nightHours = 0;
+  entry.holidayHours = 0;
+  entry.weekendHours = 0;
+  entry.extraHours = 0;
+  entry.extraPay = 0;
+  entry.workingDays = 0;
+  entry.foodVouchers = 0;
+  if (entry.dppAmount != null) entry.dppAmount = 0;
+  entry.autoOverrides = {};
+}
+
 /** Count holidays in the given month that fall on Mon–Fri (used for manager holiday credit). */
 function countMonFriHolidays(year: number, month: number, holidays: Set<string>): number {
   const prefix = `${year}-${String(month).padStart(2, "0")}-`;
@@ -894,14 +916,11 @@ export async function createOrUpdatePayrollPeriod(
 
     const entry = calculateEntry(employee, allShifts, holidays, empBaseHours, foodVoucherRate, year, month, mealAllowanceMinHours);
     // Pre-contract month (TODO #9): worked shifts before the contract started —
-    // keep the hours visible but zero the pay (NAVÍC/DPP/stravenky); a
-    // carry-forward note records the hours so they're paid in the first real month.
+    // show ONLY the worked hours (HODINY) and zero every other column (no
+    // Svátek/Navíc spill, no pay); a carry-forward note records the hours so
+    // they're paid in the first real month.
     const preContract = entry.totalHours > 0 && isPreContractMonth(empRows, year, month);
-    if (preContract) {
-      entry.extraPay = 0;
-      entry.foodVouchers = 0;
-      if (entry.dppAmount != null) entry.dppAmount = 0;
-    }
+    if (preContract) zeroPreContractEntry(entry);
     const { price: multisportPrice, startNotes: multisportStart } =
       await getMultisportForMonth(employeeId, year, month, multisportBasePrice);
     const multisportActive = multisportPrice > 0;
@@ -1040,13 +1059,9 @@ export async function recomputeEntryForEmployee(
   const empBaseHours = proratedBase ?? getBaseHours(year, month);
 
   const entry = calculateEntry(employee, shifts, holidays, empBaseHours, foodVoucherRate, year, month, mealAllowanceMinHours);
-  // Pre-contract month (TODO #9) — mirror the orchestrator: zero the pay, keep hours.
+  // Pre-contract month (TODO #9) — mirror the orchestrator: keep hours, zero everything else.
   const preContract = entry.totalHours > 0 && isPreContractMonth(empRows, year, month);
-  if (preContract) {
-    entry.extraPay = 0;
-    entry.foodVouchers = 0;
-    if (entry.dppAmount != null) entry.dppAmount = 0;
-  }
+  if (preContract) zeroPreContractEntry(entry);
   const { price: multisportPrice, startNotes: multisportStart } =
     await getMultisportForMonth(employeeId, year, month, multisportBasePrice);
   const multisportActive = multisportPrice > 0;
