@@ -232,8 +232,8 @@ export default function ShiftCell({
     e.stopPropagation();
     if (!tagEditable) return;
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    // Clamp so the ~150px menu stays on screen.
-    const x = Math.min(r.left, window.innerWidth - 160);
+    // Clamp so the ~184px menu stays on screen.
+    const x = Math.min(r.left, window.innerWidth - 192);
     setTagMenu({ x: Math.max(4, x), y: r.bottom + 2 });
   }
 
@@ -329,10 +329,10 @@ export default function ShiftCell({
                 borderRadius: "6px",
                 boxShadow: "0 6px 20px rgba(0,0,0,0.25)",
                 padding: "6px",
-                width: "150px",
+                width: "184px",
               }}
             >
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "3px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "3px" }}>
                 {SHIFT_TYPE_TAGS.map((t) => (
                   <button
                     key={t.label}
