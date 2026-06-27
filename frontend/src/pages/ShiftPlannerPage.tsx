@@ -3,7 +3,7 @@ import type { CSSProperties } from "react";
 import { api } from "../lib/api";
 import * as clock from "../lib/clock";
 import { useAuth } from "../hooks/useAuth";
-import { parseShiftExpression, getCellColor, SECTIONS, SECTION_LABELS, getCzechHolidays, MOD_PERSONS, sortSectionEmployees } from "../lib/shiftConstants";
+import { parseShiftExpression, getCellColor, SECTIONS, SECTION_LABELS, getCzechHolidays, MOD_PERSONS, sortSectionEmployees, isPureNumericExpression } from "../lib/shiftConstants";
 import { employeeDisplayName } from "../lib/employeeName";
 import { escapeHtml } from "../lib/escapeHtml";
 import ShiftGrid from "../components/ShiftGrid";
@@ -65,6 +65,7 @@ export interface ShiftDoc {
   isDouble: boolean;
   status: "assigned" | "day_off" | "unassigned";
   source?: string | null; // "vacation" for auto-applied vacation Xs; absent for manual
+  typeTag?: string | null; // #29: shift-type tag on a numeric "worked hours" cell (tally only, no pay effect)
 }
 
 export interface ModShiftDoc {
@@ -1101,6 +1102,9 @@ export default function ShiftPlannerPage() {
 
     await api.put(`/shifts/plans/${plan.id}/shifts/${employeeId}/${date}`, { rawInput });
     const docId = `${employeeId}_${date}`;
+    // Preserve an existing type-tag across a numeric→numeric edit; the backend
+    // keeps it too (it only clears the tag when the cell stops being numeric).
+    const existingTag = plan.shifts.find((s) => s.id === docId)?.typeTag ?? null;
     const updated: ShiftDoc = {
       id: docId,
       employeeId,
@@ -1114,11 +1118,29 @@ export default function ShiftPlannerPage() {
           : parsed.segments.every((s) => s.code === "X")
           ? "day_off"
           : "assigned",
+      typeTag: isPureNumericExpression(parsed) ? existingTag : null,
     };
     setPlan((prev) => {
       if (!prev) return prev;
       const others = prev.shifts.filter((s) => s.id !== docId);
       return { ...prev, shifts: [...others, updated] };
+    });
+  }
+
+  // #29: set/clear the shift-type tag on a numeric "worked hours" cell. Reuses the
+  // cell upsert endpoint (sends the unchanged rawInput + the new tag); tally-only.
+  async function handleCellTagSave(employeeId: string, date: string, typeTag: string | null) {
+    if (!plan) return;
+    const docId = `${employeeId}_${date}`;
+    const shift = plan.shifts.find((s) => s.id === docId);
+    if (!shift) return; // can only tag an existing cell
+    await api.put(`/shifts/plans/${plan.id}/shifts/${employeeId}/${date}`, {
+      rawInput: shift.rawInput,
+      typeTag,
+    });
+    setPlan((prev) => {
+      if (!prev) return prev;
+      return { ...prev, shifts: prev.shifts.map((s) => (s.id === docId ? { ...s, typeTag } : s)) };
     });
   }
 
@@ -1600,6 +1622,7 @@ export default function ShiftPlannerPage() {
               key={[...plan.employees].map((e) => e.id).sort().join(",")}
               plan={plan}
               onCellSave={handleCellSave}
+              onCellTagSave={!selfServiceOnly && canEdit ? handleCellTagSave : undefined}
               onModSave={handleModSave}
               onEditEmployee={(emp) => setEditingEmployee(emp)}
               onDeleteEmployee={handleDeleteEmployee}

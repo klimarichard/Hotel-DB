@@ -13,6 +13,32 @@ export const SHIFT_HOURS: Record<string, number> = {
 export const HOTEL_CODES = ["A", "S", "Q", "K", "P", "M"] as const;
 export type HotelCode = typeof HOTEL_CODES[number];
 
+// Allowed shift-type tags for numeric ("worked hours") cells (#29). A bare number
+// like "8" carries no shift type, so it can't be attributed in the per-type
+// occupancy tally ("Přehled obsazení"). Tagging records which type those hours
+// were worked as so the cell counts toward that type — it does NOT affect pay.
+// Mirrors the COUNTER_ROWS list in the frontend grid (label = code+hotel).
+export const SHIFT_TYPE_TAGS = [
+  "DA", "DS", "DQ", "DK", "NA", "NS", "NQ", "NK", "DPQ", "NPQ", "DPA", "NPA",
+] as const;
+export type ShiftTypeTag = typeof SHIFT_TYPE_TAGS[number];
+
+/** A "worked hours" cell: valid, non-empty, every segment a bare number (no hotel). */
+export function isPureNumericExpression(parsed: ParseResult): boolean {
+  return (
+    parsed.isValid &&
+    parsed.segments.length > 0 &&
+    parsed.segments.every((s) => /^\d+(\.\d+)?$/.test(s.code))
+  );
+}
+
+/** Coerce an incoming type-tag value to a known tag, or null if invalid/absent. */
+export function sanitizeTypeTag(value: unknown): ShiftTypeTag | null {
+  return typeof value === "string" && (SHIFT_TYPE_TAGS as readonly string[]).includes(value)
+    ? (value as ShiftTypeTag)
+    : null;
+}
+
 export interface ShiftSegment {
   code: string;
   hotel: string | null;
