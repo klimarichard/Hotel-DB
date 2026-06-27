@@ -214,6 +214,13 @@ export default function ShiftGrid({
         if (!m.has(s.date)) m.set(s.date, new Set());
         m.get(s.date)!.add(`${seg.code}_${seg.hotel}`);
       }
+      // #29: a numeric "worked hours" cell tagged with a type also covers that
+      // free-shift slot, so it stops showing as available to claim.
+      const tagKey = typeTagToCounterKey(s.typeTag);
+      if (tagKey) {
+        if (!m.has(s.date)) m.set(s.date, new Set());
+        m.get(s.date)!.add(tagKey);
+      }
     }
     return m;
   }, [showFreeShifts, plan.shifts]);

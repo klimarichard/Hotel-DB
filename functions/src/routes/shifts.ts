@@ -46,9 +46,13 @@ async function isSlotCovered(
 ): Promise<boolean> {
   const snap = await planRef.collection("shifts").where("date", "==", date).get();
   for (const d of snap.docs) {
-    const raw = (d.data().rawInput as string) ?? "";
+    const data = d.data();
+    const raw = (data.rawInput as string) ?? "";
     const parsed = parseShiftExpression(raw);
     if (parsed.isValid && parsed.segments.some((s) => s.code === code && s.hotel === hotel)) return true;
+    // #29: a numeric cell tagged with this type covers the slot. The tag label
+    // equals code+hotel for all 12 types (e.g. "DPQ" === "DP"+"Q").
+    if (sanitizeTypeTag(data.typeTag) === code + hotel) return true;
   }
   return false;
 }
