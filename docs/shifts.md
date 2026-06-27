@@ -45,6 +45,15 @@ Implementation notes for the Phase 5 Shift Planner: the shift expression parser,
 - `HO` (Home Office): 6h, standalone, admin/director/manager only.
 - Cell IDs: `${employeeId}_${date}`.
 
+### Numeric-cell shift-type tag (`typeTag`, v3.4.0)
+
+A bare-number cell (e.g. `8`) records *worked hours* but carries no shift type, so it was invisible to the per-type occupancy tally ("Přehled obsazení"). A cell can now be **tagged** with the type those hours were worked as; the tagged cell then counts toward that type in the tally. **Tally-only — it never affects pay** (hours, night/holiday/weekend buckets, vouchers are all unchanged). A composite like `DA+2` already parses a `DA` segment, so it needs no tag.
+
+- **Allowed tags** = the 12 occupancy types `DA DS DQ DK NA NS NQ NK DPQ NPQ DPA NPA`, defined once as `SHIFT_TYPE_TAGS` in `frontend/src/lib/shiftConstants.ts` (mirrored as a backend const in `services/shiftParser.ts`). `ShiftGrid`'s `COUNTER_ROWS` now *is* `SHIFT_TYPE_TAGS`, so the picker and the tally rows can never drift.
+- **Storage:** optional `typeTag: string | null` on the `shifts/{employeeId}_{date}` doc. The cell upsert (`PUT /shifts/plans/:planId/shifts/:employeeId/:date`) accepts an optional `typeTag` in the body and persists it **only when the expression is pure-numeric** (`isPureNumericExpression` — every segment a bare number). It is auto-cleared when the cell stops being numeric, and **preserved across numeric→numeric edits** when the request omits `typeTag` (a plain rawInput edit). Validated against the allowed list via `sanitizeTypeTag` (unknown → `null`). Audit-logged with the Czech label "Typ směny (štítek)", and the cell-edit log now records only the fields that actually changed.
+- **Tally:** `ShiftGrid`'s `shiftCounts` adds a tagged numeric cell to its type's count via `typeTagToCounterKey(label)` → `"<code>_<hotel>"`.
+- **UI / gating:** in `ShiftCell`, a numeric cell shows a small superscript — the tag label, or a faint `+` when untagged — opening a 4×3 picker popover (`createPortal` to `document.body` to escape the cell's `overflow:hidden`; portal clicks `stopPropagation` so selecting a type doesn't fall through to the cell's number editor). The affordance is shown **only to users who can edit shifts in every plan state** — `onCellTagSave` is passed only when `!selfServiceOnly && can("shifts.cells.edit")`, and `showTag === tagEditable`, so read-only viewers and self-service employees see nothing. No new permission key; no tour step.
+
 ### planEmployee displayOrder auto-management (feature/shift-plan-auto-position)
 
 `displayOrder` is kept contiguous (1..N) per section automatically — no manual bookkeeping needed.
