@@ -220,10 +220,13 @@ export default function ShiftCell({
   const fitFontSize = `${Math.max(0.5, Math.min(0.85, 3.4 / (displayText.length || 1))).toFixed(3)}rem`;
 
   // #29: a numeric "worked hours" cell can be tagged with the shift type it was
-  // worked as (counts toward that type in the tally; no pay effect).
+  // worked as (counts toward that type in the tally; no pay effect). The tag
+  // affordance is shown ONLY to users who can edit shifts in every plan state —
+  // i.e. full editors (onSaveTypeTag is passed only to them and readOnly is then
+  // false in all states). Read-only viewers and self-service users see nothing.
   const isNumericCell = isPureNumericExpression(displayParsed);
   const tagEditable = !readOnly && !!onSaveTypeTag && isNumericCell;
-  const showTag = (typeTag && (isNumericCell || readOnly)) || tagEditable;
+  const showTag = tagEditable;
 
   function openTagMenu(e: React.MouseEvent) {
     e.stopPropagation();
