@@ -89,6 +89,7 @@ Plán prochází stavy **Vytvořený → Otevřený → Uzavřený → Publikova
 
 - Do buňky se zapisuje **kód směny** — např. `DA`, `NS` (denní/noční + hotel), `R`, `X` (volno), `ZDA`/`ZN…`, `HO` (home office).
 - Pod plánem je **legenda** s vysvětlením typů směn, kódů hotelů a pravidel přestávek.
+- **Označení odpracovaných hodin typem směny:** zapíšete-li do buňky jen **počet odpracovaných hodin** (např. `8`), objeví se v rohu buňky malý **`+`**. Kliknutím na něj vyberete typ směny (`DA`, `DS`, … `NPA`), pod kterým byly hodiny odpracovány — buňka se pak započítá k tomuto typu v **tabulce obsazenosti**. **Na výši mzdy to nemá žádný vliv.** U složeného zápisu jako `DA+2` je typ (DA) zřejmý a štítek se nezadává.
 - **Limity X (volna):** HPP 8/měsíc, PPP 13/měsíc, DPP neomezeně; maximálně **6 X v řadě**.
 - **MOD (vedoucí směny):** u jména FOM se zobrazuje písmeno MOD a počty směn.
 

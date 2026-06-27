@@ -1,5 +1,6 @@
 import { useEffect, useRef, useMemo, useState } from "react";
-import { parseShiftExpression, getCellColor } from "../lib/shiftConstants";
+import { createPortal } from "react-dom";
+import { parseShiftExpression, getCellColor, SHIFT_TYPE_TAGS, isPureNumericExpression } from "../lib/shiftConstants";
 import { useTheme } from "../context/ThemeContext";
 
 interface Props {
@@ -11,6 +12,10 @@ interface Props {
   onNavigate: (dir: "up" | "down" | "left" | "right") => void;
   onFocus: () => void;
   onRequestChange?: () => void;
+  /** #29: current shift-type tag on a numeric cell (tally-only). */
+  typeTag?: string | null;
+  /** #29: set/clear the tag. Undefined → tagging disabled for this cell. */
+  onSaveTypeTag?: (typeTag: string | null) => Promise<void>;
 }
 
 export default function ShiftCell({
@@ -22,6 +27,8 @@ export default function ShiftCell({
   onNavigate,
   onFocus,
   onRequestChange,
+  typeTag,
+  onSaveTypeTag,
 }: Props) {
   const { theme } = useTheme();
   const dark = theme === "dark";
@@ -29,6 +36,7 @@ export default function ShiftCell({
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [tagMenu, setTagMenu] = useState<{ x: number; y: number } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const cellRef = useRef<HTMLDivElement>(null);
 
@@ -211,11 +219,40 @@ export default function ShiftCell({
   const displayText = saveError ? "!" : (rawInput || "");
   const fitFontSize = `${Math.max(0.5, Math.min(0.85, 3.4 / (displayText.length || 1))).toFixed(3)}rem`;
 
+  // #29: a numeric "worked hours" cell can be tagged with the shift type it was
+  // worked as (counts toward that type in the tally; no pay effect). The tag
+  // affordance is shown ONLY to users who can edit shifts in every plan state —
+  // i.e. full editors (onSaveTypeTag is passed only to them and readOnly is then
+  // false in all states). Read-only viewers and self-service users see nothing.
+  const isNumericCell = isPureNumericExpression(displayParsed);
+  const tagEditable = !readOnly && !!onSaveTypeTag && isNumericCell;
+  const showTag = tagEditable;
+
+  function openTagMenu(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!tagEditable) return;
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    // Clamp so the ~184px menu stays on screen.
+    const x = Math.min(r.left, window.innerWidth - 192);
+    setTagMenu({ x: Math.max(4, x), y: r.bottom + 2 });
+  }
+
+  async function pickTag(tag: string | null) {
+    setTagMenu(null);
+    if (!onSaveTypeTag || tag === (typeTag ?? null)) return;
+    try {
+      await onSaveTypeTag(tag);
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "Chyba při ukládání");
+    }
+  }
+
   return (
     <div
       ref={cellRef}
       tabIndex={0}
       style={{
+        position: "relative",
         width: "100%",
         minHeight: "1.75rem",
         background: saveError ? "#fef2f2" : bgColor,
@@ -234,7 +271,7 @@ export default function ShiftCell({
         outline: saveError ? "2px solid #dc2626" : focused ? "2px solid #3b82f6" : "none",
         outlineOffset: "-2px",
       }}
-      title={saveError ?? (rawInput ? `${rawInput} — ${hoursComputed}h` : undefined)}
+      title={saveError ?? (rawInput ? `${rawInput} — ${hoursComputed}h${typeTag ? ` (${typeTag})` : ""}` : undefined)}
       onClick={() => {
         if (readOnly) return;
         setSaveError(null);
@@ -249,6 +286,93 @@ export default function ShiftCell({
       onKeyDown={handleDisplayKeyDown}
     >
       {saveError ? "!" : (rawInput || null)}
+      {!saveError && showTag && (
+        <sup
+          onClick={openTagMenu}
+          title={
+            tagEditable
+              ? (typeTag ? `Typ směny: ${typeTag} — kliknutím změníte` : "Přiřadit typ směny")
+              : (typeTag ? `Typ směny: ${typeTag}` : undefined)
+          }
+          style={{
+            fontSize: "0.5rem",
+            fontWeight: 700,
+            marginLeft: "1px",
+            lineHeight: 1,
+            cursor: tagEditable ? "pointer" : "default",
+            opacity: typeTag ? 0.95 : 0.4,
+            color: textColor,
+          }}
+        >
+          {typeTag ?? "+"}
+        </sup>
+      )}
+      {tagMenu &&
+        createPortal(
+          <>
+            <div
+              onClick={(e) => { e.stopPropagation(); setTagMenu(null); }}
+              style={{ position: "fixed", inset: 0, zIndex: 1200 }}
+            />
+            <div
+              // Portal children bubble React events through the component tree, so
+              // without this a click inside the menu would reach the cell's onClick
+              // and open the number editor. Keep all menu clicks contained here.
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                position: "fixed",
+                left: tagMenu.x,
+                top: tagMenu.y,
+                zIndex: 1201,
+                background: dark ? "#1e293b" : "#fff",
+                border: `1px solid ${dark ? "#334155" : "#cbd5e1"}`,
+                borderRadius: "6px",
+                boxShadow: "0 6px 20px rgba(0,0,0,0.25)",
+                padding: "6px",
+                width: "184px",
+              }}
+            >
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "3px" }}>
+                {SHIFT_TYPE_TAGS.map((t) => (
+                  <button
+                    key={t.label}
+                    onClick={() => pickTag(t.label)}
+                    style={{
+                      fontSize: "0.7rem",
+                      fontWeight: 700,
+                      fontFamily: "monospace",
+                      padding: "3px 0",
+                      borderRadius: "4px",
+                      cursor: "pointer",
+                      border: t.label === typeTag ? "1px solid #3b82f6" : `1px solid ${dark ? "#334155" : "#e2e8f0"}`,
+                      background: t.label === typeTag ? "#3b82f6" : (dark ? "#0f172a" : "#f8fafc"),
+                      color: t.label === typeTag ? "#fff" : (dark ? "#e2e8f0" : "#111827"),
+                    }}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => pickTag(null)}
+                style={{
+                  marginTop: "5px",
+                  width: "100%",
+                  fontSize: "0.7rem",
+                  padding: "4px 0",
+                  borderRadius: "4px",
+                  cursor: "pointer",
+                  border: `1px solid ${dark ? "#334155" : "#e2e8f0"}`,
+                  background: dark ? "#0f172a" : "#f8fafc",
+                  color: dark ? "#cbd5e1" : "#334155",
+                }}
+              >
+                Bez typu
+              </button>
+            </div>
+          </>,
+          document.body
+        )}
     </div>
   );
 }

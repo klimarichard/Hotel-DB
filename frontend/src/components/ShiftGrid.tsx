@@ -1,31 +1,22 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as clock from "../lib/clock";
 import type { PlanDetail, PlanEmployee, ShiftDoc, ModShiftDoc } from "../pages/ShiftPlannerPage";
-import { SECTION_LABELS, SECTIONS, type Section, getCzechHolidays, MOD_PERSONS, parseShiftExpression, getCellColor, isNightShiftType, sortSectionEmployees } from "../lib/shiftConstants";
+import { SECTION_LABELS, SECTIONS, type Section, getCzechHolidays, MOD_PERSONS, parseShiftExpression, getCellColor, isNightShiftType, sortSectionEmployees, SHIFT_TYPE_TAGS, typeTagToCounterKey } from "../lib/shiftConstants";
 import { employeeDisplayName } from "../lib/employeeName";
 import { useTheme } from "../context/ThemeContext";
 import ShiftCell from "./ShiftCell";
 import ModCell from "./ModCell";
 import styles from "./ShiftGrid.module.css";
 
-const COUNTER_ROWS: { label: string; code: string; hotel: string }[] = [
-  { label: "DA",  code: "D",  hotel: "A" },
-  { label: "DS",  code: "D",  hotel: "S" },
-  { label: "DQ",  code: "D",  hotel: "Q" },
-  { label: "DK",  code: "D",  hotel: "K" },
-  { label: "NA",  code: "N",  hotel: "A" },
-  { label: "NS",  code: "N",  hotel: "S" },
-  { label: "NQ",  code: "N",  hotel: "Q" },
-  { label: "NK",  code: "N",  hotel: "K" },
-  { label: "DPQ", code: "DP", hotel: "Q" },
-  { label: "NPQ", code: "NP", hotel: "Q" },
-  { label: "DPA", code: "DP", hotel: "A" },
-  { label: "NPA", code: "NP", hotel: "A" },
-];
+// The per-type occupancy ("Přehled obsazení") rows == the taggable types (#29),
+// so they share one source of truth in shiftConstants.
+const COUNTER_ROWS = SHIFT_TYPE_TAGS;
 
 interface Props {
   plan: PlanDetail;
   onCellSave: (employeeId: string, date: string, rawInput: string) => Promise<void>;
+  /** #29: set/clear a numeric cell's shift-type tag. Undefined = tagging disabled. */
+  onCellTagSave?: (employeeId: string, date: string, typeTag: string | null) => Promise<void>;
   onModSave: (date: string, code: string) => Promise<void>;
   onEditEmployee: (emp: PlanEmployee) => void;
   onDeleteEmployee: (emp: PlanEmployee) => void;
@@ -100,6 +91,7 @@ function currentShiftDate(): string {
 export default function ShiftGrid({
   plan,
   onCellSave,
+  onCellTagSave,
   onModSave,
   onEditEmployee,
   onDeleteEmployee,
@@ -192,15 +184,20 @@ export default function ShiftGrid({
   const shiftCounts = useMemo(() => {
     if (!showCounterTable) return null;
     const counts: Record<string, Record<string, number>> = {};
+    const bump = (date: string, key: string) => {
+      if (!counts[date]) counts[date] = {};
+      counts[date][key] = (counts[date][key] ?? 0) + 1;
+    };
     for (const shift of plan.shifts) {
       const parsed = parseShiftExpression(shift.rawInput);
       if (!parsed.isValid) continue;
       for (const seg of parsed.segments) {
         if (!seg.hotel) continue;
-        const key = `${seg.code}_${seg.hotel}`;
-        if (!counts[shift.date]) counts[shift.date] = {};
-        counts[shift.date][key] = (counts[shift.date][key] ?? 0) + 1;
+        bump(shift.date, `${seg.code}_${seg.hotel}`);
       }
+      // #29: a numeric "worked hours" cell tagged with a type counts toward it.
+      const tagKey = typeTagToCounterKey(shift.typeTag);
+      if (tagKey) bump(shift.date, tagKey);
     }
     return counts;
   }, [showCounterTable, plan.shifts]);
@@ -585,6 +582,12 @@ export default function ShiftGrid({
                           <ShiftCell
                             rawInput={shiftDoc?.rawInput ?? ""}
                             hoursComputed={shiftDoc?.hoursComputed ?? 0}
+                            typeTag={shiftDoc?.typeTag ?? null}
+                            onSaveTypeTag={
+                              onCellTagSave && !alwaysReadOnlySections.includes(emp.section)
+                                ? (tag) => onCellTagSave(emp.employeeId, dateStr, tag)
+                                : undefined
+                            }
                             readOnly={readOnly || alwaysReadOnlySections.includes(emp.section)}
                             onSave={(raw) => onCellSave(emp.employeeId, dateStr, raw)}
                             focused={isFocused}

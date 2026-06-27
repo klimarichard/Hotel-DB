@@ -319,6 +319,42 @@ function parseSegment(token: string): ShiftSegment | { error: string } {
   };
 }
 
+// ─── Shift-type tags for numeric cells (#29) ──────────────────────────────────
+// A bare number (worked hours) carries no shift type, so it can't be attributed
+// in the per-type occupancy tally. Tagging records which type those hours were
+// worked as so the cell counts toward that type — it does NOT affect pay. This is
+// the single source of truth for both the tag picker and the counter table.
+export const SHIFT_TYPE_TAGS: { label: string; code: string; hotel: string }[] = [
+  { label: "DA",  code: "D",  hotel: "A" },
+  { label: "DS",  code: "D",  hotel: "S" },
+  { label: "DQ",  code: "D",  hotel: "Q" },
+  { label: "DK",  code: "D",  hotel: "K" },
+  { label: "NA",  code: "N",  hotel: "A" },
+  { label: "NS",  code: "N",  hotel: "S" },
+  { label: "NQ",  code: "N",  hotel: "Q" },
+  { label: "NK",  code: "N",  hotel: "K" },
+  { label: "DPQ", code: "DP", hotel: "Q" },
+  { label: "NPQ", code: "NP", hotel: "Q" },
+  { label: "DPA", code: "DP", hotel: "A" },
+  { label: "NPA", code: "NP", hotel: "A" },
+];
+
+/** Map a tag label (e.g. "DA") to its counter key (e.g. "D_A"), or null. */
+export function typeTagToCounterKey(label: string | null | undefined): string | null {
+  if (!label) return null;
+  const t = SHIFT_TYPE_TAGS.find((x) => x.label === label);
+  return t ? `${t.code}_${t.hotel}` : null;
+}
+
+/** A "worked hours" cell: valid, non-empty, every segment a bare number (no hotel). */
+export function isPureNumericExpression(parsed: ParseResult): boolean {
+  return (
+    parsed.isValid &&
+    parsed.segments.length > 0 &&
+    parsed.segments.every((s) => /^\d+(\.\d+)?$/.test(s.code))
+  );
+}
+
 export function parseShiftExpression(input: string): ParseResult {
   const trimmed = input.trim();
 
