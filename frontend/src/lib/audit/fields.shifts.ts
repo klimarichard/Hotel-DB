@@ -59,6 +59,7 @@ const shiftPlans: FieldLabelMap = {
   segments: "Segmenty směny",
   hoursComputed: "Vypočtené hodiny",
   isDouble: "Dvojitá směna",
+  typeTag: "Typ směny (štítek)",
 
   // ── Rules ──────────────────────────────────────────────────────────────────
   ruleType: "Typ pravidla",

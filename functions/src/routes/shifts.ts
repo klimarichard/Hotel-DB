@@ -1152,9 +1152,15 @@ shiftsRouter.put(
     });
     await db().collection("shiftPlans").doc(planId).update({ updatedAt: FieldValue.serverTimestamp() });
 
-    // Compact form: only log the rawInput / typeTag change. Segments + hours are
-    // derived from rawInput so storing them would just inflate the log.
-    if (beforeRaw !== parsed.rawInput || beforeTag !== typeTag) {
+    // Compact form: only log the fields that actually changed. Segments + hours
+    // are derived from rawInput so storing them would just inflate the log.
+    const rawChanged = beforeRaw !== parsed.rawInput;
+    const tagChanged = beforeTag !== typeTag;
+    if (rawChanged || tagChanged) {
+      const before: Record<string, unknown> = {};
+      const after: Record<string, unknown> = {};
+      if (rawChanged) { before.rawInput = beforeRaw; after.rawInput = parsed.rawInput; }
+      if (tagChanged) { before.typeTag = beforeTag; after.typeTag = typeTag; }
       await logUpdate(ctxFromReq(req), {
         collection: "shiftPlans/shifts",
         resourceId: planId,
@@ -1162,8 +1168,8 @@ shiftsRouter.put(
         employeeId,
         year: Number(String(date).slice(0, 4)) || undefined,
         month: Number(String(date).slice(5, 7)) || undefined,
-        before: { rawInput: beforeRaw, typeTag: beforeTag },
-        after: { rawInput: parsed.rawInput, typeTag },
+        before,
+        after,
       });
     }
     res.json({ ok: true, hoursComputed: parsed.hoursComputed, typeTag });
