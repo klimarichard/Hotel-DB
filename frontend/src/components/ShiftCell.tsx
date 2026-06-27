@@ -287,25 +287,33 @@ export default function ShiftCell({
     >
       {saveError ? "!" : (rawInput || null)}
       {!saveError && showTag && (
-        <sup
+        // Absolutely-positioned corner badge — out of normal flow so the tag
+        // never adds to the cell's content width (the 40px column stays fixed
+        // regardless of number length, e.g. "10.5", or a 3-letter tag "NPQ").
+        <span
           onClick={openTagMenu}
-          title={
-            tagEditable
-              ? (typeTag ? `Typ směny: ${typeTag} — kliknutím změníte` : "Přiřadit typ směny")
-              : (typeTag ? `Typ směny: ${typeTag}` : undefined)
-          }
+          title={typeTag ? `Typ směny: ${typeTag} — kliknutím změníte` : "Přiřadit typ směny"}
           style={{
+            position: "absolute",
+            top: 0,
+            right: 0,
+            maxWidth: "100%",
+            overflow: "hidden",
             fontSize: "0.5rem",
             fontWeight: 700,
-            marginLeft: "1px",
             lineHeight: 1,
-            cursor: tagEditable ? "pointer" : "default",
-            opacity: typeTag ? 0.95 : 0.4,
+            padding: "1px 1px 1px 2px",
+            cursor: "pointer",
+            opacity: typeTag ? 1 : 0.45,
             color: textColor,
+            background: typeTag
+              ? (dark ? "rgba(15,23,42,0.72)" : "rgba(255,255,255,0.78)")
+              : "transparent",
+            borderBottomLeftRadius: "3px",
           }}
         >
           {typeTag ?? "+"}
-        </sup>
+        </span>
       )}
       {tagMenu &&
         createPortal(
