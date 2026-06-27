@@ -113,6 +113,12 @@ Three follow-ups on the Dodatek (`změna smlouvy`) form:
 
 ---
 
+## Czech address connector normalization (#6, v3.4.3)
+
+`permanentAddress` / `contactAddress` (free-text, in the `employees/{id}/contact` sub-doc) are normalized on save so compound place names follow ÚJČ (prirucka.ujc.cas.cz id=164 spojovník / id=165 pomlčka): both joined parts single-word → **spojovník `-`** tight (`Frýdek-Místek`, `Praha-Kunratice`); a multi-word part incl. `Praha 4` → **pomlčka en-dash `–`** with spaces (`Praha 4 – Modřany`); em-dash and other dash variants are normalized away. Helper `normalizeCzechAddressConnector()` / `normalizeContactAddresses()` in `functions/src/services/addressFormat.ts` (unit-tested via `node:test` — `npm test` in `functions/`). Conservative: only a connector with a letter on at least one side is rewritten (house ranges like `12-14` and dash-free text untouched), processed per comma-segment. Applied at both write paths: `PUT /employees/:id/contact` (admin create+edit) and the change-request approval (`employeeChangeRequests.ts`). Existing prod data was a one-time read-only-inventoried + backed-up cleanup, not a migration in the deploy.
+
+---
+
 ## Employee self-service — Můj profil (2026-05-22)
 
 Every linked user gets `/muj-profil` ("Můj profil", menu item for all six roles, appended last so no role's landing page changes). It shows the caller's **own** employee record (personal / contact / documents / insurance + employment history) and lets them propose edits that an **admin or director must approve** before they touch the live record.

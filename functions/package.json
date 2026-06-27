@@ -1,11 +1,12 @@
 {
   "name": "hotel-hr-functions",
-  "version": "3.4.2",
+  "version": "3.4.3",
   "private": true,
   "main": "lib/index.js",
   "scripts": {
     "build": "tsc && node -e \"require('fs').cpSync('assets','lib/assets',{recursive:true})\"",
     "build:watch": "tsc --watch",
+    "test": "npm run build && node --test \"lib/**/*.test.js\"",
     "serve": "npm run build && firebase emulators:start --only functions",
     "shell": "npm run build && firebase functions:shell",
     "start": "npm run shell",

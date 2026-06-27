@@ -19,6 +19,7 @@ import {
 import * as clock from "../services/clock";
 import { fillQuestionnairePdf, fillProhlaseniPdf } from "../services/formPdf";
 import { formatNationality } from "../services/nationalities";
+import { normalizeContactAddresses } from "../services/addressFormat";
 import { randomUUID } from "crypto";
 import {
   anyPeriodActiveOn,
@@ -1241,8 +1242,10 @@ employeesRouter.put(
     const colRef = db().collection("employees").doc(req.params.id).collection("contact");
     const snap = await colRef.limit(1).get();
     const before = snap.empty ? {} : (snap.docs[0].data() as Record<string, unknown>);
+    // Normalize Czech place-name connectors in the address fields on save (#6).
+    const body = normalizeContactAddresses(req.body as Record<string, unknown>);
     const data = {
-      ...req.body,
+      ...body,
       updatedAt: FieldValue.serverTimestamp(),
     };
     if (snap.empty) {
@@ -1255,7 +1258,7 @@ employeesRouter.put(
       resourceId: req.params.id,
       employeeId: req.params.id,
       before,
-      after: { ...before, ...(req.body as Record<string, unknown>) },
+      after: { ...before, ...body },
     });
     res.json({ success: true });
   }
