@@ -311,10 +311,14 @@ export default function ShiftCell({
         createPortal(
           <>
             <div
-              onClick={() => setTagMenu(null)}
+              onClick={(e) => { e.stopPropagation(); setTagMenu(null); }}
               style={{ position: "fixed", inset: 0, zIndex: 1200 }}
             />
             <div
+              // Portal children bubble React events through the component tree, so
+              // without this a click inside the menu would reach the cell's onClick
+              // and open the number editor. Keep all menu clicks contained here.
+              onClick={(e) => e.stopPropagation()}
               style={{
                 position: "fixed",
                 left: tagMenu.x,
