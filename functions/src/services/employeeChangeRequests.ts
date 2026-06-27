@@ -2,6 +2,7 @@ import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { encrypt, decrypt } from "./encryption";
 import { AuditContext, logUpdate } from "./auditLog";
+import { normalizeCzechAddressConnector } from "./addressFormat";
 import { updateDocumentAlerts, EXPIRY_FIELDS } from "../routes/employees";
 
 const db = () => admin.firestore();
@@ -238,7 +239,15 @@ async function applySubcollection(
   const sensitiveFields: string[] = [];
   for (const c of changes) {
     if (c.sensitive) sensitiveFields.push(c.field);
-    const stored = resolveStored(c);
+    let stored = resolveStored(c);
+    // Normalize Czech place-name connectors in address fields on approval (#6).
+    if (
+      section === "contact" &&
+      (c.field === "permanentAddress" || c.field === "contactAddress") &&
+      typeof stored === "string"
+    ) {
+      stored = normalizeCzechAddressConnector(stored);
+    }
     if (stored === null) {
       patch[c.field] = FieldValue.delete();
       afterForLog[c.field] = null;
