@@ -3,7 +3,7 @@ import * as admin from "firebase-admin";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { requireAuth, AuthRequest } from "../middleware/auth";
 import { requirePermission } from "../auth/permissions";
-import { parseShiftExpression, HOTEL_CODES } from "../services/shiftParser";
+import { parseShiftExpression, HOTEL_CODES, isPureNumericExpression, sanitizeTypeTag } from "../services/shiftParser";
 import { snapshotShifts, deleteCollection, autoFillManagerRShifts } from "../services/planTransitions";
 import { createOrUpdatePayrollPeriod } from "../services/payrollCalculator";
 import {
@@ -1121,7 +1121,24 @@ shiftsRouter.put(
       .collection("shifts")
       .doc(docId);
     const beforeSnap = await shiftRef.get();
-    const beforeRaw = beforeSnap.exists ? ((beforeSnap.data() as Record<string, unknown>).rawInput as string) ?? "" : "";
+    const beforeData = beforeSnap.exists ? (beforeSnap.data() as Record<string, unknown>) : {};
+    const beforeRaw = (beforeData.rawInput as string) ?? "";
+    const beforeTag = sanitizeTypeTag(beforeData.typeTag);
+
+    // Shift-type tag (#29): only meaningful on a numeric "worked hours" cell, and
+    // never alters pay. Cleared automatically when the cell isn't pure-numeric.
+    // When the request omits `typeTag` (a plain rawInput edit) the existing tag is
+    // preserved across numeric→numeric changes.
+    const tagProvided = Object.prototype.hasOwnProperty.call(body, "typeTag");
+    let typeTag: ReturnType<typeof sanitizeTypeTag>;
+    if (!isPureNumericExpression(parsed)) {
+      typeTag = null;
+    } else if (tagProvided) {
+      typeTag = sanitizeTypeTag(body.typeTag);
+    } else {
+      typeTag = beforeTag;
+    }
+
     await shiftRef.set({
       employeeId,
       date,
@@ -1130,13 +1147,14 @@ shiftsRouter.put(
       hoursComputed: parsed.hoursComputed,
       isDouble: parsed.isDouble,
       status,
+      typeTag,
       updatedAt: FieldValue.serverTimestamp(),
     });
     await db().collection("shiftPlans").doc(planId).update({ updatedAt: FieldValue.serverTimestamp() });
 
-    // Compact form: only log the rawInput change. Segments + hours are
+    // Compact form: only log the rawInput / typeTag change. Segments + hours are
     // derived from rawInput so storing them would just inflate the log.
-    if (beforeRaw !== parsed.rawInput) {
+    if (beforeRaw !== parsed.rawInput || beforeTag !== typeTag) {
       await logUpdate(ctxFromReq(req), {
         collection: "shiftPlans/shifts",
         resourceId: planId,
@@ -1144,11 +1162,11 @@ shiftsRouter.put(
         employeeId,
         year: Number(String(date).slice(0, 4)) || undefined,
         month: Number(String(date).slice(5, 7)) || undefined,
-        before: { rawInput: beforeRaw },
-        after: { rawInput: parsed.rawInput },
+        before: { rawInput: beforeRaw, typeTag: beforeTag },
+        after: { rawInput: parsed.rawInput, typeTag },
       });
     }
-    res.json({ ok: true, hoursComputed: parsed.hoursComputed });
+    res.json({ ok: true, hoursComputed: parsed.hoursComputed, typeTag });
   }
 );
 
