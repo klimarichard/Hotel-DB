@@ -16,10 +16,16 @@ export type HotelCode = typeof HOTEL_CODES[number];
 // Allowed shift-type tags for numeric ("worked hours") cells (#29). A bare number
 // like "8" carries no shift type, so it can't be attributed in the per-type
 // occupancy tally ("Přehled obsazení"). Tagging records which type those hours
-// were worked as so the cell counts toward that type — it does NOT affect pay.
-// Mirrors the COUNTER_ROWS list in the frontend grid (label = code+hotel).
+// were worked as — it does NOT affect pay.
+//
+// The first 12 are the occupancy types (label = code+hotel) and mirror the
+// frontend COUNTER_ROWS — a cell tagged with one counts in the tally / covers a
+// free-shift slot. The last 4 (R, HO, ZD, ZN) are annotation-only labels: they
+// are accepted and stored, but never equal any free-slot `code+hotel`, so they
+// add no tally row and affect no coverage. Mirrors ALL_TYPE_TAGS in the frontend.
 export const SHIFT_TYPE_TAGS = [
   "DA", "DS", "DQ", "DK", "NA", "NS", "NQ", "NK", "DPQ", "NPQ", "DPA", "NPA",
+  "R", "HO", "ZD", "ZN",
 ] as const;
 export type ShiftTypeTag = typeof SHIFT_TYPE_TAGS[number];
 
