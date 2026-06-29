@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
+import { Link, NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useAuth } from "@/hooks/useAuth";
@@ -119,10 +119,10 @@ export default function Layout() {
   return (
     <div className={styles.shell}>
       <nav className={styles.sidebar}>
-        <div className={styles.logo}>
+        <Link to="/prehled" className={styles.logo} title="Přehled" aria-label="Přehled">
           <img src={logoMark} alt="" className={styles.logoMark} />
           <span>HPM Intranet</span>
-        </div>
+        </Link>
         <ul className={styles.nav}>
           {items.map((item) => {
             const badge = badgeFor(item.id);
