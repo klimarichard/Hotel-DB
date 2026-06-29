@@ -1,6 +1,6 @@
 import { useEffect, useRef, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { parseShiftExpression, getCellColor, SHIFT_TYPE_TAGS, isPureNumericExpression } from "../lib/shiftConstants";
+import { parseShiftExpression, getCellColor, ALL_TYPE_TAGS, typeTagToCounterKey, isPureNumericExpression } from "../lib/shiftConstants";
 import { useTheme } from "../context/ThemeContext";
 
 interface Props {
@@ -228,6 +228,15 @@ export default function ShiftCell({
   const tagEditable = !readOnly && !!onSaveTypeTag && isNumericCell;
   const showTag = tagEditable;
 
+  // Badge colour: for the 12 occupancy types the badge wears that shift type's
+  // own colour — its label (e.g. "DA", "NPQ") parses to its code+hotel, so
+  // getCellColor returns the same colour the type's cell uses. The 4
+  // annotation-only tags (R/HO/ZD/ZN — no counter key) keep the neutral badge.
+  const tagColor =
+    typeTag && typeTagToCounterKey(typeTag)
+      ? getCellColor(parseShiftExpression(typeTag), dark)
+      : null;
+
   function openTagMenu(e: React.MouseEvent) {
     e.stopPropagation();
     if (!tagEditable) return;
@@ -305,10 +314,12 @@ export default function ShiftCell({
             padding: "1px 1px 1px 2px",
             cursor: "pointer",
             opacity: typeTag ? 1 : 0.45,
-            color: textColor,
-            background: typeTag
-              ? (dark ? "rgba(15,23,42,0.72)" : "rgba(255,255,255,0.78)")
-              : "transparent",
+            color: tagColor ? tagColor.text : textColor,
+            background: tagColor
+              ? tagColor.bg
+              : typeTag
+                ? (dark ? "rgba(15,23,42,0.72)" : "rgba(255,255,255,0.78)")
+                : "transparent",
             borderBottomLeftRadius: "3px",
           }}
         >
@@ -341,7 +352,7 @@ export default function ShiftCell({
               }}
             >
               <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "3px" }}>
-                {SHIFT_TYPE_TAGS.map((t) => (
+                {ALL_TYPE_TAGS.map((t) => (
                   <button
                     key={t.label}
                     onClick={() => pickTag(t.label)}
