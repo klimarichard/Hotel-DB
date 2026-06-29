@@ -1,6 +1,6 @@
 import { useEffect, useRef, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { parseShiftExpression, getCellColor, SHIFT_TYPE_TAGS, isPureNumericExpression } from "../lib/shiftConstants";
+import { parseShiftExpression, getCellColor, ALL_TYPE_TAGS, isPureNumericExpression } from "../lib/shiftConstants";
 import { useTheme } from "../context/ThemeContext";
 
 interface Props {
@@ -341,7 +341,7 @@ export default function ShiftCell({
               }}
             >
               <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "3px" }}>
-                {SHIFT_TYPE_TAGS.map((t) => (
+                {ALL_TYPE_TAGS.map((t) => (
                   <button
                     key={t.label}
                     onClick={() => pickTag(t.label)}

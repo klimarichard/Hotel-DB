@@ -322,8 +322,19 @@ function parseSegment(token: string): ShiftSegment | { error: string } {
 // ─── Shift-type tags for numeric cells (#29) ──────────────────────────────────
 // A bare number (worked hours) carries no shift type, so it can't be attributed
 // in the per-type occupancy tally. Tagging records which type those hours were
-// worked as so the cell counts toward that type — it does NOT affect pay. This is
-// the single source of truth for both the tag picker and the counter table.
+// worked as — it does NOT affect pay.
+//
+// There are two kinds of tag:
+//  • SHIFT_TYPE_TAGS — the 12 occupancy types. Each has a `code_hotel` counter
+//    key, so a cell tagged with one counts toward that type in the "Přehled
+//    obsazení" tally and covers the matching free-shift slot. This is also the
+//    single source of truth for the tally rows (`COUNTER_ROWS` in ShiftGrid).
+//  • EXTRA_TYPE_TAGS — annotation-only labels (R, HO, ZD, ZN). They are pickable
+//    on a numeric cell purely as a note; they have NO counter key, so they never
+//    add a tally row, are never counted, and never affect free-shift coverage.
+//    ZD/ZN (trainee) deliberately carry no hotel appropriation.
+//
+// The picker (ShiftCell) offers ALL_TYPE_TAGS; only SHIFT_TYPE_TAGS is counted.
 export const SHIFT_TYPE_TAGS: { label: string; code: string; hotel: string }[] = [
   { label: "DA",  code: "D",  hotel: "A" },
   { label: "DS",  code: "D",  hotel: "S" },
@@ -339,7 +350,22 @@ export const SHIFT_TYPE_TAGS: { label: string; code: string; hotel: string }[] =
   { label: "NPA", code: "NP", hotel: "A" },
 ];
 
-/** Map a tag label (e.g. "DA") to its counter key (e.g. "D_A"), or null. */
+/** Annotation-only tags — pickable but never counted (no counter key). */
+export const EXTRA_TYPE_TAGS: { label: string }[] = [
+  { label: "R" },
+  { label: "HO" },
+  { label: "ZD" },
+  { label: "ZN" },
+];
+
+/** Every tag offered in the picker: the 12 counted types + the 4 annotations. */
+export const ALL_TYPE_TAGS: { label: string }[] = [...SHIFT_TYPE_TAGS, ...EXTRA_TYPE_TAGS];
+
+/**
+ * Map a tag label (e.g. "DA") to its counter key (e.g. "D_A"), or null.
+ * Annotation-only tags (EXTRA_TYPE_TAGS) are intentionally absent here, so a
+ * numeric cell tagged with one is never counted in the tally or coverage.
+ */
 export function typeTagToCounterKey(label: string | null | undefined): string | null {
   if (!label) return null;
   const t = SHIFT_TYPE_TAGS.find((x) => x.label === label);
