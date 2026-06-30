@@ -56,6 +56,7 @@ export interface PayrollEntry {
   displayName?: string;
   baseHours?: number; // effective per-employee norm (override ?? prorated mid-month); falls back to period.baseHours
   baseHoursNorm?: number; // prorated/full norm before any per-employee override
+  hoursPerWeek?: number | null; // PPP úvazek — prorates the vacation target (#15 Part B)
   contractType: "HPP" | "PPP" | "DPP" | string;
   salary: number | null;
   hourlyRate: number | null;
@@ -682,6 +683,7 @@ export default function PayrollPage() {
       contractType: entry.contractType,
       hourlyRate: entry.hourlyRate,
       base: effBase,
+      hoursPerWeek: entry.hoursPerWeek,
       nemoc: payload.sickLeaveHours,
       maxHolidayHours: period.maxHolidayHours,
       reportOverride: payload.overrides.reportHours,
