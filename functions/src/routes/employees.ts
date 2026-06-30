@@ -504,19 +504,26 @@ function computeParentalLeave(
   rows: Array<Record<string, unknown>>,
   today: string
 ): { parentalLeaveFrom: string | null; parentalLeaveTo: string | null } {
+  // An open-ended period (no endDate yet — the end is unknown when parental
+  // leave starts) counts as ongoing; a dated one drops off once it has passed.
+  const ongoingOrFuture = (r: Record<string, unknown>): boolean => {
+    const end = r.endDate;
+    if (typeof end !== "string" || end === "") return true; // open-ended → ongoing
+    return end >= today;
+  };
   const periods = rows
     .filter(
       (r) =>
         r.changeType === "rodičovská" &&
         typeof r.startDate === "string" &&
-        typeof r.endDate === "string" &&
-        (r.endDate as string) >= today
+        ongoingOrFuture(r)
     )
     .sort((a, b) => String(a.startDate).localeCompare(String(b.startDate)));
   const p = periods[0];
+  const end = p?.endDate;
   return {
     parentalLeaveFrom: p ? (p.startDate as string) : null,
-    parentalLeaveTo: p ? (p.endDate as string) : null,
+    parentalLeaveTo: typeof end === "string" && end ? end : null,
   };
 }
 
@@ -1431,10 +1438,13 @@ employeesRouter.post(
       return;
     }
     if (body.changeType === "rodičovská") {
-      if (!body.startDate || !body.endDate) {
-        res.status(400).json({ error: "Rodičovská vyžaduje začátek i konec." });
+      if (!body.startDate) {
+        res.status(400).json({ error: "Rodičovská vyžaduje datum začátku." });
         return;
       }
+      // The end date is unknown when parental leave begins — it may be filled in
+      // later via an edit. Normalise a blank endDate to null (open-ended).
+      if (!body.endDate) body.endDate = null;
       for (const k of [
         "salary", "hourlyRate", "contractType", "jobTitle", "department",
         "companyId", "changes", "agreedReward", "agreedWorkScope",
