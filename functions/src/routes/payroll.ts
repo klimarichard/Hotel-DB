@@ -6,6 +6,7 @@ import { requireAuth, AuthRequest } from "../middleware/auth";
 import { requirePermission } from "../auth/permissions";
 import { createOrUpdatePayrollPeriod, getMultisportPrice, recomputeEntryForEmployee } from "../services/payrollCalculator";
 import { ctxFromReq, logCreate, logUpdate, logDelete, writeAudit } from "../services/auditLog";
+import * as clock from "../services/clock";
 
 export const payrollRouter = Router();
 
@@ -484,6 +485,135 @@ payrollRouter.patch(
       after: { ...before, ...update },
     });
     res.json({ ok: true });
+  }
+);
+
+// ─── GET /payroll/min-wage-check ──────────────────────────────────────────────
+// Given a candidate `minimumWage`, returns the list of employees whose CURRENT
+// effective monthly salary is below the threshold for their contract type
+// (HPP ≥ minWage; PPP ≥ (minWage/40)×hoursPerWeek, default 20h; DPP not checked).
+// Used by the Settings → Mzdy editor to show exactly which contracts would fall
+// below a new minimum before it's saved. Read-only; gated like the setting.
+
+type MinWageRow = Record<string, unknown>;
+
+function uvazekToContractTypeLite(value: string): "HPP" | "PPP" | null {
+  const v = value.toLowerCase();
+  if (v.includes("polovič") || v.includes("zkrácen") || v.includes("částečn")) return "PPP";
+  if (v.includes("plný") || v.includes("plny")) return "HPP";
+  return null;
+}
+
+function minWageThresholdServer(
+  contractType: string,
+  minWage: number,
+  hoursPerWeek: number | null
+): number | null {
+  if (contractType === "HPP") return Math.round(minWage);
+  if (contractType === "PPP") {
+    const h = hoursPerWeek && hoursPerWeek > 0 ? hoursPerWeek : 20;
+    return Math.round((minWage / 40) * h);
+  }
+  return null; // DPP / unknown: not checked
+}
+
+/**
+ * Current effective comp for the minimum-wage check: folds the latest
+ * NON-parallel (primary) session — so a concurrent second contract doesn't
+ * mask the primary — and applies mzda / úvazek / počet hodin / délka smlouvy
+ * Dodatky that have taken effect by today. Mirrors the frontend
+ * computeEffectiveState + the audit script.
+ */
+function currentEffectiveForMinWage(
+  rows: MinWageRow[],
+  today: string
+): { contractType: string; salary: number | null; hoursPerWeek: number | null; active: boolean } | null {
+  const sorted = [...rows].sort((a, b) =>
+    String(a.startDate ?? "").localeCompare(String(b.startDate ?? ""))
+  );
+  type S = { nastup: MinWageRow; dodatky: MinWageRow[]; ukonceni: MinWageRow | null; parallel: boolean };
+  const sessions: S[] = [];
+  let cur: S | null = null;
+  for (const r of sorted) {
+    const ct = r.changeType;
+    if (ct === "nástup") {
+      if (cur) sessions.push(cur);
+      cur = { nastup: r, dodatky: [], ukonceni: null, parallel: r.parallel === true };
+    } else if (cur && ct === "změna smlouvy") {
+      cur.dodatky.push(r);
+    } else if (cur && ct === "ukončení") {
+      cur.ukonceni = r;
+    }
+  }
+  if (cur) sessions.push(cur);
+  const nonParallel = sessions.filter((s) => !s.parallel);
+  const s = nonParallel.length ? nonParallel[nonParallel.length - 1] : null;
+  if (!s) return null;
+
+  let contractType = String(s.nastup.contractType ?? "");
+  let salary = s.nastup.salary != null ? Number(s.nastup.salary) : null;
+  let hoursPerWeek = s.nastup.hoursPerWeek != null ? Number(s.nastup.hoursPerWeek) : null;
+  let endDate = (s.nastup.endDate as string | null | undefined) ?? null;
+  for (const d of s.dodatky) {
+    if (String(d.startDate ?? "") > today) continue; // future-dated: not yet effective
+    const changes = (d.changes as Array<{ changeKind?: string; value?: string }> | undefined) ?? [];
+    for (const ch of changes) {
+      if (ch.changeKind === "mzda" && ch.value) {
+        const n = Number(ch.value);
+        if (Number.isFinite(n) && contractType !== "DPP") salary = n;
+      } else if (ch.changeKind === "úvazek" && ch.value) {
+        const m = uvazekToContractTypeLite(ch.value);
+        if (m) contractType = m;
+      } else if (ch.changeKind === "počet hodin" && ch.value) {
+        const n = Number(ch.value);
+        if (Number.isFinite(n)) hoursPerWeek = n;
+      } else if (ch.changeKind === "délka smlouvy") {
+        endDate = ch.value || null;
+      }
+    }
+  }
+  if (s.ukonceni && s.ukonceni.startDate) endDate = s.ukonceni.startDate as string;
+  const started = String(s.nastup.startDate ?? "") <= today;
+  const ended = !!endDate && String(endDate) < today;
+  return { contractType, salary, hoursPerWeek, active: started && !ended };
+}
+
+payrollRouter.get(
+  "/min-wage-check",
+  requireAuth,
+  requirePermission("settings.payroll.manage"),
+  async (req: AuthRequest, res: Response) => {
+    const minWage = Number(req.query.minimumWage);
+    if (!Number.isFinite(minWage) || minWage <= 0) {
+      res.status(400).json({ error: "Neplatná minimální mzda." });
+      return;
+    }
+    const today = clock.today();
+    const empSnap = await db().collection("employees").get();
+    const checked = await Promise.all(
+      empSnap.docs.map(async (empDoc) => {
+        const rowsSnap = await empDoc.ref.collection("employment").get();
+        const rows = rowsSnap.docs.map((r) => r.data() as MinWageRow);
+        const eff = currentEffectiveForMinWage(rows, today);
+        if (!eff || !eff.active) return null;
+        const threshold = minWageThresholdServer(eff.contractType, minWage, eff.hoursPerWeek);
+        if (threshold == null) return null; // DPP not checked
+        if (eff.salary == null || !Number.isFinite(eff.salary) || eff.salary >= threshold) return null;
+        const e = empDoc.data() as Record<string, unknown>;
+        return {
+          employeeId: empDoc.id,
+          name: `${e.firstName ?? ""} ${e.lastName ?? ""}`.trim() || empDoc.id,
+          contractType: eff.contractType,
+          hoursPerWeek: eff.hoursPerWeek,
+          salary: eff.salary,
+          threshold,
+        };
+      })
+    );
+    const violations = checked
+      .filter((v): v is NonNullable<typeof v> => v !== null)
+      .sort((a, b) => a.salary - b.salary);
+    res.json({ minimumWage: minWage, violations });
   }
 );
 
