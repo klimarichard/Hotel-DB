@@ -52,6 +52,8 @@ const PROTECTED_ROOT_FIELDS = [
   "currentDepartment",
   "currentContractType",
   "currentCompanyId",
+  "currentContractDuringLeave",
+  "leaveContractType",
   "employmentStartDate",
   "employmentEndDate",
   "parentalLeaveFrom",
@@ -135,29 +137,29 @@ async function computeEffectiveRootFields(
 
   // clock.today() honours the non-prod test clock.
   const today = clock.today();
-  type Session = { nastup: Row; dodatky: Row[]; terminated: boolean };
+
+  // Build the chronological session list. Every `nástup` opens a session;
+  // `změna smlouvy` / `ukončení` attach to the most recently opened one, and
+  // `rodičovská` rows are collected on their session (informational).
+  type Session = { nastup: Row; dodatky: Row[]; rodicovska: Row[]; terminated: boolean };
+  const sessions: Session[] = [];
   let current: Session | null = null;
-  let latest: Session | null = null;
   for (const r of rows) {
     const ct = r.changeType as string | undefined;
     if (ct === "nástup") {
-      if (current) latest = current;
-      current = { nastup: r, dodatky: [], terminated: false };
+      if (current) sessions.push(current);
+      current = { nastup: r, dodatky: [], rodicovska: [], terminated: false };
     } else if (current && ct === "změna smlouvy") {
       current.dodatky.push(r);
+    } else if (current && ct === "rodičovská") {
+      current.rodicovska.push(r);
     } else if (current && ct === "ukončení") {
       // Date-based: a future-dated Ukončení leaves the employee active (and
       // still showing their current position) until the day after the end date.
       if (((r.startDate as string | undefined) ?? "") < today) current.terminated = true;
     }
   }
-  if (current) latest = current;
-  if (!latest || latest.terminated) return null;
-
-  let jobTitle = (latest.nastup.jobTitle as string | undefined) ?? "";
-  let contractType = (latest.nastup.contractType as string | undefined) ?? "";
-  const companyId = (latest.nastup.companyId as string | undefined) ?? null;
-  let department = (latest.nastup.department as string | undefined) ?? "";
+  if (current) sessions.push(current);
 
   // A position-change Dodatek can move the employee to a position that belongs
   // to a DIFFERENT department, so currentDepartment (→ Oddělení column + detail
@@ -172,32 +174,80 @@ async function computeEffectiveRootFields(
     return lazyMap.get(positionName);
   };
 
-  // Only fold Dodatky whose validity (startDate) has arrived — mirrors the
-  // frontend computeEffectiveState so the Zaměstnanci list and the employee
-  // detail header agree.
-  for (const dodatek of latest.dodatky) {
-    if (((dodatek.startDate as string | undefined) ?? "") > today) continue;
-    const changes = (dodatek.changes as Array<{ changeKind?: string; value?: string }> | undefined) ?? [];
-    for (const ch of changes) {
-      if (ch.changeKind === "pracovní pozice" && ch.value) {
-        jobTitle = ch.value;
-        const resolved = await resolveDept(ch.value);
-        if (resolved) department = resolved;
-      } else if (ch.changeKind === "úvazek" && ch.value) {
-        // Same mapping as the frontend's uvazekToContractType — keep
-        // the two in sync if either side changes.
-        const v = ch.value.toLowerCase();
-        if (v.includes("polovič") || v.includes("zkrácen") || v.includes("částečn")) contractType = "PPP";
-        else if (v.includes("plný") || v.includes("plny")) contractType = "HPP";
+  // Fold a single session's applicable Dodatky into its effective contract
+  // fields. Only Dodatky whose validity (startDate) has arrived are folded —
+  // mirrors the frontend computeEffectiveState so list + detail header agree.
+  const foldSession = async (
+    s: Session
+  ): Promise<{ jobTitle: string; contractType: string; companyId: string | null; department: string }> => {
+    let jobTitle = (s.nastup.jobTitle as string | undefined) ?? "";
+    let contractType = (s.nastup.contractType as string | undefined) ?? "";
+    const companyId = (s.nastup.companyId as string | undefined) ?? null;
+    let department = (s.nastup.department as string | undefined) ?? "";
+    for (const dodatek of s.dodatky) {
+      if (((dodatek.startDate as string | undefined) ?? "") > today) continue;
+      const changes = (dodatek.changes as Array<{ changeKind?: string; value?: string }> | undefined) ?? [];
+      for (const ch of changes) {
+        if (ch.changeKind === "pracovní pozice" && ch.value) {
+          jobTitle = ch.value;
+          const resolved = await resolveDept(ch.value);
+          if (resolved) department = resolved;
+        } else if (ch.changeKind === "úvazek" && ch.value) {
+          // Same mapping as the frontend's uvazekToContractType — keep
+          // the two in sync if either side changes.
+          const v = ch.value.toLowerCase();
+          if (v.includes("polovič") || v.includes("zkrácen") || v.includes("částečn")) contractType = "PPP";
+          else if (v.includes("plný") || v.includes("plny")) contractType = "HPP";
+        }
       }
     }
+    return { jobTitle, contractType, companyId, department };
+  };
+
+  // CURRENT = the most recent ACTIVE session (started, not terminated). Payroll
+  // and shifts belong to this contract. A concurrent second contract (e.g. a DPP
+  // worked during parental leave) is simply the latest active session, so it
+  // wins automatically; when it ends, the still-active earlier contract
+  // resurfaces as current. Byte-identical to the long-standing "latest session"
+  // behaviour for every single-contract employee.
+  const isStarted = (s: Session) => (((s.nastup.startDate as string | undefined) ?? "") <= today);
+  let chosen: Session | null = null;
+  for (let i = sessions.length - 1; i >= 0; i--) {
+    if (isStarted(sessions[i]) && !sessions[i].terminated) { chosen = sessions[i]; break; }
+  }
+  if (!chosen) {
+    // No active session: surface a future (before-start) latest session so the
+    // upcoming contract still shows; a terminated tail clears current* (null).
+    const last = sessions[sessions.length - 1] ?? null;
+    if (last && !last.terminated && !isStarted(last)) chosen = last;
+    else return null;
   }
 
+  // currentContractDuringLeave: an active rodičovská sits on a DIFFERENT (earlier)
+  // session than the current contract → the current contract is a concurrent
+  // second job worked during leave. Drives the "RODIČOVSKÁ / position" list label
+  // (vs. a plain "RODIČOVSKÁ" when the person is on leave from their only job).
+  const rodActive = (rd: Row): boolean => {
+    const start = (rd.startDate as string | undefined) ?? "";
+    if (start > today) return false;
+    const end = rd.endDate as string | undefined;
+    return !end || end >= today; // open-ended → ongoing
+  };
+  const leaveSession = sessions.find((s) => s !== chosen && s.rodicovska.some(rodActive)) ?? null;
+  const currentContractDuringLeave = !!leaveSession;
+  // The on-leave (main) contract's type, so the Zaměstnanci list can show its
+  // badge alongside the current (concurrent) contract's — e.g. [HPP] [DPP].
+  const leaveContractType = leaveSession ? (await foldSession(leaveSession)).contractType || null : null;
+
+  const pf = await foldSession(chosen);
+
   return {
-    currentCompanyId: companyId,
-    currentDepartment: department,
-    currentContractType: contractType,
-    currentJobTitle: jobTitle,
+    currentCompanyId: pf.companyId,
+    currentDepartment: pf.department,
+    currentContractType: pf.contractType,
+    currentJobTitle: pf.jobTitle,
+    currentContractDuringLeave,
+    leaveContractType,
   };
 }
 
@@ -241,6 +291,8 @@ const EMPTY_ROOT_FIELDS = {
   currentDepartment: "",
   currentContractType: "",
   currentJobTitle: "",
+  currentContractDuringLeave: false,
+  leaveContractType: null,
 } as const;
 
 /**
@@ -433,19 +485,26 @@ function computeParentalLeave(
   rows: Array<Record<string, unknown>>,
   today: string
 ): { parentalLeaveFrom: string | null; parentalLeaveTo: string | null } {
+  // An open-ended period (no endDate yet — the end is unknown when parental
+  // leave starts) counts as ongoing; a dated one drops off once it has passed.
+  const ongoingOrFuture = (r: Record<string, unknown>): boolean => {
+    const end = r.endDate;
+    if (typeof end !== "string" || end === "") return true; // open-ended → ongoing
+    return end >= today;
+  };
   const periods = rows
     .filter(
       (r) =>
         r.changeType === "rodičovská" &&
         typeof r.startDate === "string" &&
-        typeof r.endDate === "string" &&
-        (r.endDate as string) >= today
+        ongoingOrFuture(r)
     )
     .sort((a, b) => String(a.startDate).localeCompare(String(b.startDate)));
   const p = periods[0];
+  const end = p?.endDate;
   return {
     parentalLeaveFrom: p ? (p.startDate as string) : null,
-    parentalLeaveTo: p ? (p.endDate as string) : null,
+    parentalLeaveTo: typeof end === "string" && end ? end : null,
   };
 }
 
@@ -542,6 +601,10 @@ async function resyncRootFields(
   // the current* fields changed, so it sits before the early returns below.
   await applyDerivedStatus(empRef, now, req);
   if (!before) return;
+  // current*-only diff gates the AUDIT entry here (the root WRITE already
+  // happened in recomputeRootFromLatestSession). A concurrent-contract change is
+  // audited at the row level by the POST/PATCH logCreate/logUpdate, so it must
+  // NOT also emit a no-diff current* entry.
   const changed =
     after.currentJobTitle !== (before.currentJobTitle ?? "") ||
     after.currentContractType !== (before.currentContractType ?? "") ||
@@ -589,7 +652,9 @@ export async function refreshEffectiveRootForAllActive(): Promise<{ scanned: num
       patch.currentJobTitle !== (before.currentJobTitle ?? "") ||
       patch.currentContractType !== (before.currentContractType ?? "") ||
       patch.currentDepartment !== (before.currentDepartment ?? "") ||
-      patch.currentCompanyId !== (before.currentCompanyId ?? null);
+      patch.currentCompanyId !== (before.currentCompanyId ?? null) ||
+      (patch.currentContractDuringLeave ?? false) !== (before.currentContractDuringLeave ?? false) ||
+      (patch.leaveContractType ?? null) !== (before.leaveContractType ?? null);
     if (changed) {
       await doc.ref.update({ ...patch, updatedAt: FieldValue.serverTimestamp() });
       updated++;
@@ -1355,10 +1420,13 @@ employeesRouter.post(
       return;
     }
     if (body.changeType === "rodičovská") {
-      if (!body.startDate || !body.endDate) {
-        res.status(400).json({ error: "Rodičovská vyžaduje začátek i konec." });
+      if (!body.startDate) {
+        res.status(400).json({ error: "Rodičovská vyžaduje datum začátku." });
         return;
       }
+      // The end date is unknown when parental leave begins — it may be filled in
+      // later via an edit. Normalise a blank endDate to null (open-ended).
+      if (!body.endDate) body.endDate = null;
       for (const k of [
         "salary", "hourlyRate", "contractType", "jobTitle", "department",
         "companyId", "changes", "agreedReward", "agreedWorkScope",
@@ -1410,6 +1478,7 @@ employeesRouter.post(
         companyId: body.companyId,
         salary: body.salary,
         hourlyRate: body.hourlyRate,
+        hoursPerWeek: body.hoursPerWeek,
         changes: body.changes,
       },
     });

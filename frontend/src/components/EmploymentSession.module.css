@@ -125,8 +125,24 @@
   font-variant-numeric: tabular-nums;
 }
 
-.rodicovskaDelete {
+.rodicovskaEdit {
   margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 0.875rem;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
+}
+
+.rodicovskaEdit:hover {
+  color: var(--color-text);
+  background: var(--color-surface-3);
+}
+
+.rodicovskaDelete {
   background: none;
   border: none;
   color: var(--color-text-muted);

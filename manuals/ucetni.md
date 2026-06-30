@@ -65,7 +65,7 @@ Evidence všech zaměstnanců — **vše jen pro čtení**. Záložky **Aktivní
 - Vyhledávací pole hledá podle jména, příjmení, **rodného příjmení**, pozice i národnosti.
 - Řádky jsou barevně odlišené podle typu smlouvy (HPP / PPP / DPP).
 - Vedle odznaku HPP/PPP/DPP může být u jména zaměstnance zobrazen zelený odznak **„V zácviku"** — ten signalizuje, že zaměstnanec je aktuálně v období zácviku. Odznak zmizí automaticky po uplynutí nastaveného data konce zácviku.
-- U jména zaměstnance může být zobrazen i odznak **„Rodičovská"** — ten signalizuje, že zaměstnanec je aktuálně na rodičovské dovolené. Odznak se zobrazuje jen po dobu trvání zadaného období a poté automaticky zmizí.
+- Zaměstnanec aktuálně na rodičovské dovolené má ve sloupcích **Pozice** a **Oddělení** zobrazený odznak **„Rodičovská"** — zobrazuje se jen po dobu trvání zadaného období a poté automaticky zmizí. Pracuje-li takový zaměstnanec zároveň na druhý úvazek (souběžná smlouva), zobrazují se u jeho jména **oba odznaky smlouvy** (např. HPP i DPP) a ve sloupcích Pozice/Oddělení text **„RODIČOVSKÁ / [aktuální pozice]"**.
 - Tlačítko **Exportovat CSV** otevře dialog, kde vyberete sloupce a filtry a stáhnete data do tabulky.
 
 #### Sloupce tabulky
@@ -98,7 +98,7 @@ Detail má tři záložky — **Detail** (osobní a kontaktní údaje), **Histor
 
 #### Historie pracovního poměru
 
-Pracovní poměr je členěn na **sezení (sessions)** — každé začíná **Nástupem**, může obsahovat **Dodatky** (změna mzdy, pozice, úvazku, délky smlouvy) a končí **Ukončením**.
+Pracovní poměr je členěn na **sezení (sessions)** — každé začíná **Nástupem**, může obsahovat **Dodatky** (změna mzdy, pozice, úvazku, délky smlouvy nebo počtu hodin u PPP) a končí **Ukončením**.
 
 - Mzda a pozice v záhlaví poměru se mění až **k datu platnosti Dodatku**.
 - **Automatický přesun do „Ukončení":** zaměstnanec se do záložky *Ukončení* přesune sám, jakmile **uplyne datum ukončení** (smlouva na dobu určitou nebo zadané ukončení). Den ukončení je ještě aktivní — přesun proběhne až následující den. Naopak zaměstnanec s budoucím nástupem se zobrazuje v záložce **Před nástupem** a do záložky **Aktivní** se přesune automaticky **v den nástupu**.

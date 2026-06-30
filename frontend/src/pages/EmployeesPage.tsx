@@ -33,6 +33,13 @@ interface Employee {
   // within it; the live check below makes appearance/clearing automatic.
   parentalLeaveFrom?: string | null;
   parentalLeaveTo?: string | null;
+  // True when the CURRENT contract (most recent active) is a concurrent second
+  // job worked during an active rodičovská on a DIFFERENT contract (server-owned).
+  // Drives the "RODIČOVSKÁ / position" list label vs a plain "RODIČOVSKÁ".
+  currentContractDuringLeave?: boolean;
+  // The on-leave (main) contract's type, shown as a badge alongside the current
+  // (concurrent) contract — e.g. [HPP] [DPP]. Only set while concurrent.
+  leaveContractType?: string | null;
 }
 
 // In training = flag set AND (no end date, or end date today/in the future).
@@ -41,14 +48,62 @@ function isInTraining(emp: Employee): boolean {
   return emp.zaucovani === true && (!emp.zaucovaniDo || emp.zaucovaniDo >= clock.today());
 }
 
-// On parental leave = today falls within the denormalized [from, to] window.
+// Contract-type badge class — coloured by the badge's OWN type (grey HPP /
+// blue PPP / amber DPP), so a concurrent row shows each contract in its colour.
+function contractBadgeClass(ct: string): string {
+  if (ct === "DPP") return `${styles.contractBadge} ${styles.contractBadgeDpp}`;
+  if (ct === "PPP") return `${styles.contractBadge} ${styles.contractBadgePpp}`;
+  return styles.contractBadge;
+}
+
+// On parental leave = today is on/after the start and (if an end date is set)
+// on/before it. An open-ended period (no end date yet — unknown when leave
+// begins) keeps the badge until an end date is later filled in and passes.
 function isOnParentalLeave(emp: Employee): boolean {
   const today = clock.today();
   return (
     !!emp.parentalLeaveFrom &&
-    !!emp.parentalLeaveTo &&
     emp.parentalLeaveFrom <= today &&
-    today <= emp.parentalLeaveTo
+    (!emp.parentalLeaveTo || today <= emp.parentalLeaveTo)
+  );
+}
+
+// Position / department shown in the list. While on parental leave the column
+// reads "RODIČOVSKÁ"; if the current contract is a concurrent job worked during
+// that leave (currentContractDuringLeave), the current position/department
+// follows a slash ("RODIČOVSKÁ/<current>"). Returns "" (not "—") when empty so
+// the caller controls the empty fallback and the sort comparator reuses it.
+function positionDisplay(emp: Employee): string {
+  if (isOnParentalLeave(emp)) {
+    return emp.currentContractDuringLeave && emp.currentJobTitle
+      ? `RODIČOVSKÁ/${emp.currentJobTitle}`
+      : "RODIČOVSKÁ";
+  }
+  return emp.currentJobTitle ?? "";
+}
+function departmentDisplay(emp: Employee): string {
+  if (isOnParentalLeave(emp)) {
+    return emp.currentContractDuringLeave && emp.currentDepartment
+      ? `RODIČOVSKÁ/${emp.currentDepartment}`
+      : "RODIČOVSKÁ";
+  }
+  return emp.currentDepartment ?? "";
+}
+
+// Cell content for the Pozice / Oddělení columns. While on parental leave the
+// column leads with the "Rodičovská" badge; if the current contract is a
+// concurrent job worked during that leave, the current value follows a slash
+// ("[badge] / <current>"). The badge's default left margin is dropped since it
+// now leads the cell. Sorting uses positionDisplay/departmentDisplay so the
+// order matches what's shown.
+function parentalCell(emp: Employee, base: string) {
+  if (!isOnParentalLeave(emp)) return base || "—";
+  const showCurrent = !!emp.currentContractDuringLeave && !!base;
+  return (
+    <>
+      <span className={styles.parentalBadge} style={{ marginLeft: 0 }}>Rodičovská</span>
+      {showCurrent && <span style={{ marginLeft: 6 }}>/ {base}</span>}
+    </>
   );
 }
 
@@ -65,9 +120,9 @@ const csCollator = new Intl.Collator("cs", { sensitivity: "base", numeric: true 
 function sortValue(e: Employee, key: SortKey): string {
   switch (key) {
     case "jobTitle":
-      return e.currentJobTitle ?? "";
+      return positionDisplay(e);
     case "department":
-      return e.currentDepartment ?? "";
+      return departmentDisplay(e);
     case "nationality":
       return e.nationality ? nationalityName(e.nationality) : "";
     case "startDate":
@@ -254,18 +309,21 @@ export default function EmployeesPage() {
                     <Link to={`/zamestnanci/${emp.id}`} className={styles.nameLink}>
                       {employeeSurnameFirst(emp)}
                     </Link>
+                    {/* On leave with a concurrent contract: show the main
+                        (on-leave) contract's badge first, then the current one
+                        — e.g. [HPP] [DPP]. */}
+                    {emp.currentContractDuringLeave && emp.leaveContractType && (
+                      <span className={contractBadgeClass(emp.leaveContractType)}>{emp.leaveContractType}</span>
+                    )}
                     {emp.currentContractType && (
-                      <span className={styles.contractBadge}>{emp.currentContractType}</span>
+                      <span className={contractBadgeClass(emp.currentContractType)}>{emp.currentContractType}</span>
                     )}
                     {isInTraining(emp) && (
                       <span className={styles.trainingBadge}>V zácviku</span>
                     )}
-                    {isOnParentalLeave(emp) && (
-                      <span className={styles.parentalBadge}>Rodičovská</span>
-                    )}
                   </td>
-                  <td>{emp.currentJobTitle || "—"}</td>
-                  <td>{emp.currentDepartment || "—"}</td>
+                  <td>{parentalCell(emp, emp.currentJobTitle ?? "")}</td>
+                  <td>{parentalCell(emp, emp.currentDepartment ?? "")}</td>
                   <td>{emp.nationality ? nationalityName(emp.nationality) : "—"}</td>
                   <td>{formatDateCZ(emp.employmentStartDate) || "—"}</td>
                   <td>{formatDateCZ(emp.employmentEndDate) || "—"}</td>

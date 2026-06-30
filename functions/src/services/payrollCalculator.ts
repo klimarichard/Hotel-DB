@@ -102,6 +102,7 @@ interface EmploymentRowLite {
   jobTitle?: string;
   salary?: number | null;
   hourlyRate?: number | null;
+  hoursPerWeek?: number | null;
   changes?: ChangeLite[];
 }
 
@@ -218,7 +219,7 @@ export function effectiveCompFromRows(
   rows: EmploymentRowLite[],
   year: number,
   month: number
-): { salary: number | null; hourlyRate: number | null; contractType: string; jobTitle: string; positionChanged: boolean } | null {
+): { salary: number | null; hourlyRate: number | null; contractType: string; jobTitle: string; hoursPerWeek: number | null; positionChanged: boolean } | null {
   const relevant = relevantSessionForMonth(buildSessions(rows), year, month);
   if (!relevant) return null;
   const nastupJobTitle = relevant.nastup.jobTitle ?? "";
@@ -228,6 +229,7 @@ export function effectiveCompFromRows(
   let hourlyRate: number | null = null;
   let contractType = "";
   let jobTitle = "";
+  let hoursPerWeek: number | null = null;
 
   // Nástup first, then Dodatky whose validity (startDate) has arrived by the
   // month's end. A future-dated Dodatek must not change comp until its day.
@@ -237,6 +239,7 @@ export function effectiveCompFromRows(
     if (row.hourlyRate != null) hourlyRate = row.hourlyRate;
     if (row.contractType) contractType = row.contractType;
     if (row.jobTitle) jobTitle = row.jobTitle;
+    if (row.hoursPerWeek != null) hoursPerWeek = row.hoursPerWeek;
     for (const ch of row.changes ?? []) {
       if (ch.changeKind === "mzda" && ch.value) {
         const n = Number(ch.value);
@@ -246,13 +249,31 @@ export function effectiveCompFromRows(
       } else if (ch.changeKind === "úvazek" && ch.value) {
         const m = uvazekToContractType(ch.value);
         if (m) contractType = m;
+      } else if (ch.changeKind === "počet hodin" && ch.value) {
+        const n = Number(ch.value);
+        if (Number.isFinite(n)) hoursPerWeek = n;
       }
     }
   }
   // positionChanged: a "pracovní pozice" Dodatek moved the employee off the
   // Nástup position, so the Nástup's folded hourlyRate is stale for navíc.
   const positionChanged = normalizePositionName(jobTitle) !== normalizePositionName(nastupJobTitle);
-  return { salary, hourlyRate, contractType, jobTitle, positionChanged };
+  return { salary, hourlyRate, contractType, jobTitle, hoursPerWeek, positionChanged };
+}
+
+/**
+ * Part-time vacation factor (#15 Part B). A PPP part-timer accrues vacation
+ * toward a PRORATED base (hoursPerWeek / 40 of the full norm) — generalising the
+ * legacy hardcoded "half" (which assumed 20h) to any úvazek. A PPP row with no
+ * hoursPerWeek is treated as 20h → 0.5 (byte-identical to the old behaviour).
+ * NON-PPP → 1 (full base). This affects ONLY the vacation target; the Výkaz /
+ * Navíc cap stays at the full HPP base, so a part-timer can work up to the full
+ * norm before any hour counts as overtime.
+ */
+function vacationFactor(contractType: string, hoursPerWeek: number | null | undefined): number {
+  if (contractType !== "PPP") return 1;
+  const hpw = hoursPerWeek && hoursPerWeek > 0 ? hoursPerWeek : 20;
+  return hpw / 40;
 }
 
 function normalizePositionName(name: string): string {
@@ -473,6 +494,7 @@ export interface EmployeeEntry {
   sickLeaveHours: number;
   baseHours: number; // effective norm used in the calc (override ?? prorated/full)
   baseHoursNorm: number; // prorated/full-month norm BEFORE any per-employee override
+  hoursPerWeek: number | null; // PPP úvazek — prorates the vacation target (frontend mirror)
   // calculated:
   totalHours: number;
   reportHours: number;
@@ -507,6 +529,9 @@ export function calculateEntry(
     section: string;
     sickLeaveHours?: number;
     overrides?: Record<string, number>;
+    // PPP part-time weekly hours — prorates the VACATION target only (default
+    // 20h → half, the legacy behaviour). Does NOT change the Výkaz/Navíc cap.
+    hoursPerWeek?: number | null;
   },
   shifts: ShiftDoc[],
   holidays: Set<string>,
@@ -561,13 +586,13 @@ export function calculateEntry(
   const managerBonus = isVeduci ? countMonFriHolidays(year, month, holidays) * 8 : 0;
   const rawReportHours = totalHours + managerBonus;
 
-  // Clean (pre-Nemoc, pre-override) values. Výkaz is capped at the base norm;
-  // worked hours over the norm are always overtime. Vacation accrues toward the
-  // full base for HPP, toward half the base for PPP.
-  const isPpp = employee.contractType === "PPP";
+  // Clean (pre-Nemoc, pre-override) values. Výkaz is capped at the FULL base
+  // norm — a part-timer can work up to the full HPP base before any hour counts
+  // as overtime (Navíc). Vacation, however, accrues toward the úvazek-PRORATED
+  // base for PPP (#15 Part B): full base × hoursPerWeek/40 (default 20h → half).
   const cleanReport = Math.min(effBase, rawReportHours);
   const cleanExtra = Math.max(0, rawReportHours - effBase);
-  const vacTarget = isDpp ? 0 : (isPpp ? effBase / 2 : effBase);
+  const vacTarget = isDpp ? 0 : Math.round(effBase * vacationFactor(employee.contractType, employee.hoursPerWeek));
   const cleanVacation = Math.max(0, vacTarget - cleanReport);
   const cleanExtraPay = (!isDpp && cleanExtra > 0 && employee.hourlyRate != null && employee.hourlyRate > 0)
     ? employee.hourlyRate * cleanExtra : 0;
@@ -631,6 +656,7 @@ export function calculateEntry(
     sickLeaveHours: employee.sickLeaveHours ?? 0,
     baseHours: effBase,
     baseHoursNorm: baseHours,
+    hoursPerWeek: employee.hoursPerWeek ?? null,
     totalHours,
     reportHours,
     vacationHours,
@@ -907,10 +933,13 @@ export async function createOrUpdatePayrollPeriod(
       section: planEmp.section as string ?? "",
       sickLeaveHours: sickLeaveMap.get(employeeId) ?? 0,
       overrides: overridesMap.get(employeeId) ?? {},
+      hoursPerWeek: eff?.hoursPerWeek ?? null,
     };
 
     // Prorate the norm for employees who started or were terminated mid-month;
-    // null → employed the whole month, so use the standard full-month base.
+    // null → employed the whole month, so use the standard full-month base. The
+    // Výkaz/Navíc cap stays at this full base for part-timers too (#15 Part B);
+    // only the vacation target inside calculateEntry is úvazek-prorated.
     const proratedBase = proratedBaseFromRows(empRows, year, month);
     const empBaseHours = proratedBase ?? baseHours;
 
@@ -1053,6 +1082,7 @@ export async function recomputeEntryForEmployee(
     section: (planEmp.section as string) ?? "",
     sickLeaveHours: next.sickLeaveHours,
     overrides: next.overrides,
+    hoursPerWeek: eff?.hoursPerWeek ?? null,
   };
 
   const proratedBase = proratedBaseFromRows(empRows, year, month);

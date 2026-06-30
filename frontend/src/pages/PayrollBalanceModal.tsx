@@ -46,6 +46,7 @@ export default function PayrollBalanceModal({ entry, baseHoursNorm, maxHolidayHo
     contractType: entry.contractType,
     hourlyRate: entry.hourlyRate,
     base: B,
+    hoursPerWeek: entry.hoursPerWeek,
     nemoc: N,
     maxHolidayHours,
     reportOverride: vykazPinned ? num(vykaz) : undefined,
@@ -56,8 +57,9 @@ export default function PayrollBalanceModal({ entry, baseHoursNorm, maxHolidayHo
   const vykazShown = vykazPinned ? vykaz : fmt(res.vykaz);
   const baseOverridden = B !== baseHoursNorm;
   // HPP invariant: Výkaz + Dovolená + Nemoc must equal the full base. PPP has no
-  // single target — Dovolená fills only to ½ základu, Výkaz can run up to the
-  // full base, and Navíc starts only above it — so we show thresholds, not a sum-check.
+  // single target — Dovolená fills only to the úvazek-proportional part of the
+  // base (½ at 20 h/week), Výkaz can run up to the full base, and Navíc starts
+  // only above it — so we show thresholds, not a sum-check.
   const sumOk = !isPpp && res.sum === B;
 
   async function handleSave() {
@@ -69,6 +71,7 @@ export default function PayrollBalanceModal({ entry, baseHoursNorm, maxHolidayHo
       contractType: entry.contractType,
       hourlyRate: entry.hourlyRate,
       base: B,
+      hoursPerWeek: entry.hoursPerWeek,
       nemoc: N,
       maxHolidayHours,
       reportOverride: finalReportOverride,

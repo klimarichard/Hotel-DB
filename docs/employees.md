@@ -361,7 +361,7 @@ Stored as a regular doc in `employees/{id}/employment` with the shape:
 
 Backend (`functions/src/routes/employees.ts`) enforces this in two ways:
 
-- `POST /api/employees/:id/employment` whitelists `changeType: "rodičovská"` in `VALID_CHANGE_TYPES` and validates that both `startDate` and `endDate` are present; any request missing either is rejected 400.
+- `POST /api/employees/:id/employment` whitelists `changeType: "rodičovská"` in `VALID_CHANGE_TYPES` and validates that `startDate` is present. **`endDate` is optional** — a blank or absent end date is normalized to `null` (open-ended leave whose end is not yet known). Any request missing `startDate` is rejected 400.
 - `PATCH /api/employees/:id/employment/:rowId` on a row whose stored `changeType` is `"rodičovská"` strips every employment-contract field (`changeType`, `salary`, `hourlyRate`, `contractType`, `jobTitle`, `department`, `companyId`, `changes`, `agreedReward`, `agreedWorkScope`, `workLocation`, `probationPeriod`, `status`) from the PATCH body before writing — a `rodičovská` row can never be mutated into employment-contract data.
 
 ### Session grouping
@@ -373,8 +373,8 @@ Backend (`functions/src/routes/employees.ts`) enforces this in two ways:
 `frontend/src/components/EmploymentSession.tsx`:
 
 - Session header shows a **"+ Rodičovská"** button (beside "+ Dodatek") when the session is not terminated and the user holds `employment.manage`. Clicking it fires `onAddRodicovska` → `EmployeeDetailPage` opens `AddEntryModal` with `lockedChangeType: "rodičovská"`.
-- `AddEntryModal` in `rodičovská` mode shows only **Začátek** and **Konec** date fields (no contract type, no salary, no changes). Title: "Rodičovská dovolená". Both dates are required — the form validates `endDate` before submitting.
-- Active periods render in a **"rodicovskaBand"** — a header sub-row showing "Rodičovská | start – end" with a ✕ delete button per period (gated `employment.manage`). The band is outside the collapsible body so it is always visible on collapsed sessions.
+- `AddEntryModal` in `rodičovská` mode shows only **Začátek** and optional **Konec** date fields (no contract type, no salary, no changes). Title: "Rodičovská dovolená". Only `startDate` is required; `endDate` may be left blank for open-ended leave (the end date is often not known when parental leave begins).
+- Active periods render in a **"rodicovskaBand"** — a header sub-row showing "Rodičovská | start – end" (or "dosud" in a `.ongoing` span when `endDate` is null) with per-period action buttons (gated `employment.manage`): a **✎ edit button** (`onEditRow(rd)`) so the end date can be filled in later, and a ✕ delete button. The band is outside the collapsible body so it is always visible on collapsed sessions; the ✎ edit button is the only affordance for rodičovská rows since they do not appear in the expandable body list.
 - `rodičovská` rows are **not** included in the session's `rows[]` list and therefore do not appear as EmploymentRowItem entries in the expanded body.
 
 ### Denormalized badge — `parentalLeaveFrom` / `parentalLeaveTo`
@@ -386,9 +386,9 @@ Two new root-level fields on `employees/{id}` hold the next-or-current parental-
 | `parentalLeaveFrom` | `string` YYYY-MM-DD \| `null` | Start of the earliest not-yet-ended `rodičovská` period |
 | `parentalLeaveTo` | `string` YYYY-MM-DD \| `null` | End of the same period |
 
-`computeParentalLeave(rows, today)` in `functions/src/routes/employees.ts` filters `rodičovská` rows whose `endDate >= today`, sorts by `startDate`, and takes the first. Written by `applyDerivedStatus` on every employment write that involves a `rodičovská` row (no root-field fold, just the parental-leave window update), and on every nightly sweep.
+`computeParentalLeave(rows, today)` in `functions/src/routes/employees.ts` finds the earliest `rodičovská` row that has not yet ended: a row with no `endDate` (open-ended) is treated as ongoing; a dated row drops off once its `endDate` is past. Sorts qualifying rows by `startDate` and takes the first. Written by `applyDerivedStatus` on every employment write that involves a `rodičovská` row (no root-field fold, just the parental-leave window update), and on every nightly sweep.
 
-`isOnParentalLeave(emp)` in `frontend/src/pages/EmployeesPage.tsx` does a live containment check: `parentalLeaveFrom <= today <= parentalLeaveTo`. When true, a **"Rodičovská"** badge renders next to the employee's name in the Employees list. The badge appears/clears automatically with no server round-trip once the date lands within or exits the stored window.
+`isOnParentalLeave(emp)` in `frontend/src/pages/EmployeesPage.tsx` does a live containment check: `parentalLeaveFrom <= today` AND (`parentalLeaveTo` is null/empty OR `today <= parentalLeaveTo`). An open-ended period (null `parentalLeaveTo`) keeps the badge until an end date is filled in and passes. A **"Rodičovská"** badge renders next to the employee's name in the Employees list and appears/clears automatically with no server round-trip.
 
 No migration required — `parentalLeaveFrom` / `parentalLeaveTo` backfill automatically on the next nightly `refreshEmployeeEffective` sweep or a manual `POST /api/employees/trigger-effective-refresh`.
 
@@ -472,6 +472,7 @@ A constant `PROTECTED_ROOT_FIELDS` lists every server-derived / denormalized fie
 
 ```
 status, currentJobTitle, currentDepartment, currentContractType, currentCompanyId,
+currentContractDuringLeave, leaveContractType,
 employmentStartDate, employmentEndDate, parentalLeaveFrom, parentalLeaveTo,
 zaucovani, zaucovaniDo, createdAt, createdBy
 ```
@@ -487,3 +488,111 @@ zaucovani, zaucovaniDo, createdAt, createdBy
 - `PUT /:id/benefits` — drops fields in `BENEFITS_SENSITIVE_FIELDS` that are empty or equal the mask.
 
 Without this guard, a frontend that re-submits the redacted display value (the placeholder string) would encrypt it and overwrite the real ciphertext. The dropped field is simply skipped on the `update()` call, preserving the stored encrypted value unchanged.
+
+---
+
+## Concurrent contracts — simplified model (v3.5.0, #22)
+
+An employee may hold two active contracts simultaneously — the typical case is a main employment (e.g. HPP) that the employee is on rodičovská from, plus a concurrent secondary contract (e.g. DPP) that they actively work. **Design decision: payroll and shifts belong to the most recent active contract.** There is no separate payroll row per contract and no per-contract shift attribution.
+
+### Backend — `computeEffectiveRootFields` selection rule
+
+The function selects the **latest active session** (the most recently started Nástup that is both started and not terminated by today) and exposes its folded fields as `current*`. For single-contract employees this is byte-identical to the previous behaviour. When a concurrent contract (e.g. a DPP) is the latest active session it becomes current automatically; when it ends, the still-active earlier contract resurfaces as current.
+
+Two new server-owned root fields are written alongside `current*` (both in `PROTECTED_ROOT_FIELDS`):
+
+| Field | Type | Description |
+|---|---|---|
+| `currentContractDuringLeave` | `boolean` | An active `rodičovská` row exists on a **different** session than the current (latest active) one — the current contract is a concurrent job worked during leave. Default `false`. |
+| `leaveContractType` | `string \| null` | The on-leave (main) contract's folded `contractType` (e.g. `"HPP"`), so the Employees list can badge it alongside the current concurrent contract. `null` when not in concurrent-leave mode. |
+
+These are computed in `computeEffectiveRootFields` by finding `leaveSession` — any session other than `chosen` that has at least one `rodičovská` row currently active (started and not yet ended or open-ended). Written by the same employment-write + nightly-sweep + manual-trigger paths as `current*`. `EMPTY_ROOT_FIELDS` defaults both to `false` / `null`.
+
+### Frontend — Employees list
+
+`EmployeesPage.tsx` was updated to handle the concurrent-leave scenario:
+
+- **`isOnParentalLeave(emp)`** — unchanged predicate (see the RODIČOVSKÁ section above).
+- **`positionDisplay(emp)` / `departmentDisplay(emp)`** — if on parental leave and `currentContractDuringLeave`, returns `"RODIČOVSKÁ/<currentJobTitle>"` / `"RODIČOVSKÁ/<currentDepartment>"`; if on parental leave without concurrent, returns `"RODIČOVSKÁ"`; otherwise the normal current value.
+- **`parentalCell(emp, base)`** — renders the Pozice/Oddělení cell JSX: leads with a `<span className={styles.parentalBadge}>Rodičovská</span>`; when `currentContractDuringLeave && base` appends `"/ <base>"` text (no leading margin on the badge, since it leads the cell).
+- **Contract-type badges in the name cell** — a concurrent-leave employee shows two badges: `leaveContractType` first, then `currentContractType`, each coloured independently via `contractBadgeClass()` (default/grey = HPP, `.contractBadgePpp` blue = PPP, `.contractBadgeDpp` amber = DPP).
+- **Sorting** — Pozice/Oddělení columns sort on `positionDisplay` / `departmentDisplay`, so "RODIČOVSKÁ/..." sorts under R.
+
+> **Note:** An earlier "Phase 1" interim design (a user-settable `parallel` flag on Nástup rows, an `additionalContracts[]` array, and a "Souběžná smlouva" checkbox) was built and then replaced before this feature reached production. No production data carries that flag. The `currentEffectiveForMinWage` helper in `routes/payroll.ts` reads `r.parallel === true` defensively, but this will always be `false` for current data.
+
+---
+
+## PPP part-time support — `hoursPerWeek` (v3.5.0, #15)
+
+A new optional field `hoursPerWeek` (number) on employment rows enables an explicit hours-per-week fraction for PPP employees. The legacy assumption of 20 h/week (half-time) remains in force whenever the field is absent.
+
+### Data model
+
+`employees/{id}/employment/{rowId}` — a Nástup row with `contractType: "PPP"` may carry `hoursPerWeek: <number>`. Set via a **"Počet hodin týdně"** numeric input on the Nástup form (visible only when `contractType === "PPP"`; hidden for HPP/DPP). DPP rows never carry this field (DPP pay is based on agreed reward, not weekly hours).
+
+A new **"počet hodin"** Dodatek change kind — a `změna smlouvy` row may carry `changes: [{ changeKind: "počet hodin", value: "<number>" }]` to update the fraction mid-contract. This appears in the Dodatek form's change-kind dropdown and is displayed as "Počet hodin týdně" in the row summary (label registered in `frontend/src/components/EmploymentRowItem.tsx`). The audit field label is also registered in `frontend/src/lib/audit/fields.employee.ts`.
+
+### Frontend fold — `computeEffectiveState`
+
+`frontend/src/lib/employmentSessions.ts` carries `hoursPerWeek` through the fold: starts from `nastup.hoursPerWeek ?? null`; a "počet hodin" Dodatek overrides it. `EffectiveState` and the `EmploymentRow` type both include `hoursPerWeek: number | null`. The same fold is mirrored server-side in `effectiveCompFromRows()` in `functions/src/services/payrollCalculator.ts`.
+
+### Contract template variables
+
+Three new variables in `frontend/src/lib/contractVariables.ts` (v3.5.0):
+
+| Variable | Group | Description |
+|---|---|---|
+| `{{hoursPerWeek}}` | Pracovní podmínky | Hours/week from the Nástup row (PPP) |
+| `{{newHoursPerWeek}}` | Dodatky | New hours/week from a "počet hodin" Dodatek |
+| `{{isDodatekHodiny}}` | Dodatky | `"ano"` when the Dodatek contains a "počet hodin" change; empty otherwise |
+
+See also the `{{isDodatekHodiny}}` entry in [Dodatek template variables](contracts.md#dodatek-template-variables-2026-04-30) in `contracts.md`.
+
+### Payroll
+
+PPP vacation proration (`vacationFactor`) and all other payroll-computation implications of `hoursPerWeek` are documented in `payroll.md` (local, gitignored).
+
+---
+
+## Minimum-wage check — non-blocking warning (v3.5.0, #2)
+
+A non-blocking warning surface for HPP/PPP contracts whose monthly gross salary is below the statutory `minimumWage` setting (`settings/payroll`). DPP is never checked.
+
+### Threshold formula
+
+Frontend helper `frontend/src/lib/minWage.ts`:
+
+```
+HPP → round(minWage)
+PPP → round((minWage / 40) × hoursPerWeek)   — default 20 h when hoursPerWeek is absent
+DPP → null (not checked)
+```
+
+Exports:
+- `minWageThreshold(contractType, minWage, hoursPerWeek?)` → `number | null` — the monthly threshold, or `null` for unchecked types
+- `isBelowMinWage(contractType, salary, minWage, hoursPerWeek?)` → `boolean`
+- `formatCzk(value)` → `"39 000"` (Czech thousands grouping with non-breaking space)
+
+The backend in `functions/src/routes/payroll.ts` mirrors the formula in `minWageThresholdServer()` and `currentEffectiveForMinWage()`.
+
+### Warning surface 1 — contract entry
+
+In `EmployeeDetailPage.tsx`, both the Nástup salary field and the mzda Dodatek salary field call `minWageThreshold` on change. When the entered value is below threshold, a `ConfirmModal` (state variable `minWageWarn`) informs the user. The warning is **non-blocking** — the admin acknowledges it and proceeds; no save is blocked.
+
+### Warning surface 2 — Settings → Mzdy
+
+When the admin edits `minimumWage` in `SettingsPage.tsx`, clicking "Zkontrolovat a uložit" calls `GET /api/payroll/min-wage-check?minimumWage=<newValue>` first. If violations are returned, the UI lists them (employee name, contract type, current salary, threshold, hours/week for PPP) before offering a separate "Uložit i přesto" button. If the endpoint call fails, the setting saves directly without blocking (network failure must not prevent a legal setting change).
+
+### Endpoint
+
+```
+GET /api/payroll/min-wage-check?minimumWage=<number>
+```
+
+- **Gate:** `requireAuth` + `requirePermission("settings.payroll.manage")`
+- **Query parameter:** `minimumWage` — a positive number; returns 400 otherwise
+- **Response:** `{ minimumWage: number, violations: ViolationEntry[] }`
+- `ViolationEntry`: `{ employeeId, name, contractType, hoursPerWeek: number | null, salary: number, threshold: number }`
+- Only ACTIVE employees and active (started, not yet ended) contracts are checked.
+- Results sorted by `salary` ascending (most under-threshold first).
+- Defined in `functions/src/routes/payroll.ts`.

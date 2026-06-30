@@ -72,6 +72,7 @@ const employees: FieldLabelMap = {
   endDate: "Konec platnosti",
   salary: "Mzda",
   hourlyRate: "Hodinová sazba",
+  hoursPerWeek: "Počet hodin týdně",
   contractType: "Typ smlouvy",
   jobTitle: "Pracovní pozice",
   department: "Oddělení",
