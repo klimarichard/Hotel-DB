@@ -55,14 +55,15 @@ function isInTraining(emp: Employee): boolean {
   return emp.zaucovani === true && (!emp.zaucovaniDo || emp.zaucovaniDo >= clock.today());
 }
 
-// On parental leave = today falls within the denormalized [from, to] window.
+// On parental leave = today is on/after the start and (if an end date is set)
+// on/before it. An open-ended period (no end date yet — unknown when leave
+// begins) keeps the badge until an end date is later filled in and passes.
 function isOnParentalLeave(emp: Employee): boolean {
   const today = clock.today();
   return (
     !!emp.parentalLeaveFrom &&
-    !!emp.parentalLeaveTo &&
     emp.parentalLeaveFrom <= today &&
-    today <= emp.parentalLeaveTo
+    (!emp.parentalLeaveTo || today <= emp.parentalLeaveTo)
   );
 }
 

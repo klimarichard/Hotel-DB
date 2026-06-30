@@ -866,9 +866,8 @@ function AddEntryModal({
     if (form.changeType === "nástup" && !form.contractType) {
       setError("Vyberte typ smlouvy."); return;
     }
-    if (form.changeType === "rodičovská" && !form.endDate) {
-      setError("Vyplňte konec rodičovské dovolené."); return;
-    }
+    // Rodičovská end date is OPTIONAL — it's unknown when leave begins and can
+    // be filled in later by editing the period.
     const warning = computeMinWageWarning();
     if (warning) { setMinWageWarn({ message: warning }); return; }
     void doSave();
@@ -990,15 +989,17 @@ function AddEntryModal({
               </div>
               {form.changeType === "rodičovská" && (
                 <div className={styles.modalField}>
-                  <label className={styles.modalLabel}>Konec *</label>
+                  <label className={styles.modalLabel}>Konec (nepovinné)</label>
                   <input
                     className={styles.modalInput}
                     type="date"
                     value={form.endDate}
                     min={form.startDate || undefined}
                     onChange={(e) => setField("endDate", e.target.value)}
-                    required
                   />
+                  <p className={styles.modalNote}>
+                    Konec lze nechat prázdný a doplnit později (tlačítkem ✎ u rodičovské).
+                  </p>
                 </div>
               )}
             </div>

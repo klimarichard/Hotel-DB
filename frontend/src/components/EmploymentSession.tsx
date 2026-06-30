@@ -167,18 +167,29 @@ export default function EmploymentSessionCard({
               <span className={styles.rodicovskaDates}>
                 {formatDateCZ(rd.startDate) ?? rd.startDate}
                 {" – "}
-                {rd.endDate ? formatDateCZ(rd.endDate) : "—"}
+                {rd.endDate ? formatDateCZ(rd.endDate) : <span className={styles.ongoing}>dosud</span>}
               </span>
               {canManageEmployment && (
-                <button
-                  type="button"
-                  className={styles.rodicovskaDelete}
-                  onClick={() => onDeleteRow(rd)}
-                  aria-label="Odebrat rodičovskou"
-                  title="Odebrat rodičovskou"
-                >
-                  ✕
-                </button>
+                <>
+                  <button
+                    type="button"
+                    className={styles.rodicovskaEdit}
+                    onClick={() => onEditRow(rd)}
+                    aria-label="Upravit rodičovskou (např. doplnit konec)"
+                    title="Upravit rodičovskou (např. doplnit konec)"
+                  >
+                    ✎
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.rodicovskaDelete}
+                    onClick={() => onDeleteRow(rd)}
+                    aria-label="Odebrat rodičovskou"
+                    title="Odebrat rodičovskou"
+                  >
+                    ✕
+                  </button>
+                </>
               )}
             </div>
           ))}
