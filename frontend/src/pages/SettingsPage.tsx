@@ -89,6 +89,15 @@ interface JobPositionRecord {
   displayOrder: number;
 }
 
+interface MinWageViolation {
+  employeeId: string;
+  name: string;
+  contractType: string;
+  hoursPerWeek: number | null;
+  salary: number;
+  threshold: number;
+}
+
 interface PosCascadePreview {
   fieldChange: { hourlyRate: { from: number | null; to: number | null } };
   affectedEmployees: Array<{
@@ -218,6 +227,52 @@ export default function SettingsPage() {
   const [minimumWageDraft, setMinimumWageDraft] = useState<string>("");
   const [showMinWageConfirm, setShowMinWageConfirm] = useState(false);
   const [minWageSaving, setMinWageSaving] = useState(false);
+  const [minWageChecking, setMinWageChecking] = useState(false);
+  // Contracts found below the candidate minimum wage (null = not checked yet).
+  const [minWageViolations, setMinWageViolations] = useState<MinWageViolation[] | null>(null);
+
+  const closeMinWageModal = () => {
+    setShowMinWageConfirm(false);
+    setMinWageViolations(null);
+  };
+
+  const saveMinimumWage = async () => {
+    const val = Number(minimumWageDraft);
+    if (!Number.isFinite(val) || val <= 0) return;
+    setMinWageSaving(true);
+    try {
+      await api.patch("/payroll/settings", { minimumWage: val });
+      setMinimumWage(val);
+      closeMinWageModal();
+    } catch {
+      // silent
+    } finally {
+      setMinWageSaving(false);
+    }
+  };
+
+  // Check ALL current contracts against the new value. If any are below, show
+  // the list (and let the admin save anyway); otherwise save straight away.
+  const checkThenSaveMinimumWage = async () => {
+    const val = Number(minimumWageDraft);
+    if (!Number.isFinite(val) || val <= 0) return;
+    setMinWageChecking(true);
+    try {
+      const res = await api.get<{ violations: MinWageViolation[] }>(
+        `/payroll/min-wage-check?minimumWage=${val}`
+      );
+      if (res.violations.length > 0) {
+        setMinWageViolations(res.violations);
+      } else {
+        await saveMinimumWage();
+      }
+    } catch {
+      // Check failed — don't block the (legal) setting change; save directly.
+      await saveMinimumWage();
+    } finally {
+      setMinWageChecking(false);
+    }
+  };
   const [multisportBasePrice, setMultisportBasePrice] = useState<number>(470);
   const [multisportBasePriceDraft, setMultisportBasePriceDraft] = useState<string>("");
   const [showMultisportConfirm, setShowMultisportConfirm] = useState(false);
@@ -1600,7 +1655,7 @@ export default function SettingsPage() {
             <span style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--color-text)" }}>
               {minimumWage.toLocaleString("cs-CZ")} Kč / měsíc
             </span>
-            <button className={styles.linkBtn} onClick={() => { setMinimumWageDraft(String(minimumWage)); setShowMinWageConfirm(true); }}>
+            <button className={styles.linkBtn} onClick={() => { setMinimumWageDraft(String(minimumWage)); setMinWageViolations(null); setShowMinWageConfirm(true); }}>
               Upravit
             </button>
           </div>
@@ -1619,48 +1674,89 @@ export default function SettingsPage() {
                     type="number"
                     step="100"
                     value={minimumWageDraft}
-                    onChange={(e) => setMinimumWageDraft(e.target.value)}
+                    onChange={(e) => { setMinimumWageDraft(e.target.value); setMinWageViolations(null); }}
                     autoFocus
                   />
                 </div>
-                {Number(minimumWageDraft) > minimumWage && (
-                  <p
+                {minWageViolations && minWageViolations.length > 0 && (
+                  <div
                     style={{
-                      fontSize: "0.8125rem",
-                      color: "var(--color-warning-text)",
-                      background: "var(--color-warning-bg)",
+                      marginBottom: "0.875rem",
                       border: "1px solid var(--color-warning-border, var(--color-border-strong))",
                       borderRadius: 6,
-                      padding: "0.5rem 0.625rem",
-                      margin: "0 0 0.875rem",
+                      overflow: "hidden",
                     }}
                   >
-                    Zvýšení minimální mzdy: stávající smlouvy pod novou hranicí se automaticky
-                    neupraví. Zkontrolujte mzdy pod minimem a případně upravte jednotlivé smlouvy.
-                  </p>
+                    <div
+                      style={{
+                        fontSize: "0.8125rem",
+                        fontWeight: 600,
+                        color: "var(--color-warning-text)",
+                        background: "var(--color-warning-bg)",
+                        padding: "0.5rem 0.625rem",
+                      }}
+                    >
+                      Pod novou minimální mzdou ({Number(minimumWageDraft).toLocaleString("cs-CZ")} Kč):{" "}
+                      {minWageViolations.length}{" "}
+                      {minWageViolations.length === 1
+                        ? "smlouva"
+                        : minWageViolations.length <= 4
+                          ? "smlouvy"
+                          : "smluv"}
+                    </div>
+                    <div style={{ maxHeight: 220, overflowY: "auto" }}>
+                      {minWageViolations.map((v) => (
+                        <div
+                          key={v.employeeId}
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            gap: "0.75rem",
+                            padding: "0.4rem 0.625rem",
+                            borderTop: "1px solid var(--color-border-subtle)",
+                            fontSize: "0.8125rem",
+                          }}
+                        >
+                          <span style={{ color: "var(--color-text)" }}>
+                            {v.name}
+                            <span style={{ color: "var(--color-text-muted)" }}>
+                              {" · "}
+                              {v.contractType}
+                              {v.contractType === "PPP" ? ` ${v.hoursPerWeek ?? 20} h/týd` : ""}
+                            </span>
+                          </span>
+                          <span style={{ whiteSpace: "nowrap", color: "var(--color-danger-text-strong)" }}>
+                            {v.salary.toLocaleString("cs-CZ")} {"<"} {v.threshold.toLocaleString("cs-CZ")} Kč
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 )}
                 <div className={styles.formActions}>
-                  <Button variant="secondary" onClick={() => setShowMinWageConfirm(false)} disabled={minWageSaving}>
-                    Zrušit
-                  </Button>
-                  <Button
-                    variant="primary"
-                    disabled={minWageSaving || !minimumWageDraft || Number(minimumWageDraft) <= 0}
-                    onClick={async () => {
-                      setMinWageSaving(true);
-                      try {
-                        await api.patch("/payroll/settings", { minimumWage: Number(minimumWageDraft) });
-                        setMinimumWage(Number(minimumWageDraft));
-                        setShowMinWageConfirm(false);
-                      } catch {
-                        // silent
-                      } finally {
-                        setMinWageSaving(false);
-                      }
-                    }}
-                  >
-                    {minWageSaving ? "Ukládám…" : "Uložit"}
-                  </Button>
+                  {minWageViolations && minWageViolations.length > 0 ? (
+                    <>
+                      <Button variant="secondary" onClick={() => setMinWageViolations(null)} disabled={minWageSaving}>
+                        Zpět
+                      </Button>
+                      <Button variant="primary" disabled={minWageSaving} onClick={() => void saveMinimumWage()}>
+                        {minWageSaving ? "Ukládám…" : "Přesto uložit"}
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Button variant="secondary" onClick={closeMinWageModal} disabled={minWageSaving || minWageChecking}>
+                        Zrušit
+                      </Button>
+                      <Button
+                        variant="primary"
+                        disabled={minWageChecking || minWageSaving || !minimumWageDraft || Number(minimumWageDraft) <= 0}
+                        onClick={() => void checkThenSaveMinimumWage()}
+                      >
+                        {minWageChecking ? "Kontroluji…" : minWageSaving ? "Ukládám…" : "Zkontrolovat a uložit"}
+                      </Button>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
