@@ -1,5 +1,7 @@
 /**
- * Payroll balance — Výkaz + Dovolená + Nemoc = target (HPP: base, PPP: base/2).
+ * Payroll balance — Výkaz + Dovolená + Nemoc = target (the base norm; for PPP
+ * that base is already úvazek-prorated upstream, so the target is the prorated
+ * base, not base/2 — #15 Part B).
  *
  * MIRROR: keep in exact sync with the balance block in
  * functions/src/services/payrollCalculator.ts → calculateEntry().
@@ -38,7 +40,7 @@ export interface BalanceResult {
   navicHours: number;
   navicPay: number;       // raw net NAVÍC
   transferToSvatek: number;
-  vacTarget: number;      // base (HPP) or base/2 (PPP)
+  vacTarget: number;      // the base norm (already úvazek-prorated for PPP)
   sum: number;            // vykaz + dovolena + nemoc
   /** Výkaz with no manual override — for the dialog's "follow auto" behaviour. */
   naturalVykaz: number;
@@ -52,7 +54,6 @@ export interface BalanceResult {
 
 export function computeBalance(inp: BalanceInput): BalanceResult {
   const isDpp = inp.contractType === "DPP";
-  const isPpp = inp.contractType === "PPP";
   const W = inp.workedTotal;
   const B = inp.base;
   const N = inp.nemoc;
@@ -60,7 +61,9 @@ export function computeBalance(inp: BalanceInput): BalanceResult {
 
   const cleanReport = Math.min(B, W);
   const cleanExtra = Math.max(0, W - B);
-  const vacTarget = isDpp ? 0 : (isPpp ? B / 2 : B);
+  // Base is already úvazek-prorated for PPP upstream (#15 Part B), so the
+  // vacation target is the (prorated) base for both HPP and PPP.
+  const vacTarget = isDpp ? 0 : B;
   const cleanVacation = Math.max(0, vacTarget - cleanReport);
   const cleanExtraPay = (!isDpp && cleanExtra > 0 && rate > 0) ? rate * cleanExtra : 0;
   const cleanHoliday = inp.cleanHoliday;
