@@ -52,7 +52,7 @@ const PROTECTED_ROOT_FIELDS = [
   "currentDepartment",
   "currentContractType",
   "currentCompanyId",
-  "additionalContracts",
+  "currentContractDuringLeave",
   "employmentStartDate",
   "employmentEndDate",
   "parentalLeaveFrom",
@@ -137,23 +137,21 @@ async function computeEffectiveRootFields(
   // clock.today() honours the non-prod test clock.
   const today = clock.today();
 
-  // Build the FULL chronological session list. Every `nástup` opens a session;
-  // `změna smlouvy` / `ukončení` attach to the most recently opened one. A
-  // nástup flagged `parallel: true` marks a CONCURRENT (second-job) contract:
-  // it forms its own session, kept SEPARATE from the primary line so it doesn't
-  // overwrite current* (which would hide the main contract). Without any
-  // parallel session, the selection below is byte-identical to the old
-  // "latest session" behaviour.
-  type Session = { nastup: Row; dodatky: Row[]; terminated: boolean; parallel: boolean };
+  // Build the chronological session list. Every `nástup` opens a session;
+  // `změna smlouvy` / `ukončení` attach to the most recently opened one, and
+  // `rodičovská` rows are collected on their session (informational).
+  type Session = { nastup: Row; dodatky: Row[]; rodicovska: Row[]; terminated: boolean };
   const sessions: Session[] = [];
   let current: Session | null = null;
   for (const r of rows) {
     const ct = r.changeType as string | undefined;
     if (ct === "nástup") {
       if (current) sessions.push(current);
-      current = { nastup: r, dodatky: [], terminated: false, parallel: r.parallel === true };
+      current = { nastup: r, dodatky: [], rodicovska: [], terminated: false };
     } else if (current && ct === "změna smlouvy") {
       current.dodatky.push(r);
+    } else if (current && ct === "rodičovská") {
+      current.rodicovska.push(r);
     } else if (current && ct === "ukončení") {
       // Date-based: a future-dated Ukončení leaves the employee active (and
       // still showing their current position) until the day after the end date.
@@ -205,49 +203,47 @@ async function computeEffectiveRootFields(
     return { jobTitle, contractType, companyId, department };
   };
 
-  // PRIMARY = the latest NON-parallel session (mirrors the previous "latest
-  // session" pick exactly when there are no parallel sessions). current* is
-  // cleared (null return) when there is no primary or it has been terminated,
-  // exactly as before — UNLESS an active concurrent contract remains (below).
-  const nonParallel = sessions.filter((s) => !s.parallel);
-  const primary = nonParallel.length ? nonParallel[nonParallel.length - 1] : null;
-  const primaryActive = !!primary && !primary.terminated;
-
-  // ADDITIONAL = every ACTIVE parallel (concurrent) contract. Phase 1: surfaced
-  // on the Zaměstnanci list as a secondary badge — NOT yet paid or
-  // shift-attributed (that is Phase 2 / Phase 3). endDate is taken from the
-  // Nástup row (concurrent contracts rarely carry Dodatky in practice).
-  const additionalContracts: Array<Record<string, unknown>> = [];
-  for (const s of sessions) {
-    if (!s.parallel) continue;
-    const started = (((s.nastup.startDate as string | undefined) ?? "") <= today);
-    if (!started || s.terminated) continue;
-    const f = await foldSession(s);
-    additionalContracts.push({
-      nastupRowId: s.nastup.id,
-      contractType: f.contractType,
-      jobTitle: f.jobTitle,
-      department: f.department,
-      companyId: f.companyId,
-      startDate: (s.nastup.startDate as string | undefined) ?? null,
-      endDate: (s.nastup.endDate as string | null | undefined) ?? null,
-    });
+  // CURRENT = the most recent ACTIVE session (started, not terminated). Payroll
+  // and shifts belong to this contract. A concurrent second contract (e.g. a DPP
+  // worked during parental leave) is simply the latest active session, so it
+  // wins automatically; when it ends, the still-active earlier contract
+  // resurfaces as current. Byte-identical to the long-standing "latest session"
+  // behaviour for every single-contract employee.
+  const isStarted = (s: Session) => (((s.nastup.startDate as string | undefined) ?? "") <= today);
+  let chosen: Session | null = null;
+  for (let i = sessions.length - 1; i >= 0; i--) {
+    if (isStarted(sessions[i]) && !sessions[i].terminated) { chosen = sessions[i]; break; }
+  }
+  if (!chosen) {
+    // No active session: surface a future (before-start) latest session so the
+    // upcoming contract still shows; a terminated tail clears current* (null).
+    const last = sessions[sessions.length - 1] ?? null;
+    if (last && !last.terminated && !isStarted(last)) chosen = last;
+    else return null;
   }
 
-  // No active primary AND no concurrent contracts → behave exactly as before
-  // (caller clears the root fields via EMPTY_ROOT_FIELDS).
-  if (!primaryActive && additionalContracts.length === 0) return null;
+  // currentContractDuringLeave: an active rodičovská sits on a DIFFERENT (earlier)
+  // session than the current contract → the current contract is a concurrent
+  // second job worked during leave. Drives the "RODIČOVSKÁ / position" list label
+  // (vs. a plain "RODIČOVSKÁ" when the person is on leave from their only job).
+  const rodActive = (rd: Row): boolean => {
+    const start = (rd.startDate as string | undefined) ?? "";
+    if (start > today) return false;
+    const end = rd.endDate as string | undefined;
+    return !end || end >= today; // open-ended → ongoing
+  };
+  const currentContractDuringLeave = sessions.some(
+    (s) => s !== chosen && s.rodicovska.some(rodActive)
+  );
 
-  const pf = primaryActive
-    ? await foldSession(primary as Session)
-    : { jobTitle: "", contractType: "", companyId: null as string | null, department: "" };
+  const pf = await foldSession(chosen);
 
   return {
     currentCompanyId: pf.companyId,
     currentDepartment: pf.department,
     currentContractType: pf.contractType,
     currentJobTitle: pf.jobTitle,
-    additionalContracts,
+    currentContractDuringLeave,
   };
 }
 
@@ -291,28 +287,8 @@ const EMPTY_ROOT_FIELDS = {
   currentDepartment: "",
   currentContractType: "",
   currentJobTitle: "",
-  additionalContracts: [],
+  currentContractDuringLeave: false,
 } as const;
-
-/**
- * Stable, key-order-independent comparison of two `additionalContracts` arrays
- * (concurrent-contract denormalization). Serialises each entry as a fixed-order
- * tuple so a Firestore-read object and a freshly-built one compare equal when
- * their values match.
- */
-function additionalContractsKey(arr: unknown): string {
-  return JSON.stringify(
-    ((arr as Array<Record<string, unknown>>) ?? []).map((c) => [
-      c.nastupRowId ?? null,
-      c.contractType ?? null,
-      c.jobTitle ?? null,
-      c.department ?? null,
-      c.companyId ?? null,
-      c.startDate ?? null,
-      c.endDate ?? null,
-    ])
-  );
-}
 
 /**
  * Derive an employee's lifecycle status from their employment sessions —
@@ -672,7 +648,7 @@ export async function refreshEffectiveRootForAllActive(): Promise<{ scanned: num
       patch.currentContractType !== (before.currentContractType ?? "") ||
       patch.currentDepartment !== (before.currentDepartment ?? "") ||
       patch.currentCompanyId !== (before.currentCompanyId ?? null) ||
-      additionalContractsKey(patch.additionalContracts) !== additionalContractsKey(before.additionalContracts);
+      (patch.currentContractDuringLeave ?? false) !== (before.currentContractDuringLeave ?? false);
     if (changed) {
       await doc.ref.update({ ...patch, updatedAt: FieldValue.serverTimestamp() });
       updated++;
@@ -1498,7 +1474,6 @@ employeesRouter.post(
         hourlyRate: body.hourlyRate,
         hoursPerWeek: body.hoursPerWeek,
         changes: body.changes,
-        parallel: body.parallel,
       },
     });
 

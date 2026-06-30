@@ -83,7 +83,6 @@ const employees: FieldLabelMap = {
   value: "Nová hodnota",
   reason: "Důvod",
   note: "Poznámka",
-  parallel: "Souběžná smlouva",
 };
 
 export const EMPLOYEE_FIELDS: Record<string, FieldLabelMap> = { employees };
