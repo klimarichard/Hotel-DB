@@ -53,6 +53,7 @@ const PROTECTED_ROOT_FIELDS = [
   "currentContractType",
   "currentCompanyId",
   "currentContractDuringLeave",
+  "leaveContractType",
   "employmentStartDate",
   "employmentEndDate",
   "parentalLeaveFrom",
@@ -232,9 +233,11 @@ async function computeEffectiveRootFields(
     const end = rd.endDate as string | undefined;
     return !end || end >= today; // open-ended → ongoing
   };
-  const currentContractDuringLeave = sessions.some(
-    (s) => s !== chosen && s.rodicovska.some(rodActive)
-  );
+  const leaveSession = sessions.find((s) => s !== chosen && s.rodicovska.some(rodActive)) ?? null;
+  const currentContractDuringLeave = !!leaveSession;
+  // The on-leave (main) contract's type, so the Zaměstnanci list can show its
+  // badge alongside the current (concurrent) contract's — e.g. [HPP] [DPP].
+  const leaveContractType = leaveSession ? (await foldSession(leaveSession)).contractType || null : null;
 
   const pf = await foldSession(chosen);
 
@@ -244,6 +247,7 @@ async function computeEffectiveRootFields(
     currentContractType: pf.contractType,
     currentJobTitle: pf.jobTitle,
     currentContractDuringLeave,
+    leaveContractType,
   };
 }
 
@@ -288,6 +292,7 @@ const EMPTY_ROOT_FIELDS = {
   currentContractType: "",
   currentJobTitle: "",
   currentContractDuringLeave: false,
+  leaveContractType: null,
 } as const;
 
 /**
@@ -648,7 +653,8 @@ export async function refreshEffectiveRootForAllActive(): Promise<{ scanned: num
       patch.currentContractType !== (before.currentContractType ?? "") ||
       patch.currentDepartment !== (before.currentDepartment ?? "") ||
       patch.currentCompanyId !== (before.currentCompanyId ?? null) ||
-      (patch.currentContractDuringLeave ?? false) !== (before.currentContractDuringLeave ?? false);
+      (patch.currentContractDuringLeave ?? false) !== (before.currentContractDuringLeave ?? false) ||
+      (patch.leaveContractType ?? null) !== (before.leaveContractType ?? null);
     if (changed) {
       await doc.ref.update({ ...patch, updatedAt: FieldValue.serverTimestamp() });
       updated++;
