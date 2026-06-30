@@ -102,6 +102,7 @@ interface EmploymentRowLite {
   jobTitle?: string;
   salary?: number | null;
   hourlyRate?: number | null;
+  hoursPerWeek?: number | null;
   changes?: ChangeLite[];
 }
 
@@ -218,7 +219,7 @@ export function effectiveCompFromRows(
   rows: EmploymentRowLite[],
   year: number,
   month: number
-): { salary: number | null; hourlyRate: number | null; contractType: string; jobTitle: string; positionChanged: boolean } | null {
+): { salary: number | null; hourlyRate: number | null; contractType: string; jobTitle: string; hoursPerWeek: number | null; positionChanged: boolean } | null {
   const relevant = relevantSessionForMonth(buildSessions(rows), year, month);
   if (!relevant) return null;
   const nastupJobTitle = relevant.nastup.jobTitle ?? "";
@@ -228,6 +229,7 @@ export function effectiveCompFromRows(
   let hourlyRate: number | null = null;
   let contractType = "";
   let jobTitle = "";
+  let hoursPerWeek: number | null = null;
 
   // Nástup first, then Dodatky whose validity (startDate) has arrived by the
   // month's end. A future-dated Dodatek must not change comp until its day.
@@ -237,6 +239,7 @@ export function effectiveCompFromRows(
     if (row.hourlyRate != null) hourlyRate = row.hourlyRate;
     if (row.contractType) contractType = row.contractType;
     if (row.jobTitle) jobTitle = row.jobTitle;
+    if (row.hoursPerWeek != null) hoursPerWeek = row.hoursPerWeek;
     for (const ch of row.changes ?? []) {
       if (ch.changeKind === "mzda" && ch.value) {
         const n = Number(ch.value);
@@ -246,13 +249,29 @@ export function effectiveCompFromRows(
       } else if (ch.changeKind === "úvazek" && ch.value) {
         const m = uvazekToContractType(ch.value);
         if (m) contractType = m;
+      } else if (ch.changeKind === "počet hodin" && ch.value) {
+        const n = Number(ch.value);
+        if (Number.isFinite(n)) hoursPerWeek = n;
       }
     }
   }
   // positionChanged: a "pracovní pozice" Dodatek moved the employee off the
   // Nástup position, so the Nástup's folded hourlyRate is stale for navíc.
   const positionChanged = normalizePositionName(jobTitle) !== normalizePositionName(nastupJobTitle);
-  return { salary, hourlyRate, contractType, jobTitle, positionChanged };
+  return { salary, hourlyRate, contractType, jobTitle, hoursPerWeek, positionChanged };
+}
+
+/**
+ * Part-time (PPP) base-hours proration (#15 Part B): scale the month's base-hours
+ * norm by hoursPerWeek / 40 for PPP contracts. A PPP row with no hoursPerWeek is
+ * treated as 20h (the legacy "poloviční úvazek"), which yields ×0.5 — the same
+ * vacation target as before, but a halved Výkaz cap (hours over it become Navíc).
+ * HPP/DPP are returned unchanged.
+ */
+function prorateBaseForPpp(base: number, contractType: string, hoursPerWeek: number | null | undefined): number {
+  if (contractType !== "PPP") return base;
+  const hpw = hoursPerWeek && hoursPerWeek > 0 ? hoursPerWeek : 20;
+  return Math.round(base * (hpw / 40));
 }
 
 function normalizePositionName(name: string): string {
@@ -563,11 +582,11 @@ export function calculateEntry(
 
   // Clean (pre-Nemoc, pre-override) values. Výkaz is capped at the base norm;
   // worked hours over the norm are always overtime. Vacation accrues toward the
-  // full base for HPP, toward half the base for PPP.
-  const isPpp = employee.contractType === "PPP";
+  // base norm — which is ALREADY prorated by úvazek for PPP (#15 Part B,
+  // prorateBaseForPpp), so a PPP target is its prorated base, not effBase/2.
   const cleanReport = Math.min(effBase, rawReportHours);
   const cleanExtra = Math.max(0, rawReportHours - effBase);
-  const vacTarget = isDpp ? 0 : (isPpp ? effBase / 2 : effBase);
+  const vacTarget = isDpp ? 0 : effBase;
   const cleanVacation = Math.max(0, vacTarget - cleanReport);
   const cleanExtraPay = (!isDpp && cleanExtra > 0 && employee.hourlyRate != null && employee.hourlyRate > 0)
     ? employee.hourlyRate * cleanExtra : 0;
@@ -911,8 +930,10 @@ export async function createOrUpdatePayrollPeriod(
 
     // Prorate the norm for employees who started or were terminated mid-month;
     // null → employed the whole month, so use the standard full-month base.
+    // Then scale by úvazek for PPP part-timers (#15 Part B) — stacks on top of
+    // any mid-month proration.
     const proratedBase = proratedBaseFromRows(empRows, year, month);
-    const empBaseHours = proratedBase ?? baseHours;
+    const empBaseHours = prorateBaseForPpp(proratedBase ?? baseHours, contractType, eff?.hoursPerWeek);
 
     const entry = calculateEntry(employee, allShifts, holidays, empBaseHours, foodVoucherRate, year, month, mealAllowanceMinHours);
     // Pre-contract month (TODO #9): worked shifts before the contract started —
@@ -1056,7 +1077,7 @@ export async function recomputeEntryForEmployee(
   };
 
   const proratedBase = proratedBaseFromRows(empRows, year, month);
-  const empBaseHours = proratedBase ?? getBaseHours(year, month);
+  const empBaseHours = prorateBaseForPpp(proratedBase ?? getBaseHours(year, month), contractType, eff?.hoursPerWeek);
 
   const entry = calculateEntry(employee, shifts, holidays, empBaseHours, foodVoucherRate, year, month, mealAllowanceMinHours);
   // Pre-contract month (TODO #9) — mirror the orchestrator: keep hours, zero everything else.
