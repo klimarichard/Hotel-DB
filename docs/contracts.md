@@ -65,9 +65,10 @@ Three derived variables drive the typical "Czech vs foreigner" branch:
 Empty / unknown nationality is treated as foreign because the foreign branch typically adds legally required fields (passport / visa).
 
 ### Row-sourced template variables + probation/end-date conditionals (2026-04-29)
-Three plain variables sourced from the employment row are exposed in the template variable picker (under "Pracovní podmínky"):
+Four plain variables sourced from the employment row are exposed in the template variable picker (under "Pracovní podmínky"):
 - `{{workLocation}}` / `{{probationPeriod}}` — free-form strings stored on the row.
 - `{{signingDate}}` — raw ISO; `resolveVariables` formats it with the shared `formatDateCZ` helper, so it lands in the rendered contract as "DD. MM. YYYY".
+- `{{hoursPerWeek}}` (v3.5.0) — effective hours per week from the PPP Nástup row (the `hoursPerWeek` field, absent for HPP/DPP). Used in PPP contracts to state the contracted fraction ("Počet hodin týdně (PPP)" in the picker).
 
 Four derived conditional flags drive `{{#if}}` blocks for the common branches:
 - `hasProbation` / `noProbation` — `noProbation` is true when the probation string is empty, `"0"`, `"0 měsíců"`, or otherwise contains no non-zero digit (heuristic: `/[1-9]/.test(probationPeriod)`). Anything with a real number is `hasProbation`.
@@ -232,6 +233,7 @@ New "Dodatky" group in the contract-template variable picker covers the four cha
 - `{{newJobTitle}}` / `{{isDodatekPozice}}` — for `"pracovní pozice"`.
 - `{{newWorkScope}}` / `{{isDodatekUvazek}}` — for `"úvazek"`.
 - `{{newEndDate}}` / `{{isDodatekZmenaKonce}}` — for `"délka smlouvy"` (formatted as date).
+- `{{newHoursPerWeek}}` / `{{isDodatekHodiny}}` (v3.5.0) — new hours/week value + conditional flag for `changeKind === "počet hodin"` (PPP part-time fraction change). `{{isDodatekHodiny}}` is `"ano"` when a "počet hodin" change is present; empty otherwise.
 - `{{salaryChangeVerb}}` — emits `"zvyšuje"` if the new salary is greater than the salary in force immediately before the dodatek, `"mění"` otherwise. Empty string if either side is missing or non-numeric. The "old salary" is computed by `findOldSalary(row, employment)` in `EmployeeDetailPage.tsx`: walks history in chronological order, each `nástup`'s `salary` sets the baseline and each `změna smlouvy` with a `"mzda"` change overrides it; returns the latest value applied before this row.
 
 `EmployeeData` carries two raw fields — `dodatekEffectiveDate` (ISO) and `dodatekChanges: { changeKind, value }[]` — plus `oldSalary`. `resolveVariables` derives every dodatek-related output from these inputs, so the template surface is single-source-of-truth from the row's `changes` array. Conditional flags use `changes.some(c => c.changeKind === kind)` rather than checking value emptiness, so a present-but-blank entry still triggers the section.
