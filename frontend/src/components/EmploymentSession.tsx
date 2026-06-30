@@ -120,6 +120,14 @@ export default function EmploymentSessionCard({
               {contractTypeChanged ? contractTypeChain.join(" → ") : eff.contractType}
             </span>
           )}
+          {session.nastup.parallel === true && (
+            <span
+              className={styles.concurrentTag}
+              title="Souběžně běžící úvazek — zatím se nepromítá do mezd ani plánu směn"
+            >
+              Souběžná smlouva
+            </span>
+          )}
           <span className={styles.meta}>{companyName}</span>
           {shownSalary != null && (
             <span className={styles.salaryWrap}>

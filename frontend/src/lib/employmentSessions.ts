@@ -23,6 +23,14 @@ export interface EmploymentRow {
   agreedReward?: number;
   signingDate?: string;
   changes?: ChangeRow[];
+  /**
+   * Marks a CONCURRENT (second-job) Nástup — a contract that runs in parallel
+   * with the primary one rather than superseding it. Set only on `nástup` rows.
+   * The session it opens is shown as a "Souběžná smlouva" and surfaced on the
+   * Zaměstnanci list via the root `additionalContracts[]` denormalization.
+   * Phase 1: display only — not yet paid or shift-attributed.
+   */
+  parallel?: boolean;
 }
 
 export interface ContractRecord {

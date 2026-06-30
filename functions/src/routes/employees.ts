@@ -52,6 +52,7 @@ const PROTECTED_ROOT_FIELDS = [
   "currentDepartment",
   "currentContractType",
   "currentCompanyId",
+  "additionalContracts",
   "employmentStartDate",
   "employmentEndDate",
   "parentalLeaveFrom",
@@ -135,14 +136,22 @@ async function computeEffectiveRootFields(
 
   // clock.today() honours the non-prod test clock.
   const today = clock.today();
-  type Session = { nastup: Row; dodatky: Row[]; terminated: boolean };
+
+  // Build the FULL chronological session list. Every `nástup` opens a session;
+  // `změna smlouvy` / `ukončení` attach to the most recently opened one. A
+  // nástup flagged `parallel: true` marks a CONCURRENT (second-job) contract:
+  // it forms its own session, kept SEPARATE from the primary line so it doesn't
+  // overwrite current* (which would hide the main contract). Without any
+  // parallel session, the selection below is byte-identical to the old
+  // "latest session" behaviour.
+  type Session = { nastup: Row; dodatky: Row[]; terminated: boolean; parallel: boolean };
+  const sessions: Session[] = [];
   let current: Session | null = null;
-  let latest: Session | null = null;
   for (const r of rows) {
     const ct = r.changeType as string | undefined;
     if (ct === "nástup") {
-      if (current) latest = current;
-      current = { nastup: r, dodatky: [], terminated: false };
+      if (current) sessions.push(current);
+      current = { nastup: r, dodatky: [], terminated: false, parallel: r.parallel === true };
     } else if (current && ct === "změna smlouvy") {
       current.dodatky.push(r);
     } else if (current && ct === "ukončení") {
@@ -151,13 +160,7 @@ async function computeEffectiveRootFields(
       if (((r.startDate as string | undefined) ?? "") < today) current.terminated = true;
     }
   }
-  if (current) latest = current;
-  if (!latest || latest.terminated) return null;
-
-  let jobTitle = (latest.nastup.jobTitle as string | undefined) ?? "";
-  let contractType = (latest.nastup.contractType as string | undefined) ?? "";
-  const companyId = (latest.nastup.companyId as string | undefined) ?? null;
-  let department = (latest.nastup.department as string | undefined) ?? "";
+  if (current) sessions.push(current);
 
   // A position-change Dodatek can move the employee to a position that belongs
   // to a DIFFERENT department, so currentDepartment (→ Oddělení column + detail
@@ -172,32 +175,79 @@ async function computeEffectiveRootFields(
     return lazyMap.get(positionName);
   };
 
-  // Only fold Dodatky whose validity (startDate) has arrived — mirrors the
-  // frontend computeEffectiveState so the Zaměstnanci list and the employee
-  // detail header agree.
-  for (const dodatek of latest.dodatky) {
-    if (((dodatek.startDate as string | undefined) ?? "") > today) continue;
-    const changes = (dodatek.changes as Array<{ changeKind?: string; value?: string }> | undefined) ?? [];
-    for (const ch of changes) {
-      if (ch.changeKind === "pracovní pozice" && ch.value) {
-        jobTitle = ch.value;
-        const resolved = await resolveDept(ch.value);
-        if (resolved) department = resolved;
-      } else if (ch.changeKind === "úvazek" && ch.value) {
-        // Same mapping as the frontend's uvazekToContractType — keep
-        // the two in sync if either side changes.
-        const v = ch.value.toLowerCase();
-        if (v.includes("polovič") || v.includes("zkrácen") || v.includes("částečn")) contractType = "PPP";
-        else if (v.includes("plný") || v.includes("plny")) contractType = "HPP";
+  // Fold a single session's applicable Dodatky into its effective contract
+  // fields. Only Dodatky whose validity (startDate) has arrived are folded —
+  // mirrors the frontend computeEffectiveState so list + detail header agree.
+  const foldSession = async (
+    s: Session
+  ): Promise<{ jobTitle: string; contractType: string; companyId: string | null; department: string }> => {
+    let jobTitle = (s.nastup.jobTitle as string | undefined) ?? "";
+    let contractType = (s.nastup.contractType as string | undefined) ?? "";
+    const companyId = (s.nastup.companyId as string | undefined) ?? null;
+    let department = (s.nastup.department as string | undefined) ?? "";
+    for (const dodatek of s.dodatky) {
+      if (((dodatek.startDate as string | undefined) ?? "") > today) continue;
+      const changes = (dodatek.changes as Array<{ changeKind?: string; value?: string }> | undefined) ?? [];
+      for (const ch of changes) {
+        if (ch.changeKind === "pracovní pozice" && ch.value) {
+          jobTitle = ch.value;
+          const resolved = await resolveDept(ch.value);
+          if (resolved) department = resolved;
+        } else if (ch.changeKind === "úvazek" && ch.value) {
+          // Same mapping as the frontend's uvazekToContractType — keep
+          // the two in sync if either side changes.
+          const v = ch.value.toLowerCase();
+          if (v.includes("polovič") || v.includes("zkrácen") || v.includes("částečn")) contractType = "PPP";
+          else if (v.includes("plný") || v.includes("plny")) contractType = "HPP";
+        }
       }
     }
+    return { jobTitle, contractType, companyId, department };
+  };
+
+  // PRIMARY = the latest NON-parallel session (mirrors the previous "latest
+  // session" pick exactly when there are no parallel sessions). current* is
+  // cleared (null return) when there is no primary or it has been terminated,
+  // exactly as before — UNLESS an active concurrent contract remains (below).
+  const nonParallel = sessions.filter((s) => !s.parallel);
+  const primary = nonParallel.length ? nonParallel[nonParallel.length - 1] : null;
+  const primaryActive = !!primary && !primary.terminated;
+
+  // ADDITIONAL = every ACTIVE parallel (concurrent) contract. Phase 1: surfaced
+  // on the Zaměstnanci list as a secondary badge — NOT yet paid or
+  // shift-attributed (that is Phase 2 / Phase 3). endDate is taken from the
+  // Nástup row (concurrent contracts rarely carry Dodatky in practice).
+  const additionalContracts: Array<Record<string, unknown>> = [];
+  for (const s of sessions) {
+    if (!s.parallel) continue;
+    const started = (((s.nastup.startDate as string | undefined) ?? "") <= today);
+    if (!started || s.terminated) continue;
+    const f = await foldSession(s);
+    additionalContracts.push({
+      nastupRowId: s.nastup.id,
+      contractType: f.contractType,
+      jobTitle: f.jobTitle,
+      department: f.department,
+      companyId: f.companyId,
+      startDate: (s.nastup.startDate as string | undefined) ?? null,
+      endDate: (s.nastup.endDate as string | null | undefined) ?? null,
+    });
   }
 
+  // No active primary AND no concurrent contracts → behave exactly as before
+  // (caller clears the root fields via EMPTY_ROOT_FIELDS).
+  if (!primaryActive && additionalContracts.length === 0) return null;
+
+  const pf = primaryActive
+    ? await foldSession(primary as Session)
+    : { jobTitle: "", contractType: "", companyId: null as string | null, department: "" };
+
   return {
-    currentCompanyId: companyId,
-    currentDepartment: department,
-    currentContractType: contractType,
-    currentJobTitle: jobTitle,
+    currentCompanyId: pf.companyId,
+    currentDepartment: pf.department,
+    currentContractType: pf.contractType,
+    currentJobTitle: pf.jobTitle,
+    additionalContracts,
   };
 }
 
@@ -241,7 +291,28 @@ const EMPTY_ROOT_FIELDS = {
   currentDepartment: "",
   currentContractType: "",
   currentJobTitle: "",
+  additionalContracts: [],
 } as const;
+
+/**
+ * Stable, key-order-independent comparison of two `additionalContracts` arrays
+ * (concurrent-contract denormalization). Serialises each entry as a fixed-order
+ * tuple so a Firestore-read object and a freshly-built one compare equal when
+ * their values match.
+ */
+function additionalContractsKey(arr: unknown): string {
+  return JSON.stringify(
+    ((arr as Array<Record<string, unknown>>) ?? []).map((c) => [
+      c.nastupRowId ?? null,
+      c.contractType ?? null,
+      c.jobTitle ?? null,
+      c.department ?? null,
+      c.companyId ?? null,
+      c.startDate ?? null,
+      c.endDate ?? null,
+    ])
+  );
+}
 
 /**
  * Derive an employee's lifecycle status from their employment sessions —
@@ -542,6 +613,10 @@ async function resyncRootFields(
   // the current* fields changed, so it sits before the early returns below.
   await applyDerivedStatus(empRef, now, req);
   if (!before) return;
+  // current*-only diff gates the AUDIT entry here (the root WRITE already
+  // happened in recomputeRootFromLatestSession). A concurrent-contract change is
+  // audited at the row level by the POST/PATCH logCreate/logUpdate, so it must
+  // NOT also emit a no-diff current* entry.
   const changed =
     after.currentJobTitle !== (before.currentJobTitle ?? "") ||
     after.currentContractType !== (before.currentContractType ?? "") ||
@@ -589,7 +664,8 @@ export async function refreshEffectiveRootForAllActive(): Promise<{ scanned: num
       patch.currentJobTitle !== (before.currentJobTitle ?? "") ||
       patch.currentContractType !== (before.currentContractType ?? "") ||
       patch.currentDepartment !== (before.currentDepartment ?? "") ||
-      patch.currentCompanyId !== (before.currentCompanyId ?? null);
+      patch.currentCompanyId !== (before.currentCompanyId ?? null) ||
+      additionalContractsKey(patch.additionalContracts) !== additionalContractsKey(before.additionalContracts);
     if (changed) {
       await doc.ref.update({ ...patch, updatedAt: FieldValue.serverTimestamp() });
       updated++;
@@ -1411,6 +1487,7 @@ employeesRouter.post(
         salary: body.salary,
         hourlyRate: body.hourlyRate,
         changes: body.changes,
+        parallel: body.parallel,
       },
     });
 
