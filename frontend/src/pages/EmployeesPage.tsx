@@ -33,20 +33,10 @@ interface Employee {
   // within it; the live check below makes appearance/clearing automatic.
   parentalLeaveFrom?: string | null;
   parentalLeaveTo?: string | null;
-  // Concurrent (parallel) contracts — denormalized from the employment rows
-  // onto root (server-owned). Each active second-job contract becomes a
-  // secondary badge. Phase 1: display only — not yet paid or shift-attributed.
-  additionalContracts?: AdditionalContract[];
-}
-
-interface AdditionalContract {
-  nastupRowId: string;
-  contractType: string;
-  jobTitle: string;
-  department: string;
-  companyId: string | null;
-  startDate: string | null;
-  endDate: string | null;
+  // True when the CURRENT contract (most recent active) is a concurrent second
+  // job worked during an active rodičovská on a DIFFERENT contract (server-owned).
+  // Drives the "RODIČOVSKÁ / position" list label vs a plain "RODIČOVSKÁ".
+  currentContractDuringLeave?: boolean;
 }
 
 // In training = flag set AND (no end date, or end date today/in the future).
@@ -67,40 +57,41 @@ function isOnParentalLeave(emp: Employee): boolean {
   );
 }
 
-// Position / department shown in the list. While on parental leave the primary
-// contract is paused, so its column reads "RODIČOVSKÁ"; if the employee also
-// holds a concurrent contract, that contract's value follows a slash
-// ("RODIČOVSKÁ/<concurrent>"). Several concurrent contracts join with "/".
-// Returns "" (not "—") when empty so the caller controls the empty fallback and
-// the sort comparator can reuse the same value.
+// Position / department shown in the list. While on parental leave the column
+// reads "RODIČOVSKÁ"; if the current contract is a concurrent job worked during
+// that leave (currentContractDuringLeave), the current position/department
+// follows a slash ("RODIČOVSKÁ/<current>"). Returns "" (not "—") when empty so
+// the caller controls the empty fallback and the sort comparator reuses it.
 function positionDisplay(emp: Employee): string {
   if (isOnParentalLeave(emp)) {
-    const extra = (emp.additionalContracts ?? []).map((c) => c.jobTitle).filter(Boolean);
-    return extra.length ? `RODIČOVSKÁ/${extra.join("/")}` : "RODIČOVSKÁ";
+    return emp.currentContractDuringLeave && emp.currentJobTitle
+      ? `RODIČOVSKÁ/${emp.currentJobTitle}`
+      : "RODIČOVSKÁ";
   }
   return emp.currentJobTitle ?? "";
 }
 function departmentDisplay(emp: Employee): string {
   if (isOnParentalLeave(emp)) {
-    const extra = (emp.additionalContracts ?? []).map((c) => c.department).filter(Boolean);
-    return extra.length ? `RODIČOVSKÁ/${extra.join("/")}` : "RODIČOVSKÁ";
+    return emp.currentContractDuringLeave && emp.currentDepartment
+      ? `RODIČOVSKÁ/${emp.currentDepartment}`
+      : "RODIČOVSKÁ";
   }
   return emp.currentDepartment ?? "";
 }
 
 // Cell content for the Pozice / Oddělení columns. While on parental leave the
-// column leads with the "Rodičovská" badge (the primary contract is paused),
-// followed by any concurrent contract's value ("[badge] / <concurrent>");
-// otherwise the plain text. The badge's default left margin is dropped since it
-// now leads the cell. Sorting still uses positionDisplay/departmentDisplay so
-// the order matches what's shown.
-function parentalCell(emp: Employee, base: string, extra: string[]) {
+// column leads with the "Rodičovská" badge; if the current contract is a
+// concurrent job worked during that leave, the current value follows a slash
+// ("[badge] / <current>"). The badge's default left margin is dropped since it
+// now leads the cell. Sorting uses positionDisplay/departmentDisplay so the
+// order matches what's shown.
+function parentalCell(emp: Employee, base: string) {
   if (!isOnParentalLeave(emp)) return base || "—";
-  const tail = extra.filter(Boolean);
+  const showCurrent = !!emp.currentContractDuringLeave && !!base;
   return (
     <>
       <span className={styles.parentalBadge} style={{ marginLeft: 0 }}>Rodičovská</span>
-      {tail.length > 0 && <span style={{ marginLeft: 6 }}>/ {tail.join(" / ")}</span>}
+      {showCurrent && <span style={{ marginLeft: 6 }}>/ {base}</span>}
     </>
   );
 }
@@ -313,23 +304,9 @@ export default function EmployeesPage() {
                     {isInTraining(emp) && (
                       <span className={styles.trainingBadge}>V zácviku</span>
                     )}
-                    {(emp.additionalContracts ?? []).map((c) => (
-                      <span
-                        key={c.nastupRowId}
-                        className={styles.concurrentBadge}
-                        title={
-                          `Souběžná smlouva: ${c.contractType}` +
-                          (c.jobTitle ? ` · ${c.jobTitle}` : "") +
-                          (c.department ? ` (${c.department})` : "") +
-                          " — zatím se nepromítá do mezd ani směn"
-                        }
-                      >
-                        + {c.contractType}
-                      </span>
-                    ))}
                   </td>
-                  <td>{parentalCell(emp, emp.currentJobTitle ?? "", (emp.additionalContracts ?? []).map((c) => c.jobTitle))}</td>
-                  <td>{parentalCell(emp, emp.currentDepartment ?? "", (emp.additionalContracts ?? []).map((c) => c.department))}</td>
+                  <td>{parentalCell(emp, emp.currentJobTitle ?? "")}</td>
+                  <td>{parentalCell(emp, emp.currentDepartment ?? "")}</td>
                   <td>{emp.nationality ? nationalityName(emp.nationality) : "—"}</td>
                   <td>{formatDateCZ(emp.employmentStartDate) || "—"}</td>
                   <td>{formatDateCZ(emp.employmentEndDate) || "—"}</td>

@@ -283,8 +283,6 @@ interface EmploymentRow {
   agreedReward?: number;
   signingDate?: string;
   changes?: ChangeRow[];
-  // Concurrent (parallel) second-job contract — set only on `nástup` rows.
-  parallel?: boolean;
   // Part-time: contracted hours per week (PPP only). Additive metadata in
   // Part A — drives the contract template + the minimum-wage check, but does
   // NOT yet affect payroll computation (that proration is Part B).
@@ -451,8 +449,6 @@ interface EmploymentForm {
   agreedReward: string;
   // změna smlouvy fields
   changes: ChangeRow[];
-  // Concurrent-contract flag (Nástup only) — a second, parallel úvazek.
-  parallel: boolean;
   // PPP part-time hours/week (string in the form; persisted as number)
   hoursPerWeek: string;
 }
@@ -475,7 +471,6 @@ const emptyForm: EmploymentForm = {
   agreedWorkScope: "max. 300 hodin ročně",
   agreedReward: "",
   changes: [{ ...emptyChangeRow }],
-  parallel: false,
   hoursPerWeek: "",
 };
 
@@ -498,7 +493,6 @@ function rowToForm(row: EmploymentRow): EmploymentForm {
     agreedWorkScope: row.agreedWorkScope ?? "max. 300 hodin ročně",
     agreedReward: row.agreedReward?.toString() ?? "",
     changes: row.changes?.length ? row.changes : [{ ...emptyChangeRow }],
-    parallel: row.parallel === true,
     hoursPerWeek: row.hoursPerWeek != null ? String(row.hoursPerWeek) : "",
   };
 }
@@ -890,9 +884,6 @@ function AddEntryModal({
           department: departments.find((d) => d.id === form.departmentId)?.name ?? "",
           endDate: form.endDate || null,
           signingDate: form.signingDate || null,
-          // Concurrent (second-job) contract — runs in parallel with the
-          // primary one instead of superseding it. Only meaningful on Nástup.
-          parallel: form.parallel || false,
         };
         if (form.contractType === "DPP") {
           payload = {
@@ -1057,32 +1048,6 @@ function AddEntryModal({
                     </select>
                   </div>
                 </div>
-
-                {/* Souběžná smlouva (concurrent contract) — shown only when a
-                    PRIMARY contract already exists, so the very first Nástup
-                    can't be marked parallel (that would leave the employee with
-                    no primary contract). Editing an already-parallel row keeps
-                    the box visible so it can be unticked. */}
-                {(employment.some(
-                  (r) => r.changeType === "nástup" && r.id !== initialRow?.id && r.parallel !== true
-                ) ||
-                  form.parallel) && (
-                  <div className={styles.modalField} style={{ marginTop: "0.875rem" }}>
-                    <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer" }}>
-                      <input
-                        type="checkbox"
-                        checked={form.parallel}
-                        onChange={(e) => setField("parallel", e.target.checked)}
-                      />
-                      Souběžná smlouva / druhý úvazek
-                    </label>
-                    <p className={styles.modalNote}>
-                      Druhý, souběžně běžící úvazek (např. DPP vedle hlavní smlouvy nebo
-                      rodičovské). Zobrazí se jako vedlejší smlouva. Zatím se nepromítá do
-                      mezd ani plánu směn.
-                    </p>
-                  </div>
-                )}
 
                 {/* HPP / PPP sub-branch */}
                 {(form.contractType === "HPP" || form.contractType === "PPP") && (
