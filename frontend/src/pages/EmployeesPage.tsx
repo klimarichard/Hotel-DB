@@ -67,6 +67,27 @@ function isOnParentalLeave(emp: Employee): boolean {
   );
 }
 
+// Position / department shown in the list. While on parental leave the primary
+// contract is paused, so its column reads "RODIČOVSKÁ"; if the employee also
+// holds a concurrent contract, that contract's value follows a slash
+// ("RODIČOVSKÁ/<concurrent>"). Several concurrent contracts join with "/".
+// Returns "" (not "—") when empty so the caller controls the empty fallback and
+// the sort comparator can reuse the same value.
+function positionDisplay(emp: Employee): string {
+  if (isOnParentalLeave(emp)) {
+    const extra = (emp.additionalContracts ?? []).map((c) => c.jobTitle).filter(Boolean);
+    return extra.length ? `RODIČOVSKÁ/${extra.join("/")}` : "RODIČOVSKÁ";
+  }
+  return emp.currentJobTitle ?? "";
+}
+function departmentDisplay(emp: Employee): string {
+  if (isOnParentalLeave(emp)) {
+    const extra = (emp.additionalContracts ?? []).map((c) => c.department).filter(Boolean);
+    return extra.length ? `RODIČOVSKÁ/${extra.join("/")}` : "RODIČOVSKÁ";
+  }
+  return emp.currentDepartment ?? "";
+}
+
 // Every column is sortable except Stav (which mirrors the three tabs, so a sort
 // would be redundant). "name" sorts by surname then first name.
 type SortKey = "name" | "jobTitle" | "department" | "nationality" | "startDate" | "endDate";
@@ -80,9 +101,9 @@ const csCollator = new Intl.Collator("cs", { sensitivity: "base", numeric: true 
 function sortValue(e: Employee, key: SortKey): string {
   switch (key) {
     case "jobTitle":
-      return e.currentJobTitle ?? "";
+      return positionDisplay(e);
     case "department":
-      return e.currentDepartment ?? "";
+      return departmentDisplay(e);
     case "nationality":
       return e.nationality ? nationalityName(e.nationality) : "";
     case "startDate":
@@ -293,8 +314,8 @@ export default function EmployeesPage() {
                       </span>
                     ))}
                   </td>
-                  <td>{emp.currentJobTitle || "—"}</td>
-                  <td>{emp.currentDepartment || "—"}</td>
+                  <td>{positionDisplay(emp) || "—"}</td>
+                  <td>{departmentDisplay(emp) || "—"}</td>
                   <td>{emp.nationality ? nationalityName(emp.nationality) : "—"}</td>
                   <td>{formatDateCZ(emp.employmentStartDate) || "—"}</td>
                   <td>{formatDateCZ(emp.employmentEndDate) || "—"}</td>
