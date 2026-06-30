@@ -190,13 +190,16 @@
   letter-spacing: 0.03em;
 }
 
-.pppRow .contractBadge {
+/* Badge colour follows the BADGE's own contract type (not the row), so a
+   concurrent row shows e.g. a grey HPP next to an amber DPP. Base
+   `.contractBadge` is grey = HPP / default. */
+.contractBadgePpp {
   background: var(--color-info-bg);
   color: var(--color-info-text);
   border-color: var(--color-info-border);
 }
 
-.dppRow .contractBadge {
+.contractBadgeDpp {
   background: var(--color-warning-bg);
   color: var(--color-warning-text);
   border-color: var(--color-warning-border);

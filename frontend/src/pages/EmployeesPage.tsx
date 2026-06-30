@@ -48,6 +48,14 @@ function isInTraining(emp: Employee): boolean {
   return emp.zaucovani === true && (!emp.zaucovaniDo || emp.zaucovaniDo >= clock.today());
 }
 
+// Contract-type badge class — coloured by the badge's OWN type (grey HPP /
+// blue PPP / amber DPP), so a concurrent row shows each contract in its colour.
+function contractBadgeClass(ct: string): string {
+  if (ct === "DPP") return `${styles.contractBadge} ${styles.contractBadgeDpp}`;
+  if (ct === "PPP") return `${styles.contractBadge} ${styles.contractBadgePpp}`;
+  return styles.contractBadge;
+}
+
 // On parental leave = today is on/after the start and (if an end date is set)
 // on/before it. An open-ended period (no end date yet — unknown when leave
 // begins) keeps the badge until an end date is later filled in and passes.
@@ -305,10 +313,10 @@ export default function EmployeesPage() {
                         (on-leave) contract's badge first, then the current one
                         — e.g. [HPP] [DPP]. */}
                     {emp.currentContractDuringLeave && emp.leaveContractType && (
-                      <span className={styles.contractBadge}>{emp.leaveContractType}</span>
+                      <span className={contractBadgeClass(emp.leaveContractType)}>{emp.leaveContractType}</span>
                     )}
                     {emp.currentContractType && (
-                      <span className={styles.contractBadge}>{emp.currentContractType}</span>
+                      <span className={contractBadgeClass(emp.currentContractType)}>{emp.currentContractType}</span>
                     )}
                     {isInTraining(emp) && (
                       <span className={styles.trainingBadge}>V zácviku</span>
