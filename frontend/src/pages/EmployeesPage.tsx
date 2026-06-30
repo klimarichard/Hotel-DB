@@ -88,6 +88,23 @@ function departmentDisplay(emp: Employee): string {
   return emp.currentDepartment ?? "";
 }
 
+// Cell content for the Pozice / Oddělení columns. While on parental leave the
+// column leads with the "Rodičovská" badge (the primary contract is paused),
+// followed by any concurrent contract's value ("[badge] / <concurrent>");
+// otherwise the plain text. The badge's default left margin is dropped since it
+// now leads the cell. Sorting still uses positionDisplay/departmentDisplay so
+// the order matches what's shown.
+function parentalCell(emp: Employee, base: string, extra: string[]) {
+  if (!isOnParentalLeave(emp)) return base || "—";
+  const tail = extra.filter(Boolean);
+  return (
+    <>
+      <span className={styles.parentalBadge} style={{ marginLeft: 0 }}>Rodičovská</span>
+      {tail.length > 0 && <span style={{ marginLeft: 6 }}>/ {tail.join(" / ")}</span>}
+    </>
+  );
+}
+
 // Every column is sortable except Stav (which mirrors the three tabs, so a sort
 // would be redundant). "name" sorts by surname then first name.
 type SortKey = "name" | "jobTitle" | "department" | "nationality" | "startDate" | "endDate";
@@ -296,9 +313,6 @@ export default function EmployeesPage() {
                     {isInTraining(emp) && (
                       <span className={styles.trainingBadge}>V zácviku</span>
                     )}
-                    {isOnParentalLeave(emp) && (
-                      <span className={styles.parentalBadge}>Rodičovská</span>
-                    )}
                     {(emp.additionalContracts ?? []).map((c) => (
                       <span
                         key={c.nastupRowId}
@@ -314,8 +328,8 @@ export default function EmployeesPage() {
                       </span>
                     ))}
                   </td>
-                  <td>{positionDisplay(emp) || "—"}</td>
-                  <td>{departmentDisplay(emp) || "—"}</td>
+                  <td>{parentalCell(emp, emp.currentJobTitle ?? "", (emp.additionalContracts ?? []).map((c) => c.jobTitle))}</td>
+                  <td>{parentalCell(emp, emp.currentDepartment ?? "", (emp.additionalContracts ?? []).map((c) => c.department))}</td>
                   <td>{emp.nationality ? nationalityName(emp.nationality) : "—"}</td>
                   <td>{formatDateCZ(emp.employmentStartDate) || "—"}</td>
                   <td>{formatDateCZ(emp.employmentEndDate) || "—"}</td>
