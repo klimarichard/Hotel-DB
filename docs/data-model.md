@@ -22,9 +22,13 @@ The `benefits` sub-doc carries the insurance/bank/Multisport fields plus `nepode
 | `currentDepartment` | string | same | Department name from the latest in-effect session |
 | `currentContractType` | string | same | Contract type (`HPP`/`PPP`/`DPP`) from the latest in-effect session |
 | `currentJobTitle` | string | same | Job title from the latest in-effect session |
+| `currentContractDuringLeave` | boolean | same | `true` when an active `rodičovská` row sits on a **different** session than `current*` — the current contract is a concurrent job worked during parental leave. Default `false`. |
+| `leaveContractType` | string \| null | same | The on-leave (main) contract's folded `contractType` (e.g. `"HPP"`), so the Employees list can badge it alongside the current concurrent contract. `null` when not in concurrent-leave mode. |
 | `status` | `"active"\|"before-start"\|"terminated"` | `applyDerivedStatus` (per employment write) + nightly sweep | Derived from employment rows; see [employees.md](employees.md) |
 | `employmentStartDate` | string (ISO `YYYY-MM-DD`) \| null | `applyDerivedStatus` (per employment write) + nightly sweep | Start of the employee's **current continuous run** — NOT necessarily the latest Nástup date; a rehire within one calendar month of the prior session's end extends the previous run (see continuous-run rule in [employees.md](employees.md)) |
 | `employmentEndDate` | string (ISO `YYYY-MM-DD`) \| null | `applyDerivedStatus` (per employment write) + nightly sweep | Effective end date of the latest session (`null` = open-ended); mirrors the same end-date fold as `computeEffectiveStatus` |
+
+`currentContractDuringLeave` and `leaveContractType` were added in v3.5.0 (concurrent contracts, #22). Both are in `PROTECTED_ROOT_FIELDS` and are written by the same employment-write + nightly-sweep paths as `current*`. `EMPTY_ROOT_FIELDS` defaults them to `false` / `null`. See [employees.md — Concurrent contracts](employees.md#concurrent-contracts--simplified-model-v350-22) for the full selection logic.
 
 `employmentStartDate` and `employmentEndDate` were added in v2.2.8. Both are pure derived denormalizations (no audit log on change). They are computed in `computeEmploymentDates(rows, today)` (`functions/src/routes/employees.ts`) and persisted in `applyDerivedStatus`. Existing employees backfill on the next nightly `refreshEmployeeEffective` sweep or `trigger-effective-refresh` manual call; `POST /employees` seeds both as `null` for name-only employees. No migration script needed — additive, data-safe.
 

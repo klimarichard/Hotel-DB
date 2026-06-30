@@ -24,10 +24,10 @@ Firebase project: `hotel-hr-app-75581` (production), `hote-hr-app-staging` (stag
 |---|---|
 | [Data Model & Build Phases](docs/data-model.md) | Firestore top-level collections, sub-collections, denormalized fields, and build-phase status. |
 | [Authentication, Roles & Permissions](docs/auth-and-permissions.md) | Login + password reset, the configurable permission model (catalogue + editable user types + per-user grants/revokes), `requirePermission` enforcement, the admin type/permission UI, and per-role menu order. |
-| [Employees](docs/employees.md) | Employee module, session-based employment history (incl. parental-leave RODIČOVSKÁ rows), non-+420 phone format modal, `Můj profil` self-service, self document-expiry alerts + Můj profil badge. |
+| [Employees](docs/employees.md) | Employee module, session-based employment history (incl. parental-leave RODIČOVSKÁ rows with optional end date), concurrent contracts (simplified model — latest active contract wins), PPP part-time `hoursPerWeek` field, minimum-wage non-blocking warning, non-+420 phone format modal, `Můj profil` self-service, self document-expiry alerts + Můj profil badge. |
 | [Shifts (Shift Planner)](docs/shifts.md) | Shift-expression parser, monthly grid, MOD badges, shift-change requests, X-limits, plan lifecycle, numeric-cell shift-type tagging (per-type tally). |
 | [Vacation (Dovolená)](docs/vacation.md) | Request/approval workflow, pendingEdit pattern, shift-collision handling. |
-| [Contracts & Templates](docs/contracts.md) | Contract types, TipTap template editor, server-side PDF generation, template variables, editable variable overview at generation time. |
+| [Contracts & Templates](docs/contracts.md) | Contract types, TipTap template editor, server-side PDF generation, template variables (incl. PPP `{{hoursPerWeek}}` / `{{newHoursPerWeek}}` / `{{isDodatekHodiny}}`), editable variable overview at generation time. |
 | [Other Features & UI](docs/other-features-and-ui.md) | Dashboard (`Přehled`), audit log, `Upozornění` hub, dark mode, mobile responsiveness (`BottomNav`, breakpoints, card-on-mobile), shared UI components, companies. |
 | [Onboarding Tour & Nápověda](docs/onboarding-and-help.md) | Guided first-login tour, permission/exclude gating, demo-route mock architecture, tour persistence, and the Nápověda Help page. |
 | [Deployment & Environments](docs/deployment.md) | Project aliases, deploy scripts, Secret Manager, Firestore indexes, manual triggers, test clock. |
