@@ -33,6 +33,20 @@ interface Employee {
   // within it; the live check below makes appearance/clearing automatic.
   parentalLeaveFrom?: string | null;
   parentalLeaveTo?: string | null;
+  // Concurrent (parallel) contracts — denormalized from the employment rows
+  // onto root (server-owned). Each active second-job contract becomes a
+  // secondary badge. Phase 1: display only — not yet paid or shift-attributed.
+  additionalContracts?: AdditionalContract[];
+}
+
+interface AdditionalContract {
+  nastupRowId: string;
+  contractType: string;
+  jobTitle: string;
+  department: string;
+  companyId: string | null;
+  startDate: string | null;
+  endDate: string | null;
 }
 
 // In training = flag set AND (no end date, or end date today/in the future).
@@ -263,6 +277,20 @@ export default function EmployeesPage() {
                     {isOnParentalLeave(emp) && (
                       <span className={styles.parentalBadge}>Rodičovská</span>
                     )}
+                    {(emp.additionalContracts ?? []).map((c) => (
+                      <span
+                        key={c.nastupRowId}
+                        className={styles.concurrentBadge}
+                        title={
+                          `Souběžná smlouva: ${c.contractType}` +
+                          (c.jobTitle ? ` · ${c.jobTitle}` : "") +
+                          (c.department ? ` (${c.department})` : "") +
+                          " — zatím se nepromítá do mezd ani směn"
+                        }
+                      >
+                        + {c.contractType}
+                      </span>
+                    ))}
                   </td>
                   <td>{emp.currentJobTitle || "—"}</td>
                   <td>{emp.currentDepartment || "—"}</td>
