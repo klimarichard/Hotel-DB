@@ -37,6 +37,9 @@ interface Employee {
   // job worked during an active rodičovská on a DIFFERENT contract (server-owned).
   // Drives the "RODIČOVSKÁ / position" list label vs a plain "RODIČOVSKÁ".
   currentContractDuringLeave?: boolean;
+  // The on-leave (main) contract's type, shown as a badge alongside the current
+  // (concurrent) contract — e.g. [HPP] [DPP]. Only set while concurrent.
+  leaveContractType?: string | null;
 }
 
 // In training = flag set AND (no end date, or end date today/in the future).
@@ -298,6 +301,12 @@ export default function EmployeesPage() {
                     <Link to={`/zamestnanci/${emp.id}`} className={styles.nameLink}>
                       {employeeSurnameFirst(emp)}
                     </Link>
+                    {/* On leave with a concurrent contract: show the main
+                        (on-leave) contract's badge first, then the current one
+                        — e.g. [HPP] [DPP]. */}
+                    {emp.currentContractDuringLeave && emp.leaveContractType && (
+                      <span className={styles.contractBadge}>{emp.leaveContractType}</span>
+                    )}
                     {emp.currentContractType && (
                       <span className={styles.contractBadge}>{emp.currentContractType}</span>
                     )}
