@@ -23,6 +23,13 @@ export interface EmploymentRow {
   agreedReward?: number;
   signingDate?: string;
   changes?: ChangeRow[];
+  /**
+   * Part-time contracted hours per week (PPP only). Drives the contract
+   * template + the minimum-wage check. Does NOT affect payroll computation in
+   * Part A (base-hours proration is Part B). A `počet hodin` Dodatek change
+   * updates the effective value (see computeEffectiveState).
+   */
+  hoursPerWeek?: number;
 }
 
 export interface ContractRecord {
@@ -59,6 +66,8 @@ export interface EffectiveState {
   endDate: string | null;
   salary: number | null;
   agreedReward: number | null;
+  /** Effective part-time hours/week (PPP) after folding `počet hodin` Dodatky. */
+  hoursPerWeek: number | null;
 }
 
 /**
@@ -169,6 +178,7 @@ export function computeEffectiveState(
   let agreedReward = nastup.agreedReward ?? null;
   let endDate = nastup.endDate ?? null;
   let contractType = nastup.contractType ?? "";
+  let hoursPerWeek = nastup.hoursPerWeek ?? null;
 
   // Only fold Dodatky whose validity (startDate) has arrived — a future-dated
   // Dodatek must not change the effective salary/position/úvazek until its day.
@@ -191,6 +201,9 @@ export function computeEffectiveState(
         // end date. The falsy guard used to drop this, leaving the original end
         // date (employee wrongly shown as terminated).
         endDate = ch.value || null;
+      } else if (ch.changeKind === "počet hodin" && ch.value) {
+        const n = Number(ch.value);
+        if (Number.isFinite(n)) hoursPerWeek = n;
       }
     }
   }
@@ -209,6 +222,7 @@ export function computeEffectiveState(
     endDate,
     salary,
     agreedReward,
+    hoursPerWeek,
   };
 }
 

@@ -1410,6 +1410,7 @@ employeesRouter.post(
         companyId: body.companyId,
         salary: body.salary,
         hourlyRate: body.hourlyRate,
+        hoursPerWeek: body.hoursPerWeek,
         changes: body.changes,
       },
     });
