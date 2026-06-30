@@ -98,6 +98,7 @@ const CHANGE_KIND_LABELS: Record<string, string> = {
   "pracovní pozice": "Pozice",
   úvazek: "Úvazek",
   "délka smlouvy": "Délka smlouvy",
+  "počet hodin": "Počet hodin týdně",
 };
 function renderChanges(v: unknown): string {
   if (!Array.isArray(v) || !v.length) return "—";

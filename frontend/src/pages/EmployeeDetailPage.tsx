@@ -29,7 +29,9 @@ import {
   groupBySession,
   mapContractsToRows,
   expectedContractTypesForRow,
+  uvazekToContractType,
 } from "@/lib/employmentSessions";
+import { minWageThreshold, formatCzk } from "@/lib/minWage";
 import modalStyles from "@/components/ConfirmModal.module.css";
 import styles from "./EmployeeDetailPage.module.css";
 
@@ -283,6 +285,10 @@ interface EmploymentRow {
   changes?: ChangeRow[];
   // Concurrent (parallel) second-job contract — set only on `nástup` rows.
   parallel?: boolean;
+  // Part-time: contracted hours per week (PPP only). Additive metadata in
+  // Part A — drives the contract template + the minimum-wage check, but does
+  // NOT yet affect payroll computation (that proration is Part B).
+  hoursPerWeek?: number;
 }
 
 interface ContractRecord {
@@ -391,7 +397,7 @@ type ChangeType = typeof CHANGE_TYPES[number] | "rodičovská";
 const CONTRACT_TYPES_NASTUP = ["HPP", "PPP", "DPP"] as const;
 type ContractType = typeof CONTRACT_TYPES_NASTUP[number] | "";
 
-const CHANGE_KINDS = ["mzda", "pracovní pozice", "úvazek", "délka smlouvy"] as const;
+const CHANGE_KINDS = ["mzda", "pracovní pozice", "úvazek", "délka smlouvy", "počet hodin"] as const;
 const UVAZEK_OPTIONS = [
   "plný pracovní úvazek, tj. 40 hod./týdně",
   "poloviční pracovní úvazek, tj. 20 hod./týdně",
@@ -447,6 +453,8 @@ interface EmploymentForm {
   changes: ChangeRow[];
   // Concurrent-contract flag (Nástup only) — a second, parallel úvazek.
   parallel: boolean;
+  // PPP part-time hours/week (string in the form; persisted as number)
+  hoursPerWeek: string;
 }
 
 const emptyForm: EmploymentForm = {
@@ -468,6 +476,7 @@ const emptyForm: EmploymentForm = {
   agreedReward: "",
   changes: [{ ...emptyChangeRow }],
   parallel: false,
+  hoursPerWeek: "",
 };
 
 // ─── Form initialiser (used for edit pre-fill) ───────────────────────────────
@@ -490,6 +499,7 @@ function rowToForm(row: EmploymentRow): EmploymentForm {
     agreedReward: row.agreedReward?.toString() ?? "",
     changes: row.changes?.length ? row.changes : [{ ...emptyChangeRow }],
     parallel: row.parallel === true,
+    hoursPerWeek: row.hoursPerWeek != null ? String(row.hoursPerWeek) : "",
   };
 }
 
@@ -529,6 +539,15 @@ function ChangeRowInput({
             className={styles.modalInput}
             type="number"
             placeholder="Nová mzda (Kč)"
+            value={row.value}
+            onChange={(e) => onChange(index, "value", e.target.value)}
+          />
+        )}
+        {row.changeKind === "počet hodin" && (
+          <input
+            className={styles.modalInput}
+            type="number"
+            placeholder="Nový počet hodin týdně"
             value={row.value}
             onChange={(e) => onChange(index, "value", e.target.value)}
           />
@@ -657,6 +676,10 @@ function AddEntryModal({
   const [positions, setPositions] = useState<JobPositionRec[]>([]);
   const [companies, setCompanies] = useState<CompanyRec[]>([]);
   const [dppMaxMonthlyReward, setDppMaxMonthlyReward] = useState<number | null>(null);
+  const [minimumWage, setMinimumWage] = useState<number | null>(null);
+  // Holds a pending min-wage warning: the message + the save to run if the user
+  // confirms "Přesto uložit". Non-blocking (#2) — the admin can always proceed.
+  const [minWageWarn, setMinWageWarn] = useState<{ message: string } | null>(null);
   // Manual override for DPP "Sjednaná odměna" — when true, auto-compute is suppressed.
   // Pre-existing rows start in manual mode so saved values aren't overwritten on edit.
   const [agreedRewardManual, setAgreedRewardManual] = useState<boolean>(
@@ -664,8 +687,11 @@ function AddEntryModal({
   );
 
   useEffect(() => {
-    api.get<{ dppMaxMonthlyReward: number }>("/payroll/settings")
-      .then((s) => setDppMaxMonthlyReward(s.dppMaxMonthlyReward))
+    api.get<{ dppMaxMonthlyReward: number; minimumWage: number }>("/payroll/settings")
+      .then((s) => {
+        setDppMaxMonthlyReward(s.dppMaxMonthlyReward);
+        setMinimumWage(s.minimumWage);
+      })
       .catch(() => {});
   }, []);
 
@@ -778,7 +804,63 @@ function AddEntryModal({
     </div>
   );
 
-  async function handleSubmit(e: React.FormEvent) {
+  /**
+   * Minimum-wage check (#2) — returns a warning message when the salary being
+   * entered is below the threshold for the contract, else null. Non-blocking:
+   * the caller shows it via ConfirmModal and lets the admin proceed. Covers a
+   * Nástup (HPP/PPP) and a salary ("mzda") Dodatek, resolving the effective
+   * contractType + part-time hours for the latter from the latest session
+   * overlaid with this Dodatek's úvazek / počet-hodin changes.
+   */
+  function computeMinWageWarning(): string | null {
+    if (minimumWage == null) return null;
+
+    if (form.changeType === "nástup") {
+      if (form.contractType !== "HPP" && form.contractType !== "PPP") return null;
+      if (!form.salary) return null;
+      const salary = Number(form.salary);
+      const hpw = form.contractType === "PPP" && form.hoursPerWeek ? Number(form.hoursPerWeek) : undefined;
+      const threshold = minWageThreshold(form.contractType, minimumWage, hpw);
+      if (threshold != null && Number.isFinite(salary) && salary < threshold) {
+        const hoursNote = form.contractType === "PPP" ? ` při ${hpw ?? 20} h/týdně` : "";
+        return `Zadaná mzda ${formatCzk(salary)} Kč je nižší než minimální mzda pro tuto smlouvu (${formatCzk(threshold)} Kč${hoursNote}). Přesto uložit?`;
+      }
+      return null;
+    }
+
+    if (form.changeType === "změna smlouvy") {
+      const mzda = form.changes.find((c) => c.changeKind === "mzda" && c.value);
+      if (!mzda) return null;
+      const salary = Number(mzda.value);
+      if (!Number.isFinite(salary)) return null;
+      const sessions = groupBySession(employment);
+      const eff = sessions.length ? sessions[sessions.length - 1].effective : null;
+      let contractType = eff?.contractType ?? "";
+      let hpw = eff?.hoursPerWeek ?? undefined;
+      // Overlay changes made in THIS dodatek (a single Dodatek can move úvazek
+      // and/or hours alongside the salary).
+      for (const ch of form.changes) {
+        if (ch.changeKind === "úvazek" && ch.value) {
+          const mapped = uvazekToContractType(ch.value);
+          if (mapped) contractType = mapped;
+        } else if (ch.changeKind === "počet hodin" && ch.value) {
+          const n = Number(ch.value);
+          if (Number.isFinite(n)) hpw = n;
+        }
+      }
+      if (contractType !== "HPP" && contractType !== "PPP") return null;
+      const threshold = minWageThreshold(contractType, minimumWage, hpw);
+      if (threshold != null && salary < threshold) {
+        const hoursNote = contractType === "PPP" ? ` při ${hpw ?? 20} h/týdně` : "";
+        return `Nová mzda ${formatCzk(salary)} Kč je nižší než minimální mzda pro tuto smlouvu (${formatCzk(threshold)} Kč${hoursNote}). Přesto uložit?`;
+      }
+      return null;
+    }
+
+    return null;
+  }
+
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.startDate) { setError("Datum je povinné."); return; }
     if (form.changeType === "nástup" && !form.contractType) {
@@ -787,6 +869,13 @@ function AddEntryModal({
     if (form.changeType === "rodičovská" && !form.endDate) {
       setError("Vyplňte konec rodičovské dovolené."); return;
     }
+    const warning = computeMinWageWarning();
+    if (warning) { setMinWageWarn({ message: warning }); return; }
+    void doSave();
+  }
+
+  async function doSave() {
+    setMinWageWarn(null);
     setSaving(true);
     setError(null);
     try {
@@ -819,6 +908,9 @@ function AddEntryModal({
             salary: form.salary ? Number(form.salary) : null,
             hourlyRate: form.hourlyRate ? Number(form.hourlyRate) : null,
             probationPeriod: form.probationPeriod,
+            // Part-time hours/week — PPP only (null clears it for HPP).
+            hoursPerWeek:
+              form.contractType === "PPP" && form.hoursPerWeek ? Number(form.hoursPerWeek) : null,
           };
         }
       } else if (form.changeType === "ukončení") {
@@ -1002,6 +1094,18 @@ function AddEntryModal({
                       <label className={styles.modalLabel}>Mzda (Kč)</label>
                       <input className={styles.modalInput} type="number" value={form.salary} onChange={(e) => setField("salary", e.target.value)} placeholder="0" />
                     </div>
+                    {form.contractType === "PPP" && (
+                      <div className={styles.modalField}>
+                        <label className={styles.modalLabel}>Počet hodin týdně</label>
+                        <input
+                          className={styles.modalInput}
+                          type="number"
+                          value={form.hoursPerWeek}
+                          onChange={(e) => setField("hoursPerWeek", e.target.value)}
+                          placeholder="20"
+                        />
+                      </div>
+                    )}
                     <div className={styles.modalField}>
                       <label className={styles.modalLabel}>Zkušební doba</label>
                       <input className={styles.modalInput} value={form.probationPeriod} onChange={(e) => setField("probationPeriod", e.target.value)} />
@@ -1152,6 +1256,16 @@ function AddEntryModal({
           </div>
         </form>
       </div>
+      {minWageWarn && (
+        <ConfirmModal
+          title="Mzda pod minimální mzdou"
+          message={minWageWarn.message}
+          confirmLabel="Přesto uložit"
+          cancelLabel="Zpět"
+          onConfirm={() => { void doSave(); }}
+          onCancel={() => setMinWageWarn(null)}
+        />
+      )}
     </div>
   );
 }
@@ -2123,6 +2237,7 @@ export default function EmployeeDetailPage() {
                   : (r.endDate ?? p.endDate) ?? undefined,
               workLocation: r.workLocation || p.workLocation,
               probationPeriod: r.probationPeriod || p.probationPeriod,
+              hoursPerWeek: r.hoursPerWeek ?? p.hoursPerWeek,
               signingDate: r.signingDate ?? undefined,
               originalSigningDate: findOriginalSigningDate(r, employment),
               agreedWorkScope: r.agreedWorkScope || p.agreedWorkScope,

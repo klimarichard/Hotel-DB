@@ -42,6 +42,7 @@ const CHANGE_KIND_LABEL: Record<string, string> = {
   "pracovní pozice": "Pozice",
   "úvazek": "Úvazek",
   "délka smlouvy": "Délka smlouvy",
+  "počet hodin": "Počet hodin týdně",
 };
 
 function renderChangeValue(kind: string, value: string): React.ReactNode {

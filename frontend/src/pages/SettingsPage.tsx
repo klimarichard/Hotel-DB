@@ -1623,6 +1623,22 @@ export default function SettingsPage() {
                     autoFocus
                   />
                 </div>
+                {Number(minimumWageDraft) > minimumWage && (
+                  <p
+                    style={{
+                      fontSize: "0.8125rem",
+                      color: "var(--color-warning-text)",
+                      background: "var(--color-warning-bg)",
+                      border: "1px solid var(--color-warning-border, var(--color-border-strong))",
+                      borderRadius: 6,
+                      padding: "0.5rem 0.625rem",
+                      margin: "0 0 0.875rem",
+                    }}
+                  >
+                    Zvýšení minimální mzdy: stávající smlouvy pod novou hranicí se automaticky
+                    neupraví. Zkontrolujte mzdy pod minimem a případně upravte jednotlivé smlouvy.
+                  </p>
+                )}
                 <div className={styles.formActions}>
                   <Button variant="secondary" onClick={() => setShowMinWageConfirm(false)} disabled={minWageSaving}>
                     Zrušit

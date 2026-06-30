@@ -101,6 +101,7 @@ export const VARIABLE_GROUPS: { group: string; vars: VariableDef[] }[] = [
       { key: "startDate", label: "Datum nástupu" },
       { key: "endDate", label: "Datum ukončení" },
       { key: "workLocation", label: "Místo výkonu práce" },
+      { key: "hoursPerWeek", label: "Počet hodin týdně (PPP)" },
       { key: "probationPeriod", label: "Zkušební doba" },
       { key: "signingDate", label: "Datum podpisu" },
       { key: "originalSigningDate", label: "Datum podpisu původní smlouvy" },
@@ -123,6 +124,8 @@ export const VARIABLE_GROUPS: { group: string; vars: VariableDef[] }[] = [
       { key: "isDodatekPozice", label: "Je dodatek o pozici (pro {{#if}})", kind: "if" },
       { key: "newWorkScope", label: "Nový úvazek" },
       { key: "isDodatekUvazek", label: "Je dodatek o úvazku (pro {{#if}})", kind: "if" },
+      { key: "newHoursPerWeek", label: "Nový počet hodin týdně" },
+      { key: "isDodatekHodiny", label: "Je dodatek o počtu hodin (pro {{#if}})", kind: "if" },
       { key: "newEndDate", label: "Nový konec smlouvy" },
       { key: "isDodatekZmenaKonce", label: "Je dodatek o změně konce poměru (pro {{#if}})", kind: "if" },
     ],
@@ -182,6 +185,8 @@ export interface EmployeeData {
   // DPP fields
   agreedWorkScope?: string;
   agreedReward?: string | number;
+  // Part-time weekly hours (PPP). Rendered on the PPP contract template.
+  hoursPerWeek?: string | number;
   // Dodatek fields — populated when generating "změna smlouvy" contracts.
   // dodatekEffectiveDate is raw ISO; resolveVariables formats it.
   dodatekEffectiveDate?: string;
@@ -283,6 +288,7 @@ export function resolveVariables(
     noEndDate: hasEndDate ? "" : "ano",
     agreedWorkScope: str(employee.agreedWorkScope),
     agreedReward: str(employee.agreedReward),
+    hoursPerWeek: str(employee.hoursPerWeek),
     ...(() => {
       const changes = employee.dodatekChanges ?? [];
       const findValue = (kind: string) =>
@@ -302,11 +308,13 @@ export function resolveVariables(
         newSalary: formatSalaryCZ(newSalaryStr),
         newJobTitle: str(findValue("pracovní pozice")),
         newWorkScope: str(findValue("úvazek")),
+        newHoursPerWeek: str(findValue("počet hodin")),
         newEndDate: formatDateCZ(findValue("délka smlouvy")),
         salaryChangeVerb,
         isDodatekMzda: has("mzda") ? "ano" : "",
         isDodatekPozice: has("pracovní pozice") ? "ano" : "",
         isDodatekUvazek: has("úvazek") ? "ano" : "",
+        isDodatekHodiny: has("počet hodin") ? "ano" : "",
         isDodatekZmenaKonce: has("délka smlouvy") ? "ano" : "",
       };
     })(),

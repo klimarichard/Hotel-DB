@@ -27,6 +27,8 @@ function changeLabel(change: { changeKind: string; value: string }): string {
     case "délka smlouvy":
       // Value is "doba určitá" or "doba neurčitá" — use it directly.
       return change.value || "změna délky smlouvy";
+    case "počet hodin":
+      return "změna úvazku";
     default:
       return change.changeKind || "změna";
   }
