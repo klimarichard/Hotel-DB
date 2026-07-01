@@ -1026,6 +1026,19 @@ export default function ShiftPlannerPage() {
 
   // ── Cell save (upsert / delete) ────────────────────────────────────────────
 
+  // Double-click on an editable cell of an OPEN plan toggles the X marker. It
+  // delegates to handleCellSave, so the X-limit exception dialog, the
+  // "6 X in a row" block and the coverage checks all fire exactly as when the X
+  // is typed. Only toggles empty ↔ X — never clobbers a real shift value.
+  async function handleCellToggleX(employeeId: string, date: string) {
+    if (!plan || plan.status !== "opened") return;
+    const cur = (plan.shifts.find((s) => s.id === `${employeeId}_${date}`)?.rawInput ?? "")
+      .trim()
+      .toUpperCase();
+    if (cur !== "" && cur !== "X") return; // don't overwrite an assigned shift
+    await handleCellSave(employeeId, date, cur === "X" ? "" : "X");
+  }
+
   async function handleCellSave(employeeId: string, date: string, rawInput: string) {
     if (!plan) return;
 
@@ -1673,6 +1686,7 @@ export default function ShiftPlannerPage() {
                     }
                   : undefined
               }
+              onCellDoubleClickX={plan.status === "opened" ? handleCellToggleX : undefined}
               xInfoFor={
                 can("shifts.xAllowance.manage") && (plan.status === "created" || plan.status === "opened")
                   ? (emp) => {
