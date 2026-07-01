@@ -75,11 +75,11 @@ selfServiceRouter.get("/employee/employment", async (req: AuthRequest, res) => {
 
 /**
  * GET /me/employee/contracts
- * Self-scoped contract METADATA (no PDF bytes, no storage paths) for the
- * caller's own record. The self profile uses only the signed/unsigned status
- * per employment row to hide history entries whose contract is still being
- * prepared. Auth-only (no `contracts.view`): it's the caller's own data and
- * exposes no downloadable content — unlike the admin GET /employees/:id/contracts.
+ * Self-scoped contract METADATA (no PDF bytes / storage paths) for the caller's
+ * own record: used to hide history entries whose contract is still being
+ * prepared, and to know which entries have a downloadable signed contract.
+ * Auth-only (no `contracts.view`) — it's the caller's own data. The signed PDF
+ * itself streams from GET /me/employee/contracts/:id/download below.
  */
 selfServiceRouter.get("/employee/contracts", async (req: AuthRequest, res) => {
   const empId = await getCallerEmployeeId(req.uid!);
@@ -95,8 +95,58 @@ selfServiceRouter.get("/employee/contracts", async (req: AuthRequest, res) => {
       status: c.status ?? null,
       employmentRowId: c.employmentRowId ?? null,
       generatedAt: c.generatedAt ?? null,
+      displayName: c.displayName ?? null,
     };
   }));
+});
+
+/**
+ * GET /me/employee/contracts/:contractId/download
+ * Streams the caller's OWN SIGNED contract PDF for download. Self-scoped and
+ * signed-only: the contract must live under the caller's employee record and
+ * carry a signedStoragePath (employees never download unsigned / being-prepared
+ * PDFs). Auth-only — no contracts.view, unlike the admin download route.
+ * storage.rules deny direct client access, so the read goes through Admin SDK.
+ */
+selfServiceRouter.get("/employee/contracts/:contractId/download", async (req: AuthRequest, res) => {
+  const empId = await getCallerEmployeeId(req.uid!);
+  if (!empId) { res.status(400).json({ error: "Váš účet není propojen se zaměstnaneckým záznamem." }); return; }
+
+  const snap = await db()
+    .collection("employees").doc(empId)
+    .collection("contracts").doc(req.params.contractId).get();
+  if (!snap.exists) { res.status(404).json({ error: "Smlouva nenalezena." }); return; }
+
+  const data = snap.data() as Record<string, unknown>;
+  const path = data.signedStoragePath;
+  if (data.status !== "signed" || typeof path !== "string" || !path) {
+    res.status(404).json({ error: "Podepsaná smlouva není k dispozici." });
+    return;
+  }
+
+  const file = admin.storage().bucket().file(path);
+  const [exists] = await file.exists();
+  if (!exists) { res.status(404).json({ error: "Soubor smlouvy chybí v úložišti." }); return; }
+
+  const displayBase = typeof data.displayName === "string" && data.displayName
+    ? data.displayName
+    : `smlouva_${req.params.contractId}`;
+  const filenameBase = `${displayBase} - podepsaná`;
+  // UTF-8 filename with an ASCII fallback for legacy clients (mirrors the admin
+  // download route in routes/contracts.ts).
+  const asciiFallback = filenameBase
+    .normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^\x20-\x7e]/g, "_");
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="${asciiFallback}.pdf"; filename*=UTF-8''${encodeURIComponent(filenameBase)}.pdf`
+  );
+  file.createReadStream()
+    .on("error", (e) => {
+      if (!res.headersSent) res.status(500).json({ error: (e as Error).message });
+      else res.end();
+    })
+    .pipe(res);
 });
 
 /**

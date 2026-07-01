@@ -95,7 +95,7 @@ interface Dialog {
 }
 
 export default function EmployeeSelfPage() {
-  const { employeeId, loading: authLoading, can } = useAuth();
+  const { user, employeeId, loading: authLoading, can } = useAuth();
   const { alerts: docAlerts } = useSelfDocAlertsContext();
   const canRequestEdit = can("self.profile.requestEdit");
   const canRevealSelf = can("sensitive.reveal.self");
@@ -159,6 +159,40 @@ export default function EmployeeSelfPage() {
   async function loadRequests() {
     const reqs = await api.get<ChangeRequest[]>("/me/change-requests").catch(() => []);
     setRequests(reqs);
+  }
+
+  // Download the employee's OWN signed contract for a history entry. Streams
+  // from the self endpoint (auth-only, signed-only); the server sets the proper
+  // filename in Content-Disposition, which we honour for the saved file.
+  async function handleDownloadContract(contractId: string, displayName?: string) {
+    if (!user) return;
+    try {
+      const token = await user.getIdToken();
+      const resp = await fetch(`/api/me/employee/contracts/${contractId}/download`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!resp.ok) {
+        setDialog({ title: "Chyba", message: "Smlouvu se nepodařilo stáhnout.", showCancel: false });
+        return;
+      }
+      const cd = resp.headers.get("Content-Disposition");
+      const star = cd?.match(/filename\*=UTF-8''([^;]+)/i);
+      const plain = cd?.match(/filename="([^"]+)"/i);
+      let filename = `${displayName || "smlouva"}.pdf`;
+      if (star) { try { filename = decodeURIComponent(star[1]); } catch { /* malformed */ } }
+      else if (plain) filename = plain[1];
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5_000);
+    } catch {
+      setDialog({ title: "Chyba", message: "Smlouvu se nepodařilo stáhnout.", showCancel: false });
+    }
   }
 
   useEffect(() => {
@@ -576,7 +610,7 @@ export default function EmployeeSelfPage() {
                     <EmploymentSessionCard
                       key={session.nastup.id}
                       session={session}
-                      contractsByRow={new Map()}
+                      contractsByRow={contractByRow}
                       defaultExpanded={idx === 0}
                       companies={{}}
                       employeeId={employeeId ?? "tour-demo"}
@@ -590,6 +624,7 @@ export default function EmployeeSelfPage() {
                       onAddRodicovska={() => {}}
                       onTerminate={() => {}}
                       onContractsChanged={() => {}}
+                      onSelfDownload={handleDownloadContract}
                     />
                   ))}
               </div>
