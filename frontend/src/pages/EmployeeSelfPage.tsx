@@ -10,7 +10,7 @@ import { nationalityName } from "@/lib/nationalities";
 import { formatPhoneDisplay, needsPhoneFormatPrompt } from "@/lib/phoneFormat";
 import PhoneFormatModal from "@/components/PhoneFormatModal";
 import { isCzechNationality } from "@/lib/contractVariables";
-import { groupBySession } from "@/lib/employmentSessions";
+import { groupBySession, mapContractsToRows, type ContractRecord } from "@/lib/employmentSessions";
 import EmploymentSessionCard from "@/components/EmploymentSession";
 import DocumentExpiryBar from "@/components/DocumentExpiryBar";
 import { useSelfDocAlertsContext } from "@/context/SelfDocAlertsContext";
@@ -105,6 +105,7 @@ export default function EmployeeSelfPage() {
   const [documents, setDocuments] = useState<SubDoc>(null);
   const [benefits, setBenefits] = useState<SubDoc>(null);
   const [employment, setEmployment] = useState<EmploymentRow[]>([]);
+  const [contracts, setContracts] = useState<ContractRecord[]>([]);
   const [requests, setRequests] = useState<ChangeRequest[]>([]);
   const [revealed, setRevealed] = useState<Record<string, string>>({});
   const [editMode, setEditMode] = useState(false);
@@ -174,15 +175,17 @@ export default function EmployeeSelfPage() {
       api.get<SubDoc>("/me/employee/documents"),
       api.get<SubDoc>("/me/employee/benefits"),
       api.get<EmploymentRow[]>("/me/employee/employment"),
+      api.get<ContractRecord[]>("/me/employee/contracts").catch(() => []),
       api.get<ChangeRequest[]>("/me/change-requests"),
       api.get<Array<{ name: string; code: string }>>("/educationLevels").catch(() => []),
     ])
-      .then(([e, c, d, b, hist, reqs, edu]) => {
+      .then(([e, c, d, b, hist, contractList, reqs, edu]) => {
         setEmp(e);
         setContact(c);
         setDocuments(d);
         setBenefits(b);
         setEmployment(hist);
+        setContracts(contractList);
         setEducationOptions(edu.map((l) => (l.code ? `${l.code} - ${l.name}` : l.name)));
         setRequests(reqs);
       })
@@ -431,6 +434,20 @@ export default function EmployeeSelfPage() {
 
   const hasPending = requests.some((r) => r.status === "pending");
 
+  // Employment-history overview hides entries whose contract is still being
+  // PREPARED for signing: an employee should only see finalised history. A row
+  // stays visible if its matching contract is SIGNED, or if it has no contract
+  // on file at all (legacy / pre-system rows never had one generated). A row
+  // whose matching contract exists but isn't signed yet is hidden until signed.
+  const contractByRow = mapContractsToRows(
+    employment as unknown as Parameters<typeof mapContractsToRows>[0],
+    contracts
+  );
+  const visibleEmployment = employment.filter((row) => {
+    const c = contractByRow.get(row.id);
+    return !c || c.status === "signed";
+  });
+
   return (
     <div>
       <div className={styles.headerRow}>
@@ -544,12 +561,14 @@ export default function EmployeeSelfPage() {
                 <span className={styles.fieldValue}>{emp?.currentContractType || "—"}</span>
               </div>
             </div>
-            {employment.length > 0 && (
+            {visibleEmployment.length > 0 && (
               <div style={{ marginTop: "1rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
                 {/* Read-only session-card view, identical format to the detail
                     page (TODO 43). The employee can't fetch companies or edit,
-                    so companies is empty and all action callbacks are no-ops. */}
-                {[...groupBySession(employment as unknown as Parameters<typeof groupBySession>[0])]
+                    so companies is empty and all action callbacks are no-ops.
+                    Rows with a not-yet-signed contract are filtered out above
+                    (visibleEmployment) so "being prepared" entries stay hidden. */}
+                {[...groupBySession(visibleEmployment as unknown as Parameters<typeof groupBySession>[0])]
                   .reverse()
                   .map((session, idx) => (
                     <EmploymentSessionCard

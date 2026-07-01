@@ -1407,9 +1407,17 @@ shiftsRouter.get(
   requireAuth,
   requirePermission("shifts.override.review"),
   async (_req, res) => {
+    // NOTE: the `.orderBy("requestedAt")` is REQUIRED, not cosmetic. A bare
+    // collection-group equality query (`where status==pending` with no orderBy)
+    // is not served by the (status, requestedAt) composite index and throws a
+    // FAILED_PRECONDITION on real Firestore — which the frontend badge context
+    // swallows, leaving the count stuck at 0. Mirroring the proven-working
+    // `/overrides/pending` list query routes it through the existing index.
+    // Every pending request always has `requestedAt`, so nothing is dropped.
     const snap = await db()
       .collectionGroup("shiftOverrideRequests")
       .where("status", "==", "pending")
+      .orderBy("requestedAt", "desc")
       .get();
     res.json({ count: snap.size });
   }
@@ -1682,9 +1690,15 @@ shiftsRouter.get(
   requireAuth,
   requirePermission("shifts.changeRequest.review"),
   async (_req, res) => {
+    // See the identical note on /overrides/pending-count above: the
+    // `.orderBy("requestedAt")` is required so this bare-equality collection-
+    // group count uses the (status, requestedAt) composite index instead of
+    // throwing a FAILED_PRECONDITION (which the badge context silently swallows
+    // → count stuck at 0). Mirrors the working /changeRequests/pending list.
     const snap = await db()
       .collectionGroup("shiftChangeRequests")
       .where("status", "==", "pending")
+      .orderBy("requestedAt", "desc")
       .get();
     res.json({ count: snap.size });
   }
