@@ -477,6 +477,21 @@
   font-size: 0.875rem;
 }
 
+/* Purple "MOD" tag next to the date when the employee is manager-on-duty that
+   day. Reuses the shared MOD colour trio (same as the shift grid's MOD row) so
+   it stays purple and readable in both light and dark themes. */
+.myShiftModBadge {
+  display: inline-block;
+  padding: 0.02rem 0.3rem;
+  border-radius: 3px;
+  font-weight: 700;
+  font-size: 0.6875rem;
+  letter-spacing: 0.04em;
+  background: var(--color-mod-bg);
+  color: var(--color-mod-text);
+  border: 1px solid var(--color-mod-border);
+}
+
 .myShiftBlank {
   display: inline-block;
   min-width: 2.5rem;
