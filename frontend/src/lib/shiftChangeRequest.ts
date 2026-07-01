@@ -13,9 +13,9 @@ export function formatRequestedChange(rc: RequestedChange | null | undefined): s
   if (!rc) return "—";
   switch (rc.action) {
     case "set-type":
-      return `→ ${rc.value ?? ""}`;
+      return rc.value ?? "—";
     case "set-hours":
-      return `→ ${rc.value ?? ""} h`;
+      return rc.value ? `${rc.value} h` : "—";
     case "delete":
       return "smazat";
     case "swap":

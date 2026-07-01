@@ -36,6 +36,14 @@
   border-color: var(--color-primary);
 }
 
+/* Selected state — reused by type + action buttons. */
+.active,
+.active:hover:not(:disabled) {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+}
+
 .actionRow {
   display: flex;
   gap: 6px;
