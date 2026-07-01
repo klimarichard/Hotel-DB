@@ -16,6 +16,7 @@ Implementation notes for the Phase 5 Shift Planner: the shift expression parser,
 - X limits: HPP = 8/month, PPP = 13/month, DPP = unlimited. Day/night recepce coverage minimum = 5 active employees.
 - **Consecutive X limit**: max 6 X in a row for employees/managers (hard block, no override). Admins/directors exempt.
 - **Real-time reload**: every mutation bumps `updatedAt` on the plan doc; `loadPlan()` is called after each API response so the UI refreshes immediately. There is no client-side `onSnapshot` listener — `firestore.rules` block direct client SDK reads (all data flows through `/api`), so the listener was permission-denied and silently never fired. It was removed in v3.2.1.
+- **Double-click X on open plans (v3.6.0):** On an **opened** plan, double-clicking an editable cell toggles the X marker: empty → X, and X → empty. A cell that already has a real shift value (anything other than empty or X) is never touched — the guard `if (cur !== "" && cur !== "X") return` is the single check. The handler `handleCellToggleX` in `ShiftPlannerPage` delegates straight to `handleCellSave`, so the existing X-limit exception dialog (`XOverrideModal`), the consecutive-6-X hard block, and all coverage checks fire exactly as if the user had typed X manually. Wiring: `onCellDoubleClickX` prop threaded `ShiftPlannerPage` → `ShiftGrid` → `ShiftCell` (the `onDoubleClickX` prop). **Single-click behaviour change:** when `onDoubleClickX` is present, a single click on that cell only focuses it — it no longer opens the text editor (prevents the race between click-to-edit and double-click-to-toggle). Typing, keyboard entry, and Backspace to clear still open or operate the editor normally.
 - `ShiftOverridesContext` provides global pending override count for the "Směny" nav badge.
 - **Shift legend**: mandatory work-law legend (shift types D/N/R/ZD/ZN, hotel codes A/S/Q/K, break rule) displayed below the grid on `ShiftPlannerPage`. Hidden on phones (v3.0.1) where the planner runs full-screen.
 - **PDF export** (admin/director): "Exportovat PDF" button builds a standalone HTML table from plan data with inline light-mode styles (6pt compact fonts, `table-layout:fixed`, colgroup percentages) and renders to single-page landscape A4 via `html2pdf.js`. Includes title, full grid with cell colors, MOD badges on vedoucí names, and legend. No DOM cloning — built programmatically from `plan.shifts`, `plan.employees`, `plan.modShifts`.
@@ -30,10 +31,73 @@ Implementation notes for the Phase 5 Shift Planner: the shift expression parser,
 - Badge only shown for `vedoucí` section (not recepce/portýři).
 - Name cell layout: `[nameLines: name + MOD count] [badge] [edit/delete actions on hover]`.
 
-### Shift change requests
-- `shiftChangeRequests` sub-collection under `shiftPlans/{id}`.
-- Employees double-click any cell on a published plan to open `ShiftChangeRequestModal`.
-- Approving does NOT automatically update the shift — admin handles that manually.
+### Shift change requests (v3.6.0 — structured picker + auto-apply)
+
+`shiftChangeRequests` sub-collection under `shiftPlans/{id}`.
+
+#### Employee dialog — `ShiftChangeRequestModal`
+
+On a **published** plan, employees double-click any read-only cell to open `ShiftChangeRequestModal` (`frontend/src/components/ShiftChangeRequestModal.tsx`). The modal is a structured picker, not a free-text box:
+
+- **12 shift-type buttons** laid out as three rows of four: `DA DS DQ DK / NA NS NQ NK / DPQ NPQ DPA NPA`. The selected button shows its own shift-plan colour (`getCellColor`).
+- **"vyměnit s:" dropdown** — every employee in the same plan (surname-sorted, Czech collation), excluding the requester.
+- **"zadat počet hodin"** toggle — expands a numeric sub-input (0–24; decimal allowed; comma is normalised to period).
+- **"smazat"** toggle.
+- **"Jiné:" textarea** — free-text note; optional unless no other preset is selected (in which case it becomes the whole request).
+
+Exactly one preset (type / hours / delete / swap) or a non-empty "Jiné" must be present before "Odeslat žádost" enables. Reason is **optional** when a preset is chosen; it becomes the request body for the "other" action.
+
+The submit payload carries a `requestedChange` object (typed in `frontend/src/lib/shiftChangeRequest.ts`):
+
+```ts
+interface RequestedChange {
+  action: "set-type" | "set-hours" | "delete" | "swap" | "other";
+  value?: string;               // set-type: e.g. "DA"; set-hours: e.g. "8"
+  swapWithEmployeeId?: string;  // swap
+  swapWithName?: string;        // swap — denormalized surname-first for display
+}
+```
+
+`formatRequestedChange(rc)` (same file) renders a human-readable Czech label for the review tables.
+
+#### Backend validation — `POST /shifts/plans/:planId/shiftChangeRequests`
+
+The endpoint validates the `requestedChange` from the body for `kind === "change"` requests:
+
+- `set-type` / `set-hours` — value must parse as a valid shift expression (`parseShiftExpression` must return `isValid`).
+- `swap` — `swapWithEmployeeId` required and must not equal the requester.
+- `other` — `reason` is **mandatory** (the only case where reason is still required).
+- Any other `action` → 400.
+
+`requestedChange` is stored on the doc only when present; legacy reason-only docs (no `requestedChange`) continue to coexist.
+
+#### Auto-apply on approval — `PATCH /shifts/plans/:planId/shiftChangeRequests/:reqId`
+
+When approving a structured change request (`status === "approved"`, `kind !== "free-claim"`, and `requestedChange` is present), the handler **auto-applies** the change to the plan cells before marking the request approved:
+
+| `action` | Effect |
+|---|---|
+| `set-type` | Writes `value` (e.g. `"DA"`) into the cell via `writeCell`. |
+| `set-hours` | Writes the numeric value into the cell; **carries the previous shift type** (from the old `rawInput` or its `typeTag`) onto the new cell as a `typeTag` corner badge. |
+| `delete` | Deletes the cell doc (`writeCell` with empty string). |
+| `swap` | Reads both employees' cells for that date, then writes each other's value (two `writeCell` calls). |
+| `other` | No auto-apply — left for manual editing. |
+
+All writes are audited via `logUpdate` (`collection: "shiftPlans/shifts"`). `plan.updatedAt` is bumped after every approval so connected clients reload the grid immediately (`loadPlan()` called in the frontend after the API responds).
+
+Legacy reason-only requests (no `requestedChange`) are approved without any cell mutation — existing manual-edit workflow preserved.
+
+#### "Požadovaná změna" display column
+
+A "Požadovaná změna" column was added to three review surfaces, all via `formatRequestedChange`:
+
+- **Per-plan panel** — `ShiftChangeRequestPanel` (`frontend/src/components/ShiftChangeRequestPanel.tsx`).
+- **Cross-plan Upozornění tab** — `PendingShiftChangeRequestsTab` (`frontend/src/pages/upozorneni/PendingShiftChangeRequestsTab.tsx`).
+- **Employee's own list** — `MyRequestsPanel` (`frontend/src/components/MyRequestsPanel.tsx`).
+
+Free-claim rows render "—" in this column (they have no `requestedChange`).
+
+#### Other notes
 - `ShiftChangeRequestsContext` mirrors `ShiftOverridesContext`; fetches `GET /shifts/changeRequests/pending-count`.
 - **Pending-count `orderBy` requirement (v3.5.1):** both count endpoints (`/overrides/pending-count`, `/changeRequests/pending-count`) must include `.orderBy("requestedAt","desc")`. Without it, a bare collection-group equality query is not served by the `(status, requestedAt)` composite index on real Firestore and throws `FAILED_PRECONDITION`; the badge contexts swallow it silently, leaving counts at 0. Full explanation in [Upozornění hub](other-features-and-ui.md#upozornění-hub).
 - `alwaysReadOnlySections` prop on `ShiftGrid` locks specified sections. Employees get `["vedoucí"]`.
