@@ -47,7 +47,7 @@
 .actionRow {
   display: flex;
   gap: 6px;
-  margin-top: 8px;
+  margin-top: 16px;
 }
 .actionBtn {
   flex: 1;
