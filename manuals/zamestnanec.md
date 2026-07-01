@@ -105,6 +105,11 @@ Tlačítko **Exportovat ▾** nabízí **PDF** (plán na jednu stránku A4). Tla
 Vlastní karta zaměstnance.
 
 - Vidíte své osobní údaje, kontakt, doklady a **historii pracovního poměru**.
+- **Historie pracovního poměru** — v dolní části stránky je přehled vašich zaměstnaneckých záznamů (Nástup, Dodatek, Ukončení). Zobrazují se **pouze záznamy s podepsanou smlouvou** — záznamy, k nimž dosud nebyla nahrána podepsaná smlouva, jsou v přehledu skryté. Jakmile administrátor vaši podepsanou smlouvu nahraje, příslušný záznam se automaticky ukáže. U záznamu o Ukončení se v záhlaví záznamu zobrazí i datum ukončení pracovního poměru.
+- **Stažení podepsané smlouvy** — u každého záznamu v historii pracovního poměru je tlačítko **Stáhnout smlouvu**. Kliknutím na něj si stáhnete PDF podepsané smlouvy přímo do svého zařízení. Stahovat lze jen záznamy, které jsou v přehledu viditelné (tj. s nahranou podepsanou smlouvou) — editovat ani generovat smlouvy zaměstnanec nemůže.
+
+> 📷 *(Místo pro snímek obrazovky: historie pracovního poměru s tlačítkem Stáhnout smlouvu)*
+
 - **Telefon** začínající `+420` se zobrazuje po skupinách jako `+420 XXX XXX XXX`.
 - **Zahraniční telefon (jiný než +420):** pokud při úpravě profilu zadáte telefonní číslo, které není české (nezačíná `+420`), zobrazí se při odeslání okno **„Formát telefonního čísla"**. V něm určíte, jak se má číslo zobrazovat (např. s mezerami pro lepší čitelnost) — uloží a zobrazí se přesně v tom tvaru, který zadáte. Česká čísla (`+420`) se formátují automaticky a okno se u nich neukazuje.
 - Pole **„Platnost OP"** se zde už nezobrazuje ani nenavrhuje k úpravě.
