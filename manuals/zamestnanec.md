@@ -65,13 +65,26 @@ Měsíční plán směn (recepce, portýři, manažeři). Vidíte **publikovaný
 
 ### Zadávání volna (X)
 
-Do plánu můžete sami zadávat a mazat **pouze „X" (volno)**.
+V **otevřeném** plánu můžete sami zadávat a mazat **pouze „X" (volno)** na svém vlastním řádku.
 
+- **Jak zadat nebo odebrat X:** napište do buňky `X`, nebo **buňku dvojklikněte** — prázdná buňka se okamžitě označí jako X. Dalším dvojklikem X opět odstraníte.
 - **Limity X (volna):** HPP 8/měsíc, PPP 13/měsíc, DPP neomezeně; maximálně **6 X v řadě**.
+- Pokud byste zadáním X **překročili povolený počet** pro váš typ smlouvy, otevře se dialog — vyplňte důvod a odešlete žádost o výjimku. Výjimku schvaluje administrátor.
+- Zápis **více než 6 X za sebou** systém zablokuje zcela — bez možnosti výjimky.
 
 ### Žádosti o změnu směny
 
-V **hotovém** plánu podáte **dvojklikem na buňku** žádost o změnu směny. Žádost schvaluje administrátor.
+V **publikovaném** plánu podáte **dvojklikem na vlastní buňku** žádost o změnu. Otevře se dialog, kde zvolíte, co konkrétně požadujete:
+
+- **Typ směny** — vyberte ze seznamu typ, na který chcete svou stávající směnu změnit.
+- **Vyměnit s:** — požádejte o výměnu směny s kolegou; vyberte ho ze seznamu. Stačí podat žádost jednou — kolega nemusí podávat samostatnou žádost.
+- **Zadat počet hodin** — uveďte, kolik hodin jste skutečně odpracovali (hodí se např. tehdy, když jste museli odejít dřív).
+- **Smazat** — požádejte o odebrání směny z plánu.
+- **Jiné:** — libovolný textový požadavek, který se nehodí do žádné z výše uvedených možností.
+
+Ke každé žádosti lze volitelně doplnit **poznámku**. Žádost odešlete tlačítkem **Odeslat žádost**.
+
+Po **schválení** administrátorem se změna do plánu **propíše automaticky** — není třeba čekat na ruční doplnění. Výjimkou je volba **„Jiné"**: administrátor naloží s žádostí dle vašeho textu a úpravu provede ručně. Stav žádosti vidíte v sekci **Moje žádosti**.
 
 ### Volné směny
 

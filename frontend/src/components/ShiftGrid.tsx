@@ -27,6 +27,8 @@ interface Props {
   showModCounts?: boolean;
   onModPersonChange?: (employeeId: string, oldLetter: string | null, newLetter: string | null) => Promise<void>;
   onCellRequestChange?: (employeeId: string, date: string, currentRawInput: string) => void;
+  /** Double-click an editable cell (OPEN plan) to toggle the X marker. */
+  onCellDoubleClickX?: (employeeId: string, date: string) => void;
   /** Per-employee X usage + limit info for the inline badge; null = no limit (DPP/unknown).
    *  `editable` is true only when the employee has an approved vacation this month (the
    *  only case in which admin may raise the limit). `vacCount` = vacation-origin X days. */
@@ -102,6 +104,7 @@ export default function ShiftGrid({
   showModCounts = false,
   onModPersonChange,
   onCellRequestChange,
+  onCellDoubleClickX,
   xInfoFor,
   onSetXAllowance,
   showFreeShifts = false,
@@ -606,6 +609,11 @@ export default function ShiftGrid({
                             onRequestChange={
                               onCellRequestChange && !alwaysReadOnlySections.includes(emp.section)
                                 ? () => onCellRequestChange(emp.employeeId, dateStr, shiftDoc?.rawInput ?? "")
+                                : undefined
+                            }
+                            onDoubleClickX={
+                              onCellDoubleClickX && !alwaysReadOnlySections.includes(emp.section)
+                                ? () => onCellDoubleClickX(emp.employeeId, dateStr)
                                 : undefined
                             }
                           />

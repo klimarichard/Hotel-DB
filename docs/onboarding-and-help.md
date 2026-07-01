@@ -150,14 +150,14 @@ When `anchor` is `null` (welcome, outro, or fallback) the overlay dims the full 
 
 ## Tour version & "what's new" delta
 
-`appTour.version` (currently **9**) is the highest `addedInVersion` value present in the step list. It lives in `frontend/src/lib/tours/appTour.ts`:
+`appTour.version` (currently **11**) is the highest `addedInVersion` value present in the step list. It lives in `frontend/src/lib/tours/appTour.ts`:
 
 ```ts
 export const appTour: TourDefinition = {
   id: "app",
   // Highest step `addedInVersion` in the list. Bump it (and stamp the new steps'
   // `addedInVersion`) whenever you add steps for a new feature.
-  version: 9,
+  version: 11,
   ...
 };
 ```
@@ -174,10 +174,10 @@ If a user's permissions don't include any of the new steps, the delta is empty a
 **`toursSeen` Firestore field:**
 
 ```
-users/{uid}.toursSeen = { "app": 9 }   // tourId → last seen version
+users/{uid}.toursSeen = { "app": 11 }   // tourId → last seen version
 ```
 
-This replaces the former `{ "app": 5 }` example. The `PUT /api/auth/me/tours` body is `{ tourId, version }` and uses `merge: true` so other tour entries are preserved.
+The `PUT /api/auth/me/tours` body is `{ tourId, version }` and uses `merge: true` so other tour entries are preserved.
 
 ---
 
@@ -211,7 +211,7 @@ Sections are used only for the overlay's "Předchozí/Další sekce" navigation 
 The backend stores one Firestore field on the user document:
 
 ```
-users/{uid}.toursSeen = { "app": 9 }   // tourId → last seen version
+users/{uid}.toursSeen = { "app": 11 }   // tourId → last seen version
 ```
 
 Two endpoints in `functions/src/routes/auth.ts`:
@@ -250,16 +250,19 @@ Any request to `/employees/tour-demo` or `/employees/tour-demo/...` is **always 
 For pages where the mock depends on the app state (Směny, Mzdy, Můj profil), the scenario is derived **from the URL pathname** by `activeScenario()` — not from a mutable flag — to be race-proof when the tour navigates between two demo routes that render the same page component.
 
 ```
-/napoveda/ukazka-profil          → "self"        (Můj profil, populated)
-/napoveda/ukazka-mzdy            → "payroll"      (PayrollPage, populated period)
-/napoveda/ukazka-mzdy-prazdne    → "payroll-empty" (PayrollPage, no period → create state)
-/napoveda/ukazka-smeny           → "shifts"       (ShiftPlannerPage, opened plan)
-/napoveda/ukazka-smeny-prazdne   → "shifts-empty"  (ShiftPlannerPage, no plan → create state)
-/napoveda/ukazka-smeny-vytvoreny → "shifts-created" (created plan → "Smazat plán" visible)
-/napoveda/ukazka-smeny-publikovane → "shifts-published" (published plan → Volné směny section)
+/napoveda/ukazka-profil          → "self"                (Můj profil, populated)
+/napoveda/ukazka-mzdy            → "payroll"             (PayrollPage, populated period)
+/napoveda/ukazka-mzdy-prazdne    → "payroll-empty"       (PayrollPage, no period → create state)
+/napoveda/ukazka-smeny           → "shifts"              (ShiftPlannerPage, opened plan)
+/napoveda/ukazka-smeny-prazdne   → "shifts-empty"        (ShiftPlannerPage, no plan → create state)
+/napoveda/ukazka-smeny-vytvoreny → "shifts-created"      (created plan → "Smazat plán" visible)
+/napoveda/ukazka-smeny-publikovane → "shifts-published"  (published plan → Volné směny section)
+/napoveda/ukazka-smeny-zadost    → "shifts-change-request" (published plan → change-request modal auto-opened, v3.6.0)
 ```
 
 Each route is registered in `App.tsx` with a per-route `key` (the path), so when the tour navigates between two demo routes that render the same page component (e.g. shifts-opened → shifts-published), React **unmounts and remounts** the page, ensuring a fresh fetch is fired with the new scenario already set.
+
+**Special case — `shifts-change-request` (v3.6.0):** the shift-change-request tour step needs to spotlight `data-tour="shift-change-request-modal"`, which only exists when the modal is open. The tour engine cannot perform a double-click, so `ShiftPlannerPage` detects `tourDemo.scenario === "shifts-change-request"` in a `useEffect` and, once the mock published plan has loaded, sets `pendingChangeRequest` to the first employee's first date, auto-opening the modal. This is confined to the sandbox route (its own page instance via the `key` in `App.tsx`) and never affects the real Směny page or any other demo route.
 
 ### `TourDemoRoute` wrapper
 

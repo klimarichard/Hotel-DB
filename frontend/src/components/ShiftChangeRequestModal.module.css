@@ -1,0 +1,173 @@
+.context {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+  margin: 0 0 0.75rem;
+}
+
+.sectionLabel {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  margin: 0.5rem 0 0.35rem;
+}
+
+/* 4-column grid of monospace shift-type buttons — same visual language as the
+   numeric-cell shift-type tag picker. */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 5px;
+}
+
+.typeBtn {
+  font-family: monospace;
+  font-weight: 700;
+  font-size: 0.9rem;
+  padding: 10px 0;
+  border-radius: 4px;
+  cursor: pointer;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-2);
+  color: var(--color-text);
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.typeBtn:hover:not(:disabled) {
+  background: var(--color-surface-3);
+  border-color: var(--color-primary);
+}
+
+/* Selected state — reused by type + action buttons. */
+.active,
+.active:hover:not(:disabled) {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+}
+
+.actionRow {
+  display: flex;
+  gap: 6px;
+  margin-top: 16px;
+}
+.actionBtn {
+  flex: 1;
+  padding: 9px 0;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.85rem;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-2);
+  color: var(--color-text);
+  transition: background 0.12s ease;
+}
+.actionBtn:hover:not(:disabled) {
+  background: var(--color-surface-3);
+}
+.deleteBtn {
+  color: var(--color-danger-text);
+  border-color: var(--color-danger-border);
+}
+.deleteBtn:hover:not(:disabled) {
+  background: var(--color-danger-bg);
+}
+
+.swapRow {
+  margin-top: 10px;
+}
+.select {
+  width: 100%;
+  padding: 8px;
+  border-radius: 4px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.hoursRow {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.hoursInput {
+  flex: 1;
+  padding: 8px;
+  border-radius: 4px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 0.9rem;
+}
+
+.reason {
+  width: 100%;
+  min-height: 56px;
+  resize: vertical;
+  padding: 8px;
+  border-radius: 4px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 0.875rem;
+  box-sizing: border-box;
+}
+
+.divider {
+  height: 1px;
+  background: var(--color-border-subtle);
+  margin: 0.85rem 0 0.6rem;
+}
+
+.error {
+  color: var(--color-danger-text);
+  font-size: 0.8125rem;
+  margin: 0.5rem 0 0;
+}
+
+/* Phones — the shared shell already caps width/height and scrolls .body, so we
+   only enlarge our own touch targets and keep the 4-col grid from overflowing.
+   16px input font-size also stops iOS from auto-zooming on focus. */
+@media (max-width: 559.98px), (orientation: landscape) and (max-height: 480px) {
+  /* Keep 4 columns; labels are short (max "DPQ"). Slightly tighter gap/padding
+     so four buttons never overflow a ~320px screen, taller for tappability. */
+  .grid {
+    gap: 4px;
+  }
+  .typeBtn {
+    min-height: 44px;
+    padding: 11px 0;
+    font-size: 0.95rem;
+  }
+
+  .actionRow {
+    gap: 8px;
+  }
+  .actionBtn {
+    min-height: 44px;
+    padding: 12px 0;
+    font-size: 0.9rem;
+  }
+
+  .select {
+    min-height: 44px;
+    padding: 10px 8px;
+    font-size: 1rem; /* 16px — avoids iOS focus zoom */
+  }
+
+  .hoursRow {
+    gap: 8px;
+  }
+  .hoursInput {
+    min-height: 44px;
+    padding: 11px 10px;
+    font-size: 1rem;
+  }
+
+  .reason {
+    min-height: 72px;
+    padding: 11px 10px;
+    font-size: 1rem;
+  }
+}
