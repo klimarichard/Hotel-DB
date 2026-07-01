@@ -40,6 +40,12 @@ interface Props {
   onAddRodicovska: () => void;
   onTerminate: () => void;
   onContractsChanged: () => void;
+  /**
+   * Self-service (Můj profil) download-only mode. When set, each row's admin
+   * contract actions are replaced by a single "Stáhnout smlouvu" button for the
+   * signed contract. Passed straight through to EmploymentRowItem.
+   */
+  onSelfDownload?: (contractId: string, displayName?: string) => void;
 }
 
 const Chevron = ({ open }: { open: boolean }) => (
@@ -65,6 +71,7 @@ export default function EmploymentSessionCard({
   onAddRodicovska,
   onTerminate,
   onContractsChanged,
+  onSelfDownload,
 }: Props) {
   const { can } = useAuth();
   // "+ Dodatek" / "Ukončit smlouvu" are employment-record management. Built-in
@@ -204,6 +211,7 @@ export default function EmploymentSessionCard({
               onEdit={() => onEditRow(row)}
               onDelete={() => onDeleteRow(row)}
               onContractsChanged={onContractsChanged}
+              onSelfDownload={onSelfDownload}
             />
           ))}
         </div>
