@@ -35,6 +35,7 @@ Implementation notes for the Phase 5 Shift Planner: the shift expression parser,
 - Employees double-click any cell on a published plan to open `ShiftChangeRequestModal`.
 - Approving does NOT automatically update the shift — admin handles that manually.
 - `ShiftChangeRequestsContext` mirrors `ShiftOverridesContext`; fetches `GET /shifts/changeRequests/pending-count`.
+- **Pending-count `orderBy` requirement (v3.5.1):** both count endpoints (`/overrides/pending-count`, `/changeRequests/pending-count`) must include `.orderBy("requestedAt","desc")`. Without it, a bare collection-group equality query is not served by the `(status, requestedAt)` composite index on real Firestore and throws `FAILED_PRECONDITION`; the badge contexts swallow it silently, leaving counts at 0. Full explanation in [Upozornění hub](other-features-and-ui.md#upozornění-hub).
 - `alwaysReadOnlySections` prop on `ShiftGrid` locks specified sections. Employees get `["vedoucí"]`.
 - Employees can set/delete **X only** (enforced frontend + backend).
 - **Approval idempotency (v3.2.1).** The three approval endpoints (unavailability, shift-override, shift-change-request `PATCH`) now return **404** when the request doc is missing and **409** when its `status` is not `"pending"`. A re-approval race therefore cannot run a second `.set()` on the shift cell and clobber a later manual edit. Free-claim approval additionally re-checks `isSlotCovered` and 409s if the slot has been filled in the meantime.

@@ -280,6 +280,8 @@ The distinction matters because the employment-row `status` field can lag the de
 
 **Cross-plan list endpoints** — `GET /api/shifts/overrides/pending` and `GET /api/shifts/changeRequests/pending` use `collectionGroup` queries on `(status == "pending", requestedAt desc)`. Both composite indexes are declared in `firestore.indexes.json`. Per-plan modals on `ShiftPlannerPage` are unchanged — they remain the primary action surface for approve/reject; the Upozornění hub is the cross-plan read-only/list view.
 
+**Pending-count endpoints** (`GET /shifts/overrides/pending-count`, `GET /shifts/changeRequests/pending-count`) feed the nav-badge and dashboard-tile counts for Výjimky and Žádosti o změny. **Both must include `.orderBy("requestedAt","desc")`** — a bare `collectionGroup("…").where("status","==","pending")` with no `orderBy` is not served by the `(status, requestedAt)` composite index on real Firestore and throws `FAILED_PRECONDITION`. The badge contexts swallow that error silently (`.catch(() => {})`), leaving the count stuck at 0 with no visible indication. The list endpoints have always included the `orderBy` (which is why listing worked while counting did not); the count endpoints were fixed to mirror them in v3.5.1. Every pending request always writes `requestedAt` at creation, so adding the `orderBy` does not drop any records. **Do not remove the `orderBy` from either count query** — it is required by the index, not merely cosmetic.
+
 **Audit log** — probation-alert writes are system-generated (scheduled refresh + on-employment-edit cascade) and intentionally NOT in the audit log. The triggering employment row create/edit is already audited, which is the user-meaningful event.
 
 ---

@@ -29,6 +29,13 @@ interface Props {
   /** Delete this row (the parent recomputes after the API call returns). */
   onDelete?: () => void;
   onContractsChanged: () => void;
+  /**
+   * Self-service (Můj profil) download-only mode. When provided, the admin
+   * ContractActionButtons are replaced by a single "Stáhnout smlouvu" button
+   * that downloads this row's SIGNED contract via the self endpoint. Employees
+   * get no generate/sign/delete/preview actions.
+   */
+  onSelfDownload?: (contractId: string, displayName?: string) => void;
 }
 
 const ROW_LABEL: Record<string, string> = {
@@ -69,6 +76,7 @@ export default function EmploymentRowItem({
   onEdit,
   onDelete,
   onContractsChanged,
+  onSelfDownload,
 }: Props) {
   const { can } = useAuth();
   // Per-row Upravit/Smazat are employment-record management. Built-in
@@ -146,16 +154,28 @@ export default function EmploymentRowItem({
             Upravit
           </button>
         )}
-        <ContractActionButtons
-          contract={contract}
-          defaultType={defaultContractType}
-          employmentRowId={row.id}
-          rowSnapshot={rowSnapshot}
-          defaultDisplayName={defaultDisplayName}
-          employeeId={employeeId}
-          onGenerate={onGenerate}
-          onChanged={onContractsChanged}
-        />
+        {onSelfDownload ? (
+          contract?.status === "signed" && (
+            <button
+              type="button"
+              className={styles.editBtn}
+              onClick={() => onSelfDownload(contract.id, contract.displayName)}
+            >
+              Stáhnout smlouvu
+            </button>
+          )
+        ) : (
+          <ContractActionButtons
+            contract={contract}
+            defaultType={defaultContractType}
+            employmentRowId={row.id}
+            rowSnapshot={rowSnapshot}
+            defaultDisplayName={defaultDisplayName}
+            employeeId={employeeId}
+            onGenerate={onGenerate}
+            onChanged={onContractsChanged}
+          />
+        )}
         {canManageEmployment && onDelete && (
           <button
             type="button"

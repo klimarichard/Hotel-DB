@@ -10,7 +10,7 @@ import { nationalityName } from "@/lib/nationalities";
 import { formatPhoneDisplay, needsPhoneFormatPrompt } from "@/lib/phoneFormat";
 import PhoneFormatModal from "@/components/PhoneFormatModal";
 import { isCzechNationality } from "@/lib/contractVariables";
-import { groupBySession } from "@/lib/employmentSessions";
+import { groupBySession, mapContractsToRows, type ContractRecord } from "@/lib/employmentSessions";
 import EmploymentSessionCard from "@/components/EmploymentSession";
 import DocumentExpiryBar from "@/components/DocumentExpiryBar";
 import { useSelfDocAlertsContext } from "@/context/SelfDocAlertsContext";
@@ -95,7 +95,7 @@ interface Dialog {
 }
 
 export default function EmployeeSelfPage() {
-  const { employeeId, loading: authLoading, can } = useAuth();
+  const { user, employeeId, loading: authLoading, can } = useAuth();
   const { alerts: docAlerts } = useSelfDocAlertsContext();
   const canRequestEdit = can("self.profile.requestEdit");
   const canRevealSelf = can("sensitive.reveal.self");
@@ -105,6 +105,7 @@ export default function EmployeeSelfPage() {
   const [documents, setDocuments] = useState<SubDoc>(null);
   const [benefits, setBenefits] = useState<SubDoc>(null);
   const [employment, setEmployment] = useState<EmploymentRow[]>([]);
+  const [contracts, setContracts] = useState<ContractRecord[]>([]);
   const [requests, setRequests] = useState<ChangeRequest[]>([]);
   const [revealed, setRevealed] = useState<Record<string, string>>({});
   const [editMode, setEditMode] = useState(false);
@@ -160,6 +161,40 @@ export default function EmployeeSelfPage() {
     setRequests(reqs);
   }
 
+  // Download the employee's OWN signed contract for a history entry. Streams
+  // from the self endpoint (auth-only, signed-only); the server sets the proper
+  // filename in Content-Disposition, which we honour for the saved file.
+  async function handleDownloadContract(contractId: string, displayName?: string) {
+    if (!user) return;
+    try {
+      const token = await user.getIdToken();
+      const resp = await fetch(`/api/me/employee/contracts/${contractId}/download`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!resp.ok) {
+        setDialog({ title: "Chyba", message: "Smlouvu se nepodařilo stáhnout.", showCancel: false });
+        return;
+      }
+      const cd = resp.headers.get("Content-Disposition");
+      const star = cd?.match(/filename\*=UTF-8''([^;]+)/i);
+      const plain = cd?.match(/filename="([^"]+)"/i);
+      let filename = `${displayName || "smlouva"}.pdf`;
+      if (star) { try { filename = decodeURIComponent(star[1]); } catch { /* malformed */ } }
+      else if (plain) filename = plain[1];
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5_000);
+    } catch {
+      setDialog({ title: "Chyba", message: "Smlouvu se nepodařilo stáhnout.", showCancel: false });
+    }
+  }
+
   useEffect(() => {
     if (authLoading) return;
     // Tour demo: load the mock self profile even if the real account has no
@@ -174,15 +209,17 @@ export default function EmployeeSelfPage() {
       api.get<SubDoc>("/me/employee/documents"),
       api.get<SubDoc>("/me/employee/benefits"),
       api.get<EmploymentRow[]>("/me/employee/employment"),
+      api.get<ContractRecord[]>("/me/employee/contracts").catch(() => []),
       api.get<ChangeRequest[]>("/me/change-requests"),
       api.get<Array<{ name: string; code: string }>>("/educationLevels").catch(() => []),
     ])
-      .then(([e, c, d, b, hist, reqs, edu]) => {
+      .then(([e, c, d, b, hist, contractList, reqs, edu]) => {
         setEmp(e);
         setContact(c);
         setDocuments(d);
         setBenefits(b);
         setEmployment(hist);
+        setContracts(contractList);
         setEducationOptions(edu.map((l) => (l.code ? `${l.code} - ${l.name}` : l.name)));
         setRequests(reqs);
       })
@@ -431,6 +468,22 @@ export default function EmployeeSelfPage() {
 
   const hasPending = requests.some((r) => r.status === "pending");
 
+  // Employment-history overview shows an entry ONLY when it has a matching
+  // SIGNED contract — an employee should see only finalised history. Entries
+  // whose contract is still unsigned (being prepared for signing) AND entries
+  // with no contract generated yet are both hidden, since to the employee both
+  // are "not finalised". (A Nástup with no signed contract hides its whole
+  // session via groupBySession's orphan-drop; the effective state then reflects
+  // only the signed rows.)
+  const contractByRow = mapContractsToRows(
+    employment as unknown as Parameters<typeof mapContractsToRows>[0],
+    contracts
+  );
+  const visibleEmployment = employment.filter((row) => {
+    const c = contractByRow.get(row.id);
+    return !!c && c.status === "signed";
+  });
+
   return (
     <div>
       <div className={styles.headerRow}>
@@ -544,18 +597,20 @@ export default function EmployeeSelfPage() {
                 <span className={styles.fieldValue}>{emp?.currentContractType || "—"}</span>
               </div>
             </div>
-            {employment.length > 0 && (
+            {visibleEmployment.length > 0 && (
               <div style={{ marginTop: "1rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
                 {/* Read-only session-card view, identical format to the detail
                     page (TODO 43). The employee can't fetch companies or edit,
-                    so companies is empty and all action callbacks are no-ops. */}
-                {[...groupBySession(employment as unknown as Parameters<typeof groupBySession>[0])]
+                    so companies is empty and all action callbacks are no-ops.
+                    Rows with a not-yet-signed contract are filtered out above
+                    (visibleEmployment) so "being prepared" entries stay hidden. */}
+                {[...groupBySession(visibleEmployment as unknown as Parameters<typeof groupBySession>[0])]
                   .reverse()
                   .map((session, idx) => (
                     <EmploymentSessionCard
                       key={session.nastup.id}
                       session={session}
-                      contractsByRow={new Map()}
+                      contractsByRow={contractByRow}
                       defaultExpanded={idx === 0}
                       companies={{}}
                       employeeId={employeeId ?? "tour-demo"}
@@ -569,6 +624,7 @@ export default function EmployeeSelfPage() {
                       onAddRodicovska={() => {}}
                       onTerminate={() => {}}
                       onContractsChanged={() => {}}
+                      onSelfDownload={handleDownloadContract}
                     />
                   ))}
               </div>
