@@ -1835,6 +1835,13 @@ shiftsRouter.post(
           swapWithEmployeeId,
           swapWithName: String(rc?.swapWithName ?? "").trim() || null,
         };
+      } else if (action === "other") {
+        // Free-text request; the note is mandatory and it never auto-applies.
+        if (!reason.trim()) {
+          res.status(400).json({ error: "U volby „Jiné“ je poznámka povinná." });
+          return;
+        }
+        requestedChange = { action: "other" };
       } else {
         res.status(400).json({ error: "Neplatný typ požadované změny." });
         return;
@@ -2033,8 +2040,9 @@ shiftsRouter.patch(
       const mo = Number(String(dateStr).slice(5, 7)) || undefined;
 
       // Write a cell to a raw shift expression, or delete it when the value is
-      // empty. Audits the before→after rawInput. Returns the previous rawInput.
-      const writeCell = async (cellEmpId: string, raw: string): Promise<string> => {
+      // empty. On a pure-numeric ("worked hours") cell, `carryTag` (a shift-type
+      // label) is stored as the corner typeTag badge. Audits before→after.
+      const writeCell = async (cellEmpId: string, raw: string, carryTag: string | null = null): Promise<string> => {
         const cellRef = planRef.collection("shifts").doc(`${cellEmpId}_${dateStr}`);
         const prevRaw = ((await cellRef.get()).data()?.rawInput as string) ?? "";
         const trimmed = (raw ?? "").trim();
@@ -2042,6 +2050,7 @@ shiftsRouter.patch(
           await cellRef.delete();
         } else {
           const parsed = parseShiftExpression(trimmed);
+          const isNumeric = /^\d+(\.\d+)?$/.test(trimmed);
           await cellRef.set({
             employeeId: cellEmpId,
             date: dateStr,
@@ -2050,6 +2059,7 @@ shiftsRouter.patch(
             hoursComputed: parsed.hoursComputed,
             isDouble: parsed.isDouble,
             status: "assigned",
+            typeTag: isNumeric ? sanitizeTypeTag(carryTag) : null,
             updatedAt: FieldValue.serverTimestamp(),
           });
         }
@@ -2066,8 +2076,15 @@ shiftsRouter.patch(
         return prevRaw;
       };
 
-      if (action === "set-type" || action === "set-hours") {
+      if (action === "set-type") {
         await writeCell(empId, String(rc.value ?? ""));
+      } else if (action === "set-hours") {
+        // Preserve the previous shift type as the numeric cell's corner badge:
+        // the old rawInput (e.g. "DK"), or an existing typeTag if the cell was
+        // already numeric-with-tag.
+        const prevDoc = (await planRef.collection("shifts").doc(`${empId}_${dateStr}`).get()).data() as Record<string, unknown> | undefined;
+        const carried = sanitizeTypeTag(prevDoc?.rawInput) ?? sanitizeTypeTag(prevDoc?.typeTag);
+        await writeCell(empId, String(rc.value ?? ""), carried);
       } else if (action === "delete") {
         await writeCell(empId, "");
       } else if (action === "swap") {
@@ -2080,6 +2097,7 @@ shiftsRouter.patch(
           await writeCell(otherId, myRaw);
         }
       }
+      // action === "other" intentionally applies nothing.
     }
 
     await changeReqRef.update({

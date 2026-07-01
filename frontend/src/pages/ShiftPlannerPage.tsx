@@ -1595,6 +1595,9 @@ export default function ShiftPlannerPage() {
               onResolved={() => {
                 setPlanChangeRequestCount((c) => Math.max(0, c - 1));
                 refreshChangeRequestCount();
+                // Auto-applied changes land on the plan cells — reload so the
+                // grid reflects them without a manual page refresh.
+                loadPlan(true);
               }}
             />
           )}

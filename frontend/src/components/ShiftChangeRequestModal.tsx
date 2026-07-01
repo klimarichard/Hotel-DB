@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import { formatDateCZ } from "../lib/dateFormat";
 import { employeeSurnameFirst } from "../lib/employeeName";
+import { getCellColor, parseShiftExpression } from "../lib/shiftConstants";
+import { useTheme } from "../context/ThemeContext";
 import type { PlanEmployee } from "../pages/ShiftPlannerPage";
 import type { RequestedChange } from "../lib/shiftChangeRequest";
 import Button from "./Button";
@@ -23,7 +25,8 @@ type Selection =
   | { kind: "type"; value: string }
   | { kind: "hours" }
   | { kind: "delete" }
-  | { kind: "swap"; employeeId: string };
+  | { kind: "swap"; employeeId: string }
+  | { kind: "other" };
 
 interface Props {
   employeeName: string;
@@ -49,6 +52,8 @@ export default function ShiftChangeRequestModal({
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { theme } = useTheme();
+  const isDark = theme === "dark";
 
   // Everyone in this month's plan, surname-sorted (cs), excluding the requester.
   const swapCandidates = useMemo(
@@ -82,13 +87,19 @@ export default function ShiftChangeRequestModal({
         swapWithName: emp ? employeeSurnameFirst(emp) : undefined,
       };
     }
+    // "Jiné" is a free-text request; the note is mandatory.
+    if (sel.kind === "other") return reason.trim() ? { action: "other" } : null;
     return null;
   }
 
   async function handleSubmit() {
     const rc = buildRequestedChange();
     if (!rc) {
-      setError(sel.kind === "hours" ? "Zadejte počet hodin v rozsahu 0–24." : "Vyberte požadovanou změnu.");
+      setError(
+        sel.kind === "hours" ? "Zadejte počet hodin v rozsahu 0–24."
+          : sel.kind === "other" ? "U volby „Jiné“ vyplňte poznámku."
+            : "Vyberte požadovanou změnu.",
+      );
       return;
     }
     setSaving(true);
@@ -121,11 +132,14 @@ export default function ShiftChangeRequestModal({
           <div className={styles.grid}>
             {TYPE_ROWS.flat().map((label) => {
               const active = sel.kind === "type" && sel.value === label;
+              // Selected type shows its own shift-plan colour (matches the grid).
+              const c = active ? getCellColor(parseShiftExpression(label), isDark) : null;
               return (
                 <button
                   key={label}
                   type="button"
-                  className={`${styles.typeBtn} ${active ? styles.active : ""}`}
+                  className={styles.typeBtn}
+                  style={c ? { background: c.bg, color: c.text, borderColor: c.bg } : undefined}
                   disabled={saving}
                   onClick={() => { setError(null); setSel({ kind: "type", value: label }); }}
                 >
@@ -151,6 +165,14 @@ export default function ShiftChangeRequestModal({
               onClick={() => { setError(null); setSel({ kind: "delete" }); }}
             >
               smazat
+            </button>
+            <button
+              type="button"
+              className={`${styles.actionBtn} ${sel.kind === "other" ? styles.active : ""}`}
+              disabled={saving}
+              onClick={() => { setError(null); setSel({ kind: "other" }); }}
+            >
+              Jiné
             </button>
           </div>
 
@@ -192,13 +214,15 @@ export default function ShiftChangeRequestModal({
 
           <div className={styles.divider} />
 
-          <div className={styles.sectionLabel}>Poznámka (nepovinné)</div>
+          <div className={styles.sectionLabel}>
+            Poznámka {sel.kind === "other" ? "(povinné)" : "(nepovinné)"}
+          </div>
           <textarea
             className={styles.reason}
-            placeholder="Volitelně uveďte důvod žádosti…"
+            placeholder={sel.kind === "other" ? "Popište svůj požadavek…" : "Volitelně uveďte důvod žádosti…"}
             value={reason}
             disabled={saving}
-            onChange={(e) => setReason(e.target.value)}
+            onChange={(e) => { setError(null); setReason(e.target.value); }}
           />
 
           {error && <p className={styles.error}>{error}</p>}
