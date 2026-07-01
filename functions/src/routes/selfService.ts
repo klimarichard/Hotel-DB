@@ -74,6 +74,32 @@ selfServiceRouter.get("/employee/employment", async (req: AuthRequest, res) => {
 });
 
 /**
+ * GET /me/employee/contracts
+ * Self-scoped contract METADATA (no PDF bytes, no storage paths) for the
+ * caller's own record. The self profile uses only the signed/unsigned status
+ * per employment row to hide history entries whose contract is still being
+ * prepared. Auth-only (no `contracts.view`): it's the caller's own data and
+ * exposes no downloadable content — unlike the admin GET /employees/:id/contracts.
+ */
+selfServiceRouter.get("/employee/contracts", async (req: AuthRequest, res) => {
+  const empId = await getCallerEmployeeId(req.uid!);
+  if (!empId) { res.json([]); return; }
+  const snap = await db()
+    .collection("employees").doc(empId)
+    .collection("contracts").orderBy("generatedAt", "desc").get();
+  res.json(snap.docs.map((d) => {
+    const c = d.data() as Record<string, unknown>;
+    return {
+      id: d.id,
+      type: c.type ?? null,
+      status: c.status ?? null,
+      employmentRowId: c.employmentRowId ?? null,
+      generatedAt: c.generatedAt ?? null,
+    };
+  }));
+});
+
+/**
  * GET /me/employee/alerts
  * Self-scoped mirror of GET /employees/:id/alerts: returns the caller's own
  * document-expiry alerts from the shared `alerts` collection — the SAME data
