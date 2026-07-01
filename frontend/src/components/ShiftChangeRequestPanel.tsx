@@ -3,6 +3,7 @@ import { api } from "../lib/api";
 import type { PlanEmployee } from "../pages/ShiftPlannerPage";
 import { formatDateCZ, formatDatetimeCZ } from "../lib/dateFormat";
 import { employeeDisplayName } from "../lib/employeeName";
+import { formatRequestedChange, type RequestedChange } from "../lib/shiftChangeRequest";
 import Button from "./Button";
 import styles from "./ShiftOverridePanel.module.css";
 
@@ -18,6 +19,7 @@ interface ChangeRequest {
   kind?: "change" | "free-claim";
   code?: string;
   hotel?: string;
+  requestedChange?: RequestedChange;
 }
 
 interface Props {
@@ -108,6 +110,7 @@ export default function ShiftChangeRequestPanel({ planId, employees, onResolved,
               <th>Zaměstnanec</th>
               <th>Datum</th>
               <th>Aktuální směna</th>
+              <th>Požadovaná změna</th>
               <th>Důvod</th>
               <th>Odesláno</th>
               <th>Stav</th>
@@ -125,6 +128,7 @@ export default function ShiftChangeRequestPanel({ planId, employees, onResolved,
                       ? `Volná směna ${req.code ?? ""}${req.hotel ?? ""}`
                       : (req.currentRawInput || "—")}
                   </td>
+                  <td>{req.kind === "free-claim" ? "—" : formatRequestedChange(req.requestedChange)}</td>
                   <td>{req.kind === "free-claim" ? "—" : (req.reason || "—")}</td>
                   <td>{formatDatetimeCZ(req.requestedAt)}</td>
                   <td>
@@ -159,7 +163,7 @@ export default function ShiftChangeRequestPanel({ planId, employees, onResolved,
                 </tr>
                 {canReview && rejectingId === req.id && (
                   <tr key={`reject-${req.id}`}>
-                    <td colSpan={7} className={styles.rejectRow}>
+                    <td colSpan={8} className={styles.rejectRow}>
                       <input
                         className={styles.rejectInput}
                         placeholder="Důvod zamítnutí (volitelné)…"

@@ -1804,9 +1804,41 @@ shiftsRouter.post(
       res.status(400).json({ error: "Neplatný formát data" });
       return;
     }
-    if (kind === "change" && !reason.trim()) {
-      res.status(400).json({ error: "Důvod je povinný" });
-      return;
+    // Structured requested change from the new picker dialog. reason is now
+    // OPTIONAL for kind="change"; the request instead carries what the employee
+    // wants done to the cell. (Legacy reason-only requests may still exist.)
+    let requestedChange: Record<string, unknown> | null = null;
+    if (kind === "change") {
+      const rc = body.requestedChange as Record<string, unknown> | undefined;
+      const action = rc?.action as string | undefined;
+      if (action === "set-type" || action === "set-hours") {
+        const value = String(rc?.value ?? "").trim();
+        if (!value || !parseShiftExpression(value).isValid) {
+          res.status(400).json({ error: "Neplatná hodnota směny." });
+          return;
+        }
+        requestedChange = { action, value };
+      } else if (action === "delete") {
+        requestedChange = { action };
+      } else if (action === "swap") {
+        const swapWithEmployeeId = String(rc?.swapWithEmployeeId ?? "").trim();
+        if (!swapWithEmployeeId) {
+          res.status(400).json({ error: "Vyberte zaměstnance pro výměnu." });
+          return;
+        }
+        if (swapWithEmployeeId === employeeId) {
+          res.status(400).json({ error: "Nelze vyměnit směnu se sebou." });
+          return;
+        }
+        requestedChange = {
+          action,
+          swapWithEmployeeId,
+          swapWithName: String(rc?.swapWithName ?? "").trim() || null,
+        };
+      } else {
+        res.status(400).json({ error: "Neplatný typ požadované změny." });
+        return;
+      }
     }
 
     // Plan must exist and be published
@@ -1835,6 +1867,7 @@ shiftsRouter.post(
       reviewedAt: null,
       rejectionReason: null,
     };
+    if (requestedChange) docData.requestedChange = requestedChange;
 
     if (kind === "free-claim") {
       if (!isValidFreeSlot(code, hotel)) {
@@ -1870,7 +1903,7 @@ shiftsRouter.post(
       employeeId,
       summary: kind === "free-claim"
         ? { kind, date, code, hotel }
-        : { date, currentRawInput, reason },
+        : { date, currentRawInput, reason, requestedChange },
     });
     res.status(201).json({ id: ref.id });
   }
@@ -1984,6 +2017,68 @@ shiftsRouter.patch(
           month: claimMonth,
           summary: { rejectionReason: "Směnu převzal jiný zaměstnanec." },
         });
+      }
+    }
+
+    // Structured change requests (new picker dialog): approving AUTO-APPLIES the
+    // requested change to the plan — set the cell to a shift type / hours, clear
+    // it (smazat), or swap two employees' cells for that date. Legacy reason-only
+    // change requests carry no `requestedChange` and are left for manual editing.
+    if (status === "approved" && beforeData.kind !== "free-claim" && beforeData.requestedChange) {
+      const rc = beforeData.requestedChange as Record<string, unknown>;
+      const action = rc.action as string;
+      const empId = beforeData.employeeId as string;
+      const dateStr = beforeData.date as string;
+      const yr = Number(String(dateStr).slice(0, 4)) || undefined;
+      const mo = Number(String(dateStr).slice(5, 7)) || undefined;
+
+      // Write a cell to a raw shift expression, or delete it when the value is
+      // empty. Audits the before→after rawInput. Returns the previous rawInput.
+      const writeCell = async (cellEmpId: string, raw: string): Promise<string> => {
+        const cellRef = planRef.collection("shifts").doc(`${cellEmpId}_${dateStr}`);
+        const prevRaw = ((await cellRef.get()).data()?.rawInput as string) ?? "";
+        const trimmed = (raw ?? "").trim();
+        if (trimmed === "") {
+          await cellRef.delete();
+        } else {
+          const parsed = parseShiftExpression(trimmed);
+          await cellRef.set({
+            employeeId: cellEmpId,
+            date: dateStr,
+            rawInput: parsed.rawInput,
+            segments: parsed.segments,
+            hoursComputed: parsed.hoursComputed,
+            isDouble: parsed.isDouble,
+            status: "assigned",
+            updatedAt: FieldValue.serverTimestamp(),
+          });
+        }
+        await logUpdate(ctxFromReq(req), {
+          collection: "shiftPlans/shifts",
+          resourceId: planId,
+          subResourceId: `${cellEmpId}_${dateStr}`,
+          employeeId: cellEmpId,
+          year: yr,
+          month: mo,
+          before: { rawInput: prevRaw },
+          after: { rawInput: trimmed },
+        });
+        return prevRaw;
+      };
+
+      if (action === "set-type" || action === "set-hours") {
+        await writeCell(empId, String(rc.value ?? ""));
+      } else if (action === "delete") {
+        await writeCell(empId, "");
+      } else if (action === "swap") {
+        const otherId = String(rc.swapWithEmployeeId ?? "");
+        if (otherId) {
+          // Capture both current values first, then cross-assign them.
+          const myRaw = ((await planRef.collection("shifts").doc(`${empId}_${dateStr}`).get()).data()?.rawInput as string) ?? "";
+          const otherRaw = ((await planRef.collection("shifts").doc(`${otherId}_${dateStr}`).get()).data()?.rawInput as string) ?? "";
+          await writeCell(empId, otherRaw);
+          await writeCell(otherId, myRaw);
+        }
       }
     }
 

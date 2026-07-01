@@ -1766,11 +1766,14 @@ export default function ShiftPlannerPage() {
           })()}
           date={pendingChangeRequest.date}
           currentShift={pendingChangeRequest.currentRawInput}
-          onSubmit={async (reason) => {
+          planEmployees={plan.employees}
+          requesterEmployeeId={pendingChangeRequest.employeeId}
+          onSubmit={async ({ requestedChange, reason }) => {
             await api.post(`/shifts/plans/${plan.id}/shiftChangeRequests`, {
               employeeId: pendingChangeRequest.employeeId,
               date: pendingChangeRequest.date,
               currentRawInput: pendingChangeRequest.currentRawInput,
+              requestedChange,
               reason,
               requestedAtClient: pendingChangeRequest.clickedAt,
             });

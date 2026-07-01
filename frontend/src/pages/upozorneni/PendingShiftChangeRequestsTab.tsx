@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { api } from "@/lib/api";
 import { formatDateCZ } from "@/lib/dateFormat";
 import { employeeDisplayName } from "@/lib/employeeName";
+import { formatRequestedChange, type RequestedChange } from "@/lib/shiftChangeRequest";
 import styles from "../AlertsPage.module.css";
 
 interface ChangeRequest {
@@ -14,6 +15,7 @@ interface ChangeRequest {
   date: string;
   currentRawInput: string;
   reason: string;
+  requestedChange?: RequestedChange;
 }
 
 interface EmployeeMini {
@@ -62,6 +64,7 @@ export default function PendingShiftChangeRequestsTab() {
             <th>Plán</th>
             <th>Datum</th>
             <th>Aktuální směna</th>
+            <th>Požadovaná změna</th>
             <th>Důvod</th>
             <th></th>
           </tr>
@@ -83,6 +86,7 @@ export default function PendingShiftChangeRequestsTab() {
                 <td>{fmtMonth(r.planYear, r.planMonth)}</td>
                 <td>{formatDateCZ(r.date)}</td>
                 <td><code>{r.currentRawInput || "—"}</code></td>
+                <td>{formatRequestedChange(r.requestedChange)}</td>
                 <td>{r.reason || "—"}</td>
                 <td>
                   <Link to="/smeny" className={styles.markReadBtn}>
