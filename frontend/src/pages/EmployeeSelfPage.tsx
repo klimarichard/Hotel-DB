@@ -434,18 +434,20 @@ export default function EmployeeSelfPage() {
 
   const hasPending = requests.some((r) => r.status === "pending");
 
-  // Employment-history overview hides entries whose contract is still being
-  // PREPARED for signing: an employee should only see finalised history. A row
-  // stays visible if its matching contract is SIGNED, or if it has no contract
-  // on file at all (legacy / pre-system rows never had one generated). A row
-  // whose matching contract exists but isn't signed yet is hidden until signed.
+  // Employment-history overview shows an entry ONLY when it has a matching
+  // SIGNED contract — an employee should see only finalised history. Entries
+  // whose contract is still unsigned (being prepared for signing) AND entries
+  // with no contract generated yet are both hidden, since to the employee both
+  // are "not finalised". (A Nástup with no signed contract hides its whole
+  // session via groupBySession's orphan-drop; the effective state then reflects
+  // only the signed rows.)
   const contractByRow = mapContractsToRows(
     employment as unknown as Parameters<typeof mapContractsToRows>[0],
     contracts
   );
   const visibleEmployment = employment.filter((row) => {
     const c = contractByRow.get(row.id);
-    return !c || c.status === "signed";
+    return !!c && c.status === "signed";
   });
 
   return (
