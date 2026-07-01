@@ -74,6 +74,10 @@ Kliknutím na dlaždici přejdete přímo na příslušnou sekci.
 
 Máte-li propojený zaměstnanecký záznam, zobrazí se na Přehledu **barevný pruh** (banner) s upozorněním na vaše vlastní doklady — pas nebo povolení k pobytu — u nichž platnost uplynula nebo vyprší do 30 dnů. Stejný pruh vidíte i na stránce **Můj profil**. Pokud jsou všechny vaše doklady v pořádku, pruh se nezobrazí.
 
+### Moje směny
+
+Na Přehledu se zobrazuje dlaždice **Moje směny** se seznamem vašich nadcházejících směn na 7 dní dopředu. U každého dne, kdy jste vedoucím směny (MOD), se vedle data zobrazí malý fialový odznak **MOD** — takto na první pohled vidíte, které dny v blízkém týdnu máte na starosti vedení.
+
 > 📷 *(Místo pro snímek obrazovky: Přehled)*
 
 ---
