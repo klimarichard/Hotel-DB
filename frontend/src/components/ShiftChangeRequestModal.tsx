@@ -118,7 +118,7 @@ export default function ShiftChangeRequestModal({
 
   return (
     <div className={shell.overlay}>
-      <div className={shell.modal}>
+      <div className={shell.modal} data-tour="shift-change-request-modal">
         <div className={shell.header}>
           <h2 className={shell.title}>Žádost o změnu směny</h2>
           <IconButton onClick={onClose} aria-label="Zavřít">✕</IconButton>
