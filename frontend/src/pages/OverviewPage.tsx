@@ -191,6 +191,8 @@ interface MyShiftRow {
   date: Date;
   dateKey: string;
   shift: ShiftDoc | null;
+  /** True when this employee is the manager-on-duty (MOD) for the date. */
+  isMod: boolean;
 }
 
 interface MyVacation {
@@ -216,6 +218,20 @@ function vacationStatusForDate(
   return hasPending ? "pending" : null;
 }
 
+// The employee id of the manager-on-duty (MOD) for a given date, or undefined
+// if no MOD is set. Mirrors the MOD resolution in buildStaffing: a per-day MOD
+// letter resolves to an employee either via the plan's modPersons override map
+// or the static MOD_PERSONS name table.
+function modEmployeeIdForDate(plan: PlanDetail, dateKey: string): string | undefined {
+  const modLetter = plan.modShifts.find((m) => m.id === dateKey)?.code ?? "";
+  if (!modLetter) return undefined;
+  const overrideEmpId = plan.modPersons?.[modLetter];
+  if (overrideEmpId) return overrideEmpId;
+  const staticName = MOD_PERSONS[modLetter];
+  if (!staticName) return undefined;
+  return plan.employees.find((e) => `${e.firstName} ${e.lastName}` === staticName)?.employeeId;
+}
+
 function buildMyShifts(
   days: Date[],
   plansByYM: Map<string, PlanDetail>,
@@ -228,7 +244,8 @@ function buildMyShifts(
     const shift = plan?.shifts.find(
       (s) => s.date === key && s.employeeId === employeeId
     ) ?? null;
-    return { date, dateKey: key, shift };
+    const isMod = plan ? modEmployeeIdForDate(plan, key) === employeeId : false;
+    return { date, dateKey: key, shift, isMod };
   });
 }
 
@@ -630,6 +647,11 @@ export default function OverviewPage() {
                               <span className={styles.myShiftDate}>
                                 {row.date.getDate()}.{row.date.getMonth() + 1}.
                               </span>
+                              {row.isMod && (
+                                <span className={styles.myShiftModBadge} title="Manažer ve službě (MOD)">
+                                  MOD
+                                </span>
+                              )}
                             </span>
                             {vacStatus === "approved" ? (
                               <span className={styles.myShiftVacation}>dovolená</span>
