@@ -50,6 +50,7 @@ export type TourScenario =
   | "shifts-empty"
   | "shifts-created"
   | "shifts-published"
+  | "shifts-change-request"
   | "payroll"
   | "payroll-empty";
 export const tourDemo: { active: boolean; scenario: TourScenario | null } = {
@@ -567,7 +568,11 @@ function shiftsFixture(
   if (!isGet) return { hit: true, value: {} };
 
   const planStatus =
-    scenario === "shifts-published" ? "published" : scenario === "shifts-created" ? "created" : "opened";
+    scenario === "shifts-published" || scenario === "shifts-change-request"
+      ? "published"
+      : scenario === "shifts-created"
+      ? "created"
+      : "opened";
   // Plan list — drives whether the page lands on a plan or the empty state.
   if (clean === "/shifts/plans") {
     if (scenario === "shifts-empty") return { hit: true, value: [] };
@@ -687,6 +692,7 @@ function activeScenario(): TourScenario | null {
     case "/napoveda/ukazka-smeny-prazdne": return "shifts-empty";
     case "/napoveda/ukazka-smeny-vytvoreny": return "shifts-created";
     case "/napoveda/ukazka-smeny-publikovane": return "shifts-published";
+    case "/napoveda/ukazka-smeny-zadost": return "shifts-change-request";
     default: return null;
   }
 }
@@ -752,6 +758,7 @@ export function getDemoResponse(
     case "shifts-empty":
     case "shifts-created":
     case "shifts-published":
+    case "shifts-change-request":
       return shiftsFixture(isGet, clean, scenario) ?? { hit: false };
     default:
       return { hit: false };

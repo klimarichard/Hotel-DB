@@ -12,6 +12,8 @@ interface Props {
   onNavigate: (dir: "up" | "down" | "left" | "right") => void;
   onFocus: () => void;
   onRequestChange?: () => void;
+  /** Double-click an editable cell (OPEN plan) to toggle the X marker. */
+  onDoubleClickX?: () => void;
   /** #29: current shift-type tag on a numeric cell (tally-only). */
   typeTag?: string | null;
   /** #29: set/clear the tag. Undefined → tagging disabled for this cell. */
@@ -27,6 +29,7 @@ export default function ShiftCell({
   onNavigate,
   onFocus,
   onRequestChange,
+  onDoubleClickX,
   typeTag,
   onSaveTypeTag,
 }: Props) {
@@ -283,11 +286,18 @@ export default function ShiftCell({
       title={saveError ?? (rawInput ? `${rawInput} — ${hoursComputed}h${typeTag ? ` (${typeTag})` : ""}` : undefined)}
       onClick={() => {
         if (readOnly) return;
+        // On an X-toggle cell (OPEN plan) a click only focuses — double-click
+        // toggles the X, and typing still opens the editor. This keeps the
+        // double-click from first entering edit mode, which would race the
+        // toggle's save.
+        if (onDoubleClickX) return;
         setSaveError(null);
         startEdit();
       }}
       onDoubleClick={() => {
-        if (readOnly && onRequestChange) {
+        if (!readOnly && onDoubleClickX) {
+          onDoubleClickX();
+        } else if (readOnly && onRequestChange) {
           onRequestChange();
         }
       }}

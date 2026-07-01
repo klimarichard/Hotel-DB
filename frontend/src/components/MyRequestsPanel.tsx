@@ -7,6 +7,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
 import { formatDateCZ, formatDatetimeCZ } from "../lib/dateFormat";
+import { formatRequestedChange, type RequestedChange } from "../lib/shiftChangeRequest";
 import Button from "./Button";
 import styles from "./ShiftOverridePanel.module.css";
 
@@ -32,6 +33,7 @@ interface ChangeRequest {
   kind?: "change" | "free-claim";
   code?: string;
   hotel?: string;
+  requestedChange?: RequestedChange;
 }
 
 interface Props {
@@ -163,6 +165,7 @@ export default function MyRequestsPanel({ planId }: Props) {
                   <tr>
                     <th>Datum</th>
                     <th>Aktuální směna</th>
+                    <th>Požadovaná změna</th>
                     <th>Důvod žádosti</th>
                     <th>Odesláno</th>
                     <th>Stav</th>
@@ -177,6 +180,9 @@ export default function MyRequestsPanel({ planId }: Props) {
                         {req.kind === "free-claim"
                           ? `Volná směna ${req.code ?? ""}${req.hotel ?? ""}`
                           : (req.currentRawInput || "—")}
+                      </td>
+                      <td data-label="Požadovaná změna">
+                        {req.kind === "free-claim" ? "—" : formatRequestedChange(req.requestedChange)}
                       </td>
                       <td data-label="Důvod žádosti">{req.reason || "—"}</td>
                       <td data-label="Odesláno">{formatDatetimeCZ(req.requestedAt)}</td>

@@ -18,6 +18,7 @@ import ShiftChangeRequestModal from "../components/ShiftChangeRequestModal";
 import Button from "../components/Button";
 import { useShiftOverridesContext } from "../context/ShiftOverridesContext";
 import { useShiftChangeRequestsContext } from "../context/ShiftChangeRequestsContext";
+import { tourDemo } from "../lib/tours/demoData";
 import styles from "./ShiftPlannerPage.module.css";
 
 // ─── Shared types ─────────────────────────────────────────────────────────────
@@ -311,6 +312,28 @@ export default function ShiftPlannerPage() {
   useEffect(() => {
     loadPlan();
   }, [loadPlan]);
+
+  // Guided-tour only: on the dedicated "Žádost o změnu směny" demo route
+  // (scenario "shifts-change-request") auto-open the change-request modal once
+  // the mock published plan has loaded, so the tour step can spotlight it
+  // (`data-tour="shift-change-request-modal"`). The real modal normally opens on
+  // a double-click of a read-only cell, which the tour engine can't perform; this
+  // is confined to the sandbox route (its own page instance via App.tsx key), so
+  // it never affects the real Směny page or the other shift demo routes.
+  useEffect(() => {
+    if (tourDemo.scenario !== "shifts-change-request") return;
+    if (!plan || plan.status !== "published" || plan.employees.length === 0) return;
+    if (pendingChangeRequest) return;
+    const target =
+      plan.employees.find((e) => e.section === "recepce") ?? plan.employees[0];
+    const cell = plan.shifts.find((s) => s.employeeId === target.employeeId);
+    setPendingChangeRequest({
+      employeeId: target.employeeId,
+      date: cell?.date ?? `${plan.year}-${String(plan.month).padStart(2, "0")}-01`,
+      currentRawInput: cell?.rawInput ?? "DA",
+      clickedAt: clock.now().toISOString(),
+    });
+  }, [plan, pendingChangeRequest]);
 
   // No client-side real-time listener: firestore.rules block direct client SDK
   // reads (all data flows through /api), so an onSnapshot on shiftPlans was
@@ -1003,6 +1026,19 @@ export default function ShiftPlannerPage() {
 
   // ── Cell save (upsert / delete) ────────────────────────────────────────────
 
+  // Double-click on an editable cell of an OPEN plan toggles the X marker. It
+  // delegates to handleCellSave, so the X-limit exception dialog, the
+  // "6 X in a row" block and the coverage checks all fire exactly as when the X
+  // is typed. Only toggles empty ↔ X — never clobbers a real shift value.
+  async function handleCellToggleX(employeeId: string, date: string) {
+    if (!plan || plan.status !== "opened") return;
+    const cur = (plan.shifts.find((s) => s.id === `${employeeId}_${date}`)?.rawInput ?? "")
+      .trim()
+      .toUpperCase();
+    if (cur !== "" && cur !== "X") return; // don't overwrite an assigned shift
+    await handleCellSave(employeeId, date, cur === "X" ? "" : "X");
+  }
+
   async function handleCellSave(employeeId: string, date: string, rawInput: string) {
     if (!plan) return;
 
@@ -1595,6 +1631,9 @@ export default function ShiftPlannerPage() {
               onResolved={() => {
                 setPlanChangeRequestCount((c) => Math.max(0, c - 1));
                 refreshChangeRequestCount();
+                // Auto-applied changes land on the plan cells — reload so the
+                // grid reflects them without a manual page refresh.
+                loadPlan(true);
               }}
             />
           )}
@@ -1647,6 +1686,7 @@ export default function ShiftPlannerPage() {
                     }
                   : undefined
               }
+              onCellDoubleClickX={plan.status === "opened" ? handleCellToggleX : undefined}
               xInfoFor={
                 can("shifts.xAllowance.manage") && (plan.status === "created" || plan.status === "opened")
                   ? (emp) => {
@@ -1766,11 +1806,14 @@ export default function ShiftPlannerPage() {
           })()}
           date={pendingChangeRequest.date}
           currentShift={pendingChangeRequest.currentRawInput}
-          onSubmit={async (reason) => {
+          planEmployees={plan.employees}
+          requesterEmployeeId={pendingChangeRequest.employeeId}
+          onSubmit={async ({ requestedChange, reason }) => {
             await api.post(`/shifts/plans/${plan.id}/shiftChangeRequests`, {
               employeeId: pendingChangeRequest.employeeId,
               date: pendingChangeRequest.date,
               currentRawInput: pendingChangeRequest.currentRawInput,
+              requestedChange,
               reason,
               requestedAtClient: pendingChangeRequest.clickedAt,
             });
