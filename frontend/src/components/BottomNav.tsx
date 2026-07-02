@@ -105,7 +105,13 @@ export default function BottomNav({
   );
   const anchorIds = new Set(anchors.map((a) => a.id));
   const moreItems = items.filter((i) => !anchorIds.has(i.id));
-  const showMore = moreItems.length > 0;
+  // The "Více" sheet always carries the footer utilities (theme / Nápověda /
+  // Odhlásit) — the ONLY place logout is reachable on phones. So the tab must
+  // always render, even when a user's permitted pages are all four anchors
+  // (the common case for a regular employee: Přehled/Směny/Dovolená/Profil).
+  // Previously gated on `moreItems.length > 0`, which hid logout entirely for
+  // those users.
+  const showMore = true;
 
   // "Více" is the active tab whenever the current route belongs to a non-anchor
   // page (incl. nested routes like /zamestnanci/:id).
@@ -193,24 +199,26 @@ export default function BottomNav({
               </button>
             </div>
 
-            <div className={styles.sheetList}>
-              {moreItems.map((item) => {
-                const badge = badgeFor(item.id);
-                return (
-                  <NavLink
-                    key={item.id}
-                    to={item.path}
-                    className={({ isActive }) =>
-                      [styles.sheetItem, isActive ? styles.sheetItemActive : ""].join(" ")
-                    }
-                    onClick={() => setMoreOpen(false)}
-                  >
-                    <span>{item.label}</span>
-                    {badge > 0 && <span className={styles.sheetBadge}>{badge}</span>}
-                  </NavLink>
-                );
-              })}
-            </div>
+            {moreItems.length > 0 && (
+              <div className={styles.sheetList}>
+                {moreItems.map((item) => {
+                  const badge = badgeFor(item.id);
+                  return (
+                    <NavLink
+                      key={item.id}
+                      to={item.path}
+                      className={({ isActive }) =>
+                        [styles.sheetItem, isActive ? styles.sheetItemActive : ""].join(" ")
+                      }
+                      onClick={() => setMoreOpen(false)}
+                    >
+                      <span>{item.label}</span>
+                      {badge > 0 && <span className={styles.sheetBadge}>{badge}</span>}
+                    </NavLink>
+                  );
+                })}
+              </div>
+            )}
 
             <div className={styles.sheetFooter}>
               <button
