@@ -205,5 +205,20 @@
   .cardsOnMobile td.actionCell:empty {
     display: none;
   }
+  /* The inline reject-input row (a full-width colSpan cell) shown by the review
+     panels: no label, left-aligned, input on its own line above the buttons. */
+  .cardsOnMobile td.rejectRow {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 0.5rem;
+    text-align: left;
+    border-bottom: none;
+  }
+  .cardsOnMobile td.rejectRow::before {
+    content: none;
+  }
+  .cardsOnMobile td.rejectRow .rejectInput {
+    width: 100%;
+  }
 }
 

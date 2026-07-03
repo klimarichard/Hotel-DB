@@ -86,3 +86,18 @@
 .stateError {
   color: var(--color-danger-text-strong);
 }
+
+/* Phone: the tiles grid is a single column that can shrink below the 420px
+   desktop track, so the tiles fit inside the "HR přehled" box instead of
+   spilling past its border. See index.css for the breakpoint convention. */
+@media (max-width: 559.98px), (orientation: landscape) and (max-height: 480px) {
+  .section {
+    padding: 0.85rem;
+  }
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .tile {
+    min-height: 240px;
+  }
+}

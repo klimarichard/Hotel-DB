@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import type { MenuItem } from "@/lib/menuItems";
@@ -132,9 +132,40 @@ export default function BottomNav({
     };
   }, [moreOpen]);
 
+  // Keep the fixed bar pinned to the bottom of the VISUAL viewport during
+  // pinch / double-tap zoom. A plain `position: fixed` element is anchored to the
+  // LAYOUT viewport, so it scales and slides off-screen when the page is zoomed.
+  // We track window.visualViewport and translate the bar to the visual viewport's
+  // bottom-left, countering the zoom scale so it keeps its on-screen size.
+  const barRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => {
+      const bar = barRef.current;
+      if (!bar) return;
+      if (vv.scale <= 1.0001) {
+        // Not pinch-zoomed: keep the default fixed positioning. (This also avoids
+        // fighting the on-screen keyboard, which shrinks the visual viewport
+        // without zooming — we don't want the bar floating above the keyboard.)
+        bar.style.transform = "";
+        return;
+      }
+      const offsetY = vv.offsetTop + vv.height - window.innerHeight;
+      bar.style.transform = `translate(${vv.offsetLeft}px, ${offsetY}px) scale(${1 / vv.scale})`;
+    };
+    update();
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    return () => {
+      vv.removeEventListener("resize", update);
+      vv.removeEventListener("scroll", update);
+    };
+  }, []);
+
   return (
     <>
-      <nav className={styles.bar} aria-label="Hlavní navigace (mobil)">
+      <nav ref={barRef} className={styles.bar} aria-label="Hlavní navigace (mobil)">
         {anchors.map((item) => {
           const badge = badgeFor(item.id);
           return (

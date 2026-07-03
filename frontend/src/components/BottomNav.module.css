@@ -18,6 +18,9 @@
     background: var(--color-surface);
     border-top: 1px solid var(--color-border);
     box-shadow: 0 -2px 8px var(--shadow-sm);
+    /* Anchor the JS visualViewport transform (translate + counter-scale) that
+       pins the bar to the visual viewport during pinch/double-tap zoom. */
+    transform-origin: left bottom;
   }
 }
 
