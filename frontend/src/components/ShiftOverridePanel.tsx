@@ -115,7 +115,7 @@ export default function ShiftOverridePanel({ planId, employees, onOverrideResolv
       )}
 
       {!loading && requests.length > 0 && (
-        <table className={styles.table}>
+        <table className={`${styles.table} ${styles.cardsOnMobile}`}>
           <thead>
             <tr>
               <th>Zaměstnanec</th>
@@ -130,21 +130,21 @@ export default function ShiftOverridePanel({ planId, employees, onOverrideResolv
             {requests.map((req) => (
               <>
                 <tr key={req.id} className={req.status !== "pending" ? styles.rowDone : ""}>
-                  <td>{resolveEmployeeName(req.employeeId)}</td>
-                  <td>{formatDateCZ(req.date)}</td>
-                  <td>
+                  <td data-label="Zaměstnanec">{resolveEmployeeName(req.employeeId)}</td>
+                  <td data-label="Datum">{formatDateCZ(req.date)}</td>
+                  <td data-label="Typ porušení">
                     {req.violationTypes
                       .map((t) => VIOLATION_LABELS[t] ?? t)
                       .join(", ")}
                   </td>
-                  <td>{req.reason || "—"}</td>
-                  <td>
+                  <td data-label="Důvod">{req.reason || "—"}</td>
+                  <td data-label="Stav">
                     <StatusBadge status={req.status} />
                     {req.status === "rejected" && req.rejectionReason && (
                       <div className={styles.rejectionNote}>{req.rejectionReason}</div>
                     )}
                   </td>
-                  <td>
+                  <td className={styles.actionCell}>
                     {req.status === "pending" && (
                       <div className={styles.actions}>
                         <button

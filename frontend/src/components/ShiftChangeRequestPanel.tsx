@@ -104,7 +104,7 @@ export default function ShiftChangeRequestPanel({ planId, employees, onResolved,
       )}
 
       {!loading && requests.length > 0 && (
-        <table className={styles.table}>
+        <table className={`${styles.table} ${styles.cardsOnMobile}`}>
           <thead>
             <tr>
               <th>Zaměstnanec</th>
@@ -121,23 +121,23 @@ export default function ShiftChangeRequestPanel({ planId, employees, onResolved,
             {requests.map((req) => (
               <>
                 <tr key={req.id} className={req.status !== "pending" ? styles.rowDone : ""}>
-                  <td>{resolveEmployeeName(req.employeeId)}</td>
-                  <td>{formatDateCZ(req.date)}</td>
-                  <td>
+                  <td data-label="Zaměstnanec">{resolveEmployeeName(req.employeeId)}</td>
+                  <td data-label="Datum">{formatDateCZ(req.date)}</td>
+                  <td data-label="Aktuální směna">
                     {req.kind === "free-claim"
                       ? `Volná směna ${req.code ?? ""}${req.hotel ?? ""}`
                       : (req.currentRawInput || "—")}
                   </td>
-                  <td>{req.kind === "free-claim" ? "—" : formatRequestedChange(req.requestedChange)}</td>
-                  <td>{req.kind === "free-claim" ? "—" : (req.reason || "—")}</td>
-                  <td>{formatDatetimeCZ(req.requestedAt)}</td>
-                  <td>
+                  <td data-label="Požadovaná změna">{req.kind === "free-claim" ? "—" : formatRequestedChange(req.requestedChange)}</td>
+                  <td data-label="Důvod">{req.kind === "free-claim" ? "—" : (req.reason || "—")}</td>
+                  <td data-label="Odesláno">{formatDatetimeCZ(req.requestedAt)}</td>
+                  <td data-label="Stav">
                     <StatusBadge status={req.status} />
                     {req.status === "rejected" && req.rejectionReason && (
                       <div className={styles.rejectionNote}>{req.rejectionReason}</div>
                     )}
                   </td>
-                  <td>
+                  <td className={styles.actionCell}>
                     {canReview && req.status === "pending" && (
                       <div className={styles.actions}>
                         <button

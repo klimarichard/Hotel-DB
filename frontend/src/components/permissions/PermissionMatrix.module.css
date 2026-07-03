@@ -13,6 +13,15 @@
   margin: 0 0 1rem;
 }
 
+/* Phone: collapse the masonry to a single column — a 320px column plus gap would
+   push past a ~360px screen and widen the page (see index.css for the breakpoint). */
+@media (max-width: 559.98px), (orientation: landscape) and (max-height: 480px) {
+  .matrix {
+    column-width: auto;
+    column-count: 1;
+  }
+}
+
 /* Single-column variant (height-constrained containers, e.g. the per-user modal):
    sections stack vertically and scroll cleanly. A multi-column grid here looked
    uneven because adjacent sections differ a lot in height (Přehled vs Směny), and

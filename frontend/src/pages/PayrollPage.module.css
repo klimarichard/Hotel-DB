@@ -748,3 +748,122 @@
 .notesDashBtn:hover:not(:disabled) .dash {
   color: var(--color-text);
 }
+
+/* Desktop: the fold chevron only exists in the phone accordion. */
+.foldChevron {
+  display: none;
+}
+
+/* ── Phone: payroll grid becomes a foldable accordion ─────────────────────────
+   Each employee is a card; tapping the name reveals the metric values one per
+   line. Placed at the end of the file so these rules win source order over the
+   base table rules (media queries add no specificity). The header action toolbar
+   also wraps instead of overflowing. See index.css for the breakpoint. */
+@media (max-width: 559.98px), (orientation: landscape) and (max-height: 480px) {
+  /* Action toolbar (Přepočítat / Exportovat PDF / …) wraps inside the meta box
+     instead of overflowing to the right. */
+  .meta {
+    gap: 0.6rem 0.9rem;
+  }
+  .metaItem {
+    flex-wrap: wrap;
+  }
+
+  /* The wrapper stops being one card; each row becomes its own card. */
+  .tableWrapper {
+    background: none;
+    box-shadow: none;
+    border-radius: 0;
+    overflow: visible;
+  }
+  .table,
+  .table tbody,
+  .table tr,
+  .table td {
+    display: block;
+    width: 100%;
+  }
+  .table thead {
+    display: none;
+  }
+
+  /* Section divider stays a full-width band label, not a card. */
+  .sectionRow td {
+    border-radius: 0;
+  }
+
+  /* Data rows = cards. Normal rows get a surface background; ppp/dpp keep their
+     tint from the base rules (excluded here so they aren't overwritten). */
+  .table tbody tr:not(.sectionRow) {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md, 6px);
+    box-shadow: 0 1px 4px var(--shadow-sm);
+    margin-bottom: 0.5rem;
+    overflow: hidden;
+  }
+  .table tbody tr:not(.sectionRow):not(.pppRow):not(.dppRow) {
+    background: var(--color-surface);
+  }
+
+  /* Name cell = tappable header. The .foldTable prefix lifts specificity above
+     the generic `.table td { display: block }` rule so the flex layout wins. */
+  .foldTable .nameCell {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    border-bottom: 1px solid var(--color-border-subtle);
+    background: none;
+    white-space: normal;
+  }
+  .foldChevron {
+    display: inline-block;
+    margin-left: auto;
+    color: var(--color-text-muted);
+    transition: transform 0.2s ease;
+  }
+  .foldOpen .foldChevron {
+    transform: rotate(180deg);
+  }
+
+  /* Metric cells hidden until the row is open, then one labelled value per line.
+     The hide rule needs `.foldTable tr:not(.foldOpen)` specificity to beat the
+     generic `.table td { display: block }` (a bare `.numCell` would lose). */
+  .numCell {
+    background: none;
+  }
+  .foldTable tr:not(.foldOpen) .numCell {
+    display: none;
+  }
+  .foldOpen .numCell {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 1rem;
+    padding: 0.4rem 0.9rem;
+    border-bottom: none;
+    text-align: right;
+    white-space: normal;
+  }
+  .foldOpen .numCell::before {
+    font-weight: 600;
+    color: var(--color-text-muted);
+    text-align: left;
+    flex: 0 0 auto;
+  }
+  /* Column labels by position — payroll columns are fixed order, and the name
+     cell is child 1, so the 11 metric cells are children 2–12. */
+  .foldOpen .numCell:nth-child(2)::before { content: "Hodiny"; }
+  .foldOpen .numCell:nth-child(3)::before { content: "Výkaz"; }
+  .foldOpen .numCell:nth-child(4)::before { content: "Dovolená"; }
+  .foldOpen .numCell:nth-child(5)::before { content: "Noční"; }
+  .foldOpen .numCell:nth-child(6)::before { content: "Svátek"; }
+  .foldOpen .numCell:nth-child(7)::before { content: "So+Ne"; }
+  .foldOpen .numCell:nth-child(8)::before { content: "DPP / Fakt."; }
+  .foldOpen .numCell:nth-child(9)::before { content: "Navíc"; }
+  .foldOpen .numCell:nth-child(10)::before { content: "Stravenky"; }
+  .foldOpen .numCell:nth-child(11)::before { content: "Multisport"; }
+  .foldOpen .numCell:nth-child(12)::before { content: "Poznámky"; }
+}

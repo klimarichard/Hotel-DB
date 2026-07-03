@@ -302,7 +302,7 @@
 
   /* Request row → card. width:auto (not the inherited 100%) so the horizontal
      margins inset the card instead of overflowing past the screen edge. */
-  .cardsOnMobile tbody tr:not(.editRow) {
+  .cardsOnMobile tbody tr:not(.editRow):not(.pendingEditRow):not(.rejectRow) {
     width: auto;
     background: var(--color-surface-2);
     border: 1px solid var(--color-border);
@@ -310,7 +310,7 @@
     padding: 0.25rem 0.75rem;
     margin: 0 1rem 0.625rem;
   }
-  .cardsOnMobile tbody tr:not(.editRow) td {
+  .cardsOnMobile tbody tr:not(.editRow):not(.pendingEditRow):not(.rejectRow) td {
     display: flex;
     flex-wrap: wrap;
     align-items: baseline;
@@ -320,10 +320,10 @@
     border-bottom: 1px solid var(--color-border-subtle);
     text-align: right;
   }
-  .cardsOnMobile tbody tr:not(.editRow) td:last-child {
+  .cardsOnMobile tbody tr:not(.editRow):not(.pendingEditRow):not(.rejectRow) td:last-child {
     border-bottom: none;
   }
-  .cardsOnMobile tbody tr:not(.editRow) td::before {
+  .cardsOnMobile tbody tr:not(.editRow):not(.pendingEditRow):not(.rejectRow) td::before {
     content: attr(data-label);
     flex: 0 0 auto;
     font-size: 0.7rem;
@@ -368,6 +368,51 @@
   }
   .cardsOnMobile .editSep {
     display: none;
+  }
+
+  /* Admin review sub-rows (proposed-edit details / reject input) on the "Všechny
+     žádosti" table → full-width info blocks, no data-labels, inputs full width. */
+  .cardsOnMobile tr.pendingEditRow,
+  .cardsOnMobile tr.rejectRow {
+    width: auto;
+    margin: -0.25rem 1rem 0.75rem;
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+  }
+  .cardsOnMobile tr.pendingEditRow td,
+  .cardsOnMobile tr.rejectRow td {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 0.75rem;
+    text-align: left;
+  }
+  .cardsOnMobile tr.pendingEditRow td::before,
+  .cardsOnMobile tr.rejectRow td::before {
+    content: none;
+  }
+  .cardsOnMobile tr.rejectRow .rejectInput {
+    width: 100%;
+  }
+
+  /* "Nová žádost o dovolenou" form: one field per line, with Od + Do sharing a
+     line. Overrides the fixed input min-widths so fields can go full-width. */
+  .input {
+    min-width: 0;
+  }
+  .reasonInput {
+    min-width: 0;
+  }
+  .formField {
+    flex-basis: 100%;
+  }
+  .dateField {
+    flex-basis: calc(50% - 0.5rem);
+  }
+  .formRow > button {
+    flex-basis: 100%;
   }
 }
 

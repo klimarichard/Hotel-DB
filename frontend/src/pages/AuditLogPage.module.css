@@ -321,3 +321,17 @@
   color: var(--color-text-muted);
   padding: 2rem;
 }
+
+/* ── Phone: filter fields stack full-width instead of forcing 12rem-wide selects
+   side by side (the event log itself already renders as cards). See index.css
+   for the breakpoint convention. */
+@media (max-width: 559.98px), (orientation: landscape) and (max-height: 480px) {
+  .field {
+    width: 100%;
+  }
+  .select,
+  .dateInput {
+    min-width: 0;
+    width: 100%;
+  }
+}

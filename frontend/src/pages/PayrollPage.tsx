@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, type MouseEvent } from "react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import * as clock from "@/lib/clock";
@@ -327,6 +327,9 @@ export default function PayrollPage() {
   const [balanceModal, setBalanceModal] = useState<PayrollEntry | null>(null);
   const [notesModal, setNotesModal] = useState<PayrollEntry | null>(null);
   const [recalcModal, setRecalcModal] = useState<PayrollEntry | null>(null);
+  // Which employee rows are expanded in the phone accordion view (keyed by entry
+  // id). Desktop ignores this and renders the full scroll table.
+  const [openRows, setOpenRows] = useState<Set<string>>(new Set());
   const [showAllNavic, setShowAllNavic] = useState(false);
   const [recalculating, setRecalculating] = useState(false);
   const [resetting, setResetting] = useState(false);
@@ -723,6 +726,18 @@ export default function PayrollPage() {
       .slice()
       .sort((a, b) => employeeSurnameFirst(a).localeCompare(employeeSurnameFirst(b), "cs"));
 
+  // Toggle an employee row open/closed in the phone accordion. Ignores taps on
+  // interactive controls in the header cell (the ↻ recalc button) so they work.
+  function toggleRow(id: string, e: MouseEvent) {
+    if ((e.target as HTMLElement).closest("input, button, select, a")) return;
+    setOpenRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
   function renderGroup(group: { label: string; sections: string[] }) {
     const entries = entriesForGroup(group.sections);
     if (entries.length === 0) return null;
@@ -738,9 +753,10 @@ export default function PayrollPage() {
           const ao = entry.autoOverrides ?? {};
           const sick = entry.sickLeaveHours ?? 0;
           const rowClass = isDpp ? styles.dppRow : isPpp ? styles.pppRow : "";
+          const open = openRows.has(entry.id);
           return (
-            <tr key={entry.id} className={rowClass}>
-              <td className={styles.nameCell}>
+            <tr key={entry.id} className={`${rowClass} ${open ? styles.foldOpen : ""}`}>
+              <td className={styles.nameCell} onClick={(e) => toggleRow(entry.id, e)}>
                 {employeeDisplayName(entry)}
                 {entry.contractType && (
                   <span className={styles.contractBadge}>{entry.contractType}</span>
@@ -755,6 +771,7 @@ export default function PayrollPage() {
                     ↻
                   </button>
                 )}
+                <span className={styles.foldChevron} aria-hidden="true">▾</span>
               </td>
               <td className={styles.numCell}>
                 <EditableCell
@@ -1038,7 +1055,7 @@ export default function PayrollPage() {
             </span>
           </div>
           <div className={styles.tableWrapper} data-tour="payroll-table">
-            <table className={styles.table}>
+            <table className={`${styles.table} ${styles.foldTable}`}>
               <thead>
                 <tr>
                   <th className={styles.nameHeader}>Zaměstnanec</th>
