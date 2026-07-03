@@ -83,11 +83,11 @@ export default function PendingShiftChangeRequestsTab() {
                     r.employeeId
                   )}
                 </td>
-                <td>{fmtMonth(r.planYear, r.planMonth)}</td>
-                <td>{formatDateCZ(r.date)}</td>
-                <td><code>{r.currentRawInput || "—"}</code></td>
-                <td>{formatRequestedChange(r.requestedChange)}</td>
-                <td>{r.reason || "—"}</td>
+                <td data-label="Plán">{fmtMonth(r.planYear, r.planMonth)}</td>
+                <td data-label="Datum">{formatDateCZ(r.date)}</td>
+                <td data-label="Aktuální směna"><code>{r.currentRawInput || "—"}</code></td>
+                <td data-label="Požadovaná změna">{formatRequestedChange(r.requestedChange)}</td>
+                <td data-label="Důvod">{r.reason || "—"}</td>
                 <td>
                   <Link to="/smeny" className={styles.markReadBtn}>
                     Otevřít plán →

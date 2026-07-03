@@ -64,9 +64,9 @@ function AlertTable({ alerts, actionLabel, onAction, muted }: AlertTableProps) {
                   {employeeDisplayName({ firstName: alert.employeeFirstName, lastName: alert.employeeLastName })}
                 </Link>
               </td>
-              <td>{alert.fieldLabel}</td>
-              <td>{formatDateCZ(alert.expiryDate)}</td>
-              <td><DaysBadge days={alert.daysUntilExpiry} /></td>
+              <td data-label="Doklad">{alert.fieldLabel}</td>
+              <td data-label="Datum expirace">{formatDateCZ(alert.expiryDate)}</td>
+              <td data-label="Zbývá"><DaysBadge days={alert.daysUntilExpiry} /></td>
               {actionLabel && (
                 <td>
                   <button

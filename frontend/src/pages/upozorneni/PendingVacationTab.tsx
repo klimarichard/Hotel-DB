@@ -64,10 +64,10 @@ export default function PendingVacationTab() {
                     {employeeDisplayName(v)}
                   </Link>
                 </td>
-                <td>{formatDateCZ(start)}</td>
-                <td>{formatDateCZ(end)}</td>
-                <td>{reason || "—"}</td>
-                <td>
+                <td data-label="Od">{formatDateCZ(start)}</td>
+                <td data-label="Do">{formatDateCZ(end)}</td>
+                <td data-label="Důvod">{reason || "—"}</td>
+                <td data-label="Stav">
                   {v.pendingEdit ? (
                     <span className={styles.badgeExpiring}>Úprava ke schválení</span>
                   ) : (

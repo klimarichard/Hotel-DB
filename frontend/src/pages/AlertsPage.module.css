@@ -235,3 +235,77 @@
   justify-content: flex-end;
   margin-bottom: 0.75rem;
 }
+
+/* ── Phone: review-queue tables become stacked cards ──────────────────────────
+   All five table-based Upozornění tabs share this stylesheet, so this single
+   block upgrades them together. Each row becomes a card whose header is the
+   employee name; the other columns show as labelled rows via their data-label.
+   Placed at the end of the file so these rules win source order over the base
+   table rules (media queries add no specificity). See index.css for the
+   breakpoint convention. */
+@media (max-width: 559.98px), (orientation: landscape) and (max-height: 480px) {
+  /* The wrapper stops being a single card; each row becomes its own card. */
+  .tableWrapper {
+    background: none;
+    box-shadow: none;
+    border-radius: 0;
+    overflow: visible;
+  }
+  .table,
+  .table tbody,
+  .table tr,
+  .table td {
+    display: block;
+    width: 100%;
+  }
+  .table thead {
+    display: none;
+  }
+  .table tbody tr {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md, 6px);
+    background: var(--color-surface);
+    box-shadow: 0 1px 4px var(--shadow-sm);
+    margin-bottom: 0.625rem;
+    overflow: hidden;
+  }
+  /* Status tint moves from the individual cells to the whole card. */
+  .table td {
+    background: none;
+    border-bottom: none;
+    padding: 0.35rem 0.9rem;
+  }
+  .rowExpired {
+    background: var(--color-danger-bg);
+  }
+  .rowExpiring {
+    background: var(--color-warning-bg);
+  }
+  .rowRead {
+    background: var(--color-bg);
+  }
+  /* Name cell = card header. */
+  .table td:first-child {
+    padding: 0.7rem 0.9rem 0.5rem;
+    font-weight: 600;
+    border-bottom: 1px solid var(--color-border-subtle);
+  }
+  /* Labelled fields: label left, value right. */
+  .table td[data-label] {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    text-align: right;
+  }
+  .table td[data-label]::before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: var(--color-text-muted);
+    text-align: left;
+    flex: 0 0 auto;
+  }
+  /* Action cell (last, unlabelled): give the button breathing room. */
+  .table td:last-child:not([data-label]) {
+    padding: 0.6rem 0.9rem 0.75rem;
+  }
+}
