@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, type Dispatch, type SetStateAction, type MouseEvent } from "react";
 import { Navigate } from "react-router-dom";
 import { sendPasswordResetEmail } from "firebase/auth";
 import { auth } from "@/lib/firebase";
@@ -40,6 +40,23 @@ function formatScheduledAt(iso: string): string {
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+  });
+}
+
+// Toggle a foldable table row in the phone accordion view. Ignores taps on
+// interactive controls inside the header cell (e.g. the Vzdělání inline-edit
+// input) so those keep working instead of folding the row.
+function toggleFoldRow(
+  setOpen: Dispatch<SetStateAction<Set<string>>>,
+  id: string,
+  e: MouseEvent
+) {
+  if ((e.target as HTMLElement).closest("input, button, select, a")) return;
+  setOpen((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    return next;
   });
 }
 
@@ -165,6 +182,11 @@ export default function SettingsPage() {
 
   // Per-row activation toggle state
   const [togglingUid, setTogglingUid] = useState<string | null>(null);
+  // Which rows are expanded in the phone accordion view of the Uživatelé /
+  // Pracovní pozice / Vzdělání tables (keyed by row id). Desktop ignores these.
+  const [openUserRows, setOpenUserRows] = useState<Set<string>>(new Set());
+  const [openPosRows, setOpenPosRows] = useState<Set<string>>(new Set());
+  const [openEduRows, setOpenEduRows] = useState<Set<string>>(new Set());
   // Deactivation modal (immediate or scheduled) for the user it targets.
   const [deactivateTarget, setDeactivateTarget] = useState<UserProfile | null>(null);
   const [deactivateSaving, setDeactivateSaving] = useState(false);
@@ -1087,7 +1109,7 @@ export default function SettingsPage() {
           {error && <p className={styles.errorState}>{error}</p>}
           {!loading && !error && (
             <div className={styles.tableScroll}>
-            <table className={styles.table}>
+            <table className={`${styles.table} ${styles.foldTable}`}>
               <thead>
                 <tr>
                   <th>Jméno</th>
@@ -1109,10 +1131,13 @@ export default function SettingsPage() {
                   const localEmp = u.employeeId ? employees.find((e) => e.id === u.employeeId) : null;
                   const linkedName = u.employeeName ?? (localEmp ? employeeSurnameFirst(localEmp) : null);
                   return (
-                    <tr key={u.uid}>
-                      <td className={styles.name}>{u.name}</td>
-                      <td className={styles.email}>{u.email}</td>
-                      <td>
+                    <tr key={u.uid} className={openUserRows.has(u.uid) ? styles.foldOpen : undefined}>
+                      <td className={styles.name} onClick={(e) => toggleFoldRow(setOpenUserRows, u.uid, e)}>
+                        <span>{u.name}</span>
+                        <span className={styles.foldChevron} aria-hidden="true">▾</span>
+                      </td>
+                      <td className={styles.email} data-label="E-mail">{u.email}</td>
+                      <td data-label="Typ">
                         {can("users.setType") || can("users.permissions.manage") ? (
                           <select
                             data-tour="settings-user-type"
@@ -1131,7 +1156,7 @@ export default function SettingsPage() {
                           </span>
                         )}
                       </td>
-                      <td>
+                      <td data-label="Zaměstnanec">
                         <span className={isLinked ? styles.employeeLinked : styles.employeeUnlinked}>
                           {linkedName ?? "—"}
                         </span>
@@ -1152,7 +1177,7 @@ export default function SettingsPage() {
                             </button>
                           ))}
                       </td>
-                      <td>
+                      <td data-label="Stav">
                         <span className={u.active ? styles.badgeActive : styles.badgeInactive}>
                           {u.active ? "Aktivní" : "Deaktivován"}
                         </span>
@@ -1174,7 +1199,7 @@ export default function SettingsPage() {
                           </div>
                         )}
                       </td>
-                      <td>
+                      <td data-label="Akce">
                         {can("users.manage") && (
                           <>
                             <button
@@ -1558,7 +1583,7 @@ export default function SettingsPage() {
             </div>
           )}
           <div className={styles.tableScroll}>
-          <table className={styles.table}>
+          <table className={`${styles.table} ${styles.foldTable}`}>
             <thead>
               <tr>
                 <th className={styles.sortableHeader} onClick={() => togglePosSort("name")}>
@@ -1581,14 +1606,17 @@ export default function SettingsPage() {
               {sortedPositions.map((p) => {
                 const dep = departments.find((d) => d.id === p.departmentId);
                 return (
-                  <tr key={p.id}>
-                    <td>{p.name}</td>
-                    <td>{dep?.name ?? "—"}</td>
-                    <td><SalaryCell value={p.defaultSalary} /></td>
-                    <td><SalaryCell value={p.hourlyRate ?? null} /></td>
-                    <td><SalaryCell value={p.clothingAllowance ?? null} suffix="Kč/h" /></td>
-                    <td><SalaryCell value={p.homeOfficeAllowance ?? null} suffix="Kč/h" /></td>
-                    <td>
+                  <tr key={p.id} className={openPosRows.has(p.id) ? styles.foldOpen : undefined}>
+                    <td onClick={(e) => toggleFoldRow(setOpenPosRows, p.id, e)}>
+                      <span>{p.name}</span>
+                      <span className={styles.foldChevron} aria-hidden="true">▾</span>
+                    </td>
+                    <td data-label="Oddělení">{dep?.name ?? "—"}</td>
+                    <td data-label="Výchozí mzda"><SalaryCell value={p.defaultSalary} /></td>
+                    <td data-label="Hodinová sazba"><SalaryCell value={p.hourlyRate ?? null} /></td>
+                    <td data-label="Náhrady - oblečení"><SalaryCell value={p.clothingAllowance ?? null} suffix="Kč/h" /></td>
+                    <td data-label="Náhrady - HO"><SalaryCell value={p.homeOfficeAllowance ?? null} suffix="Kč/h" /></td>
+                    <td data-label="Akce">
                       <div className={styles.rowActions}>
                         <button className={styles.linkBtn} onClick={() => openEditPosition(p)}>Upravit</button>
                         <button className={styles.deactivateBtn} onClick={() => setPosDeleteId(p.id)}>Smazat</button>
@@ -1607,7 +1635,7 @@ export default function SettingsPage() {
         <>
           {eduError && <p className={styles.errorState}>{eduError}</p>}
           <div className={styles.tableScroll}>
-          <table className={styles.table}>
+          <table className={`${styles.table} ${styles.foldTable}`}>
             <thead>
               <tr>
                 <th className={styles.sortableHeader} onClick={() => toggleEduSort("name")}>
@@ -1624,8 +1652,8 @@ export default function SettingsPage() {
                 <tr><td colSpan={3} className={styles.empty}>Žádná vzdělání</td></tr>
               )}
               {sortedEducationLevels.map((e) => (
-                <tr key={e.id}>
-                  <td>
+                <tr key={e.id} className={openEduRows.has(e.id) ? styles.foldOpen : undefined}>
+                  <td onClick={(ev) => toggleFoldRow(setOpenEduRows, e.id, ev)}>
                     {eduEditId === e.id ? (
                       <input
                         className={styles.input}
@@ -1633,10 +1661,11 @@ export default function SettingsPage() {
                         onChange={(ev) => setEduEditName(ev.target.value)}
                       />
                     ) : (
-                      e.name
+                      <span>{e.name}</span>
                     )}
+                    <span className={styles.foldChevron} aria-hidden="true">▾</span>
                   </td>
-                  <td>
+                  <td data-label="Kód">
                     {eduEditId === e.id ? (
                       <input
                         className={styles.input}
@@ -1648,7 +1677,7 @@ export default function SettingsPage() {
                       e.code ?? ""
                     )}
                   </td>
-                  <td>
+                  <td data-label="Akce">
                     <div className={styles.rowActions}>
                       {eduEditId === e.id ? (
                         <>

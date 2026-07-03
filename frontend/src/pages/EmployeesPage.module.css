@@ -100,11 +100,71 @@
   box-shadow: 0 1px 4px var(--shadow-sm);
 }
 
-/* Keep readable column widths when the table overflows on a phone — without a
-   min, auto-layout squeezes 7 columns into 360px and wraps every cell. */
+/* ── Phone: header/filters stack; the list collapses to names-only links ──────
+   (see index.css for the breakpoint convention). */
 @media (max-width: 559.98px), (orientation: landscape) and (max-height: 480px) {
+  /* Title sits above the action buttons instead of cramped beside them. */
+  .header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+  .headerActions {
+    flex-wrap: wrap;
+  }
+  /* Search spans the full width; the status toggle drops onto its own row below
+     (this also un-clips the 3rd "Ukončení" button, which the old side-by-side
+     row hid via the toggle's overflow:hidden). */
+  .filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .search {
+    max-width: none;
+    width: 100%;
+  }
+  .toggle {
+    width: 100%;
+  }
+  .toggleBtn,
+  .toggleActive {
+    flex: 1;
+    padding: 0.5rem;
+    text-align: center;
+    font-size: 0.8rem;
+  }
+  /* Names-only list: drop every column except the name link and the table
+     chrome, so each employee is a single tappable row leading to the detail. */
   .table {
-    min-width: 640px;
+    min-width: 0;
+  }
+  .table thead {
+    display: none;
+  }
+  .table,
+  .table tbody,
+  .table tr,
+  .table td {
+    display: block;
+    width: 100%;
+  }
+  .table td:not(:first-child) {
+    display: none;
+  }
+  .table tbody tr {
+    border-bottom: 1px solid var(--color-border);
+  }
+  .table td:first-child {
+    padding: 0.9rem 1rem;
+  }
+  .nameLink {
+    font-size: 1rem;
+    font-weight: 600;
+  }
+  /* Strictly names — hide the inline contract / training badges in the list. */
+  .table td:first-child .contractBadge,
+  .table td:first-child .trainingBadge {
+    display: none;
   }
 }
 
