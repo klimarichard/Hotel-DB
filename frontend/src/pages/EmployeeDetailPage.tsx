@@ -1667,7 +1667,7 @@ export default function EmployeeDetailPage() {
             </span>
           </div>
         </div>
-        <div style={{ display: "flex", gap: "0.5rem" }}>
+        <div className={styles.heroActions}>
           {canExportQuestionnaire && (
             <Button
               data-tour="emp-hero-questionnaire"

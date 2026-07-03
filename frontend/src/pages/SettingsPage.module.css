@@ -541,6 +541,15 @@
     color: var(--color-text-muted);
     flex: 0 0 auto;
   }
+  /* The actions row drops the "Akce" label — just the buttons, left-aligned. */
+  .foldTable tr.foldOpen td.foldActions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+  .foldTable tr.foldOpen td.foldActions::before {
+    content: none;
+  }
   .foldChevron {
     display: inline-block;
     color: var(--color-text-muted);

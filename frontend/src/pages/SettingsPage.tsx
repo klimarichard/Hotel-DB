@@ -1199,7 +1199,7 @@ export default function SettingsPage() {
                           </div>
                         )}
                       </td>
-                      <td data-label="Akce">
+                      <td className={styles.foldActions}>
                         {can("users.manage") && (
                           <>
                             <button
@@ -1616,7 +1616,7 @@ export default function SettingsPage() {
                     <td data-label="Hodinová sazba"><SalaryCell value={p.hourlyRate ?? null} /></td>
                     <td data-label="Náhrady - oblečení"><SalaryCell value={p.clothingAllowance ?? null} suffix="Kč/h" /></td>
                     <td data-label="Náhrady - HO"><SalaryCell value={p.homeOfficeAllowance ?? null} suffix="Kč/h" /></td>
-                    <td data-label="Akce">
+                    <td className={styles.foldActions}>
                       <div className={styles.rowActions}>
                         <button className={styles.linkBtn} onClick={() => openEditPosition(p)}>Upravit</button>
                         <button className={styles.deactivateBtn} onClick={() => setPosDeleteId(p.id)}>Smazat</button>
@@ -1677,7 +1677,7 @@ export default function SettingsPage() {
                       e.code ?? ""
                     )}
                   </td>
-                  <td data-label="Akce">
+                  <td className={styles.foldActions}>
                     <div className={styles.rowActions}>
                       {eduEditId === e.id ? (
                         <>
