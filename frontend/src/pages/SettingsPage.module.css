@@ -334,10 +334,6 @@
   .tableScroll .table td {
     white-space: nowrap;
   }
-  /* Company detail fields stack single-column on a phone. */
-  .companyGrid {
-    grid-template-columns: 1fr;
-  }
 }
 
 /* ── Companies section ────────────────────────────────────────────────────── */
@@ -370,6 +366,14 @@
   grid-template-columns: 1fr 1fr;
   gap: 0.75rem;
   margin-bottom: 1rem;
+}
+
+/* Phone: company field pairs stack one-per-row. Placed AFTER the base rule so it
+   wins the cascade (media queries add no specificity, so source order decides). */
+@media (max-width: 559.98px), (orientation: landscape) and (max-height: 480px) {
+  .companyGrid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .companyActions {
@@ -474,4 +478,75 @@
 
 .linkBtn:hover {
   background: var(--color-border);
+}
+
+/* ── Phone: foldable-accordion tables (Uživatelé / Pracovní pozice / Vzdělání) ──
+   Each row collapses to its name (the header); tapping it reveals the other
+   columns as labelled rows. This block is at the END of the file so its rules
+   win source order over the base .table and the R1 .tableScroll nowrap rules
+   (media queries add no specificity). See index.css for the breakpoint. */
+
+/* Desktop: the fold chevron only exists in the phone accordion. */
+.foldChevron {
+  display: none;
+}
+
+@media (max-width: 559.98px), (orientation: landscape) and (max-height: 480px) {
+  .foldTable,
+  .foldTable tbody,
+  .foldTable tr,
+  .foldTable td {
+    display: block;
+    width: 100%;
+  }
+  .foldTable thead {
+    display: none;
+  }
+  /* Undo the R1 nowrap so expanded values can wrap instead of forcing a scroll. */
+  .tableScroll .foldTable td {
+    white-space: normal;
+  }
+  /* Each row is a card. */
+  .foldTable tbody tr {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md, 6px);
+    margin-bottom: 0.5rem;
+    background: var(--color-surface);
+  }
+  /* Name cell = always-visible header; tap to fold/unfold. */
+  .foldTable td:first-child {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.85rem 1rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  /* Remaining cells hidden until the row is open, then shown as labelled rows. */
+  .foldTable td:not(:first-child) {
+    display: none;
+  }
+  .foldTable tr.foldOpen td:not(:first-child) {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.5rem 1rem;
+    border-top: 1px solid var(--color-border-subtle);
+    font-size: 0.85rem;
+  }
+  .foldTable tr.foldOpen td:not(:first-child)::before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: var(--color-text-muted);
+    flex: 0 0 auto;
+  }
+  .foldChevron {
+    display: inline-block;
+    color: var(--color-text-muted);
+    transition: transform 0.2s ease;
+  }
+  .foldOpen .foldChevron {
+    transform: rotate(180deg);
+  }
 }
