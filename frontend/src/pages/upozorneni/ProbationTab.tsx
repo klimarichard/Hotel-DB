@@ -66,10 +66,10 @@ function ProbationTable({ alerts, actionLabel, onAction, muted }: ProbationTable
                   {employeeDisplayName({ firstName: alert.employeeFirstName, lastName: alert.employeeLastName })}
                 </Link>
               </td>
-              <td>{formatDateCZ(alert.probationStartDate)}</td>
-              <td>{formatDateCZ(alert.probationEndDate)}</td>
-              <td>{alert.probationPeriodRaw}</td>
-              <td><DaysBadge days={alert.daysUntilEnd} /></td>
+              <td data-label="Začátek">{formatDateCZ(alert.probationStartDate)}</td>
+              <td data-label="Konec zkušební">{formatDateCZ(alert.probationEndDate)}</td>
+              <td data-label="Délka">{alert.probationPeriodRaw}</td>
+              <td data-label="Zbývá"><DaysBadge days={alert.daysUntilEnd} /></td>
               {actionLabel && (
                 <td>
                   <button
