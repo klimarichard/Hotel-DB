@@ -404,7 +404,7 @@ export default function VacationPage() {
                   </select>
                 </div>
               )}
-              <div className={styles.formField}>
+              <div className={`${styles.formField} ${styles.dateField}`}>
                 <label className={styles.label}>Od</label>
                 <input
                   type="date"
@@ -413,7 +413,7 @@ export default function VacationPage() {
                   onChange={(e) => { setStartDate(e.target.value); setFormSuccess(false); }}
                 />
               </div>
-              <div className={styles.formField}>
+              <div className={`${styles.formField} ${styles.dateField}`}>
                 <label className={styles.label}>Do</label>
                 <input
                   type="date"
@@ -570,7 +570,7 @@ export default function VacationPage() {
           ) : approvedUpcoming.length === 0 ? (
             <div className={styles.empty}>Žádné schválené dovolené.</div>
           ) : (
-            <table className={styles.table}>
+            <table className={`${styles.table} ${styles.cardsOnMobile}`}>
               <thead>
                 <tr>
                   <th>Zaměstnanec</th>
@@ -581,9 +581,9 @@ export default function VacationPage() {
               <tbody>
                 {approvedUpcoming.map((v, i) => (
                   <tr key={`${v.employeeId}-${v.startDate}-${i}`}>
-                    <td>{employeeDisplayName(v)}</td>
-                    <td>{formatDateCZ(v.startDate)}</td>
-                    <td>{formatDateCZ(v.endDate)}</td>
+                    <td data-label="Zaměstnanec">{employeeDisplayName(v)}</td>
+                    <td data-label="Od">{formatDateCZ(v.startDate)}</td>
+                    <td data-label="Do">{formatDateCZ(v.endDate)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -629,14 +629,14 @@ export default function VacationPage() {
             <tr
               className={req.status === "approved" && !req.pendingEdit ? styles.rowDone : ""}
             >
-              <td>
+              <td data-label="Zaměstnanec">
                 {employeeDisplayName(req)}
               </td>
-              <td>{formatDatetimeCZ(req.requestedAt)}</td>
-              <td>{formatDateCZ(req.startDate)}</td>
-              <td>{formatDateCZ(req.endDate)}</td>
-              <td>{req.reason || "—"}</td>
-              <td>
+              <td data-label="Žádáno">{formatDatetimeCZ(req.requestedAt)}</td>
+              <td data-label="Od">{formatDateCZ(req.startDate)}</td>
+              <td data-label="Do">{formatDateCZ(req.endDate)}</td>
+              <td data-label="Poznámka">{req.reason || "—"}</td>
+              <td data-label="Stav">
                 <StatusBadge status={req.status} />
                 {req.pendingEdit && (
                   <span className={styles.badgeEdited}>Upraveno</span>
@@ -645,7 +645,7 @@ export default function VacationPage() {
                   <div className={styles.rejectionNote}>{req.rejectionReason}</div>
                 )}
               </td>
-              <td>
+              <td className={styles.actionCell}>
                 {canReview && req.status === "pending" && !req.pendingEdit && (
                   <div className={styles.actions}>
                     <button
@@ -754,7 +754,7 @@ export default function VacationPage() {
               ) : futureRequests.length === 0 ? (
                 <div className={styles.empty}>Žádné žádosti.</div>
               ) : (
-                <table className={styles.table}>
+                <table className={`${styles.table} ${styles.cardsOnMobile}`}>
                   {header}
                   <tbody>{futureRequests.map(renderRow)}</tbody>
                 </table>
@@ -776,7 +776,7 @@ export default function VacationPage() {
                   <span className={styles.collapsibleCount}>({pastRequests.length})</span>
                 </button>
                 {showPastRequests && (
-                  <table className={styles.table}>
+                  <table className={`${styles.table} ${styles.cardsOnMobile}`}>
                     {header}
                     <tbody>{pastRequests.map(renderRow)}</tbody>
                   </table>
