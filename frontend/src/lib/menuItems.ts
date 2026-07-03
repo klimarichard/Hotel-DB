@@ -15,6 +15,9 @@ export interface MenuItem {
   label: string;
   path: string;
   permission: Permission;
+  /** Hidden from the phone bottom-nav (still in the desktop sidebar). For pages
+   *  that aren't usable on a phone — e.g. the A4 contract-template editor. */
+  hideOnMobile?: boolean;
 }
 
 export const MENU_ITEMS: ReadonlyArray<MenuItem> = [
@@ -24,7 +27,7 @@ export const MENU_ITEMS: ReadonlyArray<MenuItem> = [
   { id: "zamestnanci", label: "Zaměstnanci",     path: "/zamestnanci", permission: "nav.employees.view" },
   { id: "mzdy",        label: "Mzdy",            path: "/mzdy",        permission: "nav.payroll.view" },
   { id: "upozorneni",  label: "Upozornění",      path: "/upozorneni",  permission: "nav.alerts.view" },
-  { id: "smlouvy",     label: "Šablony smluv",   path: "/smlouvy",     permission: "nav.contractTemplates.view" },
+  { id: "smlouvy",     label: "Šablony smluv",   path: "/smlouvy",     permission: "nav.contractTemplates.view", hideOnMobile: true },
   { id: "audit",       label: "Log změn",        path: "/audit",       permission: "nav.audit.view" },
   { id: "nastaveni",   label: "Nastavení",       path: "/nastaveni",   permission: "nav.settings.view" },
   { id: "mujProfil",   label: "Můj profil",      path: "/muj-profil",  permission: "nav.profile.view" },

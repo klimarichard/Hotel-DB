@@ -192,7 +192,7 @@ export default function Layout() {
           truth. Footer utilities are passed as values/handlers (not the dark
           sidebar JSX) so BottomNav can render them in theme-aware sheet styling. */}
       <BottomNav
-        items={items}
+        items={items.filter((m) => !m.hideOnMobile)}
         badgeFor={badgeFor}
         theme={theme}
         onToggleTheme={toggleTheme}
