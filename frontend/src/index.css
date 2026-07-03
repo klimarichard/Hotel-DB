@@ -59,6 +59,11 @@
   --color-success-text: #15803d;
   --color-success-border: #86efac;
 
+  /* Parental leave (violet badge — distinct from amber DPP / blue PPP) */
+  --color-parental-bg: #f3e8ff;
+  --color-parental-text: #7e22ce;
+  --color-parental-border: #d8b4fe;
+
   /* Inputs */
   --color-input-bg: #ffffff;
   --color-input-border: #d1d5db;
@@ -163,6 +168,10 @@
   --color-success-bg: #14532d;
   --color-success-text: #86efac;
   --color-success-border: #166534;
+
+  --color-parental-bg: #3b0764;
+  --color-parental-text: #d8b4fe;
+  --color-parental-border: #7e22ce;
 
   --color-primary: #60a5fa;
   --color-primary-dark: #93c5fd;

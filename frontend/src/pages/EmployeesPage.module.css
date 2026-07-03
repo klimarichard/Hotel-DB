@@ -223,9 +223,9 @@
   display: inline-block;
   margin-left: 0.5rem;
   padding: 0.1rem 0.45rem;
-  background: var(--color-warning-bg);
-  color: var(--color-warning-text);
-  border: 1px solid var(--color-warning-border, var(--color-border-strong));
+  background: var(--color-parental-bg);
+  color: var(--color-parental-text);
+  border: 1px solid var(--color-parental-border, var(--color-border-strong));
   border-radius: 9999px;
   font-size: 0.7rem;
   font-weight: 600;
