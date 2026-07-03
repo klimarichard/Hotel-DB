@@ -467,6 +467,17 @@ On phones the Shift Planner (`ShiftPlannerPage.tsx` + `ShiftGrid`) maximizes gri
 
 This pass prioritized **employee-facing screens**: Přehled, Můj profil, Dovolená (own requests), viewing shifts (not editing the plan grid), Upozornění (read view), and Login. Admin-heavy pages (ShiftGrid editor, Payroll, full Employees table, Settings sub-panels) are "works but may scroll" and are targeted for future refinement.
 
+### Privileged-page pass (v3.8.0)
+
+The admin/manager pages left as "works but may scroll" above were made phone-native. All changes are **phone-only** — gated to the canonical `@media` breakpoint or an `isPhone` `window.matchMedia` check — so desktop layout is untouched. Patterns used:
+
+- **Foldable-accordion tables** — a variant of the card pattern for dense tables where a flat card would be too tall. The table gets a `foldTable` class; each row collapses to its **name cell (the header)**, and tapping it reveals the other columns as labelled rows. A per-row open-state `Set` in the component toggles a `foldOpen` class on the `<tr>`; a tap-guard (`closest("input,button,select,a")`) lets inner controls work without folding. Used by Settings → Uživatelé / Pracovní pozice / Vzdělání (`SettingsPage`) and the **Payroll** grid (`PayrollPage`, where the 11 metric columns are labelled by CSS `nth-child` since the columns are fixed-order). Specificity note: the hide rule must out-specify the generic `.table td { display:block }` (use `.foldTable tr:not(.foldOpen) .numCell`, not a bare class) or collapsed cells stay visible.
+- **Card conversion (`data-label`/`::before`)** extended to the Upozornění review queues (`AlertsPage` + the six `upozorneni/*` tabs, shared stylesheet), the Dovolená admin tables ("Všechny žádosti", "Schválené dovolené"), and the Směny review panels (`ShiftOverridePanel`, `ShiftChangeRequestPanel`).
+- **`EmployeesPage`** collapses to a **names-only list** (each name links to the detail); the detail page hero stacks one item per line and its field grids collapse.
+- **HR přehled tiles** (`HeadcountStats`) drop from `minmax(420px,1fr)` to a single shrinkable column so they fit the bordered box.
+- **Contract Templates** (`ContractTemplatesPage`) is not phone-viable (210 mm A4 canvas + TipTap), so an `isPhone` early-return shows a "use a larger screen" notice, and its menu entry is **hidden from the phone bottom-nav** via a new `hideOnMobile` flag on the `menuItems.ts` registry (filtered out of the `BottomNav` items in `Layout.tsx`; the desktop sidebar still shows it).
+- **Bottom-nav zoom pinning** — `BottomNav.tsx` tracks `window.visualViewport` and translates + counter-scales `.bar` so it stays pinned to the visual viewport during pinch/double-tap zoom (guarded to only engage while `scale > 1`, leaving keyboard behaviour unchanged). ⚠️ Known gap: **does not work on iOS Safari** (visualViewport transform behaves differently there) — deferred to a future update.
+
 ---
 
 ## UI tweaks (2026-06-10)
