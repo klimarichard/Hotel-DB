@@ -215,24 +215,6 @@
   white-space: nowrap;
 }
 
-/* Freeze the employee-name column while the wide grid scrolls horizontally (the
-   12-metric table always overflows a phone), so you never lose track of whose
-   row you're reading. Opaque background hides the numeric cells sliding beneath;
-   ppp/dpp rows keep their tint via the `background: inherit` rule below. */
-.nameHeader,
-.nameCell {
-  position: sticky;
-  left: 0;
-  border-right: 1px solid var(--color-border);
-}
-.nameHeader {
-  z-index: 2;
-}
-.nameCell {
-  z-index: 1;
-  background: var(--color-surface);
-}
-
 .navicHeaderInner {
   display: inline-flex;
   align-items: center;
@@ -787,12 +769,6 @@
     flex-wrap: wrap;
   }
 
-  /* Neutralise the desktop sticky name column (no horizontal scroll here). */
-  .nameHeader,
-  .nameCell {
-    position: static;
-    border-right: none;
-  }
   /* The wrapper stops being one card; each row becomes its own card. */
   .tableWrapper {
     background: none;
@@ -829,8 +805,9 @@
     background: var(--color-surface);
   }
 
-  /* Name cell = tappable header. */
-  .nameCell {
+  /* Name cell = tappable header. The .foldTable prefix lifts specificity above
+     the generic `.table td { display: block }` rule so the flex layout wins. */
+  .foldTable .nameCell {
     display: flex;
     align-items: center;
     gap: 0.5rem;
@@ -851,10 +828,14 @@
     transform: rotate(180deg);
   }
 
-  /* Metric cells hidden until the row is open, then one labelled value per line. */
+  /* Metric cells hidden until the row is open, then one labelled value per line.
+     The hide rule needs `.foldTable tr:not(.foldOpen)` specificity to beat the
+     generic `.table td { display: block }` (a bare `.numCell` would lose). */
   .numCell {
-    display: none;
     background: none;
+  }
+  .foldTable tr:not(.foldOpen) .numCell {
+    display: none;
   }
   .foldOpen .numCell {
     display: flex;
