@@ -33,6 +33,7 @@ import { createOrUpdatePayrollPeriod } from "./services/payrollCalculator";
 import { sweepExpiredMultisport } from "./services/multisportSweep";
 import { updateDocumentAlerts, EXPIRY_FIELDS } from "./routes/employees";
 import { refreshAllProbationAlerts } from "./services/probationAlerts";
+import { runScheduledDeactivations } from "./services/userDeactivation";
 
 // All functions run in europe-west3 to co-locate with the Firestore
 // database — avoids cross-region latency on every read/write.
@@ -202,6 +203,21 @@ app.post(
   }
 );
 
+app.post(
+  "/users/trigger-scheduled-deactivations",
+  requireAuth,
+  requirePermission("system.triggers"),
+  async (req: AuthRequest, res) => {
+    const result = await runScheduledDeactivations();
+    await writeAudit(ctxFromReq(req), {
+      action: "manual-trigger",
+      collection: "users",
+      extra: { trigger: "runScheduledDeactivations", result },
+    });
+    res.json(result);
+  }
+);
+
 // Catch-all error handler — turns a thrown error (or an explicit next(err))
 // into a JSON 500 instead of letting the request hang with no response. Async
 // handlers in Express 4 must still try/catch their own rejections to reach
@@ -243,6 +259,17 @@ export const api = functions
 export const checkPlanDeadlines = onSchedule("every 5 minutes", async () => {
   await clock.refresh(true);
   await transitionPlanDeadlines();
+});
+
+// ─── Scheduled function: fire due user auto-deactivations ────────────────────
+// Runs every 5 minutes, so a scheduled deactivation takes effect within ~5 min
+// of the chosen time. In the emulator, trigger manually via:
+//   curl -X POST http://127.0.0.1:5002/.../api/users/trigger-scheduled-deactivations
+export const checkScheduledDeactivations = onSchedule("every 5 minutes", async () => {
+  const result = await runScheduledDeactivations();
+  if (result.deactivated) {
+    console.log(`[checkScheduledDeactivations] deactivated ${result.deactivated} of ${result.scanned} due`);
+  }
 });
 
 // ─── Daily: refresh document expiry alerts for all employees ─────────────────
