@@ -167,7 +167,10 @@ When adding a new UI section, check whether it is a subset of something a higher
 |---|---|---|
 | `GET/POST/PATCH/DELETE /api/role-types` | Manage user types | `userTypes.manage` (list also allowed for `users.setType`); `DELETE` blocks the system type and any in-use type |
 | `PATCH /api/auth/users/:uid/permissions` | Assign a user's type + grants/revokes | `users.setType` (type only) **or** `users.permissions.manage` (type + grants/revokes); writing `extraPermissions`/`revokedPermissions` requires `users.permissions.manage` specifically (403 otherwise); `system.admin` is stripped from grants; writes merged claims + mirrors to `users/{uid}`; enforces own-admin / last-admin lockout guards; **calls `revokeRefreshTokens`** after writing (v3.2.1) |
-| `PATCH /api/auth/deactivate-user/:uid` | Disable a user account | `users.manage`; sets `disabled: true` in Firebase Auth + `active: false` in Firestore; **calls `revokeRefreshTokens`** so the disabled account can't silently refresh into a new session (v3.2.1) |
+| `PATCH /api/auth/deactivate-user/:uid` | Disable a user account immediately | `users.manage`; runs the shared `deactivateUserCore` (see below): `disabled: true` in Firebase Auth + `active: false` in Firestore, **calls `revokeRefreshTokens`** so the disabled account can't silently refresh into a new session (v3.2.1), and clears any pending `scheduledDeactivationAt`/`By` (v3.7.0) |
+| `PATCH /api/auth/schedule-deactivation/:uid` | Schedule an automatic deactivation for a future instant (v3.7.0) | `users.manage`; body `{ at: ISO-8601 }`; rejects a non-future time (compared to `clock.nowMs()`) or an already-inactive account with 400; stores `scheduledDeactivationAt` (Timestamp) + `scheduledDeactivationBy` (actor uid). The account stays fully active until the sweep fires |
+| `PATCH /api/auth/cancel-scheduled-deactivation/:uid` | Clear a pending scheduled deactivation (v3.7.0) | `users.manage`; nulls `scheduledDeactivationAt`/`By` |
+| `POST /api/users/trigger-scheduled-deactivations` | Manually run the scheduled-deactivation sweep (v3.7.0) | `system.triggers`; mirrors the `checkScheduledDeactivations` job, writes a `manual-trigger` audit entry. Not wired into the Settings → Úlohy UI (backend/testing only) |
 | `POST /api/auth/create-user` | Create a new user account | `users.manage`; if `employeeId` is supplied in the body, also requires `users.linkEmployee` (or `system.admin`) — a `users.manage` holder without `users.linkEmployee` receives 403 when they include `employeeId` (v3.2.1) |
 | `PATCH /api/auth/users/:uid/employee` | Link or unlink an employee record to a user | `users.linkEmployee`; body `{ employeeId: string \| null }` |
 | `GET /api/auth/users` | List all users | `users.view`; each entry includes `roleTypeName` and `employeeName` (see below) |
@@ -181,12 +184,25 @@ The user-list endpoint returns each user with two server-resolved display fields
 
 - **`roleTypeName`** — the Czech display name of the user's type, resolved from `roleTypes/{id}.name`. Falls back to the raw type id if the doc is missing.
 - **`employeeName`** — the linked employee's surname-first name (`${lastName} ${firstName}`), resolved via `admin.firestore().getAll(...)` regardless of the employee's `status` and regardless of whether the viewer has `employees.view.*` access.
+- **`scheduledDeactivationAt`** (v3.7.0) — the pending auto-deactivation instant emitted as a clean **ISO string** (or `null`), overriding the raw Firestore Timestamp so the frontend gets a directly-parseable value.
 
 Both fields are resolved server-side so the Settings → Uživatelé tab shows readable type and linked-employee labels for any viewer holding only `users.view`, even if they lack access to the `roleTypes` collection or the employees list.
 
 **Type column in Settings → Uživatelé:** if the viewer holds `users.setType` or `users.permissions.manage`, the type column renders as an editable `<select>`. Otherwise it renders as a static `<span>` showing `roleTypeName` (with a fallback to the resolved name from the locally-loaded types list, then the raw id). No editability bleeds through to users who lack the relevant permissions.
 
 **Per-row action buttons in Settings → Uživatelé (2026-06-17):** each action is gated by its own permission so a `users.view`-only viewer sees a read-only row — **Upravit** (edit name + e-mail), **Deaktivovat/Aktivovat**, and **Resetovat heslo** require `users.manage`; **Oprávnění** (type + per-user permissions) requires `users.setType` or `users.permissions.manage`; **Propojit/Zrušit** (link employee) requires `users.linkEmployee`. The backend already enforces all of these — this is defense-in-depth that stops showing affordances that would otherwise 403 (notably "Resetovat heslo", which fires a client-side `sendPasswordResetEmail` rather than a gated endpoint).
+
+## Scheduled user deactivation (v3.7.0)
+
+Deactivation can be either **immediate** or **scheduled for a future instant**. Both routes converge on one shared core so they can never diverge.
+
+- **`deactivateUserCore(uid, ctx)`** in `functions/src/services/userDeactivation.ts` — disables the Auth account, `revokeRefreshTokens`, sets `active: false`, and clears `scheduledDeactivationAt`/`By`, then audit-logs the `active` flip under the supplied `AuditContext`. Called by `PATCH /deactivate-user/:uid` (with `ctxFromReq(req)`) and by the sweep (with `SYSTEM_CONTEXT`, so the change log attributes it to **"Systém"**).
+- **`runScheduledDeactivations()`** — queries `users` where `scheduledDeactivationAt <= clock.now()` (a **single-field range** → no composite index needed; `active === true` is re-checked in memory so a manually-disabled account with a stale timestamp is skipped, and would otherwise need a compound index) and runs the core on each. Comparing against `clock.now()` makes the sweep honour the non-prod **test clock**.
+- **`checkScheduledDeactivations`** in `index.ts` — `onSchedule("every 5 minutes")` wrapper, so a scheduled deactivation fires within ~5 min of its time. Mirrored by the `system.triggers`-gated manual trigger for emulator/staging testing.
+
+**Auth-token timing (unchanged, v3.7.0):** deactivation — immediate or scheduled — does **not** kill the user's *current* ID token instantly. `middleware/auth.ts` calls `verifyIdToken(idToken)` **without** `checkRevoked` (a deliberate per-request-latency trade-off), so the existing ID token stays valid until it expires (≤1 h); `revokeRefreshTokens` + `disabled: true` block any refresh or new login in the meantime.
+
+**Firestore fields on `users/{uid}`** — `scheduledDeactivationAt: Timestamp | null` (the pending instant) and `scheduledDeactivationBy: string | null` (the scheduling admin's uid, forensic). Both default absent/null and are cleared by deactivate, reactivate, and cancel.
 
 ## Per-type menu order
 
