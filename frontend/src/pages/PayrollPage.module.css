@@ -215,6 +215,24 @@
   white-space: nowrap;
 }
 
+/* Freeze the employee-name column while the wide grid scrolls horizontally (the
+   12-metric table always overflows a phone), so you never lose track of whose
+   row you're reading. Opaque background hides the numeric cells sliding beneath;
+   ppp/dpp rows keep their tint via the `background: inherit` rule below. */
+.nameHeader,
+.nameCell {
+  position: sticky;
+  left: 0;
+  border-right: 1px solid var(--color-border);
+}
+.nameHeader {
+  z-index: 2;
+}
+.nameCell {
+  z-index: 1;
+  background: var(--color-surface);
+}
+
 .navicHeaderInner {
   display: inline-flex;
   align-items: center;
