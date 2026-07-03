@@ -5,6 +5,14 @@
   align-items: start;
 }
 
+/* Phone: stack the type sidebar above the editor instead of a fixed 240px split
+   (see index.css for the breakpoint convention). */
+@media (max-width: 559.98px), (orientation: landscape) and (max-height: 480px) {
+  .wrap {
+    grid-template-columns: 1fr;
+  }
+}
+
 .loading {
   padding: 2rem;
   color: var(--color-text-muted);

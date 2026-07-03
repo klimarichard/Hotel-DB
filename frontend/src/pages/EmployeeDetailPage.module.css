@@ -662,3 +662,33 @@
   border-color: var(--color-primary);
   color: var(--color-primary);
 }
+
+/* ── Phone (see index.css for the breakpoint convention) ───────────────────── */
+@media (max-width: 559.98px), (orientation: landscape) and (max-height: 480px) {
+  /* Tabs scroll horizontally instead of squishing/wrapping. */
+  .tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+  .tabBtn,
+  .tabActive {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+  /* Field pairs and modal field pairs stack single-column. */
+  .fields,
+  .modalGrid {
+    grid-template-columns: 1fr;
+  }
+  /* The floating save banner spans the width with gutters, wraps its text, and
+     sits above the fixed bottom tab bar instead of overlapping it. */
+  .postSaveBanner {
+    left: 1rem;
+    right: 1rem;
+    transform: none;
+    bottom: calc(var(--bottom-nav-height, 56px) + 1rem);
+    white-space: normal;
+  }
+}

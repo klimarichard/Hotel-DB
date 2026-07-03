@@ -1086,6 +1086,7 @@ export default function SettingsPage() {
           {loading && <p className={styles.state}>Načítám…</p>}
           {error && <p className={styles.errorState}>{error}</p>}
           {!loading && !error && (
+            <div className={styles.tableScroll}>
             <table className={styles.table}>
               <thead>
                 <tr>
@@ -1230,6 +1231,7 @@ export default function SettingsPage() {
                 })}
               </tbody>
             </table>
+            </div>
           )}
         </>
       )}
@@ -1348,6 +1350,7 @@ export default function SettingsPage() {
       {settingsTab === "departments" && can("settings.departments.manage") && (
         <>
           {depError && <p className={styles.errorState}>{depError}</p>}
+          <div className={styles.tableScroll}>
           <table className={styles.table}>
             <thead>
               <tr>
@@ -1393,6 +1396,7 @@ export default function SettingsPage() {
               ))}
             </tbody>
           </table>
+          </div>
           {showDepCreate && (
             <div className={styles.modal}>
               <div className={styles.modalBox}>
@@ -1553,6 +1557,7 @@ export default function SettingsPage() {
               </div>
             </div>
           )}
+          <div className={styles.tableScroll}>
           <table className={styles.table}>
             <thead>
               <tr>
@@ -1594,12 +1599,14 @@ export default function SettingsPage() {
               })}
             </tbody>
           </table>
+          </div>
         </>
       )}
 
       {settingsTab === "education" && can("settings.educationLevels.manage") && (
         <>
           {eduError && <p className={styles.errorState}>{eduError}</p>}
+          <div className={styles.tableScroll}>
           <table className={styles.table}>
             <thead>
               <tr>
@@ -1660,6 +1667,7 @@ export default function SettingsPage() {
               ))}
             </tbody>
           </table>
+          </div>
           {showEduCreate && (
             <div className={styles.modal}>
               <div className={styles.modalBox}>
