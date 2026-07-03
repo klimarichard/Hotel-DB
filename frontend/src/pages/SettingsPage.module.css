@@ -91,6 +91,15 @@
   margin-top: 0.5rem;
 }
 
+/* Bounds a wide table to the content column so it scrolls horizontally inside
+   this container on a phone instead of widening the page (which would break the
+   fixed bottom tab bar). No-op on desktop (content fits → no scrollbar). */
+.tableScroll {
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 /* Table */
 .table {
   width: 100%;
@@ -317,6 +326,17 @@
   .tabActive {
     flex: 0 0 auto;
     white-space: nowrap;
+  }
+  /* Keep columns at natural width inside the .tableScroll container so wide
+     tables (Uživatelé, Pracovní pozice) scroll sideways instead of wrap-crushing
+     into an unreadable stack. */
+  .tableScroll .table th,
+  .tableScroll .table td {
+    white-space: nowrap;
+  }
+  /* Company detail fields stack single-column on a phone. */
+  .companyGrid {
+    grid-template-columns: 1fr;
   }
 }
 
