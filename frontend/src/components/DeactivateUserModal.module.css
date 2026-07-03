@@ -1,0 +1,124 @@
+.modal {
+  position: fixed;
+  inset: 0;
+  background: var(--overlay-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.modalBox {
+  background: var(--color-surface);
+  border-radius: 10px;
+  padding: 2rem;
+  width: min(440px, 100vw - 2rem); /* keep a gutter on phones */
+  box-shadow: 0 4px 24px var(--shadow-md);
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.modalTitle {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--color-text-heading);
+}
+
+.subject {
+  font-size: 0.9rem;
+  color: var(--color-text);
+  margin: 0.25rem 0 1.25rem;
+}
+
+.subjectEmail {
+  color: var(--color-text-muted);
+}
+
+.options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.option:hover {
+  border-color: var(--color-border-strong, var(--color-input-focus));
+}
+
+.option input[type="radio"] {
+  margin-top: 0.15rem;
+}
+
+.optionText {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.optionHint {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+}
+
+.datetimeRow {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  flex: 1;
+}
+
+.label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.input {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--color-input-border);
+  border-radius: 6px;
+  font-size: 0.875rem;
+  background: var(--color-input-bg);
+  color: var(--color-text);
+  outline: none;
+}
+
+.input:focus {
+  border-color: var(--color-input-focus);
+}
+
+.formError {
+  font-size: 0.875rem;
+  color: var(--color-danger-text-strong);
+  background: var(--color-danger-bg);
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  margin-top: 1rem;
+}
+
+.formActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}

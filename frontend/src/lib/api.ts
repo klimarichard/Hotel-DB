@@ -112,6 +112,8 @@ export interface UserProfile {
   /** Per-user permission grants/revokes on top of the type. */
   extraPermissions?: string[];
   revokedPermissions?: string[];
+  /** ISO instant of a pending scheduled auto-deactivation, or null if none. */
+  scheduledDeactivationAt?: string | null;
 }
 
 export interface RoleType {
@@ -146,6 +148,15 @@ export const authApi = {
     api.patch<{ success: boolean }>(`/auth/users/${uid}`, body),
   deactivateUser: (uid: string) =>
     api.patch<{ success: boolean }>(`/auth/deactivate-user/${uid}`, {}),
+  /** Schedule an automatic deactivation for a future instant (ISO string). */
+  scheduleDeactivation: (uid: string, at: string) =>
+    api.patch<{ success: boolean; scheduledDeactivationAt: string }>(
+      `/auth/schedule-deactivation/${uid}`,
+      { at }
+    ),
+  /** Clear a pending scheduled deactivation. */
+  cancelScheduledDeactivation: (uid: string) =>
+    api.patch<{ success: boolean }>(`/auth/cancel-scheduled-deactivation/${uid}`, {}),
   reactivateUser: (uid: string) =>
     api.patch<{ success: boolean }>(`/auth/reactivate-user/${uid}`, {}),
   linkEmployee: (uid: string, employeeId: string | null) =>

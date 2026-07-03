@@ -186,6 +186,17 @@
   font-weight: 500;
 }
 
+/* Pending scheduled-deactivation note under the Stav badge. */
+.scheduleNote {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.35rem;
+  font-size: 0.72rem;
+  color: var(--color-warning-text);
+}
+
 .rowActions {
   display: flex;
   gap: 0.5rem;

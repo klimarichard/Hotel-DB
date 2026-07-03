@@ -7,6 +7,7 @@ import { authApi, roleTypesApi, UserProfile, RoleType, api, ApiError } from "@/l
 import { employeeSurnameFirst } from "@/lib/employeeName";
 import Button from "@/components/Button";
 import ConfirmModal from "@/components/ConfirmModal";
+import DeactivateUserModal from "@/components/DeactivateUserModal";
 import MenuOrderTab from "./settings/MenuOrderTab";
 import UserTypesTab from "./settings/UserTypesTab";
 import JobsTab from "./settings/JobsTab";
@@ -28,6 +29,19 @@ const EyeOffIcon = () => (
     <line x1="1" y1="1" x2="23" y2="23"/>
   </svg>
 );
+
+// Render a scheduled-deactivation instant (a full ISO string) in Prague-local
+// cs formatting, e.g. "5. 7. 2026 18:00". Safe with new Date() since the value
+// is a complete ISO timestamp, not a bare YYYY-MM-DD (see CLAUDE.md date rule).
+function formatScheduledAt(iso: string): string {
+  return new Date(iso).toLocaleString("cs-CZ", {
+    day: "numeric",
+    month: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
 
 function SalaryCell({ value, suffix = "Kč" }: { value: number | null | undefined; suffix?: string }) {
   const [visible, setVisible] = useState(false);
@@ -151,6 +165,10 @@ export default function SettingsPage() {
 
   // Per-row activation toggle state
   const [togglingUid, setTogglingUid] = useState<string | null>(null);
+  // Deactivation modal (immediate or scheduled) for the user it targets.
+  const [deactivateTarget, setDeactivateTarget] = useState<UserProfile | null>(null);
+  const [deactivateSaving, setDeactivateSaving] = useState(false);
+  const [deactivateError, setDeactivateError] = useState<string | null>(null);
 
   // Per-row password reset state
   const [resetingUid, setResetingUid] = useState<string | null>(null);
@@ -794,19 +812,65 @@ export default function SettingsPage() {
     }
   }
 
-  async function handleToggleActive(user: UserProfile) {
+  // Reactivate an inactive account (the "Aktivovat" button). Deactivation goes
+  // through the DeactivateUserModal instead (immediate or scheduled).
+  async function handleReactivate(user: UserProfile) {
     setTogglingUid(user.uid);
     try {
-      if (user.active) {
-        await authApi.deactivateUser(user.uid);
-      } else {
-        await authApi.reactivateUser(user.uid);
-      }
+      await authApi.reactivateUser(user.uid);
       setUsers((prev) =>
-        prev.map((u) => (u.uid === user.uid ? { ...u, active: !u.active } : u))
+        prev.map((u) =>
+          u.uid === user.uid ? { ...u, active: true, scheduledDeactivationAt: null } : u
+        )
       );
     } catch {
       // Silently fail — user sees no state change, can retry
+    } finally {
+      setTogglingUid(null);
+    }
+  }
+
+  // Confirm the deactivation modal: either deactivate now, or store a scheduled
+  // instant. Server-side errors (e.g. a past time) surface inside the modal.
+  async function handleConfirmDeactivate(opts: { mode: "now" | "schedule"; at?: string }) {
+    if (!deactivateTarget) return;
+    const uid = deactivateTarget.uid;
+    setDeactivateSaving(true);
+    setDeactivateError(null);
+    try {
+      if (opts.mode === "now") {
+        await authApi.deactivateUser(uid);
+        setUsers((prev) =>
+          prev.map((u) =>
+            u.uid === uid ? { ...u, active: false, scheduledDeactivationAt: null } : u
+          )
+        );
+      } else {
+        const res = await authApi.scheduleDeactivation(uid, opts.at!);
+        setUsers((prev) =>
+          prev.map((u) =>
+            u.uid === uid ? { ...u, scheduledDeactivationAt: res.scheduledDeactivationAt } : u
+          )
+        );
+      }
+      setDeactivateTarget(null);
+    } catch (e) {
+      setDeactivateError((e as Error)?.message || "Akci se nepodařilo dokončit.");
+    } finally {
+      setDeactivateSaving(false);
+    }
+  }
+
+  // Clear a pending scheduled deactivation (the "Zrušit naplánování" button).
+  async function handleCancelSchedule(user: UserProfile) {
+    setTogglingUid(user.uid);
+    try {
+      await authApi.cancelScheduledDeactivation(user.uid);
+      setUsers((prev) =>
+        prev.map((u) => (u.uid === user.uid ? { ...u, scheduledDeactivationAt: null } : u))
+      );
+    } catch {
+      // Silently fail — admin can retry
     } finally {
       setTogglingUid(null);
     }
@@ -1091,6 +1155,23 @@ export default function SettingsPage() {
                         <span className={u.active ? styles.badgeActive : styles.badgeInactive}>
                           {u.active ? "Aktivní" : "Deaktivován"}
                         </span>
+                        {u.active && u.scheduledDeactivationAt && (
+                          <div className={styles.scheduleNote}>
+                            <span title="Naplánovaná automatická deaktivace">
+                              ⏱ Deaktivace {formatScheduledAt(u.scheduledDeactivationAt)}
+                            </span>
+                            {can("users.manage") && (
+                              <button
+                                className={styles.linkBtn}
+                                disabled={togglingUid === u.uid}
+                                onClick={() => handleCancelSchedule(u)}
+                                title="Zrušit naplánovanou deaktivaci"
+                              >
+                                Zrušit naplánování
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </td>
                       <td>
                         {can("users.manage") && (
@@ -1123,7 +1204,7 @@ export default function SettingsPage() {
                             <button
                               className={u.active ? styles.deactivateBtn : styles.activateBtn}
                               disabled={togglingUid === u.uid}
-                              onClick={() => handleToggleActive(u)}
+                              onClick={() => (u.active ? setDeactivateTarget(u) : handleReactivate(u))}
                             >
                               {togglingUid === u.uid ? "…" : u.active ? "Deaktivovat" : "Aktivovat"}
                             </button>
@@ -2066,6 +2147,19 @@ export default function SettingsPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {deactivateTarget && (
+        <DeactivateUserModal
+          user={deactivateTarget}
+          saving={deactivateSaving}
+          error={deactivateError}
+          onCancel={() => {
+            setDeactivateTarget(null);
+            setDeactivateError(null);
+          }}
+          onConfirm={handleConfirmDeactivate}
+        />
       )}
 
       {resetLinkInfo && (
