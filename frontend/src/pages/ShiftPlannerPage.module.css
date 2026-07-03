@@ -318,4 +318,17 @@
     opacity: 0;
     pointer-events: none;
   }
+  /* Condense the month nav so it fits ~360px: collapse the 1fr spacers to a
+     single centered column, shrink the month label, tighten the nav gap. */
+  .header {
+    grid-template-columns: 1fr;
+    justify-items: center;
+  }
+  .monthLabel {
+    font-size: 1.15rem;
+    min-width: 0;
+  }
+  .monthNav {
+    gap: 0.4rem;
+  }
 }
