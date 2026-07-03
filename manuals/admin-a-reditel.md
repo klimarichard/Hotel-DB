@@ -425,7 +425,7 @@ Pokud vás zajímají pouze změny týkající se jednoho zaměstnance, nemusít
 - **Vzdělání** — stupně vzdělání pro výběr u zaměstnance.
 - **Mzdy** — sazba stravenky, maximální měsíční odměna DPP, **minimální mzda** a **základní cena Multisport** (výchozí 470 Kč/měsíc). U jednotlivých polí se zobrazuje jen vysvětlující text, nikoli již dřívější údaj *„Výchozí hodnota: …"*. Při uložení změny **minimální mzdy** systém automaticky zkontroluje všechny aktuálně platné smlouvy a zobrazí seznam zaměstnanců, jejichž mzda novou hodnotou nesplňuje — uložit přesto lze a dotčené smlouvy pak aktualizujete individuálně.
 - **Menu** — pořadí položek v levém menu pro jednotlivé **typy uživatelů**.
-- **Uživatelé** — vytváření a správa uživatelských účtů: vytvoření (i bez hesla s odkazem pro reset), úprava jména/e-mailu, volba **typu uživatele** (sloupec *Typ*), **úprava oprávnění** (viz níže), deaktivace a reaktivace, reset hesla, propojení účtu se zaměstnancem. Neaktivní účty jsou dole; při vytvoření účtu se stejným e-mailem jako neaktivní účet se nabídne jeho reaktivace.
+- **Uživatelé** — vytváření a správa uživatelských účtů: vytvoření (i bez hesla s odkazem pro reset), úprava jména/e-mailu, volba **typu uživatele** (sloupec *Typ*), **úprava oprávnění** (viz níže), **deaktivace — ihned nebo naplánovaná na datum a čas** (viz níže) — a reaktivace, reset hesla, propojení účtu se zaměstnancem. Neaktivní účty jsou dole; při vytvoření účtu se stejným e-mailem jako neaktivní účet se nabídne jeho reaktivace.
 - **Uživatelské typy** — správa typů uživatelů a jejich oprávnění (viz níže); záložka je hned za **Uživatelé**.
 - **Úlohy** — ruční spuštění automatických denních úloh (viz níže).
 
@@ -457,6 +457,17 @@ Pojistky: **nemůžete si odebrat vlastní administrátorská práva** a **posle
 > **Poznámka:** sloupec **„Typ"** rychle změní typ uživatele přímo v seznamu; tlačítko **„Oprávnění"** umožní navíc doladit jednotlivá práva (typ + individuální výjimky). Skutečná oprávnění uživatele určuje právě tato kombinace.
 
 > 📝 **Zobrazení v seznamu uživatelů:** Jméno propojeného zaměstnance se zobrazuje u každého uživatele vždy. Sloupec *Typ* zobrazuje buď rozbalovací seznam pro změnu typu (pokud máte oprávnění typ měnit), nebo prostý textový popisek aktuálního typu (pokud toto oprávnění nemáte). **Propojení účtu se zaměstnancem** (tlačítko v řádku uživatele) je nově podmíněno samostatným oprávněním **„Propojit zaměstnance s účtem"** — bez tohoto oprávnění tlačítko pro propojení/odpojení nevidíte.
+
+### Deaktivace uživatele — ihned nebo naplánovaná
+
+Kliknutím na **„Deaktivovat"** u aktivního účtu se otevře dialog s volbou:
+
+- **Deaktivovat ihned** — účet se okamžitě zablokuje. Uživatel se už znovu nepřihlásí a jeho probíhající přihlášení vyprší nejpozději do jedné hodiny (nelze ho obnovit).
+- **Naplánovat deaktivaci** — zvolíte **datum a čas** v budoucnosti. Účet zůstane až do té chvíle plně funkční a poté ho systém automaticky deaktivuje sám (proběhne zpravidla do 5 minut po zvoleném čase).
+
+U účtu s naplánovanou deaktivací se ve sloupci **Stav** zobrazí poznámka **„⏱ Deaktivace <datum a čas>"** spolu s tlačítkem **„Zrušit naplánování"**, kterým plán kdykoli před jeho spuštěním zrušíte. Automatickou deaktivaci provede **Systém** a zaznamená ji do **Logu změn**. Reaktivace i okamžitá deaktivace případný naplánovaný termín rovněž zruší.
+
+> 📷 *(Místo pro snímek obrazovky: Dialog deaktivace uživatele)*
 
 ### Úlohy
 
