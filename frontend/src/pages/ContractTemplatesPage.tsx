@@ -529,6 +529,20 @@ export default function ContractTemplatesPage() {
   // selection changes. TipTap React v3 doesn't subscribe to these by default.
   const [, forceRerender] = useReducer((x: number) => x + 1, 0);
 
+  // The 3-column workspace + 210mm A4 canvas + TipTap toolbars aren't usable on
+  // a phone, so below the phone breakpoint we show a "use a larger screen" notice
+  // instead of the editor. Mirrors the matchMedia hook in ShiftPlannerPage.
+  const [isPhone, setIsPhone] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia(
+      "(max-width: 559.98px), (orientation: landscape) and (max-height: 480px)"
+    );
+    const update = () => setIsPhone(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
   // Unsaved-changes tracking. The loader sets `isLoadingRef` while it
   // pushes content into the editor so the resulting `update` events don't
   // get counted as user edits.
@@ -888,6 +902,20 @@ export default function ContractTemplatesPage() {
     };
     reader.readAsDataURL(file);
     e.target.value = "";
+  }
+
+  if (isPhone) {
+    return (
+      <div className={styles.phoneNotice}>
+        <div className={styles.phoneNoticeIcon} aria-hidden="true">🖥️</div>
+        <h1 className={styles.phoneNoticeTitle}>Šablony smluv</h1>
+        <p className={styles.phoneNoticeText}>
+          Editor šablon pracuje s celou stránkou formátu A4 a širokým panelem nástrojů,
+          které se na telefon nevejdou. Otevřete jej prosím na počítači nebo na tabletu
+          na šířku.
+        </p>
+      </div>
+    );
   }
 
   return (
