@@ -561,3 +561,35 @@
   font-size: inherit;
   font-family: inherit;
 }
+
+/* Phone-only "use a larger screen" notice shown instead of the editor (rendered
+   by the component's isPhone early-return, so these never appear on desktop). */
+.phoneNotice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.75rem;
+  max-width: 30rem;
+  margin: 2rem auto;
+  padding: 2.5rem 1.5rem;
+}
+
+.phoneNoticeIcon {
+  font-size: 2.5rem;
+  line-height: 1;
+}
+
+.phoneNoticeTitle {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--color-text-heading);
+  margin: 0;
+}
+
+.phoneNoticeText {
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--color-text-muted);
+  margin: 0;
+}
