@@ -1,6 +1,6 @@
 import { Router } from "express";
 import * as admin from "firebase-admin";
-import { FieldValue } from "firebase-admin/firestore";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { requireAuth, AuthRequest } from "../middleware/auth";
 import {
   requirePermission,
@@ -9,6 +9,8 @@ import {
   ROLE_TYPES_COLLECTION,
 } from "../auth/permissions";
 import { ctxFromReq, logCreate, logUpdate } from "../services/auditLog";
+import * as clock from "../services/clock";
+import { deactivateUserCore } from "../services/userDeactivation";
 
 export const authRouter = Router();
 
@@ -322,30 +324,88 @@ authRouter.post(
 
 /**
  * PATCH /api/auth/deactivate-user/:uid
- * Admin-only: disable a user account.
+ * Admin-only: disable a user account immediately.
  */
 authRouter.patch(
   "/deactivate-user/:uid",
   requireAuth,
   requirePermission("users.manage"),
   async (req: AuthRequest, res) => {
+    await deactivateUserCore(req.params.uid, ctxFromReq(req));
+    res.json({ success: true });
+  }
+);
+
+/**
+ * PATCH /api/auth/schedule-deactivation/:uid
+ * Admin-only: schedule an automatic deactivation for a future instant. The
+ * account stays fully active until the runScheduledDeactivations job fires
+ * (within ~5 min of the chosen time). Body: { at: ISO-8601 string }.
+ */
+authRouter.patch(
+  "/schedule-deactivation/:uid",
+  requireAuth,
+  requirePermission("users.manage"),
+  async (req: AuthRequest, res) => {
     const { uid } = req.params;
-    await admin.auth().updateUser(uid, { disabled: true });
-    // Revoke refresh tokens so the disabled account can't silently refresh into
-    // a new session. The user's CURRENT ID token still verifies until it expires
-    // (≤1h); checkRevoked is intentionally left off to avoid a per-request lookup.
-    await admin.auth().revokeRefreshTokens(uid);
-    await admin.firestore().collection("users").doc(uid).update({
-      active: false,
+    const { at } = req.body as { at?: string };
+    const when = at ? new Date(at) : null;
+    if (!when || isNaN(when.getTime())) {
+      return res.status(400).json({ error: "Neplatné datum a čas." });
+    }
+    // Compare against the (possibly overridden, non-prod) clock so scheduling
+    // is testable under the test clock, matching how the job fires.
+    await clock.refresh(true);
+    if (when.getTime() <= clock.nowMs()) {
+      return res.status(400).json({ error: "Naplánovaný čas musí být v budoucnosti." });
+    }
+    const userRef = admin.firestore().collection("users").doc(uid);
+    const snap = await userRef.get();
+    if (!snap.exists) return res.status(404).json({ error: "Uživatel nenalezen." });
+    if (snap.get("active") !== true) {
+      return res.status(400).json({ error: "Účet už je deaktivovaný." });
+    }
+    await userRef.update({
+      scheduledDeactivationAt: Timestamp.fromDate(when),
+      scheduledDeactivationBy: req.uid ?? null,
       updatedAt: FieldValue.serverTimestamp(),
     });
     await logUpdate(ctxFromReq(req), {
       collection: "users",
       resourceId: uid,
-      before: { active: true },
-      after: { active: false },
+      before: { scheduledDeactivationAt: null },
+      after: { scheduledDeactivationAt: when.toISOString() },
     });
-    res.json({ success: true });
+    return res.json({ success: true, scheduledDeactivationAt: when.toISOString() });
+  }
+);
+
+/**
+ * PATCH /api/auth/cancel-scheduled-deactivation/:uid
+ * Admin-only: clear a pending scheduled deactivation. No-op-safe if none set.
+ */
+authRouter.patch(
+  "/cancel-scheduled-deactivation/:uid",
+  requireAuth,
+  requirePermission("users.manage"),
+  async (req: AuthRequest, res) => {
+    const { uid } = req.params;
+    const userRef = admin.firestore().collection("users").doc(uid);
+    const snap = await userRef.get();
+    if (!snap.exists) return res.status(404).json({ error: "Uživatel nenalezen." });
+    const prev = snap.get("scheduledDeactivationAt") as Timestamp | null | undefined;
+    await userRef.update({
+      scheduledDeactivationAt: null,
+      scheduledDeactivationBy: null,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    await logUpdate(ctxFromReq(req), {
+      collection: "users",
+      resourceId: uid,
+      before: { scheduledDeactivationAt: prev ? prev.toDate().toISOString() : null },
+      after: { scheduledDeactivationAt: null },
+    });
+    return res.json({ success: true });
   }
 );
 
@@ -388,9 +448,13 @@ authRouter.get("/users", requireAuth, requirePermission("users.view"), async (_r
     const data = doc.data() as Record<string, unknown>;
     const typeId = (data.roleType as string) || (data.role as string) || "";
     const employeeId = (data.employeeId as string) || null;
+    // Emit the pending-deactivation instant as a clean ISO string (the raw
+    // Firestore Timestamp serialises to an awkward {_seconds,_nanoseconds}).
+    const schedAt = data.scheduledDeactivationAt as Timestamp | null | undefined;
     return {
       uid: doc.id,
       ...data,
+      scheduledDeactivationAt: schedAt ? schedAt.toDate().toISOString() : null,
       roleTypeName: typeId ? typeNames.get(typeId) ?? typeId : null,
       employeeName: employeeId ? empNames.get(employeeId) ?? null : null,
     };
@@ -411,6 +475,8 @@ authRouter.patch(
     await admin.auth().updateUser(uid, { disabled: false });
     await admin.firestore().collection("users").doc(uid).update({
       active: true,
+      scheduledDeactivationAt: null,
+      scheduledDeactivationBy: null,
       updatedAt: FieldValue.serverTimestamp(),
     });
     await logUpdate(ctxFromReq(req), {
