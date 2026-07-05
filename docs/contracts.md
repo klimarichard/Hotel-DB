@@ -198,6 +198,20 @@ Surfaces that needed the runtime label resolution:
 
 Backend: `POST /api/contractTemplates` validates the slug (`^[a-z][a-z0-9_]{1,39}$`), rejects collisions with the 9 built-in IDs, rejects existing IDs (409). The existing `PUT /:id` body type was widened from `ContractType` to plain `string` so saves to custom-id slugs go through. The listing endpoint now returns the new `kind` field (`"standalone"` for custom, `null` for built-ins).
 
+### Delete / deactivate contract templates (v3.8.2, 2026-07-05)
+Template lifecycle management on the **Šablony smluv** page (all gated by the existing `contractTemplates.manage` permission — no new key). The rule is **custom → deletable, built-in → deactivate-only**: a custom (`kind:"standalone"`) template can be hard-deleted; the 9 built-in templates cannot (the seed recreates them and the employment-tied ones are structural), but any template can be flagged inactive.
+
+New `active` field on the template doc — **absent = active**; only an explicit `active:false` marks it inactive. The list endpoint returns `active: data.active !== false`; `GET /:id` returns the raw field.
+
+Backend routes added to `functions/src/routes/contractTemplates.ts` (all `requirePermission("contractTemplates.manage")`):
+- `DELETE /:id` — hard-delete a custom template. Rejects the 9 built-in IDs with 409 (`BUILTIN_IDS` guard). Already-generated contracts are left untouched (their PDFs persist; they just lose the link to the template name). Audited via `logDelete`.
+- `PATCH /:id { active: boolean }` — toggle the active flag (deactivate / reactivate). `merge:true` set; 404 if the doc doesn't exist. Audited via `logUpdate` (before/after `active`).
+- `GET /:id/usage` → `{ count }` — collection-group count of generated contracts whose `type` equals the template id, used to warn before deleting a used custom template. Needs the `contracts.type` `COLLECTION_GROUP` field override added to `firestore.indexes.json`.
+
+Frontend behaviour:
+- **`ContractTemplatesPage`** — custom rows show a **Smazat** button (danger `ConfirmModal`; the message includes the best-effort usage count from `GET /:id/usage`). Built-in rows show a **Deaktivovat / Aktivovat** toggle (deactivate confirms; reactivate is immediate). The sidebar list is a flex column and splits into an active group and an inactive group; the inactive group's **"Neaktivní"** heading carries `margin-top:auto` so deactivated templates are anchored to the bottom of the sidebar under a clear separator.
+- **Hide inactive from generation** — the `EmployeeDetailPage` "+ Adhoc dokument" picker filters out inactive built-in standalone types (`inactiveStandaloneIds`) and inactive customs (`active !== false`). `GenerateContractModal` refuses to generate when the fetched template has `active:false` (backend-sourced backstop for the row-tied flow, where the template id is forced by the employment row) — shows a notice and disables the generate button.
+
 ### Multisport template variables + 3-field signing-date prompt (2026-04-30)
 The standalone-contract signing-date prompt now collects **three** dates when the type is `multisport` (single date for `hmotna_odpovednost`): "Datum podpisu", "Datum žádosti", "Platnost od". All three are seeded to today on open and validated together — the Pokračovat button stays disabled until every required field has a value. Modal title dropped the "— datum podpisu" suffix since the prompt isn't single-purpose anymore.
 

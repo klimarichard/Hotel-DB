@@ -450,6 +450,8 @@ interface TemplateMeta {
   name: string;
   /** "standalone" for user-created custom templates; null/undefined for built-ins. */
   kind?: "standalone" | null;
+  /** Absent = active. `false` = deactivated (hidden from generation, sorted last). */
+  active?: boolean;
   variables: string[];
   updatedAt?: { seconds: number } | null;
 }
@@ -518,6 +520,17 @@ export default function ContractTemplatesPage() {
   const [createError, setCreateError] = useState<string | null>(null);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  // Delete / activate-toggle: a staged confirm dialog, an error dialog, and the
+  // id currently being mutated (disables that row's buttons).
+  const [actionConfirm, setActionConfirm] = useState<{
+    title: string;
+    message: string;
+    confirmLabel: string;
+    danger?: boolean;
+    onConfirm: () => void;
+  } | null>(null);
+  const [errorModal, setErrorModal] = useState<string | null>(null);
+  const [busyTemplateId, setBusyTemplateId] = useState<string | null>(null);
   const [findOpen, setFindOpen] = useState(false);
   const [findQuery, setFindQuery] = useState("");
   const [replaceQuery, setReplaceQuery] = useState("");
@@ -622,6 +635,107 @@ export default function ContractTemplatesPage() {
   useEffect(() => {
     fetchTemplates();
   }, [fetchTemplates]);
+
+  // --- Delete (custom templates) / activate-toggle (built-ins) ---
+  // The page talks to the API via raw fetch + bearer token (see fetchTemplates);
+  // these helpers keep that convention.
+  const authFetch = useCallback(
+    async (path: string, init?: RequestInit) => {
+      const token = await user!.getIdToken();
+      const hasBody = init?.body !== undefined;
+      return fetch(path, {
+        ...init,
+        headers: {
+          ...(init?.headers ?? {}),
+          Authorization: `Bearer ${token}`,
+          ...(hasBody ? { "Content-Type": "application/json" } : {}),
+        },
+      });
+    },
+    [user]
+  );
+
+  async function doSetActive(id: string, active: boolean) {
+    setActionConfirm(null);
+    if (!user) return;
+    setBusyTemplateId(id);
+    try {
+      const resp = await authFetch(`/api/contractTemplates/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ active }),
+      });
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => ({}));
+        setErrorModal(body.error ?? "Změnu se nepodařilo uložit.");
+        return;
+      }
+      await fetchTemplates();
+    } catch (e) {
+      setErrorModal((e as Error).message ?? "Změnu se nepodařilo uložit.");
+    } finally {
+      setBusyTemplateId(null);
+    }
+  }
+
+  function handleToggleActive(id: string, currentlyActive: boolean, label: string) {
+    if (!currentlyActive) {
+      // Reactivating is safe/non-destructive — do it immediately, no confirm.
+      doSetActive(id, true);
+      return;
+    }
+    setActionConfirm({
+      title: "Deaktivovat šablonu",
+      message: `Šablona „${label}" se skryje z generování smluv a přesune se na konec seznamu. Kdykoli ji můžete znovu aktivovat.`,
+      confirmLabel: "Deaktivovat",
+      onConfirm: () => doSetActive(id, false),
+    });
+  }
+
+  async function doDeleteTemplate(t: TemplateMeta) {
+    setActionConfirm(null);
+    if (!user) return;
+    setBusyTemplateId(t.id);
+    try {
+      const resp = await authFetch(`/api/contractTemplates/${t.id}`, { method: "DELETE" });
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => ({}));
+        setErrorModal(body.error ?? "Šablonu se nepodařilo smazat.");
+        return;
+      }
+      if (selected === t.id) setSelected(ALL_TYPES[0]);
+      await fetchTemplates();
+    } catch (e) {
+      setErrorModal((e as Error).message ?? "Šablonu se nepodařilo smazat.");
+    } finally {
+      setBusyTemplateId(null);
+    }
+  }
+
+  async function handleDeleteTemplate(t: TemplateMeta) {
+    if (!user) return;
+    // Best-effort usage count so the confirm can warn how many generated
+    // documents reference this template (they survive the delete).
+    setBusyTemplateId(t.id);
+    let count = 0;
+    try {
+      const resp = await authFetch(`/api/contractTemplates/${t.id}/usage`);
+      if (resp.ok) count = (await resp.json()).count ?? 0;
+    } catch {
+      /* count is advisory; fall through with 0 */
+    }
+    setBusyTemplateId(null);
+    const usageLine =
+      count > 0
+        ? `Šablona je použita u vygenerovaných dokumentů (počet: ${count}). Ty zůstanou zachovány, ztratí ale odkaz na název šablony. `
+        : "";
+    setActionConfirm({
+      title: "Smazat šablonu",
+      message: `${usageLine}Opravdu chcete smazat šablonu „${t.name}"? Tato akce je nevratná.`,
+      confirmLabel: "Smazat",
+      danger: true,
+      onConfirm: () => doDeleteTemplate(t),
+    });
+  }
 
   useEffect(() => {
     if (!editor) return;
@@ -962,15 +1076,22 @@ export default function ContractTemplatesPage() {
             <p className={styles.loadingText}>Načítám…</p>
           ) : (
             <ul className={styles.templateList}>
-              {[
-                ...ALL_TYPES.map((id) => ({ id, label: CONTRACT_TYPE_LABELS[id] })),
-                ...customTypes.map((t) => ({ id: t.id, label: t.name })),
-              ].map(({ id, label }) => {
-                const meta = templates[id];
-                return (
+              {(() => {
+                const entries = [
+                  ...ALL_TYPES.map((id) => ({ id, label: CONTRACT_TYPE_LABELS[id], builtin: true })),
+                  ...customTypes.map((t) => ({ id: t.id, label: t.name, builtin: false })),
+                ].map((e) => {
+                  const meta = templates[e.id];
+                  const active = meta ? meta.active !== false : true;
+                  return { ...e, meta, active };
+                });
+                const activeEntries = entries.filter((e) => e.active);
+                const inactiveEntries = entries.filter((e) => !e.active);
+
+                const renderItem = ({ id, label, builtin, meta, active }: (typeof entries)[number]) => (
                   <li
                     key={id}
-                    className={`${styles.templateItem} ${selected === id ? styles.templateItemActive : ""}`}
+                    className={`${styles.templateItem} ${selected === id ? styles.templateItemActive : ""} ${!active ? styles.templateItemInactive : ""}`}
                     onClick={() => requestTemplateSwitch(id)}
                   >
                     <span className={styles.templateName}>
@@ -979,16 +1100,63 @@ export default function ContractTemplatesPage() {
                         <span className={styles.dirtyDot} title="Neuložené změny">•</span>
                       )}
                     </span>
-                    {meta ? (
-                      <span className={styles.templateDate}>
-                        {formatTimestampCZ(meta.updatedAt)}
-                      </span>
-                    ) : (
-                      <span className={styles.templateEmpty}>Prázdná</span>
-                    )}
+                    <div className={styles.templateItemFooter}>
+                      {meta ? (
+                        <span className={styles.templateDate}>
+                          {formatTimestampCZ(meta.updatedAt)}
+                        </span>
+                      ) : (
+                        <span className={styles.templateEmpty}>Prázdná</span>
+                      )}
+                      {canManage && (
+                        <div
+                          className={styles.templateActions}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {builtin ? (
+                            <button
+                              type="button"
+                              className={styles.templateActionBtn}
+                              // A "Prázdná" (doc-less) built-in has nothing to
+                              // deactivate — the PATCH would 404.
+                              disabled={busyTemplateId === id || (!meta && active)}
+                              onClick={() => handleToggleActive(id, active, label)}
+                              title={active ? "Skrýt z generování a přesunout dolů" : "Znovu aktivovat"}
+                            >
+                              {active ? "Deaktivovat" : "Aktivovat"}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className={`${styles.templateActionBtn} ${styles.templateActionDanger}`}
+                              disabled={busyTemplateId === id}
+                              onClick={() => meta && handleDeleteTemplate(meta)}
+                              title="Smazat šablonu"
+                            >
+                              Smazat
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </li>
                 );
-              })}
+
+                // Active templates first; the inactive group is anchored to the
+                // BOTTOM of the sidebar (the divider's margin-top:auto eats the
+                // free space) under a "Neaktivní" heading, so the split is obvious.
+                return (
+                  <>
+                    {activeEntries.map(renderItem)}
+                    {inactiveEntries.length > 0 && (
+                      <li key="__inactive_sep__" className={styles.inactiveDivider}>
+                        Neaktivní
+                      </li>
+                    )}
+                    {inactiveEntries.map(renderItem)}
+                  </>
+                );
+              })()}
             </ul>
           )}
         </aside>
@@ -1612,6 +1780,28 @@ export default function ContractTemplatesPage() {
           cancelLabel="Zrušit"
           onConfirm={handleSaveAndSwitch}
           onCancel={() => setPendingSwitch(null)}
+        />
+      )}
+
+      {actionConfirm && (
+        <ConfirmModal
+          title={actionConfirm.title}
+          message={actionConfirm.message}
+          confirmLabel={actionConfirm.confirmLabel}
+          danger={actionConfirm.danger}
+          onConfirm={actionConfirm.onConfirm}
+          onCancel={() => setActionConfirm(null)}
+        />
+      )}
+
+      {errorModal && (
+        <ConfirmModal
+          title="Chyba"
+          message={errorModal}
+          confirmLabel="OK"
+          showCancel={false}
+          onConfirm={() => setErrorModal(null)}
+          onCancel={() => setErrorModal(null)}
         />
       )}
     </div>

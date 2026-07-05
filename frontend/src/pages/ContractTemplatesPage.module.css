@@ -65,6 +65,13 @@
   list-style: none;
   margin: 0;
   padding: 8px 0;
+  /* Flex column so the inactive group can be pushed to the bottom (its divider
+     carries margin-top:auto). min-height:100% makes "bottom" the bottom of the
+     sidebar viewport, not just below the last active item. */
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  box-sizing: border-box;
 }
 
 .templateItem {
@@ -118,6 +125,76 @@
   color: var(--color-text-subtle);
   font-style: italic;
   margin-top: 2px;
+}
+
+/* Deactivated templates: muted, sorted to the bottom (see the sort in the page). */
+.templateItemInactive {
+  opacity: 0.7;
+}
+
+.templateItemInactive .templateName {
+  color: var(--color-text-muted);
+}
+
+/* "Neaktivní" heading that anchors the deactivated-templates group to the
+   bottom of the sidebar. margin-top:auto absorbs the free vertical space above
+   it (collapses to 0 once the list overflows and the sidebar scrolls). */
+.inactiveDivider {
+  margin-top: auto;
+  padding: 6px 14px 4px;
+  border-top: 1px solid var(--color-border);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+  background: var(--color-bg);
+  cursor: default;
+}
+
+.templateItemFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.templateActions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.templateActionBtn {
+  padding: 2px 8px;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.1s, border-color 0.1s, color 0.1s;
+}
+
+.templateActionBtn:hover:not(:disabled) {
+  background: var(--color-surface-4);
+  border-color: var(--color-border-strong, var(--color-border));
+}
+
+.templateActionBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.templateActionDanger {
+  color: var(--color-danger);
+}
+
+.templateActionDanger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-danger) 10%, transparent);
+  border-color: var(--color-danger);
 }
 
 /* Center: editor */
