@@ -1076,19 +1076,19 @@ export default function ContractTemplatesPage() {
             <p className={styles.loadingText}>Načítám…</p>
           ) : (
             <ul className={styles.templateList}>
-              {[
-                ...ALL_TYPES.map((id) => ({ id, label: CONTRACT_TYPE_LABELS[id], builtin: true })),
-                ...customTypes.map((t) => ({ id: t.id, label: t.name, builtin: false })),
-              ]
-                .map((e) => {
+              {(() => {
+                const entries = [
+                  ...ALL_TYPES.map((id) => ({ id, label: CONTRACT_TYPE_LABELS[id], builtin: true })),
+                  ...customTypes.map((t) => ({ id: t.id, label: t.name, builtin: false })),
+                ].map((e) => {
                   const meta = templates[e.id];
                   const active = meta ? meta.active !== false : true;
                   return { ...e, meta, active };
-                })
-                // Inactive templates sort to the bottom (stable — keeps the
-                // built-ins-then-custom order within each group).
-                .sort((a, b) => Number(b.active) - Number(a.active))
-                .map(({ id, label, builtin, meta, active }) => (
+                });
+                const activeEntries = entries.filter((e) => e.active);
+                const inactiveEntries = entries.filter((e) => !e.active);
+
+                const renderItem = ({ id, label, builtin, meta, active }: (typeof entries)[number]) => (
                   <li
                     key={id}
                     className={`${styles.templateItem} ${selected === id ? styles.templateItemActive : ""} ${!active ? styles.templateItemInactive : ""}`}
@@ -1096,7 +1096,6 @@ export default function ContractTemplatesPage() {
                   >
                     <span className={styles.templateName}>
                       {label}
-                      {!active && <span className={styles.inactiveTag}>Neaktivní</span>}
                       {selected === id && isDirty && (
                         <span className={styles.dirtyDot} title="Neuložené změny">•</span>
                       )}
@@ -1141,7 +1140,23 @@ export default function ContractTemplatesPage() {
                       )}
                     </div>
                   </li>
-                ))}
+                );
+
+                // Active templates first; the inactive group is anchored to the
+                // BOTTOM of the sidebar (the divider's margin-top:auto eats the
+                // free space) under a "Neaktivní" heading, so the split is obvious.
+                return (
+                  <>
+                    {activeEntries.map(renderItem)}
+                    {inactiveEntries.length > 0 && (
+                      <li key="__inactive_sep__" className={styles.inactiveDivider}>
+                        Neaktivní
+                      </li>
+                    )}
+                    {inactiveEntries.map(renderItem)}
+                  </>
+                );
+              })()}
             </ul>
           )}
         </aside>

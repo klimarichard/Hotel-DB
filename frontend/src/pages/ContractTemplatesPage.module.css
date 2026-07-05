@@ -65,6 +65,13 @@
   list-style: none;
   margin: 0;
   padding: 8px 0;
+  /* Flex column so the inactive group can be pushed to the bottom (its divider
+     carries margin-top:auto). min-height:100% makes "bottom" the bottom of the
+     sidebar viewport, not just below the last active item. */
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  box-sizing: border-box;
 }
 
 .templateItem {
@@ -129,16 +136,20 @@
   color: var(--color-text-muted);
 }
 
-.inactiveTag {
-  display: inline-block;
-  margin-left: 0.4rem;
-  padding: 1px 6px;
+/* "Neaktivní" heading that anchors the deactivated-templates group to the
+   bottom of the sidebar. margin-top:auto absorbs the free vertical space above
+   it (collapses to 0 once the list overflows and the sidebar scrolls). */
+.inactiveDivider {
+  margin-top: auto;
+  padding: 6px 14px 4px;
+  border-top: 1px solid var(--color-border);
   font-size: 0.6875rem;
   font-weight: 600;
-  border-radius: 999px;
-  background: var(--color-surface-4);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
   color: var(--color-text-muted);
-  vertical-align: middle;
+  background: var(--color-bg);
+  cursor: default;
 }
 
 .templateItemFooter {
