@@ -20,6 +20,25 @@
   min-width: 0;
 }
 
+/* Phone-only per-row collapse. The summary becomes a tap target that reveals
+   the row's actions; on desktop none of this applies (no .rowPhone class). */
+.rowPhone .meta {
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.rowChevron {
+  flex: 0 0 auto;
+  color: var(--color-text-secondary);
+  transition: transform 0.2s;
+}
+
+.rowChevron[data-open="true"] {
+  transform: rotate(180deg);
+}
+
 .date {
   font-variant-numeric: tabular-nums;
   font-size: 0.8125rem;

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { useIsPhone } from "@/hooks/useIsPhone";
 import { ContractType } from "@/lib/contractVariables";
 import { formatDateCZ } from "@/lib/dateFormat";
 import type { EmploymentRow, ContractRecord } from "@/lib/employmentSessions";
@@ -7,6 +8,30 @@ import ContractActionButtons from "./ContractActionButtons";
 import ConfirmModal from "./ConfirmModal";
 import SalaryReveal from "./SalaryReveal";
 import styles from "./EmploymentRowItem.module.css";
+
+// Reveal buttons live inside the (phone-)clickable row summary; stop their taps
+// from also toggling the row open/closed.
+const StopTap = ({ children }: { children: React.ReactNode }) => (
+  <span onClick={(e) => e.stopPropagation()}>{children}</span>
+);
+
+const RowChevron = ({ open }: { open: boolean }) => (
+  <svg
+    className={styles.rowChevron}
+    data-open={open}
+    width="14"
+    height="14"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2.5"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <polyline points="6 9 12 15 18 9" />
+  </svg>
+);
 
 interface Props {
   row: EmploymentRow;
@@ -56,7 +81,7 @@ function renderChangeValue(kind: string, value: string): React.ReactNode {
   if (!value) return "—";
   if (kind === "mzda") {
     const n = Number(value);
-    if (Number.isFinite(n)) return <SalaryReveal value={n} />;
+    if (Number.isFinite(n)) return <StopTap><SalaryReveal value={n} /></StopTap>;
   }
   if (kind === "délka smlouvy") {
     return formatDateCZ(value) || value;
@@ -79,6 +104,13 @@ export default function EmploymentRowItem({
   onSelfDownload,
 }: Props) {
   const { can } = useAuth();
+  const isPhone = useIsPhone();
+  // Per-row collapse is PHONE-ONLY: on desktop every row renders its actions
+  // inline exactly as before. On phones each entry starts collapsed (buttons
+  // hidden) for a shorter, more readable list; tapping the summary reveals the
+  // actions. `expanded` is inert on desktop because `showActions` ignores it there.
+  const [expanded, setExpanded] = useState(false);
+  const showActions = !isPhone || expanded;
   // Per-row Upravit/Smazat are employment-record management. Built-in
   // admin/director hold employment.manage → unchanged.
   const canManageEmployment = can("employment.manage");
@@ -94,7 +126,7 @@ export default function EmploymentRowItem({
     if (ct && showSalary) {
       detail = (
         <>
-          {ct} <SalaryReveal value={row.salary as number} />
+          {ct} <StopTap><SalaryReveal value={row.salary as number} /></StopTap>
         </>
       );
     } else {
@@ -137,12 +169,30 @@ export default function EmploymentRowItem({
     : "Pokud k záznamu existuje smlouva (nepodepsaná i podepsaná), bude také smazána. Tato akce je nevratná.";
 
   return (
-    <div className={styles.row}>
-      <div className={styles.meta}>
+    <div className={`${styles.row} ${isPhone ? styles.rowPhone : ""}`}>
+      <div
+        className={styles.meta}
+        onClick={isPhone ? () => setExpanded((v) => !v) : undefined}
+        role={isPhone ? "button" : undefined}
+        tabIndex={isPhone ? 0 : undefined}
+        aria-expanded={isPhone ? expanded : undefined}
+        onKeyDown={
+          isPhone
+            ? (e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setExpanded((v) => !v);
+                }
+              }
+            : undefined
+        }
+      >
+        {isPhone && <RowChevron open={expanded} />}
         <span className={styles.date}>{formatDateCZ(row.startDate)}</span>
         <span className={styles.kind}>{label}</span>
         {detail && <span className={styles.detail}>{detail}</span>}
       </div>
+      {showActions && (
       <div className={styles.actions}>
         {canManageEmployment && onEdit && !signedLocked && (
           <button
@@ -186,6 +236,7 @@ export default function EmploymentRowItem({
           </button>
         )}
       </div>
+      )}
 
       {confirmDelete && (
         <ConfirmModal
