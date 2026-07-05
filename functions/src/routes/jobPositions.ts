@@ -4,6 +4,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { requireAuth, AuthRequest } from "../middleware/auth";
 import { requirePermission } from "../auth/permissions";
 import { ctxFromReq, logCreate, logUpdate, logDelete } from "../services/auditLog";
+import { isReferencedByLiveEmployee } from "../services/lookupGuard";
 
 export const jobPositionsRouter = Router();
 
@@ -283,17 +284,16 @@ jobPositionsRouter.delete(
     const ref = db().collection("jobPositions").doc(req.params.id);
     const beforeSnap = await ref.get();
     const beforeData = beforeSnap.exists ? (beforeSnap.data() as Record<string, unknown>) : {};
-    // Block delete if any employee currently holds this position. Positions are
-    // referenced by NAME (jobTitle), and the DPP hourly rate is resolved by the
-    // employee's CURRENT position name at every payroll recompute — deleting an
-    // in-use position would silently zero DPP pay on the next nightly run. The
-    // currentJobTitle check (collection-scope, automatic index) is the signal
-    // that drives that recompute; a collectionGroup over employment rows would
-    // need a COLLECTION_GROUP index the emulator wouldn't enforce.
+    // Block delete only if an ACTIVE or BEFORE-START employee currently holds
+    // this position (a terminated employee's stale currentJobTitle must not
+    // block cleanup). Positions are referenced by NAME (jobTitle), and the DPP
+    // hourly rate is resolved by the employee's CURRENT position name at every
+    // payroll recompute — deleting a position an active employee still holds
+    // would silently zero DPP pay on the next nightly run, so that case stays
+    // blocked. See services/lookupGuard.ts.
     const posName = beforeData.name;
     if (typeof posName === "string" && posName) {
-      const empHit = await db().collection("employees").where("currentJobTitle", "==", posName).limit(1).get();
-      if (!empHit.empty) {
+      if (await isReferencedByLiveEmployee("currentJobTitle", posName)) {
         res.status(400).json({ error: "Nelze smazat pracovní pozici, kterou mají aktivní zaměstnanci ve smlouvě." });
         return;
       }
