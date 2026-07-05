@@ -1341,6 +1341,11 @@ export default function EmployeeDetailPage() {
   const [requestedAtDraft, setRequestedAtDraft] = useState<string>("");
   const [validFromDraft, setValidFromDraft] = useState<string>("");
   const [customStandalone, setCustomStandalone] = useState<{ id: string; name: string }[]>([]);
+  // Ids of built-in standalone templates (multisport / hmotná odpovědnost) that
+  // have been deactivated — filtered out of the "+ Adhoc dokument" picker so you
+  // can't generate from an inactive template. (Inactive customs are already
+  // dropped from `customStandalone`.)
+  const [inactiveStandaloneIds, setInactiveStandaloneIds] = useState<string[]>([]);
   const adhocDropdownRef = useRef<HTMLDivElement | null>(null);
   const [confirmModal, setConfirmModal] = useState<{
     title: string;
@@ -1559,12 +1564,17 @@ export default function EmployeeDetailPage() {
   useEffect(() => {
     if (!id || !can("contracts.generate")) return;
     api
-      .get<{ id: string; name: string; kind?: string | null }[]>("/contractTemplates")
-      .then((list) =>
+      .get<{ id: string; name: string; kind?: string | null; active?: boolean }[]>("/contractTemplates")
+      .then((list) => {
         setCustomStandalone(
-          list.filter((t) => t.kind === "standalone").map((t) => ({ id: t.id, name: t.name }))
-        )
-      )
+          list
+            .filter((t) => t.kind === "standalone" && t.active !== false)
+            .map((t) => ({ id: t.id, name: t.name }))
+        );
+        setInactiveStandaloneIds(
+          list.filter((t) => t.active === false).map((t) => t.id)
+        );
+      })
       .catch(() => {});
   }, [id, can]);
 
@@ -1754,7 +1764,9 @@ export default function EmployeeDetailPage() {
                   {adhocDropdownOpen && (
                     <div className={styles.generateDropdownMenu}>
                       {[
-                        ...STANDALONE_TYPES.map((t) => ({ id: t, label: CONTRACT_TYPE_LABELS[t] })),
+                        ...STANDALONE_TYPES.filter(
+                          (t) => !inactiveStandaloneIds.includes(t)
+                        ).map((t) => ({ id: t, label: CONTRACT_TYPE_LABELS[t] })),
                         ...customStandalone.map((t) => ({ id: t.id, label: t.name })),
                       ].map((entry) => (
                         <button

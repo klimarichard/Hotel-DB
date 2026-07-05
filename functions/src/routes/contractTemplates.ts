@@ -3,7 +3,7 @@ import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireAuth, AuthRequest } from "../middleware/auth";
 import { requirePermission } from "../auth/permissions";
-import { ctxFromReq, logCreate, logUpdate } from "../services/auditLog";
+import { ctxFromReq, logCreate, logUpdate, logDelete } from "../services/auditLog";
 
 export const contractTemplatesRouter = Router();
 
@@ -57,6 +57,9 @@ contractTemplatesRouter.get(
         type: data.type,
         name: data.name,
         kind: data.kind ?? null,
+        // Absent = active. Only an explicit `active:false` marks a template
+        // inactive (deactivated built-in) — see PATCH /:id below.
+        active: data.active !== false,
         variables: data.variables ?? [],
         updatedAt: data.updatedAt,
         updatedBy: data.updatedBy,
@@ -265,5 +268,106 @@ contractTemplatesRouter.put(
     });
 
     res.json({ id: req.params.id, variables });
+  }
+);
+
+/**
+ * GET /api/contractTemplates/:id/usage
+ * How many generated contracts reference this template (by `type`). Used to
+ * warn before deleting a custom template — the generated PDFs survive the
+ * delete, they just lose the link back to the template name.
+ *
+ * Generated contracts live at employees/{id}/contracts/{cid} and store the
+ * template id in `type`, so this is a collection-group count over `contracts`.
+ * (Requires the `contracts.type` COLLECTION_GROUP field override in
+ * firestore.indexes.json.)
+ */
+contractTemplatesRouter.get(
+  "/:id/usage",
+  requireAuth,
+  requirePermission("contractTemplates.manage"),
+  async (req: AuthRequest, res: Response) => {
+    const agg = await db()
+      .collectionGroup("contracts")
+      .where("type", "==", req.params.id)
+      .count()
+      .get();
+    res.json({ id: req.params.id, count: agg.data().count });
+  }
+);
+
+/**
+ * DELETE /api/contractTemplates/:id
+ * Hard-delete a CUSTOM (user-created, kind:"standalone") template. Built-in
+ * templates cannot be deleted — the seed would recreate them and the
+ * employment-tied ones are structural — they can only be deactivated (PATCH).
+ * Already-generated contracts are left untouched (their PDFs persist).
+ */
+contractTemplatesRouter.delete(
+  "/:id",
+  requireAuth,
+  requirePermission("contractTemplates.manage"),
+  async (req: AuthRequest, res: Response) => {
+    const id = req.params.id;
+    if (BUILTIN_IDS.has(id)) {
+      res.status(409).json({
+        error: "Vestavěnou šablonu nelze smazat — lze ji pouze deaktivovat.",
+      });
+      return;
+    }
+    const ref = db().collection("contractTemplates").doc(id);
+    const snap = await ref.get();
+    if (!snap.exists) {
+      res.status(404).json({ error: "Šablona neexistuje." });
+      return;
+    }
+    const data = snap.data() as Record<string, unknown>;
+    await ref.delete();
+    await logDelete(ctxFromReq(req), {
+      collection: "contractTemplates",
+      resourceId: id,
+      summary: { type: data.type ?? id, name: data.name, kind: data.kind ?? null },
+    });
+    res.json({ id, deleted: true });
+  }
+);
+
+/**
+ * PATCH /api/contractTemplates/:id
+ * Toggle a template's active flag. Deactivating hides it from the contract
+ * generation surfaces (the "+ Adhoc dokument" picker and — defensively — the
+ * GenerateContractModal) and sorts it to the bottom of the templates list.
+ * Reversible. Used mainly for built-in templates (which can't be deleted).
+ * Body: { active: boolean }.
+ */
+contractTemplatesRouter.patch(
+  "/:id",
+  requireAuth,
+  requirePermission("contractTemplates.manage"),
+  async (req: AuthRequest, res: Response) => {
+    const { active } = req.body as { active?: unknown };
+    if (typeof active !== "boolean") {
+      res.status(400).json({ error: "active musí být boolean." });
+      return;
+    }
+    const ref = db().collection("contractTemplates").doc(req.params.id);
+    const snap = await ref.get();
+    if (!snap.exists) {
+      res.status(404).json({ error: "Šablona neexistuje." });
+      return;
+    }
+    const before = snap.data() as Record<string, unknown>;
+    const beforeActive = before.active !== false;
+    await ref.set(
+      { active, updatedAt: FieldValue.serverTimestamp(), updatedBy: req.uid },
+      { merge: true }
+    );
+    await logUpdate(ctxFromReq(req), {
+      collection: "contractTemplates",
+      resourceId: req.params.id,
+      before: { active: beforeActive },
+      after: { active },
+    });
+    res.json({ id: req.params.id, active });
   }
 );
