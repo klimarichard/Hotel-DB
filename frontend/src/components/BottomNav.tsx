@@ -151,7 +151,16 @@ export default function BottomNav({
         bar.style.transform = "";
         return;
       }
-      const offsetY = vv.offsetTop + vv.height - window.innerHeight;
+      // Anchor delta = (visual-viewport bottom in layout coords) − (layout-viewport
+      // bottom). The bar is `position: fixed; bottom: 0`, so its natural bottom sits
+      // at the LAYOUT viewport bottom = the layout-viewport height. Use
+      // documentElement.clientHeight for that height — NOT window.innerHeight: on iOS
+      // WebKit (Safari + Chrome) window.innerHeight tracks the VISUAL viewport and
+      // shrinks as you pinch-zoom in, which collapsed this delta and pushed the bar
+      // off-screen. clientHeight is the layout-viewport height and stays constant
+      // through pinch-zoom, so the bar tracks the visual-viewport bottom correctly.
+      const layoutHeight = document.documentElement.clientHeight;
+      const offsetY = vv.offsetTop + vv.height - layoutHeight;
       bar.style.transform = `translate(${vv.offsetLeft}px, ${offsetY}px) scale(${1 / vv.scale})`;
     };
     update();
