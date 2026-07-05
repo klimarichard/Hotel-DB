@@ -476,7 +476,15 @@ The admin/manager pages left as "works but may scroll" above were made phone-nat
 - **`EmployeesPage`** collapses to a **names-only list** (each name links to the detail); the detail page hero stacks one item per line and its field grids collapse.
 - **HR přehled tiles** (`HeadcountStats`) drop from `minmax(420px,1fr)` to a single shrinkable column so they fit the bordered box.
 - **Contract Templates** (`ContractTemplatesPage`) is not phone-viable (210 mm A4 canvas + TipTap), so an `isPhone` early-return shows a "use a larger screen" notice, and its menu entry is **hidden from the phone bottom-nav** via a new `hideOnMobile` flag on the `menuItems.ts` registry (filtered out of the `BottomNav` items in `Layout.tsx`; the desktop sidebar still shows it).
-- **Bottom-nav zoom pinning** — `BottomNav.tsx` tracks `window.visualViewport` and translates + counter-scales `.bar` so it stays pinned to the visual viewport during pinch/double-tap zoom (guarded to only engage while `scale > 1`, leaving keyboard behaviour unchanged). ⚠️ Known gap: **does not work on iOS Safari** (visualViewport transform behaves differently there) — deferred to a future update.
+- **Bottom-nav zoom pinning** — `BottomNav.tsx` tracks `window.visualViewport` and translates + counter-scales `.bar` so it stays pinned to the visual viewport during pinch/double-tap zoom (guarded to only engage while `scale > 1`, leaving keyboard behaviour unchanged). **iOS fix (v3.8.1):** the translate delta originally used `window.innerHeight` for the layout-viewport height, but on iOS WebKit (Safari + Chrome) `window.innerHeight` tracks the *visual* viewport and shrinks as you pinch-zoom in — collapsing the delta and pushing the bar off-screen. It now uses `document.documentElement.clientHeight` (the layout-viewport height, constant through pinch-zoom), so the bar tracks the visual-viewport bottom on iOS as well.
+
+### Collapsible employment-history entries on phones (v3.8.1)
+
+On the Employee-detail (and Můj profil) **Historie pracovního poměru** tab, each session card was already collapsible. On phones, the individual **entries** inside an expanded session (Nástup / Dodatek / Ukončení) are now collapsible too: every entry starts **collapsed** (only its date + type + summary and a chevron show), and tapping the summary reveals the action buttons (Upravit, Zobrazit podepsanou, Stáhnout, Smazat…). This keeps the history list short and readable on a narrow screen.
+
+- Implemented in `frontend/src/components/EmploymentRowItem.tsx`: a phone-only `expanded` state (starts `false`) with `showActions = !isPhone || expanded` — so on desktop the actions **always** render and the DOM is byte-identical to before (the toggle handler, chevron, and `.rowPhone` class are all gated behind `isPhone`).
+- The interactive `<SalaryReveal>` shown in a row summary is wrapped in a `stopPropagation` span so revealing a salary doesn't also toggle the row open/closed.
+- **New shared hook `frontend/src/hooks/useIsPhone.ts`** — a reactive `matchMedia` subscription against the canonical phone query (`PHONE_MEDIA_QUERY`, byte-identical to the inline `matchMedia` blocks in `ShiftPlannerPage` / `ContractTemplatesPage` and to `OnboardingContext`). Prefer this hook for any new "are we on a phone?" check instead of copying the inline block.
 
 ---
 
