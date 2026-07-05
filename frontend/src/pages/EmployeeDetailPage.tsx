@@ -1301,6 +1301,12 @@ export default function EmployeeDetailPage() {
   const [additional, setAdditional] = useState<AdditionalData | null>(null);
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [companies, setCompanies] = useState<CompanyRec[]>([]);
+  // Catalogues loaded only to detect a reactivated employee whose current
+  // company/department/position/education no longer exists (see the
+  // invalidCatalogRefs banner below).
+  const [deptList, setDeptList] = useState<{ id: string; name: string }[]>([]);
+  const [posList, setPosList] = useState<{ id: string; name: string }[]>([]);
+  const [eduList, setEduList] = useState<{ id: string; name: string; code: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState<"detail" | "history" | "other-docs">("detail");
   const [newEntryMode, setNewEntryMode] = useState<{
@@ -1414,16 +1420,44 @@ export default function EmployeeDetailPage() {
       api.get<AlertItem[]>(`/employees/${id}/alerts`),
       api.get<ContractRecord[]>(`/employees/${id}/contracts`).catch(() => [] as ContractRecord[]),
       api.get<CompanyRec[]>("/companies").catch(() => [] as CompanyRec[]),
+      api.get<{ id: string; name: string }[]>("/departments").catch(() => []),
+      api.get<{ id: string; name: string }[]>("/jobPositions").catch(() => []),
+      api.get<{ id: string; name: string; code: string }[]>("/educationLevels").catch(() => []),
     ])
-      .then(([emp, history, empAlerts, contractsList, comps]) => {
+      .then(([emp, history, empAlerts, contractsList, comps, deps, poss, edus]) => {
         setEmployee(emp);
         setEmployment(history);
         setAlerts(empAlerts);
         setContracts(contractsList);
         setCompanies(comps);
+        setDeptList(deps);
+        setPosList(poss);
+        setEduList(edus);
       })
       .finally(() => setLoading(false));
   }, [id]);
+
+  // Reactivation safety net: because the delete guards block removing any
+  // catalogue value an ACTIVE / BEFORE-START employee uses, the only way a
+  // non-terminated employee can reference a now-missing value is if they were
+  // reactivated after that value was deleted while they were terminated. Detect
+  // that and warn (non-blocking) so the admin fixes it. Education matches the
+  // composite "<code> - <name>" label the form stores.
+  const invalidCatalogRefs = useMemo<string[]>(() => {
+    if (!employee || employee.status === "terminated") return [];
+    const eduLabel = (e: { code: string; name: string }) =>
+      e.code ? `${e.code} - ${e.name}` : e.name;
+    const out: string[] = [];
+    if (employee.currentCompanyId && !companies.some((c) => c.id === employee.currentCompanyId))
+      out.push("Společnost");
+    if (employee.currentDepartment && !deptList.some((d) => d.name === employee.currentDepartment))
+      out.push("Oddělení");
+    if (employee.currentJobTitle && !posList.some((p) => p.name === employee.currentJobTitle))
+      out.push("Pozice");
+    if (employee.education && !eduList.some((e) => eduLabel(e) === employee.education))
+      out.push("Vzdělání");
+    return out;
+  }, [employee, companies, deptList, posList, eduList]);
 
   async function refetchContracts() {
     if (!id) return;
@@ -1723,6 +1757,17 @@ export default function EmployeeDetailPage() {
             <strong>
               Zaučování
               {additional.zaucovaniDo ? ` (do ${formatDateCZ(additional.zaucovaniDo)})` : ""}
+            </strong>
+          </div>
+        </div>
+      )}
+
+      {invalidCatalogRefs.length > 0 && (
+        <div className={styles.alertBanner}>
+          <div className={styles.alertItemExpiring}>
+            <strong>
+              Neplatné údaje po reaktivaci: {invalidCatalogRefs.join(", ")} — už nejsou
+              v číselníku. Upravte je v Detailu / Historii pracovního poměru.
             </strong>
           </div>
         </div>

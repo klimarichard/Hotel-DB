@@ -4,6 +4,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { requireAuth, AuthRequest } from "../middleware/auth";
 import { requirePermission } from "../auth/permissions";
 import { ctxFromReq, logCreate, logUpdate, logDelete } from "../services/auditLog";
+import { isReferencedByLiveEmployee } from "../services/lookupGuard";
 
 export const educationLevelsRouter = Router();
 
@@ -86,25 +87,18 @@ educationLevelsRouter.delete(
     const beforeSnap = await ref.get();
     const beforeData = beforeSnap.exists ? (beforeSnap.data() as Record<string, unknown>) : {};
 
-    // Referential-integrity guard (mirrors companies/departments/jobPositions):
-    // block deleting a level any employee still holds so the reference can't
-    // orphan. Employees store education as the composite display string the
-    // admin form builds — "<code> - <name>", or just "<name>" when the level
-    // has no code (see EmployeeFormPage) — on the employee ROOT doc, so we
-    // reconstruct that exact string and query it.
+    // Block delete only if an ACTIVE or BEFORE-START employee still holds this
+    // level (terminated employees' stale values must not block cleanup — a
+    // reactivation-time banner nudges the admin to fix them). Employees store
+    // education as the composite display string the admin form builds —
+    // "<code> - <name>", or just "<name>" without a code (see EmployeeFormPage)
+    // — on the employee ROOT doc, so we reconstruct that string and query it.
     const eduName = typeof beforeData.name === "string" ? beforeData.name : "";
     const eduCode = typeof beforeData.code === "string" ? beforeData.code : "";
     const label = eduCode ? `${eduCode} - ${eduName}` : eduName;
-    if (label) {
-      const inUse = await db()
-        .collection("employees")
-        .where("education", "==", label)
-        .limit(1)
-        .get();
-      if (!inUse.empty) {
-        res.status(400).json({ error: "Nelze smazat vzdělání, které mají přiřazené zaměstnanci." });
-        return;
-      }
+    if (label && (await isReferencedByLiveEmployee("education", label))) {
+      res.status(400).json({ error: "Nelze smazat vzdělání, které mají přiřazené zaměstnanci." });
+      return;
     }
 
     await ref.delete();
