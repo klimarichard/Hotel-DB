@@ -35,7 +35,7 @@ A bottom collapsible **Adhoc smlouvy** lists every contract record where `employ
 
 ### Components
 - `frontend/src/components/EmploymentSession.tsx` — collapsible card; computes `idx === 0`-style default-expanded behaviour from a prop, uses `<SalaryReveal>` for the redacted salary display.
-- `frontend/src/components/EmploymentRowItem.tsx` — single row's metadata + action cluster. Owns the per-row delete confirm modal with copy that varies by row type (Nástup → cascade warning with row count; Dodatek/Ukončení → tied-contract warning).
+- `frontend/src/components/EmploymentRowItem.tsx` — single row's metadata + action cluster. Owns the per-row delete confirm modal with copy that varies by row type (Nástup → cascade warning with row count; Dodatek/Ukončení → tied-contract warning). **On phones (v3.8.1)** the row's action cluster is collapsed by default and revealed by tapping the summary (see "Collapsible employment-history entries on phones" in `docs/other-features-and-ui.md`); desktop is unchanged.
 - `frontend/src/components/ContractActionButtons.tsx` — leaf renderer of the three states: no contract → `Generovat smlouvu` + `Nahrát podepsanou smlouvu`; contract with unsigned PDF → download + `Smazat smlouvu` + upload; contract with signed PDF → "Stáhnout podepsanou" + `Smazat smlouvu` + upload. The upload-without-generate path POSTs `/contracts` with no `pdfBase64` to materialise a record on the fly, then POSTs `/signed-pdf` against it — needed for legacy paper contracts that have no generated unsigned counterpart.
 - `frontend/src/components/AdhocContractsSection.tsx` — bottom collapsible.
 - `frontend/src/components/SalaryReveal.tsx` — shared `••••• [eye]` widget. Click stops propagation so it doesn't toggle the surrounding collapsible.
