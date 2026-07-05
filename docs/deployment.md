@@ -27,6 +27,11 @@ The frontend picks up its Firebase config from `frontend/.env.staging` / `fronte
 
 For focused redeploys (e.g. functions-only after a small fix) skip the npm script and run the firebase CLI directly: `firebase deploy --only functions:api --project staging` or `--only firestore:indexes --project staging`.
 
+### Cloud Functions runtime (Node.js)
+The functions run on **Node.js 22** (bumped from Node 20 in v3.8.3, 2026-07-05, ahead of Google's 2026-10-30 decommission of the Node 20 runtime). The runtime is pinned in exactly one place — `functions/package.json` → `"engines": { "node": "22" }`; there is deliberately **no** `runtime` field in `firebase.json` (if both were present, `firebase.json` would win), no `.nvmrc`, and no CI pin, so `engines.node` is the single source of truth. To move runtimes, change that value, `npm install` (refreshes the lockfile), rebuild, and redeploy.
+
+The `api` HTTPS function is **1st gen**; the seven scheduled functions are **2nd gen** (`onSchedule`). Node 22 supports both generations, so the bump is an in-place redeploy — the 1st-gen `api` keeps its URL, no delete/recreate. Node 24 is **2nd-gen only**, so staying on the 1st-gen `api` caps the runtime at Node 22 unless that function is first migrated to 2nd gen. The SDKs were untouched by the bump (`firebase-functions ^5`, `firebase-admin ^12` both run on Node 22); `functions.config()` is not used anywhere, so the v6/v7 removal of that API is a non-issue. The highest-risk surface across a runtime bump is the Puppeteer + `@sparticuz/chromium` PDF path (verify contract-PDF generation after any runtime or Chromium change).
+
 ### Encryption key via Secret Manager
 Deployed functions source `ENCRYPTION_KEY` from Google Secret Manager, not from a `.env` file. `functions/src/index.ts` declares `secrets: ["ENCRYPTION_KEY"]` on the `api` export — the only function that decrypts (`services/encryption.ts`, used solely by `routes/employees.ts`; the scheduled functions never touch encrypted fields, so the secret is scoped to `api` alone). The declaration makes the secret a **hard deploy requirement for both staging and prod**, so each project must have:
 
