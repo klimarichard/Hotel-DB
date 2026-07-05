@@ -4,6 +4,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { requireAuth, AuthRequest } from "../middleware/auth";
 import { requirePermission } from "../auth/permissions";
 import { ctxFromReq, logCreate, logUpdate, logDelete } from "../services/auditLog";
+import { isReferencedByLiveEmployee } from "../services/lookupGuard";
 
 export const companiesRouter = Router();
 
@@ -160,15 +161,13 @@ companiesRouter.delete(
   requireAuth,
   requirePermission("settings.companies.manage"),
   async (req: AuthRequest, res: Response) => {
-    // Block delete if any employee currently belongs to this company —
-    // otherwise they're left pointing at a dead companyId. Collection-scope
-    // query (automatic index); a collectionGroup over employment rows would
-    // need a COLLECTION_GROUP index the emulator wouldn't enforce. currentCompanyId
-    // is the denormalised current company on every employee (incl. terminated),
-    // so it catches active references; past generated contracts store the
-    // company inline and are unaffected.
-    const empHit = await db().collection("employees").where("currentCompanyId", "==", req.params.id).limit(1).get();
-    if (!empHit.empty) {
+    // Block delete only if an ACTIVE or BEFORE-START employee currently belongs
+    // to this company — a terminated employee's stale currentCompanyId must not
+    // block cleanup (a reactivation-time banner nudges the admin to fix it if
+    // they come back). currentCompanyId is the denormalised current company on
+    // the employee root doc; past generated contracts store the company inline
+    // and are unaffected. See services/lookupGuard.ts.
+    if (await isReferencedByLiveEmployee("currentCompanyId", req.params.id)) {
       res.status(400).json({ error: "Nelze smazat společnost, ve které jsou aktivní zaměstnanci." });
       return;
     }
