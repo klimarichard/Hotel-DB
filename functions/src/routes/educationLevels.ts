@@ -85,6 +85,28 @@ educationLevelsRouter.delete(
     const ref = db().collection("educationLevels").doc(req.params.id);
     const beforeSnap = await ref.get();
     const beforeData = beforeSnap.exists ? (beforeSnap.data() as Record<string, unknown>) : {};
+
+    // Referential-integrity guard (mirrors companies/departments/jobPositions):
+    // block deleting a level any employee still holds so the reference can't
+    // orphan. Employees store education as the composite display string the
+    // admin form builds — "<code> - <name>", or just "<name>" when the level
+    // has no code (see EmployeeFormPage) — on the employee ROOT doc, so we
+    // reconstruct that exact string and query it.
+    const eduName = typeof beforeData.name === "string" ? beforeData.name : "";
+    const eduCode = typeof beforeData.code === "string" ? beforeData.code : "";
+    const label = eduCode ? `${eduCode} - ${eduName}` : eduName;
+    if (label) {
+      const inUse = await db()
+        .collection("employees")
+        .where("education", "==", label)
+        .limit(1)
+        .get();
+      if (!inUse.empty) {
+        res.status(400).json({ error: "Nelze smazat vzdělání, které mají přiřazené zaměstnanci." });
+        return;
+      }
+    }
+
     await ref.delete();
     await logDelete(ctxFromReq(req), {
       collection: "educationLevels",
