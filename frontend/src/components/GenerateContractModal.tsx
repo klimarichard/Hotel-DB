@@ -71,6 +71,10 @@ export default function GenerateContractModal({
   const [template, setTemplate] = useState<string | null>(null);
   const [margins, setMargins] = useState<PageMargins>(DEFAULT_MARGINS);
   const [loadingTemplate, setLoadingTemplate] = useState(true);
+  // A deactivated template must not be generatable. The picker surfaces already
+  // filter inactive templates out; this is the backend-sourced backstop for the
+  // row-tied flow, where the template id is forced by the employment row.
+  const [templateInactive, setTemplateInactive] = useState(false);
   const [companyData, setCompanyData] = useState<CompanyData>({});
   const [loadingCompany, setLoadingCompany] = useState(false);
   // Per-field manual overrides of the automatic values (ad-hoc / back-dated
@@ -101,6 +105,7 @@ export default function GenerateContractModal({
         if (resp.ok) {
           const doc = await resp.json();
           setTemplate(doc.htmlContent ?? "");
+          setTemplateInactive(doc.active === false);
           if (doc.margins) setMargins(doc.margins);
         } else {
           setTemplate("");
@@ -186,6 +191,11 @@ export default function GenerateContractModal({
             <>
               {loadingTemplate || loadingCompany ? (
                 <p className={styles.info}>Načítám…</p>
+              ) : templateInactive ? (
+                <p className={styles.warn}>
+                  Tato šablona je neaktivní, a proto z ní nelze generovat smlouvu.
+                  Aktivujte ji nejdříve v sekci „Šablony smluv".
+                </p>
               ) : !template ? (
                 <p className={styles.warn}>
                   Šablona pro tento typ smlouvy není uložena. Uložte ji nejdříve v sekci
@@ -286,7 +296,7 @@ export default function GenerateContractModal({
               <Button
                 variant="primary"
                 onClick={handleGenerate}
-                disabled={loadingTemplate || loadingCompany || !template}
+                disabled={loadingTemplate || loadingCompany || !template || templateInactive}
               >
                 Generovat PDF
               </Button>
