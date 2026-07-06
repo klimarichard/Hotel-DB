@@ -17,7 +17,7 @@
 .tabs {
   display: flex;
   gap: 0.25rem;
-  border-bottom: 2px solid var(--color-border);
+  border-bottom: 2px solid var(--hotel-accent, var(--color-border));
   margin-bottom: 1.5rem;
   flex-wrap: wrap;
 }
@@ -37,14 +37,63 @@
 }
 
 .tabActive {
-  color: var(--color-primary);
-  border-bottom-color: var(--color-primary);
+  color: var(--hotel-accent, var(--color-primary));
+  border-bottom-color: var(--hotel-accent, var(--color-primary));
   font-weight: 600;
 }
 
 .tabBtn:hover {
-  color: var(--color-text-secondary);
+  color: var(--hotel-text, var(--color-text-secondary));
 }
+
+/* ── Hotel selector (colour-coded, centred, prominent) ────────────────────── */
+
+.hotelBar {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-bottom: 1.5rem;
+}
+
+.hotelPill {
+  padding: 0.6rem 1.6rem;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  background: var(--hotel-bg);
+  color: var(--hotel-text);
+  transition: filter 0.15s, box-shadow 0.15s;
+}
+
+.hotelPill:hover {
+  filter: brightness(0.96);
+}
+
+.hotelPillActive {
+  background: var(--hotel-accent);
+  color: #fff;
+  border-color: var(--hotel-accent);
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--hotel-accent) 45%, transparent);
+}
+
+[data-theme="dark"] .hotelPillActive {
+  color: #0b0f14;
+}
+
+/* Per-hotel palette — mirrors the Shift page's hotel colours (shiftConstants).
+   Light values are the default; [data-theme="dark"] overrides them. */
+.hotelA { --hotel-bg: #dcfce7; --hotel-text: #166534; --hotel-accent: #15803d; }
+.hotelS { --hotel-bg: #fde68a; --hotel-text: #78350f; --hotel-accent: #b45309; }
+.hotelQ { --hotel-bg: #fae8ff; --hotel-text: #a21caf; --hotel-accent: #a21caf; }
+.hotelK { --hotel-bg: #ede9fe; --hotel-text: #5b21b6; --hotel-accent: #6d28d9; }
+
+[data-theme="dark"] .hotelA { --hotel-bg: #064e3b; --hotel-text: #6ee7b7; --hotel-accent: #34d399; }
+[data-theme="dark"] .hotelS { --hotel-bg: #713f12; --hotel-text: #fde68a; --hotel-accent: #f59e0b; }
+[data-theme="dark"] .hotelQ { --hotel-bg: #4a044e; --hotel-text: #e879f9; --hotel-accent: #d946ef; }
+[data-theme="dark"] .hotelK { --hotel-bg: #2e1065; --hotel-text: #a78bfa; --hotel-accent: #8b5cf6; }
 
 /* ── Shared tab body ──────────────────────────────────────────────────────── */
 

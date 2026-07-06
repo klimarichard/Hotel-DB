@@ -9,6 +9,7 @@ import {
   HotelSlug,
   handoverViewPerm,
   handoverEditPerm,
+  handoverCreatePerm,
   handoverDeletePerm,
   handoverManagePerm,
 } from "../services/hotels";
@@ -306,6 +307,16 @@ handoversRouter.put(
     const ref = handoverCol(hotel).doc(id);
     const beforeSnap = await ref.get();
     const before = beforeSnap.exists ? (beforeSnap.data() as HandoverDoc) : null;
+
+    // Creating a NEW protocol (bootstrap or duplicate-to-next-shift) needs the
+    // dedicated create permission; editing an existing one needs only view/edit.
+    if (!beforeSnap.exists) {
+      const set = req.permissions ?? new Set<string>();
+      if (!set.has("system.admin") && !set.has(handoverCreatePerm(hotel))) {
+        res.status(403).json({ error: "Nemáte oprávnění vytvořit protokol." });
+        return;
+      }
+    }
 
     // Freeze at Předat: once the outgoing shift is signed, content is read-only
     // (an admin may still edit, e.g. after reverting a signature).

@@ -54,6 +54,12 @@ export function handoverEditPerm(slug: HotelSlug): string {
   return `recepce.${SLUG_TO_STEM[slug]}.protokol.view`;
 }
 
+/** `recepce.<stem>.protokol.create` — required to CREATE a new protocol (bootstrap
+ *  or duplicate-to-next-shift). Editing an existing protocol needs only view. */
+export function handoverCreatePerm(slug: HotelSlug): string {
+  return `recepce.${SLUG_TO_STEM[slug]}.protokol.create`;
+}
+
 /** `recepce.<stem>.protokol.delete` — required to DELETE a hotel's handover protocol. */
 export function handoverDeletePerm(slug: HotelSlug): string {
   return `recepce.${SLUG_TO_STEM[slug]}.protokol.delete`;

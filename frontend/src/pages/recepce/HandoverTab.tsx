@@ -346,6 +346,7 @@ function ProtocolEditor({
   onNavigate: (date: string, shift: ShiftType, doc?: Handover | null) => void;
 }) {
   const { can } = useAuth();
+  const canCreate = can(hotel.protokolCreatePerm);
   const canDelete = can(hotel.protokolDeletePerm);
   const isAdmin = can("system.admin");
   const docId = `${shiftDate}_${shiftType}`;
@@ -373,6 +374,8 @@ function ProtocolEditor({
   >(null);
   const [signBusy, setSignBusy] = useState(false);
   const [signError, setSignError] = useState<string | null>(null);
+  // Whether the NEXT shift already has a protocol (hides the create-next button).
+  const [nextExists, setNextExists] = useState(false);
 
   const predal = loaded?.predal ?? null;
   const prevzal = loaded?.prevzal ?? null;
@@ -452,6 +455,29 @@ function ProtocolEditor({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Once the protocol is closed, check whether the next shift already exists —
+  // if so, the "create next shift" button is hidden.
+  useEffect(() => {
+    if (!prevzal) {
+      setNextExists(false);
+      return;
+    }
+    let cancelled = false;
+    const next = nextShift(shiftDate, shiftType);
+    void (async () => {
+      try {
+        await api.get<Handover>(`/handovers/${hotel.slug}/${next.date}_${next.shift}`);
+        if (!cancelled) setNextExists(true);
+      } catch (e) {
+        if (!cancelled) setNextExists(!(e instanceof ApiError && e.status === 404));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prevzal]);
 
   // Debounced autosave — active once a record exists and while it's not frozen.
   useEffect(() => {
@@ -742,10 +768,16 @@ function ProtocolEditor({
       <>
         <div className={styles.placeholder}>
           <p className={styles.placeholderTitle}>Pro tuto směnu zatím není žádný záznam</p>
-          <p className={styles.placeholderHint}>Vytvořte prázdný předávací protokol a začněte vyplňovat.</p>
-          <Button onClick={createEmpty} disabled={creating}>
-            {creating ? "Vytvářím…" : "Vytvořit prázdný protokol"}
-          </Button>
+          {canCreate ? (
+            <>
+              <p className={styles.placeholderHint}>Vytvořte prázdný předávací protokol a začněte vyplňovat.</p>
+              <Button onClick={createEmpty} disabled={creating}>
+                {creating ? "Vytvářím…" : "Vytvořit prázdný protokol"}
+              </Button>
+            </>
+          ) : (
+            <p className={styles.placeholderHint}>Nemáte oprávnění vytvořit nový protokol.</p>
+          )}
         </div>
         {confirmModal}
       </>
@@ -759,32 +791,6 @@ function ProtocolEditor({
         {canDelete && (
           <Button variant="danger" size="sm" onClick={requestDeleteProtocol}>
             Smazat protokol
-          </Button>
-        )}
-      </div>
-
-      <div className={styles.signaturesRow}>
-        <SignatureBlock
-          label="Předal"
-          stamp={predal}
-          buttonLabel="Předat"
-          onSign={() => openSign("predal")}
-          signDisabled={signers.length === 0}
-          canRevert={!!predal && !prevzal}
-          onRevert={() => predal && openRevert("predal", predal)}
-        />
-        <SignatureBlock
-          label="Převzal"
-          stamp={prevzal}
-          buttonLabel="Převzít"
-          onSign={() => openSign("prevzal")}
-          signDisabled={!predal || signers.length === 0}
-          canRevert={!!prevzal}
-          onRevert={() => prevzal && openRevert("prevzal", prevzal)}
-        />
-        {prevzal && (
-          <Button variant="primary" size="sm" onClick={createNextShift}>
-            Vytvořit protokol pro další směnu
           </Button>
         )}
       </div>
@@ -991,6 +997,32 @@ function ProtocolEditor({
             </div>
           </div>
         </div>
+      </div>
+
+      <div className={styles.signaturesRow}>
+        <SignatureBlock
+          label="Předal"
+          stamp={predal}
+          buttonLabel="Předat"
+          onSign={() => openSign("predal")}
+          signDisabled={signers.length === 0}
+          canRevert={!!predal && !prevzal}
+          onRevert={() => predal && openRevert("predal", predal)}
+        />
+        <SignatureBlock
+          label="Převzal"
+          stamp={prevzal}
+          buttonLabel="Převzít"
+          onSign={() => openSign("prevzal")}
+          signDisabled={!predal || signers.length === 0}
+          canRevert={!!prevzal}
+          onRevert={() => prevzal && openRevert("prevzal", prevzal)}
+        />
+        {prevzal && !nextExists && canCreate && (
+          <Button variant="primary" size="sm" onClick={createNextShift}>
+            Vytvořit protokol pro další směnu
+          </Button>
+        )}
       </div>
 
       {signAction && (
