@@ -1,32 +1,24 @@
 import * as admin from "firebase-admin";
-import { Timestamp } from "firebase-admin/firestore";
 import { HotelSlug } from "./hotels";
 
 export const SHIFT_TYPES = ["den", "noc"] as const;
 export type ShiftType = (typeof SHIFT_TYPES)[number];
 
-export type SignatureSlot = "predal" | "prevzal";
-
-export interface StampedSignature {
-  uid: string;
-  displayName: string;
-  email: string;
-  at: Timestamp;
-}
-
+/**
+ * A per-shift reception record: cash counts, free-form účty rows, and notes.
+ * (The old Předal/Převzal signing + lock machinery was removed — this is now a
+ * plain autosaved record with a permission-gated delete.)
+ */
 export interface HandoverDoc {
   shiftDate: string;
   shiftType: ShiftType;
   notes?: Array<{ text: string; done: boolean }>;
   cashCounts?: Record<string, Record<string, number>>;
   accounts?: Array<{ name: string; amount: number }>;
-  smBreakdown?: { EUR: number; USD: number; GBP: number };
-  predal?: StampedSignature | null;
-  prevzal?: StampedSignature | null;
   createdBy?: string;
   updatedBy?: string;
-  createdAt?: Timestamp;
-  updatedAt?: Timestamp;
+  createdAt?: admin.firestore.Timestamp;
+  updatedAt?: admin.firestore.Timestamp;
 }
 
 export function isShiftDate(s: unknown): s is string {

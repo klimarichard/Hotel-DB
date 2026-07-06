@@ -232,8 +232,7 @@
   grid-template-areas:
     "kasaCZK    trezorCZK    accounts"
     "kasaEUR    trezorEUR    accounts"
-    "summary    summary      accounts"
-    "sigPredal  sigPrevzal   accounts";
+    "summary    summary      accounts";
   gap: 1rem;
   align-items: stretch;
   min-width: 0;
@@ -251,12 +250,6 @@
 .trezorEUR {
   grid-area: trezorEUR;
 }
-.sigPredalCell {
-  grid-area: sigPredal;
-}
-.sigPrevzalCell {
-  grid-area: sigPrevzal;
-}
 
 @media (max-width: 900px) {
   .cashLayout {
@@ -267,9 +260,7 @@
       "kasaEUR"
       "trezorEUR"
       "accounts"
-      "summary"
-      "sigPredal"
-      "sigPrevzal";
+      "summary";
   }
 }
 

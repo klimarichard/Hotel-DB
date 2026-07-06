@@ -46,11 +46,15 @@ export function handoverViewPerm(slug: HotelSlug): string {
 }
 
 /**
- * Permission required to WRITE a hotel's handover protocol. Basic version: the
- * same `protokol.view` key confers edit (a dedicated `recepce.<stem>.protokol.manage`
- * key for locked-stamp reverts etc. comes in a later pass). Kept as its own
- * helper so the edit gate has a single call site to upgrade later.
+ * Permission required to WRITE (create/update) a hotel's handover protocol. The
+ * `protokol.view` key confers edit — anyone who can open the tab can fill it in.
+ * Kept as its own helper so the edit gate has a single call site.
  */
 export function handoverEditPerm(slug: HotelSlug): string {
   return `recepce.${SLUG_TO_STEM[slug]}.protokol.view`;
+}
+
+/** `recepce.<stem>.protokol.delete` — required to DELETE a hotel's handover protocol. */
+export function handoverDeletePerm(slug: HotelSlug): string {
+  return `recepce.${SLUG_TO_STEM[slug]}.protokol.delete`;
 }
