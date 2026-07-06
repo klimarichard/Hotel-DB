@@ -26,12 +26,25 @@ export interface StampedSignature {
  * frozen once `predal` is set (admin can still revert). Signatures are written
  * only by the dedicated sign/revert endpoints, never by the content PUT.
  */
+export interface NoteRow {
+  id?: string;
+  text: string;
+  done: boolean;
+  locked?: boolean;
+}
+export interface AccountRow {
+  id?: string;
+  name: string;
+  amount: number;
+  locked?: boolean;
+}
+
 export interface HandoverDoc {
   shiftDate: string;
   shiftType: ShiftType;
-  notes?: Array<{ text: string; done: boolean }>;
+  notes?: NoteRow[];
   cashCounts?: Record<string, Record<string, number>>;
-  accounts?: Array<{ name: string; amount: number }>;
+  accounts?: AccountRow[];
   predal?: StampedSignature | null;
   prevzal?: StampedSignature | null;
   createdBy?: string;

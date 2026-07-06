@@ -15,6 +15,8 @@ import {
 } from "../services/hotels";
 import {
   HandoverDoc,
+  NoteRow,
+  AccountRow,
   StampedSignature,
   SignatureSlot,
   isSignatureSlot,
@@ -64,31 +66,75 @@ function sanitizeCashCounts(raw: unknown): Record<DrawerKey, Record<string, numb
   };
 }
 
-function sanitizeNotes(raw: unknown): Array<{ text: string; done: boolean }> {
+function idOf(entry: object): string | undefined {
+  const id = (entry as { id?: unknown }).id;
+  return typeof id === "string" && id !== "" ? id : undefined;
+}
+
+function sanitizeNotes(raw: unknown): NoteRow[] {
   if (!Array.isArray(raw)) return [];
-  const out: Array<{ text: string; done: boolean }> = [];
+  const out: NoteRow[] = [];
   for (const entry of raw) {
     if (!entry || typeof entry !== "object") continue;
     const text = (entry as { text?: unknown }).text;
     if (typeof text !== "string") continue;
     const done = (entry as { done?: unknown }).done === true;
-    out.push({ text, done });
+    const locked = (entry as { locked?: unknown }).locked === true;
+    const row: NoteRow = { text, done, locked };
+    const id = idOf(entry);
+    if (id) row.id = id;
+    out.push(row);
   }
   return out;
 }
 
-function sanitizeAccounts(raw: unknown): Array<{ name: string; amount: number }> {
+function sanitizeAccounts(raw: unknown): AccountRow[] {
   if (!Array.isArray(raw)) return [];
-  const out: Array<{ name: string; amount: number }> = [];
+  const out: AccountRow[] = [];
   for (const entry of raw) {
     if (!entry || typeof entry !== "object") continue;
     const name = (entry as { name?: unknown }).name;
     const amount = (entry as { amount?: unknown }).amount;
     if (typeof name !== "string" || name.trim() === "") continue;
     if (typeof amount !== "number" || !Number.isFinite(amount)) continue;
-    out.push({ name: name.trim(), amount: Math.round(amount) });
+    const locked = (entry as { locked?: unknown }).locked === true;
+    const row: AccountRow = { name: name.trim(), amount: Math.round(amount), locked };
+    const id = idOf(entry);
+    if (id) row.id = id;
+    out.push(row);
   }
   return out;
+}
+
+/**
+ * Lock enforcement: a manage/admin caller may change anything; a non-manage
+ * caller can't edit, delete, or (un)lock a LOCKED row, nor lock a new row. We
+ * merge by id — locked stored rows are preserved verbatim, everything else comes
+ * from the (already-sanitized) incoming with `locked` forced off.
+ */
+function mergeLockable<T extends { id?: string; locked?: boolean }>(
+  stored: T[],
+  incoming: T[],
+  isManage: boolean
+): T[] {
+  if (isManage) return incoming;
+  const storedById = new Map<string, T>();
+  for (const s of stored) if (s.id) storedById.set(s.id, s);
+  const result: T[] = [];
+  const used = new Set<string>();
+  for (const inc of incoming) {
+    const s = inc.id ? storedById.get(inc.id) : undefined;
+    if (s && s.locked) {
+      result.push(s);
+      used.add(inc.id as string);
+    } else {
+      result.push({ ...inc, locked: false });
+    }
+  }
+  for (const s of stored) {
+    if (s.locked && s.id && !used.has(s.id)) result.push(s);
+  }
+  return result;
 }
 
 /** Validates the :hotel URL segment. Rejects unknown slugs with 404. */
@@ -437,12 +483,14 @@ handoversRouter.put(
       return;
     }
 
+    const set = req.permissions ?? new Set<string>();
+    const isManage = set.has("system.admin") || set.has(handoverManagePerm(hotel));
     const after = {
       shiftDate: body.shiftDate,
       shiftType: body.shiftType,
-      notes: sanitizeNotes(body.notes),
+      notes: mergeLockable<NoteRow>(before?.notes ?? [], sanitizeNotes(body.notes), isManage),
       cashCounts: sanitizeCashCounts(body.cashCounts),
-      accounts: sanitizeAccounts(body.accounts),
+      accounts: mergeLockable<AccountRow>(before?.accounts ?? [], sanitizeAccounts(body.accounts), isManage),
       updatedBy: req.uid,
     };
 

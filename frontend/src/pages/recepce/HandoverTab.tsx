@@ -23,13 +23,25 @@ type TimestampLike =
   | { _seconds: number; _nanoseconds?: number };
 
 interface NoteItem {
+  id: string;
   text: string;
   done: boolean;
+  locked: boolean;
 }
 
 interface Account {
+  id: string;
   name: string;
   amount: number;
+  locked: boolean;
+}
+
+function genId(): string {
+  try {
+    return crypto.randomUUID();
+  } catch {
+    return `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+  }
 }
 
 type SignatureSlot = "predal" | "prevzal";
@@ -141,18 +153,36 @@ function drawerSubtotal(counts: Record<string, number>): number {
 function coerceNotes(raw: unknown): NoteItem[] {
   if (!Array.isArray(raw)) return [];
   return raw
-    .filter((n): n is { text: unknown; done?: unknown } => !!n && typeof n === "object")
+    .filter((n): n is Record<string, unknown> => !!n && typeof n === "object")
     .filter((n) => typeof n.text === "string")
-    .map((n) => ({ text: n.text as string, done: n.done === true }));
+    .map((n) => ({
+      id: typeof n.id === "string" && n.id ? n.id : genId(),
+      text: n.text as string,
+      done: n.done === true,
+      locked: n.locked === true,
+    }));
+}
+
+function coerceAccounts(raw: unknown): Account[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((a): a is Record<string, unknown> => !!a && typeof a === "object")
+    .filter((a) => typeof a.name === "string")
+    .map((a) => ({
+      id: typeof a.id === "string" && a.id ? a.id : genId(),
+      name: a.name as string,
+      amount: typeof a.amount === "number" ? a.amount : 0,
+      locked: a.locked === true,
+    }));
 }
 
 function toPayload(notes: NoteItem[], cashCounts: Record<DrawerKey, Record<string, number>>, accounts: Account[]) {
   return {
-    notes: notes.map((n) => ({ text: n.text, done: n.done })),
+    notes: notes.map((n) => ({ id: n.id, text: n.text, done: n.done, locked: n.locked })),
     cashCounts,
     accounts: accounts
       .filter((a) => a.name.trim() !== "")
-      .map((a) => ({ name: a.name.trim(), amount: Math.round(a.amount) || 0 })),
+      .map((a) => ({ id: a.id, name: a.name.trim(), amount: Math.round(a.amount) || 0, locked: a.locked })),
   };
 }
 
@@ -192,6 +222,30 @@ function TrashActionButton({ ariaLabel, onClick }: { ariaLabel: string; onClick:
   return (
     <button type="button" className={`${styles.rowIconBtn} ${styles.rowIconBtnTrash}`} aria-label={ariaLabel} onClick={onClick}>
       <TrashIcon />
+    </button>
+  );
+}
+
+function LockIcon({ locked }: { locked: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="4" y="11" width="16" height="10" rx="2" />
+      {locked ? <path d="M8 11V7a4 4 0 0 1 8 0v4" /> : <path d="M8 11V7a4 4 0 0 1 7.5-2" />}
+    </svg>
+  );
+}
+
+/** Interactive lock toggle (manage users). */
+function LockActionButton({ locked, onClick }: { locked: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      className={`${styles.rowIconBtn} ${locked ? styles.rowIconBtnLocked : ""}`}
+      aria-label={locked ? "Odemknout" : "Zamknout"}
+      title={locked ? "Odemknout" : "Zamknout"}
+      onClick={onClick}
+    >
+      <LockIcon locked={locked} />
     </button>
   );
 }
@@ -348,6 +402,7 @@ function ProtocolEditor({
   const { can } = useAuth();
   const canCreate = can(hotel.protokolCreatePerm);
   const canDelete = can(hotel.protokolDeletePerm);
+  const canManage = can(hotel.protokolManagePerm);
   const isAdmin = can("system.admin");
   const docId = `${shiftDate}_${shiftType}`;
 
@@ -402,7 +457,7 @@ function ProtocolEditor({
       kasaEUR: data.cashCounts?.kasaEUR ?? {},
       trezorEUR: data.cashCounts?.trezorEUR ?? {},
     };
-    const acc = data.accounts ?? [];
+    const acc = coerceAccounts(data.accounts);
     setLoaded(data);
     setNotes(n);
     setCashCounts(cc);
@@ -659,7 +714,7 @@ function ProtocolEditor({
 
   // ── Účty ─────────────────────────────────────────────────────────────────
   function addAccountRow() {
-    setAccounts((prev) => [...prev, { name: "", amount: 0 }]);
+    setAccounts((prev) => [...prev, { id: genId(), name: "", amount: 0, locked: false }]);
     setEditingIdx(accounts.length);
   }
   function setAccountName(idx: number, name: string) {
@@ -667,6 +722,9 @@ function ProtocolEditor({
   }
   function setAccountAmount(idx: number, amount: number) {
     setAccounts((prev) => prev.map((a, i) => (i === idx ? { ...a, amount: Number.isFinite(amount) ? amount : 0 } : a)));
+  }
+  function setAccountLocked(idx: number, locked: boolean) {
+    setAccounts((prev) => prev.map((a, i) => (i === idx ? { ...a, locked } : a)));
   }
   function removeAccount(idx: number) {
     setAccounts((prev) => prev.filter((_, i) => i !== idx));
@@ -691,7 +749,7 @@ function ProtocolEditor({
 
   // ── Poznámky ─────────────────────────────────────────────────────────────
   function addNote() {
-    setNotes((prev) => [...prev, { text: "", done: false }]);
+    setNotes((prev) => [...prev, { id: genId(), text: "", done: false, locked: false }]);
     setEditingNoteIdx(notes.length);
   }
   function setNoteText(idx: number, text: string) {
@@ -699,6 +757,9 @@ function ProtocolEditor({
   }
   function setNoteDone(idx: number, done: boolean) {
     setNotes((prev) => prev.map((n, i) => (i === idx ? { ...n, done } : n)));
+  }
+  function setNoteLocked(idx: number, locked: boolean) {
+    setNotes((prev) => prev.map((n, i) => (i === idx ? { ...n, locked } : n)));
   }
   function removeNote(idx: number) {
     setNotes((prev) => prev.filter((_, i) => i !== idx));
@@ -929,6 +990,7 @@ function ProtocolEditor({
               {accounts.map((acc, idx) => {
                 const isEditing = editingIdx === idx;
                 const altRow = idx % 2 === 1;
+                const rowEditable = canEdit && (!acc.locked || canManage);
                 return (
                   <Fragment key={idx}>
                     <div className={`${styles.accountRow} ${altRow ? styles.accountRowAlt : ""}`}>
@@ -959,18 +1021,26 @@ function ProtocolEditor({
                         <span className={styles.accountAmountRO}>{acc.amount.toLocaleString("cs-CZ")}</span>
                       )}
                       <span className={styles.accountSuffix}>Kč</span>
-                      {canEdit && (
+                      {rowEditable && (
                         <EditActionButton
                           editing={isEditing}
                           ariaLabel={isEditing ? "Hotovo" : "Upravit"}
                           onClick={() => setEditingIdx(isEditing ? null : idx)}
                         />
                       )}
-                      {canEdit && (
+                      {rowEditable && (
                         <TrashActionButton
                           ariaLabel={`Odstranit účet ${acc.name || "(bez názvu)"}`}
                           onClick={() => requestDeleteAccount(idx)}
                         />
+                      )}
+                      {canManage && canEdit && (
+                        <LockActionButton locked={acc.locked} onClick={() => setAccountLocked(idx, !acc.locked)} />
+                      )}
+                      {acc.locked && !canManage && (
+                        <span className={styles.rowLockedIndicator} title="Uzamčeno">
+                          <LockIcon locked />
+                        </span>
                       )}
                     </div>
                   </Fragment>
@@ -994,6 +1064,7 @@ function ProtocolEditor({
               {notes.length === 0 && <div className={styles.accountsEmpty}>Žádné poznámky.</div>}
               {notes.map((n, i) => {
                 const isEditingNote = editingNoteIdx === i;
+                const rowEditable = canEdit && (!n.locked || canManage);
                 return (
                   <div key={i} className={`${styles.noteRow} ${i % 2 === 1 ? styles.noteRowAlt : ""}`}>
                     <input
@@ -1001,7 +1072,7 @@ function ProtocolEditor({
                       className={styles.noteCheck}
                       checked={n.done}
                       onChange={(e) => setNoteDone(i, e.target.checked)}
-                      disabled={!canEdit}
+                      disabled={!rowEditable}
                       aria-label={n.done ? "Označit jako nevyřízené" : "Označit jako vyřízené"}
                     />
                     {isEditingNote ? (
@@ -1018,15 +1089,23 @@ function ProtocolEditor({
                         {n.text || <em className={styles.accountNameEmpty}>(prázdná poznámka)</em>}
                       </span>
                     )}
-                    {canEdit && (
+                    {rowEditable && (
                       <EditActionButton
                         editing={isEditingNote}
                         ariaLabel={isEditingNote ? "Hotovo" : "Upravit"}
                         onClick={() => setEditingNoteIdx(isEditingNote ? null : i)}
                       />
                     )}
-                    {canEdit && (
+                    {rowEditable && (
                       <TrashActionButton ariaLabel="Odstranit poznámku" onClick={() => requestDeleteNote(i)} />
+                    )}
+                    {canManage && canEdit && (
+                      <LockActionButton locked={n.locked} onClick={() => setNoteLocked(i, !n.locked)} />
+                    )}
+                    {n.locked && !canManage && (
+                      <span className={styles.rowLockedIndicator} title="Uzamčeno">
+                        <LockIcon locked />
+                      </span>
                     )}
                   </div>
                 );
