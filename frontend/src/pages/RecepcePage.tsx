@@ -10,13 +10,20 @@ import {
   type Hotel,
   type TabId,
 } from "@/lib/hotels";
-import HotelSelector from "@/components/HotelSelector";
 import HandoverTab from "./recepce/HandoverTab";
 import WalkinsTab from "./recepce/WalkinsTab";
 import TaxiTab from "./recepce/TaxiTab";
 import LobbyBarTab from "./recepce/LobbyBarTab";
 import TerminalTab from "./recepce/TerminalTab";
 import styles from "./RecepcePage.module.css";
+
+/** Per-hotel tint class (colours mirror the Shift page's hotel colours). */
+const HOTEL_CLASS: Record<string, string> = {
+  A: styles.hotelA,
+  S: styles.hotelS,
+  Q: styles.hotelQ,
+  K: styles.hotelK,
+};
 
 /**
  * Reception hub. Access is entirely permission-driven:
@@ -81,17 +88,38 @@ export default function RecepcePage() {
     <div>
       <div className={styles.header}>
         <h1 className={styles.title}>Recepce</h1>
-        {hotels.length > 1 && selectedHotel && (
-          <HotelSelector
-            hotels={hotels}
-            value={selectedHotel.slug}
-            onChange={(slug) => navigate(`/recepce/${slug}`)}
-          />
-        )}
       </div>
 
+      {/* Hotel selector — always shown (even for a single accessible hotel, so
+          the receptionist can see which hotel they're on), colour-coded. */}
+      {selectedHotel && (
+        <div className={styles.hotelBar} role="tablist" aria-label="Hotel">
+          {hotels.map((h) => {
+            const active = h.slug === selectedHotel.slug;
+            return (
+              <button
+                key={h.slug}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                className={`${styles.hotelPill} ${HOTEL_CLASS[h.code] ?? ""} ${
+                  active ? styles.hotelPillActive : ""
+                }`}
+                onClick={() => navigate(`/recepce/${h.slug}`)}
+              >
+                {h.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {selectedHotel && tabs.length > 0 && (
-        <div className={styles.tabs} role="tablist" aria-label="Sekce recepce">
+        <div
+          className={`${styles.tabs} ${HOTEL_CLASS[selectedHotel.code] ?? ""}`}
+          role="tablist"
+          aria-label="Sekce recepce"
+        >
           {tabs.map((t) => (
             <button
               key={t.id}

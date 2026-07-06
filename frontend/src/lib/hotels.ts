@@ -35,6 +35,8 @@ export interface Hotel {
   readonly stem: string;
   /** `recepce.<stem>.view` — gates whether the hotel is accessible at all. */
   readonly viewPerm: Permission;
+  /** `recepce.<stem>.protokol.create` — gates creating a new Předávací protokol. */
+  readonly protokolCreatePerm: Permission;
   /** `recepce.<stem>.protokol.delete` — gates deleting a Předávací protokol. */
   readonly protokolDeletePerm: Permission;
   /** `recepce.<stem>.protokol.manage` — gates reverting others' signatures. */
@@ -50,6 +52,7 @@ export const HOTELS: readonly Hotel[] = [
     label: "Ambiance",
     stem: "ambiance",
     viewPerm: "recepce.ambiance.view",
+    protokolCreatePerm: "recepce.ambiance.protokol.create",
     protokolDeletePerm: "recepce.ambiance.protokol.delete",
     protokolManagePerm: "recepce.ambiance.protokol.manage",
     tabs: [
@@ -65,6 +68,7 @@ export const HOTELS: readonly Hotel[] = [
     label: "Superior",
     stem: "superior",
     viewPerm: "recepce.superior.view",
+    protokolCreatePerm: "recepce.superior.protokol.create",
     protokolDeletePerm: "recepce.superior.protokol.delete",
     protokolManagePerm: "recepce.superior.protokol.manage",
     tabs: [
@@ -79,6 +83,7 @@ export const HOTELS: readonly Hotel[] = [
     label: "Amigo & Alqush",
     stem: "amigo",
     viewPerm: "recepce.amigo.view",
+    protokolCreatePerm: "recepce.amigo.protokol.create",
     protokolDeletePerm: "recepce.amigo.protokol.delete",
     protokolManagePerm: "recepce.amigo.protokol.manage",
     tabs: [
@@ -94,6 +99,7 @@ export const HOTELS: readonly Hotel[] = [
     label: "Ankora",
     stem: "ankora",
     viewPerm: "recepce.ankora.view",
+    protokolCreatePerm: "recepce.ankora.protokol.create",
     protokolDeletePerm: "recepce.ankora.protokol.delete",
     protokolManagePerm: "recepce.ankora.protokol.manage",
     tabs: [
