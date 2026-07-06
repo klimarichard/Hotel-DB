@@ -24,6 +24,17 @@
   gap: 0.5rem;
 }
 
+.rowIconBtnLocked {
+  color: var(--color-primary);
+}
+
+.rowLockedIndicator {
+  display: inline-flex;
+  align-items: center;
+  color: var(--color-text-muted);
+  padding: 0 4px;
+}
+
 /* ── Print (black & white, one A4) ────────────────────────────────────────── */
 .printArea {
   display: none;
