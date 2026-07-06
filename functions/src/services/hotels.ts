@@ -58,3 +58,9 @@ export function handoverEditPerm(slug: HotelSlug): string {
 export function handoverDeletePerm(slug: HotelSlug): string {
   return `recepce.${SLUG_TO_STEM[slug]}.protokol.delete`;
 }
+
+/** `recepce.<stem>.protokol.manage` — required to revert SOMEONE ELSE's signature
+ *  (self-unsign needs no permission — only a valid password). */
+export function handoverManagePerm(slug: HotelSlug): string {
+  return `recepce.${SLUG_TO_STEM[slug]}.protokol.manage`;
+}

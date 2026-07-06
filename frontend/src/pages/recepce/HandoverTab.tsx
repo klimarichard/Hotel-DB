@@ -4,6 +4,8 @@ import { useAuth } from "@/hooks/useAuth";
 import Button from "@/components/Button";
 import ConfirmModal from "@/components/ConfirmModal";
 import type { Hotel } from "@/lib/hotels";
+import { verifyCredential } from "@/lib/secondaryAuth";
+import SignModal, { type Signer } from "./SignModal";
 import styles from "./HandoverTab.module.css";
 
 type ShiftType = "den" | "noc";
@@ -30,6 +32,15 @@ interface Account {
   amount: number;
 }
 
+type SignatureSlot = "predal" | "prevzal";
+
+interface Stamp {
+  uid: string;
+  displayName: string;
+  email: string;
+  at: TimestampLike | null;
+}
+
 interface Handover {
   id: string;
   shiftDate: string;
@@ -37,6 +48,8 @@ interface Handover {
   notes?: NoteItem[] | null;
   cashCounts?: Partial<Record<DrawerKey, Record<string, number>>>;
   accounts?: Account[];
+  predal?: Stamp | null;
+  prevzal?: Stamp | null;
   updatedBy?: string;
   updatedAt?: TimestampLike | null;
 }
@@ -101,6 +114,18 @@ function formatTimeOnly(ts: TimestampLike | null | undefined): string {
   const s = timestampSeconds(ts);
   if (s === null) return "";
   return new Date(s * 1000).toLocaleTimeString("cs-CZ", { hour: "2-digit", minute: "2-digit" });
+}
+
+function formatTimestamp(ts: TimestampLike | null | undefined): string {
+  const s = timestampSeconds(ts);
+  if (s === null) return "";
+  return new Date(s * 1000).toLocaleString("cs-CZ", {
+    day: "numeric",
+    month: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function emptyCashCounts(): Record<DrawerKey, Record<string, number>> {
@@ -168,6 +193,41 @@ function TrashActionButton({ ariaLabel, onClick }: { ariaLabel: string; onClick:
     <button type="button" className={`${styles.rowIconBtn} ${styles.rowIconBtnTrash}`} aria-label={ariaLabel} onClick={onClick}>
       <TrashIcon />
     </button>
+  );
+}
+
+function SignatureBlock({
+  label,
+  stamp,
+  buttonLabel,
+  onSign,
+  signDisabled,
+  canRevert,
+  onRevert,
+}: {
+  label: string;
+  stamp: Stamp | null;
+  buttonLabel: string;
+  onSign: () => void;
+  signDisabled?: boolean;
+  canRevert: boolean;
+  onRevert: () => void;
+}) {
+  return (
+    <div className={styles.signatureBlock}>
+      <span className={styles.signatureLabel}>{label}</span>
+      {stamp ? (
+        <div className={styles.signatureStamp}>
+          <strong className={styles.signatureName}>{stamp.displayName}</strong>
+          <span className={styles.signatureTime}>{formatTimestamp(stamp.at)}</span>
+          {canRevert && <TrashActionButton ariaLabel={`Odebrat podpis ${label}`} onClick={onRevert} />}
+        </div>
+      ) : (
+        <Button variant="secondary" size="sm" onClick={onSign} disabled={signDisabled}>
+          {buttonLabel}
+        </Button>
+      )}
+    </div>
   );
 }
 
@@ -247,6 +307,10 @@ export default function HandoverTab({ hotel }: { hotel: Hotel }) {
         hotel={hotel}
         shiftDate={shiftDate}
         shiftType={shiftType}
+        onNavigate={(date, shift) => {
+          setShiftDate(date);
+          setShiftType(shift);
+        }}
       />
     </div>
   );
@@ -257,9 +321,20 @@ export default function HandoverTab({ hotel }: { hotel: Hotel }) {
 // mounts fresh whenever the shift changes: loads its doc once, shows the create
 // button when none exists, and otherwise renders the three autosaving tables.
 // ─────────────────────────────────────────────────────────────────────────────
-function ProtocolEditor({ hotel, shiftDate, shiftType }: { hotel: Hotel; shiftDate: string; shiftType: ShiftType }) {
+function ProtocolEditor({
+  hotel,
+  shiftDate,
+  shiftType,
+  onNavigate,
+}: {
+  hotel: Hotel;
+  shiftDate: string;
+  shiftType: ShiftType;
+  onNavigate: (date: string, shift: ShiftType) => void;
+}) {
   const { can } = useAuth();
   const canDelete = can(hotel.protokolDeletePerm);
+  const isAdmin = can("system.admin");
   const docId = `${shiftDate}_${shiftType}`;
 
   const [loaded, setLoaded] = useState<Handover | null>(null);
@@ -277,6 +352,19 @@ function ProtocolEditor({ hotel, shiftDate, shiftType }: { hotel: Hotel; shiftDa
   const [autosaving, setAutosaving] = useState(false);
   const [autosaveError, setAutosaveError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
+
+  // ── Signatures ─────────────────────────────────────────────────────────────
+  const [signers, setSigners] = useState<Signer[]>([]);
+  const [signAction, setSignAction] = useState<
+    { slot: SignatureSlot; mode: "sign" | "revert"; stamp?: Stamp | null } | null
+  >(null);
+  const [signBusy, setSignBusy] = useState(false);
+  const [signError, setSignError] = useState<string | null>(null);
+
+  const predal = loaded?.predal ?? null;
+  const prevzal = loaded?.prevzal ?? null;
+  // Freeze at Předat: once signed, content is read-only (admin may still edit).
+  const canEdit = !predal || isAdmin;
 
   const savedPayloadRef = useRef<string>(JSON.stringify(toPayload([], emptyCashCounts(), [])));
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -327,9 +415,29 @@ function ProtocolEditor({ hotel, shiftDate, shiftType }: { hotel: Hotel; shiftDa
   const currentPayload = useMemo(() => toPayload(notes, cashCounts, accounts), [notes, cashCounts, accounts]);
   const dirty = JSON.stringify(currentPayload) !== savedPayloadRef.current;
 
-  // Debounced autosave — active only once a record exists (created explicitly).
+  // Load the signer pool for this shift's month (for the sign dropdown).
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const list = await api.get<Signer[]>(
+          `/handovers/${hotel.slug}/signers?date=${encodeURIComponent(shiftDate)}`
+        );
+        if (!cancelled) setSigners(list);
+      } catch {
+        // non-fatal — the dropdown just shows no options
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Debounced autosave — active once a record exists and while it's not frozen.
   useEffect(() => {
     if (loading || !loaded) return;
+    if (!canEdit) return; // frozen after Předat
     if (!dirty) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => void save(), AUTOSAVE_DELAY_MS);
@@ -337,7 +445,7 @@ function ProtocolEditor({ hotel, shiftDate, shiftType }: { hotel: Hotel; shiftDa
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [notes, cashCounts, accounts, loading, loaded, dirty]);
+  }, [notes, cashCounts, accounts, loading, loaded, dirty, canEdit]);
 
   async function save() {
     if (isSavingRef.current) return;
@@ -378,6 +486,80 @@ function ProtocolEditor({ hotel, shiftDate, shiftType }: { hotel: Hotel; shiftDa
       });
     } finally {
       setCreating(false);
+    }
+  }
+
+  // ── Signatures (Předat / Převzít / Un-sign) ────────────────────────────────
+  function signErrorMessage(err: unknown): string {
+    if (err instanceof ApiError) return err.message || "Akce se nezdařila.";
+    const code = (err as { code?: string })?.code;
+    if (typeof code === "string" && code.startsWith("auth/")) return "Neplatné jméno nebo heslo.";
+    if (err instanceof Error && err.message) return err.message;
+    return "Ověření se nezdařilo.";
+  }
+
+  function openSign(slot: SignatureSlot) {
+    setSignError(null);
+    setSignAction({ slot, mode: "sign" });
+  }
+  function openRevert(slot: SignatureSlot, stamp: Stamp) {
+    setSignError(null);
+    setSignAction({ slot, mode: "revert", stamp });
+  }
+
+  async function handleSignSubmit(signer: Signer, password: string) {
+    if (!signAction) return;
+    setSignBusy(true);
+    setSignError(null);
+    try {
+      const cred = await verifyCredential(signer.name, password);
+      const base = `/handovers/${hotel.slug}/${docId}/${signAction.slot}`;
+      if (signAction.mode === "sign") {
+        // Persist any pending edits BEFORE freezing the content.
+        if (dirty && !isSavingRef.current) await save();
+        const saved = await api.post<Handover>(base, { idToken: cred.idToken });
+        applyDoc(saved);
+      } else {
+        const saved = await api.post<Handover>(`${base}/revert`, { idToken: cred.idToken });
+        applyDoc(saved);
+      }
+      setSignAction(null);
+    } catch (err) {
+      setSignError(signErrorMessage(err));
+    } finally {
+      setSignBusy(false);
+    }
+  }
+
+  /** After Převzít: create the next shift as an exact duplicate (cash/účty/notes,
+   *  no signatures) unless it already exists, then navigate to it. */
+  async function createNextShift() {
+    const next = nextShift(shiftDate, shiftType);
+    const nextId = `${next.date}_${next.shift}`;
+    try {
+      let exists = true;
+      try {
+        await api.get<Handover>(`/handovers/${hotel.slug}/${nextId}`);
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 404) exists = false;
+        else throw e;
+      }
+      if (!exists) {
+        await api.put<Handover>(`/handovers/${hotel.slug}`, {
+          shiftDate: next.date,
+          shiftType: next.shift,
+          ...toPayload(notes, cashCounts, accounts),
+        });
+      }
+      onNavigate(next.date, next.shift);
+    } catch (err) {
+      setConfirm({
+        title: "Chyba",
+        message: err instanceof Error ? err.message : "Další směnu se nepodařilo vytvořit.",
+        showCancel: false,
+        confirmLabel: "OK",
+        onConfirm: () => setConfirm(null),
+      });
     }
   }
 
@@ -560,6 +742,36 @@ function ProtocolEditor({ hotel, shiftDate, shiftType }: { hotel: Hotel; shiftDa
         )}
       </div>
 
+      <div className={styles.signaturesRow}>
+        <SignatureBlock
+          label="Předal"
+          stamp={predal}
+          buttonLabel="Předat"
+          onSign={() => openSign("predal")}
+          signDisabled={signers.length === 0}
+          canRevert={!!predal && !prevzal}
+          onRevert={() => predal && openRevert("predal", predal)}
+        />
+        <SignatureBlock
+          label="Převzal"
+          stamp={prevzal}
+          buttonLabel="Převzít"
+          onSign={() => openSign("prevzal")}
+          signDisabled={!predal || signers.length === 0}
+          canRevert={!!prevzal}
+          onRevert={() => prevzal && openRevert("prevzal", prevzal)}
+        />
+        {prevzal && (
+          <Button variant="primary" size="sm" onClick={createNextShift}>
+            Vytvořit protokol pro další směnu
+          </Button>
+        )}
+      </div>
+
+      {!canEdit && (
+        <div className={styles.frozenNotice}>Protokol je podepsán a uzamčen — obsah nelze upravit.</div>
+      )}
+
       <div className={styles.protocolGrid}>
         <div className={styles.cashLayout}>
           {DRAWER_ORDER.map((drawer) => {
@@ -589,6 +801,7 @@ function ProtocolEditor({ hotel, shiftDate, shiftType }: { hotel: Hotel; shiftDa
                         value={ks === 0 ? "" : ks}
                         onChange={(e) => setDenomCount(drawer, d, Number(e.target.value))}
                         placeholder="0"
+                        disabled={!canEdit}
                       />
                       <span className={styles.subtotal}>
                         {subtotal.toLocaleString("cs-CZ")} {symbol}
@@ -641,9 +854,11 @@ function ProtocolEditor({ hotel, shiftDate, shiftType }: { hotel: Hotel; shiftDa
           <div className={styles.accountsContainer}>
             <div className={styles.accountsContainerHeader}>
               <h3 className={styles.accountsTitle}>Účty</h3>
-              <Button variant="primary" size="sm" onClick={addAccountRow}>
-                + Přidat účet
-              </Button>
+              {canEdit && (
+                <Button variant="primary" size="sm" onClick={addAccountRow}>
+                  + Přidat účet
+                </Button>
+              )}
             </div>
             <div className={styles.accountsList}>
               {accounts.length === 0 && <div className={styles.accountsEmpty}>Žádné účty.</div>}
@@ -680,15 +895,19 @@ function ProtocolEditor({ hotel, shiftDate, shiftType }: { hotel: Hotel; shiftDa
                         <span className={styles.accountAmountRO}>{acc.amount.toLocaleString("cs-CZ")}</span>
                       )}
                       <span className={styles.accountSuffix}>Kč</span>
-                      <EditActionButton
-                        editing={isEditing}
-                        ariaLabel={isEditing ? "Hotovo" : "Upravit"}
-                        onClick={() => setEditingIdx(isEditing ? null : idx)}
-                      />
-                      <TrashActionButton
-                        ariaLabel={`Odstranit účet ${acc.name || "(bez názvu)"}`}
-                        onClick={() => requestDeleteAccount(idx)}
-                      />
+                      {canEdit && (
+                        <EditActionButton
+                          editing={isEditing}
+                          ariaLabel={isEditing ? "Hotovo" : "Upravit"}
+                          onClick={() => setEditingIdx(isEditing ? null : idx)}
+                        />
+                      )}
+                      {canEdit && (
+                        <TrashActionButton
+                          ariaLabel={`Odstranit účet ${acc.name || "(bez názvu)"}`}
+                          onClick={() => requestDeleteAccount(idx)}
+                        />
+                      )}
                     </div>
                   </Fragment>
                 );
@@ -701,9 +920,11 @@ function ProtocolEditor({ hotel, shiftDate, shiftType }: { hotel: Hotel; shiftDa
           <div className={styles.notesContainer}>
             <div className={styles.notesContainerHeader}>
               <h3 className={styles.accountsTitle}>Poznámky</h3>
-              <Button variant="primary" size="sm" onClick={addNote}>
-                + Přidat poznámku
-              </Button>
+              {canEdit && (
+                <Button variant="primary" size="sm" onClick={addNote}>
+                  + Přidat poznámku
+                </Button>
+              )}
             </div>
             <div className={styles.notesList}>
               {notes.length === 0 && <div className={styles.accountsEmpty}>Žádné poznámky.</div>}
@@ -716,6 +937,7 @@ function ProtocolEditor({ hotel, shiftDate, shiftType }: { hotel: Hotel; shiftDa
                       className={styles.noteCheck}
                       checked={n.done}
                       onChange={(e) => setNoteDone(i, e.target.checked)}
+                      disabled={!canEdit}
                       aria-label={n.done ? "Označit jako nevyřízené" : "Označit jako vyřízené"}
                     />
                     {isEditingNote ? (
@@ -732,12 +954,16 @@ function ProtocolEditor({ hotel, shiftDate, shiftType }: { hotel: Hotel; shiftDa
                         {n.text || <em className={styles.accountNameEmpty}>(prázdná poznámka)</em>}
                       </span>
                     )}
-                    <EditActionButton
-                      editing={isEditingNote}
-                      ariaLabel={isEditingNote ? "Hotovo" : "Upravit"}
-                      onClick={() => setEditingNoteIdx(isEditingNote ? null : i)}
-                    />
-                    <TrashActionButton ariaLabel="Odstranit poznámku" onClick={() => requestDeleteNote(i)} />
+                    {canEdit && (
+                      <EditActionButton
+                        editing={isEditingNote}
+                        ariaLabel={isEditingNote ? "Hotovo" : "Upravit"}
+                        onClick={() => setEditingNoteIdx(isEditingNote ? null : i)}
+                      />
+                    )}
+                    {canEdit && (
+                      <TrashActionButton ariaLabel="Odstranit poznámku" onClick={() => requestDeleteNote(i)} />
+                    )}
                   </div>
                 );
               })}
@@ -745,6 +971,35 @@ function ProtocolEditor({ hotel, shiftDate, shiftType }: { hotel: Hotel; shiftDa
           </div>
         </div>
       </div>
+
+      {signAction && (
+        <SignModal
+          title={
+            signAction.mode === "sign"
+              ? signAction.slot === "predal"
+                ? "Předat směnu"
+                : "Převzít směnu"
+              : "Odebrat podpis"
+          }
+          subtitle={
+            signAction.mode === "revert" && signAction.stamp
+              ? `${signAction.slot === "predal" ? "Předal" : "Převzal"}: ${signAction.stamp.displayName}`
+              : signAction.slot === "predal"
+                ? "Zadejte jméno a heslo předávajícího."
+                : "Zadejte jméno a heslo přebírajícího."
+          }
+          confirmLabel={signAction.mode === "sign" ? "Podepsat" : "Odebrat podpis"}
+          signers={signers}
+          defaultSignerUid={signAction.mode === "revert" ? signAction.stamp?.uid : undefined}
+          busy={signBusy}
+          errorText={signError}
+          onSubmit={handleSignSubmit}
+          onCancel={() => {
+            setSignAction(null);
+            setSignError(null);
+          }}
+        />
+      )}
 
       {confirmModal}
     </>
