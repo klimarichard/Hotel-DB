@@ -52,6 +52,20 @@ export function docId(shiftDate: string, shiftType: ShiftType): string {
   return `${shiftDate}_${shiftType}`;
 }
 
+/**
+ * The shift immediately before this one in the den→noc chain:
+ *  noc of date D → den of date D; den of date D → noc of date D-1.
+ */
+export function previousShift(shiftDate: string, shiftType: ShiftType): { date: string; shift: ShiftType } {
+  if (shiftType === "noc") return { date: shiftDate, shift: "den" };
+  const d = new Date(`${shiftDate}T00:00:00`);
+  d.setDate(d.getDate() - 1);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return { date: `${y}-${m}-${dd}`, shift: "noc" };
+}
+
 export function handoverCol(hotel: HotelSlug): admin.firestore.CollectionReference {
   return admin.firestore().collection("hotels").doc(hotel).collection("shiftHandovers");
 }

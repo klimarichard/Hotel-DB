@@ -22,6 +22,7 @@ import {
   isShiftType,
   docId,
   handoverCol,
+  previousShift,
 } from "../services/handoverShared";
 
 const db = () => admin.firestore();
@@ -308,13 +309,22 @@ handoversRouter.put(
     const beforeSnap = await ref.get();
     const before = beforeSnap.exists ? (beforeSnap.data() as HandoverDoc) : null;
 
-    // Creating a NEW protocol (bootstrap or duplicate-to-next-shift) needs the
-    // dedicated create permission; editing an existing one needs only view/edit.
+    // Creating a BRAND-NEW protocol needs the dedicated create permission.
+    // Exception: a handover continuation — creating the next shift when the
+    // immediately-previous shift is fully signed (closed) — is allowed with just
+    // edit/view, so the incoming receptionist can always continue the chain.
     if (!beforeSnap.exists) {
       const set = req.permissions ?? new Set<string>();
-      if (!set.has("system.admin") && !set.has(handoverCreatePerm(hotel))) {
-        res.status(403).json({ error: "Nemáte oprávnění vytvořit protokol." });
-        return;
+      const hasCreate = set.has("system.admin") || set.has(handoverCreatePerm(hotel));
+      if (!hasCreate) {
+        const prev = previousShift(body.shiftDate, body.shiftType);
+        const prevSnap = await handoverCol(hotel).doc(docId(prev.date, prev.shift)).get();
+        const prevDoc = prevSnap.exists ? (prevSnap.data() as HandoverDoc) : null;
+        const prevClosed = !!(prevDoc?.predal && prevDoc?.prevzal);
+        if (!prevClosed) {
+          res.status(403).json({ error: "Nemáte oprávnění vytvořit protokol." });
+          return;
+        }
       }
     }
 

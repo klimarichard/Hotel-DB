@@ -1018,7 +1018,7 @@ function ProtocolEditor({
           canRevert={!!prevzal}
           onRevert={() => prevzal && openRevert("prevzal", prevzal)}
         />
-        {prevzal && !nextExists && canCreate && (
+        {prevzal && !nextExists && (
           <Button variant="primary" size="sm" onClick={createNextShift}>
             Vytvořit protokol pro další směnu
           </Button>
