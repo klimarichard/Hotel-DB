@@ -41,12 +41,6 @@ interface Handover {
   updatedAt?: TimestampLike | null;
 }
 
-type Payload = {
-  notes: NoteItem[];
-  cashCounts: Record<DrawerKey, Record<string, number>>;
-  accounts: Account[];
-};
-
 const SHIFT_LABELS: Record<ShiftType, string> = { den: "Den", noc: "Noc" };
 
 const DRAWER_LABELS: Record<DrawerKey, string> = {
@@ -71,6 +65,13 @@ function defaultShiftForNow(): ShiftType {
   return h >= 7 && h < 19 ? "den" : "noc";
 }
 
+function fmtDate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 function previousShift(date: string, shift: ShiftType): { date: string; shift: ShiftType } {
   if (shift === "noc") return { date, shift: "den" };
   const [y, m, d] = date.split("-").map(Number);
@@ -85,13 +86,6 @@ function nextShift(date: string, shift: ShiftType): { date: string; shift: Shift
   const next = new Date(y, m - 1, d);
   next.setDate(next.getDate() + 1);
   return { date: fmtDate(next), shift: "den" };
-}
-
-function fmtDate(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
 }
 
 function timestampSeconds(ts: TimestampLike | null | undefined): number | null {
@@ -127,9 +121,7 @@ function coerceNotes(raw: unknown): NoteItem[] {
     .map((n) => ({ text: n.text as string, done: n.done === true }));
 }
 
-/** The exact shape sent to the server (and echoed back) — empty-named účty rows
- *  are dropped so they never trip the dirty check into an autosave loop. */
-function toPayload(notes: NoteItem[], cashCounts: Record<DrawerKey, Record<string, number>>, accounts: Account[]): Payload {
+function toPayload(notes: NoteItem[], cashCounts: Record<DrawerKey, Record<string, number>>, accounts: Account[]) {
   return {
     notes: notes.map((n) => ({ text: n.text, done: n.done })),
     cashCounts,
@@ -137,19 +129,6 @@ function toPayload(notes: NoteItem[], cashCounts: Record<DrawerKey, Record<strin
       .filter((a) => a.name.trim() !== "")
       .map((a) => ({ name: a.name.trim(), amount: Math.round(a.amount) || 0 })),
   };
-}
-
-function payloadFromDoc(h: Handover | null): Payload {
-  return toPayload(
-    coerceNotes(h?.notes),
-    {
-      kasaCZK: h?.cashCounts?.kasaCZK ?? {},
-      trezorCZK: h?.cashCounts?.trezorCZK ?? {},
-      kasaEUR: h?.cashCounts?.kasaEUR ?? {},
-      trezorEUR: h?.cashCounts?.trezorEUR ?? {},
-    },
-    h?.accounts ?? []
-  );
 }
 
 // ── Inline row-action icons (feather-style) ──────────────────────────────────
@@ -201,15 +180,93 @@ interface ConfirmState {
   onConfirm: () => void;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Outer tab: owns the toolbar (date + shift navigation) and mounts a FRESH,
+// keyed ProtocolEditor per (hotel, date, shift) so no state can bleed across
+// shift navigation.
+// ─────────────────────────────────────────────────────────────────────────────
 export default function HandoverTab({ hotel }: { hotel: Hotel }) {
-  const { can } = useAuth();
-  const canDelete = can(hotel.protokolDeletePerm);
-
   const [shiftDate, setShiftDate] = useState<string>(todayLocal());
   const [shiftType, setShiftType] = useState<ShiftType>(defaultShiftForNow());
 
+  return (
+    <div className={styles.panel}>
+      <div className={styles.toolbar}>
+        <div className={styles.toolbarLeft} />
+        <div className={styles.toolbarCenter}>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              const p = previousShift(shiftDate, shiftType);
+              setShiftDate(p.date);
+              setShiftType(p.shift);
+            }}
+            title="Předchozí směna"
+          >
+            ← Předchozí
+          </Button>
+          <span className={styles.toolbarLabel}>Datum</span>
+          <input
+            type="date"
+            className={styles.dateInput}
+            value={shiftDate}
+            onChange={(e) => e.target.value && setShiftDate(e.target.value)}
+          />
+          <span className={styles.toolbarLabel}>Směna</span>
+          <div className={styles.shiftGroup}>
+            {(Object.keys(SHIFT_LABELS) as ShiftType[]).map((s) => (
+              <button
+                key={s}
+                type="button"
+                className={shiftType === s ? styles.shiftBtnActive : styles.shiftBtn}
+                onClick={() => setShiftType(s)}
+              >
+                {SHIFT_LABELS[s]}
+              </button>
+            ))}
+          </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              const n = nextShift(shiftDate, shiftType);
+              setShiftDate(n.date);
+              setShiftType(n.shift);
+            }}
+            title="Následující směna"
+          >
+            Následující →
+          </Button>
+        </div>
+        <div className={styles.toolbarRight} />
+      </div>
+
+      <ProtocolEditor
+        key={`${hotel.slug}_${shiftDate}_${shiftType}`}
+        hotel={hotel}
+        shiftDate={shiftDate}
+        shiftType={shiftType}
+      />
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Inner editor for a single (hotel, date, shift). Keyed by the parent, so it
+// mounts fresh whenever the shift changes: loads its doc once, shows the create
+// button when none exists, and otherwise renders the three autosaving tables.
+// ─────────────────────────────────────────────────────────────────────────────
+function ProtocolEditor({ hotel, shiftDate, shiftType }: { hotel: Hotel; shiftDate: string; shiftType: ShiftType }) {
+  const { can } = useAuth();
+  const canDelete = can(hotel.protokolDeletePerm);
+  const docId = `${shiftDate}_${shiftType}`;
+
   const [loaded, setLoaded] = useState<Handover | null>(null);
   const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   const [notes, setNotes] = useState<NoteItem[]>([]);
   const [cashCounts, setCashCounts] = useState<Record<DrawerKey, Record<string, number>>>(emptyCashCounts());
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -221,91 +278,74 @@ export default function HandoverTab({ hotel }: { hotel: Hotel }) {
   const [autosaveError, setAutosaveError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
 
-  const savedPayloadRef = useRef<string>(JSON.stringify(payloadFromDoc(null)));
+  const savedPayloadRef = useRef<string>(JSON.stringify(toPayload([], emptyCashCounts(), [])));
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isSavingRef = useRef(false);
 
-  const docId = `${shiftDate}_${shiftType}`;
-
-  // ── Load on (hotel, date, shift) change ────────────────────────────────────
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setEditingIdx(null);
-    setEditingNoteIdx(null);
-    const id = `${shiftDate}_${shiftType}`;
-
-    void (async () => {
-      try {
-        const data = await api.get<Handover>(`/handovers/${hotel.slug}/${id}`);
-        if (cancelled) return;
-        applyDoc(data);
-      } catch (err) {
-        if (cancelled) return;
-        if (err instanceof ApiError && err.status === 404) {
-          applyDoc(null);
-        } else {
-          applyDoc(null);
-          setAutosaveError(err instanceof Error ? err.message : "Nepodařilo se načíst protokol.");
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hotel.slug, shiftDate, shiftType]);
-
-  /** Seed local state + the saved-baseline from a loaded doc (or empty). */
-  function applyDoc(data: Handover | null) {
-    const n = coerceNotes(data?.notes);
+  /** Seed local state + the saved-baseline from a loaded doc. */
+  function applyDoc(data: Handover) {
+    const n = coerceNotes(data.notes);
     const cc = {
-      kasaCZK: data?.cashCounts?.kasaCZK ?? {},
-      trezorCZK: data?.cashCounts?.trezorCZK ?? {},
-      kasaEUR: data?.cashCounts?.kasaEUR ?? {},
-      trezorEUR: data?.cashCounts?.trezorEUR ?? {},
+      kasaCZK: data.cashCounts?.kasaCZK ?? {},
+      trezorCZK: data.cashCounts?.trezorCZK ?? {},
+      kasaEUR: data.cashCounts?.kasaEUR ?? {},
+      trezorEUR: data.cashCounts?.trezorEUR ?? {},
     };
-    const acc = data?.accounts ?? [];
+    const acc = data.accounts ?? [];
     setLoaded(data);
     setNotes(n);
     setCashCounts(cc);
     setAccounts(acc);
     savedPayloadRef.current = JSON.stringify(toPayload(n, cc, acc));
-    setAutosaveError(null);
   }
 
-  const currentPayload = useMemo(
-    () => toPayload(notes, cashCounts, accounts),
-    [notes, cashCounts, accounts]
-  );
+  // Load the doc once (component is keyed per shift, so mount == shift change).
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    void (async () => {
+      try {
+        const data = await api.get<Handover>(`/handovers/${hotel.slug}/${docId}`);
+        if (!cancelled) applyDoc(data);
+      } catch (err) {
+        if (cancelled) return;
+        if (err instanceof ApiError && err.status === 404) {
+          setLoaded(null); // no record yet → empty state with create button
+        } else {
+          setLoadError(err instanceof Error ? err.message : "Nepodařilo se načíst protokol.");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const currentPayload = useMemo(() => toPayload(notes, cashCounts, accounts), [notes, cashCounts, accounts]);
   const dirty = JSON.stringify(currentPayload) !== savedPayloadRef.current;
 
-  // ── Debounced autosave (creates the doc on first edit) ─────────────────────
+  // Debounced autosave — active only once a record exists (created explicitly).
   useEffect(() => {
-    if (loading) return;
+    if (loading || !loaded) return;
     if (!dirty) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => void performAutoSave(), AUTOSAVE_DELAY_MS);
+    saveTimerRef.current = setTimeout(() => void save(), AUTOSAVE_DELAY_MS);
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [notes, cashCounts, accounts, loading, dirty, shiftDate, shiftType, hotel.slug]);
+  }, [notes, cashCounts, accounts, loading, loaded, dirty]);
 
-  async function performAutoSave() {
+  async function save() {
     if (isSavingRef.current) return;
     isSavingRef.current = true;
     setAutosaving(true);
     const payload = toPayload(notes, cashCounts, accounts);
     try {
-      const saved = await api.put<Handover>(`/handovers/${hotel.slug}`, {
-        shiftDate,
-        shiftType,
-        ...payload,
-      });
+      const saved = await api.put<Handover>(`/handovers/${hotel.slug}`, { shiftDate, shiftType, ...payload });
       setLoaded(saved);
       savedPayloadRef.current = JSON.stringify(payload);
       setAutosaveError(null);
@@ -317,7 +357,31 @@ export default function HandoverTab({ hotel }: { hotel: Hotel }) {
     }
   }
 
-  // ── Cash handlers ──────────────────────────────────────────────────────────
+  async function createEmpty() {
+    setCreating(true);
+    try {
+      const saved = await api.put<Handover>(`/handovers/${hotel.slug}`, {
+        shiftDate,
+        shiftType,
+        notes: [],
+        cashCounts: emptyCashCounts(),
+        accounts: [],
+      });
+      applyDoc(saved);
+    } catch (err) {
+      setConfirm({
+        title: "Chyba",
+        message: err instanceof Error ? err.message : "Protokol se nepodařilo vytvořit.",
+        showCancel: false,
+        confirmLabel: "OK",
+        onConfirm: () => setConfirm(null),
+      });
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  // ── Cash ─────────────────────────────────────────────────────────────────
   function setDenomCount(drawer: DrawerKey, denom: string, n: number) {
     setCashCounts((prev) => {
       const next = { ...prev[drawer] };
@@ -326,7 +390,6 @@ export default function HandoverTab({ hotel }: { hotel: Hotel }) {
       return { ...prev, [drawer]: next };
     });
   }
-
   const drawerTotals = useMemo(
     () => ({
       kasaCZK: drawerSubtotal(cashCounts.kasaCZK),
@@ -340,7 +403,7 @@ export default function HandoverTab({ hotel }: { hotel: Hotel }) {
   const totalCZK = drawerTotals.kasaCZK + drawerTotals.trezorCZK + accountsTotal;
   const totalEUR = drawerTotals.kasaEUR + drawerTotals.trezorEUR;
 
-  // ── Účty handlers ──────────────────────────────────────────────────────────
+  // ── Účty ─────────────────────────────────────────────────────────────────
   function addAccountRow() {
     setAccounts((prev) => [...prev, { name: "", amount: 0 }]);
     setEditingIdx(accounts.length);
@@ -372,7 +435,7 @@ export default function HandoverTab({ hotel }: { hotel: Hotel }) {
     });
   }
 
-  // ── Notes handlers ─────────────────────────────────────────────────────────
+  // ── Poznámky ─────────────────────────────────────────────────────────────
   function addNote() {
     setNotes((prev) => [...prev, { text: "", done: false }]);
     setEditingNoteIdx(notes.length);
@@ -404,7 +467,7 @@ export default function HandoverTab({ hotel }: { hotel: Hotel }) {
     });
   }
 
-  // ── Delete the whole protocol ──────────────────────────────────────────────
+  // ── Delete whole protocol ────────────────────────────────────────────────
   function requestDeleteProtocol() {
     setConfirm({
       title: "Smazat protokol?",
@@ -417,7 +480,13 @@ export default function HandoverTab({ hotel }: { hotel: Hotel }) {
   async function deleteProtocol() {
     try {
       await api.delete<{ ok: true }>(`/handovers/${hotel.slug}/${docId}`);
-      applyDoc(null);
+      // Back to the empty state (create button).
+      setLoaded(null);
+      setNotes([]);
+      setCashCounts(emptyCashCounts());
+      setAccounts([]);
+      savedPayloadRef.current = JSON.stringify(toPayload([], emptyCashCounts(), []));
+      setAutosaveError(null);
       setConfirm(null);
     } catch (err) {
       setConfirm({
@@ -438,281 +507,246 @@ export default function HandoverTab({ hotel }: { hotel: Hotel }) {
         ? "Neuloženo"
         : loaded
           ? `Uloženo ${formatTimeOnly(loaded.updatedAt)}`
-          : "Pro tuto směnu zatím není žádný záznam.";
+          : "";
+
+  const confirmModal = confirm && (
+    <ConfirmModal
+      title={confirm.title}
+      message={confirm.message}
+      danger={confirm.danger}
+      showCancel={confirm.showCancel}
+      confirmLabel={confirm.confirmLabel}
+      onConfirm={confirm.onConfirm}
+      onCancel={() => setConfirm(null)}
+    />
+  );
+
+  if (loading) {
+    return <div className={styles.placeholder}>Načítám…</div>;
+  }
+
+  if (loadError) {
+    return (
+      <div className={styles.placeholder}>
+        <p className={styles.placeholderTitle}>Chyba</p>
+        <p className={styles.placeholderHint}>{loadError}</p>
+      </div>
+    );
+  }
+
+  if (!loaded) {
+    return (
+      <>
+        <div className={styles.placeholder}>
+          <p className={styles.placeholderTitle}>Pro tuto směnu zatím není žádný záznam</p>
+          <p className={styles.placeholderHint}>Vytvořte prázdný předávací protokol a začněte vyplňovat.</p>
+          <Button onClick={createEmpty} disabled={creating}>
+            {creating ? "Vytvářím…" : "Vytvořit prázdný protokol"}
+          </Button>
+        </div>
+        {confirmModal}
+      </>
+    );
+  }
 
   return (
-    <div className={styles.panel}>
-      <div className={styles.toolbar}>
-        <div className={styles.toolbarLeft} />
-        <div className={styles.toolbarCenter}>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => {
-              const p = previousShift(shiftDate, shiftType);
-              setShiftDate(p.date);
-              setShiftType(p.shift);
-            }}
-            title="Předchozí směna"
-          >
-            ← Předchozí
+    <>
+      <div className={styles.editorHeader}>
+        <span className={autosaveError ? `${styles.metaText} ${styles.metaError}` : styles.metaText}>{statusText}</span>
+        {canDelete && (
+          <Button variant="danger" size="sm" onClick={requestDeleteProtocol}>
+            Smazat protokol
           </Button>
-          <span className={styles.toolbarLabel}>Datum</span>
-          <input
-            type="date"
-            className={styles.dateInput}
-            value={shiftDate}
-            onChange={(e) => setShiftDate(e.target.value)}
-          />
-          <span className={styles.toolbarLabel}>Směna</span>
-          <div className={styles.shiftGroup}>
-            {(Object.keys(SHIFT_LABELS) as ShiftType[]).map((s) => (
-              <button
-                key={s}
-                type="button"
-                className={shiftType === s ? styles.shiftBtnActive : styles.shiftBtn}
-                onClick={() => setShiftType(s)}
-              >
-                {SHIFT_LABELS[s]}
-              </button>
-            ))}
-          </div>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => {
-              const n = nextShift(shiftDate, shiftType);
-              setShiftDate(n.date);
-              setShiftType(n.shift);
-            }}
-            title="Následující směna"
-          >
-            Následující →
-          </Button>
-        </div>
-
-        <div className={styles.toolbarRight}>
-          {loaded && canDelete && (
-            <Button variant="danger" size="sm" onClick={requestDeleteProtocol}>
-              Smazat protokol
-            </Button>
-          )}
-        </div>
+        )}
       </div>
 
-      {loading ? (
-        <div className={styles.placeholder}>Načítám…</div>
-      ) : (
-        <>
-          <div className={styles.protocolGrid}>
-            <div className={styles.cashLayout}>
-              {DRAWER_ORDER.map((drawer) => {
-                const denoms = isCzkDrawer(drawer) ? CZK_DENOMS : EUR_DENOMS;
-                const symbol = isCzkDrawer(drawer) ? "Kč" : "€";
+      <div className={styles.protocolGrid}>
+        <div className={styles.cashLayout}>
+          {DRAWER_ORDER.map((drawer) => {
+            const denoms = isCzkDrawer(drawer) ? CZK_DENOMS : EUR_DENOMS;
+            const symbol = isCzkDrawer(drawer) ? "Kč" : "€";
+            return (
+              <div key={drawer} className={`${styles.cashTable} ${styles[drawer]}`}>
+                <div className={styles.cashTableHead}>{DRAWER_LABELS[drawer]}</div>
+                <div className={styles.cashRowHeader}>
+                  <span>Nominál</span>
+                  <span>KS</span>
+                  <span>Mezisoučet</span>
+                </div>
+                {denoms.map((d, i) => {
+                  const ks = cashCounts[drawer][d] ?? 0;
+                  const subtotal = Number(d) * ks;
+                  return (
+                    <div key={d} className={`${styles.cashRow} ${i % 2 === 1 ? styles.cashRowAlt : ""}`}>
+                      <span className={styles.denom}>
+                        {d} {symbol}
+                      </span>
+                      <input
+                        type="number"
+                        min={0}
+                        step={1}
+                        className={styles.cashInput}
+                        value={ks === 0 ? "" : ks}
+                        onChange={(e) => setDenomCount(drawer, d, Number(e.target.value))}
+                        placeholder="0"
+                      />
+                      <span className={styles.subtotal}>
+                        {subtotal.toLocaleString("cs-CZ")} {symbol}
+                      </span>
+                    </div>
+                  );
+                })}
+                <div className={styles.cashTotal}>
+                  CELKEM&nbsp;{drawerTotals[drawer].toLocaleString("cs-CZ")} {symbol}
+                </div>
+              </div>
+            );
+          })}
+
+          <div className={styles.summary}>
+            <div className={styles.summaryGroup}>
+              <div className={styles.summaryRow}>
+                <span>KASA</span>
+                <strong>{drawerTotals.kasaCZK.toLocaleString("cs-CZ")} Kč</strong>
+              </div>
+              <div className={styles.summaryRow}>
+                <span>TREZOR</span>
+                <strong>{drawerTotals.trezorCZK.toLocaleString("cs-CZ")} Kč</strong>
+              </div>
+              <div className={styles.summaryRow}>
+                <span>ÚČTY</span>
+                <strong>{accountsTotal.toLocaleString("cs-CZ")} Kč</strong>
+              </div>
+              <div className={styles.summaryRowTotal}>
+                <span>TOTAL CZK</span>
+                <strong>{totalCZK.toLocaleString("cs-CZ")} Kč</strong>
+              </div>
+            </div>
+            <div className={styles.summaryGroup}>
+              <div className={styles.summaryRow}>
+                <span>KASA €</span>
+                <strong>{drawerTotals.kasaEUR.toLocaleString("cs-CZ")} €</strong>
+              </div>
+              <div className={styles.summaryRow}>
+                <span>TREZOR €</span>
+                <strong>{drawerTotals.trezorEUR.toLocaleString("cs-CZ")} €</strong>
+              </div>
+              <div className={styles.summaryRowTotal}>
+                <span>TOTAL €</span>
+                <strong>{totalEUR.toLocaleString("cs-CZ")} €</strong>
+              </div>
+            </div>
+          </div>
+
+          <div className={styles.accountsContainer}>
+            <div className={styles.accountsContainerHeader}>
+              <h3 className={styles.accountsTitle}>Účty</h3>
+              <Button variant="primary" size="sm" onClick={addAccountRow}>
+                + Přidat účet
+              </Button>
+            </div>
+            <div className={styles.accountsList}>
+              {accounts.length === 0 && <div className={styles.accountsEmpty}>Žádné účty.</div>}
+              {accounts.map((acc, idx) => {
+                const isEditing = editingIdx === idx;
+                const altRow = idx % 2 === 1;
                 return (
-                  <div key={drawer} className={`${styles.cashTable} ${styles[drawer]}`}>
-                    <div className={styles.cashTableHead}>{DRAWER_LABELS[drawer]}</div>
-                    <div className={styles.cashRowHeader}>
-                      <span>Nominál</span>
-                      <span>KS</span>
-                      <span>Mezisoučet</span>
+                  <Fragment key={idx}>
+                    <div className={`${styles.accountRow} ${altRow ? styles.accountRowAlt : ""}`}>
+                      {isEditing ? (
+                        <input
+                          type="text"
+                          className={styles.accountName}
+                          value={acc.name}
+                          onChange={(e) => setAccountName(idx, e.target.value)}
+                          placeholder="Název (např. Květiny)"
+                          autoFocus
+                        />
+                      ) : (
+                        <span className={styles.accountNameRO}>
+                          {acc.name || <em className={styles.accountNameEmpty}>(bez názvu)</em>}
+                        </span>
+                      )}
+                      {isEditing ? (
+                        <input
+                          type="number"
+                          step={1}
+                          className={styles.accountAmount}
+                          value={acc.amount === 0 ? "" : acc.amount}
+                          onChange={(e) => setAccountAmount(idx, Number(e.target.value))}
+                          placeholder="0"
+                        />
+                      ) : (
+                        <span className={styles.accountAmountRO}>{acc.amount.toLocaleString("cs-CZ")}</span>
+                      )}
+                      <span className={styles.accountSuffix}>Kč</span>
+                      <EditActionButton
+                        editing={isEditing}
+                        ariaLabel={isEditing ? "Hotovo" : "Upravit"}
+                        onClick={() => setEditingIdx(isEditing ? null : idx)}
+                      />
+                      <TrashActionButton
+                        ariaLabel={`Odstranit účet ${acc.name || "(bez názvu)"}`}
+                        onClick={() => requestDeleteAccount(idx)}
+                      />
                     </div>
-                    {denoms.map((d, i) => {
-                      const ks = cashCounts[drawer][d] ?? 0;
-                      const subtotal = Number(d) * ks;
-                      return (
-                        <div key={d} className={`${styles.cashRow} ${i % 2 === 1 ? styles.cashRowAlt : ""}`}>
-                          <span className={styles.denom}>
-                            {d} {symbol}
-                          </span>
-                          <input
-                            type="number"
-                            min={0}
-                            step={1}
-                            className={styles.cashInput}
-                            value={ks === 0 ? "" : ks}
-                            onChange={(e) => setDenomCount(drawer, d, Number(e.target.value))}
-                            placeholder="0"
-                            disabled={loading}
-                          />
-                          <span className={styles.subtotal}>
-                            {subtotal.toLocaleString("cs-CZ")} {symbol}
-                          </span>
-                        </div>
-                      );
-                    })}
-                    <div className={styles.cashTotal}>
-                      CELKEM&nbsp;{drawerTotals[drawer].toLocaleString("cs-CZ")} {symbol}
-                    </div>
+                  </Fragment>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        <div className={styles.protocolRight}>
+          <div className={styles.notesContainer}>
+            <div className={styles.notesContainerHeader}>
+              <h3 className={styles.accountsTitle}>Poznámky</h3>
+              <Button variant="primary" size="sm" onClick={addNote}>
+                + Přidat poznámku
+              </Button>
+            </div>
+            <div className={styles.notesList}>
+              {notes.length === 0 && <div className={styles.accountsEmpty}>Žádné poznámky.</div>}
+              {notes.map((n, i) => {
+                const isEditingNote = editingNoteIdx === i;
+                return (
+                  <div key={i} className={`${styles.noteRow} ${i % 2 === 1 ? styles.noteRowAlt : ""}`}>
+                    <input
+                      type="checkbox"
+                      className={styles.noteCheck}
+                      checked={n.done}
+                      onChange={(e) => setNoteDone(i, e.target.checked)}
+                      aria-label={n.done ? "Označit jako nevyřízené" : "Označit jako vyřízené"}
+                    />
+                    {isEditingNote ? (
+                      <input
+                        type="text"
+                        className={n.done ? `${styles.noteText} ${styles.noteTextDone}` : styles.noteText}
+                        value={n.text}
+                        onChange={(e) => setNoteText(i, e.target.value)}
+                        placeholder="Poznámka…"
+                        autoFocus
+                      />
+                    ) : (
+                      <span className={n.done ? `${styles.noteTextRO} ${styles.noteTextDone}` : styles.noteTextRO}>
+                        {n.text || <em className={styles.accountNameEmpty}>(prázdná poznámka)</em>}
+                      </span>
+                    )}
+                    <EditActionButton
+                      editing={isEditingNote}
+                      ariaLabel={isEditingNote ? "Hotovo" : "Upravit"}
+                      onClick={() => setEditingNoteIdx(isEditingNote ? null : i)}
+                    />
+                    <TrashActionButton ariaLabel="Odstranit poznámku" onClick={() => requestDeleteNote(i)} />
                   </div>
                 );
               })}
-
-              <div className={styles.summary}>
-                <div className={styles.summaryGroup}>
-                  <div className={styles.summaryRow}>
-                    <span>KASA</span>
-                    <strong>{drawerTotals.kasaCZK.toLocaleString("cs-CZ")} Kč</strong>
-                  </div>
-                  <div className={styles.summaryRow}>
-                    <span>TREZOR</span>
-                    <strong>{drawerTotals.trezorCZK.toLocaleString("cs-CZ")} Kč</strong>
-                  </div>
-                  <div className={styles.summaryRow}>
-                    <span>ÚČTY</span>
-                    <strong>{accountsTotal.toLocaleString("cs-CZ")} Kč</strong>
-                  </div>
-                  <div className={styles.summaryRowTotal}>
-                    <span>TOTAL CZK</span>
-                    <strong>{totalCZK.toLocaleString("cs-CZ")} Kč</strong>
-                  </div>
-                </div>
-                <div className={styles.summaryGroup}>
-                  <div className={styles.summaryRow}>
-                    <span>KASA €</span>
-                    <strong>{drawerTotals.kasaEUR.toLocaleString("cs-CZ")} €</strong>
-                  </div>
-                  <div className={styles.summaryRow}>
-                    <span>TREZOR €</span>
-                    <strong>{drawerTotals.trezorEUR.toLocaleString("cs-CZ")} €</strong>
-                  </div>
-                  <div className={styles.summaryRowTotal}>
-                    <span>TOTAL €</span>
-                    <strong>{totalEUR.toLocaleString("cs-CZ")} €</strong>
-                  </div>
-                </div>
-              </div>
-
-              <div className={styles.accountsContainer}>
-                <div className={styles.accountsContainerHeader}>
-                  <h3 className={styles.accountsTitle}>Účty</h3>
-                  <Button variant="primary" size="sm" onClick={addAccountRow}>
-                    + Přidat účet
-                  </Button>
-                </div>
-                <div className={styles.accountsList}>
-                  {accounts.length === 0 && <div className={styles.accountsEmpty}>Žádné účty.</div>}
-                  {accounts.map((acc, idx) => {
-                    const isEditing = editingIdx === idx;
-                    const altRow = idx % 2 === 1;
-                    return (
-                      <Fragment key={idx}>
-                        <div className={`${styles.accountRow} ${altRow ? styles.accountRowAlt : ""}`}>
-                          {isEditing ? (
-                            <input
-                              type="text"
-                              className={styles.accountName}
-                              value={acc.name}
-                              onChange={(e) => setAccountName(idx, e.target.value)}
-                              placeholder="Název (např. Květiny)"
-                              disabled={loading}
-                              autoFocus
-                            />
-                          ) : (
-                            <span className={styles.accountNameRO}>
-                              {acc.name || <em className={styles.accountNameEmpty}>(bez názvu)</em>}
-                            </span>
-                          )}
-                          {isEditing ? (
-                            <input
-                              type="number"
-                              step={1}
-                              className={styles.accountAmount}
-                              value={acc.amount === 0 ? "" : acc.amount}
-                              onChange={(e) => setAccountAmount(idx, Number(e.target.value))}
-                              placeholder="0"
-                              disabled={loading}
-                            />
-                          ) : (
-                            <span className={styles.accountAmountRO}>{acc.amount.toLocaleString("cs-CZ")}</span>
-                          )}
-                          <span className={styles.accountSuffix}>Kč</span>
-                          <EditActionButton
-                            editing={isEditing}
-                            ariaLabel={isEditing ? "Hotovo" : "Upravit"}
-                            onClick={() => setEditingIdx(isEditing ? null : idx)}
-                          />
-                          <TrashActionButton
-                            ariaLabel={`Odstranit účet ${acc.name || "(bez názvu)"}`}
-                            onClick={() => requestDeleteAccount(idx)}
-                          />
-                        </div>
-                      </Fragment>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-
-            <div className={styles.protocolRight}>
-              <div className={styles.notesContainer}>
-                <div className={styles.notesContainerHeader}>
-                  <h3 className={styles.accountsTitle}>Poznámky</h3>
-                  <Button variant="primary" size="sm" onClick={addNote}>
-                    + Přidat poznámku
-                  </Button>
-                </div>
-                <div className={styles.notesList}>
-                  {notes.length === 0 && <div className={styles.accountsEmpty}>Žádné poznámky.</div>}
-                  {notes.map((n, i) => {
-                    const isEditingNote = editingNoteIdx === i;
-                    return (
-                      <div key={i} className={`${styles.noteRow} ${i % 2 === 1 ? styles.noteRowAlt : ""}`}>
-                        <input
-                          type="checkbox"
-                          className={styles.noteCheck}
-                          checked={n.done}
-                          onChange={(e) => setNoteDone(i, e.target.checked)}
-                          aria-label={n.done ? "Označit jako nevyřízené" : "Označit jako vyřízené"}
-                        />
-                        {isEditingNote ? (
-                          <input
-                            type="text"
-                            className={n.done ? `${styles.noteText} ${styles.noteTextDone}` : styles.noteText}
-                            value={n.text}
-                            onChange={(e) => setNoteText(i, e.target.value)}
-                            placeholder="Poznámka…"
-                            disabled={loading}
-                            autoFocus
-                          />
-                        ) : (
-                          <span className={n.done ? `${styles.noteTextRO} ${styles.noteTextDone}` : styles.noteTextRO}>
-                            {n.text || <em className={styles.accountNameEmpty}>(prázdná poznámka)</em>}
-                          </span>
-                        )}
-                        <EditActionButton
-                          editing={isEditingNote}
-                          ariaLabel={isEditingNote ? "Hotovo" : "Upravit"}
-                          onClick={() => setEditingNoteIdx(isEditingNote ? null : i)}
-                        />
-                        <TrashActionButton ariaLabel="Odstranit poznámku" onClick={() => requestDeleteNote(i)} />
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
             </div>
           </div>
+        </div>
+      </div>
 
-          <div className={styles.metaRow}>
-            <span className={autosaveError ? `${styles.metaText} ${styles.metaError}` : styles.metaText}>
-              {statusText}
-            </span>
-          </div>
-        </>
-      )}
-
-      {confirm && (
-        <ConfirmModal
-          title={confirm.title}
-          message={confirm.message}
-          danger={confirm.danger}
-          showCancel={confirm.showCancel}
-          confirmLabel={confirm.confirmLabel}
-          onConfirm={confirm.onConfirm}
-          onCancel={() => setConfirm(null)}
-        />
-      )}
-    </div>
+      {confirmModal}
+    </>
   );
 }
