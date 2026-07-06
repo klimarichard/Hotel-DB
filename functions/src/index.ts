@@ -25,7 +25,6 @@ import { selfServiceRouter } from "./routes/selfService";
 import { employeeChangeRequestsRouter } from "./routes/employeeChangeRequests";
 import { roleTypesRouter } from "./routes/roleTypes";
 import { handoversRouter } from "./routes/handovers";
-import { exchangeRatesRouter } from "./routes/exchangeRates";
 import * as clock from "./services/clock";
 import { requireAuth, AuthRequest } from "./middleware/auth";
 import { requirePermission } from "./auth/permissions";
@@ -103,7 +102,6 @@ app.use("/me", selfServiceRouter);
 app.use("/employee-change-requests", employeeChangeRequestsRouter);
 app.use("/role-types", roleTypesRouter);
 app.use("/handovers", handoversRouter);
-app.use("/exchange-rates", exchangeRatesRouter);
 
 // Health check
 app.get("/health", (_req, res) => {

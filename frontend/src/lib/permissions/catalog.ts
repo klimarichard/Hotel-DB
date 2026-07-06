@@ -105,6 +105,7 @@ export const PERMISSION_SECTIONS = [
         items: [
           { key: "recepce.ambiance.view", label: "Hotel Ambiance", level: 1 },
           { key: "recepce.ambiance.protokol.view", label: "Předávací protokol", level: 2 },
+          { key: "recepce.ambiance.protokol.delete", label: "Smazat protokol", level: 3 },
           { key: "recepce.ambiance.walkiny.view", label: "Walkiny", level: 2 },
           { key: "recepce.ambiance.taxi.view", label: "Taxi", level: 2 },
           { key: "recepce.ambiance.lobbyBar.view", label: "Lobby bar", level: 2 },
@@ -115,6 +116,7 @@ export const PERMISSION_SECTIONS = [
         items: [
           { key: "recepce.superior.view", label: "Hotel Superior", level: 1 },
           { key: "recepce.superior.protokol.view", label: "Předávací protokol", level: 2 },
+          { key: "recepce.superior.protokol.delete", label: "Smazat protokol", level: 3 },
           { key: "recepce.superior.walkiny.view", label: "Walkiny", level: 2 },
           { key: "recepce.superior.taxi.view", label: "Taxi", level: 2 },
         ],
@@ -124,6 +126,7 @@ export const PERMISSION_SECTIONS = [
         items: [
           { key: "recepce.amigo.view", label: "Hotel Amigo & Alqush", level: 1 },
           { key: "recepce.amigo.protokol.view", label: "Předávací protokol", level: 2 },
+          { key: "recepce.amigo.protokol.delete", label: "Smazat protokol", level: 3 },
           { key: "recepce.amigo.walkiny.view", label: "Walkiny", level: 2 },
           { key: "recepce.amigo.taxi.view", label: "Taxi", level: 2 },
           { key: "recepce.amigo.terminal.view", label: "Terminál", level: 2 },
@@ -134,6 +137,7 @@ export const PERMISSION_SECTIONS = [
         items: [
           { key: "recepce.ankora.view", label: "Hotel Ankora", level: 1 },
           { key: "recepce.ankora.protokol.view", label: "Předávací protokol", level: 2 },
+          { key: "recepce.ankora.protokol.delete", label: "Smazat protokol", level: 3 },
           { key: "recepce.ankora.walkiny.view", label: "Walkiny", level: 2 },
           { key: "recepce.ankora.taxi.view", label: "Taxi", level: 2 },
         ],

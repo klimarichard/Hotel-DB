@@ -35,6 +35,8 @@ export interface Hotel {
   readonly stem: string;
   /** `recepce.<stem>.view` — gates whether the hotel is accessible at all. */
   readonly viewPerm: Permission;
+  /** `recepce.<stem>.protokol.delete` — gates deleting a Předávací protokol. */
+  readonly protokolDeletePerm: Permission;
   readonly tabs: readonly HotelTab[];
 }
 
@@ -46,6 +48,7 @@ export const HOTELS: readonly Hotel[] = [
     label: "Ambiance",
     stem: "ambiance",
     viewPerm: "recepce.ambiance.view",
+    protokolDeletePerm: "recepce.ambiance.protokol.delete",
     tabs: [
       { id: "protokol", label: "Předávací protokol", viewPerm: "recepce.ambiance.protokol.view" },
       { id: "walkiny", label: "Walkiny", viewPerm: "recepce.ambiance.walkiny.view" },
@@ -59,6 +62,7 @@ export const HOTELS: readonly Hotel[] = [
     label: "Superior",
     stem: "superior",
     viewPerm: "recepce.superior.view",
+    protokolDeletePerm: "recepce.superior.protokol.delete",
     tabs: [
       { id: "protokol", label: "Předávací protokol", viewPerm: "recepce.superior.protokol.view" },
       { id: "walkiny", label: "Walkiny", viewPerm: "recepce.superior.walkiny.view" },
@@ -71,6 +75,7 @@ export const HOTELS: readonly Hotel[] = [
     label: "Amigo & Alqush",
     stem: "amigo",
     viewPerm: "recepce.amigo.view",
+    protokolDeletePerm: "recepce.amigo.protokol.delete",
     tabs: [
       { id: "protokol", label: "Předávací protokol", viewPerm: "recepce.amigo.protokol.view" },
       { id: "walkiny", label: "Walkiny", viewPerm: "recepce.amigo.walkiny.view" },
@@ -84,6 +89,7 @@ export const HOTELS: readonly Hotel[] = [
     label: "Ankora",
     stem: "ankora",
     viewPerm: "recepce.ankora.view",
+    protokolDeletePerm: "recepce.ankora.protokol.delete",
     tabs: [
       { id: "protokol", label: "Předávací protokol", viewPerm: "recepce.ankora.protokol.view" },
       { id: "walkiny", label: "Walkiny", viewPerm: "recepce.ankora.walkiny.view" },
