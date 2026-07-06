@@ -813,11 +813,18 @@ function ProtocolEditor({
     <>
       <div className={styles.editorHeader}>
         <span className={autosaveError ? `${styles.metaText} ${styles.metaError}` : styles.metaText}>{statusText}</span>
-        {canDelete && (
-          <Button variant="danger" size="sm" onClick={requestDeleteProtocol}>
-            Smazat protokol
-          </Button>
-        )}
+        <div className={styles.editorHeaderActions}>
+          {predal && prevzal && (
+            <Button variant="secondary" size="sm" onClick={() => window.print()}>
+              Tisk
+            </Button>
+          )}
+          {canDelete && (
+            <Button variant="danger" size="sm" onClick={requestDeleteProtocol}>
+              Smazat protokol
+            </Button>
+          )}
+        </div>
       </div>
 
       {!canEdit && (
@@ -895,6 +902,11 @@ function ProtocolEditor({
               <div className={styles.summaryRow}>
                 <span>TREZOR €</span>
                 <strong>{drawerTotals.trezorEUR.toLocaleString("cs-CZ")} €</strong>
+              </div>
+              {/* Spacer so TOTAL € lines up with TOTAL CZK (which has an extra ÚČTY row). */}
+              <div className={styles.summaryRow} aria-hidden="true">
+                <span>&nbsp;</span>
+                <strong>&nbsp;</strong>
               </div>
               <div className={styles.summaryRowTotal}>
                 <span>TOTAL €</span>
@@ -1048,6 +1060,112 @@ function ProtocolEditor({
             Vytvořit protokol pro další směnu
           </Button>
         )}
+      </div>
+
+      {/* Print-only layout (B&W, one A4) — visible only via window.print(). */}
+      <div className={styles.printArea}>
+        <div className={styles.printHeader}>
+          Předávací protokol — {hotel.label} — {new Date(`${shiftDate}T00:00:00`).toLocaleDateString("cs-CZ")}{" "}
+          — {shiftType === "den" ? "Denní" : "Noční"} směna
+        </div>
+        <div className={styles.printCashGrid}>
+          {DRAWER_ORDER.map((drawer) => {
+            const denoms = isCzkDrawer(drawer) ? CZK_DENOMS : EUR_DENOMS;
+            const symbol = isCzkDrawer(drawer) ? "Kč" : "€";
+            return (
+              <table key={drawer} className={styles.printTable}>
+                <caption>{DRAWER_LABELS[drawer]}</caption>
+                <thead>
+                  <tr>
+                    <th>Nominál</th>
+                    <th>KS</th>
+                    <th>Mezisoučet</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {denoms.map((d) => {
+                    const ks = cashCounts[drawer][d] ?? 0;
+                    return (
+                      <tr key={d}>
+                        <td>{d}</td>
+                        <td>{ks || ""}</td>
+                        <td>{(Number(d) * ks).toLocaleString("cs-CZ")}</td>
+                      </tr>
+                    );
+                  })}
+                  <tr className={styles.printTotalRow}>
+                    <td colSpan={2}>CELKEM</td>
+                    <td>
+                      {drawerTotals[drawer].toLocaleString("cs-CZ")} {symbol}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            );
+          })}
+        </div>
+        <div className={styles.printLower}>
+          <table className={styles.printTable}>
+            <caption>Účty</caption>
+            <tbody>
+              {accounts.filter((a) => a.name.trim() !== "").length === 0 ? (
+                <tr>
+                  <td colSpan={2}>—</td>
+                </tr>
+              ) : (
+                accounts
+                  .filter((a) => a.name.trim() !== "")
+                  .map((a, i) => (
+                    <tr key={i}>
+                      <td className={styles.printAccName}>{a.name}</td>
+                      <td>{a.amount.toLocaleString("cs-CZ")} Kč</td>
+                    </tr>
+                  ))
+              )}
+            </tbody>
+          </table>
+          <table className={styles.printTable}>
+            <caption>Souhrn</caption>
+            <tbody>
+              <tr>
+                <td>KASA</td>
+                <td>{drawerTotals.kasaCZK.toLocaleString("cs-CZ")} Kč</td>
+              </tr>
+              <tr>
+                <td>TREZOR</td>
+                <td>{drawerTotals.trezorCZK.toLocaleString("cs-CZ")} Kč</td>
+              </tr>
+              <tr>
+                <td>ÚČTY</td>
+                <td>{accountsTotal.toLocaleString("cs-CZ")} Kč</td>
+              </tr>
+              <tr className={styles.printTotalRow}>
+                <td>TOTAL CZK</td>
+                <td>{totalCZK.toLocaleString("cs-CZ")} Kč</td>
+              </tr>
+              <tr>
+                <td>KASA €</td>
+                <td>{drawerTotals.kasaEUR.toLocaleString("cs-CZ")} €</td>
+              </tr>
+              <tr>
+                <td>TREZOR €</td>
+                <td>{drawerTotals.trezorEUR.toLocaleString("cs-CZ")} €</td>
+              </tr>
+              <tr className={styles.printTotalRow}>
+                <td>TOTAL €</td>
+                <td>{totalEUR.toLocaleString("cs-CZ")} €</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div className={styles.printSignatures}>
+          <div>
+            <strong>Předal:</strong> {predal?.displayName ?? ""} — {formatTimestamp(predal?.at)}
+          </div>
+          <div>
+            <strong>Převzal:</strong> {prevzal?.displayName ?? ""} — {formatTimestamp(prevzal?.at)}
+          </div>
+        </div>
       </div>
 
       {signAction && (
