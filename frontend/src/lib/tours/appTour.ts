@@ -47,6 +47,7 @@ const SECTIONS = {
   overview: "Přehled",
   shifts: "Směny",
   vacation: "Dovolená",
+  recepce: "Recepce",
   // Zaměstnanci spans the list + the employee card (no separate "Karta" section).
   employees: "Zaměstnanci",
   profile: "Můj profil",
@@ -122,6 +123,9 @@ export const APP_TOUR_STEPS: TourStep[] = [
   { permission: "vacation.review", anchor: "vacation-all-requests", route: "/dovolena", title: "Žádosti o dovolenou", body: "Seznam žádostí všech zaměstnanců se stavem (čeká, schváleno, zamítnuto). Žádosti zde můžete schvalovat nebo zamítat.", placement: "top" },
   { permission: "vacation.view.all", excludeIfPermission: "vacation.review", anchor: "vacation-all-requests", route: "/dovolena", title: "Žádosti o dovolenou", body: "Seznam žádostí všech zaměstnanců se stavem (čeká, schváleno, zamítnuto).", placement: "top" },
   { permission: "vacation.view.approvedUpcoming", excludeIfPermission: "vacation.view.all", anchor: "vacation-approved-colleagues", route: "/dovolena", title: "Schválené dovolené kolegů", body: "Zde vidíte schválené dovolené vašich kolegů. Pokud je to možné, snažte se vyhnout kolizi termínu s někým jiným.", placement: "top" },
+
+  // ── Recepce (/recepce) ───────────────────────────────────────────────────────
+  { section: SECTIONS.recepce, permission: "nav.recepce.view", addedInVersion: 12, anchor: "nav-recepce", mobileAnchor: "bottomnav-more", title: "Recepce", body: "Sekce Recepce je hub pro recepční agendu jednotlivých hotelů. Podle oprávnění zde vidíte přístupné hotely a v nich Předávací protokol pro předání směny (počítání pokladny a trezoru, poznámky, podpis Předal/Převzal).", mobileBody: "Sekce Recepce je hub pro recepční agendu hotelů (Předávací protokol atd.). Na telefonu ji otevřete přes záložku Více ve spodní liště.", placement: "right" },
 
   // ── Zaměstnanci — seznam (/zamestnanci) ──────────────────────────────────────
   // Merged: view.all (vedení incl.) + view.nonManagement collapse into one step.
@@ -229,7 +233,7 @@ export const appTour: TourDefinition = {
   // Highest step `addedInVersion` in the list. Bump it (and stamp the new steps'
   // `addedInVersion`) whenever you add steps for a new feature — returning users
   // then see ONLY those steps; first-time users still get the whole tour.
-  version: 11,
+  version: 12,
   label: "Prohlídka aplikace",
   steps: APP_TOUR_STEPS,
 };
