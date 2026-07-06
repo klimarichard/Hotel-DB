@@ -70,6 +70,11 @@ async function request<T>(
     method,
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
+    // Never read from / write to the browser HTTP cache. API responses are
+    // dynamic; without this the browser can serve a stale response for a URL
+    // (notably a 404 cached before a doc was created, which then makes a
+    // just-created record look like it doesn't exist).
+    cache: "no-store",
   });
   if (!res.ok) {
     const errBody = await res.json().catch(() => ({ error: res.statusText }));
