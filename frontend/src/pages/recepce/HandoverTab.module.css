@@ -71,17 +71,35 @@
   margin-bottom: 6pt;
 }
 
-.printCashGrid {
+/* Mirrors the app's cashLayout: KASA/TREZOR (CZK top, EUR below) in the two left
+   columns, summary spanning beneath them, Účty spanning the full right column. */
+.printBody {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1.15fr;
+  grid-template-areas:
+    "kasaCZK   trezorCZK  accounts"
+    "kasaEUR   trezorEUR  accounts"
+    "summary   summary    accounts";
   gap: 5pt 8pt;
+  align-items: start;
 }
-
-.printLower {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8pt;
-  margin-top: 6pt;
+.pKasaCZK {
+  grid-area: kasaCZK;
+}
+.pTrezorCZK {
+  grid-area: trezorCZK;
+}
+.pKasaEUR {
+  grid-area: kasaEUR;
+}
+.pTrezorEUR {
+  grid-area: trezorEUR;
+}
+.pSummary {
+  grid-area: summary;
+}
+.pAccounts {
+  grid-area: accounts;
 }
 
 .printTable {
@@ -621,15 +639,26 @@
 
 .accountRow {
   display: grid;
-  grid-template-columns: 1fr 110px auto auto auto;
+  grid-template-columns: 1fr 110px auto auto;
   align-items: center;
   gap: 0.6rem;
   padding: 0.5rem 0.75rem;
   min-height: 2.4rem;
 }
 
+.rowActions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
 .accountRowAlt {
   background: var(--tint-alt);
+}
+
+.accountTotalRow {
+  font-weight: 700;
+  border-top: 2px solid var(--color-border);
 }
 
 /* sm sits at the top, then the regular rows below — separated by an empty
@@ -726,7 +755,7 @@
 
 .noteRow {
   display: grid;
-  grid-template-columns: auto 1fr auto auto;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 0.6rem;
   padding: 0.5rem 0.75rem;
