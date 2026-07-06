@@ -369,6 +369,8 @@ function ProtocolEditor({
 
   // ── Signatures ─────────────────────────────────────────────────────────────
   const [signers, setSigners] = useState<Signer[]>([]);
+  // Narrower pool for reverting a signature: the signer + manage/admin holders.
+  const [revokers, setRevokers] = useState<Signer[]>([]);
   // Default signer uids from the shift plan: this shift → Předal, next → Převzal.
   const [scheduled, setScheduled] = useState<{ predal: string | null; prevzal: string | null }>({
     predal: null,
@@ -556,8 +558,22 @@ function ProtocolEditor({
     setSignError(null);
     setSignAction({ slot, mode: "sign" });
   }
-  function openRevert(slot: SignatureSlot, stamp: Stamp) {
+  async function openRevert(slot: SignatureSlot, stamp: Stamp) {
     setSignError(null);
+    // Fallback (network error): at least let the signer self-unsign.
+    const fallback: Signer = {
+      uid: stamp.uid,
+      name: (stamp.email || "").split("@")[0],
+      label: stamp.displayName,
+    };
+    try {
+      const list = await api.get<Signer[]>(
+        `/handovers/${hotel.slug}/revokers?signer=${encodeURIComponent(stamp.uid)}`
+      );
+      setRevokers(list.length > 0 ? list : [fallback]);
+    } catch {
+      setRevokers([fallback]);
+    }
     setSignAction({ slot, mode: "revert", stamp });
   }
 
@@ -1051,7 +1067,7 @@ function ProtocolEditor({
                 : "Zadejte jméno a heslo přebírajícího."
           }
           confirmLabel={signAction.mode === "sign" ? "Podepsat" : "Odebrat podpis"}
-          signers={signers}
+          signers={signAction.mode === "revert" ? revokers : signers}
           defaultSignerUid={
             signAction.mode === "revert"
               ? signAction.stamp?.uid

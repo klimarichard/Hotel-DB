@@ -284,6 +284,82 @@ handoversRouter.get(
   }
 );
 
+/**
+ * GET /api/handovers/:hotel/signers is for signing; this is for REVERTING a
+ * signature — a narrower pool: the person who signed it (`?signer=<uid>`, always
+ * allowed to self-unsign) plus everyone holding the per-hotel manage permission
+ * (or system.admin). Returns `[{ uid, name, label }]` with employee-name labels.
+ * Registered BEFORE `/:hotel/:id` so "revokers" isn't captured as a doc id.
+ */
+handoversRouter.get(
+  "/:hotel/revokers",
+  requireAuth,
+  requireHotelPerm("view"),
+  async (req: AuthRequest, res: Response) => {
+    const hotel = req.params.hotel as HotelSlug;
+    const signerUid = typeof req.query.signer === "string" ? req.query.signer : null;
+    const managePerm = handoverManagePerm(hotel);
+
+    const usersSnap = await db().collection("users").get();
+    const included: Array<{ uid: string; name: string; employeeId: string | null }> = [];
+    const seenEmp = new Set<string>();
+    for (const d of usersSnap.docs) {
+      const u = d.data() as {
+        name?: unknown;
+        employeeId?: unknown;
+        active?: unknown;
+        roleType?: unknown;
+        extraPermissions?: unknown;
+        revokedPermissions?: unknown;
+      };
+      if (u.active === false) continue;
+      const name = typeof u.name === "string" ? u.name : "";
+      if (name.trim() === "") continue;
+      let ok = d.id === signerUid; // the signer may always self-unsign
+      if (!ok) {
+        const perms = await resolveEffectivePermissions({
+          roleType: typeof u.roleType === "string" ? u.roleType : undefined,
+          extra: Array.isArray(u.extraPermissions) ? (u.extraPermissions as string[]) : [],
+          revoked: Array.isArray(u.revokedPermissions) ? (u.revokedPermissions as string[]) : [],
+        });
+        ok = perms.has("system.admin") || perms.has(managePerm);
+      }
+      if (!ok) continue;
+      const empId = typeof u.employeeId === "string" ? u.employeeId : null;
+      if (empId) {
+        if (seenEmp.has(empId)) continue;
+        seenEmp.add(empId);
+      }
+      included.push({ uid: d.id, name, employeeId: empId });
+    }
+
+    // Resolve employee-name labels for the (few) included users.
+    const out = await Promise.all(
+      included.map(async (e) => {
+        let label = e.name;
+        if (e.employeeId) {
+          try {
+            const emp = await db().collection("employees").doc(e.employeeId).get();
+            if (emp.exists) {
+              const ed = emp.data() as Record<string, unknown>;
+              const dn =
+                typeof ed.displayName === "string" && ed.displayName.trim() !== ""
+                  ? ed.displayName
+                  : `${(ed.lastName as string) ?? ""} ${(ed.firstName as string) ?? ""}`.trim();
+              if (dn) label = dn;
+            }
+          } catch {
+            // keep username as the label
+          }
+        }
+        return { uid: e.uid, name: e.name, label };
+      })
+    );
+    out.sort((a, b) => a.label.localeCompare(b.label, "cs"));
+    res.json(out);
+  }
+);
+
 /** GET /api/handovers/:hotel/:id */
 handoversRouter.get(
   "/:hotel/:id",
