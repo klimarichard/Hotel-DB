@@ -14,9 +14,10 @@ import PendingVacationTab from "./upozorneni/PendingVacationTab";
 import PendingShiftOverridesTab from "./upozorneni/PendingShiftOverridesTab";
 import PendingShiftChangeRequestsTab from "./upozorneni/PendingShiftChangeRequestsTab";
 import EmployeeDataChangeRequestsTab from "./upozorneni/EmployeeDataChangeRequestsTab";
+import HandoverWarningsTab from "./upozorneni/HandoverWarningsTab";
 import styles from "./AlertsPage.module.css";
 
-type Tab = "doklady" | "zkusebni" | "dovolena" | "vyjimky" | "zmeny" | "uprava";
+type Tab = "doklady" | "zkusebni" | "dovolena" | "vyjimky" | "zmeny" | "uprava" | "predani";
 
 export default function AlertsPage() {
   const { can } = useAuth();
@@ -43,6 +44,7 @@ export default function AlertsPage() {
     ...(canOverrides ? (["vyjimky"] as Tab[]) : []),
     ...(canChanges ? (["zmeny"] as Tab[]) : []),
     ...(canDataChanges ? (["uprava"] as Tab[]) : []),
+    ...(canDataChanges ? (["predani"] as Tab[]) : []),
   ];
   const [tab, setTab] = useState<Tab>(visibleTabs[0] ?? "doklady");
 
@@ -154,6 +156,14 @@ export default function AlertsPage() {
             {tabLabel("Žádosti o úpravu údajů", dataChangesCount)}
           </button>
         )}
+        {canDataChanges && (
+          <button
+            className={tab === "predani" ? styles.tabActive : styles.tabBtn}
+            onClick={() => setTab("predani")}
+          >
+            Nenavazující předání
+          </button>
+        )}
       </div>
 
       {tab === "doklady" && <DocumentExpiryTab key={refreshKey} />}
@@ -162,6 +172,7 @@ export default function AlertsPage() {
       {tab === "vyjimky" && canOverrides && <PendingShiftOverridesTab />}
       {tab === "zmeny" && canChanges && <PendingShiftChangeRequestsTab />}
       {tab === "uprava" && canDataChanges && <EmployeeDataChangeRequestsTab />}
+      {tab === "predani" && canDataChanges && <HandoverWarningsTab />}
 
       {error && (
         <ConfirmModal

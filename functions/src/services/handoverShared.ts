@@ -66,6 +66,17 @@ export function previousShift(shiftDate: string, shiftType: ShiftType): { date: 
   return { date: `${y}-${m}-${dd}`, shift: "noc" };
 }
 
+/** The shift immediately after this one: den of date D → noc of D; noc of D → den of D+1. */
+export function nextShift(shiftDate: string, shiftType: ShiftType): { date: string; shift: ShiftType } {
+  if (shiftType === "den") return { date: shiftDate, shift: "noc" };
+  const d = new Date(`${shiftDate}T00:00:00`);
+  d.setDate(d.getDate() + 1);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return { date: `${y}-${m}-${dd}`, shift: "den" };
+}
+
 export function handoverCol(hotel: HotelSlug): admin.firestore.CollectionReference {
   return admin.firestore().collection("hotels").doc(hotel).collection("shiftHandovers");
 }
