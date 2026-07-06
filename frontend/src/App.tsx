@@ -14,6 +14,7 @@ import AlertsPage from "@/pages/AlertsPage";
 import ContractTemplatesPage from "@/pages/ContractTemplatesPage";
 import ShiftPlannerPage from "@/pages/ShiftPlannerPage";
 import VacationPage from "@/pages/VacationPage";
+import RecepcePage from "@/pages/RecepcePage";
 import OverviewPage from "@/pages/OverviewPage";
 import AuditLogPage from "@/pages/AuditLogPage";
 import HelpPage from "@/pages/HelpPage";
@@ -96,6 +97,9 @@ export default function App() {
         <Route path="prehled" element={<RequirePermission allow={["nav.dashboard.view"]}><OverviewPage /></RequirePermission>} />
         <Route path="smeny" element={<RequirePermission allow={["nav.shifts.view"]}><ShiftPlannerPage /></RequirePermission>} />
         <Route path="dovolena" element={<RequirePermission allow={["nav.vacation.view"]}><VacationPage /></RequirePermission>} />
+        <Route path="recepce" element={<RequirePermission allow={["nav.recepce.view"]}><RecepcePage /></RequirePermission>} />
+        <Route path="recepce/:hotel" element={<RequirePermission allow={["nav.recepce.view"]}><RecepcePage /></RequirePermission>} />
+        <Route path="recepce/:hotel/:tab" element={<RequirePermission allow={["nav.recepce.view"]}><RecepcePage /></RequirePermission>} />
         <Route path="zamestnanci" element={<RequirePermission allow={["nav.employees.view"]}><EmployeesPage /></RequirePermission>} />
         <Route path="zamestnanci/novy" element={<RequirePermission allow={["employees.create"]}><EmployeeFormPage /></RequirePermission>} />
         <Route path="zamestnanci/:id" element={<RequirePermission allow={["nav.employees.view"]}><EmployeeDetailPage /></RequirePermission>} />
