@@ -74,6 +74,17 @@ app.use(
 // than the raw PDF, so a 3 MB PDF lands around 4 MB of JSON body.
 app.use(express.json({ limit: "10mb" }));
 
+// API responses are dynamic and per-user — never let a cache store them. Crucially
+// this stops the Fastly CDN that Firebase Hosting puts in front of the function
+// from caching responses (notably 404s, which were then served stale so a
+// just-created record looked non-existent — even in incognito, since the CDN
+// cache is shared/server-side). Firebase Hosting's firebase.json `headers` config
+// does NOT apply to function-rewrite responses, so it must be set here.
+app.use((_req, res, next) => {
+  res.set("Cache-Control", "no-store");
+  next();
+});
+
 // Pull the latest test-clock override before each request. TTL-cached, so it
 // only re-reads Firestore every ~30s, and it's a no-op in production (the
 // override is never honoured there). Keeps clock.now() current for handlers.
