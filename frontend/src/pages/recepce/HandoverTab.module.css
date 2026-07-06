@@ -100,6 +100,66 @@
 }
 .pAccounts {
   grid-area: accounts;
+  /* Stretch to the full height of the 3-row span so CELKEM can pin to bottom. */
+  align-self: stretch;
+}
+
+/* Souhrn — mirrors the on-screen .summary two-group (CZK | EUR) box. */
+.printSummary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6pt;
+  padding: 3pt 4pt;
+  border: 0.5pt solid #000;
+}
+.printSummaryGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 1pt;
+}
+.printSummaryRow,
+.printSummaryTotal {
+  display: flex;
+  justify-content: space-between;
+  gap: 6pt;
+  font-variant-numeric: tabular-nums;
+}
+.printSummaryTotal {
+  margin-top: 2pt;
+  padding-top: 1.5pt;
+  border-top: 0.5pt solid #000;
+  font-weight: 700;
+}
+
+/* Účty — flex column; list grows, CELKEM sits at the section bottom. */
+.printAccounts {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  border: 0.5pt solid #000;
+}
+.printAccountsTitle {
+  font-weight: 700;
+  padding: 1pt 4pt;
+  border-bottom: 0.5pt solid #000;
+}
+.printAccountsList {
+  flex: 1;
+}
+.printAccountRow,
+.printAccountsTotal {
+  display: flex;
+  justify-content: space-between;
+  gap: 6pt;
+  padding: 1pt 4pt;
+  font-variant-numeric: tabular-nums;
+}
+.printAccountRow + .printAccountRow {
+  border-top: 0.25pt solid #999;
+}
+.printAccountsTotal {
+  border-top: 0.5pt solid #000;
+  font-weight: 700;
 }
 
 .printTable {
