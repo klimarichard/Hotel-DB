@@ -77,6 +77,14 @@ const DRAWER_LABELS: Record<DrawerKey, string> = {
 
 const DRAWER_ORDER: DrawerKey[] = ["kasaCZK", "trezorCZK", "kasaEUR", "trezorEUR"];
 
+/** Grid-area class per drawer, for the print layout (mirrors the app's cashLayout). */
+const PRINT_AREA_CLASS: Record<DrawerKey, string> = {
+  kasaCZK: styles.pKasaCZK,
+  trezorCZK: styles.pTrezorCZK,
+  kasaEUR: styles.pKasaEUR,
+  trezorEUR: styles.pTrezorEUR,
+};
+
 function isCzkDrawer(key: DrawerKey): boolean {
   return key === "kasaCZK" || key === "trezorCZK";
 }
@@ -1021,31 +1029,41 @@ function ProtocolEditor({
                         <span className={styles.accountAmountRO}>{acc.amount.toLocaleString("cs-CZ")}</span>
                       )}
                       <span className={styles.accountSuffix}>Kč</span>
-                      {rowEditable && (
-                        <EditActionButton
-                          editing={isEditing}
-                          ariaLabel={isEditing ? "Hotovo" : "Upravit"}
-                          onClick={() => setEditingIdx(isEditing ? null : idx)}
-                        />
-                      )}
-                      {rowEditable && (
-                        <TrashActionButton
-                          ariaLabel={`Odstranit účet ${acc.name || "(bez názvu)"}`}
-                          onClick={() => requestDeleteAccount(idx)}
-                        />
-                      )}
-                      {canManage && canEdit && (
-                        <LockActionButton locked={acc.locked} onClick={() => setAccountLocked(idx, !acc.locked)} />
-                      )}
-                      {acc.locked && !canManage && (
-                        <span className={styles.rowLockedIndicator} title="Uzamčeno">
-                          <LockIcon locked />
-                        </span>
-                      )}
+                      <div className={styles.rowActions}>
+                        {rowEditable && (
+                          <EditActionButton
+                            editing={isEditing}
+                            ariaLabel={isEditing ? "Hotovo" : "Upravit"}
+                            onClick={() => setEditingIdx(isEditing ? null : idx)}
+                          />
+                        )}
+                        {rowEditable && (
+                          <TrashActionButton
+                            ariaLabel={`Odstranit účet ${acc.name || "(bez názvu)"}`}
+                            onClick={() => requestDeleteAccount(idx)}
+                          />
+                        )}
+                        {canManage && canEdit && (
+                          <LockActionButton locked={acc.locked} onClick={() => setAccountLocked(idx, !acc.locked)} />
+                        )}
+                        {acc.locked && !canManage && (
+                          <span className={styles.rowLockedIndicator} title="Uzamčeno">
+                            <LockIcon locked />
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </Fragment>
                 );
               })}
+              {accounts.length > 0 && (
+                <div className={`${styles.accountRow} ${styles.accountTotalRow}`}>
+                  <span className={styles.accountNameRO}>CELKEM</span>
+                  <span className={styles.accountAmountRO}>{accountsTotal.toLocaleString("cs-CZ")}</span>
+                  <span className={styles.accountSuffix}>Kč</span>
+                  <div className={styles.rowActions} />
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1089,24 +1107,26 @@ function ProtocolEditor({
                         {n.text || <em className={styles.accountNameEmpty}>(prázdná poznámka)</em>}
                       </span>
                     )}
-                    {rowEditable && (
-                      <EditActionButton
-                        editing={isEditingNote}
-                        ariaLabel={isEditingNote ? "Hotovo" : "Upravit"}
-                        onClick={() => setEditingNoteIdx(isEditingNote ? null : i)}
-                      />
-                    )}
-                    {rowEditable && (
-                      <TrashActionButton ariaLabel="Odstranit poznámku" onClick={() => requestDeleteNote(i)} />
-                    )}
-                    {canManage && canEdit && (
-                      <LockActionButton locked={n.locked} onClick={() => setNoteLocked(i, !n.locked)} />
-                    )}
-                    {n.locked && !canManage && (
-                      <span className={styles.rowLockedIndicator} title="Uzamčeno">
-                        <LockIcon locked />
-                      </span>
-                    )}
+                    <div className={styles.rowActions}>
+                      {rowEditable && (
+                        <EditActionButton
+                          editing={isEditingNote}
+                          ariaLabel={isEditingNote ? "Hotovo" : "Upravit"}
+                          onClick={() => setEditingNoteIdx(isEditingNote ? null : i)}
+                        />
+                      )}
+                      {rowEditable && (
+                        <TrashActionButton ariaLabel="Odstranit poznámku" onClick={() => requestDeleteNote(i)} />
+                      )}
+                      {canManage && canEdit && (
+                        <LockActionButton locked={n.locked} onClick={() => setNoteLocked(i, !n.locked)} />
+                      )}
+                      {n.locked && !canManage && (
+                        <span className={styles.rowLockedIndicator} title="Uzamčeno">
+                          <LockIcon locked />
+                        </span>
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -1147,12 +1167,12 @@ function ProtocolEditor({
           Předávací protokol — {hotel.label} — {new Date(`${shiftDate}T00:00:00`).toLocaleDateString("cs-CZ")}{" "}
           — {shiftType === "den" ? "Denní" : "Noční"} směna
         </div>
-        <div className={styles.printCashGrid}>
+        <div className={styles.printBody}>
           {DRAWER_ORDER.map((drawer) => {
             const denoms = isCzkDrawer(drawer) ? CZK_DENOMS : EUR_DENOMS;
             const symbol = isCzkDrawer(drawer) ? "Kč" : "€";
             return (
-              <table key={drawer} className={styles.printTable}>
+              <table key={drawer} className={`${styles.printTable} ${PRINT_AREA_CLASS[drawer]}`}>
                 <caption>{DRAWER_LABELS[drawer]}</caption>
                 <thead>
                   <tr>
@@ -1182,28 +1202,8 @@ function ProtocolEditor({
               </table>
             );
           })}
-        </div>
-        <div className={styles.printLower}>
-          <table className={styles.printTable}>
-            <caption>Účty</caption>
-            <tbody>
-              {accounts.filter((a) => a.name.trim() !== "").length === 0 ? (
-                <tr>
-                  <td colSpan={2}>—</td>
-                </tr>
-              ) : (
-                accounts
-                  .filter((a) => a.name.trim() !== "")
-                  .map((a, i) => (
-                    <tr key={i}>
-                      <td className={styles.printAccName}>{a.name}</td>
-                      <td>{a.amount.toLocaleString("cs-CZ")} Kč</td>
-                    </tr>
-                  ))
-              )}
-            </tbody>
-          </table>
-          <table className={styles.printTable}>
+
+          <table className={`${styles.printTable} ${styles.pSummary}`}>
             <caption>Souhrn</caption>
             <tbody>
               <tr>
@@ -1233,6 +1233,30 @@ function ProtocolEditor({
               <tr className={styles.printTotalRow}>
                 <td>TOTAL €</td>
                 <td>{totalEUR.toLocaleString("cs-CZ")} €</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <table className={`${styles.printTable} ${styles.pAccounts}`}>
+            <caption>Účty</caption>
+            <tbody>
+              {accounts.filter((a) => a.name.trim() !== "").length === 0 ? (
+                <tr>
+                  <td colSpan={2}>—</td>
+                </tr>
+              ) : (
+                accounts
+                  .filter((a) => a.name.trim() !== "")
+                  .map((a, i) => (
+                    <tr key={i}>
+                      <td className={styles.printAccName}>{a.name}</td>
+                      <td>{a.amount.toLocaleString("cs-CZ")} Kč</td>
+                    </tr>
+                  ))
+              )}
+              <tr className={styles.printTotalRow}>
+                <td className={styles.printAccName}>CELKEM</td>
+                <td>{accountsTotal.toLocaleString("cs-CZ")} Kč</td>
               </tr>
             </tbody>
           </table>
