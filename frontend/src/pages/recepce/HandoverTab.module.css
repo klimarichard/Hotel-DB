@@ -1,0 +1,810 @@
+/* Předávací protokol (cash handover) — cash tables, účty, poznámky, summary,
+   signature blocks, sm/kurzy modals. Ported from the recepce hub branch and
+   trimmed to the basic version (no Wata / sm-trezor / per-doc history). */
+
+.panel {
+  background: var(--color-surface);
+  border-radius: 8px;
+  box-shadow: 0 1px 4px var(--shadow-sm);
+  padding: 1.5rem;
+}
+
+.placeholder {
+  padding: 3rem 1.5rem;
+  text-align: center;
+  color: var(--color-text-muted);
+  background: var(--color-surface);
+  border-radius: 8px;
+  box-shadow: 0 1px 4px var(--shadow-sm);
+}
+
+.placeholderTitle {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  margin: 0 0 0.5rem;
+}
+
+.placeholderHint {
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+  max-width: 32rem;
+  margin: 0 auto 1.25rem;
+  line-height: 1.5;
+}
+
+.swapCheckbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+  line-height: 1.4;
+  cursor: pointer;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-surface-2, var(--color-surface));
+}
+
+.swapCheckbox input[type="checkbox"] {
+  margin-top: 0.15rem;
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+  cursor: pointer;
+  accent-color: var(--color-primary);
+}
+
+/* ── Toolbar ─────────────────────────────────────────────────────────────── */
+/* Three-column grid: left spacer | centered nav group | right tools.
+   The 1fr flanks balance the visual weight so the nav group stays
+   centered on the page even when the right side has fewer items. */
+
+.toolbar {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.toolbarLeft {
+  /* spacer */
+}
+
+.toolbarCenter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+.toolbarRight {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.toolbarLabel {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+@media (max-width: 900px) {
+  .toolbar {
+    grid-template-columns: 1fr;
+  }
+  .toolbarLeft {
+    display: none;
+  }
+  .toolbarRight {
+    justify-content: center;
+  }
+}
+
+.dateInput {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  font-size: 0.875rem;
+  background: var(--color-bg);
+  color: var(--color-text-heading);
+}
+
+.shiftGroup {
+  display: inline-flex;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.shiftBtn,
+.shiftBtnActive {
+  padding: 0.35rem 0.85rem;
+  border: none;
+  background: var(--color-bg);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 0.8125rem;
+}
+
+.shiftBtnActive {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.shiftBtn + .shiftBtn,
+.shiftBtn + .shiftBtnActive,
+.shiftBtnActive + .shiftBtn,
+.shiftBtnActive + .shiftBtnActive {
+  border-left: 1px solid var(--color-border-strong);
+}
+
+.metaRow {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.metaText {
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}
+
+.metaError {
+  color: var(--color-danger, #b3261e);
+}
+
+.specialRowButtons {
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* ── Row-level pencil/trash micro-actions ────────────────────────────────
+ * IconButton on this branch only carries close/refresh variants, and
+ * CLAUDE.md keeps row-level micro-actions on local CSS. These reproduce the
+ * hub branch's IconButton edit/trash look. */
+
+.rowIconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
+  color: var(--color-text-muted);
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.rowIconBtn:hover:not(:disabled) {
+  background: var(--color-surface-4);
+  color: var(--color-text-heading);
+}
+
+.rowIconBtnTrash:hover:not(:disabled) {
+  background: var(--color-danger-bg, #fee2e2);
+  color: var(--color-danger, #b91c1c);
+}
+
+/* ── Top-level split: 2/3 cash+účty | 1/3 poznámky ──────────────────────── */
+
+.protocolGrid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 1.25rem;
+  align-items: stretch;
+  margin-top: 0.5rem;
+}
+
+.protocolRight {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+@media (max-width: 1100px) {
+  .protocolGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Cash + Účty grid (Excel-mirroring) ──────────────────────────────────
+ * Account column spans all four rows so it stretches to the full height of
+ * the cash tables + summary + signatures stack on the left. Summary spans
+ * cols 1-2 (KASA + TREZOR) so it aligns with the cash table widths instead
+ * of stretching under the Účty column.
+ */
+
+.cashLayout {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.15fr;
+  grid-template-areas:
+    "kasaCZK    trezorCZK    accounts"
+    "kasaEUR    trezorEUR    accounts"
+    "summary    summary      accounts"
+    "sigPredal  sigPrevzal   accounts";
+  gap: 1rem;
+  align-items: stretch;
+  min-width: 0;
+}
+
+.kasaCZK {
+  grid-area: kasaCZK;
+}
+.trezorCZK {
+  grid-area: trezorCZK;
+}
+.kasaEUR {
+  grid-area: kasaEUR;
+}
+.trezorEUR {
+  grid-area: trezorEUR;
+}
+.sigPredalCell {
+  grid-area: sigPredal;
+}
+.sigPrevzalCell {
+  grid-area: sigPrevzal;
+}
+
+@media (max-width: 900px) {
+  .cashLayout {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "kasaCZK"
+      "trezorCZK"
+      "kasaEUR"
+      "trezorEUR"
+      "accounts"
+      "summary"
+      "sigPredal"
+      "sigPrevzal";
+  }
+}
+
+/* ── Cash table — base + per-drawer tints ─────────────────────────────── */
+
+.cashTable {
+  --tint: var(--color-bg);
+  --tint-alt: var(--color-bg);
+  --tint-strong: var(--color-surface-2, var(--color-surface));
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--tint);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Light-mode tints — base / alt-row / header-strong */
+.cashTable.kasaCZK {
+  --tint: #eff6ff;
+  --tint-alt: #e0eafc;
+  --tint-strong: #dbeafe;
+}
+.cashTable.trezorCZK {
+  --tint: #fff7ed;
+  --tint-alt: #ffe8d4;
+  --tint-strong: #ffedd5;
+}
+.cashTable.kasaEUR {
+  --tint: #fefce8;
+  --tint-alt: #fef6c5;
+  --tint-strong: #fef3c7;
+}
+.cashTable.trezorEUR {
+  --tint: #f0fdf4;
+  --tint-alt: #d8f7e3;
+  --tint-strong: #d1fae5;
+}
+
+/* Dark-mode tints — desaturated, low-luminance */
+[data-theme="dark"] .cashTable.kasaCZK {
+  --tint: #15294a;
+  --tint-alt: #1a3155;
+  --tint-strong: #1e3a5f;
+}
+[data-theme="dark"] .cashTable.trezorCZK {
+  --tint: #2d1d10;
+  --tint-alt: #352213;
+  --tint-strong: #3d2814;
+}
+[data-theme="dark"] .cashTable.kasaEUR {
+  --tint: #2d2510;
+  --tint-alt: #352c14;
+  --tint-strong: #3d321a;
+}
+[data-theme="dark"] .cashTable.trezorEUR {
+  --tint: #102b1c;
+  --tint-alt: #143521;
+  --tint-strong: #143d28;
+}
+
+.cashTableHead {
+  background: var(--tint-strong);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-heading);
+}
+
+.cashRowHeader,
+.cashRow {
+  display: grid;
+  grid-template-columns: 1fr 70px 1fr;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.8125rem;
+}
+
+.cashRowHeader {
+  color: var(--color-text-muted);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.cashRowAlt {
+  background: var(--tint-alt);
+}
+
+.denom {
+  color: var(--color-text-secondary);
+}
+
+/* No spinner buttons — receptionist types the count, the up/down clickers
+   are not useful at the resolution the inputs have. */
+.cashInput {
+  width: 100%;
+  padding: 0.25rem 0.4rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 3px;
+  background: var(--color-input-bg, var(--color-bg));
+  color: var(--color-text-heading);
+  font-size: 0.875rem;
+  text-align: right;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.cashInput::-webkit-inner-spin-button,
+.cashInput::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.subtotal {
+  text-align: right;
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.cashTotal {
+  margin-top: auto;
+  padding: 0.55rem 0.75rem;
+  border-top: 1px solid var(--color-border);
+  background: var(--tint-strong);
+  font-weight: 700;
+  font-size: 0.875rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-heading);
+}
+
+/* ── Účty container (grey tint) ─────────────────────────────────────────── */
+
+.accountsContainer {
+  --tint: #f3f4f6;
+  --tint-alt: #ebecef;
+  --tint-strong: #e5e7eb;
+  grid-area: accounts;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--tint);
+  overflow: hidden;
+}
+
+[data-theme="dark"] .accountsContainer {
+  --tint: #232c3a;
+  --tint-alt: #283242;
+  --tint-strong: #2d3848;
+}
+
+.accountsContainerHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--tint-strong);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.accountsTitle {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--color-text-heading);
+}
+
+.accountsList {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  background: transparent;
+}
+
+.accountsEmpty {
+  padding: 1rem;
+  text-align: center;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}
+
+.accountRow {
+  display: grid;
+  grid-template-columns: 1fr 110px auto auto auto;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.75rem;
+  min-height: 2.4rem;
+}
+
+.accountRowAlt {
+  background: var(--tint-alt);
+}
+
+/* sm sits at the top, then the regular rows below — separated by an empty
+   band with a thin line so the visual break is unmistakable. */
+.accountSeparator {
+  height: 1px;
+  background: var(--color-border);
+  margin: 1.1rem 0.75rem;
+}
+
+.accountName {
+  padding: 0.35rem 0.55rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  background: var(--color-input-bg, var(--color-bg));
+  color: var(--color-text-heading);
+  font-size: 0.875rem;
+}
+
+.accountAmount {
+  padding: 0.35rem 0.55rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  background: var(--color-input-bg, var(--color-bg));
+  color: var(--color-text-heading);
+  font-size: 0.875rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.accountAmount::-webkit-inner-spin-button,
+.accountAmount::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.accountNameRO {
+  padding: 0.35rem 0;
+  font-size: 0.875rem;
+  color: var(--color-text-heading);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.accountNameEmpty {
+  color: var(--color-text-subtle);
+  font-style: italic;
+  font-weight: 400;
+}
+
+.accountAmountRO {
+  padding: 0.35rem 0;
+  font-size: 0.875rem;
+  color: var(--color-text-heading);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.accountSuffix {
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}
+
+/* ── Poznámky column ─────────────────────────────────────────────────────── */
+
+.notesContainer {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-bg);
+  overflow: hidden;
+}
+
+.notesContainerHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--color-surface-2, var(--color-surface));
+  border-bottom: 1px solid var(--color-border);
+}
+
+.notesList {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.noteRow {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.75rem;
+}
+
+.noteTextRO {
+  padding: 0.35rem 0;
+  font-size: 0.875rem;
+  color: var(--color-text-heading);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.noteRowAlt {
+  background: var(--color-surface-3, var(--color-surface-2));
+}
+
+.noteCheck {
+  width: 1.05rem;
+  height: 1.05rem;
+  cursor: pointer;
+  accent-color: var(--color-primary);
+}
+
+.noteText {
+  width: 100%;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  background: var(--color-input-bg, var(--color-bg));
+  color: var(--color-text-heading);
+  font-size: 0.875rem;
+}
+
+.noteTextDone {
+  text-decoration: line-through;
+  color: var(--color-text-muted);
+}
+
+/* ── Summary panel — sits in cashLayout grid, spans cols 1-2 ────────────── */
+
+.summary {
+  grid-area: summary;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-surface-2, var(--color-surface));
+}
+
+.summaryGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.summaryRow,
+.summaryRowTotal {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.summaryRowTotal {
+  margin-top: 0.4rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-heading);
+  font-weight: 700;
+}
+
+/* ── Signature blocks ────────────────────────────────────────────────────── */
+
+.signatureBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-bg);
+}
+
+.signatureStamp {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  color: var(--color-text-heading);
+}
+
+.signatureStampText {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+/* ── sm + kurzy modals ──────────────────────────────────────────────────── */
+
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: var(--overlay-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.smModal {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  width: 420px;
+  max-width: calc(100vw - 2rem);
+  box-shadow: 0 20px 60px var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+}
+
+.modalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.modalTitle {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-heading);
+}
+
+.modalBody {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.modalHint {
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+.modalFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--color-border);
+}
+
+/* Pin a footer button to the left edge while the standard cancel/confirm
+   pair stays right-aligned. */
+.modalFooterStart {
+  margin-right: auto;
+}
+
+.smGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 0.6rem;
+}
+
+.smLabel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  min-width: 0;
+}
+
+/* Number inputs default to a fixed natural width that overflows narrow grid
+   cells. width:100% + min-width:0 lets the input shrink to fit. */
+.smInput {
+  width: 100%;
+  min-width: 0;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  background: var(--color-input-bg, var(--color-bg));
+  color: var(--color-text-heading);
+  font-size: 0.9rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: normal;
+  letter-spacing: normal;
+  text-transform: none;
+  box-sizing: border-box;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.smInput::-webkit-inner-spin-button,
+.smInput::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.smRate {
+  display: inline-block;
+  padding: 0.1rem 0.45rem;
+  background: var(--color-surface-2, var(--color-surface));
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--color-text-heading);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.smTotal {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+  background: var(--color-surface-2, var(--color-surface));
+  font-size: 0.9rem;
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
