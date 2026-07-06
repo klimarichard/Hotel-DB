@@ -241,8 +241,11 @@ handoversRouter.get(
 
     // Map active users → signer entries; when a plan exists, keep only users whose
     // linked employee is in it. The users collection is small, so one read is fine.
+    // Dedupe by employeeId — if several accounts link to the same employee (a data
+    // anomaly, but nothing prevents it) they'd otherwise appear as identical rows.
     const usersSnap = await db().collection("users").get();
     const out: Array<{ uid: string; name: string; label: string }> = [];
+    const seenEmp = new Set<string>();
     for (const d of usersSnap.docs) {
       const u = d.data() as { name?: unknown; employeeId?: unknown; active?: unknown };
       if (u.active === false) continue;
@@ -251,8 +254,14 @@ handoversRouter.get(
       const empId = typeof u.employeeId === "string" ? u.employeeId : null;
       if (usePlan) {
         if (!empId || !planLabels.has(empId)) continue;
+        if (seenEmp.has(empId)) continue;
+        seenEmp.add(empId);
         out.push({ uid: d.id, name, label: planLabels.get(empId) ?? name });
       } else {
+        if (empId) {
+          if (seenEmp.has(empId)) continue;
+          seenEmp.add(empId);
+        }
         out.push({ uid: d.id, name, label: name });
       }
     }
