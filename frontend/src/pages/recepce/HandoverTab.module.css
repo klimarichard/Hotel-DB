@@ -9,6 +9,15 @@
   padding: 1.5rem;
 }
 
+.editorHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  min-height: 2rem;
+}
+
 .placeholder {
   padding: 3rem 1.5rem;
   text-align: center;
