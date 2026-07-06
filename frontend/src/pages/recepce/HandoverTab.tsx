@@ -249,6 +249,19 @@ export default function HandoverTab({ hotel }: { hotel: Hotel }) {
   const [shiftDate, setShiftDate] = useState<string>(todayLocal());
   const [shiftType, setShiftType] = useState<ShiftType>(defaultShiftForNow());
 
+  // A doc handed over from createNextShift so the target editor renders it
+  // directly (avoids a read-after-write GET of the just-created next-shift doc).
+  const [seeded, setSeeded] = useState<Handover | null>(null);
+
+  function go(date: string, shift: ShiftType, doc: Handover | null = null) {
+    setShiftDate(date);
+    setShiftType(shift);
+    setSeeded(doc);
+  }
+
+  const initialDoc =
+    seeded && seeded.shiftDate === shiftDate && seeded.shiftType === shiftType ? seeded : null;
+
   return (
     <div className={styles.panel}>
       <div className={styles.toolbar}>
@@ -259,8 +272,7 @@ export default function HandoverTab({ hotel }: { hotel: Hotel }) {
             size="sm"
             onClick={() => {
               const p = previousShift(shiftDate, shiftType);
-              setShiftDate(p.date);
-              setShiftType(p.shift);
+              go(p.date, p.shift);
             }}
             title="Předchozí směna"
           >
@@ -271,7 +283,7 @@ export default function HandoverTab({ hotel }: { hotel: Hotel }) {
             type="date"
             className={styles.dateInput}
             value={shiftDate}
-            onChange={(e) => e.target.value && setShiftDate(e.target.value)}
+            onChange={(e) => e.target.value && go(e.target.value, shiftType)}
           />
           <span className={styles.toolbarLabel}>Směna</span>
           <div className={styles.shiftGroup}>
@@ -280,7 +292,7 @@ export default function HandoverTab({ hotel }: { hotel: Hotel }) {
                 key={s}
                 type="button"
                 className={shiftType === s ? styles.shiftBtnActive : styles.shiftBtn}
-                onClick={() => setShiftType(s)}
+                onClick={() => go(shiftDate, s)}
               >
                 {SHIFT_LABELS[s]}
               </button>
@@ -291,8 +303,7 @@ export default function HandoverTab({ hotel }: { hotel: Hotel }) {
             size="sm"
             onClick={() => {
               const n = nextShift(shiftDate, shiftType);
-              setShiftDate(n.date);
-              setShiftType(n.shift);
+              go(n.date, n.shift);
             }}
             title="Následující směna"
           >
@@ -307,10 +318,8 @@ export default function HandoverTab({ hotel }: { hotel: Hotel }) {
         hotel={hotel}
         shiftDate={shiftDate}
         shiftType={shiftType}
-        onNavigate={(date, shift) => {
-          setShiftDate(date);
-          setShiftType(shift);
-        }}
+        initialDoc={initialDoc}
+        onNavigate={go}
       />
     </div>
   );
@@ -325,12 +334,16 @@ function ProtocolEditor({
   hotel,
   shiftDate,
   shiftType,
+  initialDoc,
   onNavigate,
 }: {
   hotel: Hotel;
   shiftDate: string;
   shiftType: ShiftType;
-  onNavigate: (date: string, shift: ShiftType) => void;
+  /** When set, render this doc directly instead of fetching (avoids a
+   *  read-after-write GET of a just-created next-shift duplicate). */
+  initialDoc: Handover | null;
+  onNavigate: (date: string, shift: ShiftType, doc?: Handover | null) => void;
 }) {
   const { can } = useAuth();
   const canDelete = can(hotel.protokolDeletePerm);
@@ -389,6 +402,12 @@ function ProtocolEditor({
 
   // Load the doc once (component is keyed per shift, so mount == shift change).
   useEffect(() => {
+    // Seeded from createNextShift → render it directly, skip the (racy) GET.
+    if (initialDoc) {
+      applyDoc(initialDoc);
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
     setLoading(true);
     void (async () => {
@@ -537,21 +556,23 @@ function ProtocolEditor({
     const next = nextShift(shiftDate, shiftType);
     const nextId = `${next.date}_${next.shift}`;
     try {
-      let exists = true;
+      // If the next shift already has a protocol, just open it; otherwise create
+      // the duplicate. Either way we carry the doc into the target editor so it
+      // renders without a read-after-write GET.
+      let doc: Handover | null = null;
       try {
-        await api.get<Handover>(`/handovers/${hotel.slug}/${nextId}`);
+        doc = await api.get<Handover>(`/handovers/${hotel.slug}/${nextId}`);
       } catch (e) {
-        if (e instanceof ApiError && e.status === 404) exists = false;
-        else throw e;
+        if (!(e instanceof ApiError && e.status === 404)) throw e;
       }
-      if (!exists) {
-        await api.put<Handover>(`/handovers/${hotel.slug}`, {
+      if (!doc) {
+        doc = await api.put<Handover>(`/handovers/${hotel.slug}`, {
           shiftDate: next.date,
           shiftType: next.shift,
           ...toPayload(notes, cashCounts, accounts),
         });
       }
-      onNavigate(next.date, next.shift);
+      onNavigate(next.date, next.shift, doc);
     } catch (err) {
       setConfirm({
         title: "Chyba",
