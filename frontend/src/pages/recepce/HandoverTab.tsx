@@ -1056,14 +1056,12 @@ function ProtocolEditor({
                   </Fragment>
                 );
               })}
-              {accounts.length > 0 && (
-                <div className={`${styles.accountRow} ${styles.accountTotalRow}`}>
-                  <span className={styles.accountNameRO}>CELKEM</span>
-                  <span className={styles.accountAmountRO}>{accountsTotal.toLocaleString("cs-CZ")}</span>
-                  <span className={styles.accountSuffix}>Kč</span>
-                  <div className={styles.rowActions} />
-                </div>
-              )}
+            </div>
+            <div className={`${styles.accountRow} ${styles.accountTotalRow}`}>
+              <span className={styles.accountNameRO}>CELKEM</span>
+              <span className={styles.accountAmountRO}>{accountsTotal.toLocaleString("cs-CZ")}</span>
+              <span className={styles.accountSuffix}>Kč</span>
+              <div className={styles.rowActions} />
             </div>
           </div>
         </div>
@@ -1203,63 +1201,65 @@ function ProtocolEditor({
             );
           })}
 
-          <table className={`${styles.printTable} ${styles.pSummary}`}>
-            <caption>Souhrn</caption>
-            <tbody>
-              <tr>
-                <td>KASA</td>
-                <td>{drawerTotals.kasaCZK.toLocaleString("cs-CZ")} Kč</td>
-              </tr>
-              <tr>
-                <td>TREZOR</td>
-                <td>{drawerTotals.trezorCZK.toLocaleString("cs-CZ")} Kč</td>
-              </tr>
-              <tr>
-                <td>ÚČTY</td>
-                <td>{accountsTotal.toLocaleString("cs-CZ")} Kč</td>
-              </tr>
-              <tr className={styles.printTotalRow}>
-                <td>TOTAL CZK</td>
-                <td>{totalCZK.toLocaleString("cs-CZ")} Kč</td>
-              </tr>
-              <tr>
-                <td>KASA €</td>
-                <td>{drawerTotals.kasaEUR.toLocaleString("cs-CZ")} €</td>
-              </tr>
-              <tr>
-                <td>TREZOR €</td>
-                <td>{drawerTotals.trezorEUR.toLocaleString("cs-CZ")} €</td>
-              </tr>
-              <tr className={styles.printTotalRow}>
-                <td>TOTAL €</td>
-                <td>{totalEUR.toLocaleString("cs-CZ")} €</td>
-              </tr>
-            </tbody>
-          </table>
+          {/* Souhrn — same two-group (CZK | EUR) layout as the on-screen summary. */}
+          <div className={`${styles.pSummary} ${styles.printSummary}`}>
+            <div className={styles.printSummaryGroup}>
+              <div className={styles.printSummaryRow}>
+                <span>KASA</span>
+                <span>{drawerTotals.kasaCZK.toLocaleString("cs-CZ")} Kč</span>
+              </div>
+              <div className={styles.printSummaryRow}>
+                <span>TREZOR</span>
+                <span>{drawerTotals.trezorCZK.toLocaleString("cs-CZ")} Kč</span>
+              </div>
+              <div className={styles.printSummaryRow}>
+                <span>ÚČTY</span>
+                <span>{accountsTotal.toLocaleString("cs-CZ")} Kč</span>
+              </div>
+              <div className={styles.printSummaryTotal}>
+                <span>TOTAL CZK</span>
+                <span>{totalCZK.toLocaleString("cs-CZ")} Kč</span>
+              </div>
+            </div>
+            <div className={styles.printSummaryGroup}>
+              <div className={styles.printSummaryRow}>
+                <span>KASA €</span>
+                <span>{drawerTotals.kasaEUR.toLocaleString("cs-CZ")} €</span>
+              </div>
+              <div className={styles.printSummaryRow}>
+                <span>TREZOR €</span>
+                <span>{drawerTotals.trezorEUR.toLocaleString("cs-CZ")} €</span>
+              </div>
+              {/* Spacer so TOTAL € lines up with TOTAL CZK (extra ÚČTY row). */}
+              <div className={styles.printSummaryRow} aria-hidden="true">
+                <span>&nbsp;</span>
+                <span>&nbsp;</span>
+              </div>
+              <div className={styles.printSummaryTotal}>
+                <span>TOTAL €</span>
+                <span>{totalEUR.toLocaleString("cs-CZ")} €</span>
+              </div>
+            </div>
+          </div>
 
-          <table className={`${styles.printTable} ${styles.pAccounts}`}>
-            <caption>Účty</caption>
-            <tbody>
-              {accounts.filter((a) => a.name.trim() !== "").length === 0 ? (
-                <tr>
-                  <td colSpan={2}>—</td>
-                </tr>
-              ) : (
-                accounts
-                  .filter((a) => a.name.trim() !== "")
-                  .map((a, i) => (
-                    <tr key={i}>
-                      <td className={styles.printAccName}>{a.name}</td>
-                      <td>{a.amount.toLocaleString("cs-CZ")} Kč</td>
-                    </tr>
-                  ))
-              )}
-              <tr className={styles.printTotalRow}>
-                <td className={styles.printAccName}>CELKEM</td>
-                <td>{accountsTotal.toLocaleString("cs-CZ")} Kč</td>
-              </tr>
-            </tbody>
-          </table>
+          {/* Účty — flex column so CELKEM pins to the bottom of the (tall) section. */}
+          <div className={`${styles.pAccounts} ${styles.printAccounts}`}>
+            <div className={styles.printAccountsTitle}>Účty</div>
+            <div className={styles.printAccountsList}>
+              {accounts
+                .filter((a) => a.name.trim() !== "")
+                .map((a, i) => (
+                  <div key={i} className={styles.printAccountRow}>
+                    <span className={styles.printAccName}>{a.name}</span>
+                    <span>{a.amount.toLocaleString("cs-CZ")} Kč</span>
+                  </div>
+                ))}
+            </div>
+            <div className={styles.printAccountsTotal}>
+              <span className={styles.printAccName}>CELKEM</span>
+              <span>{accountsTotal.toLocaleString("cs-CZ")} Kč</span>
+            </div>
+          </div>
         </div>
         <div className={styles.printSignatures}>
           <div>
