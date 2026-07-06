@@ -37,6 +37,8 @@ export interface Hotel {
   readonly viewPerm: Permission;
   /** `recepce.<stem>.protokol.delete` — gates deleting a Předávací protokol. */
   readonly protokolDeletePerm: Permission;
+  /** `recepce.<stem>.protokol.manage` — gates reverting others' signatures. */
+  readonly protokolManagePerm: Permission;
   readonly tabs: readonly HotelTab[];
 }
 
@@ -49,6 +51,7 @@ export const HOTELS: readonly Hotel[] = [
     stem: "ambiance",
     viewPerm: "recepce.ambiance.view",
     protokolDeletePerm: "recepce.ambiance.protokol.delete",
+    protokolManagePerm: "recepce.ambiance.protokol.manage",
     tabs: [
       { id: "protokol", label: "Předávací protokol", viewPerm: "recepce.ambiance.protokol.view" },
       { id: "walkiny", label: "Walkiny", viewPerm: "recepce.ambiance.walkiny.view" },
@@ -63,6 +66,7 @@ export const HOTELS: readonly Hotel[] = [
     stem: "superior",
     viewPerm: "recepce.superior.view",
     protokolDeletePerm: "recepce.superior.protokol.delete",
+    protokolManagePerm: "recepce.superior.protokol.manage",
     tabs: [
       { id: "protokol", label: "Předávací protokol", viewPerm: "recepce.superior.protokol.view" },
       { id: "walkiny", label: "Walkiny", viewPerm: "recepce.superior.walkiny.view" },
@@ -76,6 +80,7 @@ export const HOTELS: readonly Hotel[] = [
     stem: "amigo",
     viewPerm: "recepce.amigo.view",
     protokolDeletePerm: "recepce.amigo.protokol.delete",
+    protokolManagePerm: "recepce.amigo.protokol.manage",
     tabs: [
       { id: "protokol", label: "Předávací protokol", viewPerm: "recepce.amigo.protokol.view" },
       { id: "walkiny", label: "Walkiny", viewPerm: "recepce.amigo.walkiny.view" },
@@ -90,6 +95,7 @@ export const HOTELS: readonly Hotel[] = [
     stem: "ankora",
     viewPerm: "recepce.ankora.view",
     protokolDeletePerm: "recepce.ankora.protokol.delete",
+    protokolManagePerm: "recepce.ankora.protokol.manage",
     tabs: [
       { id: "protokol", label: "Předávací protokol", viewPerm: "recepce.ankora.protokol.view" },
       { id: "walkiny", label: "Walkiny", viewPerm: "recepce.ankora.walkiny.view" },
