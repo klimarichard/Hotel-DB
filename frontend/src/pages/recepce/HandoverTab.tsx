@@ -369,6 +369,11 @@ function ProtocolEditor({
 
   // ── Signatures ─────────────────────────────────────────────────────────────
   const [signers, setSigners] = useState<Signer[]>([]);
+  // Default signer uids from the shift plan: this shift → Předal, next → Převzal.
+  const [scheduled, setScheduled] = useState<{ predal: string | null; prevzal: string | null }>({
+    predal: null,
+    prevzal: null,
+  });
   const [signAction, setSignAction] = useState<
     { slot: SignatureSlot; mode: "sign" | "revert"; stamp?: Stamp | null } | null
   >(null);
@@ -442,12 +447,16 @@ function ProtocolEditor({
     let cancelled = false;
     void (async () => {
       try {
-        const list = await api.get<Signer[]>(
-          `/handovers/${hotel.slug}/signers?date=${encodeURIComponent(shiftDate)}`
-        );
-        if (!cancelled) setSigners(list);
+        const res = await api.get<{
+          signers: Signer[];
+          scheduled: { predal: string | null; prevzal: string | null };
+        }>(`/handovers/${hotel.slug}/signers?date=${encodeURIComponent(shiftDate)}&shift=${shiftType}`);
+        if (!cancelled) {
+          setSigners(res.signers);
+          setScheduled(res.scheduled);
+        }
       } catch {
-        // non-fatal — the dropdown just shows no options
+        // non-fatal — the dropdown just shows no options / no defaults
       }
     })();
     return () => {
@@ -1043,7 +1052,11 @@ function ProtocolEditor({
           }
           confirmLabel={signAction.mode === "sign" ? "Podepsat" : "Odebrat podpis"}
           signers={signers}
-          defaultSignerUid={signAction.mode === "revert" ? signAction.stamp?.uid : undefined}
+          defaultSignerUid={
+            signAction.mode === "revert"
+              ? signAction.stamp?.uid
+              : (signAction.slot === "predal" ? scheduled.predal : scheduled.prevzal) ?? undefined
+          }
           busy={signBusy}
           errorText={signError}
           onSubmit={handleSignSubmit}

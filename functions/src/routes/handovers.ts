@@ -23,7 +23,9 @@ import {
   docId,
   handoverCol,
   previousShift,
+  nextShift,
 } from "../services/handoverShared";
+import { scheduledSigner } from "../services/scheduleLookup";
 
 const db = () => admin.firestore();
 
@@ -200,6 +202,7 @@ handoversRouter.get(
   requireAuth,
   requireHotelPerm("view"),
   async (req: AuthRequest, res: Response) => {
+    const hotel = req.params.hotel as HotelSlug;
     const dateStr =
       typeof req.query.date === "string" && isShiftDate(req.query.date)
         ? (req.query.date as string)
@@ -254,7 +257,21 @@ handoversRouter.get(
       }
     }
     out.sort((a, b) => a.label.localeCompare(b.label, "cs"));
-    res.json(out);
+
+    // Default signers: whoever is scheduled for THIS shift (Předal) and the NEXT
+    // shift (Převzal) in the plan. null when nobody is scheduled → no default.
+    const shift = isShiftType(req.query.shift) ? (req.query.shift as "den" | "noc") : null;
+    let scheduled: { predal: string | null; prevzal: string | null } = { predal: null, prevzal: null };
+    if (shift) {
+      const next = nextShift(dateStr, shift);
+      const [cur, nxt] = await Promise.all([
+        scheduledSigner(hotel, dateStr, shift),
+        scheduledSigner(hotel, next.date, next.shift),
+      ]);
+      scheduled = { predal: cur?.uid ?? null, prevzal: nxt?.uid ?? null };
+    }
+
+    res.json({ signers: out, scheduled });
   }
 );
 
@@ -405,6 +422,54 @@ handoversRouter.delete(
   }
 );
 
+/**
+ * Keep a protocol's "non-consecutive handover" (nenavazující předání) warning in
+ * sync: if this shift's Předal signer differs from the PREVIOUS shift's Převzal
+ * signer, flag it in `handoverWarnings` (one doc per protocol, deterministic id);
+ * otherwise clear any stale flag. Self-healing on re-sign/revert.
+ */
+async function syncChainWarning(hotel: HotelSlug, id: string): Promise<void> {
+  const warnRef = db().collection("handoverWarnings").doc(`${hotel}_${id}`);
+  const snap = await handoverCol(hotel).doc(id).get();
+  const doc = snap.exists ? (snap.data() as HandoverDoc) : null;
+  if (!doc || !doc.predal) {
+    await warnRef.delete().catch(() => undefined);
+    return;
+  }
+  const prev = previousShift(doc.shiftDate, doc.shiftType);
+  const prevSnap = await handoverCol(hotel).doc(docId(prev.date, prev.shift)).get();
+  const prevPrevzal = prevSnap.exists ? (prevSnap.data() as HandoverDoc).prevzal : null;
+  if (prevPrevzal && prevPrevzal.uid !== doc.predal.uid) {
+    await warnRef.set({
+      hotel,
+      handoverId: id,
+      shiftDate: doc.shiftDate,
+      shiftType: doc.shiftType,
+      actorUid: doc.predal.uid,
+      actorName: doc.predal.displayName,
+      expectedUid: prevPrevzal.uid,
+      expectedName: prevPrevzal.displayName,
+      createdAt: FieldValue.serverTimestamp(),
+      read: false,
+      readAt: null,
+      readBy: null,
+    });
+  } else {
+    await warnRef.delete().catch(() => undefined);
+  }
+}
+
+/** After a predal/prevzal change, resync the affected protocol's chain warning:
+ *  a predal change affects THIS protocol; a prevzal change affects the NEXT one. */
+async function resyncChainAfter(hotel: HotelSlug, doc: HandoverDoc, slot: SignatureSlot): Promise<void> {
+  if (slot === "predal") {
+    await syncChainWarning(hotel, docId(doc.shiftDate, doc.shiftType));
+  } else {
+    const next = nextShift(doc.shiftDate, doc.shiftType);
+    await syncChainWarning(hotel, docId(next.date, next.shift));
+  }
+}
+
 // ─── Virtual signatures (Předat / Převzít + revert) ──────────────────────────
 // The client verifies a colleague's username+password on a secondary Firebase
 // app and posts the resulting idToken; the server verifies it and records the
@@ -470,6 +535,8 @@ function stampHandler(slot: SignatureSlot) {
       before: { [slot]: null },
       after: { [slot]: { uid: stamp.uid, displayName: stamp.displayName } },
     });
+
+    await resyncChainAfter(hotel, before, slot);
 
     const saved = await ref.get();
     res.json({ id, ...saved.data() });
@@ -538,6 +605,8 @@ function revertHandler(slot: SignatureSlot) {
       before: { [slot]: { uid: stamp.uid, displayName: stamp.displayName } },
       after: { [slot]: null },
     });
+
+    await resyncChainAfter(hotel, before, slot);
 
     const saved = await ref.get();
     res.json({ id, ...saved.data() });
