@@ -65,6 +65,20 @@ function TrashIcon() {
     </svg>
   );
 }
+function ChevronUpIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m18 15-6-6-6 6" />
+    </svg>
+  );
+}
+function ChevronDownIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}
 
 interface ConfirmState {
   title: string;
@@ -528,6 +542,17 @@ function RoutesModal({
   function add() {
     setDraft((prev) => [...prev, { _key: genId(), id: "", name: "", price: 0, provision: 0, roundtrip: false }]);
   }
+  /** Reorder a route (order is persisted verbatim as the array position). */
+  function move(key: string, dir: -1 | 1) {
+    setDraft((prev) => {
+      const i = prev.findIndex((r) => r._key === key);
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= prev.length) return prev;
+      const next = [...prev];
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
+  }
 
   async function save() {
     setBusy(true);
@@ -571,7 +596,7 @@ function RoutesModal({
                   </td>
                 </tr>
               )}
-              {draft.map((r) => (
+              {draft.map((r, idx) => (
                 <tr key={r._key}>
                   <td>
                     {canEdit ? (
@@ -599,9 +624,17 @@ function RoutesModal({
                   </td>
                   {canEdit && (
                     <td>
-                      <button type="button" className={`${styles.rowIconBtn} ${styles.rowIconBtnTrash}`} aria-label="Odstranit trasu" onClick={() => remove(r._key)} disabled={busy}>
-                        <TrashIcon />
-                      </button>
+                      <div className={styles.rowActions}>
+                        <button type="button" className={styles.rowIconBtn} aria-label="Posunout nahoru" title="Posunout nahoru" onClick={() => move(r._key, -1)} disabled={busy || idx === 0}>
+                          <ChevronUpIcon />
+                        </button>
+                        <button type="button" className={styles.rowIconBtn} aria-label="Posunout dolů" title="Posunout dolů" onClick={() => move(r._key, 1)} disabled={busy || idx === draft.length - 1}>
+                          <ChevronDownIcon />
+                        </button>
+                        <button type="button" className={`${styles.rowIconBtn} ${styles.rowIconBtnTrash}`} aria-label="Odstranit trasu" onClick={() => remove(r._key)} disabled={busy}>
+                          <TrashIcon />
+                        </button>
+                      </div>
                     </td>
                   )}
                 </tr>
