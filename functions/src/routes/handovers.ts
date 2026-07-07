@@ -541,17 +541,24 @@ handoversRouter.put(
     const beforeSnap = await ref.get();
     const before = beforeSnap.exists ? (beforeSnap.data() as HandoverDoc) : null;
 
-    // Creating a BRAND-NEW protocol needs the dedicated create permission.
-    // Exception: a handover continuation — creating the next shift when the
-    // immediately-previous shift is fully signed (closed) — is allowed with just
-    // edit/view, so the incoming receptionist can always continue the chain.
+    // On create, the previous shift's doc drives two things: the create-permission
+    // exception (a handover continuation from a fully-signed previous shift needs
+    // no create key) AND the carry-over of the running balances — sm trezor + wata
+    // ALWAYS follow the money into the next shift. Seeded server-side from the
+    // previous shift, never from the client body, so the manage-gating on those
+    // fields can't be bypassed at creation.
+    let seedSmTrezor = 0;
+    let seedWata = 0;
     if (!beforeSnap.exists) {
       const set = req.permissions ?? new Set<string>();
+      const prev = previousShift(body.shiftDate, body.shiftType);
+      const prevSnap = await handoverCol(hotel).doc(docId(prev.date, prev.shift)).get();
+      const prevDoc = prevSnap.exists ? (prevSnap.data() as HandoverDoc) : null;
+      seedSmTrezor = finiteOr(prevDoc?.smTrezor, 0);
+      seedWata = finiteOr(prevDoc?.wata, 0);
+
       const hasCreate = set.has("system.admin") || set.has(handoverCreatePerm(hotel));
       if (!hasCreate) {
-        const prev = previousShift(body.shiftDate, body.shiftType);
-        const prevSnap = await handoverCol(hotel).doc(docId(prev.date, prev.shift)).get();
-        const prevDoc = prevSnap.exists ? (prevSnap.data() as HandoverDoc) : null;
         const prevClosed = !!(prevDoc?.predal && prevDoc?.prevzal);
         if (!prevClosed) {
           res.status(403).json({ error: "Nemáte oprávnění vytvořit protokol." });
@@ -585,6 +592,9 @@ handoversRouter.put(
     if (!beforeSnap.exists) {
       await ref.set({
         ...after,
+        // Running balances carried from the previous shift (server-sourced).
+        smTrezor: seedSmTrezor,
+        wata: seedWata,
         createdBy: req.uid,
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),

@@ -18,6 +18,9 @@ const EUR_DENOMS = ["500", "200", "100", "50", "20", "10", "5", "2", "1"] as con
 
 const AUTOSAVE_DELAY_MS = 800;
 
+// Subscript digits for the sm field labels: rates render k₁/k₂/k₃, counts s₁/s₂/s₃.
+const SUB_DIGITS = ["₁", "₂", "₃"] as const;
+
 // firebase-admin's Timestamp serialises over the wire as { _seconds } (private
 // field), not { seconds }. Tolerate both shapes.
 type TimestampLike =
@@ -1196,7 +1199,7 @@ function ProtocolEditor({
                 value={smAmount}
                 clickable={smClickable}
                 onClick={openSmModal}
-                title={canManageSm ? "Upravit kurzy a počty sm" : "Upravit počty sm"}
+                title="Upravit sm"
               />
               <SpecialRow
                 label="sm trezor"
@@ -1632,13 +1635,15 @@ function SmModal({
         </div>
         <div className={styles.modalBody}>
           <p className={styles.modalHint}>
-            {canManageSm ? "Kurzy jsou společné pro všechny hotely." : "Kurzy může upravit jen správce sm."}
+            {canManageSm
+              ? "Hodnoty k₁–k₃ jsou společné pro všechny hotely."
+              : "Hodnoty k₁–k₃ může upravit jen správce sm."}
           </p>
-          {/* Rates (headers) + counts, column per pair. */}
+          {/* Rates (k₁–k₃) + counts (s₁–s₃), column per pair. */}
           <div className={styles.smGrid}>
             {idxs.map((i) => (
               <label key={`r${i}`} className={styles.smLabel}>
-                Kurz {i + 1}
+                {`k${SUB_DIGITS[i]}`}
                 {canManageSm ? (
                   <input
                     type="number"
@@ -1657,7 +1662,7 @@ function SmModal({
             ))}
             {idxs.map((i) => (
               <label key={`c${i}`} className={styles.smLabel}>
-                Počet {i + 1}
+                {`s${SUB_DIGITS[i]}`}
                 <input
                   type="number"
                   step="any"
@@ -1686,7 +1691,7 @@ function SmModal({
               <div className={styles.smGrid}>
                 {idxs.map((i) => (
                   <label key={`t${i}`} className={styles.smLabel}>
-                    Přesun {i + 1}
+                    {`s${SUB_DIGITS[i]}`}
                     <input
                       type="number"
                       step="any"
@@ -1706,7 +1711,7 @@ function SmModal({
                 <strong>{movedCzk.toLocaleString("cs-CZ")} Kč</strong>
               </div>
               {transferSyncBlocked && (
-                <p className={styles.modalHint}>Nejprve uložte změny počtů/kurzů, poté můžete přesunout.</p>
+                <p className={styles.modalHint}>Nejprve uložte změny, poté můžete přesunout.</p>
               )}
               <Button
                 variant="secondary"

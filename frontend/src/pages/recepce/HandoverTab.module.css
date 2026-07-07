@@ -1,6 +1,6 @@
-/* Předávací protokol (cash handover) — cash tables, účty, poznámky, summary,
-   signature blocks, sm/kurzy modals. Ported from the recepce hub branch and
-   trimmed to the basic version (no Wata / sm-trezor / per-doc history). */
+/* Předávací protokol (cash handover) — cash tables, účty (incl. the sm / sm
+   trezor / wata special rows), poznámky, summary, signature blocks, sm + wata
+   modals. Ported from the recepce hub branch, permission-driven rebuild. */
 
 .panel {
   background: var(--color-surface);
@@ -982,7 +982,7 @@
   min-width: 0;
 }
 
-/* ── sm + kurzy modals ──────────────────────────────────────────────────── */
+/* ── sm + wata modals ───────────────────────────────────────────────────── */
 
 .modalOverlay {
   position: fixed;
