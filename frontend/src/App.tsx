@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { useIsPhone } from "@/hooks/useIsPhone";
 import type { Permission } from "@/lib/permissions/catalog";
 import { resolveOrderByPermission } from "@/lib/menuItems";
 import LoginPage from "@/pages/LoginPage";
@@ -39,10 +40,22 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 // Permission-gated route. Passes if the caller has ANY of the listed
 // permissions (system.admin satisfies all via can()). Mirrors the backend
 // requirePermission gate; the backend still enforces independently.
-function RequirePermission({ allow, children }: { allow: ReadonlyArray<Permission>; children: React.ReactNode }) {
+function RequirePermission({
+  allow,
+  mobileAllow,
+  children,
+}: {
+  allow: ReadonlyArray<Permission>;
+  /** Extra permission required only on a phone (ANDed with `allow`). Desktop is
+   *  unaffected. Redirects home on a phone when the user lacks it. */
+  mobileAllow?: Permission;
+  children: React.ReactNode;
+}) {
   const { can, loading } = useAuth();
+  const isPhone = useIsPhone();
   if (loading) return <div style={{ padding: "2rem" }}>Načítám...</div>;
   if (!allow.some((p) => can(p))) return <Navigate to="/" replace />;
+  if (isPhone && mobileAllow && !can(mobileAllow)) return <Navigate to="/" replace />;
   return <>{children}</>;
 }
 
@@ -97,9 +110,9 @@ export default function App() {
         <Route path="prehled" element={<RequirePermission allow={["nav.dashboard.view"]}><OverviewPage /></RequirePermission>} />
         <Route path="smeny" element={<RequirePermission allow={["nav.shifts.view"]}><ShiftPlannerPage /></RequirePermission>} />
         <Route path="dovolena" element={<RequirePermission allow={["nav.vacation.view"]}><VacationPage /></RequirePermission>} />
-        <Route path="recepce" element={<RequirePermission allow={["nav.recepce.view"]}><RecepcePage /></RequirePermission>} />
-        <Route path="recepce/:hotel" element={<RequirePermission allow={["nav.recepce.view"]}><RecepcePage /></RequirePermission>} />
-        <Route path="recepce/:hotel/:tab" element={<RequirePermission allow={["nav.recepce.view"]}><RecepcePage /></RequirePermission>} />
+        <Route path="recepce" element={<RequirePermission allow={["nav.recepce.view"]} mobileAllow="recepce.mobile.view"><RecepcePage /></RequirePermission>} />
+        <Route path="recepce/:hotel" element={<RequirePermission allow={["nav.recepce.view"]} mobileAllow="recepce.mobile.view"><RecepcePage /></RequirePermission>} />
+        <Route path="recepce/:hotel/:tab" element={<RequirePermission allow={["nav.recepce.view"]} mobileAllow="recepce.mobile.view"><RecepcePage /></RequirePermission>} />
         <Route path="zamestnanci" element={<RequirePermission allow={["nav.employees.view"]}><EmployeesPage /></RequirePermission>} />
         <Route path="zamestnanci/novy" element={<RequirePermission allow={["employees.create"]}><EmployeeFormPage /></RequirePermission>} />
         <Route path="zamestnanci/:id" element={<RequirePermission allow={["nav.employees.view"]}><EmployeeDetailPage /></RequirePermission>} />

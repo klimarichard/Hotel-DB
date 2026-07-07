@@ -101,6 +101,7 @@ export const PERMISSION_SECTIONS = [
         items: [
           { key: "nav.recepce.view", label: "Zobrazit Recepci", level: 0 },
           { key: "recepce.sm.manage", label: "Spravovat sm", level: 1 },
+          { key: "recepce.mobile.view", label: "Zobrazit Recepci na mobilu", level: 1 },
         ],
       },
       {
