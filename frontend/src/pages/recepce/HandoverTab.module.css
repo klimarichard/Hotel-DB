@@ -1093,18 +1093,39 @@
   margin: 0;
 }
 
+/* One column of the sm grid: rate badge on top, count/transfer field below. */
+.smCell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
 .smRate {
   display: inline-block;
-  padding: 0.1rem 0.45rem;
+  padding: 0.2rem 0.6rem;
   background: var(--color-surface-2, var(--color-surface));
   border: 1px solid var(--color-border);
   border-radius: 999px;
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   font-weight: 700;
   color: var(--color-text-heading);
   font-variant-numeric: tabular-nums;
   letter-spacing: 0;
   text-transform: none;
+}
+
+/* Manage users: the badge is a click-to-edit button. */
+.smRateEditable {
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 0.12s, color 0.12s;
+}
+
+.smRateEditable:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
 }
 
 .smTotal {
