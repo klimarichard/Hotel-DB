@@ -65,8 +65,14 @@ export function handoverDeletePerm(slug: HotelSlug): string {
   return `recepce.${SLUG_TO_STEM[slug]}.protokol.delete`;
 }
 
-/** `recepce.<stem>.protokol.manage` — required to revert SOMEONE ELSE's signature
- *  (self-unsign needs no permission — only a valid password). */
+/** `recepce.<stem>.protokol.manage` ("Spravovat protokol") — broad per-hotel
+ *  protocol-management grant. Confers: reverting SOMEONE ELSE's signature
+ *  (self-unsign needs no permission — only a valid password), locking/unlocking
+ *  individual Poznámky/Účty rows, and adding/subtracting the "wata" scalar. */
 export function handoverManagePerm(slug: HotelSlug): string {
   return `recepce.${SLUG_TO_STEM[slug]}.protokol.manage`;
 }
+
+/** `recepce.sm.manage` ("Spravovat sm") — GLOBAL (not per-hotel): edit the shared
+ *  sm rates, transfer sm→sm trezor, and clear sm trezor, across all hotels. */
+export const SM_MANAGE_PERM = "recepce.sm.manage";

@@ -729,6 +729,67 @@
   margin: 1.1rem 0.75rem;
 }
 
+/* ── sm / sm trezor / wata special rows (pinned to top of Účty) ───────────── */
+.specialRow {
+  font-weight: 600;
+}
+
+/* Clickable label (opens the sm / wata modal). */
+.specialName {
+  justify-self: start;
+  padding: 0.35rem 0.45rem;
+  margin: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--color-primary);
+  cursor: pointer;
+  border-radius: 4px;
+  text-align: left;
+}
+
+.specialName:hover {
+  background: var(--color-surface-2, var(--color-surface));
+  text-decoration: underline;
+}
+
+/* Non-clickable label (user lacks the edit/manage perm for that row). */
+.specialNameStatic {
+  padding: 0.35rem 0;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--color-text-heading);
+}
+
+/* Modal helpers layered on the reused .smModal chrome. */
+.smSectionTitle {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--color-text-heading);
+}
+
+.smDivider {
+  height: 1px;
+  background: var(--color-border);
+  margin: 2px 0;
+}
+
+.smWataButtons {
+  display: flex;
+  gap: 10px;
+}
+
+.error {
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--color-danger-soft, rgba(220, 38, 38, 0.1));
+  color: var(--color-danger, #dc2626);
+  font-size: 0.8125rem;
+}
+
 .accountName {
   padding: 0.35rem 0.55rem;
   border: 1px solid var(--color-border-strong);

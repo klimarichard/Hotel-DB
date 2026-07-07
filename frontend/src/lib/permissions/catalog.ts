@@ -98,7 +98,10 @@ export const PERMISSION_SECTIONS = [
     title: "Recepce",
     subsections: [
       {
-        items: [{ key: "nav.recepce.view", label: "Zobrazit Recepci", level: 0 }],
+        items: [
+          { key: "nav.recepce.view", label: "Zobrazit Recepci", level: 0 },
+          { key: "recepce.sm.manage", label: "Spravovat sm", level: 1 },
+        ],
       },
       {
         title: "Ambiance",
@@ -107,7 +110,7 @@ export const PERMISSION_SECTIONS = [
           { key: "recepce.ambiance.protokol.view", label: "Předávací protokol", level: 2 },
           { key: "recepce.ambiance.protokol.create", label: "Vytvořit protokol", level: 3 },
           { key: "recepce.ambiance.protokol.delete", label: "Smazat protokol", level: 3 },
-          { key: "recepce.ambiance.protokol.manage", label: "Spravovat podpisy", level: 3 },
+          { key: "recepce.ambiance.protokol.manage", label: "Spravovat protokol", level: 3 },
           { key: "recepce.ambiance.walkiny.view", label: "Walkiny", level: 2 },
           { key: "recepce.ambiance.taxi.view", label: "Taxi", level: 2 },
           { key: "recepce.ambiance.lobbyBar.view", label: "Lobby bar", level: 2 },
@@ -120,7 +123,7 @@ export const PERMISSION_SECTIONS = [
           { key: "recepce.superior.protokol.view", label: "Předávací protokol", level: 2 },
           { key: "recepce.superior.protokol.create", label: "Vytvořit protokol", level: 3 },
           { key: "recepce.superior.protokol.delete", label: "Smazat protokol", level: 3 },
-          { key: "recepce.superior.protokol.manage", label: "Spravovat podpisy", level: 3 },
+          { key: "recepce.superior.protokol.manage", label: "Spravovat protokol", level: 3 },
           { key: "recepce.superior.walkiny.view", label: "Walkiny", level: 2 },
           { key: "recepce.superior.taxi.view", label: "Taxi", level: 2 },
         ],
@@ -132,7 +135,7 @@ export const PERMISSION_SECTIONS = [
           { key: "recepce.amigo.protokol.view", label: "Předávací protokol", level: 2 },
           { key: "recepce.amigo.protokol.create", label: "Vytvořit protokol", level: 3 },
           { key: "recepce.amigo.protokol.delete", label: "Smazat protokol", level: 3 },
-          { key: "recepce.amigo.protokol.manage", label: "Spravovat podpisy", level: 3 },
+          { key: "recepce.amigo.protokol.manage", label: "Spravovat protokol", level: 3 },
           { key: "recepce.amigo.walkiny.view", label: "Walkiny", level: 2 },
           { key: "recepce.amigo.taxi.view", label: "Taxi", level: 2 },
           { key: "recepce.amigo.terminal.view", label: "Terminál", level: 2 },
@@ -145,7 +148,7 @@ export const PERMISSION_SECTIONS = [
           { key: "recepce.ankora.protokol.view", label: "Předávací protokol", level: 2 },
           { key: "recepce.ankora.protokol.create", label: "Vytvořit protokol", level: 3 },
           { key: "recepce.ankora.protokol.delete", label: "Smazat protokol", level: 3 },
-          { key: "recepce.ankora.protokol.manage", label: "Spravovat podpisy", level: 3 },
+          { key: "recepce.ankora.protokol.manage", label: "Spravovat protokol", level: 3 },
           { key: "recepce.ankora.walkiny.view", label: "Walkiny", level: 2 },
           { key: "recepce.ankora.taxi.view", label: "Taxi", level: 2 },
         ],
