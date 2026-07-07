@@ -76,3 +76,15 @@ export function handoverManagePerm(slug: HotelSlug): string {
 /** `recepce.sm.manage` ("Spravovat sm") — GLOBAL (not per-hotel): edit the shared
  *  sm rates, transfer sm→sm trezor, and clear sm trezor, across all hotels. */
 export const SM_MANAGE_PERM = "recepce.sm.manage";
+
+/** `recepce.<stem>.walkiny.view` — required to see the Walkiny tab and to
+ *  add/edit/delete walk-in entries (subject to the visible range for non-managers). */
+export function walkinViewPerm(slug: HotelSlug): string {
+  return `recepce.${SLUG_TO_STEM[slug]}.walkiny.view`;
+}
+
+/** `recepce.<stem>.walkiny.manage` ("Spravovat walkiny") — set the visible date
+ *  range and see/add entries with no range restriction. */
+export function walkinManagePerm(slug: HotelSlug): string {
+  return `recepce.${SLUG_TO_STEM[slug]}.walkiny.manage`;
+}
