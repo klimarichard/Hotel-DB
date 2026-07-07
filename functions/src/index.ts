@@ -27,6 +27,7 @@ import { roleTypesRouter } from "./routes/roleTypes";
 import { handoversRouter } from "./routes/handovers";
 import { handoverWarningsRouter } from "./routes/handoverWarnings";
 import { walkinsRouter } from "./routes/walkins";
+import { taxiRouter } from "./routes/taxi";
 import * as clock from "./services/clock";
 import { requireAuth, AuthRequest } from "./middleware/auth";
 import { requirePermission } from "./auth/permissions";
@@ -117,6 +118,7 @@ app.use("/role-types", roleTypesRouter);
 app.use("/handovers", handoversRouter);
 app.use("/handover-warnings", handoverWarningsRouter);
 app.use("/walkins", walkinsRouter);
+app.use("/taxi", taxiRouter);
 
 // Health check
 app.get("/health", (_req, res) => {

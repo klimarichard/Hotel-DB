@@ -88,3 +88,18 @@ export function walkinViewPerm(slug: HotelSlug): string {
 export function walkinManagePerm(slug: HotelSlug): string {
   return `recepce.${SLUG_TO_STEM[slug]}.walkiny.manage`;
 }
+
+/** `recepce.<stem>.taxi.view` — see the Taxi tab + add/edit/delete rides. */
+export function taxiViewPerm(slug: HotelSlug): string {
+  return `recepce.${SLUG_TO_STEM[slug]}.taxi.view`;
+}
+
+/** `recepce.<stem>.taxi.manage` ("Spravovat taxi") — set the taxi visible date
+ *  range and see/add rides with no range restriction. */
+export function taxiManagePerm(slug: HotelSlug): string {
+  return `recepce.${SLUG_TO_STEM[slug]}.taxi.manage`;
+}
+
+/** `recepce.taxi.manageRates` ("Spravovat ceník taxi") — GLOBAL: edit the shared
+ *  common-routes price/provision table (settings/taxiRoutes) for all hotels. */
+export const TAXI_MANAGE_RATES_PERM = "recepce.taxi.manageRates";
