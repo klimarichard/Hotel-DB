@@ -156,7 +156,7 @@ function TabBody({ hotel, tab }: { hotel: Hotel; tab: TabId }) {
     case "protokol":
       return <HandoverTab hotel={hotel} />;
     case "walkiny":
-      return <WalkinsTab />;
+      return <WalkinsTab hotel={hotel} />;
     case "taxi":
       return <TaxiTab />;
     case "lobbyBar":

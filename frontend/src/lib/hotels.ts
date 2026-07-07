@@ -41,6 +41,10 @@ export interface Hotel {
   readonly protokolDeletePerm: Permission;
   /** `recepce.<stem>.protokol.manage` — gates reverting others' signatures. */
   readonly protokolManagePerm: Permission;
+  /** `recepce.<stem>.walkiny.view` — gates the Walkiny tab + add/edit/delete entries. */
+  readonly walkinyViewPerm: Permission;
+  /** `recepce.<stem>.walkiny.manage` — gates setting the visible date range + seeing all entries. */
+  readonly walkinyManagePerm: Permission;
   readonly tabs: readonly HotelTab[];
 }
 
@@ -55,6 +59,8 @@ export const HOTELS: readonly Hotel[] = [
     protokolCreatePerm: "recepce.ambiance.protokol.create",
     protokolDeletePerm: "recepce.ambiance.protokol.delete",
     protokolManagePerm: "recepce.ambiance.protokol.manage",
+    walkinyViewPerm: "recepce.ambiance.walkiny.view",
+    walkinyManagePerm: "recepce.ambiance.walkiny.manage",
     tabs: [
       { id: "protokol", label: "Předávací protokol", viewPerm: "recepce.ambiance.protokol.view" },
       { id: "walkiny", label: "Walkiny", viewPerm: "recepce.ambiance.walkiny.view" },
@@ -71,6 +77,8 @@ export const HOTELS: readonly Hotel[] = [
     protokolCreatePerm: "recepce.superior.protokol.create",
     protokolDeletePerm: "recepce.superior.protokol.delete",
     protokolManagePerm: "recepce.superior.protokol.manage",
+    walkinyViewPerm: "recepce.superior.walkiny.view",
+    walkinyManagePerm: "recepce.superior.walkiny.manage",
     tabs: [
       { id: "protokol", label: "Předávací protokol", viewPerm: "recepce.superior.protokol.view" },
       { id: "walkiny", label: "Walkiny", viewPerm: "recepce.superior.walkiny.view" },
@@ -86,6 +94,8 @@ export const HOTELS: readonly Hotel[] = [
     protokolCreatePerm: "recepce.amigo.protokol.create",
     protokolDeletePerm: "recepce.amigo.protokol.delete",
     protokolManagePerm: "recepce.amigo.protokol.manage",
+    walkinyViewPerm: "recepce.amigo.walkiny.view",
+    walkinyManagePerm: "recepce.amigo.walkiny.manage",
     tabs: [
       { id: "protokol", label: "Předávací protokol", viewPerm: "recepce.amigo.protokol.view" },
       { id: "walkiny", label: "Walkiny", viewPerm: "recepce.amigo.walkiny.view" },
@@ -102,6 +112,8 @@ export const HOTELS: readonly Hotel[] = [
     protokolCreatePerm: "recepce.ankora.protokol.create",
     protokolDeletePerm: "recepce.ankora.protokol.delete",
     protokolManagePerm: "recepce.ankora.protokol.manage",
+    walkinyViewPerm: "recepce.ankora.walkiny.view",
+    walkinyManagePerm: "recepce.ankora.walkiny.manage",
     tabs: [
       { id: "protokol", label: "Předávací protokol", viewPerm: "recepce.ankora.protokol.view" },
       { id: "walkiny", label: "Walkiny", viewPerm: "recepce.ankora.walkiny.view" },
