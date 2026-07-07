@@ -45,6 +45,10 @@ export interface Hotel {
   readonly walkinyViewPerm: Permission;
   /** `recepce.<stem>.walkiny.manage` — gates setting the visible date range + seeing all entries. */
   readonly walkinyManagePerm: Permission;
+  /** `recepce.<stem>.taxi.view` — gates the Taxi tab + add/edit/delete rides. */
+  readonly taxiViewPerm: Permission;
+  /** `recepce.<stem>.taxi.manage` — gates setting the taxi visible date range + seeing all rides. */
+  readonly taxiManagePerm: Permission;
   readonly tabs: readonly HotelTab[];
 }
 
@@ -61,6 +65,8 @@ export const HOTELS: readonly Hotel[] = [
     protokolManagePerm: "recepce.ambiance.protokol.manage",
     walkinyViewPerm: "recepce.ambiance.walkiny.view",
     walkinyManagePerm: "recepce.ambiance.walkiny.manage",
+    taxiViewPerm: "recepce.ambiance.taxi.view",
+    taxiManagePerm: "recepce.ambiance.taxi.manage",
     tabs: [
       { id: "protokol", label: "Předávací protokol", viewPerm: "recepce.ambiance.protokol.view" },
       { id: "walkiny", label: "Walkiny", viewPerm: "recepce.ambiance.walkiny.view" },
@@ -79,6 +85,8 @@ export const HOTELS: readonly Hotel[] = [
     protokolManagePerm: "recepce.superior.protokol.manage",
     walkinyViewPerm: "recepce.superior.walkiny.view",
     walkinyManagePerm: "recepce.superior.walkiny.manage",
+    taxiViewPerm: "recepce.superior.taxi.view",
+    taxiManagePerm: "recepce.superior.taxi.manage",
     tabs: [
       { id: "protokol", label: "Předávací protokol", viewPerm: "recepce.superior.protokol.view" },
       { id: "walkiny", label: "Walkiny", viewPerm: "recepce.superior.walkiny.view" },
@@ -96,6 +104,8 @@ export const HOTELS: readonly Hotel[] = [
     protokolManagePerm: "recepce.amigo.protokol.manage",
     walkinyViewPerm: "recepce.amigo.walkiny.view",
     walkinyManagePerm: "recepce.amigo.walkiny.manage",
+    taxiViewPerm: "recepce.amigo.taxi.view",
+    taxiManagePerm: "recepce.amigo.taxi.manage",
     tabs: [
       { id: "protokol", label: "Předávací protokol", viewPerm: "recepce.amigo.protokol.view" },
       { id: "walkiny", label: "Walkiny", viewPerm: "recepce.amigo.walkiny.view" },
@@ -114,6 +124,8 @@ export const HOTELS: readonly Hotel[] = [
     protokolManagePerm: "recepce.ankora.protokol.manage",
     walkinyViewPerm: "recepce.ankora.walkiny.view",
     walkinyManagePerm: "recepce.ankora.walkiny.manage",
+    taxiViewPerm: "recepce.ankora.taxi.view",
+    taxiManagePerm: "recepce.ankora.taxi.manage",
     tabs: [
       { id: "protokol", label: "Předávací protokol", viewPerm: "recepce.ankora.protokol.view" },
       { id: "walkiny", label: "Walkiny", viewPerm: "recepce.ankora.walkiny.view" },
