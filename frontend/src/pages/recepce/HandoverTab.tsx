@@ -801,6 +801,10 @@ function ProtocolEditor({
   const smClickable = canEdit && !!loaded;
   const smTrezorClickable = canEdit && canManageSm && !!loaded;
   const wataClickable = canEdit && canManage && !!loaded;
+  // Hide a zero-valued balance row from users who can't manage it (declutter for
+  // regular receptionists); managers always see their row, even at 0.
+  const showSmTrezorRow = canManageSm || smTrezor !== 0;
+  const showWataRow = canManage || wata !== 0;
 
   function openSmModal() {
     if (!smClickable) return;
@@ -1198,20 +1202,24 @@ function ProtocolEditor({
                 onClick={openSmModal}
                 title="Upravit sm"
               />
-              <SpecialRow
-                label="sm trezor"
-                value={smTrezor}
-                clickable={smTrezorClickable}
-                onClick={requestClearSmTrezor}
-                title="Vynulovat sm trezor"
-              />
-              <SpecialRow
-                label="wata"
-                value={wata}
-                clickable={wataClickable}
-                onClick={openWataModal}
-                title="Přičíst / odečíst wata"
-              />
+              {showSmTrezorRow && (
+                <SpecialRow
+                  label="sm trezor"
+                  value={smTrezor}
+                  clickable={smTrezorClickable}
+                  onClick={requestClearSmTrezor}
+                  title="Vynulovat sm trezor"
+                />
+              )}
+              {showWataRow && (
+                <SpecialRow
+                  label="wata"
+                  value={wata}
+                  clickable={wataClickable}
+                  onClick={openWataModal}
+                  title="Přičíst / odečíst wata"
+                />
+              )}
               <div className={styles.accountSeparator} />
               {accounts.length === 0 && <div className={styles.accountsEmpty}>Žádné účty.</div>}
               {accounts.map((acc, idx) => {
@@ -1469,14 +1477,18 @@ function ProtocolEditor({
                 <span className={styles.printAccName}>sm</span>
                 <span>{smAmount.toLocaleString("cs-CZ")} Kč</span>
               </div>
-              <div className={styles.printAccountRow}>
-                <span className={styles.printAccName}>sm trezor</span>
-                <span>{smTrezor.toLocaleString("cs-CZ")} Kč</span>
-              </div>
-              <div className={styles.printAccountRow}>
-                <span className={styles.printAccName}>wata</span>
-                <span>{wata.toLocaleString("cs-CZ")} Kč</span>
-              </div>
+              {showSmTrezorRow && (
+                <div className={styles.printAccountRow}>
+                  <span className={styles.printAccName}>sm trezor</span>
+                  <span>{smTrezor.toLocaleString("cs-CZ")} Kč</span>
+                </div>
+              )}
+              {showWataRow && (
+                <div className={styles.printAccountRow}>
+                  <span className={styles.printAccName}>wata</span>
+                  <span>{wata.toLocaleString("cs-CZ")} Kč</span>
+                </div>
+              )}
               {accounts
                 .filter((a) => a.name.trim() !== "")
                 .map((a, i) => (
