@@ -12,6 +12,7 @@ import {
   handoverCreatePerm,
   handoverDeletePerm,
   handoverManagePerm,
+  SM_MANAGE_PERM,
 } from "../services/hotels";
 import {
   HandoverDoc,
@@ -69,6 +70,42 @@ function sanitizeCashCounts(raw: unknown): Record<DrawerKey, Record<string, numb
 function idOf(entry: object): string | undefined {
   const id = (entry as { id?: unknown }).id;
   return typeof id === "string" && id !== "" ? id : undefined;
+}
+
+/**
+ * Coerce arbitrary input into a length-3 tuple of finite numbers. Used for the
+ * global sm rates, the per-protocol sm counts, and transfer amounts (all ≥ 0 —
+ * decimals allowed). Missing/invalid entries collapse to 0.
+ */
+function sanitizeTriple(raw: unknown, opts?: { allowNegative?: boolean }): [number, number, number] {
+  const arr = Array.isArray(raw) ? raw : [];
+  const out: number[] = [];
+  for (let i = 0; i < 3; i++) {
+    const v = arr[i];
+    let n = typeof v === "number" && Number.isFinite(v) ? v : 0;
+    if (!opts?.allowNegative && n < 0) n = 0;
+    out.push(n);
+  }
+  return out as [number, number, number];
+}
+
+/** A single finite scalar (any sign), else fallback. For the wata delta. */
+function finiteOr(raw: unknown, fallback: number): number {
+  return typeof raw === "number" && Number.isFinite(raw) ? raw : fallback;
+}
+
+const SM_SETTINGS_REF = () => db().collection("settings").doc("sm");
+
+/** The three GLOBAL sm rates (settings/sm). Absent doc → [0,0,0]. */
+async function readSmRates(): Promise<[number, number, number]> {
+  const snap = await SM_SETTINGS_REF().get();
+  const raw = snap.exists ? (snap.data() as { rates?: unknown }).rates : undefined;
+  return sanitizeTriple(raw);
+}
+
+/** Σ aᵢ·bᵢ — the sm dot product (rates·counts, or rates·transfer amounts). */
+function dot(a: [number, number, number], b: [number, number, number]): number {
+  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 }
 
 function sanitizeNotes(raw: unknown): NoteRow[] {
@@ -153,7 +190,7 @@ function validateHotelParam(req: AuthRequest, res: Response, next: NextFunction)
  * gates removal (its own recepce.<stem>.protokol.delete key). Assumes requireAuth
  * ran first (req.permissions) and validateHotelParam validated the slug.
  */
-function requireHotelPerm(kind: "view" | "edit" | "delete") {
+function requireHotelPerm(kind: "view" | "edit" | "delete" | "manage") {
   return (req: AuthRequest, res: Response, next: NextFunction): void => {
     const hotel = req.params.hotel as HotelSlug;
     const set = req.permissions ?? new Set<string>();
@@ -162,8 +199,22 @@ function requireHotelPerm(kind: "view" | "edit" | "delete") {
         ? handoverViewPerm(hotel)
         : kind === "edit"
           ? handoverEditPerm(hotel)
-          : handoverDeletePerm(hotel);
+          : kind === "manage"
+            ? handoverManagePerm(hotel)
+            : handoverDeletePerm(hotel);
     if (set.has("system.admin") || set.has(needed)) {
+      next();
+      return;
+    }
+    res.status(403).json({ error: "Nemáte oprávnění k této akci." });
+  };
+}
+
+/** Static-permission gate (system.admin always passes). For the GLOBAL sm keys. */
+function requirePerm(perm: string) {
+  return (req: AuthRequest, res: Response, next: NextFunction): void => {
+    const set = req.permissions ?? new Set<string>();
+    if (set.has("system.admin") || set.has(perm)) {
       next();
       return;
     }
@@ -200,6 +251,38 @@ async function resolveDisplayName(uid: string, fallbackEmail: string): Promise<s
   }
   return fallbackEmail;
 }
+
+// ─── Global sm rates (settings/sm) ───────────────────────────────────────────
+// Shared across all four hotels. Registered BEFORE the `/:hotel` middleware so
+// the "sm" segment isn't validated as a hotel slug. GET is readable by anyone
+// who can see the Recepce area (needed to render the sm row's CZK value); PUT is
+// gated on the global recepce.sm.manage key.
+handoversRouter.get(
+  "/sm/rates",
+  requireAuth,
+  requirePerm("nav.recepce.view"),
+  async (_req: AuthRequest, res: Response) => {
+    res.json({ rates: await readSmRates() });
+  }
+);
+
+handoversRouter.put(
+  "/sm/rates",
+  requireAuth,
+  requirePerm(SM_MANAGE_PERM),
+  async (req: AuthRequest, res: Response) => {
+    const before = await readSmRates();
+    const rates = sanitizeTriple((req.body as { rates?: unknown }).rates);
+    await SM_SETTINGS_REF().set({ rates, updatedBy: req.uid, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    await logUpdate(ctxFromReq(req), {
+      collection: "settings",
+      resourceId: "sm",
+      before: { rates: before },
+      after: { rates },
+    });
+    res.json({ rates });
+  }
+);
 
 handoversRouter.use("/:hotel", validateHotelParam);
 
@@ -441,6 +524,7 @@ handoversRouter.put(
       notes?: unknown;
       cashCounts?: unknown;
       accounts?: unknown;
+      smCounts?: unknown;
     };
 
     if (!isShiftDate(body.shiftDate)) {
@@ -491,6 +575,10 @@ handoversRouter.put(
       notes: mergeLockable<NoteRow>(before?.notes ?? [], sanitizeNotes(body.notes), isManage),
       cashCounts: sanitizeCashCounts(body.cashCounts),
       accounts: mergeLockable<AccountRow>(before?.accounts ?? [], sanitizeAccounts(body.accounts), isManage),
+      // sm counts flow through the normal content PUT (any protocol-edit user).
+      // smTrezor + wata are NOT touched here — they move only via their dedicated
+      // endpoints, so omitting them from the merge preserves the stored values.
+      smCounts: sanitizeTriple(body.smCounts),
       updatedBy: req.uid,
     };
 
@@ -745,6 +833,142 @@ function revertHandler(slot: SignatureSlot) {
     res.json({ id, ...saved.data() });
   };
 }
+
+// ─── sm trezor / wata mutations ──────────────────────────────────────────────
+// Per-field money moves, each returning the full saved doc. Registered BEFORE the
+// generic `/:hotel/:id/:slot` signature routes so their literal path segments
+// aren't captured as a signature slot. All obey the freeze rule (loadForFieldMutation).
+
+/**
+ * Load a protocol doc for a per-field mutation, enforcing the same freeze rule as
+ * content edits: once signed (predal) only an admin may mutate. Returns null after
+ * responding on any error, so callers just `if (!loaded) return;`.
+ */
+async function loadForFieldMutation(
+  req: AuthRequest,
+  res: Response,
+  hotel: HotelSlug,
+  id: string
+): Promise<{ ref: admin.firestore.DocumentReference; before: HandoverDoc } | null> {
+  const ref = handoverCol(hotel).doc(id);
+  const snap = await ref.get();
+  if (!snap.exists) {
+    res.status(404).json({ error: "Předání nenalezeno." });
+    return null;
+  }
+  const before = snap.data() as HandoverDoc;
+  if (before.predal && !isAdmin(req)) {
+    res.status(403).json({ error: "Podepsaný protokol nelze upravit." });
+    return null;
+  }
+  return { ref, before };
+}
+
+// POST /:hotel/:id/sm-transfer  body { transfer: [t1,t2,t3] }
+// MOVE from sm counts to sm trezor: subtract the (clamped) transfer amounts from
+// smCounts, add their CZK product (Σ transferᵢ·rateᵢ) to smTrezor. sm.manage only.
+handoversRouter.post(
+  "/:hotel/:id/sm-transfer",
+  requireAuth,
+  requireHotelPerm("edit"),
+  requirePerm(SM_MANAGE_PERM),
+  async (req: AuthRequest, res: Response) => {
+    const hotel = req.params.hotel as HotelSlug;
+    const loaded = await loadForFieldMutation(req, res, hotel, req.params.id);
+    if (!loaded) return;
+    const { ref, before } = loaded;
+
+    const rates = await readSmRates();
+    const counts = sanitizeTriple(before.smCounts);
+    const wanted = sanitizeTriple((req.body as { transfer?: unknown }).transfer);
+    // Clamp each transfer to what's available so counts can't go negative.
+    const moved: [number, number, number] = [
+      Math.min(wanted[0], counts[0]),
+      Math.min(wanted[1], counts[1]),
+      Math.min(wanted[2], counts[2]),
+    ];
+    const newCounts: [number, number, number] = [
+      counts[0] - moved[0],
+      counts[1] - moved[1],
+      counts[2] - moved[2],
+    ];
+    const newTrezor = finiteOr(before.smTrezor, 0) + dot(rates, moved);
+
+    await ref.set(
+      { smCounts: newCounts, smTrezor: newTrezor, updatedBy: req.uid, updatedAt: FieldValue.serverTimestamp() },
+      { merge: true }
+    );
+    await logUpdate(ctxFromReq(req), {
+      collection: "shiftHandovers",
+      resourceId: req.params.id,
+      subResourceId: hotel,
+      before: { smCounts: counts, smTrezor: finiteOr(before.smTrezor, 0) },
+      after: { smCounts: newCounts, smTrezor: newTrezor },
+    });
+    const saved = await ref.get();
+    res.json({ id: req.params.id, ...saved.data() });
+  }
+);
+
+// POST /:hotel/:id/sm-trezor/clear — reset smTrezor to 0. sm.manage only.
+handoversRouter.post(
+  "/:hotel/:id/sm-trezor/clear",
+  requireAuth,
+  requireHotelPerm("edit"),
+  requirePerm(SM_MANAGE_PERM),
+  async (req: AuthRequest, res: Response) => {
+    const hotel = req.params.hotel as HotelSlug;
+    const loaded = await loadForFieldMutation(req, res, hotel, req.params.id);
+    if (!loaded) return;
+    const { ref, before } = loaded;
+
+    const prev = finiteOr(before.smTrezor, 0);
+    await ref.set(
+      { smTrezor: 0, updatedBy: req.uid, updatedAt: FieldValue.serverTimestamp() },
+      { merge: true }
+    );
+    await logUpdate(ctxFromReq(req), {
+      collection: "shiftHandovers",
+      resourceId: req.params.id,
+      subResourceId: hotel,
+      before: { smTrezor: prev },
+      after: { smTrezor: 0 },
+    });
+    const saved = await ref.get();
+    res.json({ id: req.params.id, ...saved.data() });
+  }
+);
+
+// POST /:hotel/:id/wata  body { delta } — add/subtract from wata (may go negative).
+// Gated on the hotel's protokol.manage ("Spravovat protokol").
+handoversRouter.post(
+  "/:hotel/:id/wata",
+  requireAuth,
+  requireHotelPerm("manage"),
+  async (req: AuthRequest, res: Response) => {
+    const hotel = req.params.hotel as HotelSlug;
+    const loaded = await loadForFieldMutation(req, res, hotel, req.params.id);
+    if (!loaded) return;
+    const { ref, before } = loaded;
+
+    const delta = finiteOr((req.body as { delta?: unknown }).delta, 0);
+    const prev = finiteOr(before.wata, 0);
+    const next = prev + delta;
+    await ref.set(
+      { wata: next, updatedBy: req.uid, updatedAt: FieldValue.serverTimestamp() },
+      { merge: true }
+    );
+    await logUpdate(ctxFromReq(req), {
+      collection: "shiftHandovers",
+      resourceId: req.params.id,
+      subResourceId: hotel,
+      before: { wata: prev },
+      after: { wata: next },
+    });
+    const saved = await ref.get();
+    res.json({ id: req.params.id, ...saved.data() });
+  }
+);
 
 // Register the 4-segment revert routes BEFORE the 3-segment sign routes.
 handoversRouter.post(

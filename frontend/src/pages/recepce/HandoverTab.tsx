@@ -1,7 +1,9 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import type { Dispatch, SetStateAction } from "react";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import Button from "@/components/Button";
+import IconButton from "@/components/IconButton";
 import ConfirmModal from "@/components/ConfirmModal";
 import type { Hotel } from "@/lib/hotels";
 import { verifyCredential } from "@/lib/secondaryAuth";
@@ -60,10 +62,28 @@ interface Handover {
   notes?: NoteItem[] | null;
   cashCounts?: Partial<Record<DrawerKey, Record<string, number>>>;
   accounts?: Account[];
+  /** The three sm counts. sm's CZK value = Σ rateᵢ·countᵢ (rates are global). */
+  smCounts?: number[] | null;
+  /** Accumulated sm trezor scalar (moved from sm by sm.manage users). */
+  smTrezor?: number | null;
+  /** wata scalar (± by protokol.manage users; may be negative). */
+  wata?: number | null;
   predal?: Stamp | null;
   prevzal?: Stamp | null;
   updatedBy?: string;
   updatedAt?: TimestampLike | null;
+}
+
+/** Coerce any input into a fixed length-3 numeric tuple (missing/invalid → 0). */
+function triple(raw: unknown): [number, number, number] {
+  const a = Array.isArray(raw) ? raw : [];
+  const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+  return [n(a[0]), n(a[1]), n(a[2])];
+}
+
+/** Σ rateᵢ·countᵢ — the sm row's CZK value. */
+function smDot(rates: [number, number, number], counts: [number, number, number]): number {
+  return rates[0] * counts[0] + rates[1] * counts[1] + rates[2] * counts[2];
 }
 
 const SHIFT_LABELS: Record<ShiftType, string> = { den: "Den", noc: "Noc" };
@@ -184,13 +204,20 @@ function coerceAccounts(raw: unknown): Account[] {
     }));
 }
 
-function toPayload(notes: NoteItem[], cashCounts: Record<DrawerKey, Record<string, number>>, accounts: Account[]) {
+function toPayload(
+  notes: NoteItem[],
+  cashCounts: Record<DrawerKey, Record<string, number>>,
+  accounts: Account[],
+  smCounts: [number, number, number]
+) {
   return {
     notes: notes.map((n) => ({ id: n.id, text: n.text, done: n.done, locked: n.locked })),
     cashCounts,
     accounts: accounts
       .filter((a) => a.name.trim() !== "")
       .map((a) => ({ id: a.id, name: a.name.trim(), amount: Math.round(a.amount) || 0, locked: a.locked })),
+    // smTrezor + wata are NOT sent here — they mutate only via dedicated endpoints.
+    smCounts,
   };
 }
 
@@ -289,6 +316,38 @@ function SignatureBlock({
           {buttonLabel}
         </Button>
       )}
+    </div>
+  );
+}
+
+/** One of the three pinned Účty rows (sm / sm trezor / wata). The label is a
+ *  button when the viewer may act on it, otherwise plain text; the value column
+ *  mirrors the regular account rows so the grid lines up. */
+function SpecialRow({
+  label,
+  value,
+  clickable,
+  onClick,
+  title,
+}: {
+  label: string;
+  value: number;
+  clickable: boolean;
+  onClick: () => void;
+  title?: string;
+}) {
+  return (
+    <div className={`${styles.accountRow} ${styles.specialRow}`}>
+      {clickable ? (
+        <button type="button" className={styles.specialName} onClick={onClick} title={title ?? "Upravit"}>
+          {label}
+        </button>
+      ) : (
+        <span className={styles.specialNameStatic}>{label}</span>
+      )}
+      <span className={styles.accountAmountRO}>{value.toLocaleString("cs-CZ")}</span>
+      <span className={styles.accountSuffix}>Kč</span>
+      <div className={styles.rowActions} />
     </div>
   );
 }
@@ -411,6 +470,7 @@ function ProtocolEditor({
   const canCreate = can(hotel.protokolCreatePerm);
   const canDelete = can(hotel.protokolDeletePerm);
   const canManage = can(hotel.protokolManagePerm);
+  const canManageSm = can("recepce.sm.manage");
   const isAdmin = can("system.admin");
   const docId = `${shiftDate}_${shiftType}`;
 
@@ -422,6 +482,17 @@ function ProtocolEditor({
   const [notes, setNotes] = useState<NoteItem[]>([]);
   const [cashCounts, setCashCounts] = useState<Record<DrawerKey, Record<string, number>>>(emptyCashCounts());
   const [accounts, setAccounts] = useState<Account[]>([]);
+  // sm counts flow through autosave (content); smTrezor + wata mutate only via
+  // their dedicated endpoints. Rates are global (settings/sm), fetched separately.
+  const [smCounts, setSmCounts] = useState<[number, number, number]>([0, 0, 0]);
+  const [smTrezor, setSmTrezor] = useState<number>(0);
+  const [wata, setWata] = useState<number>(0);
+  const [rates, setRates] = useState<[number, number, number]>([0, 0, 0]);
+  // Which special row's modal is open (sm counts/rates, or wata ±).
+  const [smModalOpen, setSmModalOpen] = useState(false);
+  const [wataModalOpen, setWataModalOpen] = useState(false);
+  const [smBusy, setSmBusy] = useState(false);
+  const [smError, setSmError] = useState<string | null>(null);
 
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
   const [editingNoteIdx, setEditingNoteIdx] = useState<number | null>(null);
@@ -452,7 +523,7 @@ function ProtocolEditor({
   // Freeze at Předat: once signed, content is read-only (admin may still edit).
   const canEdit = !predal || isAdmin;
 
-  const savedPayloadRef = useRef<string>(JSON.stringify(toPayload([], emptyCashCounts(), [])));
+  const savedPayloadRef = useRef<string>(JSON.stringify(toPayload([], emptyCashCounts(), [], [0, 0, 0])));
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isSavingRef = useRef(false);
 
@@ -466,11 +537,15 @@ function ProtocolEditor({
       trezorEUR: data.cashCounts?.trezorEUR ?? {},
     };
     const acc = coerceAccounts(data.accounts);
+    const sc = triple(data.smCounts);
     setLoaded(data);
     setNotes(n);
     setCashCounts(cc);
     setAccounts(acc);
-    savedPayloadRef.current = JSON.stringify(toPayload(n, cc, acc));
+    setSmCounts(sc);
+    setSmTrezor(typeof data.smTrezor === "number" ? data.smTrezor : 0);
+    setWata(typeof data.wata === "number" ? data.wata : 0);
+    savedPayloadRef.current = JSON.stringify(toPayload(n, cc, acc, sc));
   }
 
   // Load the doc once (component is keyed per shift, so mount == shift change).
@@ -504,7 +579,10 @@ function ProtocolEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const currentPayload = useMemo(() => toPayload(notes, cashCounts, accounts), [notes, cashCounts, accounts]);
+  const currentPayload = useMemo(
+    () => toPayload(notes, cashCounts, accounts, smCounts),
+    [notes, cashCounts, accounts, smCounts]
+  );
   const dirty = JSON.stringify(currentPayload) !== savedPayloadRef.current;
 
   // Load the signer pool for this shift's month (for the sign dropdown).
@@ -522,6 +600,24 @@ function ProtocolEditor({
         }
       } catch {
         // non-fatal — the dropdown just shows no options / no defaults
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Load the global sm rates (shared across hotels) so the sm row can show its
+  // CZK value. Read-only for most users; sm.manage edits them in the sm modal.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await api.get<{ rates: number[] }>(`/handovers/sm/rates`);
+        if (!cancelled) setRates(triple(res.rates));
+      } catch {
+        // non-fatal — sm value just shows against zero rates until this succeeds
       }
     })();
     return () => {
@@ -564,13 +660,13 @@ function ProtocolEditor({
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [notes, cashCounts, accounts, loading, loaded, dirty, canEdit]);
+  }, [notes, cashCounts, accounts, smCounts, loading, loaded, dirty, canEdit]);
 
   async function save() {
     if (isSavingRef.current) return;
     isSavingRef.current = true;
     setAutosaving(true);
-    const payload = toPayload(notes, cashCounts, accounts);
+    const payload = toPayload(notes, cashCounts, accounts, smCounts);
     try {
       const saved = await api.put<Handover>(`/handovers/${hotel.slug}`, { shiftDate, shiftType, ...payload });
       setLoaded(saved);
@@ -683,7 +779,7 @@ function ProtocolEditor({
         doc = await api.put<Handover>(`/handovers/${hotel.slug}`, {
           shiftDate: next.date,
           shiftType: next.shift,
-          ...toPayload(notes, cashCounts, accounts),
+          ...toPayload(notes, cashCounts, accounts, smCounts),
         });
       }
       onNavigate(next.date, next.shift, doc);
@@ -695,6 +791,99 @@ function ProtocolEditor({
         confirmLabel: "OK",
         onConfirm: () => setConfirm(null),
       });
+    }
+  }
+
+  // ── sm / sm trezor / wata ──────────────────────────────────────────────────
+  // Clickability: sm counts editable by any protocol-edit user; rates + transfer
+  // + sm trezor by sm.manage; wata by the hotel's protokol.manage. All disabled
+  // once frozen (canEdit is false for non-admins after Předat).
+  const smClickable = canEdit && !!loaded;
+  const smTrezorClickable = canEdit && canManageSm && !!loaded;
+  const wataClickable = canEdit && canManage && !!loaded;
+
+  function openSmModal() {
+    if (!smClickable) return;
+    setSmError(null);
+    setSmModalOpen(true);
+  }
+  function openWataModal() {
+    if (!wataClickable) return;
+    setSmError(null);
+    setWataModalOpen(true);
+  }
+
+  /** Save sm counts (always) + global rates (only when sm.manage changed them). */
+  async function saveSm(counts: [number, number, number], newRates: [number, number, number] | null) {
+    setSmBusy(true);
+    setSmError(null);
+    try {
+      if (newRates) {
+        const res = await api.put<{ rates: number[] }>(`/handovers/sm/rates`, { rates: newRates });
+        setRates(triple(res.rates));
+      }
+      setSmCounts(counts); // triggers autosave of the content PUT
+      setSmModalOpen(false);
+    } catch (err) {
+      setSmError(err instanceof Error ? err.message : "Uložení se nezdařilo.");
+    } finally {
+      setSmBusy(false);
+    }
+  }
+
+  /** MOVE a portion of the sm counts into sm trezor (sm.manage only). */
+  async function transferSm(transfer: [number, number, number]) {
+    setSmBusy(true);
+    setSmError(null);
+    try {
+      const saved = await api.post<Handover>(`/handovers/${hotel.slug}/${docId}/sm-transfer`, { transfer });
+      applyDoc(saved);
+      setSmModalOpen(false);
+    } catch (err) {
+      setSmError(err instanceof Error ? err.message : "Přesun se nezdařil.");
+    } finally {
+      setSmBusy(false);
+    }
+  }
+
+  function requestClearSmTrezor() {
+    if (!smTrezorClickable) return;
+    setConfirm({
+      title: "Vynulovat sm trezor?",
+      message: `Aktuální hodnota sm trezor (${smTrezor.toLocaleString("cs-CZ")} Kč) bude nastavena na nulu. Pokračovat?`,
+      danger: true,
+      confirmLabel: "Vynulovat",
+      onConfirm: () => void clearSmTrezor(),
+    });
+  }
+  async function clearSmTrezor() {
+    try {
+      const saved = await api.post<Handover>(`/handovers/${hotel.slug}/${docId}/sm-trezor/clear`, {});
+      applyDoc(saved);
+      setConfirm(null);
+    } catch (err) {
+      setConfirm({
+        title: "Chyba",
+        message: err instanceof Error ? err.message : "Vynulování se nezdařilo.",
+        showCancel: false,
+        confirmLabel: "OK",
+        onConfirm: () => setConfirm(null),
+      });
+    }
+  }
+
+  /** Add (delta>0) or subtract (delta<0) from wata (protokol.manage only). */
+  async function applyWata(delta: number) {
+    setSmBusy(true);
+    setSmError(null);
+    try {
+      const saved = await api.post<Handover>(`/handovers/${hotel.slug}/${docId}/wata`, { delta });
+      applyDoc(saved);
+      setWataModalOpen(false);
+    } catch (err) {
+      setSmError(err instanceof Error ? err.message : "Úprava se nezdařila.");
+    } finally {
+      setSmBusy(false);
     }
   }
 
@@ -716,7 +905,11 @@ function ProtocolEditor({
     }),
     [cashCounts]
   );
-  const accountsTotal = useMemo(() => accounts.reduce((s, a) => s + (a.amount || 0), 0), [accounts]);
+  const regularAccountsTotal = useMemo(() => accounts.reduce((s, a) => s + (a.amount || 0), 0), [accounts]);
+  // sm row value = Σ rateᵢ·countᵢ. The Účty total folds in sm + sm trezor + wata
+  // (wata may be negative), so ÚČTY / CELKEM / TOTAL CZK all include the three.
+  const smAmount = useMemo(() => smDot(rates, smCounts), [rates, smCounts]);
+  const accountsTotal = regularAccountsTotal + smAmount + smTrezor + wata;
   const totalCZK = drawerTotals.kasaCZK + drawerTotals.trezorCZK + accountsTotal;
   const totalEUR = drawerTotals.kasaEUR + drawerTotals.trezorEUR;
 
@@ -808,7 +1001,10 @@ function ProtocolEditor({
       setNotes([]);
       setCashCounts(emptyCashCounts());
       setAccounts([]);
-      savedPayloadRef.current = JSON.stringify(toPayload([], emptyCashCounts(), []));
+      setSmCounts([0, 0, 0]);
+      setSmTrezor(0);
+      setWata(0);
+      savedPayloadRef.current = JSON.stringify(toPayload([], emptyCashCounts(), [], [0, 0, 0]));
       setAutosaveError(null);
       setConfirm(null);
     } catch (err) {
@@ -994,6 +1190,29 @@ function ProtocolEditor({
               )}
             </div>
             <div className={styles.accountsList}>
+              {/* Three special rows pinned to the top, above a separator. */}
+              <SpecialRow
+                label="sm"
+                value={smAmount}
+                clickable={smClickable}
+                onClick={openSmModal}
+                title={canManageSm ? "Upravit kurzy a počty sm" : "Upravit počty sm"}
+              />
+              <SpecialRow
+                label="sm trezor"
+                value={smTrezor}
+                clickable={smTrezorClickable}
+                onClick={requestClearSmTrezor}
+                title="Vynulovat sm trezor"
+              />
+              <SpecialRow
+                label="wata"
+                value={wata}
+                clickable={wataClickable}
+                onClick={openWataModal}
+                title="Přičíst / odečíst wata"
+              />
+              <div className={styles.accountSeparator} />
               {accounts.length === 0 && <div className={styles.accountsEmpty}>Žádné účty.</div>}
               {accounts.map((acc, idx) => {
                 const isEditing = editingIdx === idx;
@@ -1246,6 +1465,18 @@ function ProtocolEditor({
           <div className={`${styles.pAccounts} ${styles.printAccounts}`}>
             <div className={styles.printAccountsTitle}>Účty</div>
             <div className={styles.printAccountsList}>
+              <div className={styles.printAccountRow}>
+                <span className={styles.printAccName}>sm</span>
+                <span>{smAmount.toLocaleString("cs-CZ")} Kč</span>
+              </div>
+              <div className={styles.printAccountRow}>
+                <span className={styles.printAccName}>sm trezor</span>
+                <span>{smTrezor.toLocaleString("cs-CZ")} Kč</span>
+              </div>
+              <div className={styles.printAccountRow}>
+                <span className={styles.printAccName}>wata</span>
+                <span>{wata.toLocaleString("cs-CZ")} Kč</span>
+              </div>
               {accounts
                 .filter((a) => a.name.trim() !== "")
                 .map((a, i) => (
@@ -1304,7 +1535,271 @@ function ProtocolEditor({
         />
       )}
 
+      {smModalOpen && loaded && (
+        <SmModal
+          rates={rates}
+          counts={smCounts}
+          smTrezor={smTrezor}
+          canManageSm={canManageSm}
+          canEditCounts={canEdit}
+          contentDirty={dirty}
+          busy={smBusy}
+          errorText={smError}
+          onSave={saveSm}
+          onTransfer={transferSm}
+          onCancel={() => {
+            setSmModalOpen(false);
+            setSmError(null);
+          }}
+        />
+      )}
+
+      {wataModalOpen && loaded && (
+        <WataModal
+          current={wata}
+          busy={smBusy}
+          errorText={smError}
+          onApply={applyWata}
+          onCancel={() => {
+            setWataModalOpen(false);
+            setSmError(null);
+          }}
+        />
+      )}
+
       {confirmModal}
     </>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// sm modal — edit the three counts (any edit user), the three GLOBAL rates
+// (sm.manage only), and optionally MOVE part of the counts into sm trezor
+// (sm.manage only). The transfer panel is disabled while there are unsaved count
+// edits so it always operates on the server's current counts.
+// ─────────────────────────────────────────────────────────────────────────────
+function SmModal({
+  rates,
+  counts,
+  smTrezor,
+  canManageSm,
+  canEditCounts,
+  contentDirty,
+  busy,
+  errorText,
+  onSave,
+  onTransfer,
+  onCancel,
+}: {
+  rates: [number, number, number];
+  counts: [number, number, number];
+  smTrezor: number;
+  canManageSm: boolean;
+  canEditCounts: boolean;
+  contentDirty: boolean;
+  busy: boolean;
+  errorText: string | null;
+  onSave: (counts: [number, number, number], rates: [number, number, number] | null) => void;
+  onTransfer: (transfer: [number, number, number]) => void;
+  onCancel: () => void;
+}) {
+  const [draftRates, setDraftRates] = useState<[number, number, number]>(rates);
+  const [draftCounts, setDraftCounts] = useState<[number, number, number]>(counts);
+  const [transfer, setTransfer] = useState<[number, number, number]>([0, 0, 0]);
+
+  const idxs = [0, 1, 2] as const;
+  const setAt = (
+    setter: Dispatch<SetStateAction<[number, number, number]>>,
+    i: number,
+    v: number
+  ) => setter((prev) => prev.map((x, j) => (j === i ? (Number.isFinite(v) && v >= 0 ? v : 0) : x)) as [number, number, number]);
+
+  const product = smDot(draftRates, draftCounts);
+  const ratesChanged = canManageSm && idxs.some((i) => draftRates[i] !== rates[i]);
+  const countsDirty = idxs.some((i) => draftCounts[i] !== counts[i]);
+  // Transfer clamps to the SAVED counts and needs the server in sync.
+  const clampedTransfer = idxs.map((i) => Math.min(transfer[i], counts[i])) as unknown as [number, number, number];
+  const movedCzk = smDot(rates, clampedTransfer);
+  const transferSyncBlocked = contentDirty || countsDirty || ratesChanged;
+  const transferEmpty = idxs.every((i) => clampedTransfer[i] <= 0);
+
+  return (
+    <div className={styles.modalOverlay}>
+      <div className={styles.smModal}>
+        <div className={styles.modalHeader}>
+          <h2 className={styles.modalTitle}>sm</h2>
+          <IconButton variant="close" aria-label="Zavřít" onClick={onCancel} />
+        </div>
+        <div className={styles.modalBody}>
+          <p className={styles.modalHint}>
+            {canManageSm ? "Kurzy jsou společné pro všechny hotely." : "Kurzy může upravit jen správce sm."}
+          </p>
+          {/* Rates (headers) + counts, column per pair. */}
+          <div className={styles.smGrid}>
+            {idxs.map((i) => (
+              <label key={`r${i}`} className={styles.smLabel}>
+                Kurz {i + 1}
+                {canManageSm ? (
+                  <input
+                    type="number"
+                    step="any"
+                    min={0}
+                    className={styles.smInput}
+                    value={draftRates[i] === 0 ? "" : draftRates[i]}
+                    onChange={(e) => setAt(setDraftRates, i, Number(e.target.value))}
+                    placeholder="0"
+                    disabled={busy}
+                  />
+                ) : (
+                  <span className={styles.smRate}>{rates[i].toLocaleString("cs-CZ")}</span>
+                )}
+              </label>
+            ))}
+            {idxs.map((i) => (
+              <label key={`c${i}`} className={styles.smLabel}>
+                Počet {i + 1}
+                <input
+                  type="number"
+                  step="any"
+                  min={0}
+                  className={styles.smInput}
+                  value={draftCounts[i] === 0 ? "" : draftCounts[i]}
+                  onChange={(e) => setAt(setDraftCounts, i, Number(e.target.value))}
+                  placeholder="0"
+                  disabled={busy || !canEditCounts}
+                />
+              </label>
+            ))}
+          </div>
+          <div className={styles.smTotal}>
+            <span>sm celkem</span>
+            <strong>{product.toLocaleString("cs-CZ")} Kč</strong>
+          </div>
+
+          {canManageSm && (
+            <>
+              <div className={styles.smDivider} />
+              <p className={styles.smSectionTitle}>Přesun do sm trezor</p>
+              <p className={styles.modalHint}>
+                Přesune zadané počty ze sm do sm trezor (sm trezor: {smTrezor.toLocaleString("cs-CZ")} Kč).
+              </p>
+              <div className={styles.smGrid}>
+                {idxs.map((i) => (
+                  <label key={`t${i}`} className={styles.smLabel}>
+                    Přesun {i + 1}
+                    <input
+                      type="number"
+                      step="any"
+                      min={0}
+                      max={counts[i]}
+                      className={styles.smInput}
+                      value={transfer[i] === 0 ? "" : transfer[i]}
+                      onChange={(e) => setAt(setTransfer, i, Number(e.target.value))}
+                      placeholder="0"
+                      disabled={busy || transferSyncBlocked}
+                    />
+                  </label>
+                ))}
+              </div>
+              <div className={styles.smTotal}>
+                <span>Přesunout</span>
+                <strong>{movedCzk.toLocaleString("cs-CZ")} Kč</strong>
+              </div>
+              {transferSyncBlocked && (
+                <p className={styles.modalHint}>Nejprve uložte změny počtů/kurzů, poté můžete přesunout.</p>
+              )}
+              <Button
+                variant="secondary"
+                size="sm"
+                block
+                disabled={busy || transferSyncBlocked || transferEmpty}
+                onClick={() => onTransfer(clampedTransfer)}
+              >
+                Přesunout do sm trezor
+              </Button>
+            </>
+          )}
+
+          {errorText && <div className={styles.error}>{errorText}</div>}
+        </div>
+        <div className={styles.modalFooter}>
+          <Button variant="secondary" type="button" onClick={onCancel} disabled={busy}>
+            Zrušit
+          </Button>
+          <Button
+            type="button"
+            disabled={busy || (!canEditCounts && !ratesChanged)}
+            onClick={() => onSave(draftCounts, ratesChanged ? draftRates : null)}
+          >
+            {busy ? "Ukládám…" : "Uložit"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// wata modal — add or subtract an amount from the current wata scalar.
+// ─────────────────────────────────────────────────────────────────────────────
+function WataModal({
+  current,
+  busy,
+  errorText,
+  onApply,
+  onCancel,
+}: {
+  current: number;
+  busy: boolean;
+  errorText: string | null;
+  onApply: (delta: number) => void;
+  onCancel: () => void;
+}) {
+  const [amount, setAmount] = useState<number>(0);
+  const valid = Number.isFinite(amount) && amount > 0;
+
+  return (
+    <div className={styles.modalOverlay}>
+      <div className={styles.smModal}>
+        <div className={styles.modalHeader}>
+          <h2 className={styles.modalTitle}>wata</h2>
+          <IconButton variant="close" aria-label="Zavřít" onClick={onCancel} />
+        </div>
+        <div className={styles.modalBody}>
+          <div className={styles.smTotal}>
+            <span>Aktuální hodnota</span>
+            <strong>{current.toLocaleString("cs-CZ")} Kč</strong>
+          </div>
+          <label className={styles.smLabel} style={{ alignItems: "stretch", textTransform: "none", letterSpacing: 0 }}>
+            Částka (Kč)
+            <input
+              type="number"
+              step="any"
+              min={0}
+              className={styles.smInput}
+              value={amount === 0 ? "" : amount}
+              onChange={(e) => setAmount(Number(e.target.value))}
+              placeholder="0"
+              disabled={busy}
+              autoFocus
+            />
+          </label>
+          {errorText && <div className={styles.error}>{errorText}</div>}
+        </div>
+        <div className={styles.modalFooter}>
+          <Button variant="secondary" type="button" onClick={onCancel} disabled={busy}>
+            Zrušit
+          </Button>
+          <div className={styles.smWataButtons}>
+            <Button variant="danger" type="button" disabled={busy || !valid} onClick={() => onApply(-Math.abs(amount))}>
+              − Odečíst
+            </Button>
+            <Button type="button" disabled={busy || !valid} onClick={() => onApply(Math.abs(amount))}>
+              + Přičíst
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }

@@ -45,6 +45,16 @@ export interface HandoverDoc {
   notes?: NoteRow[];
   cashCounts?: Record<string, Record<string, number>>;
   accounts?: AccountRow[];
+  /**
+   * The three "sm" counts (cᵢ) for this protocol. The sm row's CZK value is the
+   * dot product Σ rateᵢ·cᵢ where the rates are GLOBAL (settings/sm), not stored
+   * here. Editable by any protocol-edit user via the normal content PUT.
+   */
+  smCounts?: number[];
+  /** Accumulated "sm trezor" scalar — grows via sm→trezor transfers (sm.manage). */
+  smTrezor?: number;
+  /** "wata" scalar — freely +/- by the hotel's protokol.manage holders. May be negative. */
+  wata?: number;
   predal?: StampedSignature | null;
   prevzal?: StampedSignature | null;
   createdBy?: string;
