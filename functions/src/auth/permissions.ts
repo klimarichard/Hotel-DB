@@ -149,6 +149,7 @@ export const PERMISSION_CATALOG = [
     group: "Recepce",
     items: [
       { key: "recepce.sm.manage", label: "Spravovat sm" },
+      { key: "recepce.mobile.view", label: "Zobrazit Recepci na mobilu" },
       { key: "recepce.ambiance.view", label: "Hotel Ambiance" },
       { key: "recepce.ambiance.protokol.view", label: "Ambiance — Předávací protokol" },
       { key: "recepce.ambiance.protokol.create", label: "Ambiance — Vytvořit protokol" },
