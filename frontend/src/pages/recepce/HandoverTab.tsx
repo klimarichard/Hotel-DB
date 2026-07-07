@@ -18,9 +18,6 @@ const EUR_DENOMS = ["500", "200", "100", "50", "20", "10", "5", "2", "1"] as con
 
 const AUTOSAVE_DELAY_MS = 800;
 
-// Subscript digits for the sm field labels: rates render k₁/k₂/k₃, counts s₁/s₂/s₃.
-const SUB_DIGITS = ["₁", "₂", "₃"] as const;
-
 // firebase-admin's Timestamp serialises over the wire as { _seconds } (private
 // field), not { seconds }. Tolerate both shapes.
 type TimestampLike =
@@ -1609,6 +1606,8 @@ function SmModal({
   const [draftRates, setDraftRates] = useState<[number, number, number]>(rates);
   const [draftCounts, setDraftCounts] = useState<[number, number, number]>(counts);
   const [transfer, setTransfer] = useState<[number, number, number]>([0, 0, 0]);
+  // Which rate badge is being inline-edited (manage users click a badge to edit).
+  const [editingRate, setEditingRate] = useState<number | null>(null);
 
   const idxs = [0, 1, 2] as const;
   const setAt = (
@@ -1634,17 +1633,12 @@ function SmModal({
           <IconButton variant="close" aria-label="Zavřít" onClick={onCancel} />
         </div>
         <div className={styles.modalBody}>
-          <p className={styles.modalHint}>
-            {canManageSm
-              ? "Hodnoty k₁–k₃ jsou společné pro všechny hotely."
-              : "Hodnoty k₁–k₃ může upravit jen správce sm."}
-          </p>
-          {/* Rates (k₁–k₃) + counts (s₁–s₃), column per pair. */}
+          {canManageSm && <p className={styles.modalHint}>Hodnoty jsou společné pro všechny hotely.</p>}
+          {/* Per column: rate badge on top (click-to-edit for manage), count field below. */}
           <div className={styles.smGrid}>
             {idxs.map((i) => (
-              <label key={`r${i}`} className={styles.smLabel}>
-                {`k${SUB_DIGITS[i]}`}
-                {canManageSm ? (
+              <div key={`r${i}`} className={styles.smCell}>
+                {canManageSm && editingRate === i ? (
                   <input
                     type="number"
                     step="any"
@@ -1652,17 +1646,28 @@ function SmModal({
                     className={styles.smInput}
                     value={draftRates[i] === 0 ? "" : draftRates[i]}
                     onChange={(e) => setAt(setDraftRates, i, Number(e.target.value))}
+                    onBlur={() => setEditingRate(null)}
                     placeholder="0"
+                    autoFocus
                     disabled={busy}
                   />
+                ) : canManageSm ? (
+                  <button
+                    type="button"
+                    className={`${styles.smRate} ${styles.smRateEditable}`}
+                    onClick={() => setEditingRate(i)}
+                    title="Upravit"
+                    disabled={busy}
+                  >
+                    {draftRates[i].toLocaleString("cs-CZ")}
+                  </button>
                 ) : (
                   <span className={styles.smRate}>{rates[i].toLocaleString("cs-CZ")}</span>
                 )}
-              </label>
+              </div>
             ))}
             {idxs.map((i) => (
-              <label key={`c${i}`} className={styles.smLabel}>
-                {`s${SUB_DIGITS[i]}`}
+              <div key={`c${i}`} className={styles.smCell}>
                 <input
                   type="number"
                   step="any"
@@ -1673,7 +1678,7 @@ function SmModal({
                   placeholder="0"
                   disabled={busy || !canEditCounts}
                 />
-              </label>
+              </div>
             ))}
           </div>
           <div className={styles.smTotal}>
@@ -1690,8 +1695,7 @@ function SmModal({
               </p>
               <div className={styles.smGrid}>
                 {idxs.map((i) => (
-                  <label key={`t${i}`} className={styles.smLabel}>
-                    {`s${SUB_DIGITS[i]}`}
+                  <div key={`t${i}`} className={styles.smCell}>
                     <input
                       type="number"
                       step="any"
@@ -1703,7 +1707,7 @@ function SmModal({
                       placeholder="0"
                       disabled={busy || transferSyncBlocked}
                     />
-                  </label>
+                  </div>
                 ))}
               </div>
               <div className={styles.smTotal}>
