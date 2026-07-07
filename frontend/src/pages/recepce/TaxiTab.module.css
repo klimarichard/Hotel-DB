@@ -218,6 +218,16 @@
   color: var(--color-text-heading);
 }
 
+.rowIconBtn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.rowIconBtn:disabled:hover {
+  background: transparent;
+  color: var(--color-text-muted);
+}
+
 .rowIconBtnTrash:hover {
   color: var(--color-danger, #dc2626);
 }
