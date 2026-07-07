@@ -183,14 +183,9 @@ export default function TaxiTab({ hotel }: { hotel: Hotel }) {
         ) : (
           <span />
         )}
-        <div className={styles.headerActions}>
-          <Button variant="secondary" size="sm" onClick={() => setRoutesOpen(true)}>
-            Ceník tras
-          </Button>
-          <Button size="sm" onClick={() => setEditing("new")}>
-            + Přidat jízdu
-          </Button>
-        </div>
+        <Button size="sm" onClick={() => setEditing("new")}>
+          + Přidat jízdu
+        </Button>
       </div>
 
       {loading ? (
@@ -198,55 +193,104 @@ export default function TaxiTab({ hotel }: { hotel: Hotel }) {
       ) : loadError ? (
         <div className={`${styles.empty} ${styles.statusError}`}>{loadError}</div>
       ) : (
-        <div className={styles.tableWrap}>
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <th>Datum</th>
-                <th>Čas</th>
-                <th>Pokoj</th>
-                <th>PAX</th>
-                <th>Destinace</th>
-                <th>Částka</th>
-                <th>Provize</th>
-                <th>Poznámka</th>
-                <th aria-label="Akce" />
-              </tr>
-            </thead>
-            <tbody>
-              {rides.length === 0 && (
-                <tr>
-                  <td colSpan={9} className={styles.empty}>
-                    Žádné taxi jízdy.
-                  </td>
-                </tr>
+        <div className={styles.content}>
+          <div className={styles.left}>
+            <div className={styles.tableWrap}>
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th>Datum</th>
+                    <th>Čas</th>
+                    <th>Pokoj</th>
+                    <th>PAX</th>
+                    <th>Destinace</th>
+                    <th>Částka</th>
+                    <th>Provize</th>
+                    <th>Poznámka</th>
+                    <th aria-label="Akce" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {rides.length === 0 && (
+                    <tr>
+                      <td colSpan={9} className={styles.empty}>
+                        Žádné taxi jízdy.
+                      </td>
+                    </tr>
+                  )}
+                  {rides.map((r) => (
+                    <tr key={r.id}>
+                      <td>{formatDate(r.date)}</td>
+                      <td>{r.time}</td>
+                      <td>{r.room}</td>
+                      <td className={styles.numCell}>{r.pax ?? ""}</td>
+                      <td>{r.routeName || <span className={styles.otherTag}>jiné</span>}</td>
+                      <td className={styles.numCell}>{r.amount.toLocaleString("cs-CZ")} Kč</td>
+                      <td className={styles.numCell}>{r.provision.toLocaleString("cs-CZ")} Kč</td>
+                      <td className={styles.noteCell} title={r.note}>
+                        {r.note}
+                      </td>
+                      <td className={styles.actionsCell}>
+                        <div className={styles.rowActions}>
+                          <button type="button" className={styles.rowIconBtn} aria-label="Upravit" onClick={() => setEditing(r)}>
+                            <PencilIcon />
+                          </button>
+                          <button type="button" className={`${styles.rowIconBtn} ${styles.rowIconBtnTrash}`} aria-label="Smazat" onClick={() => requestDelete(r)}>
+                            <TrashIcon />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <aside className={styles.pricelist}>
+            <div className={styles.pricelistHeader}>
+              <h3 className={styles.pricelistTitle}>Ceník tras</h3>
+              {canManageRates && (
+                <Button variant="secondary" size="sm" onClick={() => setRoutesOpen(true)}>
+                  Upravit
+                </Button>
               )}
-              {rides.map((r) => (
-                <tr key={r.id}>
-                  <td>{formatDate(r.date)}</td>
-                  <td>{r.time}</td>
-                  <td>{r.room}</td>
-                  <td className={styles.numCell}>{r.pax ?? ""}</td>
-                  <td>{r.routeName || <span className={styles.otherTag}>jiné</span>}</td>
-                  <td className={styles.numCell}>{r.amount.toLocaleString("cs-CZ")} Kč</td>
-                  <td className={styles.numCell}>{r.provision.toLocaleString("cs-CZ")} Kč</td>
-                  <td className={styles.noteCell} title={r.note}>
-                    {r.note}
-                  </td>
-                  <td className={styles.actionsCell}>
-                    <div className={styles.rowActions}>
-                      <button type="button" className={styles.rowIconBtn} aria-label="Upravit" onClick={() => setEditing(r)}>
-                        <PencilIcon />
-                      </button>
-                      <button type="button" className={`${styles.rowIconBtn} ${styles.rowIconBtnTrash}`} aria-label="Smazat" onClick={() => requestDelete(r)}>
-                        <TrashIcon />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+            </div>
+            <div className={styles.pricelistBody}>
+              <table className={styles.routesTable}>
+                <thead>
+                  <tr>
+                    <th>Trasa</th>
+                    <th>Cena</th>
+                    <th>Provize</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {routes.length === 0 && (
+                    <tr>
+                      <td colSpan={3} className={styles.empty}>
+                        Žádné trasy.
+                      </td>
+                    </tr>
+                  )}
+                  {routes.map((r) => (
+                    <tr key={r.id}>
+                      <td>
+                        {r.name}
+                        {r.roundtrip && (
+                          <span className={styles.roundBadge} title="Zpáteční">
+                            ↺
+                          </span>
+                        )}
+                      </td>
+                      <td className={styles.numCell}>{r.price.toLocaleString("cs-CZ")} Kč</td>
+                      <td className={styles.numCell}>{r.provision.toLocaleString("cs-CZ")} Kč</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </aside>
         </div>
       )}
 

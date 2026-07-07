@@ -232,15 +232,15 @@ walkinsRouter.get(
   requireWalkinPerm("view"),
   async (req: AuthRequest, res: Response) => {
     const hotel = req.params.hotel as HotelSlug;
-    const range = isManage(req, hotel) ? { from: null, to: null } : await readRange(hotel);
-
-    let q: admin.firestore.Query = walkinCol(hotel);
-    if (range.from) q = q.where("date", ">=", range.from);
-    if (range.to) q = q.where("date", "<=", range.to);
-    q = q.orderBy("date", "desc");
-
-    const snap = await q.get();
-    res.json(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    const snap = await walkinCol(hotel).orderBy("date", "desc").get();
+    let rows = snap.docs.map((d) => ({ id: d.id, ...(d.data() as WalkinDoc) }));
+    // Non-managers are bounded by the visible range, applied IN-APP so that a
+    // one-sided range (only `from` or only `to`) gates just that one side.
+    if (!isManage(req, hotel)) {
+      const range = await readRange(hotel);
+      rows = rows.filter((r) => inRange(r.date, range));
+    }
+    res.json(rows);
   }
 );
 

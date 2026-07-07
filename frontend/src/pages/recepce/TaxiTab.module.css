@@ -5,7 +5,7 @@
   flex-direction: column;
   gap: 1rem;
   padding: 1rem;
-  max-width: 1080px;
+  max-width: 1200px;
 }
 
 .header {
@@ -57,6 +57,55 @@
 
 .statusError {
   color: var(--color-danger, #dc2626);
+}
+
+/* Rides table (left) beside the ceník (right); wraps on narrow widths. */
+.content {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.left {
+  flex: 1;
+  min-width: 0;
+}
+
+.pricelist {
+  width: 300px;
+  flex-shrink: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.pricelistHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem 0.4rem 0.75rem;
+  background: var(--color-surface-2, var(--color-surface));
+  border-bottom: 1px solid var(--color-border);
+}
+
+.pricelistTitle {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--color-text-heading);
+}
+
+.pricelistBody {
+  max-height: 65vh;
+  overflow-y: auto;
+}
+
+.roundBadge {
+  margin-left: 5px;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
 }
 
 .tableWrap {
