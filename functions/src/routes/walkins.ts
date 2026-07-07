@@ -24,6 +24,25 @@ function todayPrague(): string {
   return new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Prague" }).format(new Date());
 }
 
+/**
+ * When the entry's month has no shift plan, the employee dropdown falls back to
+ * all non-terminated employees whose current position is one of these reception
+ * roles (matched case-insensitively against employees.currentJobTitle).
+ */
+const WALKIN_FALLBACK_POSITIONS = new Set<string>([
+  "recepční",
+  "portýr",
+  "noční portýr",
+  "noční recepční",
+  "front office manager",
+  "senior front office manager",
+  "director of front office",
+  "general manager",
+]);
+function normalizePosition(v: unknown): string {
+  return typeof v === "string" ? v.trim().toLowerCase() : "";
+}
+
 /** Validates the :hotel URL segment. Rejects unknown slugs with 404. */
 function validateHotelParam(req: AuthRequest, res: Response, next: NextFunction): void {
   if (!isHotelSlug(req.params.hotel)) {
@@ -135,6 +154,28 @@ walkinsRouter.get(
         out.push({ employeeId: data.employeeId, name: name || data.employeeId });
       }
     }
+
+    // No plan (or an empty one) → fall back to reception-role employees.
+    if (out.length === 0) {
+      const empSnap = await db().collection("employees").get();
+      for (const d of empSnap.docs) {
+        const e = d.data() as {
+          currentJobTitle?: unknown;
+          status?: unknown;
+          displayName?: unknown;
+          firstName?: unknown;
+          lastName?: unknown;
+        };
+        if (e.status === "terminated") continue;
+        if (!WALKIN_FALLBACK_POSITIONS.has(normalizePosition(e.currentJobTitle))) continue;
+        const name =
+          typeof e.displayName === "string" && e.displayName.trim() !== ""
+            ? e.displayName
+            : `${(e.lastName as string) ?? ""} ${(e.firstName as string) ?? ""}`.trim();
+        out.push({ employeeId: d.id, name: name || d.id });
+      }
+    }
+
     out.sort((a, b) => a.name.localeCompare(b.name, "cs"));
     res.json(out);
   }
