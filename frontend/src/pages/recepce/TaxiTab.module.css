@@ -5,7 +5,6 @@
   flex-direction: column;
   gap: 1rem;
   padding: 1rem;
-  max-width: 1200px;
 }
 
 .header {
@@ -72,9 +71,18 @@
   min-width: 0;
 }
 
+/* Toolbar (Přidat jízdu) above the rides table, matching its width. */
+.leftToolbar {
+  display: flex;
+  justify-content: flex-end;
+  max-width: 900px;
+  margin-bottom: 0.5rem;
+}
+
+/* Ceník pinned to the right of the page; sized to its content, no inner scroll. */
 .pricelist {
-  width: 300px;
-  flex-shrink: 0;
+  flex: 0 0 auto;
+  align-self: flex-start;
   border: 1px solid var(--color-border);
   border-radius: 6px;
   overflow: hidden;
@@ -97,9 +105,31 @@
   color: var(--color-text-heading);
 }
 
-.pricelistBody {
-  max-height: 65vh;
-  overflow-y: auto;
+/* Read-only ceník table: auto-fit the Trasa column, show every route (no scroll). */
+.priceTable {
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  width: auto;
+}
+
+.priceTable th {
+  text-align: left;
+  padding: 0.4rem 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+  font-weight: 700;
+  color: var(--color-text-heading);
+  white-space: nowrap;
+}
+
+.priceTable td {
+  padding: 0.35rem 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-heading);
+  white-space: nowrap;
+}
+
+.priceTable tbody tr:nth-child(even) td {
+  background: var(--color-surface-3, var(--color-surface-2));
 }
 
 .roundBadge {
@@ -112,6 +142,7 @@
   overflow-x: auto;
   border: 1px solid var(--color-border);
   border-radius: 6px;
+  max-width: 900px;
 }
 
 .table {

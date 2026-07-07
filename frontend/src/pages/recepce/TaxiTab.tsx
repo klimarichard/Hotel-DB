@@ -164,29 +164,26 @@ export default function TaxiTab({ hotel }: { hotel: Hotel }) {
 
   return (
     <div className={styles.panel}>
-      <div className={styles.header}>
-        {canManage ? (
-          <div className={styles.rangeEditor}>
-            <span className={styles.rangeLabel}>Viditelné období:</span>
-            <input type="date" className={styles.dateInput} value={rangeFrom} onChange={(e) => setRangeFrom(e.target.value)} aria-label="Od" />
-            <span>–</span>
-            <input type="date" className={styles.dateInput} value={rangeTo} onChange={(e) => setRangeTo(e.target.value)} aria-label="Do" />
-            <Button variant="secondary" size="sm" onClick={saveRange} disabled={rangeSaving}>
-              {rangeSaving ? "Ukládám…" : "Uložit období"}
-            </Button>
-            {rangeError && <span className={`${styles.statusText} ${styles.statusError}`}>{rangeError}</span>}
-          </div>
-        ) : hasRange ? (
-          <span className={styles.rangeInfo}>
-            Zobrazené období: {range.from ? formatDate(range.from) : "…"} – {range.to ? formatDate(range.to) : "…"}
-          </span>
-        ) : (
-          <span />
-        )}
-        <Button size="sm" onClick={() => setEditing("new")}>
-          + Přidat jízdu
-        </Button>
-      </div>
+      {(canManage || hasRange) && (
+        <div className={styles.header}>
+          {canManage ? (
+            <div className={styles.rangeEditor}>
+              <span className={styles.rangeLabel}>Viditelné období:</span>
+              <input type="date" className={styles.dateInput} value={rangeFrom} onChange={(e) => setRangeFrom(e.target.value)} aria-label="Od" />
+              <span>–</span>
+              <input type="date" className={styles.dateInput} value={rangeTo} onChange={(e) => setRangeTo(e.target.value)} aria-label="Do" />
+              <Button variant="secondary" size="sm" onClick={saveRange} disabled={rangeSaving}>
+                {rangeSaving ? "Ukládám…" : "Uložit období"}
+              </Button>
+              {rangeError && <span className={`${styles.statusText} ${styles.statusError}`}>{rangeError}</span>}
+            </div>
+          ) : (
+            <span className={styles.rangeInfo}>
+              Zobrazené období: {range.from ? formatDate(range.from) : "…"} – {range.to ? formatDate(range.to) : "…"}
+            </span>
+          )}
+        </div>
+      )}
 
       {loading ? (
         <div className={styles.empty}>Načítám…</div>
@@ -195,6 +192,11 @@ export default function TaxiTab({ hotel }: { hotel: Hotel }) {
       ) : (
         <div className={styles.content}>
           <div className={styles.left}>
+            <div className={styles.leftToolbar}>
+              <Button size="sm" onClick={() => setEditing("new")}>
+                + Přidat jízdu
+              </Button>
+            </div>
             <div className={styles.tableWrap}>
               <table className={styles.table}>
                 <thead>
@@ -257,7 +259,7 @@ export default function TaxiTab({ hotel }: { hotel: Hotel }) {
               )}
             </div>
             <div className={styles.pricelistBody}>
-              <table className={styles.routesTable}>
+              <table className={styles.priceTable}>
                 <thead>
                   <tr>
                     <th>Trasa</th>
