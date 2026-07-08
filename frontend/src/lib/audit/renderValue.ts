@@ -15,6 +15,7 @@ import { nationalityName } from "@/lib/nationalities";
 import { PERMISSION_SECTIONS } from "@/lib/permissions/catalog";
 import { MENU_ITEMS } from "@/lib/menuItems";
 import { VARIABLE_GROUPS } from "@/lib/contractVariables";
+import { hotelBySlug } from "@/lib/hotels";
 
 function isObj(v: unknown): v is Record<string, unknown> {
   return !!v && typeof v === "object" && !Array.isArray(v);
@@ -188,6 +189,19 @@ export function renderAuditFieldValue(
       return typeof value === "string" ? DOC_TYPE_LABELS[value] ?? value : formatAuditValue(value);
     case "trigger":
       return typeof value === "string" ? TRIGGER_LABELS[value] ?? value : formatAuditValue(value);
+    case "hotel":
+      // Recepce hotel slug → its display label (never the raw slug).
+      return typeof value === "string" && value
+        ? hotelBySlug(value)?.label ?? value
+        : formatAuditValue(value);
+    case "shift":
+      // Handover shift code → Czech.
+      return value === "den" ? "Denní" : value === "noc" ? "Noční" : formatAuditValue(value);
+    case "changeLabels":
+      // The element-level change list of a protocol save — already human text.
+      return Array.isArray(value) && value.length
+        ? value.filter((x) => typeof x === "string" && x).join("; ")
+        : formatAuditValue(value);
     case "nationality":
       // App shows the resolved country name (nationalityName), not the code.
       return typeof value === "string" && value ? nationalityName(value) : formatAuditValue(value);
