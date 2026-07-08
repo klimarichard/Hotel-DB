@@ -207,12 +207,6 @@ export default function TaxiTab({ hotel }: { hotel: Hotel }) {
               Zobrazené období: {range.from ? formatDate(range.from) : "…"} – {range.to ? formatDate(range.to) : "…"}
             </span>
           )}
-          {canManage && (
-            <div className={styles.provizeTotal}>
-              <span className={styles.provizeTotalLabel}>Celková provize za viditelné období:</span>{" "}
-              <span className={styles.provizeTotalValue}>{visibleProvize.toLocaleString("cs-CZ")} Kč</span>
-            </div>
-          )}
         </div>
       )}
 
@@ -223,6 +217,12 @@ export default function TaxiTab({ hotel }: { hotel: Hotel }) {
       ) : (
         <div className={styles.content}>
           <div className={styles.left}>
+            {canManage && (
+              <div className={styles.provizeTotal}>
+                <span className={styles.provizeTotalLabel}>Celková provize za viditelné období:</span>{" "}
+                <span className={styles.provizeTotalValue}>{visibleProvize.toLocaleString("cs-CZ")} Kč</span>
+              </div>
+            )}
             <div className={styles.leftToolbar}>
               <Button size="sm" onClick={() => setEditing("new")}>
                 + Přidat jízdu
