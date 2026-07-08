@@ -74,6 +74,35 @@ interface Handover {
   updatedAt?: TimestampLike | null;
 }
 
+/** One protocol change-history entry (from GET /handovers/:hotel/:id/history). */
+interface HistoryEntry {
+  seq: number;
+  at: TimestampLike | null;
+  label: string;
+  by: string;
+  undone: boolean;
+  applied: boolean;
+}
+
+function tsSeconds(ts: TimestampLike | null | undefined): number | null {
+  if (!ts) return null;
+  if ("seconds" in ts && typeof ts.seconds === "number") return ts.seconds;
+  if ("_seconds" in ts && typeof ts._seconds === "number") return ts._seconds;
+  return null;
+}
+
+/** "8.7. 14:32" style, for the history panel. Empty on a missing timestamp. */
+function stampDateTime(ts: TimestampLike | null | undefined): string {
+  const s = tsSeconds(ts);
+  if (s == null) return "";
+  return new Intl.DateTimeFormat("cs-CZ", {
+    day: "numeric",
+    month: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(s * 1000));
+}
+
 /** Coerce any input into a fixed length-3 numeric tuple (missing/invalid → 0). */
 function triple(raw: unknown): [number, number, number] {
   const a = Array.isArray(raw) ? raw : [];
@@ -501,6 +530,13 @@ function ProtocolEditor({
   const [autosaveError, setAutosaveError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
 
+  // ── Change history + undo/redo ───────────────────────────────────────────────
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [stepBusy, setStepBusy] = useState(false);
+
   // ── Signatures ─────────────────────────────────────────────────────────────
   const [signers, setSigners] = useState<Signer[]>([]);
   // Narrower pool for reverting a signature: the signer + manage/admin holders.
@@ -677,6 +713,55 @@ function ProtocolEditor({
     } finally {
       isSavingRef.current = false;
       setAutosaving(false);
+    }
+  }
+
+  // Reload the change history whenever the doc is (re)saved — `loaded` gets a new
+  // reference on every save/undo/redo, so this refreshes the panel + undo state.
+  useEffect(() => {
+    if (!loaded) {
+      setHistory([]);
+      setCanUndo(false);
+      setCanRedo(false);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await api.get<{ entries: HistoryEntry[]; canUndo: boolean; canRedo: boolean }>(
+          `/handovers/${hotel.slug}/${docId}/history`
+        );
+        if (!cancelled) {
+          setHistory(res.entries);
+          setCanUndo(res.canUndo);
+          setCanRedo(res.canRedo);
+        }
+      } catch {
+        /* history is non-essential — a failed load must not break the editor */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded, hotel.slug, docId]);
+
+  /** Undo or redo one step on the server, then reseed local state from the result. */
+  async function step(dir: "undo" | "redo") {
+    if (stepBusy) return;
+    setStepBusy(true);
+    try {
+      const saved = await api.post<Handover & { canUndo: boolean; canRedo: boolean }>(
+        `/handovers/${hotel.slug}/${docId}/${dir}`,
+        {}
+      );
+      applyDoc(saved);
+      setCanUndo(saved.canUndo);
+      setCanRedo(saved.canRedo);
+    } catch (err) {
+      setAutosaveError(err instanceof Error ? err.message : "Akci se nepodařilo provést.");
+    } finally {
+      setStepBusy(false);
     }
   }
 
@@ -1083,6 +1168,31 @@ function ProtocolEditor({
       <div className={styles.editorHeader}>
         <span className={autosaveError ? `${styles.metaText} ${styles.metaError}` : styles.metaText}>{statusText}</span>
         <div className={styles.editorHeaderActions}>
+          {canEdit && (
+            <>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => void step("undo")}
+                disabled={!canUndo || stepBusy || dirty || autosaving}
+                title="Vrátit poslední změnu"
+              >
+                ↶ Zpět
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => void step("redo")}
+                disabled={!canRedo || stepBusy || dirty || autosaving}
+                title="Znovu provést vrácenou změnu"
+              >
+                ↷ Vpřed
+              </Button>
+            </>
+          )}
+          <Button variant="ghost" size="sm" onClick={() => setHistoryOpen((o) => !o)}>
+            Historie{history.length ? ` (${history.length})` : ""}
+          </Button>
           {predal && prevzal && (
             <Button variant="secondary" size="sm" onClick={() => window.print()}>
               Tisk
@@ -1098,6 +1208,27 @@ function ProtocolEditor({
 
       {!canEdit && (
         <div className={styles.frozenNotice}>Protokol je podepsán a uzamčen — obsah nelze upravit.</div>
+      )}
+
+      {historyOpen && (
+        <div className={styles.historyPanel}>
+          <div className={styles.historyPanelHead}>Historie změn</div>
+          {history.length === 0 ? (
+            <p className={styles.historyEmpty}>Zatím žádné zaznamenané změny.</p>
+          ) : (
+            <ul className={styles.historyList}>
+              {history.map((h) => (
+                <li key={h.seq} className={h.undone ? styles.historyUndone : undefined}>
+                  <span className={styles.historyLabel}>{h.label}</span>
+                  <span className={styles.historyMeta}>
+                    {h.by} · {stampDateTime(h.at)}
+                    {h.undone ? " · vráceno" : ""}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
 
       <div className={styles.protocolGrid}>
