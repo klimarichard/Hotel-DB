@@ -25,11 +25,23 @@ export type AuditAction = "create" | "update" | "delete" | "reveal" | "export" |
 // ─── Field labels ────────────────────────────────────────────────────────────
 
 /** Merged field-label registry, keyed by ROOT collection (segment before "/"). */
+/** Recepce Předávací protokol — labels for the compact summary + undo/redo extras. */
+const HANDOVER_FIELDS: Record<string, FieldLabelMap> = {
+  shiftHandovers: {
+    hotel: "Hotel",
+    shift: "Směna",
+    date: "Datum",
+    changeLabels: "Změny",
+    label: "Změna",
+  },
+};
+
 export const FIELD_LABELS: Record<string, FieldLabelMap> = {
   ...EMPLOYEE_FIELDS,
   ...PAYROLL_FIELDS,
   ...SHIFT_FIELDS,
   ...MISC_FIELDS,
+  ...HANDOVER_FIELDS,
 };
 
 /**
@@ -86,6 +98,7 @@ export const COLLECTION_LABELS: Record<string, string> = {
   alerts: "Upozornění",
   documentAlerts: "Upozornění – doklady",
   probationAlerts: "Upozornění – zkušební doba",
+  shiftHandovers: "Předávací protokol",
 };
 
 /**
@@ -336,6 +349,10 @@ export const EVENT_LABELS: Record<string, string> = {
   "employee.autoTerminate": "Automatické ukončení zaměstnance",
   "employee.autoReactivate": "Automatické obnovení zaměstnance",
   "employee.autoStatusChange": "Automatická změna stavu zaměstnance",
+  // Recepce — Předávací protokol
+  "recepce.protokol.edit": "Úprava předávacího protokolu",
+  "recepce.protokol.undo": "Vrácení změny v protokolu",
+  "recepce.protokol.redo": "Obnovení změny v protokolu",
 };
 
 /** Header phrase for a semantic event id, or undefined if unknown. */

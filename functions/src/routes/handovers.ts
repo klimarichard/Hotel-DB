@@ -233,7 +233,6 @@ function requirePerm(perm: string) {
   };
 }
 
-const isAdmin = (req: AuthRequest): boolean => (req.permissions ?? new Set<string>()).has("system.admin");
 
 /**
  * Resolve the display name to snapshot into a signature: linked employee's
@@ -578,9 +577,11 @@ handoversRouter.put(
       }
     }
 
-    // Freeze at Předat: once the outgoing shift is signed, content is read-only
-    // (an admin may still edit, e.g. after reverting a signature).
-    if (before?.predal && !isAdmin(req)) {
+    // Freeze on ANY signature: once either Předal or Převzal is present the
+    // protocol is fully immutable — no edits, no undo/redo, not even for an admin.
+    // To change a signed protocol you must first revert its signature(s), which
+    // unfreezes it.
+    if (before?.predal || before?.prevzal) {
       res.status(403).json({ error: "Podepsaný protokol nelze upravit." });
       return;
     }
@@ -665,10 +666,9 @@ handoversRouter.put(
         event: "recepce.protokol.edit",
         extra: {
           hotel,
-          shiftDate: body.shiftDate,
-          shiftType: body.shiftType,
-          changeCount: changes.length,
-          labels: changes.slice(0, 6).map((c) => c.label),
+          shift: body.shiftType,
+          date: body.shiftDate,
+          changeLabels: changes.slice(0, 6).map((c) => c.label),
         },
       });
     }
@@ -924,7 +924,8 @@ async function loadForFieldMutation(
     return null;
   }
   const before = snap.data() as HandoverDoc;
-  if (before.predal && !isAdmin(req)) {
+  // Any signature (Předal or Převzal) freezes the protocol completely.
+  if (before.predal || before.prevzal) {
     res.status(403).json({ error: "Podepsaný protokol nelze upravit." });
     return null;
   }
@@ -1110,8 +1111,9 @@ function stepHandler(dir: "undo" | "redo") {
       return;
     }
     const before = snap.data() as HandoverDoc;
-    // Same freeze rule as edits: a signed protocol is read-only (admin excepted).
-    if (before.predal && !isAdmin(req)) {
+    // Same freeze rule as edits: ANY signature makes the protocol immutable — no
+    // undo/redo either, admin included. Revert the signature first to change it.
+    if (before.predal || before.prevzal) {
       res.status(403).json({ error: "Podepsaný protokol nelze upravit." });
       return;
     }
@@ -1139,7 +1141,7 @@ function stepHandler(dir: "undo" | "redo") {
       collection: "shiftHandovers",
       resourceId: id,
       event: dir === "undo" ? "recepce.protokol.undo" : "recepce.protokol.redo",
-      extra: { hotel, label: plan.change.label },
+      extra: { hotel, shift: before.shiftType, date: before.shiftDate, label: plan.change.label },
     });
 
     const saved = await ref.get();

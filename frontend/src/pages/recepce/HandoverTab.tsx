@@ -500,7 +500,6 @@ function ProtocolEditor({
   const canDelete = can(hotel.protokolDeletePerm);
   const canManage = can(hotel.protokolManagePerm);
   const canManageSm = can("recepce.sm.manage");
-  const isAdmin = can("system.admin");
   const docId = `${shiftDate}_${shiftType}`;
 
   const [loaded, setLoaded] = useState<Handover | null>(null);
@@ -556,8 +555,10 @@ function ProtocolEditor({
 
   const predal = loaded?.predal ?? null;
   const prevzal = loaded?.prevzal ?? null;
-  // Freeze at Předat: once signed, content is read-only (admin may still edit).
-  const canEdit = !predal || isAdmin;
+  // Freeze on ANY signature (Předal or Převzal): the protocol becomes fully
+  // immutable — no edits, no undo/redo, no admin exception. Revert the signature
+  // to unfreeze it.
+  const canEdit = !predal && !prevzal;
 
   const savedPayloadRef = useRef<string>(JSON.stringify(toPayload([], emptyCashCounts(), [], [0, 0, 0])));
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
