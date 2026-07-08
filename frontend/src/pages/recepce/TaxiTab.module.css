@@ -40,6 +40,26 @@
   color: var(--color-text-secondary);
 }
 
+/* Provize total for the visible period — pushed to the right edge of the header
+   (taxi.manage only). margin-left:auto right-aligns it even when the row wraps. */
+.provizeTotal {
+  margin-left: auto;
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+  text-align: right;
+}
+
+.provizeTotalLabel {
+  font-weight: 600;
+  color: var(--color-text-heading);
+}
+
+.provizeTotalValue {
+  font-weight: 700;
+  color: var(--color-text-heading);
+  white-space: nowrap;
+}
+
 .dateInput {
   padding: 0.35rem 0.5rem;
   border: 1px solid var(--color-border-strong);
