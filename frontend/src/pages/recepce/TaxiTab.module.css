@@ -40,10 +40,12 @@
   color: var(--color-text-secondary);
 }
 
-/* Provize total for the visible period — pushed to the right edge of the header
-   (taxi.manage only). margin-left:auto right-aligns it even when the row wraps. */
+/* Provize total for the visible period (taxi.manage only). Lives at the top of
+   the rides column, capped to the same 900px as the table/toolbar and
+   right-aligned, so it lines up with the table's right border + Přidat button. */
 .provizeTotal {
-  margin-left: auto;
+  max-width: 900px;
+  margin-bottom: 0.5rem;
   font-size: 0.85rem;
   color: var(--color-text-secondary);
   text-align: right;
