@@ -176,6 +176,17 @@ export default function TaxiTab({ hotel }: { hotel: Hotel }) {
 
   const hasRange = !!(range.from || range.to);
 
+  // Total "Provize" over the rides inside the effective visible period — only the
+  // taxi.manage holders see it. Managers receive ALL rides from the API (the
+  // range bounds only non-managers), so filter to the saved range here, matching
+  // the backend's one-sided semantics (a missing bound gates only that side).
+  const visibleProvize = useMemo(() => {
+    const { from, to } = range;
+    return rides
+      .filter((r) => (!from || r.date >= from) && (!to || r.date <= to))
+      .reduce((sum, r) => sum + (Number.isFinite(r.provision) ? r.provision : 0), 0);
+  }, [rides, range]);
+
   return (
     <div className={styles.panel}>
       {(canManage || hasRange) && (
@@ -195,6 +206,12 @@ export default function TaxiTab({ hotel }: { hotel: Hotel }) {
             <span className={styles.rangeInfo}>
               Zobrazené období: {range.from ? formatDate(range.from) : "…"} – {range.to ? formatDate(range.to) : "…"}
             </span>
+          )}
+          {canManage && (
+            <div className={styles.provizeTotal}>
+              <span className={styles.provizeTotalLabel}>Celková provize za viditelné období:</span>{" "}
+              <span className={styles.provizeTotalValue}>{visibleProvize.toLocaleString("cs-CZ")} Kč</span>
+            </div>
           )}
         </div>
       )}
