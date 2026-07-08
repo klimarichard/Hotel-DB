@@ -234,6 +234,8 @@ function requirePerm(perm: string) {
 }
 
 
+const isAdmin = (req: AuthRequest): boolean => (req.permissions ?? new Set<string>()).has("system.admin");
+
 /**
  * Resolve the display name to snapshot into a signature: linked employee's
  * first+last name → the user's `name` → the email. Never throws (a missing user
@@ -577,11 +579,10 @@ handoversRouter.put(
       }
     }
 
-    // Freeze on ANY signature: once either Předal or Převzal is present the
-    // protocol is fully immutable — no edits, no undo/redo, not even for an admin.
-    // To change a signed protocol you must first revert its signature(s), which
-    // unfreezes it.
-    if (before?.predal || before?.prevzal) {
+    // Freeze on ANY signature (Předal or Převzal). Content edits keep the admin
+    // override (an admin can still correct a signed protocol directly); undo/redo
+    // does NOT — see stepHandler. Non-admins must revert the signature to edit.
+    if ((before?.predal || before?.prevzal) && !isAdmin(req)) {
       res.status(403).json({ error: "Podepsaný protokol nelze upravit." });
       return;
     }
@@ -924,8 +925,8 @@ async function loadForFieldMutation(
     return null;
   }
   const before = snap.data() as HandoverDoc;
-  // Any signature (Předal or Převzal) freezes the protocol completely.
-  if (before.predal || before.prevzal) {
+  // Any signature freezes money moves — with the admin override (same as content).
+  if ((before.predal || before.prevzal) && !isAdmin(req)) {
     res.status(403).json({ error: "Podepsaný protokol nelze upravit." });
     return null;
   }
@@ -1111,10 +1112,11 @@ function stepHandler(dir: "undo" | "redo") {
       return;
     }
     const before = snap.data() as HandoverDoc;
-    // Same freeze rule as edits: ANY signature makes the protocol immutable — no
-    // undo/redo either, admin included. Revert the signature first to change it.
+    // Undo/redo is frozen on ANY signature for EVERYONE — no admin override
+    // (unlike content edits). A signed protocol's history is locked; revert the
+    // signature to re-enable undo/redo.
     if (before.predal || before.prevzal) {
-      res.status(403).json({ error: "Podepsaný protokol nelze upravit." });
+      res.status(403).json({ error: "Podepsaný protokol nelze vrátit zpět." });
       return;
     }
     const cursor = readCursor(before as unknown as Record<string, unknown>);

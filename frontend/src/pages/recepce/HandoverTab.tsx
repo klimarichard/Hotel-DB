@@ -500,6 +500,7 @@ function ProtocolEditor({
   const canDelete = can(hotel.protokolDeletePerm);
   const canManage = can(hotel.protokolManagePerm);
   const canManageSm = can("recepce.sm.manage");
+  const isAdmin = can("system.admin");
   const docId = `${shiftDate}_${shiftType}`;
 
   const [loaded, setLoaded] = useState<Handover | null>(null);
@@ -555,10 +556,12 @@ function ProtocolEditor({
 
   const predal = loaded?.predal ?? null;
   const prevzal = loaded?.prevzal ?? null;
-  // Freeze on ANY signature (Předal or Převzal): the protocol becomes fully
-  // immutable — no edits, no undo/redo, no admin exception. Revert the signature
-  // to unfreeze it.
-  const canEdit = !predal && !prevzal;
+  // Freeze on ANY signature (Předal or Převzal). Two levels:
+  //  • canEdit — content + sm/wata edits — keeps the admin override.
+  //  • canStep — undo/redo — is frozen for EVERYONE, admin included.
+  const signed = !!(predal || prevzal);
+  const canEdit = !signed || isAdmin;
+  const canStep = !signed;
 
   const savedPayloadRef = useRef<string>(JSON.stringify(toPayload([], emptyCashCounts(), [], [0, 0, 0])));
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1169,7 +1172,7 @@ function ProtocolEditor({
       <div className={styles.editorHeader}>
         <span className={autosaveError ? `${styles.metaText} ${styles.metaError}` : styles.metaText}>{statusText}</span>
         <div className={styles.editorHeaderActions}>
-          {canEdit && (
+          {canStep && (
             <>
               <Button
                 variant="secondary"
@@ -1209,6 +1212,11 @@ function ProtocolEditor({
 
       {!canEdit && (
         <div className={styles.frozenNotice}>Protokol je podepsán a uzamčen — obsah nelze upravit.</div>
+      )}
+      {canEdit && signed && (
+        <div className={styles.frozenNotice}>
+          Protokol je podepsán — obsah může upravit pouze administrátor, krok zpět/vpřed je uzamčen.
+        </div>
       )}
 
       {historyOpen && (
