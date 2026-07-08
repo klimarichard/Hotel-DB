@@ -38,6 +38,7 @@ import { sweepExpiredMultisport } from "./services/multisportSweep";
 import { updateDocumentAlerts, EXPIRY_FIELDS } from "./routes/employees";
 import { refreshAllProbationAlerts } from "./services/probationAlerts";
 import { runScheduledDeactivations } from "./services/userDeactivation";
+import { sweepRecepceRetention } from "./services/recepceRetention";
 
 // All functions run in europe-west3 to co-locate with the Firestore
 // database — avoids cross-region latency on every read/write.
@@ -237,6 +238,22 @@ app.post(
   }
 );
 
+app.post(
+  "/recepce/trigger-retention-sweep",
+  requireAuth,
+  requirePermission("system.triggers"),
+  async (req: AuthRequest, res) => {
+    await clock.refresh(true);
+    const result = await sweepRecepceRetention();
+    await writeAudit(ctxFromReq(req), {
+      action: "manual-trigger",
+      collection: "auditLog",
+      extra: { trigger: "sweepRecepceRetention", result },
+    });
+    res.json(result);
+  }
+);
+
 // Catch-all error handler — turns a thrown error (or an explicit next(err))
 // into a JSON 500 instead of letting the request hang with no response. Async
 // handlers in Express 4 must still try/catch their own rejections to reach
@@ -339,6 +356,22 @@ export const refreshEmployeeEffective = onSchedule(
     await clock.refresh(true);
     const res = await refreshEffectiveRootForAllActive();
     console.log(`[refreshEmployeeEffective] scanned ${res.scanned}, updated ${res.updated}`);
+  }
+);
+
+// ─── Daily at midnight (Europe/Prague): sweep recepce history > 6 months ──────
+// Deletes the change history (auditLog for shiftHandovers/walkins/taxiRides +
+// the per-protocol history subcollections) once it's 6 months or older. Never
+// touches the live tables. Trigger manually via:
+//   curl -X POST http://127.0.0.1:5002/.../api/recepce/trigger-retention-sweep
+export const sweepRecepceHistory = onSchedule(
+  { schedule: "0 0 * * *", timeZone: "Europe/Prague" },
+  async () => {
+    await clock.refresh(true);
+    const res = await sweepRecepceRetention();
+    console.log(
+      `[sweepRecepceHistory] cutoff ${res.cutoffISO}: deleted ${res.auditDeleted} audit + ${res.historyDeleted} history`
+    );
   }
 );
 

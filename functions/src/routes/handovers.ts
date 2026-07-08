@@ -3,7 +3,7 @@ import * as admin from "firebase-admin";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { requireAuth, AuthRequest } from "../middleware/auth";
 import { resolveEffectivePermissions } from "../auth/permissions";
-import { ctxFromReq, logCreate, logUpdate, logDelete } from "../services/auditLog";
+import { ctxFromReq, logCreate, logUpdate, logDelete, writeAudit } from "../services/auditLog";
 import {
   isHotelSlug,
   HotelSlug,
@@ -29,6 +29,17 @@ import {
   nextShift,
 } from "../services/handoverShared";
 import { scheduledSigner } from "../services/scheduleLookup";
+import {
+  HandoverContent,
+  diffHandover,
+  applyChange,
+  appendHistory,
+  readCursor,
+  planUndo,
+  planRedo,
+  markUndone,
+  canUndoRedo,
+} from "../services/handoverHistory";
 
 const db = () => admin.firestore();
 
@@ -589,12 +600,38 @@ handoversRouter.put(
       updatedBy: req.uid,
     };
 
+    // Element-level history: diff the stored content against this save so every
+    // changed note / účet / cash denomination / sm count is recorded on its own
+    // (drives the in-protocol history panel + undo/redo). Computed BEFORE the
+    // write, from the doc as it currently stands.
+    const afterContent: HandoverContent = {
+      notes: after.notes,
+      accounts: after.accounts,
+      cashCounts: after.cashCounts,
+      smCounts: after.smCounts,
+    };
+    const changes = diffHandover(
+      before
+        ? { notes: before.notes, accounts: before.accounts, cashCounts: before.cashCounts, smCounts: before.smCounts }
+        : null,
+      afterContent
+    );
+    const newCursor = await appendHistory(
+      hotel,
+      id,
+      readCursor((before as unknown as Record<string, unknown>) ?? undefined),
+      changes,
+      { uid: req.uid ?? "", email: req.userEmail ?? "" }
+    );
+
     if (!beforeSnap.exists) {
       await ref.set({
         ...after,
         // Running balances carried from the previous shift (server-sourced).
         smTrezor: seedSmTrezor,
         wata: seedWata,
+        histSeq: newCursor.histSeq,
+        histCursor: newCursor.histCursor,
         createdBy: req.uid,
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
@@ -606,13 +643,33 @@ handoversRouter.put(
         summary: { shiftDate: body.shiftDate, shiftType: body.shiftType, authorUid: req.uid },
       });
     } else {
-      await ref.set({ ...after, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
-      await logUpdate(ctxFromReq(req), {
+      // update() (NOT set-merge): a set with { merge:true } deep-merges the
+      // cashCounts map, so a denomination dropped to 0 (absent from the payload)
+      // would linger in Firestore. update() replaces each named field wholesale.
+      await ref.update({
+        ...after,
+        histSeq: newCursor.histSeq,
+        histCursor: newCursor.histCursor,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    }
+
+    // One compact audit entry per save — the element-level detail lives in the
+    // protocol's history subcollection, not duplicated into auditLog. Skipped on
+    // a no-op flush (autosave can fire with nothing actually changed).
+    if (changes.length > 0) {
+      await writeAudit(ctxFromReq(req), {
+        action: "update",
         collection: "shiftHandovers",
         resourceId: id,
-        subResourceId: hotel,
-        before: (before as unknown as Record<string, unknown>) ?? undefined,
-        after: { ...((before as unknown as Record<string, unknown>) ?? {}), ...after },
+        event: "recepce.protokol.edit",
+        extra: {
+          hotel,
+          shiftDate: body.shiftDate,
+          shiftType: body.shiftType,
+          changeCount: changes.length,
+          labels: changes.slice(0, 6).map((c) => c.label),
+        },
       });
     }
 
@@ -979,6 +1036,123 @@ handoversRouter.post(
     res.json({ id: req.params.id, ...saved.data() });
   }
 );
+
+// ─── History panel + undo / redo ─────────────────────────────────────────────
+// Registered BEFORE the generic /:hotel/:id/:slot signature route so "history",
+// "undo" and "redo" aren't captured as a signature slot. All content-only,
+// freeze-aware, and scoped to a single protocol doc (never reach across shifts).
+
+/** Extract the four undoable content fields from a stored protocol doc. */
+function contentOf(doc: HandoverDoc): HandoverContent {
+  return {
+    notes: Array.isArray(doc.notes) ? doc.notes : [],
+    accounts: Array.isArray(doc.accounts) ? doc.accounts : [],
+    cashCounts: (doc.cashCounts as Record<string, Record<string, number>>) ?? {},
+    smCounts: sanitizeTriple(doc.smCounts),
+  };
+}
+
+/**
+ * GET /:hotel/:id/history — the protocol's change history (newest first) plus the
+ * undo/redo availability. Display names are resolved per distinct author.
+ */
+handoversRouter.get(
+  "/:hotel/:id/history",
+  requireAuth,
+  requireHotelPerm("view"),
+  async (req: AuthRequest, res: Response) => {
+    const hotel = req.params.hotel as HotelSlug;
+    const id = req.params.id;
+    const ref = handoverCol(hotel).doc(id);
+    const snap = await ref.get();
+    if (!snap.exists) {
+      res.status(404).json({ error: "Předání nenalezeno." });
+      return;
+    }
+    const cursor = readCursor(snap.data() as Record<string, unknown>);
+    const histSnap = await ref.collection("history").orderBy("seq", "desc").get();
+
+    // Resolve author display names once per distinct uid.
+    const uids = [...new Set(histSnap.docs.map((d) => (d.data() as { byUid?: string }).byUid).filter(Boolean) as string[])];
+    const names = new Map<string, string>();
+    await Promise.all(
+      uids.map(async (uid) => {
+        const entry = histSnap.docs.find((d) => (d.data() as { byUid?: string }).byUid === uid);
+        const email = (entry?.data() as { byEmail?: string })?.byEmail ?? "";
+        names.set(uid, await resolveDisplayName(uid, email));
+      })
+    );
+
+    const entries = histSnap.docs.map((d) => {
+      const e = d.data() as { seq: number; at: unknown; byUid: string; label: string; undone: boolean };
+      return {
+        seq: e.seq,
+        at: e.at,
+        label: e.label,
+        by: names.get(e.byUid) ?? e.byUid,
+        undone: e.undone === true,
+        applied: e.seq <= cursor.histCursor,
+      };
+    });
+    res.json({ entries, ...(await canUndoRedo(hotel, id, cursor)) });
+  }
+);
+
+/** Shared undo/redo handler: `dir` selects the direction. */
+function stepHandler(dir: "undo" | "redo") {
+  return async (req: AuthRequest, res: Response): Promise<void> => {
+    const hotel = req.params.hotel as HotelSlug;
+    const id = req.params.id;
+    const ref = handoverCol(hotel).doc(id);
+    const snap = await ref.get();
+    if (!snap.exists) {
+      res.status(404).json({ error: "Předání nenalezeno." });
+      return;
+    }
+    const before = snap.data() as HandoverDoc;
+    // Same freeze rule as edits: a signed protocol is read-only (admin excepted).
+    if (before.predal && !isAdmin(req)) {
+      res.status(403).json({ error: "Podepsaný protokol nelze upravit." });
+      return;
+    }
+    const cursor = readCursor(before as unknown as Record<string, unknown>);
+    const plan = dir === "undo" ? await planUndo(hotel, id, cursor) : await planRedo(hotel, id, cursor);
+    if (!plan) {
+      res.status(409).json({ error: dir === "undo" ? "Není co vrátit zpět." : "Není co obnovit." });
+      return;
+    }
+
+    const content = contentOf(before);
+    applyChange(content, plan.change, dir);
+    await ref.update({
+      notes: content.notes,
+      accounts: content.accounts,
+      cashCounts: content.cashCounts,
+      smCounts: content.smCounts,
+      histCursor: plan.cursor.histCursor,
+      updatedBy: req.uid,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    await markUndone(hotel, id, plan.seq, dir === "undo");
+    await writeAudit(ctxFromReq(req), {
+      action: "update",
+      collection: "shiftHandovers",
+      resourceId: id,
+      event: dir === "undo" ? "recepce.protokol.undo" : "recepce.protokol.redo",
+      extra: { hotel, label: plan.change.label },
+    });
+
+    const saved = await ref.get();
+    res.json({ id, ...saved.data(), ...(await canUndoRedo(hotel, id, plan.cursor)) });
+  };
+}
+
+handoversRouter.post("/:hotel/:id/undo", requireAuth, requireHotelPerm("edit"), (req: AuthRequest, res: Response) => {
+  void stepHandler("undo")(req, res);
+});
+handoversRouter.post("/:hotel/:id/redo", requireAuth, requireHotelPerm("edit"), (req: AuthRequest, res: Response) => {
+  void stepHandler("redo")(req, res);
+});
 
 // Register the 4-segment revert routes BEFORE the 3-segment sign routes.
 handoversRouter.post(

@@ -256,6 +256,67 @@
   margin-bottom: 1rem;
 }
 
+/* ── Change-history panel ─────────────────────────────────────────────────── */
+.historyPanel {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface-2, var(--color-surface));
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.historyPanelHead {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+  margin-bottom: 0.5rem;
+}
+
+.historyEmpty {
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+.historyList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 16rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.historyList li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  padding: 0.375rem 0.5rem;
+  border-radius: 6px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+}
+
+.historyLabel {
+  font-size: 0.8125rem;
+  color: var(--color-text-heading);
+}
+
+.historyMeta {
+  font-size: 0.6875rem;
+  color: var(--color-text-muted);
+}
+
+/* An undone entry (above the cursor) — redoable, shown struck through. */
+.historyUndone .historyLabel {
+  text-decoration: line-through;
+  color: var(--color-text-muted);
+}
+
 .placeholder {
   padding: 3rem 1.5rem;
   text-align: center;
