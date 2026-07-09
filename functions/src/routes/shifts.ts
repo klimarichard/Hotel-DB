@@ -1174,6 +1174,12 @@ shiftsRouter.put(
       try {
         await db().runTransaction(async (tx) => {
           const cellSnap = await tx.get(xShiftRef);
+          // Read the plan doc into the transaction's READ set. Combined with the
+          // plan-doc bump at the end, this makes every concurrent self-service X-write
+          // in the plan conflict on a shared document under Firestore's optimistic
+          // model — so the coverage check can't be raced, including the phantom case
+          // where the racing X is a brand-new cell the day-query never saw.
+          await tx.get(planRef);
           const beforeExists = cellSnap.exists;
           auditBeforeRaw = beforeExists ? ((cellSnap.data() as Record<string, unknown>).rawInput as string) ?? "" : "";
           // Optimistic concurrency (same as the non-X path).
