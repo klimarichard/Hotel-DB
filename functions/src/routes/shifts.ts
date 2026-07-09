@@ -1070,6 +1070,41 @@ shiftsRouter.post(
 // ─── Shifts (cells) ──────────────────────────────────────────────────────────
 
 // PUT /shifts/plans/:planId/shifts/:employeeId/:date — upsert a shift cell
+// ─── Self-service X business rules (enforced server-side on the cell PUT) ─────
+// The client only ADVISES these (routing to the override-request flow); mirror
+// them server-side so they can't be bypassed by a crafted request or a concurrent
+// race. Only self-service X entries are gated — managers (shifts.xAllowance.manage)
+// and admin bypass, exactly as on the client, and approved overrides / vacation
+// auto-fill write via their own handlers, so none of those flows are affected.
+class CellConflict {
+  constructor(public readonly current: unknown) {}
+}
+class RuleBlock {
+  constructor(public readonly message: string) {}
+}
+/** Base monthly voluntary-X limit by contract type (8 HPP / 13 PPP; null = none). */
+function xBaseLimit(contractType: string | null): number | null {
+  const ct = (contractType ?? "").toUpperCase();
+  if (ct.includes("HPP")) return 8;
+  if (ct.includes("PPP")) return 13;
+  return null;
+}
+/** Length of the consecutive-X run through `newDate` given the set of X dates.
+ *  Uses only the Y/M/D constructor + getters (no toISOString), so it's DST/UTC-safe
+ *  on the UTC Cloud Functions runtime and matches the client's `consecutiveXRun`. */
+function consecutiveXRun(xDates: Set<string>, newDate: string): number {
+  const addDays = (dateStr: string, n: number): string => {
+    const [y, m, d] = dateStr.split("-").map(Number);
+    const dt = new Date(y, m - 1, d + n);
+    return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+  };
+  let before = 0;
+  for (let d = addDays(newDate, -1); xDates.has(d); d = addDays(d, -1)) before++;
+  let after = 0;
+  for (let d = addDays(newDate, 1); xDates.has(d); d = addDays(d, 1)) after++;
+  return before + 1 + after;
+}
+
 shiftsRouter.put(
   "/plans/:planId/shifts/:employeeId/:date",
   requireAuth,
@@ -1116,6 +1151,138 @@ shiftsRouter.put(
       status = "day_off";
     } else {
       status = "assigned";
+    }
+
+    // Self-service X entry → enforce the shift business rules server-side, inside a
+    // transaction. Bumping the plan doc in the txn serializes concurrent self-service
+    // X-writes, so a coverage check can't be raced (incl. the phantom new-cell case).
+    // Managers/admin (shifts.xAllowance.manage) bypass; approved overrides + vacation
+    // auto-fill write through other handlers, so they never reach this path.
+    const perms = req.permissions ?? new Set<string>();
+    const isAllX = parsed.segments.length > 0 && parsed.segments.every((s) => s.code === "X");
+    if (isAllX && !(perms.has("shifts.xAllowance.manage") || perms.has("system.admin"))) {
+      const xDocId = `${employeeId}_${date}`;
+      const planRef = db().collection("shiftPlans").doc(planId);
+      const shiftsCol = planRef.collection("shifts");
+      const xShiftRef = shiftsCol.doc(xDocId);
+      const base = Object.prototype.hasOwnProperty.call(body, "baseRawInput")
+        ? typeof body.baseRawInput === "string"
+          ? body.baseRawInput
+          : null
+        : undefined;
+      let auditBeforeRaw = "";
+      try {
+        await db().runTransaction(async (tx) => {
+          const cellSnap = await tx.get(xShiftRef);
+          const beforeExists = cellSnap.exists;
+          auditBeforeRaw = beforeExists ? ((cellSnap.data() as Record<string, unknown>).rawInput as string) ?? "" : "";
+          // Optimistic concurrency (same as the non-X path).
+          if (base !== undefined) {
+            const stored = beforeExists ? auditBeforeRaw : null;
+            if (stored !== base) {
+              throw new CellConflict(beforeExists ? { id: xDocId, ...(cellSnap.data() as object) } : null);
+            }
+          }
+          const [empSnap, daySnap, planEmpsSnap, meGlobalSnap] = await Promise.all([
+            tx.get(shiftsCol.where("employeeId", "==", employeeId)),
+            tx.get(shiftsCol.where("date", "==", date)),
+            tx.get(planRef.collection("planEmployees")),
+            tx.get(db().collection("employees").doc(employeeId)),
+          ]);
+          const meEmp = planEmpsSnap.docs
+            .map((d) => d.data() as Record<string, unknown>)
+            .find((e) => e.employeeId === employeeId);
+
+          // Voluntary-X dates AFTER this edit (exclude this cell, then add it). Also
+          // count vacation-origin Xs — a non-zero count is the only case in which the
+          // admin's X-limit override applies.
+          const voluntary = new Set<string>();
+          let vacationX = 0;
+          empSnap.docs.forEach((d) => {
+            const s = d.data() as { date?: string; status?: string; source?: string };
+            if (s.status === "day_off" && s.source === "vacation") vacationX++;
+            else if (s.status === "day_off" && s.date && s.date !== date) voluntary.add(s.date);
+          });
+          voluntary.add(date);
+
+          // Rule 1 — no more than 6 consecutive voluntary X.
+          if (consecutiveXRun(voluntary, date) > 6) {
+            throw new RuleBlock(
+              "Nelze zadat více než 6 X po sobě jdoucích dnů. Pokud potřebujete volno na delší dobu, požádejte o dovolenou."
+            );
+          }
+          // Rule 2 — monthly X limit (8 HPP / 13 PPP; admin override only with vacation).
+          if (meEmp) {
+            const ctBase = xBaseLimit(
+              ((meGlobalSnap.data() as Record<string, unknown> | undefined)?.currentContractType as string) ?? null
+            );
+            if (ctBase !== null) {
+              const limit = vacationX > 0 && meEmp.xLimitOverride != null ? (meEmp.xLimitOverride as number) : ctBase;
+              if (voluntary.size > limit) {
+                throw new RuleBlock(`Překročen měsíční limit volných dnů (X): maximálně ${limit}.`);
+              }
+            }
+          }
+          // Rule 3 — at least 5 recepce of this shift type remain available.
+          if (meEmp && meEmp.section === "recepce" && (meEmp.primaryShiftType === "D" || meEmp.primaryShiftType === "N")) {
+            const st = meEmp.primaryShiftType;
+            const eligible = planEmpsSnap.docs
+              .map((d) => d.data() as Record<string, unknown>)
+              .filter((e) => e.section === "recepce" && e.primaryShiftType === st && e.active === true);
+            const dayOff = new Set<string>();
+            daySnap.docs.forEach((d) => {
+              const s = d.data() as { employeeId?: string; status?: string };
+              if (s.employeeId && s.status === "day_off") dayOff.add(s.employeeId);
+            });
+            const withX = eligible.filter(
+              (e) => e.employeeId === employeeId || dayOff.has(e.employeeId as string)
+            ).length;
+            if (eligible.length - withX < 5) {
+              throw new RuleBlock(
+                `Na směně musí zůstat alespoň 5 dostupných recepčních (${st === "D" ? "denní" : "noční"}).`
+              );
+            }
+          }
+
+          // Passed → write the X and bump the plan (the serialization point).
+          tx.set(xShiftRef, {
+            employeeId,
+            date,
+            rawInput: parsed.rawInput,
+            segments: parsed.segments,
+            hoursComputed: parsed.hoursComputed,
+            isDouble: parsed.isDouble,
+            status,
+            typeTag: null,
+            updatedAt: FieldValue.serverTimestamp(),
+          });
+          tx.update(planRef, { updatedAt: FieldValue.serverTimestamp() });
+        });
+      } catch (e) {
+        if (e instanceof CellConflict) {
+          res.status(409).json({ error: "Buňku mezitím upravil jiný uživatel.", conflict: true, current: e.current });
+          return;
+        }
+        if (e instanceof RuleBlock) {
+          res.status(403).json({ error: e.message });
+          return;
+        }
+        throw e;
+      }
+      if (auditBeforeRaw !== parsed.rawInput) {
+        await logUpdate(ctxFromReq(req), {
+          collection: "shiftPlans/shifts",
+          resourceId: planId,
+          subResourceId: xDocId,
+          employeeId,
+          year: Number(String(date).slice(0, 4)) || undefined,
+          month: Number(String(date).slice(5, 7)) || undefined,
+          before: { rawInput: auditBeforeRaw },
+          after: { rawInput: parsed.rawInput },
+        });
+      }
+      res.json({ ok: true, hoursComputed: parsed.hoursComputed, typeTag: null });
+      return;
     }
 
     const docId = `${employeeId}_${date}`;

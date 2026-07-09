@@ -1228,6 +1228,21 @@ export default function ShiftPlannerPage() {
         notifyCellConflict();
         return;
       }
+      if (e instanceof ApiError && e.status === 403) {
+        // Server rejected a business rule (X-limit / coverage / 6-in-a-row) — e.g. a
+        // concurrent X dropped coverage below 5 after our local check passed. The
+        // frontend normally routes to the override flow first, so this is the race /
+        // bypass backstop: surface the server's reason and refresh to the true state.
+        setConfirmModal({
+          title: "Nelze uložit",
+          message: e.message || "Tuto úpravu nelze uložit.",
+          confirmLabel: "OK",
+          showCancel: false,
+          onConfirm: () => setConfirmModal(null),
+        });
+        loadPlan(true);
+        return;
+      }
       throw e;
     }
     // Preserve an existing type-tag across a numeric→numeric edit; the backend
