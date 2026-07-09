@@ -1129,6 +1129,23 @@ shiftsRouter.put(
     const beforeRaw = (beforeData.rawInput as string) ?? "";
     const beforeTag = sanitizeTypeTag(beforeData.typeTag);
 
+    // Optimistic concurrency (same cell). `baseRawInput` is the value the client
+    // based this edit on (null = it saw an empty/absent cell). If the stored cell
+    // has moved since, reject with 409 instead of silently clobbering a colleague's
+    // change — the client notifies + reloads. Only enforced when the field is sent.
+    if (Object.prototype.hasOwnProperty.call(body, "baseRawInput")) {
+      const base = typeof body.baseRawInput === "string" ? body.baseRawInput : null;
+      const stored = beforeSnap.exists ? beforeRaw : null;
+      if (stored !== base) {
+        res.status(409).json({
+          error: "Buňku mezitím upravil jiný uživatel.",
+          conflict: true,
+          current: beforeSnap.exists ? { id: docId, ...beforeData } : null,
+        });
+        return;
+      }
+    }
+
     // Shift-type tag (#29): only meaningful on a numeric "worked hours" cell, and
     // never alters pay. Cleared automatically when the cell isn't pure-numeric.
     // When the request omits `typeTag` (a plain rawInput edit) the existing tag is
@@ -1207,6 +1224,22 @@ shiftsRouter.delete(
       .doc(docId);
     const beforeSnap = await shiftRef.get();
     const beforeData = beforeSnap.exists ? (beforeSnap.data() as Record<string, unknown>) : {};
+
+    // Optimistic concurrency: don't delete a cell a colleague changed underneath.
+    // `baseRawInput` (query) is the value the client saw. Skipped when the cell is
+    // already gone (an idempotent delete is harmless).
+    if (typeof req.query.baseRawInput === "string" && beforeSnap.exists) {
+      const storedRaw = (beforeData.rawInput as string) ?? "";
+      if (storedRaw !== req.query.baseRawInput) {
+        res.status(409).json({
+          error: "Buňku mezitím upravil jiný uživatel.",
+          conflict: true,
+          current: { id: docId, ...beforeData },
+        });
+        return;
+      }
+    }
+
     await shiftRef.delete();
     await db().collection("shiftPlans").doc(planId).update({ updatedAt: FieldValue.serverTimestamp() });
     if (beforeSnap.exists) {

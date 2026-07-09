@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
-import { api } from "../lib/api";
+import { api, ApiError } from "../lib/api";
 import * as clock from "../lib/clock";
 import { useAuth } from "../hooks/useAuth";
 import { parseShiftExpression, getCellColor, SECTIONS, SECTION_LABELS, getCzechHolidays, MOD_PERSONS, sortSectionEmployees, isPureNumericExpression } from "../lib/shiftConstants";
@@ -96,6 +96,17 @@ interface PlanListItem {
   month: number;
   year: number;
   status: PlanStatus;
+  /** Firestore Timestamp (serialized) — the change-detection token for the poll. */
+  updatedAt?: { _seconds?: number; _nanoseconds?: number; seconds?: number; nanoseconds?: number };
+}
+
+/** Epoch millis of a serialized Firestore Timestamp (external-change detection). */
+function tsMillis(ts: PlanListItem["updatedAt"]): number | null {
+  if (!ts) return null;
+  const s = typeof ts.seconds === "number" ? ts.seconds : ts._seconds;
+  const n = typeof ts.nanoseconds === "number" ? ts.nanoseconds : ts._nanoseconds;
+  if (typeof s !== "number") return null;
+  return s * 1000 + Math.floor((n ?? 0) / 1e6);
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -269,6 +280,8 @@ export default function ShiftPlannerPage() {
   const { refresh: refreshChangeRequestCount } = useShiftChangeRequestsContext();
   const [planOverrideCount, setPlanOverrideCount] = useState(0);
   const [planChangeRequestCount, setPlanChangeRequestCount] = useState(0);
+  // Change-detection token: the updatedAt (millis) of the plan we currently show.
+  const seenUpdatedRef = useRef<number | null>(null);
 
   // ── Load plan for selected month/year ──────────────────────────────────────
 
@@ -289,9 +302,11 @@ export default function ShiftPlannerPage() {
           (p) => p.month === selectedMonth && p.year === selectedYear
         );
         if (!match) {
+          seenUpdatedRef.current = null;
           if (!silent) setLoading(false);
           return;
         }
+        seenUpdatedRef.current = tsMillis(match.updatedAt);
         return api.get<PlanDetail>(`/shifts/plans/${match.id}`).then((detail) => {
           setPlan({ ...detail, modShifts: detail.modShifts ?? [] });
           // Fetch pending override count for this plan (silently ignored for non-admin/director)
@@ -312,6 +327,38 @@ export default function ShiftPlannerPage() {
   useEffect(() => {
     loadPlan();
   }, [loadPlan]);
+
+  // External-change detection. The plan has no realtime channel (firestore.rules
+  // block client SDK reads, so an onSnapshot is impossible), so we poll the plan
+  // list while the tab is visible + refetch on focus, and silently reload when THIS
+  // month's plan changed. Skipped while a cell <input> is focused so a reload can't
+  // disrupt typing or invalidate the in-progress save's compare-and-swap base.
+  useEffect(() => {
+    async function check() {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      const ae = document.activeElement as HTMLElement | null;
+      if (ae && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA" || ae.isContentEditable)) return;
+      if (seenUpdatedRef.current === null) return;
+      try {
+        const plans = await api.get<PlanListItem[]>("/shifts/plans");
+        const match = plans.find((p) => p.month === selectedMonth && p.year === selectedYear);
+        if (!match) return;
+        const serverMs = tsMillis(match.updatedAt);
+        if (serverMs !== null && serverMs !== seenUpdatedRef.current) loadPlan(true);
+      } catch {
+        // transient — next tick retries
+      }
+    }
+    const iv = setInterval(() => void check(), 15000);
+    const onFocus = () => void check();
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    return () => {
+      clearInterval(iv);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
+  }, [selectedMonth, selectedYear, loadPlan]);
 
   // Guided-tour only: on the dedicated "Žádost o změnu směny" demo route
   // (scenario "shifts-change-request") auto-open the change-request modal once
@@ -1039,6 +1086,19 @@ export default function ShiftPlannerPage() {
     await handleCellSave(employeeId, date, cur === "X" ? "" : "X");
   }
 
+  /** A cell write hit a concurrency conflict (409): tell the user + refresh. */
+  function notifyCellConflict() {
+    setConfirmModal({
+      title: "Buňku upravil někdo jiný",
+      message:
+        "Tuto buňku mezitím změnil jiný uživatel, vaše úprava se neuložila. Zobrazuji aktuální verzi plánu.",
+      confirmLabel: "OK",
+      showCancel: false,
+      onConfirm: () => setConfirmModal(null),
+    });
+    loadPlan(true);
+  }
+
   async function handleCellSave(employeeId: string, date: string, rawInput: string) {
     if (!plan) return;
 
@@ -1066,7 +1126,11 @@ export default function ShiftPlannerPage() {
           danger: true,
           onConfirm: () => {
             setConfirmModal(null);
-            api.delete(`/shifts/plans/${plan.id}/shifts/${employeeId}/${date}`)
+            api.delete(
+              `/shifts/plans/${plan.id}/shifts/${employeeId}/${date}?baseRawInput=${encodeURIComponent(
+                plan.shifts.find((s) => s.id === `${employeeId}_${date}`)?.rawInput ?? ""
+              )}`
+            )
               .then(() => {
                 setPlan((prev) => {
                   if (!prev) return prev;
@@ -1074,14 +1138,31 @@ export default function ShiftPlannerPage() {
                   return { ...prev, shifts: prev.shifts.filter((s) => s.id !== docId) };
                 });
               })
-              .catch((e) => setError(e instanceof Error ? e.message : "Chyba při mazání"));
+              .catch((e) => {
+                if (e instanceof ApiError && e.status === 409) {
+                  notifyCellConflict();
+                  return;
+                }
+                setError(e instanceof Error ? e.message : "Chyba při mazání");
+              });
           },
         });
         // Return without deleting – let the modal handle it.
         // ShiftCell will re-display the original value since setPlan wasn't called.
         return;
       }
-      await api.delete(`/shifts/plans/${plan.id}/shifts/${employeeId}/${date}`);
+      const delBase = plan.shifts.find((s) => s.id === `${employeeId}_${date}`)?.rawInput ?? "";
+      try {
+        await api.delete(
+          `/shifts/plans/${plan.id}/shifts/${employeeId}/${date}?baseRawInput=${encodeURIComponent(delBase)}`
+        );
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 409) {
+          notifyCellConflict();
+          return;
+        }
+        throw e;
+      }
       setPlan((prev) => {
         if (!prev) return prev;
         const docId = `${employeeId}_${date}`;
@@ -1136,8 +1217,19 @@ export default function ShiftPlannerPage() {
       }
     }
 
-    await api.put(`/shifts/plans/${plan.id}/shifts/${employeeId}/${date}`, { rawInput });
     const docId = `${employeeId}_${date}`;
+    // Optimistic concurrency: send the value we based this edit on so the server
+    // rejects (409) if the cell moved, rather than clobbering a colleague's change.
+    const baseRawInput = plan.shifts.find((s) => s.id === docId)?.rawInput ?? null;
+    try {
+      await api.put(`/shifts/plans/${plan.id}/shifts/${employeeId}/${date}`, { rawInput, baseRawInput });
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 409) {
+        notifyCellConflict();
+        return;
+      }
+      throw e;
+    }
     // Preserve an existing type-tag across a numeric→numeric edit; the backend
     // keeps it too (it only clears the tag when the cell stops being numeric).
     const existingTag = plan.shifts.find((s) => s.id === docId)?.typeTag ?? null;
@@ -1170,10 +1262,19 @@ export default function ShiftPlannerPage() {
     const docId = `${employeeId}_${date}`;
     const shift = plan.shifts.find((s) => s.id === docId);
     if (!shift) return; // can only tag an existing cell
-    await api.put(`/shifts/plans/${plan.id}/shifts/${employeeId}/${date}`, {
-      rawInput: shift.rawInput,
-      typeTag,
-    });
+    try {
+      await api.put(`/shifts/plans/${plan.id}/shifts/${employeeId}/${date}`, {
+        rawInput: shift.rawInput,
+        typeTag,
+        baseRawInput: shift.rawInput,
+      });
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 409) {
+        notifyCellConflict();
+        return;
+      }
+      throw e;
+    }
     setPlan((prev) => {
       if (!prev) return prev;
       return { ...prev, shifts: prev.shifts.map((s) => (s.id === docId ? { ...s, typeTag } : s)) };
