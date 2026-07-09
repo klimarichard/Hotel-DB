@@ -49,7 +49,7 @@ export const CONTRACT_TYPE_LABELS: Record<string, string> = {
   multisport: "Multisport",
 };
 
-/** Contract types that are triggered by a history row (built-in only — custom templates are always standalone) */
+/** Contract types that are triggered by a history row (built-in only – custom templates are always standalone) */
 export const HISTORY_TIED_TYPES: ContractType[] = [
   "nastup_hpp",
   "nastup_ppp",
@@ -179,7 +179,7 @@ export interface EmployeeData {
   workLocation?: string;
   probationPeriod?: string;
   signingDate?: string; // raw ISO date (YYYY-MM-DD); resolveVariables formats it
-  // Signing date of the most recent prior "nástup" row — the contract this
+  // Signing date of the most recent prior "nástup" row – the contract this
   // dodatek/ukončení references. Raw ISO; resolveVariables formats it.
   originalSigningDate?: string;
   // DPP fields
@@ -187,14 +187,14 @@ export interface EmployeeData {
   agreedReward?: string | number;
   // Part-time weekly hours (PPP). Rendered on the PPP contract template.
   hoursPerWeek?: string | number;
-  // Dodatek fields — populated when generating "změna smlouvy" contracts.
+  // Dodatek fields – populated when generating "změna smlouvy" contracts.
   // dodatekEffectiveDate is raw ISO; resolveVariables formats it.
   dodatekEffectiveDate?: string;
   dodatekChanges?: { changeKind: string; value: string }[];
-  // Salary in force immediately before this dodatek — used to compute
+  // Salary in force immediately before this dodatek – used to compute
   // salaryChangeVerb ("zvyšuje" if newSalary > oldSalary, else "mění").
   oldSalary?: string | number;
-  // Multisport-specific dates — collected by the standalone-contract
+  // Multisport-specific dates – collected by the standalone-contract
   // signing-date prompt. Raw ISO; resolveVariables formats them.
   requestedAt?: string;
   validFrom?: string;
@@ -204,7 +204,7 @@ export interface EmployeeData {
  * Whether a nationality code should be treated as Czech. Compared
  * exactly against the canonical "CZE" code; the nationality field will
  * become a fixed dropdown of country codes, so no fuzzy matching is
- * needed. Empty / unknown is treated as foreign — safer default since
+ * needed. Empty / unknown is treated as foreign – safer default since
  * the foreign branch typically adds legally required fields.
  */
 export function isCzechNationality(nat: string): boolean {
@@ -256,7 +256,7 @@ export function resolveVariables(
   const hasProbation = /[1-9]/.test(probationStr);
   const hasEndDate = str(employee.endDate).trim() !== "";
   // Visa type: matches the canonical string "trvalý pobyt" exactly
-  // (case-insensitive, trimmed) — anything else, including empty,
+  // (case-insensitive, trimmed) – anything else, including empty,
   // counts as no permanent residence.
   const hasPermanentResidence =
     str(employee.visaType).trim().toLowerCase() === "trvalý pobyt";
@@ -338,7 +338,7 @@ const UNLESS_RE = /\{\{#unless\s+(\w+)\}\}([\s\S]*?)\{\{\/unless\}\}/g;
 // can later remove only the empty <p></p> wrappers that are adjacent to
 // the strip point, while preserving intentional blank lines elsewhere.
 const STRIP_MARKER = "HPM_STRIPPED";
-// Drop any <p>…marker…</p> whose only contents reduce to the marker —
+// Drop any <p>…marker…</p> whose only contents reduce to the marker –
 // the wrapping paragraph existed solely to hold the conditional. Then
 // strip any leftover bare markers (e.g. when the conditional sat
 // between paragraphs at block level). Empty <p></p> elsewhere are
@@ -356,7 +356,7 @@ const BARE_MARKER_RE = new RegExp(STRIP_MARKER, "g");
  * <p></p> wrappers immediately adjacent to the strip point are removed
  * so a deleted line doesn't leave a blank paragraph behind. Empty
  * paragraphs that are *not* adjacent to a stripped block are preserved
- * — they're intentional blank lines authored in the template.
+ * – they're intentional blank lines authored in the template.
  *
  * Nesting is not supported: blocks are matched non-greedily and a nested
  * inner {{#if}} would close its own outer block prematurely.
@@ -370,15 +370,15 @@ function processConditionals(html: string, vars: Record<string, string>): string
   return out;
 }
 
-// Strip a trailing run of truly-empty <p></p> at the document end —
+// Strip a trailing run of truly-empty <p></p> at the document end –
 // TipTap's editor often leaves a dangling empty paragraph after the
 // last block that, when re-rendered with margin-bottom, can overflow
 // onto a blank second page in the generated PDF.
 const TRAILING_EMPTY_PS_RE = /(?:<p[^>]*>\s*<\/p>\s*)+$/;
 // Strip empty <p></p> runs that immediately precede a <table>. The
 // table has its own margin-top (0.5cm in RENDER_CSS), so the author's
-// blank paragraphs above the table — added for visual spacing in the
-// editor — would otherwise stack with the table margin and push the
+// blank paragraphs above the table – added for visual spacing in the
+// editor – would otherwise stack with the table margin and push the
 // row past the page boundary. Single-row tables can never break
 // (Chromium implicit break-inside: avoid on <tr>), so even a small
 // overshoot moves the whole table to the next page.
@@ -417,7 +417,7 @@ export function fillTemplate(html: string, vars: Record<string, string>): string
 
 /**
  * Return the list of `{{key}}` placeholders in the HTML that have no value
- * (value is empty string) after resolution — signals missing data to the
+ * (value is empty string) after resolution – signals missing data to the
  * user. Variables that only appear inside a conditional block whose
  * condition is false are not considered missing because they won't render.
  */

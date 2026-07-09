@@ -86,7 +86,7 @@ export default function ExportEmployeesModal({ onClose }: Props) {
         setDiscoveredJobTitles([...titles].sort((a, b) => a.localeCompare(b, "cs")));
       })
       .catch(() => {
-        // Silent failure — the user can still export; the multi-filters just stay empty.
+        // Silent failure – the user can still export; the multi-filters just stay empty.
       })
       .finally(() => {
         if (!cancelled) setOptionsLoading(false);

@@ -16,7 +16,7 @@ export interface MenuItem {
   path: string;
   permission: Permission;
   /** Hidden from the phone bottom-nav (still in the desktop sidebar). For pages
-   *  that aren't usable on a phone — e.g. the A4 contract-template editor. */
+   *  that aren't usable on a phone – e.g. the A4 contract-template editor. */
   hideOnMobile?: boolean;
   /** Extra permission required ONLY on a phone. When set and the user lacks it,
    *  the item is hidden from the phone bottom-nav and its route redirects on a
@@ -39,7 +39,7 @@ export const MENU_ITEMS: ReadonlyArray<MenuItem> = [
 ];
 
 /**
- * Permission-based sidebar resolver — the driver of sidebar visibility + order.
+ * Permission-based sidebar resolver – the driver of sidebar visibility + order.
  * Takes the user's `can()` and the saved order: keeps only items the user can
  * see (via each item's `permission`), applies the saved order, then appends any
  * visible items missing from it (so newly-added items appear automatically).

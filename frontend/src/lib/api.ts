@@ -57,7 +57,7 @@ async function request<T>(
   body?: unknown
 ): Promise<T> {
   // Guided-tour demo: serve mock fixtures (no backend, no Firestore) for the
-  // sentinel demo employee and — while a demo route is mounted — the self /
+  // sentinel demo employee and – while a demo route is mounted – the self /
   // payroll / shifts / recepce endpoints for the active scenario. See
   // lib/tours/demoData.ts. A `status >= 400` means the fixture wants to simulate
   // an error response (e.g. a 404 so the protokol "empty → create" state renders).
@@ -137,7 +137,7 @@ export interface RoleType {
 }
 
 export const roleTypesApi = {
-  // Always alphabetical by name (cs) — every consumer (type dropdowns, the
+  // Always alphabetical by name (cs) – every consumer (type dropdowns, the
   // user-types list, menu-order cards) expects the same ordering.
   list: () =>
     api

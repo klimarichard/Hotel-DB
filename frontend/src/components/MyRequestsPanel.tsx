@@ -123,9 +123,9 @@ export default function MyRequestsPanel({ planId }: Props) {
                   {overrides.map((req) => (
                     <tr key={req.id} className={req.status !== "pending" ? styles.rowDone : ""}>
                       <td data-label="Datum">{formatDateCZ(req.date)}</td>
-                      <td data-label="Požadovaná směna">{req.requestedInput || "—"}</td>
-                      <td data-label="Důvod porušení">{(req.violationTypes ?? []).map((v) => VIOLATION_LABELS[v] ?? v).join(", ") || "—"}</td>
-                      <td data-label="Důvod žádosti">{req.reason || "—"}</td>
+                      <td data-label="Požadovaná směna">{req.requestedInput || "–"}</td>
+                      <td data-label="Důvod porušení">{(req.violationTypes ?? []).map((v) => VIOLATION_LABELS[v] ?? v).join(", ") || "–"}</td>
+                      <td data-label="Důvod žádosti">{req.reason || "–"}</td>
                       <td data-label="Odesláno">{formatDatetimeCZ(req.requestedAt)}</td>
                       <td data-label="Stav">
                         <StatusBadge status={req.status} />
@@ -179,12 +179,12 @@ export default function MyRequestsPanel({ planId }: Props) {
                       <td data-label="Aktuální směna">
                         {req.kind === "free-claim"
                           ? `Volná směna ${req.code ?? ""}${req.hotel ?? ""}`
-                          : (req.currentRawInput || "—")}
+                          : (req.currentRawInput || "–")}
                       </td>
                       <td data-label="Požadovaná změna">
-                        {req.kind === "free-claim" ? "—" : formatRequestedChange(req.requestedChange)}
+                        {req.kind === "free-claim" ? "–" : formatRequestedChange(req.requestedChange)}
                       </td>
-                      <td data-label="Důvod žádosti">{req.reason || "—"}</td>
+                      <td data-label="Důvod žádosti">{req.reason || "–"}</td>
                       <td data-label="Odesláno">{formatDatetimeCZ(req.requestedAt)}</td>
                       <td data-label="Stav">
                         <StatusBadge status={req.status} />

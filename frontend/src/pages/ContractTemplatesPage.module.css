@@ -305,7 +305,7 @@
   margin: 0 4px;
 }
 
-/* Scrollable "desk" area — gray background behind the pages */
+/* Scrollable "desk" area – gray background behind the pages */
 .editor {
   flex: 1;
   overflow-y: auto;
@@ -326,7 +326,7 @@
  * - box-shadow gives the whole block a subtle paper-on-desk lift.
  *
  * Padding (1.5 cm top/bottom, 1 cm left/right) only applies to the very
- * first and last "page" of the block — content flowing across a gap
+ * first and last "page" of the block – content flowing across a gap
  * still flows continuously inside the editor (manual ↧ page-break node
  * is the way to force a clean break before the gap).
  */
@@ -347,7 +347,7 @@
 }
 
 /*
- * Page-break node ↧ — visual dashed divider in the editor only. Saved HTML
+ * Page-break node ↧ – visual dashed divider in the editor only. Saved HTML
  * keeps just `page-break-before: always; height: 0;` (set inline by
  * PageBreak.renderHTML), so the PDF gets a clean break with no visible
  * mark. The styling lives here so it never reaches the Puppeteer
@@ -633,7 +633,7 @@
 }
 
 /* Make ::marker font-size match the LI's font-size (set by the FontSize
- * dropdown when the cursor is inside a list — see ListItemStyle extension). */
+ * dropdown when the cursor is inside a list – see ListItemStyle extension). */
 .a4Page :global(li::marker) {
   font-size: inherit;
   font-family: inherit;

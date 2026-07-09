@@ -6,7 +6,7 @@ import { now as clockNow } from "@/lib/clock";
  * Purpose: let the REAL `EmployeeSelfPage` and `EmployeeDetailPage` (plus their
  * sub-components: EmploymentSessionCard / EmploymentRowItem / ContractActionButtons,
  * MultisportEditor, OtherDocumentsTab, the audit history) render fully-populated
- * with dummy data and WITHOUT hitting the backend or Firestore — so a first-login
+ * with dummy data and WITHOUT hitting the backend or Firestore – so a first-login
  * onboarding tour can walk a user through these screens against a safe sandbox.
  *
  * Wiring: `lib/api.ts` calls `getDemoResponse(method, path, tourDemo.active)`
@@ -21,7 +21,7 @@ import { now as clockNow } from "@/lib/clock";
  *     route wrapper, which flips it on mount and off on unmount).
  *
  * Safety: every NON-GET request (POST/PUT/PATCH/DELETE) that we "hit" returns an
- * empty object `{}` — it is swallowed, never persisted — so the tour can't write
+ * empty object `{}` – it is swallowed, never persisted – so the tour can't write
  * to the database even if the user clicks a save/submit button.
  *
  * The fixtures are typed loosely (`unknown` / `as` casts) on purpose; what
@@ -283,7 +283,7 @@ const selfEmployee: unknown = {
   currentContractType: "HPP",
 };
 
-// Self contact SubDoc — same fields the self-page reads via SELF_EDIT_FIELDS.
+// Self contact SubDoc – same fields the self-page reads via SELF_EDIT_FIELDS.
 const selfContact: unknown = {
   phone: "+420 777 123 456",
   email: "jan.novak@example.com",
@@ -298,14 +298,14 @@ const selfDocuments: unknown = {
   idCardNumber: MASK,
 };
 
-// Self benefits SubDoc — sensitive insuranceNumber/bankAccount as MASK.
+// Self benefits SubDoc – sensitive insuranceNumber/bankAccount as MASK.
 const selfBenefits: unknown = {
   insuranceNumber: MASK,
   insuranceCompany: "VZP",
   bankAccount: MASK,
 };
 
-// Self employment history — reuse the same rows; the self-page renders them
+// Self employment history – reuse the same rows; the self-page renders them
 // read-only via EmploymentSessionCard with no-op callbacks.
 const selfEmployment: unknown[] = detailEmployment;
 
@@ -578,7 +578,7 @@ function shiftsFixture(
       : scenario === "shifts-created"
       ? "created"
       : "opened";
-  // Plan list — drives whether the page lands on a plan or the empty state.
+  // Plan list – drives whether the page lands on a plan or the empty state.
   if (clean === "/shifts/plans") {
     if (scenario === "shifts-empty") return { hit: true, value: [] };
     const { year, month } = currentYM();
@@ -606,19 +606,19 @@ function shiftsFixture(
 // ─── Recepce-demo fixtures (`/recepce/*` tabs via /napoveda/ukazka-protokol|…) ─
 //
 // The REAL HandoverTab / WalkinsTab / TaxiTab (rendered by pages/RecepceDemoPage)
-// fed with mock data — no backend, no Firestore — so a first-login tour can walk
+// fed with mock data – no backend, no Firestore – so a first-login tour can walk
 // the reception workflow against a safe sandbox. Every non-GET is swallowed.
 
-/** Epoch-seconds "now" for demo timestamps (real wall clock — the handover editor
+/** Epoch-seconds "now" for demo timestamps (real wall clock – the handover editor
  *  keys off the real date/shift, NOT the test clock, so we must match it). */
 function demoNowSec(): number {
   return Math.floor(new Date().getTime() / 1000);
 }
-/** Real wall-clock date (sv-SE = YYYY-MM-DD) — matches HandoverTab.todayLocal(). */
+/** Real wall-clock date (sv-SE = YYYY-MM-DD) – matches HandoverTab.todayLocal(). */
 function realTodayIso(): string {
   return new Intl.DateTimeFormat("sv-SE").format(new Date());
 }
-/** Real day/night split — matches HandoverTab.defaultShiftForNow(). */
+/** Real day/night split – matches HandoverTab.defaultShiftForNow(). */
 function realShiftNow(): "den" | "noc" {
   const h = new Date().getHours();
   return h >= 7 && h < 19 ? "den" : "noc";
@@ -869,7 +869,7 @@ const SELF_PATHS = new Set<string>([
  * instance and its remount-time fetch can fire while the route wrapper's effect
  * cleanup has momentarily reset a flag. The URL, by contrast, is always current
  * by the time any fetch runs. (Pages are also given a per-route `key` so they
- * actually remount + refetch on such transitions — see App.tsx.)
+ * actually remount + refetch on such transitions – see App.tsx.)
  */
 function activeScenario(): TourScenario | null {
   const p = typeof window !== "undefined" ? window.location.pathname : "";

@@ -137,7 +137,7 @@ export default function ShiftOverridePanel({ planId, employees, onOverrideResolv
                       .map((t) => VIOLATION_LABELS[t] ?? t)
                       .join(", ")}
                   </td>
-                  <td data-label="Důvod">{req.reason || "—"}</td>
+                  <td data-label="Důvod">{req.reason || "–"}</td>
                   <td data-label="Stav">
                     <StatusBadge status={req.status} />
                     {req.status === "rejected" && req.rejectionReason && (

@@ -30,7 +30,7 @@ const ENUM_LABELS: Record<string, Record<string, string>> = {
     "změna smlouvy": "Dodatek",
     ukončení: "Ukončení",
   },
-  // Systém transition summaries store the before/after state under from/to —
+  // Systém transition summaries store the before/after state under from/to –
   // covers both plan lifecycle states and employee lifecycle statuses.
   from: {
     created: "Vytvořený",
@@ -100,7 +100,7 @@ function isNullish(v: unknown): boolean {
  * @param fieldLeaf the leaf field name (drives enum + boolean wording)
  */
 export function formatAuditValue(value: unknown, fieldLeaf?: string): string {
-  if (isNullish(value)) return "—";
+  if (isNullish(value)) return "–";
 
   if (typeof value === "boolean") return value ? "Ano" : "Ne";
 
@@ -118,7 +118,7 @@ export function formatAuditValue(value: unknown, fieldLeaf?: string): string {
   }
 
   if (Array.isArray(value)) {
-    if (value.length === 0) return "—";
+    if (value.length === 0) return "–";
     return value.map((v) => formatAuditValue(v, fieldLeaf)).join(", ");
   }
 
@@ -139,7 +139,7 @@ export function formatAuditValue(value: unknown, fieldLeaf?: string): string {
     const entries = Object.entries(value as Record<string, unknown>).filter(
       ([, v]) => !isNullish(v)
     );
-    if (entries.length === 0) return "—";
+    if (entries.length === 0) return "–";
     return entries
       .map(([k, v]) => `${nestedKeyLabel(k)}: ${formatAuditValue(v)}`)
       .join(", ");

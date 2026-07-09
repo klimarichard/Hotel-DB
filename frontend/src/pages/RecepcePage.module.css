@@ -83,7 +83,7 @@
   color: #0b0f14;
 }
 
-/* Per-hotel palette — mirrors the Shift page's hotel colours (shiftConstants).
+/* Per-hotel palette – mirrors the Shift page's hotel colours (shiftConstants).
    Light values are the default; [data-theme="dark"] overrides them. */
 .hotelA { --hotel-bg: #dcfce7; --hotel-text: #166534; --hotel-accent: #15803d; }
 .hotelS { --hotel-bg: #fde68a; --hotel-text: #78350f; --hotel-accent: #b45309; }

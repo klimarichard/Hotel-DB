@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 /**
- * Phone (bottom-nav) layout test — mirrors the EXACT media query Layout uses to
+ * Phone (bottom-nav) layout test – mirrors the EXACT media query Layout uses to
  * swap the sidebar for the bottom tab bar, including the landscape short-screen
  * case. Kept byte-identical to the inline `matchMedia` blocks in
  * ShiftPlannerPage / ContractTemplatesPage and to OnboardingContext's

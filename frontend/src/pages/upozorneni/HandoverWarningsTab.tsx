@@ -48,8 +48,8 @@ function WarningTable({
               <td data-label="Hotel">{hotelBySlug(w.hotel)?.label ?? w.hotel}</td>
               <td data-label="Datum">{formatDateCZ(w.shiftDate)}</td>
               <td data-label="Směna">{SHIFT_LABELS[w.shiftType] ?? w.shiftType}</td>
-              <td data-label="Předal">{w.actorName || "—"}</td>
-              <td data-label="Očekáván">{w.expectedName || "—"}</td>
+              <td data-label="Předal">{w.actorName || "–"}</td>
+              <td data-label="Očekáván">{w.expectedName || "–"}</td>
               {actionLabel && (
                 <td>
                   <button className={styles.markReadBtn} onClick={() => onAction?.(w.id)}>

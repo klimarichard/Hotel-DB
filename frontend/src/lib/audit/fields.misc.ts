@@ -151,7 +151,7 @@ const settings: FieldLabelMap = {
   minimumWage: "Minimální mzda",
   multisportBasePrice: "Základní cena Multisport",
   mealAllowanceMinHours: "Min. délka směny pro stravenku (h)",
-  // settings/menuOrder — per-role menu order arrays
+  // settings/menuOrder – per-role menu order arrays
   admin: "Pořadí menu – administrátor",
   director: "Pořadí menu – ředitel",
   manager: "Pořadí menu – FOM",

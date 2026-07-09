@@ -83,7 +83,7 @@
   color: var(--color-text-muted);
 }
 
-/* Compact one-line change summary on the collapsed card — ellipsizes so the
+/* Compact one-line change summary on the collapsed card – ellipsizes so the
    author/time stay aligned on the right. */
 .summary {
   font-size: 0.82rem;

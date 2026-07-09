@@ -114,7 +114,7 @@ export default function UnavailabilityPanel({ planId }: Props) {
                 >
                   <td>{req.employeeId}</td>
                   <td>{req.date}</td>
-                  <td>{req.reason || "—"}</td>
+                  <td>{req.reason || "–"}</td>
                   <td>{req.isException ? "Ano" : "Ne"}</td>
                   <td>
                     <StatusBadge status={req.status} />

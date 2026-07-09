@@ -110,7 +110,7 @@ function triple(raw: unknown): [number, number, number] {
   return [n(a[0]), n(a[1]), n(a[2])];
 }
 
-/** Σ rateᵢ·countᵢ — the sm row's CZK value. */
+/** Σ rateᵢ·countᵢ – the sm row's CZK value. */
 function smDot(rates: [number, number, number], counts: [number, number, number]): number {
   return rates[0] * counts[0] + rates[1] * counts[1] + rates[2] * counts[2];
 }
@@ -245,7 +245,7 @@ function toPayload(
     accounts: accounts
       .filter((a) => a.name.trim() !== "")
       .map((a) => ({ id: a.id, name: a.name.trim(), amount: Math.round(a.amount) || 0, locked: a.locked })),
-    // smTrezor + wata are NOT sent here — they mutate only via dedicated endpoints.
+    // smTrezor + wata are NOT sent here – they mutate only via dedicated endpoints.
     smCounts,
   };
 }
@@ -560,8 +560,8 @@ function ProtocolEditor({
   const predal = loaded?.predal ?? null;
   const prevzal = loaded?.prevzal ?? null;
   // Freeze on ANY signature (Předal or Převzal). Two levels:
-  //  • canEdit — content + sm/wata edits — keeps the admin override.
-  //  • canStep — undo/redo — is frozen for EVERYONE, admin included.
+  //  • canEdit – content + sm/wata edits – keeps the admin override.
+  //  • canStep – undo/redo – is frozen for EVERYONE, admin included.
   const signed = !!(predal || prevzal);
   const canEdit = !signed || isAdmin;
   const canStep = !signed;
@@ -642,7 +642,7 @@ function ProtocolEditor({
           setScheduled(res.scheduled);
         }
       } catch {
-        // non-fatal — the dropdown just shows no options / no defaults
+        // non-fatal – the dropdown just shows no options / no defaults
       }
     })();
     return () => {
@@ -660,7 +660,7 @@ function ProtocolEditor({
         const res = await api.get<{ rates: number[] }>(`/handovers/sm/rates`);
         if (!cancelled) setRates(triple(res.rates));
       } catch {
-        // non-fatal — sm value just shows against zero rates until this succeeds
+        // non-fatal – sm value just shows against zero rates until this succeeds
       }
     })();
     return () => {
@@ -669,7 +669,7 @@ function ProtocolEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Once the protocol is closed, check whether the next shift already exists —
+  // Once the protocol is closed, check whether the next shift already exists –
   // if so, the "create next shift" button is hidden.
   useEffect(() => {
     if (!prevzal) {
@@ -692,7 +692,7 @@ function ProtocolEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prevzal]);
 
-  // Debounced autosave — active once a record exists and while it's not frozen.
+  // Debounced autosave – active once a record exists and while it's not frozen.
   useEffect(() => {
     if (loading || !loaded) return;
     if (!canEdit) return; // frozen after Předat
@@ -723,7 +723,7 @@ function ProtocolEditor({
     }
   }
 
-  // Reload the change history whenever the doc is (re)saved — `loaded` gets a new
+  // Reload the change history whenever the doc is (re)saved – `loaded` gets a new
   // reference on every save/undo/redo, so this refreshes the panel + undo state.
   useEffect(() => {
     if (!loaded) {
@@ -744,7 +744,7 @@ function ProtocolEditor({
           setCanRedo(res.canRedo);
         }
       } catch {
-        /* history is non-essential — a failed load must not break the editor */
+        /* history is non-essential – a failed load must not break the editor */
       }
     })();
     return () => {
@@ -1205,7 +1205,7 @@ function ProtocolEditor({
           </Button>
           </div>
           {predal && prevzal && (
-            <Button variant="secondary" size="sm" onClick={() => window.print()}>
+            <Button variant="secondary" size="sm" onClick={() => window.print()} data-tour="protokol-print">
               Tisk
             </Button>
           )}
@@ -1218,11 +1218,11 @@ function ProtocolEditor({
       </div>
 
       {!canEdit && (
-        <div className={styles.frozenNotice}>Protokol je podepsán a uzamčen — obsah nelze upravit.</div>
+        <div className={styles.frozenNotice}>Protokol je podepsán a uzamčen – obsah nelze upravit.</div>
       )}
       {canEdit && signed && (
         <div className={styles.frozenNotice}>
-          Protokol je podepsán — obsah může upravit pouze administrátor, krok zpět/vpřed je uzamčen.
+          Protokol je podepsán – obsah může upravit pouze administrátor, krok zpět/vpřed je uzamčen.
         </div>
       )}
 
@@ -1534,11 +1534,11 @@ function ProtocolEditor({
         )}
       </div>
 
-      {/* Print-only layout (B&W, one A4) — visible only via window.print(). */}
+      {/* Print-only layout (B&W, one A4) – visible only via window.print(). */}
       <div className={styles.printArea}>
         <div className={styles.printHeader}>
-          Předávací protokol — {hotel.label} — {new Date(`${shiftDate}T00:00:00`).toLocaleDateString("cs-CZ")}{" "}
-          — {shiftType === "den" ? "Denní" : "Noční"} směna
+          Předávací protokol – {hotel.label} – {new Date(`${shiftDate}T00:00:00`).toLocaleDateString("cs-CZ")}{" "}
+          – {shiftType === "den" ? "Denní" : "Noční"} směna
         </div>
         <div className={styles.printBody}>
           {DRAWER_ORDER.map((drawer) => {
@@ -1576,7 +1576,7 @@ function ProtocolEditor({
             );
           })}
 
-          {/* Souhrn — same two-group (CZK | EUR) layout as the on-screen summary. */}
+          {/* Souhrn – same two-group (CZK | EUR) layout as the on-screen summary. */}
           <div className={`${styles.pSummary} ${styles.printSummary}`}>
             <div className={styles.printSummaryGroup}>
               <div className={styles.printSummaryRow}>
@@ -1617,7 +1617,7 @@ function ProtocolEditor({
             </div>
           </div>
 
-          {/* Účty — flex column so CELKEM pins to the bottom of the (tall) section. */}
+          {/* Účty – flex column so CELKEM pins to the bottom of the (tall) section. */}
           <div className={`${styles.pAccounts} ${styles.printAccounts}`}>
             <div className={styles.printAccountsTitle}>Účty</div>
             <div className={styles.printAccountsList}>
@@ -1654,10 +1654,10 @@ function ProtocolEditor({
         </div>
         <div className={styles.printSignatures}>
           <div>
-            <strong>Předal:</strong> {predal?.displayName ?? ""} — {formatTimestamp(predal?.at)}
+            <strong>Předal:</strong> {predal?.displayName ?? ""} – {formatTimestamp(predal?.at)}
           </div>
           <div>
-            <strong>Převzal:</strong> {prevzal?.displayName ?? ""} — {formatTimestamp(prevzal?.at)}
+            <strong>Převzal:</strong> {prevzal?.displayName ?? ""} – {formatTimestamp(prevzal?.at)}
           </div>
         </div>
       </div>
@@ -1733,7 +1733,7 @@ function ProtocolEditor({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// sm modal — edit the three counts (any edit user), the three GLOBAL rates
+// sm modal – edit the three counts (any edit user), the three GLOBAL rates
 // (sm.manage only), and optionally MOVE part of the counts into sm trezor
 // (sm.manage only). The transfer panel is disabled while there are unsaved count
 // edits so it always operates on the server's current counts.
@@ -1909,7 +1909,7 @@ function SmModal({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// wata modal — add or subtract an amount from the current wata scalar.
+// wata modal – add or subtract an amount from the current wata scalar.
 // ─────────────────────────────────────────────────────────────────────────────
 function WataModal({
   current,

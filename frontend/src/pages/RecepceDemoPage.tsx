@@ -43,7 +43,7 @@ export default function RecepceDemoPage({ tab }: { tab: TabId }) {
   return (
     <div>
       <div className={styles.header}>
-        <h1 className={styles.title}>Recepce — {hotel.label}</h1>
+        <h1 className={styles.title}>Recepce – {hotel.label}</h1>
       </div>
       {tab === "protokol" && <HandoverTab hotel={hotel} />}
       {tab === "walkiny" && <WalkinsTab hotel={hotel} />}

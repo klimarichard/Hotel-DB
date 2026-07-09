@@ -161,7 +161,7 @@
     font-size: 1rem;
     font-weight: 600;
   }
-  /* Strictly names — hide the inline contract / training badges in the list. */
+  /* Strictly names – hide the inline contract / training badges in the list. */
   .table td:first-child .contractBadge,
   .table td:first-child .trainingBadge {
     display: none;
@@ -213,7 +213,7 @@
   background: var(--color-surface-2);
 }
 
-/* Row tints per contract type — clearly distinguishable in both light and dark.
+/* Row tints per contract type – clearly distinguishable in both light and dark.
    PPP = blue, DPP = amber. Kept identical to PayrollPage.module.css. */
 .pppRow {
   background: #dbeafe;
@@ -322,7 +322,7 @@
   font-weight: 500;
 }
 
-/* Solid violet — stands out on white (HPP), blue (PPP) and amber (DPP) rows,
+/* Solid violet – stands out on white (HPP), blue (PPP) and amber (DPP) rows,
    and is distinct from the green (active) / red (terminated) badges. */
 .badgeBeforeStart {
   display: inline-block;

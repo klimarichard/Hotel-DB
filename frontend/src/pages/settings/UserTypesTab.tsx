@@ -117,7 +117,7 @@ export default function UserTypesTab() {
   function submitCreate() {
     if (!newName.trim()) return;
     if (!cloneFrom) {
-      // "strip all" / blank type — warn first.
+      // "strip all" / blank type – warn first.
       setModal({
         title: "Prázdný typ",
         message: `Vytvořit typ „${newName.trim()}" zcela bez oprávnění? Uživatelům s tímto typem se vše skryje, dokud práva nepřidáte.`,
@@ -212,7 +212,7 @@ export default function UserTypesTab() {
                 disabled={isSystem}
                 onChange={(e) => setDraft((p) => (p ? { ...p, management: e.target.checked } : p))}
               />
-              <span>Vedení — záznamy zaměstnanců s tímto typem se skryjí personalistovi (a podobným).</span>
+              <span>Vedení – záznamy zaměstnanců s tímto typem se skryjí personalistovi (a podobným).</span>
             </label>
 
             <PermissionMatrix

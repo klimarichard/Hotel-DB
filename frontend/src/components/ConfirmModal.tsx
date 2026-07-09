@@ -14,7 +14,7 @@ interface Props {
   cancelLabel?: string;
   showCancel?: boolean;
   danger?: boolean;
-  // Optional middle button — used for three-way dialogs like
+  // Optional middle button – used for three-way dialogs like
   // "Save and continue / Discard / Cancel".
   tertiary?: TertiaryAction;
   onConfirm: () => void;

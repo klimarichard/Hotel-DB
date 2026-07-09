@@ -13,7 +13,7 @@ interface Props {
   decorate?: (key: string) => ReactNode;
   /** Admin target: render everything checked + locked (system.admin confers all). */
   forceAllOn?: boolean;
-  /** Use a vertical grid instead of masonry — for height-constrained, scrollable
+  /** Use a vertical grid instead of masonry – for height-constrained, scrollable
    *  containers (the per-user modal) where masonry would overflow horizontally. */
   gridLayout?: boolean;
 }
@@ -22,7 +22,7 @@ interface Props {
  * Hierarchical permission matrix shared by UserTypesTab and UserPermissionsModal.
  * Renders sections → subsections → rows indented by level; a row is disabled when
  * its parent is unchecked (computeEnabled), greying out to signal the dependency.
- * The cascade/exclusion logic lives in lib/permissions/hierarchy.ts — this only
+ * The cascade/exclusion logic lives in lib/permissions/hierarchy.ts – this only
  * renders state and reports raw toggles.
  */
 export default function PermissionMatrix({

@@ -50,7 +50,7 @@ export default function Layout() {
   // ALL six review queues shown there, each gated by the same permission that
   // gates that page's tab. (Documents/probation are already 0 without
   // alerts.view, since AlertsContext only fetches them then.) Vacation + shift
-  // queues ALSO keep their own dedicated badges below — the dedicated badge
+  // queues ALSO keep their own dedicated badges below – the dedicated badge
   // says WHERE, this total says overall outstanding load.
   const upozorneniBadge =
     unreadCount +
@@ -172,10 +172,10 @@ export default function Layout() {
           <button className={styles.logoutBtn} onClick={handleLogout}>
             Odhlásit
           </button>
-          {/* Test-clock control — renders only where faking time is allowed
+          {/* Test-clock control – renders only where faking time is allowed
               (staging / emulator), never in production. */}
           <TimeOverrideControl />
-          {/* App version (vX.Y.Z) — always the last footer element so it pins to
+          {/* App version (vX.Y.Z) – always the last footer element so it pins to
               the very bottom (below the test-clock control in staging). Gated by
               system.version.view; admins see it by default (system.admin). */}
           {can("system.version.view") && (
@@ -188,7 +188,7 @@ export default function Layout() {
         <Outlet />
       </main>
       {/* Phone-only bottom tab bar (hidden ≥560px via CSS). Reuses the same
-          permission-gated `items` + `badgeFor` as the sidebar — single source of
+          permission-gated `items` + `badgeFor` as the sidebar – single source of
           truth. Footer utilities are passed as values/handlers (not the dark
           sidebar JSX) so BottomNav can render them in theme-aware sheet styling. */}
       <BottomNav

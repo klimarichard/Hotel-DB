@@ -44,7 +44,7 @@ export function usernameToEmail(username: string): string {
 /**
  * Verify an email/username + password WITHOUT disturbing the active session.
  * Signs in on the secondary app, captures the ID token, then always signs the
- * secondary instance out. Throws on invalid credentials — the caller renders the
+ * secondary instance out. Throws on invalid credentials – the caller renders the
  * error in the sign modal.
  */
 export async function verifyCredential(

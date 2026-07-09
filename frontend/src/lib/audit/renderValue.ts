@@ -1,7 +1,7 @@
 /**
  * Human-readable rendering for audit field values. THE RULE: the change log must
  * never show a raw identifier (field key, permission key, page key, doc/job code,
- * internal doc-id) — every value resolves to the same Czech text the app shows.
+ * internal doc-id) – every value resolves to the same Czech text the app shows.
  *
  * Resolution is TARGETED per field leaf (a blanket "humanise camelCase" would
  * wrongly mangle real values like the insurer code "VoZP"), reusing the app's
@@ -38,12 +38,12 @@ const VARIABLE_LABELS = (() => {
   return m;
 })();
 
-// Document codes (audit extra.document) — mirrors the UI buttons.
+// Document codes (audit extra.document) – mirrors the UI buttons.
 const DOC_TYPE_LABELS: Record<string, string> = {
   taxDeclaration: "Prohlášení poplatníka",
   questionnaire: "Osobní dotazník",
 };
-// Manual-trigger job codes (audit extra.trigger) — mirrors Settings → Úlohy titles.
+// Manual-trigger job codes (audit extra.trigger) – mirrors Settings → Úlohy titles.
 const TRIGGER_LABELS: Record<string, string> = {
   refreshDocumentAlerts: "Upozornění na doklady",
   updateDocumentAlerts: "Upozornění na doklady",
@@ -70,10 +70,10 @@ function renderOverrides(v: unknown): string {
   const parts = Object.entries(v)
     .filter(([, val]) => !isNullish(val))
     .map(([k, val]) => `${fieldLabel("payrollPeriods/entries", k)}: ${formatAuditValue(val, k)}`);
-  return parts.length ? parts.join(", ") : "—";
+  return parts.length ? parts.join(", ") : "–";
 }
 function renderPeriods(v: unknown): string {
-  if (!Array.isArray(v) || !v.length) return "—";
+  if (!Array.isArray(v) || !v.length) return "–";
   return v
     .map((p) => {
       const o = isObj(p) ? p : {};
@@ -82,7 +82,7 @@ function renderPeriods(v: unknown): string {
     .join("; ");
 }
 function renderCompanions(v: unknown): string {
-  if (!Array.isArray(v) || !v.length) return "—";
+  if (!Array.isArray(v) || !v.length) return "–";
   return v
     .map((c) => {
       const o = isObj(c) ? c : {};
@@ -102,7 +102,7 @@ const CHANGE_KIND_LABELS: Record<string, string> = {
   "počet hodin": "Počet hodin týdně",
 };
 function renderChanges(v: unknown): string {
-  if (!Array.isArray(v) || !v.length) return "—";
+  if (!Array.isArray(v) || !v.length) return "–";
   return v
     .map((c) => {
       const o = isObj(c) ? c : {};
@@ -125,10 +125,10 @@ function renderJobResult(v: unknown): string {
     const n = num(val);
     return n !== undefined && JOB_RESULT_PHRASES[k] ? JOB_RESULT_PHRASES[k](n) : `${k}: ${formatAuditValue(val)}`;
   });
-  return parts.length ? parts.join(", ") : "—";
+  return parts.length ? parts.join(", ") : "–";
 }
 
-// Internal foreign-key / bookkeeping fields with no human-meaningful value —
+// Internal foreign-key / bookkeeping fields with no human-meaningful value –
 // the record's identity is already in the card title, so hide these rows.
 const HIDDEN_ID_LEAVES = new Set([
   "departmentId",
@@ -137,7 +137,7 @@ const HIDDEN_ID_LEAVES = new Set([
   "sourceNoteId",
   "deletedDueToEmploymentRowDelete",
 ]);
-// An array is a menu-order list iff every element is a known menu page key —
+// An array is a menu-order list iff every element is a known menu page key –
 // detected by shape (not leaf name) so CUSTOM role types (e.g. "rezervace")
 // are covered too, not just the built-in roles.
 function isMenuOrderArray(v: unknown): v is string[] {
@@ -198,7 +198,7 @@ export function renderAuditFieldValue(
       // Handover shift code → Czech.
       return value === "den" ? "Denní" : value === "noc" ? "Noční" : formatAuditValue(value);
     case "changeLabels":
-      // The element-level change list of a protocol save — already human text.
+      // The element-level change list of a protocol save – already human text.
       return Array.isArray(value) && value.length
         ? value.filter((x) => typeof x === "string" && x).join("; ")
         : formatAuditValue(value);

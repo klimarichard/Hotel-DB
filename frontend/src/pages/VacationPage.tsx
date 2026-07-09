@@ -14,14 +14,14 @@ import ConfirmModal from "../components/ConfirmModal";
 import Button from "../components/Button";
 
 function extractCollisions(e: unknown): ShiftCollision[] | null {
-  // Preferred path — ApiError with structured body
+  // Preferred path – ApiError with structured body
   if (e instanceof ApiError && e.status === 409) {
     const body = e.body as { error?: string; collisions?: ShiftCollision[] } | null;
     if (body && body.error === "shift_collision" && Array.isArray(body.collisions)) {
       return body.collisions;
     }
   }
-  // Fallback — duck-typed for cases where instanceof fails across HMR/bundle
+  // Fallback – duck-typed for cases where instanceof fails across HMR/bundle
   // boundaries (the error class identity may differ but the shape is stable).
   const anyE = e as { status?: number; body?: { error?: string; collisions?: ShiftCollision[] } };
   if (anyE && anyE.status === 409 && anyE.body && anyE.body.error === "shift_collision" && Array.isArray(anyE.body.collisions)) {
@@ -79,7 +79,7 @@ export default function VacationPage() {
   const canViewAll = can("vacation.view.all");
   // "Schválené dovolené kolegů" is redundant for anyone who can see ALL requests
   // (the "Všechny žádosti" table below already lists every approved request), so
-  // hide it — and skip its fetch — for vacation.view.all holders. Inverse-gate
+  // hide it – and skip its fetch – for vacation.view.all holders. Inverse-gate
   // pattern, mirroring the tour's excludeIfPermission.
   const canViewApprovedUpcoming = can("vacation.view.approvedUpcoming") && !canViewAll;
 
@@ -252,7 +252,7 @@ export default function VacationPage() {
       prev.map((r) => {
         if (r.id !== id) return r;
         if (r.pendingEdit) {
-          // Approving an edit — apply new dates and clear pendingEdit
+          // Approving an edit – apply new dates and clear pendingEdit
           return {
             ...r,
             startDate: r.pendingEdit.startDate,
@@ -306,7 +306,7 @@ export default function VacationPage() {
         prev.map((r) => {
           if (r.id !== id) return r;
           if (r.pendingEdit) {
-            // Rejecting an edit — just clear pendingEdit, keep approved status
+            // Rejecting an edit – just clear pendingEdit, keep approved status
             return { ...r, pendingEdit: null };
           }
           return { ...r, status: "rejected" as const, rejectionReason };
@@ -362,7 +362,7 @@ export default function VacationPage() {
     } catch (e) {
       const collisions = extractCollisions(e);
       if (collisions) setInfoCollisions(collisions);
-      // Other errors silently fail — user can retry
+      // Other errors silently fail – user can retry
     } finally {
       setEditSaving(false);
     }
@@ -394,7 +394,7 @@ export default function VacationPage() {
                     onChange={(e) => { setTargetEmployeeId(e.target.value); setFormSuccess(false); }}
                   >
                     <option value="">
-                      {employeeId ? "Já (vlastní žádost)" : "— vyberte zaměstnance —"}
+                      {employeeId ? "Já (vlastní žádost)" : "– vyberte zaměstnance –"}
                     </option>
                     {roster.map((r) => (
                       <option key={r.id} value={r.id}>
@@ -476,7 +476,7 @@ export default function VacationPage() {
                   <tr key={req.id} className={req.status === "approved" && !req.pendingEdit ? styles.rowDone : ""}>
                     <td data-label="Od">{formatDateCZ(req.startDate)}</td>
                     <td data-label="Do">{formatDateCZ(req.endDate)}</td>
-                    <td data-label="Poznámka">{req.reason || "—"}</td>
+                    <td data-label="Poznámka">{req.reason || "–"}</td>
                     <td data-label="Stav">
                       <StatusBadge status={req.status} />
                       {req.pendingEdit && (
@@ -561,7 +561,7 @@ export default function VacationPage() {
         )}
       </div>
 
-      {/* Approved upcoming vacations — employees & managers */}
+      {/* Approved upcoming vacations – employees & managers */}
       {canViewApprovedUpcoming && (
         <div className={styles.tableWrapper} data-tour="vacation-approved-colleagues">
           <div className={styles.sectionTitle}>Schválené dovolené (všichni zaměstnanci)</div>
@@ -622,7 +622,7 @@ export default function VacationPage() {
         />
       )}
 
-      {/* All requests — admin/director only */}
+      {/* All requests – admin/director only */}
       {canViewAll && (() => {
         const renderRow = (req: VacationRequest) => (
           <Fragment key={req.id}>
@@ -635,7 +635,7 @@ export default function VacationPage() {
               <td data-label="Žádáno">{formatDatetimeCZ(req.requestedAt)}</td>
               <td data-label="Od">{formatDateCZ(req.startDate)}</td>
               <td data-label="Do">{formatDateCZ(req.endDate)}</td>
-              <td data-label="Poznámka">{req.reason || "—"}</td>
+              <td data-label="Poznámka">{req.reason || "–"}</td>
               <td data-label="Stav">
                 <StatusBadge status={req.status} />
                 {req.pendingEdit && (

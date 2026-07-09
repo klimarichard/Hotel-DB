@@ -165,10 +165,10 @@ export default function AddEmployeeToPlanModal({ planId, existingEmployees, onCl
             value={primaryShiftType}
             onChange={(e) => setPrimaryShiftType(e.target.value as ShiftType | "")}
           >
-            <option value="">— žádný —</option>
-            <option value="D">D — denní (12h)</option>
-            <option value="N">N — noční (12h)</option>
-            <option value="R">R — FOM (8h)</option>
+            <option value="">– žádný –</option>
+            <option value="D">D – denní (12h)</option>
+            <option value="N">N – noční (12h)</option>
+            <option value="R">R – FOM (8h)</option>
           </select>
 
           {/* Primary hotel */}
@@ -178,10 +178,10 @@ export default function AddEmployeeToPlanModal({ planId, existingEmployees, onCl
             value={primaryHotel}
             onChange={(e) => setPrimaryHotel(e.target.value as HotelCode | "")}
           >
-            <option value="">— žádný —</option>
+            <option value="">– žádný –</option>
             {HOTEL_CODES.map((h) => (
               <option key={h} value={h}>
-                {h} — {HOTEL_NAMES[h]}
+                {h} – {HOTEL_NAMES[h]}
               </option>
             ))}
           </select>

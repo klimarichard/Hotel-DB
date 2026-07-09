@@ -193,7 +193,7 @@ export default function MultisportEditor({ employeeId }: Props) {
               <ul className={styles.list}>
                 {companions.map((c, i) => (
                   <li key={i}>
-                    {c.name} — {formatDateCZ(c.from)} – {c.to ? formatDateCZ(c.to) : "trvá"} ·{" "}
+                    {c.name} – {formatDateCZ(c.from)} – {c.to ? formatDateCZ(c.to) : "trvá"} ·{" "}
                     {Number(c.price).toLocaleString("cs-CZ")} Kč
                   </li>
                 ))}

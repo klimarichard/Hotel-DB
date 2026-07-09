@@ -42,7 +42,7 @@ interface Props {
   displayName?: string;
   /**
    * When set, the generated PDF is ATTACHED to this existing contract
-   * record (ad-hoc "row-first" flow) instead of creating a new one — the
+   * record (ad-hoc "row-first" flow) instead of creating a new one – the
    * record's signingDate / displayName are preserved.
    */
   existingContractId?: string;
@@ -231,7 +231,7 @@ export default function GenerateContractModal({
                     </div>
                     <p className={styles.varTableHint}>
                       Hodnoty lze upravit pro tuto smlouvu (např. zpětně datovaná
-                      smlouva). Úpravy se nikam neukládají — ovlivní jen toto generování.
+                      smlouva). Úpravy se nikam neukládají – ovlivní jen toto generování.
                     </p>
                     <table>
                       <tbody>

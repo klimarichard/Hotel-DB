@@ -26,7 +26,7 @@ interface EmployeeMini {
 }
 
 function fmtMonth(year: number | null, month: number | null): string {
-  if (year == null || month == null) return "—";
+  if (year == null || month == null) return "–";
   return `${String(month).padStart(2, "0")}/${year}`;
 }
 
@@ -85,9 +85,9 @@ export default function PendingShiftChangeRequestsTab() {
                 </td>
                 <td data-label="Plán">{fmtMonth(r.planYear, r.planMonth)}</td>
                 <td data-label="Datum">{formatDateCZ(r.date)}</td>
-                <td data-label="Aktuální směna"><code>{r.currentRawInput || "—"}</code></td>
+                <td data-label="Aktuální směna"><code>{r.currentRawInput || "–"}</code></td>
                 <td data-label="Požadovaná změna">{formatRequestedChange(r.requestedChange)}</td>
-                <td data-label="Důvod">{r.reason || "—"}</td>
+                <td data-label="Důvod">{r.reason || "–"}</td>
                 <td>
                   <Link to="/smeny" className={styles.markReadBtn}>
                     Otevřít plán →

@@ -29,7 +29,7 @@ export const DEFAULT_MARGINS: PageMargins = { top: 15, bottom: 15, left: 15, rig
 /**
  * Generate a contract PDF Blob by sending the filled HTML to the
  * server-side Puppeteer renderer. Real headless Chromium drives the
- * rendering, so the PDF matches the editor preview exactly — same
+ * rendering, so the PDF matches the editor preview exactly – same
  * font-metrics, same line-spacing, native list markers, etc. The
  * earlier client-side html2pdf.js path was abandoned because
  * html2canvas drifted from the browser's own rendering.

@@ -9,7 +9,7 @@
  *     hoursPerWeek set is treated as 20 h/week (the legacy "poloviční úvazek").
  *   • DPP → NOT checked (paid hourly / agreed reward).
  *
- * Part A is warn-only and additive — this helper does NOT change any pay
+ * Part A is warn-only and additive – this helper does NOT change any pay
  * computation; the part-time base-hours proration is Part B.
  */
 

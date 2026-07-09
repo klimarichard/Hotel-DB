@@ -15,7 +15,7 @@ interface OnboardingContextValue {
   prev: () => void;
   /** Jump directly to a step index (clamped). Used by the section-jump buttons. */
   goToStep: (index: number) => void;
-  /** Finish or skip — both mark the tour as seen so it won't auto-fire again. */
+  /** Finish or skip – both mark the tour as seen so it won't auto-fire again. */
   dismiss: () => void;
 }
 
@@ -32,7 +32,7 @@ const OnboardingContext = createContext<OnboardingContextValue>({
 /**
  * Tour-only demo routes (App.tsx): the REAL pages rendered on mock data. When a
  * user skips/closes the tour while parked on one of these, we bounce them back to
- * a real app page (see dismiss) — otherwise they'd be stranded on a sandbox URL.
+ * a real app page (see dismiss) – otherwise they'd be stranded on a sandbox URL.
  * `/zamestnanci/tour-demo` is the sentinel employee-detail demo (no wrapper).
  */
 function isDemoRoute(pathname: string): boolean {
@@ -40,7 +40,7 @@ function isDemoRoute(pathname: string): boolean {
 }
 
 /**
- * Phone (bottom-nav) layout test — mirrors the exact media query Layout uses to
+ * Phone (bottom-nav) layout test – mirrors the exact media query Layout uses to
  * swap the sidebar for the bottom tab bar. When true, the tour retargets its
  * sidebar-anchored steps onto the bottom nav (see buildAppTour → ctx.isPhone).
  * Read at tour-start time; rotating mid-tour is a rare edge we don't re-resolve.
@@ -110,7 +110,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     [toursSeen, cacheKey]
   );
 
-  // Manual replay (from Nápověda) — ALWAYS the full tour filtered to this user's
+  // Manual replay (from Nápověda) – ALWAYS the full tour filtered to this user's
   // permissions, regardless of what they've already seen.
   const startTour = useCallback(() => {
     setStepIndex(0);
@@ -152,7 +152,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
 
   const dismiss = useCallback(() => {
     // Finishing or skipping either the full tour OR a delta marks the user as
-    // current — both spread appTour.version, so this lands on APP_TOUR_VERSION.
+    // current – both spread appTour.version, so this lands on APP_TOUR_VERSION.
     if (activeTour) recordSeenVersion(activeTour.version);
     setActiveTour(null);
     setStepIndex(0);

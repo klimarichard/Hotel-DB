@@ -59,7 +59,7 @@
   --color-success-text: #15803d;
   --color-success-border: #86efac;
 
-  /* Parental leave (violet badge — distinct from amber DPP / blue PPP) */
+  /* Parental leave (violet badge – distinct from amber DPP / blue PPP) */
   --color-parental-bg: #f3e8ff;
   --color-parental-text: #7e22ce;
   --color-parental-border: #d8b4fe;
@@ -100,9 +100,9 @@
      Responsive breakpoint convention (reuse verbatim in every @media). CSS
      Modules can't share JS vars inside @media, so this is a documented
      convention, not a token:
-       >= 900px        desktop  — sidebar, multi-column (unchanged)
-       560px - 900px   tablet   — minor padding adjustments
-       phone           — bottom tab bar, single-column, card layouts
+       >= 900px        desktop  – sidebar, multi-column (unchanged)
+       560px - 900px   tablet   – minor padding adjustments
+       phone           – bottom tab bar, single-column, card layouts
      The PHONE condition must catch a phone in BOTH orientations. Portrait is
      narrow (caught by width); landscape is WIDE but SHORT, so width alone lets
      the desktop sidebar reappear. The canonical phone query is therefore:

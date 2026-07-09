@@ -151,7 +151,7 @@ export default function TourOverlay() {
   const { prev: prevSection, next: nextSection } = sectionNavTargets(activeTour.steps, stepIndex);
   const showSectionNav = prevSection !== null || nextSection !== null;
 
-  // Popover position: below the anchor if there's room, else above — then the
+  // Popover position: below the anchor if there's room, else above – then the
   // top is ALWAYS clamped so the whole popover (incl. its buttons) stays inside
   // the viewport. Horizontal is clamped too. Centered when there's no anchor.
   let popStyle: CSSProperties;

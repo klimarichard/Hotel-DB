@@ -46,7 +46,7 @@ const MONTHS = [
   "červenec", "srpen", "září", "říjen", "listopad", "prosinec",
 ];
 
-// Pull a human name from a create/delete snapshot — the only place a deleted
+// Pull a human name from a create/delete snapshot – the only place a deleted
 // entity's name survives once it's gone from the live lookup lists.
 function summaryName(summary?: Record<string, unknown>): string | undefined {
   if (!summary) return undefined;
@@ -110,7 +110,7 @@ export default function AuditLogPage() {
 
   useEffect(() => {
     // Load ALL statuses (incl. "before-start") so every audited employee
-    // resolves to a name in the card title — a Před-nástupem employee's edits
+    // resolves to a name in the card title – a Před-nástupem employee's edits
     // were otherwise nameless.
     Promise.all([
       api.get<EmployeeMini[]>("/employees?status=active"),
@@ -210,11 +210,11 @@ export default function AuditLogPage() {
     return m;
   }, [plans, periods]);
 
-  // The human identifier shown after the "—" in the card header, resolved per
+  // The human identifier shown after the "–" in the card header, resolved per
   // collection. Employee-scoped records (incl. shift cells + payroll entries)
   // show the name (+ month where the record is period-scoped); plan/period-level
   // records show the month; the rest show their entity name. Empty when there is
-  // no meaningful identifier (e.g. a settings change — shown in the body).
+  // no meaningful identifier (e.g. a settings change – shown in the body).
   function recordTitle(ev: {
     collectionRoot: string;
     resourceId?: string;
@@ -234,7 +234,7 @@ export default function AuditLogPage() {
       return { text: userNameMap.get(rid) || summaryName(ev.summary) || "" };
     }
     // Live entity name, then the create/delete snapshot name (so a DELETED
-    // entity — gone from the lookup lists — still shows its name).
+    // entity – gone from the lookup lists – still shows its name).
     return { text: entityNameMap.get(`${root}:${rid}`) || summaryName(ev.summary) || "" };
   }
 
@@ -338,7 +338,7 @@ export default function AuditLogPage() {
   const buckets = useMemo(() => bucketByDate(events), [events]);
 
   // Wait for this component's own useAuth instance to finish loading before
-  // gating — useAuth is a per-component hook (no shared context), so on first
+  // gating – useAuth is a per-component hook (no shared context), so on first
   // render permissions are still empty. Mirrors PayrollPage / SettingsPage.
   if (authLoading) return null;
   if (!can("nav.audit.view")) return <Navigate to="/" replace />;
@@ -355,7 +355,7 @@ export default function AuditLogPage() {
       </div>
 
       <div className={styles.filterPanel}>
-        {/* Stránka (page category) — multi-select chips */}
+        {/* Stránka (page category) – multi-select chips */}
         <div className={styles.filterGroup}>
           <span className={styles.groupLabel}>Stránka</span>
           <div className={styles.chipRow}>
@@ -372,7 +372,7 @@ export default function AuditLogPage() {
           </div>
         </div>
 
-        {/* Autor změny (user) — multi-select chips */}
+        {/* Autor změny (user) – multi-select chips */}
         {users.length > 0 && (
           <div className={styles.filterGroup}>
             <span className={styles.groupLabel}>Autor změny</span>

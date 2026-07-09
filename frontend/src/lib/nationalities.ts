@@ -2,7 +2,7 @@
  * Pure data module for nationality / country selection in the HR app.
  *
  * Contains all ISO 3166-1 alpha-3 country codes paired with their standard
- * Czech short country names (exonyms). No imports — safe to use anywhere.
+ * Czech short country names (exonyms). No imports – safe to use anywhere.
  */
 
 export interface Nationality {

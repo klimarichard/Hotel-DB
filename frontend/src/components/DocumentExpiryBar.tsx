@@ -11,7 +11,7 @@ export interface DocumentExpiryAlert {
 
 /**
  * Banner listing one employee's expired / soon-to-expire documents. Pure
- * display: it renders whatever alerts it is given — the classification
+ * display: it renders whatever alerts it is given – the classification
  * (30-day window, status "expired" once past) is computed server-side in the
  * shared `alerts` collection. Shown on the employee detail page, the self
  * profile page and the dashboard, all from that same data.
@@ -32,7 +32,7 @@ export default function DocumentExpiryBar({
           }
         >
           <strong>{a.fieldLabel}</strong>
-          {" — "}
+          {" – "}
           {a.daysUntilExpiry < 0
             ? `Prošlé o ${Math.abs(a.daysUntilExpiry)} dní (${formatDateCZ(a.expiryDate)})`
             : a.daysUntilExpiry === 0

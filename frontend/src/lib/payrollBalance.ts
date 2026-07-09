@@ -1,8 +1,8 @@
 /**
- * Payroll balance — Výkaz + Dovolená + Nemoc = target. The Výkaz/Navíc cap is
+ * Payroll balance – Výkaz + Dovolená + Nemoc = target. The Výkaz/Navíc cap is
  * the FULL base norm (a part-timer earns Navíc only above the full HPP base),
  * but the vacation target is úvazek-prorated for PPP: full base × hoursPerWeek/40
- * (default 20h → half) — #15 Part B.
+ * (default 20h → half) – #15 Part B.
  *
  * MIRROR: keep in exact sync with the balance block in
  * functions/src/services/payrollCalculator.ts → calculateEntry().
@@ -25,13 +25,13 @@ export interface BalanceInput {
   contractType: string;
   hourlyRate: number | null;
   base: number;
-  /** PPP úvazek — prorates the vacation target (default 20h → half). */
+  /** PPP úvazek – prorates the vacation target (default 20h → half). */
   hoursPerWeek?: number | null;
   nemoc: number;
   maxHolidayHours: number;
   /** User-pinned Výkaz (overrides.reportHours), if any. */
   reportOverride?: number;
-  /** User-pinned Svátek / Navíc — when set, the balance won't auto-fill them. */
+  /** User-pinned Svátek / Navíc – when set, the balance won't auto-fill them. */
   holidayOverride?: number;
   extraPayOverride?: number;
 }
@@ -45,10 +45,10 @@ export interface BalanceResult {
   transferToSvatek: number;
   vacTarget: number;      // full base (HPP) or base × hoursPerWeek/40 (PPP)
   sum: number;            // vykaz + dovolena + nemoc
-  /** Výkaz with no manual override — for the dialog's "follow auto" behaviour. */
+  /** Výkaz with no manual override – for the dialog's "follow auto" behaviour. */
   naturalVykaz: number;
   autoOverrides: Partial<Record<BalanceField, number>>;
-  // Clean (pre-Nemoc, pre-override) values for the resolved base — let callers
+  // Clean (pre-Nemoc, pre-override) values for the resolved base – let callers
   // keep local entry state consistent after a Základ override.
   cleanReport: number;
   cleanVacation: number;
@@ -66,7 +66,7 @@ export function computeBalance(inp: BalanceInput): BalanceResult {
   const cleanReport = Math.min(B, W);
   const cleanExtra = Math.max(0, W - B);
   // Výkaz is capped at the FULL base; only the vacation target is úvazek-prorated
-  // for PPP — full base × hoursPerWeek/40 (default 20h → half). #15 Part B.
+  // for PPP – full base × hoursPerWeek/40 (default 20h → half). #15 Part B.
   const ptFactor = isPpp ? ((inp.hoursPerWeek && inp.hoursPerWeek > 0 ? inp.hoursPerWeek : 20) / 40) : 1;
   const vacTarget = isDpp ? 0 : Math.round(B * ptFactor);
   const cleanVacation = Math.max(0, vacTarget - cleanReport);

@@ -66,7 +66,7 @@ export default function PendingVacationTab() {
                 </td>
                 <td data-label="Od">{formatDateCZ(start)}</td>
                 <td data-label="Do">{formatDateCZ(end)}</td>
-                <td data-label="Důvod">{reason || "—"}</td>
+                <td data-label="Důvod">{reason || "–"}</td>
                 <td data-label="Stav">
                   {v.pendingEdit ? (
                     <span className={styles.badgeExpiring}>Úprava ke schválení</span>

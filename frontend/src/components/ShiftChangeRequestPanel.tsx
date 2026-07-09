@@ -126,10 +126,10 @@ export default function ShiftChangeRequestPanel({ planId, employees, onResolved,
                   <td data-label="Aktuální směna">
                     {req.kind === "free-claim"
                       ? `Volná směna ${req.code ?? ""}${req.hotel ?? ""}`
-                      : (req.currentRawInput || "—")}
+                      : (req.currentRawInput || "–")}
                   </td>
-                  <td data-label="Požadovaná změna">{req.kind === "free-claim" ? "—" : formatRequestedChange(req.requestedChange)}</td>
-                  <td data-label="Důvod">{req.kind === "free-claim" ? "—" : (req.reason || "—")}</td>
+                  <td data-label="Požadovaná změna">{req.kind === "free-claim" ? "–" : formatRequestedChange(req.requestedChange)}</td>
+                  <td data-label="Důvod">{req.kind === "free-claim" ? "–" : (req.reason || "–")}</td>
                   <td data-label="Odesláno">{formatDatetimeCZ(req.requestedAt)}</td>
                   <td data-label="Stav">
                     <StatusBadge status={req.status} />

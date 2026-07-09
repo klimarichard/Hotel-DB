@@ -13,7 +13,7 @@
   opacity: 0.5;
 }
 
-/* ── close — modal header ✕ ─────────────────────────────────────────────── */
+/* ── close – modal header ✕ ─────────────────────────────────────────────── */
 
 .close {
   background: none;
@@ -28,7 +28,7 @@
   background: var(--color-surface-4);
 }
 
-/* ── refresh — page-header re-trigger ↻ ─────────────────────────────────── */
+/* ── refresh – page-header re-trigger ↻ ─────────────────────────────────── */
 
 .refresh {
   background: none;
