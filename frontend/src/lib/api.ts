@@ -58,9 +58,16 @@ async function request<T>(
 ): Promise<T> {
   // Guided-tour demo: serve mock fixtures (no backend, no Firestore) for the
   // sentinel demo employee and — while a demo route is mounted — the self /
-  // payroll / shifts endpoints for the active scenario. See lib/tours/demoData.ts.
+  // payroll / shifts / recepce endpoints for the active scenario. See
+  // lib/tours/demoData.ts. A `status >= 400` means the fixture wants to simulate
+  // an error response (e.g. a 404 so the protokol "empty → create" state renders).
   const demo = getDemoResponse(method, path);
-  if (demo.hit) return demo.value as T;
+  if (demo.hit) {
+    if (typeof demo.status === "number" && demo.status >= 400) {
+      throw new ApiError(demo.status, { error: "demo" }, "demo");
+    }
+    return demo.value as T;
+  }
 
   const headers: Record<string, string> = {
     ...(await getAuthHeader()),

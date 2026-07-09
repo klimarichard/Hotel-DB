@@ -218,13 +218,13 @@ export default function TaxiTab({ hotel }: { hotel: Hotel }) {
         <div className={styles.content}>
           <div className={styles.left}>
             {canManage && (
-              <div className={styles.provizeTotal}>
+              <div className={styles.provizeTotal} data-tour="taxi-provize">
                 <span className={styles.provizeTotalLabel}>Celková provize za viditelné období:</span>{" "}
                 <span className={styles.provizeTotalValue}>{visibleProvize.toLocaleString("cs-CZ")} Kč</span>
               </div>
             )}
             <div className={styles.leftToolbar}>
-              <Button size="sm" onClick={() => setEditing("new")}>
+              <Button size="sm" onClick={() => setEditing("new")} data-tour="taxi-add">
                 + Přidat jízdu
               </Button>
             </div>
@@ -280,7 +280,7 @@ export default function TaxiTab({ hotel }: { hotel: Hotel }) {
             </div>
           </div>
 
-          <aside className={styles.pricelist}>
+          <aside className={styles.pricelist} data-tour="taxi-cenik">
             <div className={styles.pricelistHeader}>
               <h3 className={styles.pricelistTitle}>Ceník tras</h3>
               {canManageRates && (

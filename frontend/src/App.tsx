@@ -16,6 +16,7 @@ import ContractTemplatesPage from "@/pages/ContractTemplatesPage";
 import ShiftPlannerPage from "@/pages/ShiftPlannerPage";
 import VacationPage from "@/pages/VacationPage";
 import RecepcePage from "@/pages/RecepcePage";
+import RecepceDemoPage from "@/pages/RecepceDemoPage";
 import OverviewPage from "@/pages/OverviewPage";
 import AuditLogPage from "@/pages/AuditLogPage";
 import HelpPage from "@/pages/HelpPage";
@@ -140,6 +141,11 @@ export default function App() {
         <Route path="napoveda/ukazka-smeny-vytvoreny" element={<TourDemoRoute scenario="shifts-created"><ShiftPlannerPage key="demo-shifts-created" /></TourDemoRoute>} />
         <Route path="napoveda/ukazka-smeny-publikovane" element={<TourDemoRoute scenario="shifts-published"><ShiftPlannerPage key="demo-shifts-published" /></TourDemoRoute>} />
         <Route path="napoveda/ukazka-smeny-zadost" element={<TourDemoRoute scenario="shifts-change-request"><ShiftPlannerPage key="demo-shifts-change-request" /></TourDemoRoute>} />
+        <Route path="napoveda/ukazka-protokol" element={<TourDemoRoute scenario="protokol"><RecepceDemoPage tab="protokol" key="demo-protokol" /></TourDemoRoute>} />
+        <Route path="napoveda/ukazka-protokol-prazdne" element={<TourDemoRoute scenario="protokol-empty"><RecepceDemoPage tab="protokol" key="demo-protokol-empty" /></TourDemoRoute>} />
+        <Route path="napoveda/ukazka-protokol-podepsany" element={<TourDemoRoute scenario="protokol-signed"><RecepceDemoPage tab="protokol" key="demo-protokol-signed" /></TourDemoRoute>} />
+        <Route path="napoveda/ukazka-walkiny" element={<TourDemoRoute scenario="walkiny"><RecepceDemoPage tab="walkiny" key="demo-walkiny" /></TourDemoRoute>} />
+        <Route path="napoveda/ukazka-taxi" element={<TourDemoRoute scenario="taxi"><RecepceDemoPage tab="taxi" key="demo-taxi" /></TourDemoRoute>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

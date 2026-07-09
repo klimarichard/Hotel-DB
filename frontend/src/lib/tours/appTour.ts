@@ -1,4 +1,5 @@
 import type { TourStep, TourDefinition } from "./types";
+import type { Permission } from "@/lib/permissions/catalog";
 
 /**
  * Master, permission-driven tour step list.
@@ -36,6 +37,48 @@ const DEMO_SHIFTS_EMPTY = "/napoveda/ukazka-smeny-prazdne"; // real Směny page,
 const DEMO_SHIFTS_CREATED = "/napoveda/ukazka-smeny-vytvoreny"; // created (not opened) plan → Smazat plán
 const DEMO_SHIFTS_PUBLISHED = "/napoveda/ukazka-smeny-publikovane"; // published plan → Volné směny section
 const DEMO_SHIFTS_CHANGE_REQUEST = "/napoveda/ukazka-smeny-zadost"; // published plan → change-request modal auto-opened
+// Recepce demos: the REAL protokol/walkiny/taxi tab rendered on mock data via
+// pages/RecepceDemoPage (protokol has populated / empty / signed variants so the
+// create button and the after-handover "next shift" button both get a state).
+const DEMO_PROTOKOL = "/napoveda/ukazka-protokol"; // populated, unsigned protocol
+const DEMO_PROTOKOL_EMPTY = "/napoveda/ukazka-protokol-prazdne"; // no record → create button
+const DEMO_PROTOKOL_SIGNED = "/napoveda/ukazka-protokol-podepsany"; // signed → next-shift button
+const DEMO_WALKINY = "/napoveda/ukazka-walkiny"; // populated walk-ins table
+const DEMO_TAXI = "/napoveda/ukazka-taxi"; // populated rides + routes ceník
+
+// Recepce permissions are PER-HOTEL; a step should show for anyone with access to
+// ANY hotel, so each gates on the OR of all four hotels' keys (buildAppTour keeps
+// a step when the user holds any permission in the array).
+const RECEPCE_PROTOKOL_VIEW: Permission[] = [
+  "recepce.ambiance.protokol.view",
+  "recepce.superior.protokol.view",
+  "recepce.amigo.protokol.view",
+  "recepce.ankora.protokol.view",
+];
+const RECEPCE_PROTOKOL_CREATE: Permission[] = [
+  "recepce.ambiance.protokol.create",
+  "recepce.superior.protokol.create",
+  "recepce.amigo.protokol.create",
+  "recepce.ankora.protokol.create",
+];
+const RECEPCE_WALKINY_VIEW: Permission[] = [
+  "recepce.ambiance.walkiny.view",
+  "recepce.superior.walkiny.view",
+  "recepce.amigo.walkiny.view",
+  "recepce.ankora.walkiny.view",
+];
+const RECEPCE_TAXI_VIEW: Permission[] = [
+  "recepce.ambiance.taxi.view",
+  "recepce.superior.taxi.view",
+  "recepce.amigo.taxi.view",
+  "recepce.ankora.taxi.view",
+];
+const RECEPCE_TAXI_MANAGE: Permission[] = [
+  "recepce.ambiance.taxi.manage",
+  "recepce.superior.taxi.manage",
+  "recepce.amigo.taxi.manage",
+  "recepce.ankora.taxi.manage",
+];
 
 /**
  * Section labels for the "Předchozí/Další sekce" jump buttons. Set `section` only
@@ -125,7 +168,29 @@ export const APP_TOUR_STEPS: TourStep[] = [
   { permission: "vacation.view.approvedUpcoming", excludeIfPermission: "vacation.view.all", anchor: "vacation-approved-colleagues", route: "/dovolena", title: "Schválené dovolené kolegů", body: "Zde vidíte schválené dovolené vašich kolegů. Pokud je to možné, snažte se vyhnout kolizi termínu s někým jiným.", placement: "top" },
 
   // ── Recepce (/recepce) ───────────────────────────────────────────────────────
-  { section: SECTIONS.recepce, permission: "nav.recepce.view", addedInVersion: 12, anchor: "nav-recepce", mobileAnchor: "bottomnav-more", title: "Recepce", body: "Sekce Recepce je hub pro recepční agendu jednotlivých hotelů. Podle oprávnění zde vidíte přístupné hotely a v nich Předávací protokol pro předání směny (počítání pokladny a trezoru, poznámky, podpis Předal/Převzal).", mobileBody: "Sekce Recepce je hub pro recepční agendu hotelů (Předávací protokol atd.). Na telefonu ji otevřete přes záložku Více ve spodní liště.", placement: "right" },
+  { section: SECTIONS.recepce, permission: "nav.recepce.view", addedInVersion: 12, anchor: "nav-recepce", mobileAnchor: "bottomnav-more", title: "Recepce", body: "Sekce Recepce je hub pro recepční agendu jednotlivých hotelů. Podle oprávnění zde vidíte přístupné hotely a v nich záložky Předávací protokol, Walkiny a Taxi. Přepínáte je nahoře — nejprve hotel, pod ním jeho sekce.", mobileBody: "Sekce Recepce je hub pro recepční agendu hotelů (Předávací protokol, Walkiny, Taxi). Na telefonu ji otevřete přes záložku Více ve spodní liště.", placement: "right" },
+
+  // ── Recepce → Předávací protokol (demo tab on mock data) ─────────────────────
+  // Deep protokol/walkiny/taxi steps are desktop-only (hideOnMobile): they
+  // spotlight the wide protocol grid / tables that don't lay out on a phone.
+  { permission: RECEPCE_PROTOKOL_VIEW, addedInVersion: 12, hideOnMobile: true, anchor: "protokol-toolbar", route: DEMO_PROTOKOL, title: "Výběr směny", body: "Předávací protokol se vede pro každou směnu zvlášť. Nahoře zvolíte datum a směnu (Den / Noc); šipkami ← Předchozí a Následující → přecházíte mezi navazujícími směnami.", placement: "bottom" },
+  { permission: RECEPCE_PROTOKOL_CREATE, addedInVersion: 12, hideOnMobile: true, anchor: "protokol-create", route: DEMO_PROTOKOL_EMPTY, title: "Založení protokolu", body: "Na začátku směny tlačítkem Vytvořit prázdný protokol založíte nový protokol pro danou směnu. Pak už jen průběžně vyplňujete — vše se ukládá automaticky (stav ukládání vidíte nahoře).", placement: "bottom" },
+  { permission: RECEPCE_PROTOKOL_VIEW, addedInVersion: 12, hideOnMobile: true, anchor: "protokol-cash", route: DEMO_PROTOKOL, title: "Počítání pokladny a trezoru", body: "Do tabulek KASA a TREZOR (zvlášť pro CZK a EUR) zapisujete u jednotlivých nominálů počty kusů (KS). Mezisoučty, CELKEM za každou zásuvku i souhrny (TOTAL CZK / TOTAL €) se dopočítávají samy.", placement: "top" },
+  { permission: RECEPCE_PROTOKOL_VIEW, addedInVersion: 12, hideOnMobile: true, anchor: "protokol-ucty", route: DEMO_PROTOKOL, title: "Účty", body: "Do sekce Účty přidáváte tlačítkem + Přidat účet jednotlivé položky (název a částku v Kč). Jejich součet se promítá do celkové částky protokolu.", placement: "top" },
+  { permission: RECEPCE_PROTOKOL_VIEW, addedInVersion: 12, hideOnMobile: true, anchor: "protokol-sm", route: DEMO_PROTOKOL, title: "Řádky sm, sm trezor a wata", body: "Nad běžnými účty jsou tři zvláštní řádky. „sm“ se dopočítá z počtů stravenek a jejich cen; „sm trezor“ je do trezoru přesunutá část sm; „wata“ je ruční korekce (±). sm trezor a wata mění jen pověření uživatelé.", placement: "right" },
+  { permission: RECEPCE_PROTOKOL_VIEW, addedInVersion: 12, hideOnMobile: true, anchor: "protokol-notes", route: DEMO_PROTOKOL, title: "Poznámky", body: "Do Poznámek zapisujete vzkazy pro navazující směnu. Vyřízené položky odškrtnete — zaškrtnutá poznámka se přeškrtne.", placement: "left" },
+  { permission: RECEPCE_PROTOKOL_VIEW, addedInVersion: 12, hideOnMobile: true, anchor: "protokol-signatures", route: DEMO_PROTOKOL, title: "Předání směny podpisem", body: "Na konci směny protokol podepíšete tlačítkem Předat (potvrdíte jménem a heslem). Přebírající pak stiskne Převzít. Jakýmkoli podpisem se obsah uzamkne, takže čísla už nelze dodatečně měnit.", placement: "top" },
+  { permission: RECEPCE_PROTOKOL_VIEW, addedInVersion: 12, hideOnMobile: true, anchor: "protokol-nextshift", route: DEMO_PROTOKOL_SIGNED, title: "Protokol pro další směnu", body: "Po převzetí se nabídne tlačítko Vytvořit protokol pro další směnu — založí navazující protokol a přenese do něj počáteční stav pokladny, trezoru a účtů, takže nová směna nezačíná od nuly.", placement: "top" },
+  { permission: RECEPCE_PROTOKOL_VIEW, addedInVersion: 12, hideOnMobile: true, anchor: "protokol-history", route: DEMO_PROTOKOL, title: "Historie a vrácení změn", body: "Tlačítky ↶ Zpět a ↷ Vpřed vracíte poslední změny, tlačítko Historie zobrazí seznam všech úprav. Po podpisu je krok zpět/vpřed uzamčen. Protokol podepsaný oběma stranami lze také vytisknout.", placement: "bottom" },
+
+  // ── Recepce → Walkiny (demo tab) ─────────────────────────────────────────────
+  { permission: RECEPCE_WALKINY_VIEW, addedInVersion: 12, hideOnMobile: true, anchor: "walkiny-table", route: DEMO_WALKINY, title: "Walkiny", body: "Záložka Walkiny eviduje prodeje typu walk-in — průběžná tabulka (nejnovější nahoře) s datem, zaměstnancem, číslem rezervace v Protelu a částkou. Vedoucí nastavuje viditelné období, které ostatním ohraničuje, co vidí i co mohou zadat.", placement: "top" },
+  { permission: RECEPCE_WALKINY_VIEW, addedInVersion: 12, hideOnMobile: true, anchor: "walkiny-add", route: DEMO_WALKINY, title: "Přidání walk-inu", body: "Tlačítkem + Přidat walk-in otevřete formulář: datum, zaměstnanec (z plánu směn daného měsíce), číslo rezervace v Protelu a částka s měnou (CZK / EUR).", placement: "bottom" },
+
+  // ── Recepce → Taxi (demo tab) ────────────────────────────────────────────────
+  { permission: RECEPCE_TAXI_VIEW, addedInVersion: 12, hideOnMobile: true, anchor: "taxi-add", route: DEMO_TAXI, title: "Taxi jízdy", body: "Záložka Taxi eviduje odvozy hostů. Tlačítkem + Přidat jízdu zadáte datum, čas, pokoj, počet osob (PAX) a destinaci. U trasy z ceníku se částka i provize doplní a uzamknou; u volby „Jiné…“ je zadáte ručně a připíšete povinnou poznámku.", placement: "bottom" },
+  { permission: RECEPCE_TAXI_VIEW, addedInVersion: 12, hideOnMobile: true, anchor: "taxi-cenik", route: DEMO_TAXI, title: "Ceník tras", body: "Vpravo je Ceník tras — u každé trasy cena a provize (↺ značí zpáteční jízdu). Uživatelé s oprávněním správy ceníku ho upraví tlačítkem Upravit.", placement: "left" },
+  { permission: RECEPCE_TAXI_MANAGE, addedInVersion: 12, hideOnMobile: true, anchor: "taxi-provize", route: DEMO_TAXI, title: "Celková provize", body: "Vedoucí vidí součet provizí za jízdy ve viditelném období. Rozsah období nastavíte poli Od–Do v horní liště.", placement: "bottom" },
 
   // ── Zaměstnanci — seznam (/zamestnanci) ──────────────────────────────────────
   // Merged: view.all (vedení incl.) + view.nonManagement collapse into one step.
