@@ -150,14 +150,14 @@ When `anchor` is `null` (welcome, outro, or fallback) the overlay dims the full 
 
 ## Tour version & "what's new" delta
 
-`appTour.version` (currently **11**) is the highest `addedInVersion` value present in the step list. It lives in `frontend/src/lib/tours/appTour.ts`:
+`appTour.version` (currently **12** — the Recepce section's steps) is the highest `addedInVersion` value present in the step list. It lives in `frontend/src/lib/tours/appTour.ts`:
 
 ```ts
 export const appTour: TourDefinition = {
   id: "app",
   // Highest step `addedInVersion` in the list. Bump it (and stamp the new steps'
   // `addedInVersion`) whenever you add steps for a new feature.
-  version: 11,
+  version: 12,
   ...
 };
 ```
@@ -174,7 +174,7 @@ If a user's permissions don't include any of the new steps, the delta is empty a
 **`toursSeen` Firestore field:**
 
 ```
-users/{uid}.toursSeen = { "app": 11 }   // tourId → last seen version
+users/{uid}.toursSeen = { "app": 12 }   // tourId → last seen version
 ```
 
 The `PUT /api/auth/me/tours` body is `{ tourId, version }` and uses `merge: true` so other tour entries are preserved.
@@ -183,7 +183,7 @@ The `PUT /api/auth/me/tours` body is `{ tourId, version }` and uses `merge: true
 
 ## Tour sections
 
-The master step list is organised into **12 active sections** defined in the `SECTIONS` const in `appTour.ts`. The section label is set only on the first step of each group; `buildAppTour` carries it forward to every subsequent step before filtering. **Each section opens with its sidebar nav-item step** (gated on the matching `nav.*.view` permission) — e.g. `nav.employees.view` leads the Zaměstnanci section and `nav.payroll.view` leads Mzdy. There is no separate "Navigace" section; "Log změn" (`audit`) is a standalone single-step section, since the audit page has no further walkthrough steps.
+The master step list is organised into **13 active sections** defined in the `SECTIONS` const in `appTour.ts`. The section label is set only on the first step of each group; `buildAppTour` carries it forward to every subsequent step before filtering. **Each section opens with its sidebar nav-item step** (gated on the matching `nav.*.view` permission) — e.g. `nav.employees.view` leads the Zaměstnanci section and `nav.payroll.view` leads Mzdy. There is no separate "Navigace" section; "Log změn" (`audit`) is a standalone single-step section, since the audit page has no further walkthrough steps.
 
 | Section label | Content covered |
 |---|---|
@@ -191,6 +191,7 @@ The master step list is organised into **12 active sections** defined in the `SE
 | Přehled | Nav-item step (Přehled) + dnešní datum header, Dnes/Zítra staffing, Moje směny tile, Úkoly, Statistiky |
 | Směny | All shift-plan steps (view, edit, create, transitions, free shifts, export, …) |
 | Dovolená | Vacation request form, all-requests panel, approved-colleagues view |
+| Recepce | Nav-item step (Recepce, `appTour.version: 12`) + 13 further steps: Předávací protokol (shift toolbar, cash/trezor counting, Účty, sm special rows, Poznámky, signatures, next-shift creation, history/undo-redo, print, "založení protokolu"), Walkiny (table, add form), Taxi (ride table + "Jiné…", ceník). All deep steps `hideOnMobile: true`. See [Recepce — Guided tour & demo routes](recepce.md#guided-tour--demo-routes). |
 | Zaměstnanci | Employee list + filters + create/export; employee card (edit, delete, sensitive reveal, benefits, employment history, contracts, documents) |
 | Můj profil | Self-page title, Navrhnout úpravu, own sensitive reveal, pending requests |
 | Šablony smluv | Template list, new template |
@@ -211,7 +212,7 @@ Sections are used only for the overlay's "Předchozí/Další sekce" navigation 
 The backend stores one Firestore field on the user document:
 
 ```
-users/{uid}.toursSeen = { "app": 11 }   // tourId → last seen version
+users/{uid}.toursSeen = { "app": 12 }   // tourId → last seen version
 ```
 
 Two endpoints in `functions/src/routes/auth.ts`:
@@ -258,7 +259,14 @@ For pages where the mock depends on the app state (Směny, Mzdy, Můj profil), t
 /napoveda/ukazka-smeny-vytvoreny → "shifts-created"      (created plan → "Smazat plán" visible)
 /napoveda/ukazka-smeny-publikovane → "shifts-published"  (published plan → Volné směny section)
 /napoveda/ukazka-smeny-zadost    → "shifts-change-request" (published plan → change-request modal auto-opened, v3.6.0)
+/napoveda/ukazka-protokol           → "protokol"           (RecepceDemoPage tab="protokol", populated unsigned protocol)
+/napoveda/ukazka-protokol-prazdne   → "protokol-empty"     (no record → "Založit protokol" button)
+/napoveda/ukazka-protokol-podepsany → "protokol-signed"    (both signatures present → next-shift + print buttons)
+/napoveda/ukazka-walkiny            → "walkiny"            (RecepceDemoPage tab="walkiny", populated table)
+/napoveda/ukazka-taxi               → "taxi"               (RecepceDemoPage tab="taxi", populated rides + ceník)
 ```
+
+The three Recepce tabs share a single wrapper, `RecepceDemoPage.tsx`, rather than each getting its own `TourDemoRoute`-wrapped page component — it renders one real tab (`HandoverTab`/`WalkinsTab`/`TaxiTab`) for a hotel chosen from the current user's accessible hotels (preferring one where they also hold the tab's manage permission, so manager-only spotlighted controls actually render). See [Recepce — Guided tour & demo routes](recepce.md#guided-tour--demo-routes) for the full mock-hotel-selection logic.
 
 Each route is registered in `App.tsx` with a per-route `key` (the path), so when the tour navigates between two demo routes that render the same page component (e.g. shifts-opened → shifts-published), React **unmounts and remounts** the page, ensuring a fresh fetch is fired with the new scenario already set.
 
