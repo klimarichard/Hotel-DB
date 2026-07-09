@@ -95,9 +95,21 @@ export default function TourOverlay() {
     }
     const update = () => setRect(el.getBoundingClientRect());
     update();
+    // Re-measure for a short window after the anchor resolves. A right-aligned or
+    // flex-sized control (e.g. the taxi "+ Přidat jízdu" button, whose x depends
+    // on the ceník column beside it) can shift a frame or two after it first
+    // appears; without this the spotlight would freeze at the stale position.
+    let raf = 0;
+    let ticks = 0;
+    const settle = () => {
+      update();
+      if (ticks++ < 30) raf = requestAnimationFrame(settle);
+    };
+    raf = requestAnimationFrame(settle);
     window.addEventListener("scroll", update, true);
     window.addEventListener("resize", update);
     return () => {
+      cancelAnimationFrame(raf);
       window.removeEventListener("scroll", update, true);
       window.removeEventListener("resize", update);
     };

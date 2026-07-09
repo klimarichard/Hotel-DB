@@ -1174,7 +1174,10 @@ function ProtocolEditor({
     <>
       <div className={styles.editorHeader}>
         <span className={autosaveError ? `${styles.metaText} ${styles.metaError}` : styles.metaText}>{statusText}</span>
-        <div className={styles.editorHeaderActions} data-tour="protokol-history">
+        <div className={styles.editorHeaderActions}>
+          {/* Tight tour anchor: undo/redo + Historie only, so the spotlight isn't
+              thrown off-centre by the admin-only Tisk / Smazat buttons beside them. */}
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }} data-tour="protokol-history">
           {canStep && (
             <>
               <Button
@@ -1200,6 +1203,7 @@ function ProtocolEditor({
           <Button variant="ghost" size="sm" onClick={() => setHistoryOpen((o) => !o)}>
             Historie{history.length ? ` (${history.length})` : ""}
           </Button>
+          </div>
           {predal && prevzal && (
             <Button variant="secondary" size="sm" onClick={() => window.print()}>
               Tisk
