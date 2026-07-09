@@ -1,0 +1,438 @@
+/* Taxi – continuous ride table + ride modal + global routes (ceník) editor. */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.rangeEditor {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+}
+
+.rangeLabel {
+  font-weight: 600;
+  color: var(--color-text-heading);
+}
+
+.rangeInfo {
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+}
+
+/* Provize total for the visible period (taxi.manage only). Lives at the top of
+   the rides column, capped to the same 900px as the table/toolbar and
+   right-aligned, so it lines up with the table's right border + Přidat button. */
+.provizeTotal {
+  max-width: 900px;
+  margin-bottom: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+  text-align: right;
+}
+
+.provizeTotalLabel {
+  font-weight: 600;
+  color: var(--color-text-heading);
+}
+
+.provizeTotalValue {
+  font-weight: 700;
+  color: var(--color-text-heading);
+  white-space: nowrap;
+}
+
+.dateInput {
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  background: var(--color-input-bg, var(--color-bg));
+  color: var(--color-text-heading);
+  font-size: 0.85rem;
+}
+
+.statusText {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.statusError {
+  color: var(--color-danger, #dc2626);
+}
+
+/* Rides table (left) beside the ceník (right); wraps on narrow widths. */
+.content {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.left {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Toolbar (Přidat jízdu) above the rides table, matching its width. */
+.leftToolbar {
+  display: flex;
+  justify-content: flex-end;
+  max-width: 900px;
+  margin-bottom: 0.5rem;
+}
+
+/* Ceník pinned to the right of the page; sized to its content, no inner scroll. */
+.pricelist {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.pricelistHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem 0.4rem 0.75rem;
+  background: var(--color-surface-2, var(--color-surface));
+  border-bottom: 1px solid var(--color-border);
+}
+
+.pricelistTitle {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--color-text-heading);
+}
+
+/* Read-only ceník table: auto-fit the Trasa column, show every route (no scroll). */
+.priceTable {
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  width: auto;
+}
+
+.priceTable th {
+  text-align: left;
+  padding: 0.4rem 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+  font-weight: 700;
+  color: var(--color-text-heading);
+  white-space: nowrap;
+}
+
+.priceTable td {
+  padding: 0.35rem 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-heading);
+  white-space: nowrap;
+}
+
+.priceTable tbody tr:nth-child(even) td {
+  background: var(--color-surface-3, var(--color-surface-2));
+}
+
+.roundBadge {
+  margin-left: 5px;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.tableWrap {
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  max-width: 900px;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.table th {
+  text-align: left;
+  padding: 0.55rem 0.65rem;
+  background: var(--color-surface-2, var(--color-surface));
+  border-bottom: 1px solid var(--color-border);
+  font-weight: 700;
+  color: var(--color-text-heading);
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 0.5rem 0.65rem;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-heading);
+  vertical-align: middle;
+}
+
+.table tbody tr:nth-child(even) td {
+  background: var(--color-surface-3, var(--color-surface-2));
+}
+
+.numCell {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.noteCell {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.otherTag {
+  font-style: italic;
+  color: var(--color-text-muted);
+}
+
+.actionsCell {
+  width: 1%;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.rowActions {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.rowIconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.rowIconBtn:hover {
+  background: var(--color-surface-2, var(--color-surface));
+  color: var(--color-text-heading);
+}
+
+.rowIconBtn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.rowIconBtn:disabled:hover {
+  background: transparent;
+  color: var(--color-text-muted);
+}
+
+.rowIconBtnTrash:hover {
+  color: var(--color-danger, #dc2626);
+}
+
+.empty {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+}
+
+/* ── modal (shared shell for ride + routes) ───────────────────────────────── */
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: var(--overlay-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  width: 460px;
+  max-width: calc(100vw - 2rem);
+  box-shadow: 0 20px 60px var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 3rem);
+}
+
+.modalWide {
+  width: 640px;
+}
+
+.modalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.modalTitle {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-heading);
+}
+
+.modalBody {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.input,
+.select {
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  background: var(--color-input-bg, var(--color-bg));
+  color: var(--color-text-heading);
+  font-size: 0.9rem;
+  font-weight: normal;
+}
+
+.input:disabled,
+.select:disabled {
+  background: var(--color-surface-2, var(--color-surface));
+  color: var(--color-text-muted);
+}
+
+.row3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+}
+
+.row2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.inputNumber {
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.inputNumber::-webkit-inner-spin-button,
+.inputNumber::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.modalFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--color-border);
+}
+
+.modalFooterStart {
+  margin-right: auto;
+}
+
+.error {
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--color-danger-soft, rgba(220, 38, 38, 0.1));
+  color: var(--color-danger, #dc2626);
+  font-size: 0.8125rem;
+}
+
+/* ── routes (ceník) editor ────────────────────────────────────────────────── */
+.routesTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.routesTable th {
+  text-align: left;
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid var(--color-border);
+  font-weight: 700;
+  color: var(--color-text-heading);
+  white-space: nowrap;
+}
+
+.routesTable td {
+  padding: 0.3rem 0.4rem;
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: middle;
+}
+
+.routeInput {
+  width: 100%;
+  min-width: 0;
+  padding: 0.35rem 0.45rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  background: var(--color-input-bg, var(--color-bg));
+  color: var(--color-text-heading);
+  font-size: 0.85rem;
+  box-sizing: border-box;
+}
+
+.routeNum {
+  width: 90px;
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.routeNum::-webkit-inner-spin-button,
+.routeNum::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.routeCheck {
+  width: 1.05rem;
+  height: 1.05rem;
+  cursor: pointer;
+  accent-color: var(--color-primary);
+}

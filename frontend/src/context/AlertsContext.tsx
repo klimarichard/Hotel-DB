@@ -57,7 +57,7 @@ export function AlertsProvider({ children }: { children: ReactNode }) {
   const unreadProbationCount = probationAlerts.filter((a) => !a.read).length;
 
   // Flip the `read` flag on the matching cached alerts so the derived counts
-  // (and the sidebar badge that reads them) update immediately — without
+  // (and the sidebar badge that reads them) update immediately – without
   // waiting for the persist + refetch round-trip. fetchAll() then reconciles
   // with the server, and a rejected POST re-syncs back to the true state.
   function applyRead(

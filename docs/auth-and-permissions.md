@@ -16,7 +16,7 @@ Two password-reset flows using Firebase Auth built-in email:
 
 ### Permission catalogue (fixed vocabulary)
 
-Permissions are a **fixed vocabulary of ~87 granular keys** — a catalogue, not free-form strings.
+Permissions are a **fixed vocabulary of ~131 granular keys** — a catalogue, not free-form strings. (Went from ~87 to ~131 when the **Recepce** group was added — 42 keys: 1 `nav.recepce.view` master + 41 global/per-hotel keys — see [Recepce → Permission model](recepce.md#permission-model).)
 
 - **Backend source of truth**: `functions/src/auth/permissions.ts` (`PERMISSION_CATALOG`) — a **flat** list of `{ group, items: [{ key, label }] }`. The backend stores and validates a flat permission array and is unaware of the frontend hierarchy.
 - **Frontend mirror**: `frontend/src/lib/permissions/catalog.ts` — keys must stay in sync with the backend (a manual mirror; `scripts/_smoke-permissions-hierarchy.js` asserts the two key sets are equal). Since **v2.2.0** the frontend catalogue is **hierarchical** (`PERMISSION_SECTIONS`, one section per app page) — see "Hierarchical permission matrix" below.
@@ -46,6 +46,44 @@ The special `system.admin` permission **expands to ALL permissions** and cannot 
 **`dashboard.staffing.view`** gates the DNES / ZÍTRA staffing sections on the Přehled (`/prehled`) page (the blocks that show employees scheduled for day/night shifts and managers on vacation). It is deliberately **not** granted to `accountant` (finance viewer — those sections are operational, not financial). `admin` receives it via `system.admin` expansion.
 
 > **Deploy note:** `dashboard.staffing.view` was added as a new permission key. When deployed to an environment where the built-in `roleTypes` docs already exist in Firestore, those docs' `permissions` arrays won't contain the key, so the Dnes/Zítra sections will be **hidden for existing users** until it is backfilled. Backfill **additively** — either add the permission to each affected type in-app (Nastavení → Uživatelské typy), or run a targeted `arrayUnion` of just this key onto `director`, `manager`, `employee`, and `hr`. Do **not** re-run `seed-role-types.js` to fix this: it overwrites each type's whole `permissions` array from `BUILTIN_TYPE_PERMISSIONS`, discarding any in-app permission customisations. `admin` needs no backfill (`system.admin` expansion), and a type with no Firestore doc at all falls back to `BUILTIN_TYPE_PERMISSIONS`, which already includes the key.
+
+#### Recepce permissions
+
+A dedicated **"Recepce"** catalogue group (42 keys total, including the
+`nav.recepce.view` master in "Stránky / navigace") gates the per-hotel reception
+hub — full breakdown, per-key semantics, and the `recepce.<stem>.*` per-hotel
+naming scheme are documented in [Recepce → Permission
+model](recepce.md#permission-model). Two points worth surfacing here:
+
+- **No built-in type holds any `recepce.*` permission by default** — only `admin`
+  (via `system.admin`) can use Recepce until an admin grants the relevant keys to
+  a type or individual users. This is deliberate (front-desk staff are typically
+  not `director`/`manager`), but means a fresh environment needs an explicit
+  grant step before Recepce is usable by anyone else.
+- Recepce also introduces the **`recepce.mobile.view`** key, part of a general
+  phone-only gating pattern — see "Mobile-only gating (`mobilePermission` /
+  `mobileAllow`)" below.
+
+### Mobile-only gating (`mobilePermission` / `mobileAllow`)
+
+A page can be **desktop-accessible but phone-restricted to a subset of users**
+without a separate permission tree — introduced for Recepce (dense grids that
+work but aren't ideal on a phone) but reusable for any future page:
+
+- **`MenuItem.mobilePermission`** (`frontend/src/lib/menuItems.ts`) — when set,
+  the sidebar item is filtered out of `BottomNav`'s item list on a phone unless
+  the user *also* holds this key (`Layout.tsx`:
+  `items.filter((m) => !m.hideOnMobile && (!m.mobilePermission || can(m.mobilePermission)))`).
+  The desktop sidebar always shows the item if the base `permission` passes —
+  `mobilePermission` only narrows the **phone** bottom-nav.
+- **`RequirePermission`'s `mobileAllow` prop** (`frontend/src/App.tsx`) — ANDs an
+  extra permission onto the route guard, checked only when `useIsPhone()` is
+  true; failing it redirects to `/`. Desktop access via the base `allow` array is
+  unaffected.
+- Wired today for `/recepce*` with `mobilePermission`/`mobileAllow` =
+  `"recepce.mobile.view"`. A user can hold `nav.recepce.view` (desktop access)
+  without `recepce.mobile.view` and simply won't see or be able to open Recepce
+  on a phone.
 
 #### Users & permissions group
 

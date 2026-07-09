@@ -62,7 +62,7 @@ function toggleFoldRow(
 
 function SalaryCell({ value, suffix = "Kč" }: { value: number | null | undefined; suffix?: string }) {
   const [visible, setVisible] = useState(false);
-  if (value == null) return <>—</>;
+  if (value == null) return <>–</>;
   return (
     <span className={styles.salaryCell}>
       {visible ? `${value.toLocaleString("cs-CZ")} ${suffix}` : "•••••"}
@@ -307,7 +307,7 @@ export default function SettingsPage() {
         await saveMinimumWage();
       }
     } catch {
-      // Check failed — don't block the (legal) setting change; save directly.
+      // Check failed – don't block the (legal) setting change; save directly.
       await saveMinimumWage();
     } finally {
       setMinWageChecking(false);
@@ -332,7 +332,7 @@ export default function SettingsPage() {
   const [companyCreateForm, setCompanyCreateForm] = useState<{ abbreviation: string; name: string; address: string; ic: string; dic: string; fileNo: string }>({ abbreviation: "", name: "", address: "", ic: "", dic: "", fileNo: "" });
   const [companyDeleteId, setCompanyDeleteId] = useState<string | null>(null);
   const [companyError, setCompanyError] = useState<string | null>(null);
-  // Generic error dialog (e.g. a delete blocked by referential integrity) —
+  // Generic error dialog (e.g. a delete blocked by referential integrity) –
   // shown via ConfirmModal for consistency with the rest of the app.
   const [errorModal, setErrorModal] = useState<string | null>(null);
 
@@ -351,7 +351,7 @@ export default function SettingsPage() {
 
   useEffect(() => { loadUsers(); }, [loadUsers]);
 
-  // Configurable user types — for the create form + per-row type dropdown.
+  // Configurable user types – for the create form + per-row type dropdown.
   useEffect(() => {
     roleTypesApi.list().then(setRoleTypes).catch(() => setRoleTypes([]));
   }, []);
@@ -372,7 +372,7 @@ export default function SettingsPage() {
       const list = await api.get<CompanyRecord[]>("/companies");
       // Seed safety net: only when the collection is completely empty do we show
       // the two default companies as unsaved placeholders, so a fresh DB isn't
-      // blank. When companies exist, deletes stick — we never resurrect them.
+      // blank. When companies exist, deletes stick – we never resurrect them.
       if (list.length === 0) { fallback(); return; }
       const map: Record<string, CompanyRecord> = {};
       for (const c of list) map[c.id] = { ...c, abbreviation: c.abbreviation || c.id };
@@ -846,7 +846,7 @@ export default function SettingsPage() {
         )
       );
     } catch {
-      // Silently fail — user sees no state change, can retry
+      // Silently fail – user sees no state change, can retry
     } finally {
       setTogglingUid(null);
     }
@@ -892,7 +892,7 @@ export default function SettingsPage() {
         prev.map((u) => (u.uid === user.uid ? { ...u, scheduledDeactivationAt: null } : u))
       );
     } catch {
-      // Silently fail — admin can retry
+      // Silently fail – admin can retry
     } finally {
       setTogglingUid(null);
     }
@@ -1022,7 +1022,7 @@ export default function SettingsPage() {
                   autoComplete="new-password"
                 />
                 <p className={styles.fieldHint}>
-                  Alespoň 8 znaků, malé i velké písmeno a číslici. Nechte prázdné —
+                  Alespoň 8 znaků, malé i velké písmeno a číslici. Nechte prázdné –
                   uživateli se odešle odkaz pro nastavení vlastního hesla.
                 </p>
               </div>
@@ -1046,7 +1046,7 @@ export default function SettingsPage() {
                     value={form.employeeId}
                     onChange={(e) => setForm({ ...form, employeeId: e.target.value })}
                   >
-                    <option value="">— Nepropojovat —</option>
+                    <option value="">– Nepropojovat –</option>
                     {sortedEmployees.map((emp) => (
                       <option key={emp.id} value={emp.id}>
                         {employeeSurnameFirst(emp)}
@@ -1083,7 +1083,7 @@ export default function SettingsPage() {
                 value={linkEmployeeId}
                 onChange={(e) => setLinkEmployeeId(e.target.value)}
               >
-                <option value="">— Zrušit propojení —</option>
+                <option value="">– Zrušit propojení –</option>
                 {sortedEmployees.map((emp) => (
                   <option key={emp.id} value={emp.id}>
                     {employeeSurnameFirst(emp)}
@@ -1158,7 +1158,7 @@ export default function SettingsPage() {
                       </td>
                       <td data-label="Zaměstnanec">
                         <span className={isLinked ? styles.employeeLinked : styles.employeeUnlinked}>
-                          {linkedName ?? "—"}
+                          {linkedName ?? "–"}
                         </span>
                         {can("users.linkEmployee") &&
                           (isLinked ? (
@@ -1279,31 +1279,31 @@ export default function SettingsPage() {
                     <label className={styles.label}>Název</label>
                     {isEditing
                       ? <input className={styles.input} value={c.name} onChange={(e) => setCompanyField(c.id, "name", e.target.value)} />
-                      : <span className={styles.companyValue}>{c.name || "—"}</span>}
+                      : <span className={styles.companyValue}>{c.name || "–"}</span>}
                   </div>
                   <div className={styles.field}>
                     <label className={styles.label}>Adresa</label>
                     {isEditing
                       ? <input className={styles.input} value={c.address} onChange={(e) => setCompanyField(c.id, "address", e.target.value)} />
-                      : <span className={styles.companyValue}>{c.address || "—"}</span>}
+                      : <span className={styles.companyValue}>{c.address || "–"}</span>}
                   </div>
                   <div className={styles.field}>
                     <label className={styles.label}>IČO</label>
                     {isEditing
                       ? <input className={styles.input} value={c.ic} onChange={(e) => setCompanyField(c.id, "ic", e.target.value)} />
-                      : <span className={styles.companyValue}>{c.ic || "—"}</span>}
+                      : <span className={styles.companyValue}>{c.ic || "–"}</span>}
                   </div>
                   <div className={styles.field}>
                     <label className={styles.label}>DIČ</label>
                     {isEditing
                       ? <input className={styles.input} value={c.dic} onChange={(e) => setCompanyField(c.id, "dic", e.target.value)} />
-                      : <span className={styles.companyValue}>{c.dic || "—"}</span>}
+                      : <span className={styles.companyValue}>{c.dic || "–"}</span>}
                   </div>
                   <div className={styles.field}>
                     <label className={styles.label}>Spisová značka</label>
                     {isEditing
                       ? <input className={styles.input} value={c.fileNo} onChange={(e) => setCompanyField(c.id, "fileNo", e.target.value)} placeholder="např. C 12345 vedená u MS v Praze" />
-                      : <span className={styles.companyValue}>{c.fileNo || "—"}</span>}
+                      : <span className={styles.companyValue}>{c.fileNo || "–"}</span>}
                   </div>
                 </div>
                 <div className={styles.companyActions}>
@@ -1473,7 +1473,7 @@ export default function SettingsPage() {
                     value={posForm.departmentId}
                     onChange={(e) => setPosForm({ ...posForm, departmentId: e.target.value })}
                   >
-                    <option value="">— vyberte —</option>
+                    <option value="">– vyberte –</option>
                     {[...departments]
                       .sort((a, b) => a.name.localeCompare(b.name, "cs"))
                       .map((d) => (
@@ -1497,7 +1497,7 @@ export default function SettingsPage() {
                     type="number"
                     value={posForm.hourlyRate}
                     onChange={(e) => setPosForm({ ...posForm, hourlyRate: e.target.value })}
-                    placeholder="—"
+                    placeholder="–"
                   />
                 </div>
                 <div className={styles.field}>
@@ -1507,7 +1507,7 @@ export default function SettingsPage() {
                     type="number"
                     value={posForm.clothingAllowance}
                     onChange={(e) => setPosForm({ ...posForm, clothingAllowance: e.target.value })}
-                    placeholder="—"
+                    placeholder="–"
                   />
                 </div>
                 <div className={styles.field}>
@@ -1517,7 +1517,7 @@ export default function SettingsPage() {
                     type="number"
                     value={posForm.homeOfficeAllowance}
                     onChange={(e) => setPosForm({ ...posForm, homeOfficeAllowance: e.target.value })}
-                    placeholder="—"
+                    placeholder="–"
                   />
                 </div>
                 <div className={styles.formActions}>
@@ -1533,8 +1533,8 @@ export default function SettingsPage() {
                 <h2 className={styles.modalTitle}>Změna hodinové sazby</h2>
                 <p style={{ margin: "0 0 0.75rem", fontSize: "0.875rem" }}>
                   Hodinová sazba pozice se mění z{" "}
-                  <strong>{posCascade.fieldChange.hourlyRate.from ?? "—"}</strong>{" "}
-                  na <strong>{posCascade.fieldChange.hourlyRate.to ?? "—"}</strong> Kč/hod.
+                  <strong>{posCascade.fieldChange.hourlyRate.from ?? "–"}</strong>{" "}
+                  na <strong>{posCascade.fieldChange.hourlyRate.to ?? "–"}</strong> Kč/hod.
                   Tato změna se promítne do aktivních pracovních záznamů následujících zaměstnanců:
                 </p>
                 <div style={{ maxHeight: "240px", overflowY: "auto", marginBottom: "0.75rem", border: "1px solid #e5e7eb", borderRadius: "4px" }}>
@@ -1550,7 +1550,7 @@ export default function SettingsPage() {
                       {posCascade.affectedEmployees.map((e) => (
                         <tr key={e.id}>
                           <td>{employeeSurnameFirst(e)}</td>
-                          <td>{e.currentHourlyRate ?? "—"}</td>
+                          <td>{e.currentHourlyRate ?? "–"}</td>
                           <td>
                             {e.isManualOverride && (
                               <span style={{ display: "inline-block", padding: "0 6px", background: "#fef3c7", color: "#92400e", borderRadius: "3px", fontSize: "0.75rem", fontWeight: 600 }}>
@@ -1611,7 +1611,7 @@ export default function SettingsPage() {
                       <span>{p.name}</span>
                       <span className={styles.foldChevron} aria-hidden="true">▾</span>
                     </td>
-                    <td data-label="Oddělení">{dep?.name ?? "—"}</td>
+                    <td data-label="Oddělení">{dep?.name ?? "–"}</td>
                     <td data-label="Výchozí mzda"><SalaryCell value={p.defaultSalary} /></td>
                     <td data-label="Hodinová sazba"><SalaryCell value={p.hourlyRate ?? null} /></td>
                     <td data-label="Náhrady - oblečení"><SalaryCell value={p.clothingAllowance ?? null} suffix="Kč/h" /></td>
@@ -1938,7 +1938,7 @@ export default function SettingsPage() {
           )}
 
           <h2 style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--color-text-heading)", marginTop: "2rem", marginBottom: "1rem" }}>
-            Stravenkový paušál — minimální délka směny
+            Stravenkový paušál – minimální délka směny
           </h2>
           <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "0.5rem" }}>
             <span style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--color-text)" }}>
@@ -2165,7 +2165,7 @@ export default function SettingsPage() {
               />
               {!!editForm.email.trim() && editForm.email.trim() !== editingUser.email && (
                 <p className={styles.fieldHint}>
-                  ⚠ Změna e-mailu změní přihlašovací údaje uživatele — bude se přihlašovat novým e-mailem.
+                  ⚠ Změna e-mailu změní přihlašovací údaje uživatele – bude se přihlašovat novým e-mailem.
                 </p>
               )}
             </div>
@@ -2245,7 +2245,7 @@ export default function SettingsPage() {
       {confirmEmailChange && (
         <ConfirmModal
           title="Změnit e-mail?"
-          message="Změnou e-mailu se změní přihlašovací údaje uživatele — od této chvíle se přihlašuje novým e-mailem. Pokračovat?"
+          message="Změnou e-mailu se změní přihlašovací údaje uživatele – od této chvíle se přihlašuje novým e-mailem. Pokračovat?"
           confirmLabel="Změnit e-mail"
           danger
           onConfirm={doSaveEdit}

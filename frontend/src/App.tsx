@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { useIsPhone } from "@/hooks/useIsPhone";
 import type { Permission } from "@/lib/permissions/catalog";
 import { resolveOrderByPermission } from "@/lib/menuItems";
 import LoginPage from "@/pages/LoginPage";
@@ -14,6 +15,8 @@ import AlertsPage from "@/pages/AlertsPage";
 import ContractTemplatesPage from "@/pages/ContractTemplatesPage";
 import ShiftPlannerPage from "@/pages/ShiftPlannerPage";
 import VacationPage from "@/pages/VacationPage";
+import RecepcePage from "@/pages/RecepcePage";
+import RecepceDemoPage from "@/pages/RecepceDemoPage";
 import OverviewPage from "@/pages/OverviewPage";
 import AuditLogPage from "@/pages/AuditLogPage";
 import HelpPage from "@/pages/HelpPage";
@@ -38,10 +41,22 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 // Permission-gated route. Passes if the caller has ANY of the listed
 // permissions (system.admin satisfies all via can()). Mirrors the backend
 // requirePermission gate; the backend still enforces independently.
-function RequirePermission({ allow, children }: { allow: ReadonlyArray<Permission>; children: React.ReactNode }) {
+function RequirePermission({
+  allow,
+  mobileAllow,
+  children,
+}: {
+  allow: ReadonlyArray<Permission>;
+  /** Extra permission required only on a phone (ANDed with `allow`). Desktop is
+   *  unaffected. Redirects home on a phone when the user lacks it. */
+  mobileAllow?: Permission;
+  children: React.ReactNode;
+}) {
   const { can, loading } = useAuth();
+  const isPhone = useIsPhone();
   if (loading) return <div style={{ padding: "2rem" }}>Načítám...</div>;
   if (!allow.some((p) => can(p))) return <Navigate to="/" replace />;
+  if (isPhone && mobileAllow && !can(mobileAllow)) return <Navigate to="/" replace />;
   return <>{children}</>;
 }
 
@@ -96,6 +111,9 @@ export default function App() {
         <Route path="prehled" element={<RequirePermission allow={["nav.dashboard.view"]}><OverviewPage /></RequirePermission>} />
         <Route path="smeny" element={<RequirePermission allow={["nav.shifts.view"]}><ShiftPlannerPage /></RequirePermission>} />
         <Route path="dovolena" element={<RequirePermission allow={["nav.vacation.view"]}><VacationPage /></RequirePermission>} />
+        <Route path="recepce" element={<RequirePermission allow={["nav.recepce.view"]} mobileAllow="recepce.mobile.view"><RecepcePage /></RequirePermission>} />
+        <Route path="recepce/:hotel" element={<RequirePermission allow={["nav.recepce.view"]} mobileAllow="recepce.mobile.view"><RecepcePage /></RequirePermission>} />
+        <Route path="recepce/:hotel/:tab" element={<RequirePermission allow={["nav.recepce.view"]} mobileAllow="recepce.mobile.view"><RecepcePage /></RequirePermission>} />
         <Route path="zamestnanci" element={<RequirePermission allow={["nav.employees.view"]}><EmployeesPage /></RequirePermission>} />
         <Route path="zamestnanci/novy" element={<RequirePermission allow={["employees.create"]}><EmployeeFormPage /></RequirePermission>} />
         <Route path="zamestnanci/:id" element={<RequirePermission allow={["nav.employees.view"]}><EmployeeDetailPage /></RequirePermission>} />
@@ -106,14 +124,14 @@ export default function App() {
         <Route path="upozorneni" element={<RequirePermission allow={["nav.alerts.view"]}><AlertsPage /></RequirePermission>} />
         <Route path="nastaveni" element={<RequirePermission allow={["nav.settings.view"]}><SettingsPage /></RequirePermission>} />
         <Route path="audit" element={<RequirePermission allow={["nav.audit.view"]}><AuditLogPage /></RequirePermission>} />
-        {/* Help is available to every authenticated user — no permission gate. */}
+        {/* Help is available to every authenticated user – no permission gate. */}
         <Route path="napoveda" element={<HelpPage />} />
-        {/* Tour-only demo routes — REAL pages fed by mock data (no backend).
+        {/* Tour-only demo routes – REAL pages fed by mock data (no backend).
             The employee-detail demo reuses the real /zamestnanci/:id route with
             the sentinel id "tour-demo" (no separate route needed). */}
         {/* `key` forces a remount (and thus a re-fetch of the mock data) when the
             tour navigates between demo routes that render the same page component
-            — e.g. shifts opened → published, or payroll period → empty. Without it
+            – e.g. shifts opened → published, or payroll period → empty. Without it
             React reuses the instance and the page keeps its first-loaded state. */}
         <Route path="napoveda/ukazka-profil" element={<TourDemoRoute scenario="self"><EmployeeSelfPage key="demo-self" /></TourDemoRoute>} />
         <Route path="napoveda/ukazka-mzdy" element={<TourDemoRoute scenario="payroll"><PayrollPage key="demo-payroll" /></TourDemoRoute>} />
@@ -123,6 +141,11 @@ export default function App() {
         <Route path="napoveda/ukazka-smeny-vytvoreny" element={<TourDemoRoute scenario="shifts-created"><ShiftPlannerPage key="demo-shifts-created" /></TourDemoRoute>} />
         <Route path="napoveda/ukazka-smeny-publikovane" element={<TourDemoRoute scenario="shifts-published"><ShiftPlannerPage key="demo-shifts-published" /></TourDemoRoute>} />
         <Route path="napoveda/ukazka-smeny-zadost" element={<TourDemoRoute scenario="shifts-change-request"><ShiftPlannerPage key="demo-shifts-change-request" /></TourDemoRoute>} />
+        <Route path="napoveda/ukazka-protokol" element={<TourDemoRoute scenario="protokol"><RecepceDemoPage tab="protokol" key="demo-protokol" /></TourDemoRoute>} />
+        <Route path="napoveda/ukazka-protokol-prazdne" element={<TourDemoRoute scenario="protokol-empty"><RecepceDemoPage tab="protokol" key="demo-protokol-empty" /></TourDemoRoute>} />
+        <Route path="napoveda/ukazka-protokol-podepsany" element={<TourDemoRoute scenario="protokol-signed"><RecepceDemoPage tab="protokol" key="demo-protokol-signed" /></TourDemoRoute>} />
+        <Route path="napoveda/ukazka-walkiny" element={<TourDemoRoute scenario="walkiny"><RecepceDemoPage tab="walkiny" key="demo-walkiny" /></TourDemoRoute>} />
+        <Route path="napoveda/ukazka-taxi" element={<TourDemoRoute scenario="taxi"><RecepceDemoPage tab="taxi" key="demo-taxi" /></TourDemoRoute>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

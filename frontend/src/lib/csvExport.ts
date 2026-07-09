@@ -26,7 +26,7 @@ export interface ExportColumn {
   field: string;
   /** How to format the raw value for CSV output. */
   format: ColumnFormat;
-  /** True for fields encrypted at rest — requires the "include sensitive" toggle. */
+  /** True for fields encrypted at rest – requires the "include sensitive" toggle. */
   sensitive?: boolean;
   /** Which tab/group the checkbox lives under in the modal. */
   group: ColumnGroup;
@@ -34,7 +34,7 @@ export interface ExportColumn {
    * Force Excel to treat the cell as a literal string. Needed for ID-like fields
    * (visa, passport, bank account, insurance, phone, birth number…) where Excel
    * would otherwise strip leading zeros, drop leading "+", or mis-parse a "/" as
-   * a division. Emits `="value"` — Excel's only reliable text escape.
+   * a division. Emits `="value"` – Excel's only reliable text escape.
    */
   forceText?: boolean;
 }
@@ -105,7 +105,7 @@ export interface ExportRow {
 // ─── Formatters ──────────────────────────────────────────────────────────────
 
 /**
- * ISO "YYYY-MM-DD" → "DD. MM. YYYY" (seed convention — spaces around dots).
+ * ISO "YYYY-MM-DD" → "DD. MM. YYYY" (seed convention – spaces around dots).
  * Anything else (null/undefined/empty/Firestore Timestamp object) → "".
  *
  * NOTE: we split on "-" instead of constructing a Date to avoid the UTC-shift
@@ -181,7 +181,7 @@ export function getCellValue(row: ExportRow, column: ExportColumn): string {
 /**
  * Format a single CSV cell, applying the column's forceText flag. Excel strips
  * leading zeros and mangles values starting with "+" unless the cell is
- * prefixed with `=` and wrapped in double quotes — i.e. written as `="value"`.
+ * prefixed with `=` and wrapped in double quotes – i.e. written as `="value"`.
  * That literal is then quoted per RFC 4180 so the inner quotes are doubled.
  */
 function formatCsvCell(row: ExportRow, column: ExportColumn): string {

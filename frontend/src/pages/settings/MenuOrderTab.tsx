@@ -111,7 +111,7 @@ export default function MenuOrderTab() {
                     e.target.value = "";
                   }}
                 >
-                  <option value="">—</option>
+                  <option value="">–</option>
                   {types.filter((x) => x.id !== t.id).map((x) => (
                     <option key={x.id} value={x.id}>{x.name}</option>
                   ))}

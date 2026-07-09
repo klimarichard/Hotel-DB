@@ -12,12 +12,12 @@ import styles from "./EmployeeFormPage.module.css";
 
 // Nationality is a free-text searchable field (datalist) storing the alpha-3 code.
 function natLabel(code: string): string {
-  return NATIONALITIES.some((n) => n.code === code) ? `${code} — ${nationalityName(code)}` : code;
+  return NATIONALITIES.some((n) => n.code === code) ? `${code} – ${nationalityName(code)}` : code;
 }
 function resolveNationalityCode(v: string): string {
   const t = v.trim();
   if (!t) return "";
-  const byLabel = NATIONALITIES.find((n) => `${n.code} — ${n.name}` === t);
+  const byLabel = NATIONALITIES.find((n) => `${n.code} – ${n.name}` === t);
   if (byLabel) return byLabel.code;
   const byCode = NATIONALITIES.find((n) => n.code === t.toUpperCase());
   if (byCode) return byCode.code;
@@ -164,7 +164,7 @@ export default function EmployeeFormPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [employeeName, setEmployeeName] = useState("");
-  // Terminated employee matching the new hire (name + birthdate) — drives the
+  // Terminated employee matching the new hire (name + birthdate) – drives the
   // reactivate-vs-create-duplicate prompt.
   const [dupMatch, setDupMatch] = useState<
     { id: string; firstName: string; lastName: string; dobMatched: boolean } | null
@@ -280,7 +280,7 @@ export default function EmployeeFormPage() {
         }
       }
     } catch {
-      // Ignore — the match check must never prevent creating an employee.
+      // Ignore – the match check must never prevent creating an employee.
     }
     return null;
   }
@@ -400,7 +400,7 @@ export default function EmployeeFormPage() {
           message={
             `${dupMatch.firstName} ${dupMatch.lastName} je již v systému jako ukončený zaměstnanec` +
             (dupMatch.dobMatched ? " (shoduje se jméno i datum narození)." : " (shoduje se jméno).") +
-            " Můžete otevřít jeho profil a upravit údaje — nový pracovní poměr (Nástup) pak přidáte ručně v historii. Nebo přesto vytvořit nového."
+            " Můžete otevřít jeho profil a upravit údaje – nový pracovní poměr (Nástup) pak přidáte ručně v historii. Nebo přesto vytvořit nového."
           }
           confirmLabel="Reaktivovat a upravit údaje"
           tertiary={{
@@ -433,7 +433,7 @@ export default function EmployeeFormPage() {
       </div>
 
       <h1 className={styles.title}>
-        {isEdit ? `Upravit — ${employeeName}` : "Nový zaměstnanec"}
+        {isEdit ? `Upravit – ${employeeName}` : "Nový zaměstnanec"}
       </h1>
 
       <form onSubmit={handleSubmit}>
@@ -462,7 +462,7 @@ export default function EmployeeFormPage() {
             </Field>
             <Field label="Pohlaví">
               <select className={styles.input} value={personal.gender} onChange={(e) => setP("gender", e.target.value)}>
-                <option value="">— vyberte —</option>
+                <option value="">– vyberte –</option>
                 <option value="m">Muž</option>
                 <option value="f">Žena</option>
               </select>
@@ -492,13 +492,13 @@ export default function EmployeeFormPage() {
             </Field>
             <Field label="Rodinný stav">
               <select className={styles.input} value={personal.maritalStatus} onChange={(e) => setP("maritalStatus", e.target.value)}>
-                <option value="">— vyberte —</option>
+                <option value="">– vyberte –</option>
                 {MARITAL_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
             </Field>
             <Field label="Vzdělání">
               <select className={styles.input} value={personal.education} onChange={(e) => setP("education", e.target.value)}>
-                <option value="">— vyberte —</option>
+                <option value="">– vyberte –</option>
                 {educationOptions.map((s) => <option key={s} value={s}>{s}</option>)}
                 {personal.education && !educationOptions.includes(personal.education) && (
                   <option value={personal.education}>{personal.education}</option>
@@ -519,7 +519,7 @@ export default function EmployeeFormPage() {
               />
               <datalist id="nationalityOptions">
                 {NATIONALITIES.map((n) => (
-                  <option key={n.code} value={`${n.code} — ${n.name}`} />
+                  <option key={n.code} value={`${n.code} – ${n.name}`} />
                 ))}
               </datalist>
             </Field>

@@ -25,11 +25,23 @@ export type AuditAction = "create" | "update" | "delete" | "reveal" | "export" |
 // ─── Field labels ────────────────────────────────────────────────────────────
 
 /** Merged field-label registry, keyed by ROOT collection (segment before "/"). */
+/** Recepce Předávací protokol – labels for the compact summary + undo/redo extras. */
+const HANDOVER_FIELDS: Record<string, FieldLabelMap> = {
+  shiftHandovers: {
+    hotel: "Hotel",
+    shift: "Směna",
+    date: "Datum",
+    changeLabels: "Změny",
+    label: "Změna",
+  },
+};
+
 export const FIELD_LABELS: Record<string, FieldLabelMap> = {
   ...EMPLOYEE_FIELDS,
   ...PAYROLL_FIELDS,
   ...SHIFT_FIELDS,
   ...MISC_FIELDS,
+  ...HANDOVER_FIELDS,
 };
 
 /**
@@ -41,7 +53,7 @@ export const FIELD_LABELS: Record<string, FieldLabelMap> = {
  * like `displayName` would otherwise mean the employee's display name).
  */
 export function fieldLabel(collection: string, fieldPath: string | undefined): string {
-  if (!fieldPath) return "—";
+  if (!fieldPath) return "–";
   const leaf = fieldPath.split(".").pop() ?? fieldPath;
   const segments = (collection || "").split("/");
   for (let i = segments.length - 1; i >= 0; i--) {
@@ -86,6 +98,7 @@ export const COLLECTION_LABELS: Record<string, string> = {
   alerts: "Upozornění",
   documentAlerts: "Upozornění – doklady",
   probationAlerts: "Upozornění – zkušební doba",
+  shiftHandovers: "Předávací protokol",
 };
 
 /**
@@ -115,7 +128,7 @@ export const SUBAREA_LABELS: Record<string, string> = {
 
 /** "employees/contact" → "Zaměstnanec · Kontakt"; used in the filter dropdown. */
 export function collectionLabel(collection: string): string {
-  if (!collection) return "—";
+  if (!collection) return "–";
   const [root, sub] = collection.split("/");
   const rootLabel = COLLECTION_LABELS[root] ?? humanizeKey(root);
   if (!sub) return rootLabel;
@@ -125,7 +138,7 @@ export function collectionLabel(collection: string): string {
 
 // ─── Page categories (change-log overhaul) ───────────────────────────────────
 
-/** Page bucket an audit entry belongs to — mirrors the backend AuditCategory. */
+/** Page bucket an audit entry belongs to – mirrors the backend AuditCategory. */
 export type AuditCategory =
   | "smeny"
   | "dovolena"
@@ -159,7 +172,7 @@ export const CATEGORY_LABELS: Record<AuditCategory, string> = {
   system: "Systém",
 };
 
-/** Nastavení sub-area — mirrors the backend SettingsArea. */
+/** Nastavení sub-area – mirrors the backend SettingsArea. */
 export type SettingsArea =
   | "uzivatele"
   | "spolecnosti"
@@ -245,7 +258,7 @@ export function actionVerb(action: AuditAction): string {
 /**
  * The thing an action acted on, in Czech GENITIVE (reads after the action noun:
  * "Vytvoření dokumentu", "Upravení kontaktních údajů", "Smazání dokumentu").
- * Keyed by collection — sub-area wins over root (so employees/contracts is a
+ * Keyed by collection – sub-area wins over root (so employees/contracts is a
  * "dokument", not a "zaměstnanec"). Lower-cased: common noun mid-phrase.
  */
 const SUBJECT_GEN: Record<string, string> = {
@@ -315,7 +328,7 @@ export const EVENT_LABELS: Record<string, string> = {
   "vacation.reject": "Zamítnutí žádosti o dovolenou",
   "vacation.approveEdit": "Schválení úpravy dovolené",
   "vacation.rejectEdit": "Zamítnutí úpravy dovolené",
-  // Směny — žádosti
+  // Směny – žádosti
   "shift.unavailability.approve": "Schválení nedostupnosti",
   "shift.unavailability.reject": "Zamítnutí nedostupnosti",
   "shift.override.approve": "Schválení žádosti o výjimku",
@@ -328,7 +341,7 @@ export const EVENT_LABELS: Record<string, string> = {
   // Můj profil → Zaměstnanci
   "employeeChange.approve": "Schválení žádosti o úpravu profilu",
   "employeeChange.reject": "Zamítnutí žádosti o úpravu profilu",
-  // Systém — automatické akce
+  // Systém – automatické akce
   "plan.autoTransition": "Automatický přechod plánu",
   "plan.autoFillManagerR": "Automatické doplnění směn R vedoucím",
   "multisport.autoStart": "Automatické zahájení Multisportu",
@@ -336,6 +349,10 @@ export const EVENT_LABELS: Record<string, string> = {
   "employee.autoTerminate": "Automatické ukončení zaměstnance",
   "employee.autoReactivate": "Automatické obnovení zaměstnance",
   "employee.autoStatusChange": "Automatická změna stavu zaměstnance",
+  // Recepce – Předávací protokol
+  "recepce.protokol.edit": "Úprava předávacího protokolu",
+  "recepce.protokol.undo": "Vrácení změny v protokolu",
+  "recepce.protokol.redo": "Obnovení změny v protokolu",
 };
 
 /** Header phrase for a semantic event id, or undefined if unknown. */
@@ -346,7 +363,7 @@ export function eventLabel(event: string | undefined): string | undefined {
 
 /**
  * Render-derive a semantic event id for a LEGACY entry that predates the
- * `event` field — from its (collection, status newValue). Lets old approvals /
+ * `event` field – from its (collection, status newValue). Lets old approvals /
  * rejections render as "Schválení / Zamítnutí" instead of a bare status change.
  * Returns undefined when nothing maps (falls back to the generic header).
  */

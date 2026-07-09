@@ -4,9 +4,23 @@ This document describes the Firestore data model (top-level collections, sub-col
 
 ## Firestore Data Model
 
-**Top-level collections:** `employees`, `users`, `roleTypes`, `companies`, `jobPositions`, `departments`, `educationLevels`, `alerts`, `notifications`, `shiftPlans`, `vacationRequests`, `payrollPeriods`, `auditLog`
+**Top-level collections:** `employees`, `users`, `roleTypes`, `companies`, `jobPositions`, `departments`, `educationLevels`, `alerts`, `notifications`, `shiftPlans`, `vacationRequests`, `payrollPeriods`, `auditLog`, `hotels`, `handoverWarnings`, `settings`
 
 **Sub-collections under `employees/{id}`:** `documents`, `contact`, `employment`, `benefits`, `contracts`
+
+**Sub-collections under `hotels/{hotelSlug}`** (Recepce; `hotelSlug` ∈ `ambiance`, `superior`, `amigo-alqush`, `ankora` — see [Recepce](recepce.md)):
+
+| Path | Purpose |
+|---|---|
+| `hotels/{slug}/shiftHandovers/{shiftDate}_{shiftType}` | Předávací protokol per shift (`den`\|`noc`); each doc has its own `history` subcollection for element-level change history + undo/redo. |
+| `hotels/{slug}/walkins/{autoId}` | Walk-in sale entries. |
+| `hotels/{slug}/taxiRides/{autoId}` | Taxi ride entries. |
+| `hotels/{slug}/config/walkins`, `hotels/{slug}/config/taxi` | Per-hotel visible date range (`{ from, to }`) that `walkiny.manage`/`taxi.manage` set to bound non-manager visibility. |
+
+`handoverWarnings/{hotel}_{shiftDate}_{shiftType}` — "Nenavazující předání" flags
+(a handover chain break), surfaced on the Upozornění hub. `settings/sm` and
+`settings/taxiRoutes` hold the two GLOBAL (all-hotels) Recepce config docs — the
+shared sm rates and the shared taxi routes ceník, respectively.
 
 The `benefits` sub-doc carries the insurance/bank/Multisport fields plus `nepodepiseProhlaseni: boolean` ("Nepodepíše prohlášení poplatníka" — drives the "Nepodepsané prohlášení" banner on the employee detail page) and `zaucovani: boolean` + `zaucovaniDo: string` (YYYY-MM-DD) — the "Zaučování" (training) flag and its end date, which drive a "Zaučování" banner that auto-hides once `zaucovaniDo` passes. **`zaucovani` + `zaucovaniDo` are also denormalized onto the root `employees/{id}` doc** (written by the `PUT /employees/:id/benefits` handler) so the Employees list — which reads only root docs — can render the "V zácviku" badge without joining the benefits sub-doc; the badge's auto-expiry is computed live from `zaucovaniDo` on read.
 

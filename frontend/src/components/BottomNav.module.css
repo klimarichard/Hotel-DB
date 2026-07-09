@@ -209,7 +209,7 @@
   letter-spacing: 0.03em;
 }
 
-/* Logged-in user — the phone equivalent of the sidebar footer's user line. */
+/* Logged-in user – the phone equivalent of the sidebar footer's user line. */
 .sheetUser {
   display: flex;
   flex-direction: column;

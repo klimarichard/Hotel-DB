@@ -24,6 +24,10 @@ import { timeOverrideRouter } from "./routes/timeOverride";
 import { selfServiceRouter } from "./routes/selfService";
 import { employeeChangeRequestsRouter } from "./routes/employeeChangeRequests";
 import { roleTypesRouter } from "./routes/roleTypes";
+import { handoversRouter } from "./routes/handovers";
+import { handoverWarningsRouter } from "./routes/handoverWarnings";
+import { walkinsRouter } from "./routes/walkins";
+import { taxiRouter } from "./routes/taxi";
 import * as clock from "./services/clock";
 import { requireAuth, AuthRequest } from "./middleware/auth";
 import { requirePermission } from "./auth/permissions";
@@ -34,6 +38,7 @@ import { sweepExpiredMultisport } from "./services/multisportSweep";
 import { updateDocumentAlerts, EXPIRY_FIELDS } from "./routes/employees";
 import { refreshAllProbationAlerts } from "./services/probationAlerts";
 import { runScheduledDeactivations } from "./services/userDeactivation";
+import { sweepRecepceRetention } from "./services/recepceRetention";
 
 // All functions run in europe-west3 to co-locate with the Firestore
 // database — avoids cross-region latency on every read/write.
@@ -73,6 +78,17 @@ app.use(
 // than the raw PDF, so a 3 MB PDF lands around 4 MB of JSON body.
 app.use(express.json({ limit: "10mb" }));
 
+// API responses are dynamic and per-user — never let a cache store them. Crucially
+// this stops the Fastly CDN that Firebase Hosting puts in front of the function
+// from caching responses (notably 404s, which were then served stale so a
+// just-created record looked non-existent — even in incognito, since the CDN
+// cache is shared/server-side). Firebase Hosting's firebase.json `headers` config
+// does NOT apply to function-rewrite responses, so it must be set here.
+app.use((_req, res, next) => {
+  res.set("Cache-Control", "no-store");
+  next();
+});
+
 // Pull the latest test-clock override before each request. TTL-cached, so it
 // only re-reads Firestore every ~30s, and it's a no-op in production (the
 // override is never honoured there). Keeps clock.now() current for handlers.
@@ -100,6 +116,10 @@ app.use("/settings/time-override", timeOverrideRouter);
 app.use("/me", selfServiceRouter);
 app.use("/employee-change-requests", employeeChangeRequestsRouter);
 app.use("/role-types", roleTypesRouter);
+app.use("/handovers", handoversRouter);
+app.use("/handover-warnings", handoverWarningsRouter);
+app.use("/walkins", walkinsRouter);
+app.use("/taxi", taxiRouter);
 
 // Health check
 app.get("/health", (_req, res) => {
@@ -218,6 +238,22 @@ app.post(
   }
 );
 
+app.post(
+  "/recepce/trigger-retention-sweep",
+  requireAuth,
+  requirePermission("system.triggers"),
+  async (req: AuthRequest, res) => {
+    await clock.refresh(true);
+    const result = await sweepRecepceRetention();
+    await writeAudit(ctxFromReq(req), {
+      action: "manual-trigger",
+      collection: "auditLog",
+      extra: { trigger: "sweepRecepceRetention", result },
+    });
+    res.json(result);
+  }
+);
+
 // Catch-all error handler — turns a thrown error (or an explicit next(err))
 // into a JSON 500 instead of letting the request hang with no response. Async
 // handlers in Express 4 must still try/catch their own rejections to reach
@@ -320,6 +356,22 @@ export const refreshEmployeeEffective = onSchedule(
     await clock.refresh(true);
     const res = await refreshEffectiveRootForAllActive();
     console.log(`[refreshEmployeeEffective] scanned ${res.scanned}, updated ${res.updated}`);
+  }
+);
+
+// ─── Daily at midnight (Europe/Prague): sweep recepce history > 6 months ──────
+// Deletes the change history (auditLog for shiftHandovers/walkins/taxiRides +
+// the per-protocol history subcollections) once it's 6 months or older. Never
+// touches the live tables. Trigger manually via:
+//   curl -X POST http://127.0.0.1:5002/.../api/recepce/trigger-retention-sweep
+export const sweepRecepceHistory = onSchedule(
+  { schedule: "0 0 * * *", timeZone: "Europe/Prague" },
+  async () => {
+    await clock.refresh(true);
+    const res = await sweepRecepceRetention();
+    console.log(
+      `[sweepRecepceHistory] cutoff ${res.cutoffISO}: deleted ${res.auditDeleted} audit + ${res.historyDeleted} history`
+    );
   }
 );
 

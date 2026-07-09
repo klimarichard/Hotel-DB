@@ -671,7 +671,7 @@
 /* ── Phone (see index.css for the breakpoint convention) ───────────────────── */
 @media (max-width: 559.98px), (orientation: landscape) and (max-height: 480px) {
   /* Hero stacks one item per line: name, then meta (pozice/oddělení/stav), then
-     the action buttons — instead of the buttons cramming beside the name. */
+     the action buttons – instead of the buttons cramming beside the name. */
   .hero {
     flex-direction: column;
     gap: 0.75rem;

@@ -43,7 +43,7 @@ export interface PayrollNote {
   read?: boolean;
   readAt?: { seconds?: number; _seconds?: number } | null;
   readByName?: string;
-  // System-generated notes (mid-month Nástup/Ukončení) — regenerated on every
+  // System-generated notes (mid-month Nástup/Ukončení) – regenerated on every
   // recalc, so they're read-only in the UI.
   auto?: boolean;
   kind?: "nastup" | "ukonceni" | string;
@@ -56,7 +56,7 @@ export interface PayrollEntry {
   displayName?: string;
   baseHours?: number; // effective per-employee norm (override ?? prorated mid-month); falls back to period.baseHours
   baseHoursNorm?: number; // prorated/full norm before any per-employee override
-  hoursPerWeek?: number | null; // PPP úvazek — prorates the vacation target (#15 Part B)
+  hoursPerWeek?: number | null; // PPP úvazek – prorates the vacation target (#15 Part B)
   contractType: "HPP" | "PPP" | "DPP" | string;
   salary: number | null;
   hourlyRate: number | null;
@@ -102,7 +102,7 @@ const MONTH_NAMES = [
 
 // Display groups for the payroll table: managers stay in their own section on
 // top; reception + porters are shown together as one section. The stored
-// `section` value on each entry is unchanged — this is a display-only merge.
+// `section` value on each entry is unchanged – this is a display-only merge.
 const SECTION_GROUPS: { label: string; sections: string[] }[] = [
   { label: "FOM", sections: ["vedoucí"] },
   { label: "Recepce a portýři", sections: ["recepce", "portýři"] },
@@ -125,13 +125,13 @@ const EyeOffIcon = () => (
 
 // Výkaz / Dovolená / Nemoc / Základ are balanced together in PayrollBalanceModal
 // via computeBalance() (lib/payrollBalance.ts), which mirrors the backend's
-// calculateEntry. The old incremental computeCascades was removed — it broke the
+// calculateEntry. The old incremental computeCascades was removed – it broke the
 // invariant on re-edit (lowering Nemoc left Dovolená stuck).
 
 // ─── NAVÍC tiered display ─────────────────────────────────────────────────────
 
 function formatNavic(extraPay: number): React.ReactNode {
-  if (!extraPay || extraPay <= 0) return "—";
+  if (!extraPay || extraPay <= 0) return "–";
   if (extraPay < 5000) {
     const displayed = Math.ceil(extraPay / 0.85 / 100) * 100;
     return displayed.toLocaleString("cs-CZ");
@@ -208,8 +208,8 @@ function EditableCell({
       return;
     }
     if (num === naturalValue) {
-      // Typing the natural (auto/computed) value clears any override — including
-      // a stale one that already equals it — so the cell reads as non-edited.
+      // Typing the natural (auto/computed) value clears any override – including
+      // a stale one that already equals it – so the cell reads as non-edited.
       if (hasOverride) await onSave(null);
     } else if (num !== override) {
       await onSave(num);
@@ -257,7 +257,7 @@ function EditableCell({
       ? `Automaticky dopočítáno (vypočteno: ${computed})${editable ? " · dvojklik pro úpravu" : ""}`
       : editable ? "Dvojklik pro úpravu" : "";
 
-  // Explicit "restore original" — only for truly inline cells (onEditClick cells
+  // Explicit "restore original" – only for truly inline cells (onEditClick cells
   // delegate to the balance modal, whose own onSave is a no-op, so a reset glyph
   // there would do nothing).
   const showReset = editable && isUserOverridden && !onEditClick;
@@ -274,7 +274,7 @@ function EditableCell({
 
   const renderedValue = renderValue
     ? renderValue(displayValue)
-    : (displayValue === 0 ? "—" : displayValue.toLocaleString("cs-CZ"));
+    : (displayValue === 0 ? "–" : displayValue.toLocaleString("cs-CZ"));
 
   if (masked) {
     return (
@@ -511,9 +511,9 @@ export default function PayrollPage() {
         const raw = (e as unknown as Record<string, unknown>)[field];
         return typeof raw === "number" ? raw : 0;
       };
-      const fmt = (n: number) => (n === 0 ? "—" : n.toLocaleString("cs-CZ"));
+      const fmt = (n: number) => (n === 0 ? "–" : n.toLocaleString("cs-CZ"));
       const navicText = (extraPay: number): string => {
-        if (!extraPay || extraPay <= 0) return "—";
+        if (!extraPay || extraPay <= 0) return "–";
         if (extraPay < 5000) return (Math.ceil(extraPay / 0.85 / 100) * 100).toLocaleString("cs-CZ");
         if (extraPay === 5000) return (6000).toLocaleString("cs-CZ");
         return `${(6000).toLocaleString("cs-CZ")}<br>${(extraPay - 5000).toLocaleString("cs-CZ")}`;
@@ -551,7 +551,7 @@ export default function PayrollPage() {
           const dppAmount = entry.overrides?.dppAmount ?? entry.dppAmount ?? 0;
 
           const vacationCell = isDpp
-            ? "—"
+            ? "–"
             : (sick > 0
               ? `${fmt(vacation)}<div style="${cs.nemoc}">${sick} NEMOC</div>`
               : fmt(vacation));
@@ -559,20 +559,20 @@ export default function PayrollPage() {
           rowsHtml += "<tr>";
           rowsHtml += `<td style="${cs.nameCell}">${nameHtml}</td>`;
           rowsHtml += `<td style="${cs.cell}">${fmt(hours)}</td>`;
-          rowsHtml += `<td style="${cs.cell}">${isDpp ? "—" : fmt(report)}</td>`;
+          rowsHtml += `<td style="${cs.cell}">${isDpp ? "–" : fmt(report)}</td>`;
           rowsHtml += `<td style="${cs.cell}">${vacationCell}</td>`;
-          rowsHtml += `<td style="${cs.cell}">${isDpp ? "—" : fmt(night)}</td>`;
-          rowsHtml += `<td style="${cs.cell}">${isDpp ? "—" : fmt(holiday)}</td>`;
-          rowsHtml += `<td style="${cs.cell}">${isDpp ? "—" : fmt(weekend)}</td>`;
-          rowsHtml += `<td style="${cs.cell}">${isDpp ? fmt(dppAmount) : "—"}</td>`;
-          rowsHtml += `<td style="${cs.cell}">${isDpp ? "—" : navicText(extraPay)}</td>`;
-          rowsHtml += `<td style="${cs.cell}">${isDpp ? "—" : fmt(foodVouchers)}</td>`;
+          rowsHtml += `<td style="${cs.cell}">${isDpp ? "–" : fmt(night)}</td>`;
+          rowsHtml += `<td style="${cs.cell}">${isDpp ? "–" : fmt(holiday)}</td>`;
+          rowsHtml += `<td style="${cs.cell}">${isDpp ? "–" : fmt(weekend)}</td>`;
+          rowsHtml += `<td style="${cs.cell}">${isDpp ? fmt(dppAmount) : "–"}</td>`;
+          rowsHtml += `<td style="${cs.cell}">${isDpp ? "–" : navicText(extraPay)}</td>`;
+          rowsHtml += `<td style="${cs.cell}">${isDpp ? "–" : fmt(foodVouchers)}</td>`;
           const multisportCell =
             typeof entry.multisportPrice === "number"
               ? entry.multisportPrice > 0
                 ? `${entry.multisportPrice.toLocaleString("cs-CZ")} Kč`
-                : "—"
-              : entry.multisportActive ? "ANO" : "—";
+                : "–"
+              : entry.multisportActive ? "ANO" : "–";
           rowsHtml += `<td style="${cs.cell}">${multisportCell}</td>`;
           rowsHtml += "</tr>";
         }
@@ -594,7 +594,7 @@ export default function PayrollPage() {
 
       const fullHtml = `
         <div style="font-family:Arial,sans-serif;color:#111827;background:#fff;">
-          <h2 style="margin:0 0 6px 0;font-size:12pt;">Mzdy — ${MONTH_NAMES[period.month - 1]} ${period.year}</h2>
+          <h2 style="margin:0 0 6px 0;font-size:12pt;">Mzdy – ${MONTH_NAMES[period.month - 1]} ${period.year}</h2>
           <div style="font-size:8pt;color:#6b7280;margin-bottom:6px;">
             Základ: <strong>${period.baseHours}</strong> &nbsp;·&nbsp;
             Max. nočních: <strong>${period.maxNightHours}</strong> &nbsp;·&nbsp;
@@ -642,7 +642,7 @@ export default function PayrollPage() {
   }
 
   // Direct per-cell override (HODINY, NOČNÍ, SVÁTEK, SO+NE, NAVÍC, STRAVENKY,
-  // DPP). Výkaz / Dovolená / Nemoc / Základ are NOT edited here — they go through
+  // DPP). Výkaz / Dovolená / Nemoc / Základ are NOT edited here – they go through
   // the balance dialog (saveBalance) so the invariant is always maintained.
   async function saveOverride(entryId: string, field: OverrideField, value: number | null) {
     if (!period) return;
@@ -782,7 +782,7 @@ export default function PayrollPage() {
                 />
               </td>
               <td className={styles.numCell}>
-                {isDpp ? <span className={styles.dash}>—</span> : (
+                {isDpp ? <span className={styles.dash}>–</span> : (
                   <EditableCell
                     computed={entry.reportHours}
                     override={ov.reportHours}
@@ -794,7 +794,7 @@ export default function PayrollPage() {
                 )}
               </td>
               <td className={styles.numCell}>
-                {isDpp ? <span className={styles.dash}>—</span> : (
+                {isDpp ? <span className={styles.dash}>–</span> : (
                   <span className={styles.vacationWrap}>
                     <span className={styles.vacationInline}>
                       <EditableCell
@@ -826,7 +826,7 @@ export default function PayrollPage() {
                 )}
               </td>
               <td className={styles.numCell}>
-                {isDpp ? <span className={styles.dash}>—</span> : (
+                {isDpp ? <span className={styles.dash}>–</span> : (
                   <EditableCell
                     computed={entry.nightHours}
                     override={ov.nightHours}
@@ -836,7 +836,7 @@ export default function PayrollPage() {
                 )}
               </td>
               <td className={styles.numCell}>
-                {isDpp ? <span className={styles.dash}>—</span> : (
+                {isDpp ? <span className={styles.dash}>–</span> : (
                   <EditableCell
                     computed={entry.holidayHours}
                     override={ov.holidayHours}
@@ -847,7 +847,7 @@ export default function PayrollPage() {
                 )}
               </td>
               <td className={styles.numCell}>
-                {isDpp ? <span className={styles.dash}>—</span> : (
+                {isDpp ? <span className={styles.dash}>–</span> : (
                   <EditableCell
                     computed={entry.weekendHours}
                     override={ov.weekendHours}
@@ -864,10 +864,10 @@ export default function PayrollPage() {
                     editable={canEdit}
                     onSave={(v) => saveOverride(entry.id, "dppAmount", v)}
                   />
-                ) : <span className={styles.dash}>—</span>}
+                ) : <span className={styles.dash}>–</span>}
               </td>
               <td className={styles.numCell}>
-                {isDpp ? <span className={styles.dash}>—</span> : (
+                {isDpp ? <span className={styles.dash}>–</span> : (
                   <EditableCell
                     computed={entry.extraPay}
                     override={ov.extraPay}
@@ -881,7 +881,7 @@ export default function PayrollPage() {
                 )}
               </td>
               <td className={styles.numCell}>
-                {isDpp ? <span className={styles.dash}>—</span> : (
+                {isDpp ? <span className={styles.dash}>–</span> : (
                   <EditableCell
                     computed={entry.foodVouchers}
                     override={ov.foodVouchers}
@@ -895,12 +895,12 @@ export default function PayrollPage() {
                   entry.multisportPrice > 0 ? (
                     `${entry.multisportPrice.toLocaleString("cs-CZ")} Kč`
                   ) : (
-                    <span className={styles.dash}>—</span>
+                    <span className={styles.dash}>–</span>
                   )
                 ) : entry.multisportActive ? (
                   "ANO"
                 ) : (
-                  <span className={styles.dash}>—</span>
+                  <span className={styles.dash}>–</span>
                 )}
               </td>
               <td className={styles.numCell}>
@@ -921,7 +921,7 @@ export default function PayrollPage() {
                     title="Přidat poznámku"
                     disabled={!canManageNotes}
                   >
-                    <span className={styles.dash}>—</span>
+                    <span className={styles.dash}>–</span>
                   </button>
                 )}
               </td>

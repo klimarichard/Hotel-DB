@@ -62,7 +62,7 @@ const ChevronIcon = ({ open }: { open: boolean }) => (
 // ─── SensitiveField ───────────────────────────────────────────────────────────
 // apiValue: the raw value from the API response.
 //   "••••••••" → data exists, show redacted + reveal button
-//   falsy      → no data stored, show "—"
+//   falsy      → no data stored, show "–"
 
 function SensitiveField({
   employeeId,
@@ -103,7 +103,7 @@ function SensitiveField({
     <div className={styles.field}>
       <span className={styles.fieldLabel}>{label}</span>
       {!apiValue ? (
-        <span className={styles.fieldValue}>—</span>
+        <span className={styles.fieldValue}>–</span>
       ) : (
         <span className={styles.fieldValue}>
           {displayValue}
@@ -120,7 +120,7 @@ function SensitiveField({
 
 // ─── Employee history (audit log) ─────────────────────────────────────────────
 
-/** Human header for an employment row id — mirrors the employment-history
+/** Human header for an employment row id – mirrors the employment-history
  *  entry header so the audit log's "Vazba na pracovní poměr" reads naturally. */
 function employmentRowHeader(row: EmploymentRow): string {
   const typeLabel =
@@ -284,7 +284,7 @@ interface EmploymentRow {
   signingDate?: string;
   changes?: ChangeRow[];
   // Part-time: contracted hours per week (PPP only). Additive metadata in
-  // Part A — drives the contract template + the minimum-wage check, but does
+  // Part A – drives the contract template + the minimum-wage check, but does
   // NOT yet affect payroll computation (that proration is Part B).
   hoursPerWeek?: number;
 }
@@ -341,7 +341,7 @@ function isDateAfter(a: string | undefined, b: string | undefined): boolean {
 /**
  * Signing date of the most recent prior "nástup" row that the given row
  * sits on top of. Used as `{{originalSigningDate}}` for amendments and
- * terminations whose body references "smlouva ze dne …" — that date is the
+ * terminations whose body references "smlouva ze dne …" – that date is the
  * underlying nástup's signingDate, not the dodatek/ukončení's own.
  *
  * Picks the latest nástup with `startDate <= row.startDate` (excluding
@@ -524,7 +524,7 @@ function ChangeRowInput({
           value={row.changeKind}
           onChange={(e) => onChange(index, "changeKind", e.target.value)}
         >
-          <option value="">— typ změny —</option>
+          <option value="">– typ změny –</option>
           {CHANGE_KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
         </select>
 
@@ -568,7 +568,7 @@ function ChangeRowInput({
           );
           // Preserve the current value as a fallback option when it
           // doesn't match any catalogue entry (e.g. a legacy free-text
-          // string from before this dropdown existed) — otherwise the
+          // string from before this dropdown existed) – otherwise the
           // <select> would silently drop it.
           const valueInCatalogue = positions.some((p) => p.name === row.value);
           return (
@@ -577,7 +577,7 @@ function ChangeRowInput({
               value={row.value}
               onChange={(e) => onChange(index, "value", e.target.value)}
             >
-              <option value="">— vyberte pozici —</option>
+              <option value="">– vyberte pozici –</option>
               {!valueInCatalogue && row.value && (
                 <option value={row.value}>{row.value} (mimo katalog)</option>
               )}
@@ -604,7 +604,7 @@ function ChangeRowInput({
             value={row.value}
             onChange={(e) => onChange(index, "value", e.target.value)}
           >
-            <option value="">— vyberte —</option>
+            <option value="">– vyberte –</option>
             {UVAZEK_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
           </select>
         )}
@@ -672,9 +672,9 @@ function AddEntryModal({
   const [dppMaxMonthlyReward, setDppMaxMonthlyReward] = useState<number | null>(null);
   const [minimumWage, setMinimumWage] = useState<number | null>(null);
   // Holds a pending min-wage warning: the message + the save to run if the user
-  // confirms "Přesto uložit". Non-blocking (#2) — the admin can always proceed.
+  // confirms "Přesto uložit". Non-blocking (#2) – the admin can always proceed.
   const [minWageWarn, setMinWageWarn] = useState<{ message: string } | null>(null);
-  // Manual override for DPP "Sjednaná odměna" — when true, auto-compute is suppressed.
+  // Manual override for DPP "Sjednaná odměna" – when true, auto-compute is suppressed.
   // Pre-existing rows start in manual mode so saved values aren't overwritten on edit.
   const [agreedRewardManual, setAgreedRewardManual] = useState<boolean>(
     !!initialRow?.agreedReward
@@ -778,7 +778,7 @@ function AddEntryModal({
   }
 
   // "Actively employed" = at least one session that isn't over yet. A
-  // fixed-term contract (e.g. DPP) with a future end date counts as active —
+  // fixed-term contract (e.g. DPP) with a future end date counts as active –
   // the old check (a row with endDate === null) wrongly treated every
   // fixed-term contract as inactive, firing a misleading warning when ending
   // one.
@@ -799,7 +799,7 @@ function AddEntryModal({
   );
 
   /**
-   * Minimum-wage check (#2) — returns a warning message when the salary being
+   * Minimum-wage check (#2) – returns a warning message when the salary being
    * entered is below the threshold for the contract, else null. Non-blocking:
    * the caller shows it via ConfirmModal and lets the admin proceed. Covers a
    * Nástup (HPP/PPP) and a salary ("mzda") Dodatek, resolving the effective
@@ -860,7 +860,7 @@ function AddEntryModal({
     if (form.changeType === "nástup" && !form.contractType) {
       setError("Vyberte typ smlouvy."); return;
     }
-    // Rodičovská end date is OPTIONAL — it's unknown when leave begins and can
+    // Rodičovská end date is OPTIONAL – it's unknown when leave begins and can
     // be filled in later by editing the period.
     const warning = computeMinWageWarning();
     if (warning) { setMinWageWarn({ message: warning }); return; }
@@ -898,7 +898,7 @@ function AddEntryModal({
             salary: form.salary ? Number(form.salary) : null,
             hourlyRate: form.hourlyRate ? Number(form.hourlyRate) : null,
             probationPeriod: form.probationPeriod,
-            // Part-time hours/week — PPP only (null clears it for HPP).
+            // Part-time hours/week – PPP only (null clears it for HPP).
             hoursPerWeek:
               form.contractType === "PPP" && form.hoursPerWeek ? Number(form.hoursPerWeek) : null,
           };
@@ -911,7 +911,7 @@ function AddEntryModal({
           signingDate: form.signingDate || null,
         };
       } else if (form.changeType === "rodičovská") {
-        // Informational period — start + end only, no salary/position/contract.
+        // Informational period – start + end only, no salary/position/contract.
         payload = {
           changeType: "rodičovská",
           startDate: form.startDate,
@@ -1009,7 +1009,7 @@ function AddEntryModal({
                         setForm((f) => ({ ...f, departmentId: newDepId, jobTitle: "" }));
                       }}
                     >
-                      <option value="">— vyberte —</option>
+                      <option value="">– vyberte –</option>
                       {departments.map((d) => (
                         <option key={d.id} value={d.id}>{d.name}</option>
                       ))}
@@ -1032,7 +1032,7 @@ function AddEntryModal({
                         }));
                       }}
                     >
-                      <option value="">— vyberte —</option>
+                      <option value="">– vyberte –</option>
                       {positions
                         .filter((p) => p.departmentId === form.departmentId)
                         .map((p) => (
@@ -1043,7 +1043,7 @@ function AddEntryModal({
                   <div className={styles.modalField}>
                     <label className={styles.modalLabel}>Typ smlouvy *</label>
                     <select className={styles.modalInput} value={form.contractType} onChange={(e) => setField("contractType", e.target.value as ContractType)}>
-                      <option value="">— vyberte —</option>
+                      <option value="">– vyberte –</option>
                       {CONTRACT_TYPES_NASTUP.map((t) => <option key={t} value={t}>{t}</option>)}
                     </select>
                   </div>
@@ -1315,7 +1315,7 @@ export default function EmployeeDetailPage() {
   } | null>(null);
   const [editingRow, setEditingRow] = useState<EmploymentRow | null>(null);
 
-  // Generation flow has two distinct modes — row-tied (employment row contract)
+  // Generation flow has two distinct modes – row-tied (employment row contract)
   // and standalone (ad-hoc Multisport / Hmotná odpovědnost / custom). Both
   // feed the same GenerateContractModal but compose `employeeData` differently.
   // For row-tied generation we also carry the parent Nástup so Dodatek and
@@ -1338,7 +1338,7 @@ export default function EmployeeDetailPage() {
       }
     | null
   >(null);
-  // Adhoc-dropdown state — listing built-in standalone types + custom ones,
+  // Adhoc-dropdown state – listing built-in standalone types + custom ones,
   // and the small signing-date prompt that appears between dropdown click
   // and GenerateContractModal opening.
   const [adhocDropdownOpen, setAdhocDropdownOpen] = useState(false);
@@ -1348,7 +1348,7 @@ export default function EmployeeDetailPage() {
   const [validFromDraft, setValidFromDraft] = useState<string>("");
   const [customStandalone, setCustomStandalone] = useState<{ id: string; name: string }[]>([]);
   // Ids of built-in standalone templates (multisport / hmotná odpovědnost) that
-  // have been deactivated — filtered out of the "+ Adhoc dokument" picker so you
+  // have been deactivated – filtered out of the "+ Adhoc dokument" picker so you
   // can't generate from an inactive template. (Inactive customs are already
   // dropped from `customStandalone`.)
   const [inactiveStandaloneIds, setInactiveStandaloneIds] = useState<string[]>([]);
@@ -1465,7 +1465,7 @@ export default function EmployeeDetailPage() {
       const list = await api.get<ContractRecord[]>(`/employees/${id}/contracts`);
       setContracts(list);
     } catch {
-      // ignore — list stays as-is until next refetch
+      // ignore – list stays as-is until next refetch
     }
   }
 
@@ -1523,7 +1523,7 @@ export default function EmployeeDetailPage() {
     if (row.changeType === "rodičovská") {
       setConfirmModal({
         title: "Odebrat rodičovskou",
-        message: `Opravdu odebrat rodičovskou dovolenou (${formatDateCZ(row.startDate)} – ${row.endDate ? formatDateCZ(row.endDate) : "—"})?`,
+        message: `Opravdu odebrat rodičovskou dovolenou (${formatDateCZ(row.startDate)} – ${row.endDate ? formatDateCZ(row.endDate) : "–"})?`,
         confirmLabel: "Odebrat",
         danger: true,
         onConfirm: () => {
@@ -1578,7 +1578,7 @@ export default function EmployeeDetailPage() {
     }
   }, [expanded, id, loadedSections]);
 
-  // Load contact + documents when the History tab is opened — they feed
+  // Load contact + documents when the History tab is opened – they feed
   // the GenerateContractModal so the user can generate a PDF without
   // having to first visit the Detail tab to populate the cache.
   useEffect(() => {
@@ -1679,7 +1679,7 @@ export default function EmployeeDetailPage() {
   if (loading) return <div className={styles.state}>Načítám…</div>;
   if (!employee) return <div className={styles.state}>Zaměstnanec nenalezen.</div>;
 
-  const val = (v?: string | null) => v || "—";
+  const val = (v?: string | null) => v || "–";
 
   return (
     <div>
@@ -1693,7 +1693,7 @@ export default function EmployeeDetailPage() {
         <div className={styles.heroLeft}>
           <div className={styles.heroName}>{employeeDisplayName(employee)}</div>
           <div className={styles.heroMeta}>
-            {employee.currentJobTitle || "—"} · {employee.currentDepartment || "—"} ·{" "}
+            {employee.currentJobTitle || "–"} · {employee.currentDepartment || "–"} ·{" "}
             <span
               className={
                 employee.status === "active"
@@ -1748,7 +1748,7 @@ export default function EmployeeDetailPage() {
         </div>
       )}
 
-      {/* "Zaučování" badge — only while training is still active (no end date,
+      {/* "Zaučování" badge – only while training is still active (no end date,
           or end date today/in the future). Auto-disappears once it passes. */}
       {additional?.zaucovani === true &&
         (!additional.zaucovaniDo || additional.zaucovaniDo >= clock.today()) && (
@@ -1766,7 +1766,7 @@ export default function EmployeeDetailPage() {
         <div className={styles.alertBanner}>
           <div className={styles.alertItemExpiring}>
             <strong>
-              Neplatné údaje po reaktivaci: {invalidCatalogRefs.join(", ")} — už nejsou
+              Neplatné údaje po reaktivaci: {invalidCatalogRefs.join(", ")} – už nejsou
               v číselníku. Upravte je v Detailu / Historii pracovního poměru.
             </strong>
           </div>
@@ -1942,7 +1942,7 @@ export default function EmployeeDetailPage() {
                 setEmployment((prev) => [row, ...prev]);
                 setNewEntryMode(null);
                 // Dodatek may have changed root denormalized fields server-side
-                // (currentJobTitle etc.) — re-fetch the employee to keep the
+                // (currentJobTitle etc.) – re-fetch the employee to keep the
                 // Detail tab in sync without a full page reload.
                 if ((row.changeType === "změna smlouvy" || row.changeType === "rodičovská") && id) {
                   api.get<Employee>(`/employees/${id}`).then(setEmployee).catch(() => {});
@@ -1954,7 +1954,7 @@ export default function EmployeeDetailPage() {
                   setConfirmModal({
                     title: "Zrušit Multisport v extranetu",
                     message:
-                      "Zaměstnanec měl aktivní Multisport. Konec byl automaticky nastaven na konec měsíce ukončení — nezapomeňte členství zrušit i v Multisport extranetu.",
+                      "Zaměstnanec měl aktivní Multisport. Konec byl automaticky nastaven na konec měsíce ukončení – nezapomeňte členství zrušit i v Multisport extranetu.",
                     confirmLabel: "Rozumím",
                     showCancel: false,
                     onConfirm: () => setConfirmModal(null),
@@ -2090,7 +2090,7 @@ export default function EmployeeDetailPage() {
           <div className={styles.field}><span className={styles.fieldLabel}>Jméno</span><span className={styles.fieldValue}>{employee.firstName} {employee.lastName}</span></div>
           <div className={styles.field}><span className={styles.fieldLabel}>Zobrazované jméno</span><span className={styles.fieldValue}>{employee.displayName?.trim() ? employee.displayName : `${employeeDisplayName(employee)} (výchozí)`}</span></div>
           <div className={styles.field}><span className={styles.fieldLabel}>Datum narození</span><span className={styles.fieldValue}>{val(formatDateCZ(employee.dateOfBirth))}</span></div>
-          <div className={styles.field}><span className={styles.fieldLabel}>Pohlaví</span><span className={styles.fieldValue}>{employee.gender === "m" ? "Muž" : employee.gender === "f" ? "Žena" : "—"}</span></div>
+          <div className={styles.field}><span className={styles.fieldLabel}>Pohlaví</span><span className={styles.fieldValue}>{employee.gender === "m" ? "Muž" : employee.gender === "f" ? "Žena" : "–"}</span></div>
           <div className={styles.field}><span className={styles.fieldLabel}>Rodné příjmení</span><span className={styles.fieldValue}>{val(employee.birthSurname)}</span></div>
           <SensitiveField employeeId={id!} field="birthNumber" label="Rodné číslo" apiValue={employee.birthNumber} />
           <div className={styles.field}><span className={styles.fieldLabel}>Rodinný stav</span><span className={styles.fieldValue}>{val(displayGendered(employee.maritalStatus, employee.genderNeutralDisplay ? null : (employee.gender as "m" | "f")))}</span></div>
@@ -2205,8 +2205,8 @@ export default function EmployeeDetailPage() {
           <>
             <MultisportEditor employeeId={id!} />
             <div className={styles.fields}>
-              <div className={styles.field}><span className={styles.fieldLabel}>Home office</span><span className={styles.fieldValue}>{additional?.homeOffice != null ? String(additional.homeOffice) : "—"}</span></div>
-              <div className={styles.field}><span className={styles.fieldLabel}>Náhrady</span><span className={styles.fieldValue}>{additional?.allowances === true ? "Ano" : additional?.allowances === false ? "Ne" : "—"}</span></div>
+              <div className={styles.field}><span className={styles.fieldLabel}>Home office</span><span className={styles.fieldValue}>{additional?.homeOffice != null ? String(additional.homeOffice) : "–"}</span></div>
+              <div className={styles.field}><span className={styles.fieldLabel}>Náhrady</span><span className={styles.fieldValue}>{additional?.allowances === true ? "Ano" : additional?.allowances === false ? "Ne" : "–"}</span></div>
             </div>
           </>
         )}
@@ -2251,7 +2251,7 @@ export default function EmployeeDetailPage() {
               // An "ukončení" row stores the termination date in its own
               // startDate (not endDate). The {{endDate}} variable on a
               // termination template means "Datum ukončení", so map it from
-              // the row's startDate — otherwise it falls back to the parent's
+              // the row's startDate – otherwise it falls back to the parent's
               // (often empty, or the original fixed end) and the template
               // reports no end date / the wrong date.
               endDate:

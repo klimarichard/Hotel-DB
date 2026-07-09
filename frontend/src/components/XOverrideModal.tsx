@@ -53,7 +53,7 @@ export default function XOverrideModal({ employeeName, date, violations, onSubmi
         </div>
         <div className={styles.body}>
           <p style={{ fontSize: "0.875rem", color: "#374151", margin: "0 0 0.75rem" }}>
-            <strong>{employeeName}</strong> — {date}
+            <strong>{employeeName}</strong> – {date}
           </p>
 
           <div style={{ background: "#fef9c3", border: "1px solid #fde047", borderRadius: "6px", padding: "0.6rem 0.75rem", marginBottom: "1rem" }}>

@@ -8,7 +8,7 @@ import Button from "@/components/Button";
 import styles from "./HelpPage.module.css";
 
 /**
- * Nápověda — permission-driven Czech reference. It lists exactly the things the
+ * Nápověda – permission-driven Czech reference. It lists exactly the things the
  * current user can do, derived from the same master tour step list (filtered by
  * `can()`) that powers the guided tour, grouped by the permission catalog's own
  * groups. The "Spustit prohlídku" button replays that same filtered tour.
@@ -18,7 +18,7 @@ import styles from "./HelpPage.module.css";
  * optional screenshot (see lib/help/helpImages.ts).
  *
  * Single source of truth: add a permission to the catalog + a tour step and it
- * surfaces here automatically — no per-role help content.
+ * surfaces here automatically – no per-role help content.
  */
 
 // permission key → catalog group label, built once from the catalog.

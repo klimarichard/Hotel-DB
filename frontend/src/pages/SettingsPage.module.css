@@ -541,7 +541,7 @@
     color: var(--color-text-muted);
     flex: 0 0 auto;
   }
-  /* The actions row drops the "Akce" label — just the buttons, left-aligned. */
+  /* The actions row drops the "Akce" label – just the buttons, left-aligned. */
   .foldTable tr.foldOpen td.foldActions {
     justify-content: flex-start;
     flex-wrap: wrap;

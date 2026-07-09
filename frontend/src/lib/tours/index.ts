@@ -4,7 +4,7 @@ import { appTour, APP_TOUR_STEPS, WHATS_NEW_INTRO } from "./appTour";
 
 /**
  * There is a single, permission-driven tour. `buildAppTour(can)` returns the
- * tour with its steps filtered down to the ones the current user holds — steps
+ * tour with its steps filtered down to the ones the current user holds – steps
  * with no `permission` (welcome / outro) are always kept. No per-role tours.
  */
 export const APP_TOUR_ID = appTour.id;
@@ -12,8 +12,8 @@ export const APP_TOUR_VERSION = appTour.version;
 
 /**
  * Whether a step is shown for this user. The rule is:
- *   HAS `permission` (any of them if it's an array — OR semantics for merged
- *   variants)  AND NOT any `excludeIfPermission` (the inverse "superset" gate —
+ *   HAS `permission` (any of them if it's an array – OR semantics for merged
+ *   variants)  AND NOT any `excludeIfPermission` (the inverse "superset" gate –
  *   a superseding permission hides a step that would be redundant, e.g. an admin
  *   who can see ALL vacation requests shouldn't get the approved-colleagues-only
  *   step). Steps with no `permission` (welcome / outro) are always shown unless
@@ -33,7 +33,7 @@ export function userHasStepPermission(
   return Array.isArray(step.permission) ? step.permission.some(can) : can(step.permission);
 }
 
-/** Production build flag — staging/dev keep non-prod-only steps (e.g. test clock). */
+/** Production build flag – staging/dev keep non-prod-only steps (e.g. test clock). */
 const IS_PROD = import.meta.env.MODE === "production";
 
 /**
@@ -47,8 +47,8 @@ export interface TourBuildContext {
    * Whether the current viewport is the phone (bottom-nav) layout. When true,
    * `buildAppTour` drops `hideOnMobile` steps and rewrites each step's
    * `anchor`/`body` from its `mobileAnchor`/`mobileBody` overrides. Defaults to
-   * false so the desktop tour — and the Nápověda page, which lists content
-   * regardless of viewport — is unaffected.
+   * false so the desktop tour – and the Nápověda page, which lists content
+   * regardless of viewport – is unaffected.
    */
   isPhone?: boolean;
 }
@@ -60,7 +60,7 @@ export interface TourBuildOptions {
    * Used for returning users who already saw an older version. Omit for the full
    * tour (first-time users + manual replay from Nápověda). When no new step
    * matches the user's permissions, the returned tour has an empty `steps` array
-   * — the caller should then skip firing and just record the seen-version.
+   * – the caller should then skip firing and just record the seen-version.
    */
   sinceVersion?: number;
 }
@@ -71,7 +71,7 @@ export function buildAppTour(
   opts: TourBuildOptions = {}
 ): TourDefinition {
   // Resolve each step's section by carry-forward over the MASTER list FIRST (only
-  // the first step of each group carries an explicit `section`), THEN filter — so
+  // the first step of each group carries an explicit `section`), THEN filter – so
   // a step keeps its section even if its group's lead step is filtered out.
   let currentSection = "";
   const withSection = APP_TOUR_STEPS.map((step) => {

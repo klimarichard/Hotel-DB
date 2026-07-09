@@ -7,7 +7,7 @@ import styles from "./PhoneFormatModal.module.css";
  * Shown at save time when a non-+420 phone number is entered (the +420 case is
  * auto-formatted on display). Lets the user choose how the number should be
  * displayed; the chosen string is stored verbatim and shown as-is everywhere.
- * Dismissal follows the project rule — ✕ / Zrušit / Uložit only, never backdrop.
+ * Dismissal follows the project rule – ✕ / Zrušit / Uložit only, never backdrop.
  */
 interface Props {
   phone: string;
@@ -29,7 +29,7 @@ export default function PhoneFormatModal({ phone, onConfirm, onCancel }: Props) 
         <div className={styles.body}>
           <p className={styles.note}>
             Toto číslo není české (+420). Zadejte, jak se má zobrazovat (např.
-            s mezerami pro čitelnost) — uloží se a zobrazí přesně takto.
+            s mezerami pro čitelnost) – uloží se a zobrazí přesně takto.
           </p>
           <div className={styles.fieldLabel}>Zadané číslo</div>
           <div className={styles.raw}>{phone}</div>

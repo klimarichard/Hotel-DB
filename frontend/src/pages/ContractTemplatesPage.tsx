@@ -21,7 +21,7 @@ import { TableCell } from "@tiptap/extension-table-cell";
  * element, so neither addAttributes' renderHTML nor an extension-level
  * renderHTML override can write a class onto it. Instead, we apply the
  * `hpm-borderless` class via a ProseMirror Decoration that runs on every
- * state update — the decoration writes class on top of whatever NodeView
+ * state update – the decoration writes class on top of whatever NodeView
  * rendered the table, which is exactly what we want.
  *
  * parseHTML on the attribute keeps save/reload round-trips working: when
@@ -216,7 +216,7 @@ const NbspKeybind = Extension.create({
   },
 });
 
-/** Line-height attribute on TextStyle — toolbar select offers 1.0/1.15/1.5/2.0/3.0. */
+/** Line-height attribute on TextStyle – toolbar select offers 1.0/1.15/1.5/2.0/3.0. */
 const LineHeight = Extension.create({
   name: "lineHeight",
   addGlobalAttributes() {
@@ -390,7 +390,7 @@ const ListItemStyle = Extension.create({
   },
 });
 
-/** Custom FontSize extension — adds fontSize attribute to TextStyle marks. */
+/** Custom FontSize extension – adds fontSize attribute to TextStyle marks. */
 const FontSize = Extension.create({
   name: "fontSize",
   addGlobalAttributes() {
@@ -482,7 +482,7 @@ interface TemplateDoc extends TemplateMeta {
 }
 
 function SaveIcon() {
-  // Floppy-disk glyph at 14×14 — matches the Button text size.
+  // Floppy-disk glyph at 14×14 – matches the Button text size.
   return (
     <svg
       width="14"
@@ -505,7 +505,7 @@ function SaveIcon() {
 export default function ContractTemplatesPage() {
   const { user, can } = useAuth();
   // Editing is gated by contractTemplates.manage; a view-only user (route perm
-  // contractTemplates.view) sees templates read-only — no toolbar, no Save, no
+  // contractTemplates.view) sees templates read-only – no toolbar, no Save, no
   // Create, no variable-insert, no margins editor.
   const canManage = can("contractTemplates.manage");
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -679,7 +679,7 @@ export default function ContractTemplatesPage() {
 
   function handleToggleActive(id: string, currentlyActive: boolean, label: string) {
     if (!currentlyActive) {
-      // Reactivating is safe/non-destructive — do it immediately, no confirm.
+      // Reactivating is safe/non-destructive – do it immediately, no confirm.
       doSetActive(id, true);
       return;
     }
@@ -866,7 +866,7 @@ export default function ContractTemplatesPage() {
         body: JSON.stringify({
           type: selected,
           // Built-in types resolve via the label map; custom (standalone)
-          // templates aren't in it, so fall back to their stored name —
+          // templates aren't in it, so fall back to their stored name –
           // otherwise the backend rejects with "type, name, and htmlContent
           // are required" because name comes through undefined.
           name:
@@ -886,7 +886,7 @@ export default function ContractTemplatesPage() {
         try {
           const body = (await resp.json()) as { error?: string };
           detail = body?.error ?? "";
-        } catch { /* non-JSON body — fall through to generic */ }
+        } catch { /* non-JSON body – fall through to generic */ }
         throw new Error(detail || `Chyba při ukládání (${resp.status})`);
       }
       setSaveMsg("Uloženo");
@@ -1118,7 +1118,7 @@ export default function ContractTemplatesPage() {
                               type="button"
                               className={styles.templateActionBtn}
                               // A "Prázdná" (doc-less) built-in has nothing to
-                              // deactivate — the PATCH would 404.
+                              // deactivate – the PATCH would 404.
                               disabled={busyTemplateId === id || (!meta && active)}
                               onClick={() => handleToggleActive(id, active, label)}
                               title={active ? "Skrýt z generování a přesunout dolů" : "Znovu aktivovat"}
@@ -1211,7 +1211,7 @@ export default function ContractTemplatesPage() {
                 }
                 // Propagate font-size onto the parent <li> directly so the
                 // browser's ::marker (the "1." / "•") inherits it. Chain-based
-                // updateAttributes was unreliable here — use setNodeMarkup on
+                // updateAttributes was unreliable here – use setNodeMarkup on
                 // the listItem ancestor instead.
                 if (editor) {
                   const { state, view } = editor;
@@ -1385,7 +1385,7 @@ export default function ContractTemplatesPage() {
               className={styles.toolBtn}
               onMouseDown={(e) => { e.preventDefault(); editor?.chain().focus().setHorizontalRule().run(); }}
               title="Vodorovná čára"
-            >—</button>
+            >–</button>
 
             <span className={styles.toolSep} />
 

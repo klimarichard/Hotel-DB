@@ -2,7 +2,7 @@
  * Czech field labels for the `payrollPeriods` collection and its sub-docs
  * (entries, notes). Filled in by the payroll-labels task.
  *
- * One root map — period docs (`payrollPeriods`), per-employee entries
+ * One root map – period docs (`payrollPeriods`), per-employee entries
  * (`payrollPeriods/entries`) and notes (`payrollPeriods/entries/notes`) all
  * resolve through this single map, since the leaf field names are unique
  * enough not to collide. Labels mirror the column headers / modal wording in

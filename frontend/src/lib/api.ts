@@ -57,10 +57,17 @@ async function request<T>(
   body?: unknown
 ): Promise<T> {
   // Guided-tour demo: serve mock fixtures (no backend, no Firestore) for the
-  // sentinel demo employee and — while a demo route is mounted — the self /
-  // payroll / shifts endpoints for the active scenario. See lib/tours/demoData.ts.
+  // sentinel demo employee and – while a demo route is mounted – the self /
+  // payroll / shifts / recepce endpoints for the active scenario. See
+  // lib/tours/demoData.ts. A `status >= 400` means the fixture wants to simulate
+  // an error response (e.g. a 404 so the protokol "empty → create" state renders).
   const demo = getDemoResponse(method, path);
-  if (demo.hit) return demo.value as T;
+  if (demo.hit) {
+    if (typeof demo.status === "number" && demo.status >= 400) {
+      throw new ApiError(demo.status, { error: "demo" }, "demo");
+    }
+    return demo.value as T;
+  }
 
   const headers: Record<string, string> = {
     ...(await getAuthHeader()),
@@ -70,6 +77,11 @@ async function request<T>(
     method,
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
+    // Never read from / write to the browser HTTP cache. API responses are
+    // dynamic; without this the browser can serve a stale response for a URL
+    // (notably a 404 cached before a doc was created, which then makes a
+    // just-created record look like it doesn't exist).
+    cache: "no-store",
   });
   if (!res.ok) {
     const errBody = await res.json().catch(() => ({ error: res.statusText }));
@@ -125,7 +137,7 @@ export interface RoleType {
 }
 
 export const roleTypesApi = {
-  // Always alphabetical by name (cs) — every consumer (type dropdowns, the
+  // Always alphabetical by name (cs) – every consumer (type dropdowns, the
   // user-types list, menu-order cards) expects the same ordering.
   list: () =>
     api

@@ -57,9 +57,9 @@ export default function PayrollBalanceModal({ entry, baseHoursNorm, maxHolidayHo
   const vykazShown = vykazPinned ? vykaz : fmt(res.vykaz);
   const baseOverridden = B !== baseHoursNorm;
   // HPP invariant: Výkaz + Dovolená + Nemoc must equal the full base. PPP has no
-  // single target — Dovolená fills only to the úvazek-proportional part of the
+  // single target – Dovolená fills only to the úvazek-proportional part of the
   // base (½ at 20 h/week), Výkaz can run up to the full base, and Navíc starts
-  // only above it — so we show thresholds, not a sum-check.
+  // only above it – so we show thresholds, not a sum-check.
   const sumOk = !isPpp && res.sum === B;
 
   async function handleSave() {
@@ -83,7 +83,7 @@ export default function PayrollBalanceModal({ entry, baseHoursNorm, maxHolidayHo
     if (baseOverridden) overrides.baseHours = B; else delete overrides.baseHours;
     if (finalReportOverride !== undefined) overrides.reportHours = finalReportOverride;
     else delete overrides.reportHours;
-    // Dovolená is auto-balanced now — drop any legacy manual override.
+    // Dovolená is auto-balanced now – drop any legacy manual override.
     delete overrides.vacationHours;
 
     setSaving(true);
@@ -102,7 +102,7 @@ export default function PayrollBalanceModal({ entry, baseHoursNorm, maxHolidayHo
     <div className={styles.modalOverlay}>
       <div className={styles.modal}>
         <div className={styles.modalHeader}>
-          <span className={styles.modalTitle}>Mzdové složky — {employeeDisplayName(entry)}</span>
+          <span className={styles.modalTitle}>Mzdové složky – {employeeDisplayName(entry)}</span>
           <button className={styles.modalClose} onClick={onClose}>✕</button>
         </div>
         <div className={styles.modalBody}>

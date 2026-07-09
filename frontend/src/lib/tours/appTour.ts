@@ -15,7 +15,7 @@ import type { TourStep, TourDefinition } from "./types";
  *  - `reveal` clicks tab/expander anchors to mount controls hidden behind tabs.
  *  - Person-record controls (reveal sensitive, employment, contracts, documents,
  *    benefits, edit/delete, and the Můj profil controls) point at the tour-only
- *    demo profile at /napoveda/ukazka — a fully-populated INERT dummy record, so
+ *    demo profile at /napoveda/ukazka – a fully-populated INERT dummy record, so
  *    every anchor (e.g. the sensitive-data eye) always exists and no real data
  *    is shown. See pages/TourDemoProfile.tsx.
  *  - State-gated controls (shift plan controls, payroll period buttons) only
@@ -36,6 +36,14 @@ const DEMO_SHIFTS_EMPTY = "/napoveda/ukazka-smeny-prazdne"; // real Směny page,
 const DEMO_SHIFTS_CREATED = "/napoveda/ukazka-smeny-vytvoreny"; // created (not opened) plan → Smazat plán
 const DEMO_SHIFTS_PUBLISHED = "/napoveda/ukazka-smeny-publikovane"; // published plan → Volné směny section
 const DEMO_SHIFTS_CHANGE_REQUEST = "/napoveda/ukazka-smeny-zadost"; // published plan → change-request modal auto-opened
+// Recepce demos: the REAL protokol/walkiny/taxi tab rendered on mock data via
+// pages/RecepceDemoPage (protokol has populated / empty / signed variants so the
+// create button and the after-handover "next shift" button both get a state).
+const DEMO_PROTOKOL = "/napoveda/ukazka-protokol"; // populated, unsigned protocol
+const DEMO_PROTOKOL_EMPTY = "/napoveda/ukazka-protokol-prazdne"; // no record → create button
+const DEMO_PROTOKOL_SIGNED = "/napoveda/ukazka-protokol-podepsany"; // signed → next-shift button
+const DEMO_WALKINY = "/napoveda/ukazka-walkiny"; // populated walk-ins table
+const DEMO_TAXI = "/napoveda/ukazka-taxi"; // populated rides + routes ceník
 
 /**
  * Section labels for the "Předchozí/Další sekce" jump buttons. Set `section` only
@@ -47,6 +55,7 @@ const SECTIONS = {
   overview: "Přehled",
   shifts: "Směny",
   vacation: "Dovolená",
+  recepce: "Recepce",
   // Zaměstnanci spans the list + the employee card (no separate "Karta" section).
   employees: "Zaměstnanci",
   profile: "Můj profil",
@@ -74,7 +83,7 @@ export const APP_TOUR_STEPS: TourStep[] = [
 
   // ── Přehled (/prehled) ──────────────────────────────────────────────────────
   { section: SECTIONS.overview, permission: "nav.dashboard.view", anchor: "nav-prehled", mobileAnchor: "bottomnav-prehled", title: "Přehled", body: "Přehled je vaše úvodní obrazovka se shrnutím nejdůležitějších údajů.", placement: "right" },
-  // Date header — two variants: WITH the denní/noční badge (users with shift
+  // Date header – two variants: WITH the denní/noční badge (users with shift
   // access) and WITHOUT it (stats-only viewers like the účetní, whose header
   // shows no shift badge). The inverse gate keeps shift users on the first only.
   { permission: ["shifts.view.all", "shifts.view.self"], anchor: "overview-date-header", route: "/prehled", title: "Přehled - dnešní datum", body: "Titulek nahoře vždy ukazuje dnešní datum a právě probíhající směnu (denní/noční).", placement: "bottom" },
@@ -123,7 +132,32 @@ export const APP_TOUR_STEPS: TourStep[] = [
   { permission: "vacation.view.all", excludeIfPermission: "vacation.review", anchor: "vacation-all-requests", route: "/dovolena", title: "Žádosti o dovolenou", body: "Seznam žádostí všech zaměstnanců se stavem (čeká, schváleno, zamítnuto).", placement: "top" },
   { permission: "vacation.view.approvedUpcoming", excludeIfPermission: "vacation.view.all", anchor: "vacation-approved-colleagues", route: "/dovolena", title: "Schválené dovolené kolegů", body: "Zde vidíte schválené dovolené vašich kolegů. Pokud je to možné, snažte se vyhnout kolizi termínu s někým jiným.", placement: "top" },
 
-  // ── Zaměstnanci — seznam (/zamestnanci) ──────────────────────────────────────
+  // ── Recepce (/recepce) ───────────────────────────────────────────────────────
+  { section: SECTIONS.recepce, permission: "nav.recepce.view", addedInVersion: 12, anchor: "nav-recepce", mobileAnchor: "bottomnav-more", title: "Recepce", body: "V sekci Recepce je veškerá agenda jednotlivých hotelů. Naleznete zde Předávací protokol, Walkiny a Taxi. Na hotelu Ambiance navíc prodej z lobby baru a na hotelu Amigo prodej přes terminál na baru.", placement: "right" },
+
+  // ── Recepce → Předávací protokol (demo tab on mock data) ─────────────────────
+  // Deep protokol/walkiny/taxi steps are desktop-only (hideOnMobile): they
+  // spotlight the wide protocol grid / tables that don't lay out on a phone.
+  { permission: ["recepce.ambiance.protokol.view", "recepce.superior.protokol.view", "recepce.amigo.protokol.view", "recepce.ankora.protokol.view"], addedInVersion: 12, hideOnMobile: true, anchor: "protokol-toolbar", route: DEMO_PROTOKOL, title: "Výběr směny", body: "Předávací protokol se vede pro každou směnu zvlášť. Nahoře zvolíte datum a směnu (Den / Noc); šipkami ← Předchozí a Následující → přecházíte mezi navazujícími směnami.", placement: "bottom" },
+  { permission: ["recepce.ambiance.protokol.view", "recepce.superior.protokol.view", "recepce.amigo.protokol.view", "recepce.ankora.protokol.view"], addedInVersion: 12, hideOnMobile: true, anchor: "protokol-cash", route: DEMO_PROTOKOL, title: "Počítání pokladny a trezoru", body: "Do tabulek KASA a TREZOR (zvlášť pro CZK a EUR) zapisujete u jednotlivých bankovek a mincí počty kusů.", placement: "top" },
+  { permission: ["recepce.ambiance.protokol.view", "recepce.superior.protokol.view", "recepce.amigo.protokol.view", "recepce.ankora.protokol.view"], addedInVersion: 12, hideOnMobile: true, anchor: "protokol-ucty", route: DEMO_PROTOKOL, title: "Účty", body: "Do sekce Účty přidáváte tlačítkem + Přidat účet jednotlivé položky (název a částku v Kč).", placement: "top" },
+  { permission: ["recepce.ambiance.protokol.view", "recepce.superior.protokol.view", "recepce.amigo.protokol.view", "recepce.ankora.protokol.view"], addedInVersion: 12, hideOnMobile: true, anchor: "protokol-sm", route: DEMO_PROTOKOL, title: "Speciální řádky", body: "Nad běžnými účty jsou speciální řádky. Řádek „sm“ editujete kliknutím na text „sm“. Ostatní dva řádky mohou měnit jen pověření uživatelé.", placement: "right" },
+  { permission: ["recepce.ambiance.protokol.view", "recepce.superior.protokol.view", "recepce.amigo.protokol.view", "recepce.ankora.protokol.view"], addedInVersion: 12, hideOnMobile: true, anchor: "protokol-notes", route: DEMO_PROTOKOL, title: "Poznámky", body: "Do Poznámek zapisujete vzkazy pro navazující směnu. Vyřízené položky odškrtnete – zaškrtnutá poznámka se přeškrtne a do další směny se již nekopíruje.", placement: "left" },
+  { permission: ["recepce.ambiance.protokol.view", "recepce.superior.protokol.view", "recepce.amigo.protokol.view", "recepce.ankora.protokol.view"], addedInVersion: 12, hideOnMobile: true, anchor: "protokol-signatures", route: DEMO_PROTOKOL, title: "Předání směny podpisem", body: "Na konci směny protokol podepíšete tlačítkem Předat (potvrdíte jménem a heslem). Přebírající pak podepíše tlačítkem Převzít. Jakmile je přítomný alespoň jeden podpis, protokol již nelze upravit. Podpis může smazat pouze ten, kdo protokol původně podepsal, a musí při tom opět zadat heslo.", placement: "top" },
+  { permission: ["recepce.ambiance.protokol.view", "recepce.superior.protokol.view", "recepce.amigo.protokol.view", "recepce.ankora.protokol.view"], addedInVersion: 12, hideOnMobile: true, anchor: "protokol-nextshift", route: DEMO_PROTOKOL_SIGNED, title: "Protokol pro další směnu", body: "Po podepsání oběma recepčními se objeví tlačítko „Vytvořit protokol pro další směnu“, kterým zkopírujete současné hodnoty v protokolu do další směny.", placement: "top" },
+  { permission: ["recepce.ambiance.protokol.view", "recepce.superior.protokol.view", "recepce.amigo.protokol.view", "recepce.ankora.protokol.view"], addedInVersion: 12, hideOnMobile: true, anchor: "protokol-history", route: DEMO_PROTOKOL, title: "Historie a vrácení změn", body: "Tlačítky ↶ Zpět a ↷ Vpřed můžete vracet změny, tlačítko Historie zobrazí seznam všech úprav.", placement: "bottom" },
+  { permission: ["recepce.ambiance.protokol.view", "recepce.superior.protokol.view", "recepce.amigo.protokol.view", "recepce.ankora.protokol.view"], addedInVersion: 12, hideOnMobile: true, anchor: "protokol-print", route: DEMO_PROTOKOL_SIGNED, title: "Tisk protokolu", body: "Jakmile je protokol podepsaný oběma stranami, můžete ho vytisknout.", placement: "bottom" },
+  { permission: ["recepce.ambiance.protokol.create", "recepce.superior.protokol.create", "recepce.amigo.protokol.create", "recepce.ankora.protokol.create"], addedInVersion: 12, hideOnMobile: true, anchor: "protokol-create", route: DEMO_PROTOKOL_EMPTY, title: "Založení protokolu", body: "Pokud pro danou směnu neexistuje žádný předávací protokol, můžete vytvořit jeho prázdnou kopii a začít vyplňovat.", placement: "bottom" },
+
+  // ── Recepce → Walkiny (demo tab) ─────────────────────────────────────────────
+  { permission: ["recepce.ambiance.walkiny.view", "recepce.superior.walkiny.view", "recepce.amigo.walkiny.view", "recepce.ankora.walkiny.view"], addedInVersion: 12, hideOnMobile: true, anchor: "walkiny-table", route: DEMO_WALKINY, title: "Walkiny", body: "V této tabulce evidujeme prodané walk-iny. Nejnovější prodeje se zobrazují nahoře.", placement: "top" },
+  { permission: ["recepce.ambiance.walkiny.view", "recepce.superior.walkiny.view", "recepce.amigo.walkiny.view", "recepce.ankora.walkiny.view"], addedInVersion: 12, hideOnMobile: true, anchor: "walkiny-add", route: DEMO_WALKINY, title: "Přidání walk-inu", body: "Tímto tlačítkem otevřete formulář pro přidání walk-inu: zadáte datum, recepčního, který walk-in prodal, číslo rezervace v Protelu a částku s měnou (CZK/EUR).", placement: "bottom" },
+
+  // ── Recepce → Taxi (demo tab) ────────────────────────────────────────────────
+  { permission: ["recepce.ambiance.taxi.view", "recepce.superior.taxi.view", "recepce.amigo.taxi.view", "recepce.ankora.taxi.view"], addedInVersion: 12, hideOnMobile: true, anchor: "taxi-add", route: DEMO_TAXI, title: "Taxi jízdy", body: "V této tabulce zapisujeme objednané jízdy taxi. Tlačítkem „Přidat jízdu“ zadáte datum, čas, pokoj, počet osob a destinaci. U trasy ze stálého ceníku se částka i provize doplní automaticky. U volby „Jiné…“ zadáte cenu ručně a připíšete povinnou poznámku, o jakou trasu se jednalo.", placement: "bottom" },
+  { permission: ["recepce.ambiance.taxi.view", "recepce.superior.taxi.view", "recepce.amigo.taxi.view", "recepce.ankora.taxi.view"], addedInVersion: 12, hideOnMobile: true, anchor: "taxi-cenik", route: DEMO_TAXI, title: "Ceník tras", body: "Vpravo vidíte stálý ceník. U každé trasy je cena a provize (↺ značí roundtrip).", placement: "left" },
+
+  // ── Zaměstnanci – seznam (/zamestnanci) ──────────────────────────────────────
   // Merged: view.all (vedení incl.) + view.nonManagement collapse into one step.
   { section: SECTIONS.employees, permission: "nav.employees.view", anchor: "nav-zamestnanci", mobileAnchor: "bottomnav-more", title: "Zaměstnanci", body: "Sekce Zaměstnanci obsahuje karty zaměstnanců s údaji, doklady, smlouvami a historií pracovního poměru.", mobileBody: "Sekce Zaměstnanci obsahuje karty zaměstnanců s údaji, doklady, smlouvami a historií. Na telefonu ji otevřete přes záložku Více ve spodní liště.", placement: "right" },
   { permission: ["employees.view.all", "employees.view.nonManagement"], anchor: "emp-list", scrollBlock: "start", route: "/zamestnanci", title: "Seznam zaměstnanců", body: "Zde vidíte seznam zaměstnanců. Kliknutím na jméno otevřete zaměstnaneckou kartu.", placement: "bottom" },
@@ -131,7 +165,7 @@ export const APP_TOUR_STEPS: TourStep[] = [
   { permission: "employees.export", anchor: "emp-export", route: "/zamestnanci", title: "Export seznamu", body: "Seznam zaměstnanců můžete exportovat do CSV.", placement: "bottom" },
   { permission: "employees.create", anchor: "emp-create", route: "/zamestnanci", title: "Vytvoření zaměstnance", body: "Tlačítkem Přidat zaměstnance založíte novou kartu.", placement: "bottom" },
 
-  // ── Zaměstnanec — karta: REAL detail page fed by mock data (/zamestnanci/tour-demo) ──
+  // ── Zaměstnanec – karta: REAL detail page fed by mock data (/zamestnanci/tour-demo) ──
   // Detail-tab sections are expanded by default; history/docs controls live on
   // their tab, so those steps `reveal` (click) the tab button first.
   { permission: ["employees.view.all", "employees.view.nonManagement"], addedInVersion: 7, anchor: "emp-hero-questionnaire", route: DEMO_EMP, title: "Osobní dotazník", body: "Tlačítkem Dotazník otevřete v novém okně vyplněný osobní dotazník zaměstnance (PDF) k vytištění.", placement: "bottom" },
@@ -154,9 +188,9 @@ export const APP_TOUR_STEPS: TourStep[] = [
   { permission: "documents.upload", anchor: "emp-doc-upload", route: DEMO_EMP, reveal: ["emp-tab-docs"], title: "Nahrání dokumentu", body: "Tlačítkem Nahrát dokument přidáte k zaměstnanci další dokument.", placement: "bottom" },
   { permission: "documents.delete", anchor: "emp-doc-delete", route: DEMO_EMP, reveal: ["emp-tab-docs"], title: "Smazání dokumentu", body: "Tlačítkem Smazat odstraníte nahraný dokument (aplikace se zeptá na potvrzení).", placement: "left" },
 
-  // ── Můj profil — REAL self page fed by mock data (/napoveda/ukazka-profil) ──────
+  // ── Můj profil – REAL self page fed by mock data (/napoveda/ukazka-profil) ──────
   { section: SECTIONS.profile, permission: "nav.profile.view", anchor: "nav-mujProfil", mobileAnchor: "bottomnav-mujProfil", title: "Můj profil", body: "Můj profil zobrazuje vaše zaměstnanecké údaje.", placement: "right" },
-  { permission: "nav.profile.view", anchor: "selfpage-title", route: DEMO_SELF, title: "Můj profil", body: "Tato stránka zobrazuje vaši kartu zaměstnance — osobní údaje, kontakt, doklady a historii pracovního poměru. Slouží ke čtení. (Ukázková data pouze pro průvodce.)", placement: "bottom" },
+  { permission: "nav.profile.view", anchor: "selfpage-title", route: DEMO_SELF, title: "Můj profil", body: "Tato stránka zobrazuje vaši kartu zaměstnance – osobní údaje, kontakt, doklady a historii pracovního poměru. Slouží ke čtení. (Ukázková data pouze pro průvodce.)", placement: "bottom" },
   { permission: "self.profile.requestEdit", anchor: "selfpage-edit-btn", route: DEMO_SELF, title: "Navrhnout úpravu", body: "Tlačítkem Navrhnout úpravu můžete upravit svoje údaje a odeslat změny ke schválení. Změněné údaje se objeví až po schválení administrátorem nebo ředitelem.", placement: "left" },
   { permission: "sensitive.reveal.self", anchor: "selfpage-reveal", route: DEMO_SELF, title: "Zobrazení vlastních citlivých údajů", body: "Pole označená ikonou oka (např. rodné číslo) jsou skryta. Kliknutím je dočasně zobrazíte. Každé zobrazení je zaznamenáno v logu aplikace.", placement: "left" },
   { permission: "self.profile.requestEdit", anchor: "selfpage-requests", route: DEMO_SELF, title: "Vaše návrhy na změnu", body: "Zde vidíte odeslané návrhy na úpravu profilu a jejich stav. Změny čekající na schválení jde zrušit.", placement: "top" },
@@ -185,9 +219,9 @@ export const APP_TOUR_STEPS: TourStep[] = [
   { permission: "system.triggers", anchor: "alerts-refresh", route: "/upozorneni", title: "Ruční obnovení", body: "Můžete ručně aktualizovat upozornění.", placement: "bottom" },
 
   // ── Log změn (/audit) ────────────────────────────────────────────────────────────
-  { section: SECTIONS.audit, permission: "nav.audit.view", anchor: "nav-audit", mobileAnchor: "bottomnav-more", title: "Log změn", body: "Log změn zaznamenává všechny změny dat provedené v aplikaci. V Logu změn dohledáte, kdo a kdy data změnil nebo zobrazil citlivé údaje.", mobileBody: "Log změn zaznamenává všechny změny dat v aplikaci — kdo a kdy data změnil nebo zobrazil citlivé údaje. Na telefonu jej otevřete přes záložku Více ve spodní liště.", placement: "right" },
+  { section: SECTIONS.audit, permission: "nav.audit.view", anchor: "nav-audit", mobileAnchor: "bottomnav-more", title: "Log změn", body: "Log změn zaznamenává všechny změny dat provedené v aplikaci. V Logu změn dohledáte, kdo a kdy data změnil nebo zobrazil citlivé údaje.", mobileBody: "Log změn zaznamenává všechny změny dat v aplikaci – kdo a kdy data změnil nebo zobrazil citlivé údaje. Na telefonu jej otevřete přes záložku Více ve spodní liště.", placement: "right" },
 
-  // ── Uživatelé a oprávnění (/nastaveni) — before the číselník tabs ──────────────────
+  // ── Uživatelé a oprávnění (/nastaveni) – before the číselník tabs ──────────────────
   { section: SECTIONS.settings, permission: "nav.settings.view", anchor: "nav-nastaveni", mobileAnchor: "bottomnav-more", title: "Nastavení", body: "Nastavení obsahuje seznamy (firem, pracovních pozic apod.), správu uživatelů, uživatelských typů a další konfiguraci.", mobileBody: "Nastavení obsahuje seznamy, správu uživatelů a další konfiguraci. Na telefonu je otevřete přes záložku Více ve spodní liště.", placement: "right" },
   { permission: "users.view", anchor: "settings-tab-users", route: "/nastaveni", reveal: ["settings-tab-users"], title: "Uživatelé", body: "Na záložce Uživatelé vidíte uživatelské účty.", placement: "bottom" },
   { permission: "users.manage", anchor: "settings-add-user", route: "/nastaveni", reveal: ["settings-tab-users"], title: "Správa uživatelů", body: "Tlačítkem Přidat uživatele zakládáte účty, můžete je upravovat a deaktivovat.", placement: "bottom" },
@@ -206,7 +240,7 @@ export const APP_TOUR_STEPS: TourStep[] = [
   // ── Systém ─────────────────────────────────────────────────────────────────────
   { permission: "system.triggers", anchor: "settings-tab-jobs", route: "/nastaveni", reveal: ["settings-tab-jobs"], title: "Ruční spuštění úloh", body: "Na záložce Úlohy v Nastavení můžete ručně spustit naplánované úlohy (přechody plánů směn, obnova upozornění, přepočet aktuálních údajů). Každé spuštění je zaznamenáno v Logu změn.", placement: "bottom" },
   { permission: "system.timeOverride", anchor: "tour-timeclock", hideInProd: true, title: "Testovací hodiny", body: "Mimo live verzi můžete nastavit testovací „nynější“ čas pro ověřování chování závislého na datu. V live verzi je funkce neaktivní.", placement: "top" },
-  { permission: "system.admin", anchor: null, title: "Superadmin", body: "Máte oprávnění superadministrátora — přístup ke všem funkcím bez omezení. Používejte je obezřetně, zejména u nevratných operací.", placement: "bottom" },
+  { permission: "system.admin", anchor: null, title: "Superadmin", body: "Máte oprávnění superadministrátora – přístup ke všem funkcím bez omezení. Používejte je obezřetně, zejména u nevratných operací.", placement: "bottom" },
 
   // ── Outro ───────────────────────────────────────────────────────────────────────
   { section: SECTIONS.outro, anchor: "help-button", mobileAnchor: "bottomnav-more", title: "Průvodce dokončen", body: "To je vše! Průvodce i nápovědu kdykoliv znovu otevřete tlačítkem „? Nápověda“ vlevo dole.", mobileBody: "To je vše! Průvodce i nápovědu kdykoliv znovu otevřete v záložce Více ve spodní liště.", placement: "right" },
@@ -214,7 +248,7 @@ export const APP_TOUR_STEPS: TourStep[] = [
 
 /**
  * Synthetic lead card for the "what's new" mini-tour (delta mode). NOT part of
- * APP_TOUR_STEPS — buildAppTour prepends it when `sinceVersion` is set and new
+ * APP_TOUR_STEPS – buildAppTour prepends it when `sinceVersion` is set and new
  * steps exist, so an incremental tour feels intentional instead of dropping the
  * returning user straight into an unfamiliar feature.
  */
@@ -227,9 +261,9 @@ export const WHATS_NEW_INTRO: TourStep = {
 export const appTour: TourDefinition = {
   id: "app",
   // Highest step `addedInVersion` in the list. Bump it (and stamp the new steps'
-  // `addedInVersion`) whenever you add steps for a new feature — returning users
+  // `addedInVersion`) whenever you add steps for a new feature – returning users
   // then see ONLY those steps; first-time users still get the whole tour.
-  version: 11,
+  version: 12,
   label: "Prohlídka aplikace",
   steps: APP_TOUR_STEPS,
 };

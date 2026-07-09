@@ -72,7 +72,7 @@ export default function ContractActionButtons({
   async function handlePreview(kind: "unsigned" | "signed") {
     if (!user || !contract) return;
     const token = await user.getIdToken();
-    // Backend sends Content-Disposition: inline — open the blob in a new tab to
+    // Backend sends Content-Disposition: inline – open the blob in a new tab to
     // preview. (A blob URL can't carry a filename, so the tab title is generic;
     // use "Stáhnout" for a correctly-named download.)
     const resp = await fetch(
@@ -254,7 +254,7 @@ export default function ContractActionButtons({
           className={styles.generateBtn}
           onClick={handleRegenerate}
           disabled={busy !== null}
-          title="Parametry řádku se změnily — vygenerovaná smlouva je neaktuální"
+          title="Parametry řádku se změnily – vygenerovaná smlouva je neaktuální"
         >
           {busy === "deleting" ? "Zahazuji…" : "Znovu generovat smlouvu"}
         </button>

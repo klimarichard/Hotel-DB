@@ -6,7 +6,7 @@ import { now as clockNow } from "@/lib/clock";
  * Purpose: let the REAL `EmployeeSelfPage` and `EmployeeDetailPage` (plus their
  * sub-components: EmploymentSessionCard / EmploymentRowItem / ContractActionButtons,
  * MultisportEditor, OtherDocumentsTab, the audit history) render fully-populated
- * with dummy data and WITHOUT hitting the backend or Firestore — so a first-login
+ * with dummy data and WITHOUT hitting the backend or Firestore – so a first-login
  * onboarding tour can walk a user through these screens against a safe sandbox.
  *
  * Wiring: `lib/api.ts` calls `getDemoResponse(method, path, tourDemo.active)`
@@ -21,7 +21,7 @@ import { now as clockNow } from "@/lib/clock";
  *     route wrapper, which flips it on mount and off on unmount).
  *
  * Safety: every NON-GET request (POST/PUT/PATCH/DELETE) that we "hit" returns an
- * empty object `{}` — it is swallowed, never persisted — so the tour can't write
+ * empty object `{}` – it is swallowed, never persisted – so the tour can't write
  * to the database even if the user clicks a save/submit button.
  *
  * The fixtures are typed loosely (`unknown` / `as` casts) on purpose; what
@@ -52,7 +52,12 @@ export type TourScenario =
   | "shifts-published"
   | "shifts-change-request"
   | "payroll"
-  | "payroll-empty";
+  | "payroll-empty"
+  | "protokol"
+  | "protokol-empty"
+  | "protokol-signed"
+  | "walkiny"
+  | "taxi";
 export const tourDemo: { active: boolean; scenario: TourScenario | null } = {
   active: false,
   scenario: null,
@@ -278,7 +283,7 @@ const selfEmployee: unknown = {
   currentContractType: "HPP",
 };
 
-// Self contact SubDoc — same fields the self-page reads via SELF_EDIT_FIELDS.
+// Self contact SubDoc – same fields the self-page reads via SELF_EDIT_FIELDS.
 const selfContact: unknown = {
   phone: "+420 777 123 456",
   email: "jan.novak@example.com",
@@ -293,14 +298,14 @@ const selfDocuments: unknown = {
   idCardNumber: MASK,
 };
 
-// Self benefits SubDoc — sensitive insuranceNumber/bankAccount as MASK.
+// Self benefits SubDoc – sensitive insuranceNumber/bankAccount as MASK.
 const selfBenefits: unknown = {
   insuranceNumber: MASK,
   insuranceCompany: "VZP",
   bankAccount: MASK,
 };
 
-// Self employment history — reuse the same rows; the self-page renders them
+// Self employment history – reuse the same rows; the self-page renders them
 // read-only via EmploymentSessionCard with no-op callbacks.
 const selfEmployment: unknown[] = detailEmployment;
 
@@ -573,7 +578,7 @@ function shiftsFixture(
       : scenario === "shifts-created"
       ? "created"
       : "opened";
-  // Plan list — drives whether the page lands on a plan or the empty state.
+  // Plan list – drives whether the page lands on a plan or the empty state.
   if (clean === "/shifts/plans") {
     if (scenario === "shifts-empty") return { hit: true, value: [] };
     const { year, month } = currentYM();
@@ -596,6 +601,193 @@ function shiftsFixture(
   }
   // Any other GET under /shifts/* → empty list (safe default, no backend call).
   return { hit: true, value: [] };
+}
+
+// ─── Recepce-demo fixtures (`/recepce/*` tabs via /napoveda/ukazka-protokol|…) ─
+//
+// The REAL HandoverTab / WalkinsTab / TaxiTab (rendered by pages/RecepceDemoPage)
+// fed with mock data – no backend, no Firestore – so a first-login tour can walk
+// the reception workflow against a safe sandbox. Every non-GET is swallowed.
+
+/** Epoch-seconds "now" for demo timestamps (real wall clock – the handover editor
+ *  keys off the real date/shift, NOT the test clock, so we must match it). */
+function demoNowSec(): number {
+  return Math.floor(new Date().getTime() / 1000);
+}
+/** Real wall-clock date (sv-SE = YYYY-MM-DD) – matches HandoverTab.todayLocal(). */
+function realTodayIso(): string {
+  return new Intl.DateTimeFormat("sv-SE").format(new Date());
+}
+/** Real day/night split – matches HandoverTab.defaultShiftForNow(). */
+function realShiftNow(): "den" | "noc" {
+  const h = new Date().getHours();
+  return h >= 7 && h < 19 ? "den" : "noc";
+}
+/** The handover doc id the ProtocolEditor requests for "now" (`<date>_<shift>`). */
+function primaryHandoverId(): string {
+  return `${realTodayIso()}_${realShiftNow()}`;
+}
+
+function demoStamp(uid: string, displayName: string, email: string, secondsAgo: number): unknown {
+  return { uid, displayName, email, at: { seconds: demoNowSec() - secondsAgo } };
+}
+
+/** A populated protocol (optionally signed). Full cash/účty/sm/notes so every
+ *  control renders; sm trezor + wata are non-zero so their rows always show. */
+function buildDemoHandover(signed: boolean): unknown {
+  return {
+    id: primaryHandoverId(),
+    shiftDate: realTodayIso(),
+    shiftType: realShiftNow(),
+    notes: [
+      { id: "demo-note-1", text: "Předat noční recepci klíč od trezoru", done: false, locked: false },
+      { id: "demo-note-2", text: "Vyřídit reklamaci – pokoj 214", done: true, locked: false },
+    ],
+    cashCounts: {
+      kasaCZK: { "5000": 3, "1000": 5, "500": 4, "200": 6, "100": 8 },
+      trezorCZK: { "5000": 10, "2000": 5 },
+      kasaEUR: { "50": 4, "20": 6, "10": 5 },
+      trezorEUR: { "100": 3 },
+    },
+    accounts: [
+      { id: "demo-acc-1", name: "Květiny", amount: 1200, locked: false },
+      { id: "demo-acc-2", name: "Room service", amount: 3450, locked: true },
+    ],
+    smCounts: [2, 1, 3],
+    smTrezor: 5000,
+    wata: -250,
+    predal: signed ? demoStamp("demo-p", "Jan Novák", "jan.novak@example.com", 3600) : null,
+    prevzal: signed ? demoStamp("demo-q", "Petr Svoboda", "petr.svoboda@example.com", 60) : null,
+    updatedBy: "demo",
+    // FIXED (not time-based): the editor's concurrency poll compares updatedAt
+    // against its base; a changing demo timestamp would false-fire the "edited by
+    // someone else" banner mid-tour. A constant keeps every mocked GET identical.
+    updatedAt: { seconds: 1751500000 },
+  };
+}
+
+/** Signer pool + scheduled defaults so the Předat/Převzít dropdowns are enabled. */
+const demoSigners: unknown = {
+  signers: [
+    { uid: "demo-p", name: "jan.novak", label: "Jan Novák" },
+    { uid: "demo-q", name: "petr.svoboda", label: "Petr Svoboda" },
+  ],
+  scheduled: { predal: "demo-p", prevzal: "demo-q" },
+};
+
+function buildDemoHistory(signed: boolean): unknown {
+  const s = demoNowSec();
+  return {
+    entries: [
+      { seq: 1, at: { seconds: s - 900 }, label: "Změna hotovosti (KASA CZK)", by: "Jan Novák", undone: false, applied: true },
+      { seq: 2, at: { seconds: s - 600 }, label: "Přidán účet Květiny", by: "Jan Novák", undone: false, applied: true },
+      { seq: 3, at: { seconds: s - 300 }, label: "Změna poznámky", by: "Jan Novák", undone: false, applied: true },
+    ],
+    // Frozen once signed → undo/redo locked.
+    canUndo: !signed,
+    canRedo: false,
+  };
+}
+
+/** Serve mocks for /handovers/* while a protokol demo scenario is active. */
+function handoverFixture(
+  isGet: boolean,
+  clean: string,
+  scenario: TourScenario
+): { hit: boolean; value?: unknown; status?: number } | null {
+  if (clean !== "/handovers" && !clean.startsWith("/handovers/")) return null;
+  const signed = scenario === "protokol-signed";
+
+  // Global sm rates (GET + PUT echo).
+  if (clean === "/handovers/sm/rates") return { hit: true, value: { rates: [500, 200, 100] } };
+
+  const m = clean.match(/^\/handovers\/([^/]+)\/(.+)$/);
+  if (m) {
+    const rest = m[2];
+    if (rest === "signers") return { hit: true, value: demoSigners };
+    if (rest === "revokers" || rest.startsWith("revokers")) return { hit: true, value: [] };
+    if (rest.endsWith("/history")) return { hit: true, value: buildDemoHistory(signed) };
+    // POST actions (undo/redo/predal/prevzal/revert/sm-transfer/sm-trezor/wata) → swallow.
+    if (!isGet) return { hit: true, value: {} };
+    // Bare doc GET: rest === "<date>_<shift>".
+    if (scenario === "protokol-empty") return { hit: true, status: 404 };
+    if (signed) {
+      // Signed doc for the current shift; the "next shift" probe must 404 so the
+      // "Vytvořit protokol pro další směnu" button appears.
+      return rest === primaryHandoverId()
+        ? { hit: true, value: buildDemoHandover(true) }
+        : { hit: true, status: 404 };
+    }
+    return { hit: true, value: buildDemoHandover(false) };
+  }
+  // PUT/POST directly on /handovers/{slug} (create/save) → return a doc.
+  if (!isGet) return { hit: true, value: buildDemoHandover(false) };
+  return { hit: true, value: {} };
+}
+
+/** Current-month prefix + a couple of in-month dates for the walkiny/taxi tables. */
+function demoMonthDates(): { ym: string; d05: string; d11: string; today: string } {
+  const today = realTodayIso();
+  const ym = today.slice(0, 7);
+  return { ym, d05: `${ym}-05`, d11: `${ym}-11`, today };
+}
+
+/** Serve mocks for /walkins/* while the walkiny demo is active. */
+function walkinsFixture(
+  isGet: boolean,
+  clean: string
+): { hit: boolean; value?: unknown } | null {
+  if (clean !== "/walkins" && !clean.startsWith("/walkins/")) return null;
+  if (!isGet) return { hit: true, value: {} };
+  const { d05, d11, today } = demoMonthDates();
+  if (clean.endsWith("/range")) return { hit: true, value: { from: `${today.slice(0, 7)}-01`, to: today } };
+  if (clean.endsWith("/employees")) {
+    return {
+      hit: true,
+      value: [
+        { employeeId: "demo-e1", name: "Nováková Jana" },
+        { employeeId: "demo-e2", name: "Svoboda Petr" },
+      ],
+    };
+  }
+  // List: /walkins/{slug}
+  return {
+    hit: true,
+    value: [
+      { id: "dw1", date: d05, employeeId: "demo-e1", employeeName: "Nováková Jana", resNo: "1465199", amount: 2500, currency: "CZK" },
+      { id: "dw2", date: d11, employeeId: "demo-e2", employeeName: "Svoboda Petr", resNo: "1465233", amount: 180, currency: "EUR" },
+      { id: "dw3", date: today, employeeId: "demo-e1", employeeName: "Nováková Jana", resNo: "1465301", amount: 3200, currency: "CZK" },
+    ],
+  };
+}
+
+const demoTaxiRoutes: unknown = [
+  { id: "r1", name: "Letiště T1", price: 750, provision: 150, roundtrip: false },
+  { id: "r2", name: "Letiště T2", price: 750, provision: 150, roundtrip: false },
+  { id: "r3", name: "Centrum – Staré Město", price: 350, provision: 70, roundtrip: false },
+  { id: "r4", name: "Kongresové centrum (zpáteční)", price: 600, provision: 120, roundtrip: true },
+];
+
+/** Serve mocks for /taxi/* while the taxi demo is active. */
+function taxiFixture(
+  isGet: boolean,
+  clean: string
+): { hit: boolean; value?: unknown } | null {
+  if (clean !== "/taxi" && !clean.startsWith("/taxi/")) return null;
+  // Global routes ceník (GET + PUT echo).
+  if (clean === "/taxi/routes") return { hit: true, value: { routes: demoTaxiRoutes } };
+  if (!isGet) return { hit: true, value: {} };
+  const { d05, d11, today } = demoMonthDates();
+  if (clean.endsWith("/range")) return { hit: true, value: { from: `${today.slice(0, 7)}-01`, to: today } };
+  // List: /taxi/{slug}
+  return {
+    hit: true,
+    value: [
+      { id: "t1", date: d05, time: "08:30", room: "307", pax: 2, routeName: "Letiště T1", amount: 750, provision: 150, note: "" },
+      { id: "t2", date: d11, time: "14:10", room: "212", pax: 1, routeName: "Centrum – Staré Město", amount: 350, provision: 70, note: "" },
+      { id: "t3", date: today, time: "19:45", room: "401", pax: 3, routeName: "", amount: 900, provision: 180, note: "Přání hosta – mimo ceník" },
+    ],
+  };
 }
 
 // ─── Dispatcher ───────────────────────────────────────────────────────────────
@@ -680,7 +872,7 @@ const SELF_PATHS = new Set<string>([
  * instance and its remount-time fetch can fire while the route wrapper's effect
  * cleanup has momentarily reset a flag. The URL, by contrast, is always current
  * by the time any fetch runs. (Pages are also given a per-route `key` so they
- * actually remount + refetch on such transitions — see App.tsx.)
+ * actually remount + refetch on such transitions – see App.tsx.)
  */
 function activeScenario(): TourScenario | null {
   const p = typeof window !== "undefined" ? window.location.pathname : "";
@@ -693,6 +885,11 @@ function activeScenario(): TourScenario | null {
     case "/napoveda/ukazka-smeny-vytvoreny": return "shifts-created";
     case "/napoveda/ukazka-smeny-publikovane": return "shifts-published";
     case "/napoveda/ukazka-smeny-zadost": return "shifts-change-request";
+    case "/napoveda/ukazka-protokol": return "protokol";
+    case "/napoveda/ukazka-protokol-prazdne": return "protokol-empty";
+    case "/napoveda/ukazka-protokol-podepsany": return "protokol-signed";
+    case "/napoveda/ukazka-walkiny": return "walkiny";
+    case "/napoveda/ukazka-taxi": return "taxi";
     default: return null;
   }
 }
@@ -711,7 +908,7 @@ function activeScenario(): TourScenario | null {
 export function getDemoResponse(
   method: string,
   path: string
-): { hit: boolean; value?: unknown } {
+): { hit: boolean; value?: unknown; status?: number } {
   const clean = stripQuery(path);
   const isGet = method.toUpperCase() === "GET";
 
@@ -760,6 +957,15 @@ export function getDemoResponse(
     case "shifts-published":
     case "shifts-change-request":
       return shiftsFixture(isGet, clean, scenario) ?? { hit: false };
+    // ── Recepce demos (protokol populated/empty/signed, walkiny, taxi) ──
+    case "protokol":
+    case "protokol-empty":
+    case "protokol-signed":
+      return handoverFixture(isGet, clean, scenario) ?? { hit: false };
+    case "walkiny":
+      return walkinsFixture(isGet, clean) ?? { hit: false };
+    case "taxi":
+      return taxiFixture(isGet, clean) ?? { hit: false };
     default:
       return { hit: false };
   }

@@ -47,7 +47,7 @@ export default function VacationCollisionInfoModal({ collisions, onClose }: Prop
           <ul style={{ margin: 0, padding: "0 0 0 1.1rem", fontSize: "0.875rem", color: "var(--color-text)" }}>
             {collisions.map((c) => (
               <li key={c.date} style={{ marginBottom: "0.25rem" }}>
-                <strong>{formatDate(c.date)}</strong> — {c.rawInput}
+                <strong>{formatDate(c.date)}</strong> – {c.rawInput}
               </li>
             ))}
           </ul>

@@ -34,5 +34,5 @@ export function displayGendered(
     return femalePart;
   }
 
-  return value; // unknown gender — keep combined form
+  return value; // unknown gender – keep combined form
 }

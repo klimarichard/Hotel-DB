@@ -94,7 +94,7 @@ export default function JobsTab() {
   return (
     <div className={styles.wrap}>
       <p className={styles.intro}>
-        Tyto úlohy běží automaticky každý den. Zde je můžete spustit ručně — například po výpadku
+        Tyto úlohy běží automaticky každý den. Zde je můžete spustit ručně – například po výpadku
         nebo když potřebujete okamžitě přepočítat data. Každé spuštění se zaznamenává do Logu změn.
       </p>
       <div className={styles.list} data-tour="settings-jobs-list">

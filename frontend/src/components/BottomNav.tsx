@@ -8,7 +8,7 @@ import styles from "./BottomNav.module.css";
  * Phone-only bottom tab bar (hidden ≥560px; the sidebar takes over there).
  *
  * Single source of truth: it consumes the SAME permission-gated, ordered
- * `items` and the SAME `badgeFor` that Layout already computed for the sidebar —
+ * `items` and the SAME `badgeFor` that Layout already computed for the sidebar –
  * it never re-derives permissions. Four fixed anchors map to registry ids; the
  * fifth tab "Více" opens a slide-up sheet with every remaining permitted item
  * plus the footer utilities (theme / help / logout / clock / version) that
@@ -18,7 +18,7 @@ import styles from "./BottomNav.module.css";
 
 const ANCHOR_IDS = ["prehled", "smeny", "dovolena", "mujProfil"] as const;
 
-// Bottom-bar display labels only — the registry label stays authoritative for
+// Bottom-bar display labels only – the registry label stays authoritative for
 // the sidebar. "Můj profil" is too wide for a 360px tab slot.
 const LABEL_OVERRIDE: Record<string, string> = {
   mujProfil: "Profil",
@@ -32,9 +32,9 @@ interface BottomNavProps {
   onLogout: () => void;
   /** Pre-gated version string (e.g. "v2.3.4") or null when not permitted. */
   versionLabel: string | null;
-  /** <TimeOverrideControl/> — self-styled; only renders where allowed. */
+  /** <TimeOverrideControl/> – self-styled; only renders where allowed. */
   timeControl?: ReactNode;
-  /** Logged-in user's display name/email — shown in the "Více" sheet (the phone
+  /** Logged-in user's display name/email – shown in the "Více" sheet (the phone
    *  equivalent of the sidebar footer's logged-in-user line). */
   userLabel?: string | null;
   /** Logged-in user's role/type label, shown under `userLabel`. */
@@ -106,7 +106,7 @@ export default function BottomNav({
   const anchorIds = new Set(anchors.map((a) => a.id));
   const moreItems = items.filter((i) => !anchorIds.has(i.id));
   // The "Více" sheet always carries the footer utilities (theme / Nápověda /
-  // Odhlásit) — the ONLY place logout is reachable on phones. So the tab must
+  // Odhlásit) – the ONLY place logout is reachable on phones. So the tab must
   // always render, even when a user's permitted pages are all four anchors
   // (the common case for a regular employee: Přehled/Směny/Dovolená/Profil).
   // Previously gated on `moreItems.length > 0`, which hid logout entirely for
@@ -147,14 +147,14 @@ export default function BottomNav({
       if (vv.scale <= 1.0001) {
         // Not pinch-zoomed: keep the default fixed positioning. (This also avoids
         // fighting the on-screen keyboard, which shrinks the visual viewport
-        // without zooming — we don't want the bar floating above the keyboard.)
+        // without zooming – we don't want the bar floating above the keyboard.)
         bar.style.transform = "";
         return;
       }
       // Anchor delta = (visual-viewport bottom in layout coords) − (layout-viewport
       // bottom). The bar is `position: fixed; bottom: 0`, so its natural bottom sits
       // at the LAYOUT viewport bottom = the layout-viewport height. Use
-      // documentElement.clientHeight for that height — NOT window.innerHeight: on iOS
+      // documentElement.clientHeight for that height – NOT window.innerHeight: on iOS
       // WebKit (Safari + Chrome) window.innerHeight tracks the VISUAL viewport and
       // shrinks as you pinch-zoom in, which collapsed this delta and pushed the bar
       // off-screen. clientHeight is the layout-viewport height and stays constant
@@ -224,7 +224,7 @@ export default function BottomNav({
             if (e.key === "Escape") setMoreOpen(false);
           }}
         >
-          {/* No backdrop onClick — project rule: overlays dismiss only via the
+          {/* No backdrop onClick – project rule: overlays dismiss only via the
               explicit close button or by selecting an item. */}
           <div className={styles.sheet}>
             <div className={styles.sheetHeader}>

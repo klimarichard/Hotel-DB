@@ -5,18 +5,18 @@ export interface RequestedChange {
   action: "set-type" | "set-hours" | "delete" | "swap" | "other";
   value?: string;               // set-type: label e.g. "DA"; set-hours: e.g. "8"
   swapWithEmployeeId?: string;  // swap
-  swapWithName?: string;        // swap — denormalized "Surname Firstname" for display
+  swapWithName?: string;        // swap – denormalized "Surname Firstname" for display
   // "other" = free-text request (the note carries it); never auto-applied.
 }
 
 /** Human-readable Czech label for the admin review tables. */
 export function formatRequestedChange(rc: RequestedChange | null | undefined): string {
-  if (!rc) return "—";
+  if (!rc) return "–";
   switch (rc.action) {
     case "set-type":
-      return rc.value ?? "—";
+      return rc.value ?? "–";
     case "set-hours":
-      return rc.value ? `${rc.value} h` : "—";
+      return rc.value ? `${rc.value} h` : "–";
     case "delete":
       return "smazat";
     case "swap":
@@ -24,6 +24,6 @@ export function formatRequestedChange(rc: RequestedChange | null | undefined): s
     case "other":
       return "Jiné";
     default:
-      return "—";
+      return "–";
   }
 }

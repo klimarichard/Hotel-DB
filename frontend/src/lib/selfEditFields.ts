@@ -1,11 +1,11 @@
 /**
  * Fields an employee may propose edits to on their own profile (Task 4).
  * MIRRORS the backend whitelist in
- * `functions/src/services/employeeChangeRequests.ts` (EDITABLE_FIELDS) — keep
+ * `functions/src/services/employeeChangeRequests.ts` (EDITABLE_FIELDS) – keep
  * the two in sync. The backend re-validates every submitted field, so this
  * list only drives which inputs the self-page renders.
  *
- * Employment/contract terms are intentionally absent — those flow through the
+ * Employment/contract terms are intentionally absent – those flow through the
  * Nástup/Dodatek employment workflow, not self-service.
  */
 export type SelfEditSection = "root" | "contact" | "documents" | "benefits";

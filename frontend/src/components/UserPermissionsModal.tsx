@@ -17,14 +17,14 @@ interface Props {
  * Per-user permission editor: pick a user type + tweak individual grants/revokes
  * on top of it. The matrix shows the EFFECTIVE state (type ∪ grants − revokes);
  * toggling a box that differs from the type records a grant or revoke (marked ●).
- * The backend enforces the lockout guards (own-admin / last-admin) — surfaced here.
+ * The backend enforces the lockout guards (own-admin / last-admin) – surfaced here.
  */
 export default function UserPermissionsModal({ user, onClose, onSaved }: Props) {
   const { can } = useAuth();
   // Editing individual grants/revokes requires users.permissions.manage. A
   // caller with only users.setType can still open this modal (to change the
   // type) but the permission matrix is read-only for them, and save() sends
-  // only the roleType — mirroring the backend gate on PATCH .../permissions.
+  // only the roleType – mirroring the backend gate on PATCH .../permissions.
   const canManagePerms = can("users.permissions.manage");
   const [types, setTypes] = useState<RoleType[]>([]);
   const [loading, setLoading] = useState(true);
@@ -100,7 +100,7 @@ export default function UserPermissionsModal({ user, onClose, onSaved }: Props) 
     <div className={styles.overlay}>
       <div className={styles.modal}>
         <div className={styles.header}>
-          <h2 className={styles.title}>Oprávnění — {user.name}</h2>
+          <h2 className={styles.title}>Oprávnění – {user.name}</h2>
           <IconButton variant="close" aria-label="Zavřít" onClick={onClose}>✕</IconButton>
         </div>
 

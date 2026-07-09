@@ -36,7 +36,7 @@ export const SECTION_LABELS: Record<Section, string> = {
 export const SHIFT_TYPES = ["D", "N", "R"] as const;
 export type ShiftType = typeof SHIFT_TYPES[number];
 
-/** Night-shift roles (recepce N, portýři NP) — they sort below the day ones (D / DP). */
+/** Night-shift roles (recepce N, portýři NP) – they sort below the day ones (D / DP). */
 export function isNightShiftType(t: string | null | undefined): boolean {
   return t === "N" || t === "NP";
 }
@@ -83,16 +83,16 @@ export const SHIFT_TEXT_COLORS: Record<string, string> = {
 // Key: hotel code for regular shifts, "P"+hotel for portýr shifts, "X" for day off
 
 export const CELL_COLORS: Record<string, { bg: string; text: string }> = {
-  A:  { bg: "#dcfce7", text: "#166534" },   // Ambiance — green
-  S:  { bg: "#fde68a", text: "#78350f" },   // Superior — gold
-  Q:  { bg: "#fdf4ff", text: "#c026d3" },   // Amigo — fuchsia
-  K:  { bg: "#ede9fe", text: "#5b21b6" },   // Ankora — purple
-  P:  { bg: "#d1d5db", text: "#1f2937" },   // Perla — gray
-  M:  { bg: "#d1d5db", text: "#1f2937" },   // Metropol — gray
-  PA: { bg: "#dbeafe", text: "#1e40af" },   // Ambiance portýr — blue
-  PQ: { bg: "#431407", text: "#fed7aa" },   // Amigo portýr — dark brown
-  HO: { bg: "#e0e7ff", text: "#3730a3" },   // Home Office — indigo
-  X:  { bg: "#fee2e2", text: "#dc2626" },   // X — red
+  A:  { bg: "#dcfce7", text: "#166534" },   // Ambiance – green
+  S:  { bg: "#fde68a", text: "#78350f" },   // Superior – gold
+  Q:  { bg: "#fdf4ff", text: "#c026d3" },   // Amigo – fuchsia
+  K:  { bg: "#ede9fe", text: "#5b21b6" },   // Ankora – purple
+  P:  { bg: "#d1d5db", text: "#1f2937" },   // Perla – gray
+  M:  { bg: "#d1d5db", text: "#1f2937" },   // Metropol – gray
+  PA: { bg: "#dbeafe", text: "#1e40af" },   // Ambiance portýr – blue
+  PQ: { bg: "#431407", text: "#fed7aa" },   // Amigo portýr – dark brown
+  HO: { bg: "#e0e7ff", text: "#3730a3" },   // Home Office – indigo
+  X:  { bg: "#fee2e2", text: "#dc2626" },   // X – red
 };
 
 const DEFAULT_CELL_COLOR = { bg: "#f0f9ff", text: "#0c4a6e" };
@@ -100,34 +100,34 @@ const DEFAULT_CELL_COLOR_DARK = { bg: "#1e3a5f", text: "#93c5fd" };
 
 // Lighter/more pastel variants used for ZD and ZN substitution shifts
 const Z_CELL_COLORS: Record<string, { bg: string; text: string }> = {
-  A: { bg: "#f0fdf4", text: "#166534" },   // Ambiance — lighter green
-  S: { bg: "#fffbeb", text: "#92400e" },   // Superior — lighter amber
-  Q: { bg: "#fae8ff", text: "#a21caf" },   // Amigo — lighter fuchsia
-  K: { bg: "#f5f3ff", text: "#5b21b6" },   // Ankora — lighter violet
-  P: { bg: "#f9fafb", text: "#6b7280" },   // Perla — lighter gray
-  M: { bg: "#f9fafb", text: "#6b7280" },   // Metropol — lighter gray
+  A: { bg: "#f0fdf4", text: "#166534" },   // Ambiance – lighter green
+  S: { bg: "#fffbeb", text: "#92400e" },   // Superior – lighter amber
+  Q: { bg: "#fae8ff", text: "#a21caf" },   // Amigo – lighter fuchsia
+  K: { bg: "#f5f3ff", text: "#5b21b6" },   // Ankora – lighter violet
+  P: { bg: "#f9fafb", text: "#6b7280" },   // Perla – lighter gray
+  M: { bg: "#f9fafb", text: "#6b7280" },   // Metropol – lighter gray
 };
 
 const Z_CELL_COLORS_DARK: Record<string, { bg: string; text: string }> = {
-  A: { bg: "#065f46", text: "#a7f3d0" },   // Ambiance — lighter dark green
-  S: { bg: "#92400e", text: "#fef3c7" },   // Superior — lighter dark amber
-  Q: { bg: "#6b21a8", text: "#f5d0fe" },   // Amigo — lighter dark fuchsia
-  K: { bg: "#4c1d95", text: "#ddd6fe" },   // Ankora — lighter dark violet
-  P: { bg: "#4b5563", text: "#e5e7eb" },   // Perla — lighter dark gray
-  M: { bg: "#4b5563", text: "#e5e7eb" },   // Metropol — lighter dark gray
+  A: { bg: "#065f46", text: "#a7f3d0" },   // Ambiance – lighter dark green
+  S: { bg: "#92400e", text: "#fef3c7" },   // Superior – lighter dark amber
+  Q: { bg: "#6b21a8", text: "#f5d0fe" },   // Amigo – lighter dark fuchsia
+  K: { bg: "#4c1d95", text: "#ddd6fe" },   // Ankora – lighter dark violet
+  P: { bg: "#4b5563", text: "#e5e7eb" },   // Perla – lighter dark gray
+  M: { bg: "#4b5563", text: "#e5e7eb" },   // Metropol – lighter dark gray
 };
 
 const CELL_COLORS_DARK: Record<string, { bg: string; text: string }> = {
-  A:  { bg: "#064e3b", text: "#6ee7b7" },   // Ambiance — dark green
-  S:  { bg: "#713f12", text: "#fde68a" },   // Superior — dark gold
-  Q:  { bg: "#4a044e", text: "#e879f9" },   // Amigo — dark fuchsia
-  K:  { bg: "#2e1065", text: "#a78bfa" },   // Ankora — dark purple
-  P:  { bg: "#374151", text: "#d1d5db" },   // Perla — dark grey
-  M:  { bg: "#374151", text: "#d1d5db" },   // Metropol — dark grey
-  PA: { bg: "#1d4ed8", text: "#bfdbfe" },   // Ambiance portýr — vivid blue
-  PQ: { bg: "#1c0a00", text: "#fed7aa" },   // Amigo portýr — very dark brown
-  HO: { bg: "#1e1b4b", text: "#a5b4fc" },   // Home Office — dark indigo
-  X:  { bg: "#450a0a", text: "#fca5a5" },   // X — dark red
+  A:  { bg: "#064e3b", text: "#6ee7b7" },   // Ambiance – dark green
+  S:  { bg: "#713f12", text: "#fde68a" },   // Superior – dark gold
+  Q:  { bg: "#4a044e", text: "#e879f9" },   // Amigo – dark fuchsia
+  K:  { bg: "#2e1065", text: "#a78bfa" },   // Ankora – dark purple
+  P:  { bg: "#374151", text: "#d1d5db" },   // Perla – dark grey
+  M:  { bg: "#374151", text: "#d1d5db" },   // Metropol – dark grey
+  PA: { bg: "#1d4ed8", text: "#bfdbfe" },   // Ambiance portýr – vivid blue
+  PQ: { bg: "#1c0a00", text: "#fed7aa" },   // Amigo portýr – very dark brown
+  HO: { bg: "#1e1b4b", text: "#a5b4fc" },   // Home Office – dark indigo
+  X:  { bg: "#450a0a", text: "#fca5a5" },   // X – dark red
 };
 
 export function getCellColor(parsed: ParseResult, dark = false): { bg: string; text: string } {
@@ -231,7 +231,7 @@ export function getCzechHolidays(year: number): Set<string> {
 }
 
 // ─── Parser (mirrored from functions/src/services/shiftParser.ts) ─────────────
-// Keep in sync manually — do NOT import across packages.
+// Keep in sync manually – do NOT import across packages.
 
 export interface ShiftSegment {
   code: string;
@@ -269,7 +269,7 @@ function parseSegment(token: string): ShiftSegment | { error: string } {
     return { code: token, hotel: null, hours };
   }
 
-  // Shift code — multi-char first
+  // Shift code – multi-char first
   let code: string;
   let remainder: string;
 
@@ -322,14 +322,14 @@ function parseSegment(token: string): ShiftSegment | { error: string } {
 // ─── Shift-type tags for numeric cells (#29) ──────────────────────────────────
 // A bare number (worked hours) carries no shift type, so it can't be attributed
 // in the per-type occupancy tally. Tagging records which type those hours were
-// worked as — it does NOT affect pay.
+// worked as – it does NOT affect pay.
 //
 // There are two kinds of tag:
-//  • SHIFT_TYPE_TAGS — the 12 occupancy types. Each has a `code_hotel` counter
+//  • SHIFT_TYPE_TAGS – the 12 occupancy types. Each has a `code_hotel` counter
 //    key, so a cell tagged with one counts toward that type in the "Přehled
 //    obsazení" tally and covers the matching free-shift slot. This is also the
 //    single source of truth for the tally rows (`COUNTER_ROWS` in ShiftGrid).
-//  • EXTRA_TYPE_TAGS — annotation-only labels (R, HO, ZD, ZN). They are pickable
+//  • EXTRA_TYPE_TAGS – annotation-only labels (R, HO, ZD, ZN). They are pickable
 //    on a numeric cell purely as a note; they have NO counter key, so they never
 //    add a tally row, are never counted, and never affect free-shift coverage.
 //    ZD/ZN (trainee) deliberately carry no hotel appropriation.
@@ -350,7 +350,7 @@ export const SHIFT_TYPE_TAGS: { label: string; code: string; hotel: string }[] =
   { label: "NPA", code: "NP", hotel: "A" },
 ];
 
-/** Annotation-only tags — pickable but never counted (no counter key). */
+/** Annotation-only tags – pickable but never counted (no counter key). */
 export const EXTRA_TYPE_TAGS: { label: string }[] = [
   { label: "R" },
   { label: "HO" },

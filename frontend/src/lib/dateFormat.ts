@@ -1,7 +1,7 @@
 /**
  * Centralised Czech date formatting helpers.
  *
- * Convention used throughout the app: "DD. MM. YYYY" — Czech-style,
+ * Convention used throughout the app: "DD. MM. YYYY" – Czech-style,
  * with spaces between segments. Every user-facing date display goes
  * through these helpers, including contract output, so changing the
  * convention is a one-line edit here.
@@ -36,9 +36,9 @@ export function formatDateCZ(input: string | Date | null | undefined): string {
  * Handles both `seconds` and `_seconds` field names (admin SDK variance).
  */
 export function formatTimestampCZ(ts: FirestoreTimestamp): string {
-  if (!ts) return "—";
+  if (!ts) return "–";
   const secs = ts.seconds ?? ts._seconds;
-  if (secs === undefined) return "—";
+  if (secs === undefined) return "–";
   const d = new Date(secs * 1000);
   return `${pad(d.getDate())}. ${pad(d.getMonth() + 1)}. ${d.getFullYear()}`;
 }
@@ -48,9 +48,9 @@ export function formatTimestampCZ(ts: FirestoreTimestamp): string {
  * Used for request panels where the precise time is meaningful for ordering.
  */
 export function formatDatetimeCZ(ts: FirestoreTimestamp): string {
-  if (!ts) return "—";
+  if (!ts) return "–";
   const secs = ts.seconds ?? ts._seconds;
-  if (secs === undefined) return "—";
+  if (secs === undefined) return "–";
   const d = new Date(secs * 1000);
   return (
     `${pad(d.getDate())}. ${pad(d.getMonth() + 1)}. ${d.getFullYear()} ` +
