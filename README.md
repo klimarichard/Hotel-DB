@@ -12,6 +12,7 @@ The application UI is in **Czech**. This README and the developer documentation 
 - **Vacation** — request/approval workflow with automatic shift-collision handling.
 - **Payroll** — monthly computation from the published shift plan, manual adjustments, notes, period locking, and PDF export.
 - **Dashboard, alerts & audit** — a per-role dashboard (Přehled), an alerts hub (Upozornění), and a complete change log (Log změn).
+- **Recepce** — a permission-driven front-desk hub per hotel (Ambiance, Superior, Amigo & Alqush, Ankora): a shift handover protocol (cash counting, accounts, notes, signature-based handover), a walk-in sales log, and a taxi-ride log with commission tracking and a shared route price list.
 - **Onboarding tour & help** — a guided first-login tour (auto-starts once, fully replayable from Nápověda) that spotlights controls based on each user's permissions; section-jump navigation lets users skip ahead or back a whole page at a time; returning users who have already completed the tour see only a short "Co je nového" card for newly-added features rather than the full tour again; a searchable Nápověda reference page; all permission-driven with no per-role duplicates.
 - **Administration** — companies, job positions, departments, education levels, payroll settings, user management, per-role menu ordering, and manual job triggers (Settings → Úlohy).
 
@@ -45,6 +46,117 @@ Per-role manuals — each covers **only** what that role can do in the app. (The
 - [Účetní](manuals/ucetni.md)
 
 > When a new role is added, add a matching manual under `manuals/`.
+
+## Recepce (uživatelská příručka)
+
+Přístup do sekce **Recepce** není vázaný na jednu konkrétní roli — řídí se výhradně **oprávněními**, která administrátor přidělí uživatelskému typu nebo jednotlivému uživateli (Nastavení → Uživatelské typy). Recepci proto může mít otevřenou recepční, FOM i ředitel, podle toho, co jim bylo přiděleno. Z toho důvodu je popsána přímo zde, a ne v jedné z příruček výše.
+
+> 📷 *(Místo pro snímek obrazovky: hub Recepce s lištou hotelů a záložkami)*
+
+### Otevření Recepce a výběr hotelu
+
+1. V levém menu klikněte na položku **Recepce**. Položka se v menu zobrazí jen uživatelům, kteří mají alespoň jedno oprávnění v této sekci — pokud ji nevidíte, obraťte se na administrátora.
+2. Nahoře se zobrazí lišta s hotely, ke kterým máte přístup — **Ambiance**, **Superior**, **Amigo & Alqush** a **Ankora**. Kliknutím na název hotelu jej vyberete; vybraný hotel je barevně zvýrazněný.
+   - Máte-li přístup jen k jednomu hotelu, lišta se přesto zobrazuje (abyste vždy viděli, na kterém hotelu právě pracujete), a aplikace vás rovnou otevře v něm.
+3. Pod lištou hotelů se zobrazí záložky dostupné pro vybraný hotel — typicky **Předávací protokol**, **Walkiny** a **Taxi**. Nabídka záložek se liší hotel od hotelu podle toho, jaká oprávnění máte.
+4. Kliknutím na záložku otevřete danou sekci.
+
+> 📝 Nemáte-li přístup k žádnému hotelu, zobrazí se hláška „Žádný přístupný hotel" — obraťte se na administrátora.
+
+### Předávací protokol
+
+Předávací protokol eviduje hotovost, účty a poznámky pro jednu konkrétní směnu (den + **Den**/**Noc**) a slouží k formálnímu předání směny mezi dvěma zaměstnanci pomocí podpisu.
+
+**Výběr směny**
+
+- V horní liště zvolte **datum** a typ směny — **Den** nebo **Noc**.
+- Tlačítky **← Předchozí** a **Následující →** se posouváte na sousední směnu (den ↔ noc, včetně přechodu přes půlnoc).
+
+**Vytvoření protokolu**
+
+- Pokud pro zvolenou směnu ještě žádný protokol neexistuje, zobrazí se tlačítko **Vytvořit prázdný protokol** (vidí ho jen uživatelé s oprávněním protokol vytvářet). Kliknutím vznikne prázdný protokol připravený k vyplnění.
+
+**Počítání hotovosti — KASA a TREZOR**
+
+- Protokol obsahuje čtyři samostatné tabulky: **KASA CZK**, **TREZOR CZK**, **KASA €** a **TREZOR €**.
+- U každého nominálu (bankovky a mince) zadejte **počet kusů** — aplikace sama dopočítá mezisoučet (nominál × počet kusů) i celkový součet dané tabulky (**CELKEM**).
+- Součty KASA, TREZOR i celková hodnota v CZK a EUR se zobrazují v souhrnu nad seznamem účtů.
+
+**Účty**
+
+- Tlačítkem **+ Přidat účet** přidáte nový řádek, zadáte jeho **název** a **částku** v Kč.
+- U každého řádku můžete přes ikony tužky a koše záznam **upravit** nebo **smazat**.
+- Uživatelé s oprávněním **Spravovat protokol** mohou řádek navíc **uzamknout** ikonou zámku — uzamčený řádek pak nejde upravit ani smazat nikým jiným, dokud jej stejný uživatel znovu neodemkne.
+- Nad běžnými účty jsou natrvalo tři speciální řádky:
+  - **sm** — hodnota se počítá automaticky z počtu kusů zadaných po kliknutí na řádek; sazby nastavují uživatelé s oprávněním **Spravovat sm**.
+  - **sm trezor** — částka převedená z „sm" do trezoru; vynulovat ji (po fyzickém odvedení hotovosti) mohou uživatelé s oprávněním **Spravovat sm**. Ostatním se řádek zobrazí, jen má-li nenulovou hodnotu.
+  - **wata** — ruční přičtení nebo odečtení částky; upravují jej uživatelé s oprávněním **Spravovat protokol**. Ostatním se řádek zobrazí, jen má-li nenulovou hodnotu.
+- Řádek **CELKEM** na konci sečte všechny účty včetně sm, sm trezor a wata.
+
+**Poznámky**
+
+- V panelu **Poznámky** přidáte poznámku tlačítkem **+ Přidat poznámku**.
+- Zaškrtávacím políčkem označíte poznámku jako **vyřízenou** (přeškrtne se).
+- Poznámku lze stejně jako účet upravit, smazat a uživatelé s oprávněním **Spravovat protokol** ji mohou uzamknout.
+
+**Předání směny (podpis)**
+
+- Jakmile je protokol vyplněný, směnu **předáte** podpisem: klikněte na **Předat** u pole *Předal*, v okně vyberte své **jméno** a zadejte **heslo** — tím potvrdíte, že podpis provádíte skutečně vy. Po potvrzení se u pole *Předal* zobrazí vaše jméno a čas podpisu.
+- Kolega přebírající směnu obdobně klikne na **Převzít** u pole *Převzal* a potvrdí svým jménem a heslem.
+- **Jakmile je protokol podepsaný alespoň jednou stranou** (Předal nebo Převzal), **obsah se uzamkne** a dál jej nelze upravovat — výjimkou je administrátor. Krok **Zpět/Vpřed** (viz níže) je po podpisu zamčený pro úplně všechny, administrátora nevyjímaje.
+- Podpis lze odebrat kliknutím na ikonu koše u jména — smí to udělat sám podepsaný, nebo uživatel s oprávněním **Spravovat protokol**/administrátor. Podpis *Předal* lze odebrat, jen dokud není podepsáno *Převzal*.
+
+> ⚠️ Po podpisu obsah protokolu (hotovost, účty, poznámky) neupravujte, nejste-li administrátor — podepsaná verze má zůstat finální záznam o směně.
+
+**Protokol pro další směnu**
+
+- Po podpisu *Převzal* se objeví tlačítko **Vytvořit protokol pro další směnu** — vytvoří přesnou kopii aktuálního protokolu (hotovost, účty, poznámky, bez podpisů) pro navazující směnu a rovnou vás do ní přepne. Tlačítko se nezobrazí, pokud protokol pro další směnu už existuje.
+
+**Historie změn a krok zpět/vpřed**
+
+- Tlačítkem **Historie** otevřete panel se seznamem provedených změn (kdo, co a kdy změnil) v chronologickém pořadí.
+- Dokud protokol není podepsaný, jsou k dispozici tlačítka **↶ Zpět** a **↷ Vpřed** — vrátí, respektive znovu provedou poslední změnu. Po podpisu jsou nedostupná pro všechny.
+
+**Tisk**
+
+- Jakmile jsou podepsané **obě** strany (*Předal* i *Převzal*), zobrazí se tlačítko **Tisk** — otevře přehlednou černobílou tiskovou sestavu protokolu na jednu stránku A4.
+
+**Smazání protokolu**
+
+- Uživatelé s oprávněním protokol **mazat** vidí tlačítko **Smazat protokol**. Po potvrzení se protokol nevratně smaže — použijte jen výjimečně, například při omylem založeném protokolu.
+
+> 📷 *(Místo pro snímek obrazovky: Předávací protokol s hotovostí, účty a podpisy)*
+
+### Walkiny
+
+Záložka **Walkiny** eviduje prodeje typu „walk-in" — zákazník bez rezervace přijde přímo na recepci.
+
+- Tabulka zobrazuje **datum**, **zaměstnance**, **číslo rezervace v Protelu** a **částku** (v Kč nebo €), řazeno od nejnovějšího záznamu.
+- Nový záznam přidáte tlačítkem **+ Přidat walk-in**: vyberete **datum**, **zaměstnance** (nabídka se plní ze zaměstnanců naplánovaných na směnu ve zvoleném měsíci), zadáte **číslo rezervace**, **částku** a **měnu**.
+- Existující záznam upravíte nebo smažete ikonami tužky a koše u řádku.
+- Uživatelé s oprávněním **Spravovat walkiny** navíc nastavují **viditelné období** (rozsah od–do) — tím určují, jaké datum smí ostatní uživatelé zadat a jaké záznamy vidí. Bez tohoto oprávnění vidíte jen informační řádek s aktuálně nastaveným obdobím.
+
+> 📷 *(Místo pro snímek obrazovky: tabulka Walkiny)*
+
+### Taxi
+
+Záložka **Taxi** eviduje objednané taxi jízdy hotelových hostů včetně provize.
+
+- Tabulka zobrazuje **datum, čas, pokoj, počet osob (PAX), destinaci, částku, provizi** a **poznámku**, řazeno od nejnovější jízdy.
+- Novou jízdu přidáte tlačítkem **+ Přidat jízdu**:
+  - **Destinaci** vyberte z **ceníku tras** (viz níže), nebo zvolte **„Jiné…"** pro trasu mimo ceník.
+  - U trasy z ceníku se **částka a provize doplní automaticky** a nejdou ručně přepsat. U trasy typu round-trip (zpáteční) navíc není povinné zadávat čas.
+  - U volby **„Jiné…"** musíte zadat **částku** ručně a je povinná i **poznámka** popisující trasu.
+  - Pokoj a počet osob jsou nepovinné.
+- Existující jízdu upravíte nebo smažete ikonami tužky a koše.
+- Uživatelé s oprávněním **Spravovat taxi** nastavují **viditelné období** (obdobně jako u Walkin) a navíc vidí nad tabulkou souhrn **Celková provize za viditelné období** — součet provizí ze všech jízd spadajících do nastaveného období.
+- Vpravo je panel **Ceník tras** se seznamem tras, jejich **cenou**, **provizí** a příznakem zpáteční jízdy (↺). Uživatelé s oprávněním **Spravovat ceník taxi** zde tlačítkem **Upravit** otevřou editaci ceníku — mohou trasy přidávat, přejmenovávat, měnit cenu/provizi, přeřazovat pořadí šipkami nebo mazat. Ceník je společný pro všechny hotely.
+
+> 📷 *(Místo pro snímek obrazovky: Taxi — tabulka jízd a ceník tras)*
+
+### Průvodce aplikací
+
+I Recepci (Předávací protokol, Walkiny i Taxi) pokrývá úvodní **Prohlídka aplikace** — interaktivní průvodce, který se spustí automaticky při prvním přihlášení a je kdykoli znovu dostupný tlačítkem **„? Nápověda"** vlevo dole. Zobrazuje jen kroky odpovídající vašim oprávněním, takže uvidíte pouze ty části Recepce, ke kterým máte přístup.
 
 ## Developer documentation
 

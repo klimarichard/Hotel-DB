@@ -251,16 +251,18 @@ The page (`/audit`) is a date-sectioned timeline of grouped event cards. The bac
 
 ## Upozornění hub
 
-`/upozorneni` (admin + director) is a tabbed page that aggregates everything that needs admin attention. The menu label is **Upozornění** (was "Neplatné doklady").
+`/upozorneni` (admin + director, plus anyone else holding the relevant per-tab review permission) is a tabbed page that aggregates everything that needs admin attention. The menu label is **Upozornění** (was "Neplatné doklady").
 
-**Tabs**
+**Tabs** (`frontend/src/pages/AlertsPage.tsx`)
 1. **Doklady** — document-expiry alerts from the `alerts/` collection (existing).
 2. **Zkušební doba** — probation-end alerts from `probationAlerts/`.
-3. **Dovolená** — pending vacation requests (status `pending` or approved-with-pendingEdit). Sourced from `GET /vacation` filtered client-side. Workflow-driven (approve/reject in `VacationPage` makes the row disappear).
-4. **Výjimky** — pending shift override requests across all plans. New endpoint `GET /api/shifts/overrides/pending` runs a `collectionGroup` query and denormalizes `planId/planYear/planMonth` per row.
-5. **Žádosti o změny** — same pattern via `GET /api/shifts/changeRequests/pending`.
+3. **Dovolená** — pending vacation requests (status `pending` or approved-with-pendingEdit). Sourced from `GET /vacation` filtered client-side. Workflow-driven (approve/reject in `VacationPage` makes the row disappear). Gated `vacation.review`.
+4. **Výjimky** — pending shift override requests across all plans. Endpoint `GET /api/shifts/overrides/pending` runs a `collectionGroup` query and denormalizes `planId/planYear/planMonth` per row. Gated `shifts.override.review`.
+5. **Žádosti o změny** — same pattern via `GET /api/shifts/changeRequests/pending`. Gated `shifts.changeRequest.review`.
+6. **Žádosti o úpravu údajů** — pending employee self-service data-change requests (`EmployeeDataChangeRequestsTab`, gated `changeRequests.review`).
+7. **Nenavazující předání** — Recepce handover-chain-break flags (`HandoverWarningsTab`, `GET/POST /api/handover-warnings`, gated `changeRequests.review` — no separate key). Detailed in [Recepce — Non-consecutive handover warning](recepce.md#non-consecutive-handover-warning-nenavazující-předání). **Not** included in the sidebar `/upozorneni` badge total below (still "all six" review queues) — it's a data-integrity flag, not a review backlog item, and has no tab-pill count of its own.
 
-Tab labels show pending counts as red pill badges.
+Tab labels show pending counts as red pill badges (tab 7 is the exception — no count badge).
 
 **Read-state (Doklady + Zkušební doba)** — shared and server-side. Each `alerts/` and `probationAlerts/` doc carries `read` / `readAt` / `readBy`; marking read/unread goes through `POST /api/alerts/read` and `POST /api/alerts/probation/read` (`{ ids, read }`, admin/director), so a dismissal is shared across all admins/directors and survives the daily/manual refreshes. The refreshers **preserve** the flag when the underlying deadline (`expiryDate` / `probationEndDate`) is unchanged and **reset** it to unread only when the date moves (a renewed document / edited probation date). Read alerts stay in a muted **Přečtené** archive with an "Označit jako nepřečtené" un-mark action and don't count toward the badge. `AlertsContext` derives the unread badge counts purely from the server flag — the old `localStorage` keys (`hotel_hr_read_alert_ids_v2` / `hotel_hr_read_probation_alert_ids_v1`) are gone.
 
@@ -312,6 +314,7 @@ The distinction matters because the employment-row `status` field can lag the de
   - Other text-bearing single-use buttons: `clearBtn`/`unclearBtn` (EmployeeForm sensitive-field clear), `postSaveBannerBtn`, `addChangeBtn`, `editRowBtn`.
   - `<Link>` elements styled as buttons: `EmployeesPage` addBtn Link, `EmployeeFormPage` cancelBtn Link — the shared primitives only wrap `<button>`.
 - **Typography & tokens**: Inter loaded from `fonts.bunny.net` via `<link>` in `frontend/index.html`. Spacing scale (`--space-1…7`), radius scale (`--radius-sm|md|lg`), font-weights (`--font-weight-regular|medium|semibold|bold`) live in `index.css` `:root`.
+- **Dash convention**: visible frontend text uses **en dashes (`–`), never em dashes (`—`)** — e.g. date-range labels ("Od – Do"), page-subtitle separators ("Recepce – Ambiance"). Keep this when writing new UI copy.
 - **Favicon / logo**: single source of truth at `frontend/src/assets/logo.svg` (real OTH gold brand mark, viewBox tightened to `210 300 195 195` so the glyph fills its box at any size — path data untouched from the Illustrator export). Referenced from `frontend/index.html` as `<link rel="icon" href="./src/assets/logo.svg">` (relative path so Vite processes and fingerprints it in production), imported into `Layout.tsx` at 26×26px in the sidebar via `styles.logoMark`, and rendered at 72×72px above the heading on both login and forgot-password views via `LoginPage.module.css` → `.logo`. The earlier placeholder `public/favicon.svg` was removed in `feature/unified-logo`; `assets/logo-mark.svg` (unimported placeholder) is retained as a backup.
 - **Active nav link**: `Layout.module.css` → `.active` combines the existing `#3b82f6` 3px left-border and `#2d3f54` fill with a soft primary-tinted inner shadow (`box-shadow: inset 0 0 18px rgba(59, 130, 246, 0.12)`) so the selected row reads as "lit up" rather than merely shaded.
 - **Sidebar user bar**: `.userBar` uses `gap: var(--space-2)` between email, role, logout and theme toggle (no per-element `margin-top` rules). `.userEmail` is `0.8125rem`.
