@@ -659,7 +659,10 @@ function buildDemoHandover(signed: boolean): unknown {
     predal: signed ? demoStamp("demo-p", "Jan Novák", "jan.novak@example.com", 3600) : null,
     prevzal: signed ? demoStamp("demo-q", "Petr Svoboda", "petr.svoboda@example.com", 60) : null,
     updatedBy: "demo",
-    updatedAt: { seconds: demoNowSec() - 120 },
+    // FIXED (not time-based): the editor's concurrency poll compares updatedAt
+    // against its base; a changing demo timestamp would false-fire the "edited by
+    // someone else" banner mid-tour. A constant keeps every mocked GET identical.
+    updatedAt: { seconds: 1751500000 },
   };
 }
 

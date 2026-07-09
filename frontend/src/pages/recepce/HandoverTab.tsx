@@ -91,6 +91,21 @@ function tsSeconds(ts: TimestampLike | null | undefined): number | null {
   return null;
 }
 
+/** Epoch millis of a timestamp — the optimistic-concurrency token sent to the
+ *  server. Uses seconds*1000 + floor(nanos/1e6), the SAME formula as the server's
+ *  `tsMillis`, so the two agree bit-for-bit on whether the doc has moved. */
+function tsMillis(ts: TimestampLike | null | undefined): number | null {
+  const s = tsSeconds(ts);
+  if (s == null) return null;
+  const n =
+    ts && "nanoseconds" in ts && typeof (ts as { nanoseconds?: number }).nanoseconds === "number"
+      ? (ts as { nanoseconds: number }).nanoseconds
+      : ts && "_nanoseconds" in ts && typeof (ts as { _nanoseconds?: number })._nanoseconds === "number"
+        ? (ts as { _nanoseconds: number })._nanoseconds
+        : 0;
+  return s * 1000 + Math.floor(n / 1e6);
+}
+
 /** "8.7. 14:32" style, for the history panel. Empty on a missing timestamp. */
 function stampDateTime(ts: TimestampLike | null | undefined): string {
   const s = tsSeconds(ts);
@@ -556,6 +571,10 @@ function ProtocolEditor({
   const [signError, setSignError] = useState<string | null>(null);
   // Whether the NEXT shift already has a protocol (hides the create-next button).
   const [nextExists, setNextExists] = useState(false);
+  // Set when another user has changed (or deleted) this doc since we loaded it and
+  // we have unsaved edits: a non-destructive banner lets the user reload. `current`
+  // is the server's version (null = it was deleted). While set, autosave is paused.
+  const [externalChange, setExternalChange] = useState<{ current: Handover | null } | null>(null);
 
   const predal = loaded?.predal ?? null;
   const prevzal = loaded?.prevzal ?? null;
@@ -569,6 +588,11 @@ function ProtocolEditor({
   const savedPayloadRef = useRef<string>(JSON.stringify(toPayload([], emptyCashCounts(), [], [0, 0, 0])));
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isSavingRef = useRef(false);
+  // Latest values mirrored into refs so the change-detection poll can read them
+  // without re-subscribing its interval/listeners on every keystroke.
+  const loadedRef = useRef<Handover | null>(null);
+  const dirtyRef = useRef(false);
+  const externalRef = useRef<{ current: Handover | null } | null>(null);
 
   /** Seed local state + the saved-baseline from a loaded doc. */
   function applyDoc(data: Handover) {
@@ -627,6 +651,17 @@ function ProtocolEditor({
     [notes, cashCounts, accounts, smCounts]
   );
   const dirty = JSON.stringify(currentPayload) !== savedPayloadRef.current;
+
+  // Mirror the live values the detection poll reads (see the poll effect below).
+  useEffect(() => {
+    loadedRef.current = loaded;
+  }, [loaded]);
+  useEffect(() => {
+    dirtyRef.current = dirty;
+  }, [dirty]);
+  useEffect(() => {
+    externalRef.current = externalChange;
+  }, [externalChange]);
 
   // Load the signer pool for this shift's month (for the sign dropdown).
   useEffect(() => {
@@ -695,6 +730,7 @@ function ProtocolEditor({
   // Debounced autosave – active once a record exists and while it's not frozen.
   useEffect(() => {
     if (loading || !loaded) return;
+    if (externalChange) return; // paused while an unresolved external-change banner is up
     if (!canEdit) return; // frozen after Předat
     if (!dirty) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -703,25 +739,109 @@ function ProtocolEditor({
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [notes, cashCounts, accounts, smCounts, loading, loaded, dirty, canEdit]);
+  }, [notes, cashCounts, accounts, smCounts, loading, loaded, dirty, canEdit, externalChange]);
 
-  async function save() {
-    if (isSavingRef.current) return;
+  async function save(): Promise<boolean> {
+    if (isSavingRef.current) return false;
     isSavingRef.current = true;
     setAutosaving(true);
     const payload = toPayload(notes, cashCounts, accounts, smCounts);
     try {
-      const saved = await api.put<Handover>(`/handovers/${hotel.slug}`, { shiftDate, shiftType, ...payload });
+      const saved = await api.put<Handover>(`/handovers/${hotel.slug}`, {
+        shiftDate,
+        shiftType,
+        ...payload,
+        // Optimistic-concurrency token: the version we currently hold. The server
+        // rejects the save (409) if the stored doc has moved since, rather than
+        // silently overwriting a colleague's edit.
+        baseUpdatedAt: tsMillis(loaded?.updatedAt),
+      });
       setLoaded(saved);
       savedPayloadRef.current = JSON.stringify(payload);
       setAutosaveError(null);
+      return true;
     } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        // Another user changed (or deleted) the doc since we loaded it. Don't
+        // clobber — surface the server's version and let the user reload.
+        const body = err.body as { current?: Handover | null } | undefined;
+        setExternalChange({ current: body?.current ?? null });
+        setAutosaveError(null);
+        return false;
+      }
       setAutosaveError(err instanceof Error ? err.message : "Chyba ukládání.");
+      return false;
     } finally {
       isSavingRef.current = false;
       setAutosaving(false);
     }
   }
+
+  /** Discard local edits and adopt the server's current version (conflict banner). */
+  function reloadFromExternal() {
+    const cur = externalChange?.current ?? null;
+    if (cur) {
+      applyDoc(cur);
+    } else {
+      // Deleted on the server → drop back to the empty state (create button).
+      setLoaded(null);
+      setNotes([]);
+      setCashCounts(emptyCashCounts());
+      setAccounts([]);
+      setSmCounts([0, 0, 0]);
+      setSmTrezor(0);
+      setWata(0);
+      savedPayloadRef.current = JSON.stringify(toPayload([], emptyCashCounts(), [], [0, 0, 0]));
+    }
+    setExternalChange(null);
+    setAutosaveError(null);
+  }
+
+  // Detect another user's edits. The doc has no realtime channel (firestore.rules
+  // block direct client reads, so an onSnapshot is impossible), so we poll while
+  // the tab is visible + refetch on focus. If the stored doc has moved: reload
+  // silently when we have no unsaved edits, else raise the non-destructive banner.
+  // Reads live values via refs so the interval/listeners subscribe once per shift.
+  useEffect(() => {
+    async function check() {
+      if (isSavingRef.current || externalRef.current) return;
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      if (!loadedRef.current) return;
+      try {
+        const server = await api.get<Handover>(`/handovers/${hotel.slug}/${docId}`);
+        const serverMs = tsMillis(server.updatedAt);
+        const baseMs = tsMillis(loadedRef.current?.updatedAt);
+        if (serverMs === null || baseMs === null || serverMs === baseMs) return;
+        if (dirtyRef.current) setExternalChange({ current: server });
+        else applyDoc(server);
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 404) {
+          if (dirtyRef.current) setExternalChange({ current: null });
+          else {
+            setLoaded(null);
+            setNotes([]);
+            setCashCounts(emptyCashCounts());
+            setAccounts([]);
+            setSmCounts([0, 0, 0]);
+            setSmTrezor(0);
+            setWata(0);
+            savedPayloadRef.current = JSON.stringify(toPayload([], emptyCashCounts(), [], [0, 0, 0]));
+          }
+        }
+        // transient errors: ignore (next tick retries)
+      }
+    }
+    const iv = setInterval(() => void check(), 15000);
+    const onFocus = () => void check();
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    return () => {
+      clearInterval(iv);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hotel.slug, docId]);
 
   // Reload the change history whenever the doc is (re)saved – `loaded` gets a new
   // reference on every save/undo/redo, so this refreshes the panel + undo state.
@@ -836,8 +956,16 @@ function ProtocolEditor({
       const cred = await verifyCredential(signer.name, password);
       const base = `/handovers/${hotel.slug}/${docId}/${signAction.slot}`;
       if (signAction.mode === "sign") {
-        // Persist any pending edits BEFORE freezing the content.
-        if (dirty && !isSavingRef.current) await save();
+        // Persist any pending edits BEFORE freezing the content. If that save hits
+        // a conflict (409), the external-change banner is raised — abort the sign
+        // rather than stamping over a version we no longer hold.
+        if (dirty && !isSavingRef.current) {
+          const ok = await save();
+          if (!ok) {
+            setSignBusy(false);
+            return;
+          }
+        }
         const saved = await api.post<Handover>(base, { idToken: cred.idToken });
         applyDoc(saved);
       } else {
@@ -1223,6 +1351,16 @@ function ProtocolEditor({
       {canEdit && signed && (
         <div className={styles.frozenNotice}>
           Protokol je podepsán – obsah může upravit pouze administrátor, krok zpět/vpřed je uzamčen.
+        </div>
+      )}
+      {externalChange && (
+        <div className={styles.frozenNotice}>
+          {externalChange.current === null
+            ? "Tento protokol byl mezitím smazán jiným uživatelem. Vaše neuložené změny nebyly uloženy."
+            : "Tento protokol byl mezitím upraven jiným uživatelem. Vaše neuložené změny nebyly uloženy."}{" "}
+          <Button variant="secondary" size="sm" onClick={reloadFromExternal}>
+            {externalChange.current === null ? "Zavřít" : "Načíst aktuální verzi"}
+          </Button>
         </div>
       )}
 
