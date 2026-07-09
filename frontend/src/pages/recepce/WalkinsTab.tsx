@@ -189,7 +189,7 @@ export default function WalkinsTab({ hotel }: { hotel: Hotel }) {
         ) : (
           <span />
         )}
-        <Button size="sm" onClick={() => setEditing("new")}>
+        <Button size="sm" onClick={() => setEditing("new")} data-tour="walkiny-add">
           + Přidat walk-in
         </Button>
       </div>
@@ -199,7 +199,7 @@ export default function WalkinsTab({ hotel }: { hotel: Hotel }) {
       ) : loadError ? (
         <div className={`${styles.empty} ${styles.statusError}`}>{loadError}</div>
       ) : (
-        <div className={styles.tableWrap}>
+        <div className={styles.tableWrap} data-tour="walkiny-table">
           <table className={styles.table}>
             <thead>
               <tr>

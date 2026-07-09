@@ -358,15 +358,18 @@ function SpecialRow({
   clickable,
   onClick,
   title,
+  dataTour,
 }: {
   label: string;
   value: number;
   clickable: boolean;
   onClick: () => void;
   title?: string;
+  /** Optional guided-tour anchor (data-tour) for spotlighting this row. */
+  dataTour?: string;
 }) {
   return (
-    <div className={`${styles.accountRow} ${styles.specialRow}`}>
+    <div className={`${styles.accountRow} ${styles.specialRow}`} data-tour={dataTour}>
       {clickable ? (
         <button type="button" className={styles.specialName} onClick={onClick} title={title ?? "Upravit"}>
           {label}
@@ -416,7 +419,7 @@ export default function HandoverTab({ hotel }: { hotel: Hotel }) {
     <div className={styles.panel}>
       <div className={styles.toolbar}>
         <div className={styles.toolbarLeft} />
-        <div className={styles.toolbarCenter}>
+        <div className={styles.toolbarCenter} data-tour="protokol-toolbar">
           <Button
             variant="secondary"
             size="sm"
@@ -1154,7 +1157,7 @@ function ProtocolEditor({
           {canCreate ? (
             <>
               <p className={styles.placeholderHint}>Vytvořte prázdný předávací protokol a začněte vyplňovat.</p>
-              <Button onClick={createEmpty} disabled={creating}>
+              <Button onClick={createEmpty} disabled={creating} data-tour="protokol-create">
                 {creating ? "Vytvářím…" : "Vytvořit prázdný protokol"}
               </Button>
             </>
@@ -1171,7 +1174,7 @@ function ProtocolEditor({
     <>
       <div className={styles.editorHeader}>
         <span className={autosaveError ? `${styles.metaText} ${styles.metaError}` : styles.metaText}>{statusText}</span>
-        <div className={styles.editorHeaderActions}>
+        <div className={styles.editorHeaderActions} data-tour="protokol-history">
           {canStep && (
             <>
               <Button
@@ -1241,7 +1244,7 @@ function ProtocolEditor({
       )}
 
       <div className={styles.protocolGrid}>
-        <div className={styles.cashLayout}>
+        <div className={styles.cashLayout} data-tour="protokol-cash">
           {DRAWER_ORDER.map((drawer) => {
             const denoms = isCzkDrawer(drawer) ? CZK_DENOMS : EUR_DENOMS;
             const symbol = isCzkDrawer(drawer) ? "Kč" : "€";
@@ -1324,7 +1327,7 @@ function ProtocolEditor({
             </div>
           </div>
 
-          <div className={styles.accountsContainer}>
+          <div className={styles.accountsContainer} data-tour="protokol-ucty">
             <div className={styles.accountsContainerHeader}>
               <h3 className={styles.accountsTitle}>Účty</h3>
               {canEdit && (
@@ -1341,6 +1344,7 @@ function ProtocolEditor({
                 clickable={smClickable}
                 onClick={openSmModal}
                 title="Upravit sm"
+                dataTour="protokol-sm"
               />
               {showSmTrezorRow && (
                 <SpecialRow
@@ -1434,7 +1438,7 @@ function ProtocolEditor({
         </div>
 
         <div className={styles.protocolRight}>
-          <div className={styles.notesContainer}>
+          <div className={styles.notesContainer} data-tour="protokol-notes">
             <div className={styles.notesContainerHeader}>
               <h3 className={styles.accountsTitle}>Poznámky</h3>
               {canEdit && (
@@ -1500,7 +1504,7 @@ function ProtocolEditor({
         </div>
       </div>
 
-      <div className={styles.signaturesRow}>
+      <div className={styles.signaturesRow} data-tour="protokol-signatures">
         <SignatureBlock
           label="Předal"
           stamp={predal}
@@ -1520,7 +1524,7 @@ function ProtocolEditor({
           onRevert={() => prevzal && openRevert("prevzal", prevzal)}
         />
         {prevzal && !nextExists && (
-          <Button variant="primary" size="sm" onClick={createNextShift}>
+          <Button variant="primary" size="sm" onClick={createNextShift} data-tour="protokol-nextshift">
             Vytvořit protokol pro další směnu
           </Button>
         )}
