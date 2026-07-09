@@ -11,7 +11,7 @@ interface AuthState {
   role: UserRole | null;
   /** The user's configurable type id (roleType). For built-in types this equals
    *  the legacy role name ("employee", "manager", …). Null when unset. Prefer
-   *  this over `role` — type-based users created post-RBAC carry no role claim. */
+   *  this over `role` – type-based users created post-RBAC carry no role claim. */
   roleType: string | null;
   employeeId: string | null;
   /** Display name from users/{uid}.name (via /auth/me); null when unset. */
@@ -27,7 +27,7 @@ const EMPTY_PERMS: ReadonlySet<string> = new Set();
 
 export interface AuthValue extends AuthState {
   /**
-   * Permission check — the frontend mirror of the backend gate. Honours the
+   * Permission check – the frontend mirror of the backend gate. Honours the
    * system.admin superuser key. Use this to show/hide UI; the backend enforces
    * the same permission independently on every endpoint.
    */

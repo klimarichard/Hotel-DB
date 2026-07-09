@@ -2,8 +2,8 @@
  * Display formatting for phone numbers.
  *
  * A Czech number (prefix "+420") is grouped as "+420 XXX XXX XXX" when it has
- * exactly nine national digits. Anything else — other country codes, partial or
- * non-standard numbers — is returned trimmed and unchanged (a custom display
+ * exactly nine national digits. Anything else – other country codes, partial or
+ * non-standard numbers – is returned trimmed and unchanged (a custom display
  * format for other country codes is a separate, later task). Storage is never
  * touched; this is purely for rendering.
  */
@@ -22,7 +22,7 @@ export function formatPhoneDisplay(phone?: string | null): string {
 /**
  * Whether saving `phone` should prompt the user to choose a display format.
  * True only for a non-empty, non-+420 number that differs from `previous`
- * (its previously-stored value) — +420 numbers auto-format, and an unchanged
+ * (its previously-stored value) – +420 numbers auto-format, and an unchanged
  * number shouldn't re-prompt. The chosen string is then stored verbatim.
  */
 export function needsPhoneFormatPrompt(phone: string, previous: string): boolean {

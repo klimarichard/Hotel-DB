@@ -4,8 +4,8 @@
  * action, ~one moment) becomes one card, with the changed fields sub-grouped
  * by area (Osobní údaje / Kontakt / …).
  *
- * Grouping is heuristic — the backend writes per-field docs with independent
- * serverTimestamps and no request id — so we group CONSECUTIVE entries in the
+ * Grouping is heuristic – the backend writes per-field docs with independent
+ * serverTimestamps and no request id – so we group CONSECUTIVE entries in the
  * (time-desc) stream that share author + action + record and fall within a
  * short time window. Re-run over the full accumulated list so groups re-form
  * correctly across pagination.
@@ -80,7 +80,7 @@ export interface AuditEvent {
   summary?: Record<string, unknown>;
   /** reveal/export/manual-trigger: free-form extras. */
   extra?: Record<string, unknown>;
-  /** Raw entries backing this event — for the "technical detail" escape hatch. */
+  /** Raw entries backing this event – for the "technical detail" escape hatch. */
   entries: AuditEntry[];
 }
 
@@ -266,10 +266,10 @@ export interface EventTitle {
 }
 
 /**
- * Specific identifier for the record an event acted on — the employee name,
+ * Specific identifier for the record an event acted on – the employee name,
  * the payroll month, or a name pulled from a create/delete snapshot. Returns
  * an empty string when only a generic collection label would apply, since the
- * header's subject noun already conveys that (avoids "Vytvořil společnost —
+ * header's subject noun already conveys that (avoids "Vytvořil společnost –
  * Společnost").
  */
 export function eventTitle(ev: AuditEvent, employeeName?: string): EventTitle {

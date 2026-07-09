@@ -50,7 +50,7 @@
   border-color: var(--color-text-subtle);
 }
 
-/* "DNES" jump-to-current-month button — only shown when off the current month */
+/* "DNES" jump-to-current-month button – only shown when off the current month */
 .todayBtn {
   background: none;
   border: 1px solid var(--color-border-strong);

@@ -90,7 +90,7 @@ export default function RecepcePage() {
         <h1 className={styles.title}>Recepce</h1>
       </div>
 
-      {/* Hotel selector — always shown (even for a single accessible hotel, so
+      {/* Hotel selector – always shown (even for a single accessible hotel, so
           the receptionist can see which hotel they're on), colour-coded. */}
       {selectedHotel && (
         <div className={styles.hotelBar} role="tablist" aria-label="Hotel">

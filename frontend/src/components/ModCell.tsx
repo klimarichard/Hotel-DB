@@ -3,7 +3,7 @@ import { useTheme } from "../context/ThemeContext";
 
 interface Props {
   code: string;
-  /** Letters currently assigned to managers in this plan — the only codes the MOD row accepts. */
+  /** Letters currently assigned to managers in this plan – the only codes the MOD row accepts. */
   validCodes: string[];
   /** letter → manager full name, for the cell tooltip. */
   letterNames?: Record<string, string>;
@@ -22,7 +22,7 @@ export default function ModCell({ code, validCodes, letterNames, readOnly, onSav
   const inputRef = useRef<HTMLInputElement>(null);
   const cellRef = useRef<HTMLDivElement>(null);
 
-  // Intentionally excludes `editing` from deps — see ShiftCell for explanation.
+  // Intentionally excludes `editing` from deps – see ShiftCell for explanation.
   useEffect(() => {
     if (!focused) return;
     if (editing) inputRef.current?.focus();
@@ -159,7 +159,7 @@ export default function ModCell({ code, validCodes, letterNames, readOnly, onSav
         outline: saveError ? "2px solid #dc2626" : focused ? "2px solid #3b82f6" : "none",
         outlineOffset: "-2px",
       }}
-      title={saveError ?? (code ? `${code} — ${letterNames?.[code] ?? ""}` : undefined)}
+      title={saveError ?? (code ? `${code} – ${letterNames?.[code] ?? ""}` : undefined)}
       onClick={() => { setSaveError(null); startEdit(); }}
       onFocus={onFocus}
       onKeyDown={handleDisplayKeyDown}

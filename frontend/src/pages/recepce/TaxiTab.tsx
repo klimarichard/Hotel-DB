@@ -176,7 +176,7 @@ export default function TaxiTab({ hotel }: { hotel: Hotel }) {
 
   const hasRange = !!(range.from || range.to);
 
-  // Total "Provize" over the rides inside the effective visible period — only the
+  // Total "Provize" over the rides inside the effective visible period – only the
   // taxi.manage holders see it. Managers receive ALL rides from the API (the
   // range bounds only non-managers), so filter to the saved range here, matching
   // the backend's one-sided semantics (a missing bound gates only that side).

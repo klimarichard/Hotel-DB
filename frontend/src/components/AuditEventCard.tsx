@@ -44,7 +44,7 @@ const HIDDEN_FIELDS = new Set([
 const REF_FIELDS = new Set(["employmentRowId"]);
 
 function formatTime(d: Date | null, withDate: boolean): string {
-  if (!d) return "—";
+  if (!d) return "–";
   return d.toLocaleString("cs-CZ", {
     ...(withDate ? { day: "2-digit", month: "2-digit", year: "numeric" } : {}),
     hour: "2-digit",
@@ -128,7 +128,7 @@ export default function AuditEventCard({
     else {
       const o = displayValue(c.fieldPath, c.oldValue, resolveRef, resolveType);
       const n = displayValue(c.fieldPath, c.newValue, resolveRef, resolveType);
-      if (o != null || n != null) compactSummary = `${c.label}: ${o ?? "—"} → ${n ?? "—"}`;
+      if (o != null || n != null) compactSummary = `${c.label}: ${o ?? "–"} → ${n ?? "–"}`;
     }
   } else if (!semanticHeader && flatChanges.length > 1) {
     const labels = flatChanges.map((c) => c.label).filter(Boolean);
@@ -157,7 +157,7 @@ export default function AuditEventCard({
         <span className={styles.action}>{headerVerb}</span>
         {!hideTitle && title && (
           <>
-            <span className={styles.sep}>—</span>
+            <span className={styles.sep}>–</span>
             {titleNode}
           </>
         )}
@@ -192,9 +192,9 @@ export default function AuditEventCard({
                             <span className={styles.redacted}>citlivý údaj změněn</span>
                           ) : (
                             <>
-                              <span className={styles.oldVal}>{oldDisp ?? "—"}</span>
+                              <span className={styles.oldVal}>{oldDisp ?? "–"}</span>
                               <span className={styles.arrow}>→</span>
-                              <span className={styles.newVal}>{newDisp ?? "—"}</span>
+                              <span className={styles.newVal}>{newDisp ?? "–"}</span>
                             </>
                           )}
                         </dd>

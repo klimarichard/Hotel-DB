@@ -83,7 +83,7 @@ function isWeekend(d: Date): boolean {
   return d.getDay() === 0 || d.getDay() === 6;
 }
 
-/** The "active shift date" — today if it's 07:00 or later, yesterday if before 07:00. */
+/** The "active shift date" – today if it's 07:00 or later, yesterday if before 07:00. */
 function currentShiftDate(): string {
   const now = clock.now();
   const d = now.getHours() < 7 ? new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1) : now;
@@ -342,7 +342,7 @@ export default function ShiftGrid({
   }, [effectiveLetterByEmployeeId]);
 
   // Valid MOD codes are the letters actually assigned to managers (vedoucí) in
-  // THIS plan — not a hardcoded list. Assigning a new letter to a manager via
+  // THIS plan – not a hardcoded list. Assigning a new letter to a manager via
   // the badge editor immediately makes it acceptable in the MOD row. Also build
   // a letter → name map so the MOD cell tooltip shows who the letter belongs to.
   const { modValidCodes, modLetterNames } = useMemo(() => {
@@ -446,7 +446,7 @@ export default function ShiftGrid({
                           <span className={styles.empNameText}>
                             {employeeDisplayName(emp)}
                             {canSeeInactiveFlag && !emp.active && (
-                              <span className={styles.inactiveBadge} title="Neaktivní — nepočítá se jako dostupný">–</span>
+                              <span className={styles.inactiveBadge} title="Neaktivní – nepočítá se jako dostupný">–</span>
                             )}
                           </span>
                           {showModCounts && modLetter && modCountsByLetter && (() => {
@@ -476,7 +476,7 @@ export default function ShiftGrid({
                                     min={0}
                                     max={31}
                                     autoFocus
-                                    title="Nový limit X pro tento měsíc (kolik X smí napsat nad rámec dovolené) — Enter uložit, Esc zrušit"
+                                    title="Nový limit X pro tento měsíc (kolik X smí napsat nad rámec dovolené) – Enter uložit, Esc zrušit"
                                     onFocus={(e) => e.target.select()}
                                     onBlur={() => setEditingXEmployee(null)}
                                     onKeyDown={async (e) => {
@@ -510,7 +510,7 @@ export default function ShiftGrid({
                             );
                           })()}
                         </div>
-                        {/* Badge — vedoucí only */}
+                        {/* Badge – vedoucí only */}
                         {section === "vedoucí" && !isEditingMod && modLetter && (
                           <span
                             className={`${styles.modBadge}${onModPersonChange ? ` ${styles.modBadgeEditable}` : ""}`}
@@ -537,7 +537,7 @@ export default function ShiftGrid({
                             maxLength={1}
                             autoFocus
                             placeholder="?"
-                            title={`Dostupná písmena: ${availableLetters.join(", ")} — Enter pro uložení, Esc pro zrušení`}
+                            title={`Dostupná písmena: ${availableLetters.join(", ")} – Enter pro uložení, Esc pro zrušení`}
                             onFocus={(e) => e.target.select()}
                             onBlur={() => setEditingModEmployee(null)}
                             onKeyDown={async (e) => {
@@ -556,7 +556,7 @@ export default function ShiftGrid({
                             }}
                           />
                         )}
-                        {/* Edit/delete actions — appear on hover, to the right of badge */}
+                        {/* Edit/delete actions – appear on hover, to the right of badge */}
                         {canEditEmployees && (
                           <span className={styles.empActions}>
                             <button

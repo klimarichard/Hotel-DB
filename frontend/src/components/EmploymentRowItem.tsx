@@ -41,12 +41,12 @@ interface Props {
   rowSnapshot: Record<string, unknown>;
   employeeId: string;
   /** Number of rows in the session this Nástup anchors. Drives the
-   *  cascade-delete confirm copy ("smaže pracovní poměr — N záznamů").
+   *  cascade-delete confirm copy ("smaže pracovní poměr – N záznamů").
    *  Ignored for non-Nástup rows. */
   sessionRowCount?: number;
   onGenerate?: () => void;
   /**
-   * Open the row in edit mode. Hidden once a signed PDF is on file —
+   * Open the row in edit mode. Hidden once a signed PDF is on file –
    * editing the underlying record after that would silently desync from
    * the legally-binding signed contract.
    */
@@ -78,7 +78,7 @@ const CHANGE_KIND_LABEL: Record<string, string> = {
 };
 
 function renderChangeValue(kind: string, value: string): React.ReactNode {
-  if (!value) return "—";
+  if (!value) return "–";
   if (kind === "mzda") {
     const n = Number(value);
     if (Number.isFinite(n)) return <StopTap><SalaryReveal value={n} /></StopTap>;
@@ -164,7 +164,7 @@ export default function EmploymentRowItem({
       : "Smazat ukončení?";
   const deleteMessage = isNastup
     ? cascadeCount > 1
-      ? `Tím se smaže celý pracovní poměr — ${cascadeCount} záznamů (Nástup, dodatky a případné Ukončení) včetně všech vygenerovaných i podepsaných smluv. Tato akce je nevratná.`
+      ? `Tím se smaže celý pracovní poměr – ${cascadeCount} záznamů (Nástup, dodatky a případné Ukončení) včetně všech vygenerovaných i podepsaných smluv. Tato akce je nevratná.`
       : "Tím se smaže celý pracovní poměr včetně všech vygenerovaných i podepsaných smluv. Tato akce je nevratná."
     : "Pokud k záznamu existuje smlouva (nepodepsaná i podepsaná), bude také smazána. Tato akce je nevratná.";
 

@@ -79,8 +79,8 @@ export default function EmploymentSessionCard({
   const canManageEmployment = can("employment.manage");
   const [open, setOpen] = useState(defaultExpanded);
   const eff = session.effective;
-  const companyName = companies[eff.companyId] ?? eff.companyId ?? "—";
-  // DPP headers show no monetary value — DPP has no monthly salary, and the
+  const companyName = companies[eff.companyId] ?? eff.companyId ?? "–";
+  // DPP headers show no monetary value – DPP has no monthly salary, and the
   // agreed reward is not shown in the session header (per TODO line 59).
   const shownSalary = eff.contractType === "DPP" ? null : eff.salary;
 
@@ -119,7 +119,7 @@ export default function EmploymentSessionCard({
                 );
               })
             ) : (
-              eff.jobTitle || "—"
+              eff.jobTitle || "–"
             )}
           </span>
           {eff.contractType && (
@@ -140,7 +140,7 @@ export default function EmploymentSessionCard({
           </span>
         </div>
         {/* "Ukončit smlouvu" stays available for any session without a formal
-            Ukončení row — including fixed-term contracts (e.g. DPP) whose end
+            Ukončení row – including fixed-term contracts (e.g. DPP) whose end
             date is set or has already passed, so they can always be ended
             (early or retroactively). "+ Dodatek" remains hidden once the
             session is over (terminated = Ukončení row or endDate in the past). */}
@@ -157,7 +157,7 @@ export default function EmploymentSessionCard({
         )}
       </div>
 
-      {/* Parental-leave periods — informational header band, always visible. */}
+      {/* Parental-leave periods – informational header band, always visible. */}
       {session.rodicovska.length > 0 && (
         <div className={styles.rodicovskaBand}>
           {session.rodicovska.map((rd) => (

@@ -125,8 +125,8 @@ export default function ShiftChangeRequestModal({
         </div>
         <div className={shell.body}>
           <p className={styles.context}>
-            <strong>{employeeName}</strong> — {formatDateCZ(date)} — aktuálně:{" "}
-            <strong>{currentShift || "—"}</strong>
+            <strong>{employeeName}</strong> – {formatDateCZ(date)} – aktuálně:{" "}
+            <strong>{currentShift || "–"}</strong>
           </p>
 
           <div className={styles.sectionLabel}>Požadovaná změna na:</div>
@@ -164,7 +164,7 @@ export default function ShiftChangeRequestModal({
                 setSel(e.target.value ? { kind: "swap", employeeId: e.target.value } : { kind: "none" });
               }}
             >
-              <option value="">— vyberte zaměstnance —</option>
+              <option value="">– vyberte zaměstnance –</option>
               {swapCandidates.map((e) => (
                 <option key={e.employeeId} value={e.employeeId}>
                   {employeeSurnameFirst(e)}

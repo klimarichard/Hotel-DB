@@ -25,10 +25,10 @@ interface Employee {
   // Continuous-employment start (NOT the latest Nástup) + effective end (or null).
   employmentStartDate?: string | null;
   employmentEndDate?: string | null;
-  // "Zaučování" (training) — denormalized from the benefits sub-doc onto root.
+  // "Zaučování" (training) – denormalized from the benefits sub-doc onto root.
   zaucovani?: boolean;
   zaucovaniDo?: string | null;
-  // Parental-leave window — denormalized from the employment rows onto root
+  // Parental-leave window – denormalized from the employment rows onto root
   // (the active-or-next "rodičovská" period). Badge shows only while today is
   // within it; the live check below makes appearance/clearing automatic.
   parentalLeaveFrom?: string | null;
@@ -38,7 +38,7 @@ interface Employee {
   // Drives the "RODIČOVSKÁ / position" list label vs a plain "RODIČOVSKÁ".
   currentContractDuringLeave?: boolean;
   // The on-leave (main) contract's type, shown as a badge alongside the current
-  // (concurrent) contract — e.g. [HPP] [DPP]. Only set while concurrent.
+  // (concurrent) contract – e.g. [HPP] [DPP]. Only set while concurrent.
   leaveContractType?: string | null;
 }
 
@@ -48,7 +48,7 @@ function isInTraining(emp: Employee): boolean {
   return emp.zaucovani === true && (!emp.zaucovaniDo || emp.zaucovaniDo >= clock.today());
 }
 
-// Contract-type badge class — coloured by the badge's OWN type (grey HPP /
+// Contract-type badge class – coloured by the badge's OWN type (grey HPP /
 // blue PPP / amber DPP), so a concurrent row shows each contract in its colour.
 function contractBadgeClass(ct: string): string {
   if (ct === "DPP") return `${styles.contractBadge} ${styles.contractBadgeDpp}`;
@@ -57,7 +57,7 @@ function contractBadgeClass(ct: string): string {
 }
 
 // On parental leave = today is on/after the start and (if an end date is set)
-// on/before it. An open-ended period (no end date yet — unknown when leave
+// on/before it. An open-ended period (no end date yet – unknown when leave
 // begins) keeps the badge until an end date is later filled in and passes.
 function isOnParentalLeave(emp: Employee): boolean {
   const today = clock.today();
@@ -71,7 +71,7 @@ function isOnParentalLeave(emp: Employee): boolean {
 // Position / department shown in the list. While on parental leave the column
 // reads "RODIČOVSKÁ"; if the current contract is a concurrent job worked during
 // that leave (currentContractDuringLeave), the current position/department
-// follows a slash ("RODIČOVSKÁ/<current>"). Returns "" (not "—") when empty so
+// follows a slash ("RODIČOVSKÁ/<current>"). Returns "" (not "–") when empty so
 // the caller controls the empty fallback and the sort comparator reuses it.
 function positionDisplay(emp: Employee): string {
   if (isOnParentalLeave(emp)) {
@@ -97,7 +97,7 @@ function departmentDisplay(emp: Employee): string {
 // now leads the cell. Sorting uses positionDisplay/departmentDisplay so the
 // order matches what's shown.
 function parentalCell(emp: Employee, base: string) {
-  if (!isOnParentalLeave(emp)) return base || "—";
+  if (!isOnParentalLeave(emp)) return base || "–";
   const showCurrent = !!emp.currentContractDuringLeave && !!base;
   return (
     <>
@@ -311,7 +311,7 @@ export default function EmployeesPage() {
                     </Link>
                     {/* On leave with a concurrent contract: show the main
                         (on-leave) contract's badge first, then the current one
-                        — e.g. [HPP] [DPP]. */}
+                        – e.g. [HPP] [DPP]. */}
                     {emp.currentContractDuringLeave && emp.leaveContractType && (
                       <span className={contractBadgeClass(emp.leaveContractType)}>{emp.leaveContractType}</span>
                     )}
@@ -324,9 +324,9 @@ export default function EmployeesPage() {
                   </td>
                   <td>{parentalCell(emp, emp.currentJobTitle ?? "")}</td>
                   <td>{parentalCell(emp, emp.currentDepartment ?? "")}</td>
-                  <td>{emp.nationality ? nationalityName(emp.nationality) : "—"}</td>
-                  <td>{formatDateCZ(emp.employmentStartDate) || "—"}</td>
-                  <td>{formatDateCZ(emp.employmentEndDate) || "—"}</td>
+                  <td>{emp.nationality ? nationalityName(emp.nationality) : "–"}</td>
+                  <td>{formatDateCZ(emp.employmentStartDate) || "–"}</td>
+                  <td>{formatDateCZ(emp.employmentEndDate) || "–"}</td>
                   <td>
                     <span
                       className={

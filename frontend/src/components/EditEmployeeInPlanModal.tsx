@@ -75,12 +75,12 @@ export default function EditEmployeeInPlanModal({ planId, employee, onClose, onS
             value={primaryShiftType}
             onChange={(e) => setPrimaryShiftType(e.target.value)}
           >
-            <option value="">— žádný —</option>
-            <option value="D">D — denní (12h)</option>
-            <option value="N">N — noční (12h)</option>
-            <option value="R">R — FOM (8h)</option>
-            <option value="DP">DP — portýr denní (12h)</option>
-            <option value="NP">NP — portýr noční (12h)</option>
+            <option value="">– žádný –</option>
+            <option value="D">D – denní (12h)</option>
+            <option value="N">N – noční (12h)</option>
+            <option value="R">R – FOM (8h)</option>
+            <option value="DP">DP – portýr denní (12h)</option>
+            <option value="NP">NP – portýr noční (12h)</option>
           </select>
 
           <label className={styles.label}>Primární hotel</label>
@@ -89,10 +89,10 @@ export default function EditEmployeeInPlanModal({ planId, employee, onClose, onS
             value={primaryHotel}
             onChange={(e) => setPrimaryHotel(e.target.value)}
           >
-            <option value="">— žádný —</option>
+            <option value="">– žádný –</option>
             {HOTEL_CODES.map((h) => (
               <option key={h} value={h}>
-                {h} — {HOTEL_NAMES[h as HotelCode]}
+                {h} – {HOTEL_NAMES[h as HotelCode]}
               </option>
             ))}
           </select>

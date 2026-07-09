@@ -25,11 +25,11 @@ import styles from "./EmployeeSelfPage.module.css";
 
 const MASK = "••••••••";
 
-// First sensitive field key — used solely to anchor the onboarding tour's reveal
+// First sensitive field key – used solely to anchor the onboarding tour's reveal
 // step on a single (the first) reveal button. Inert: drives no behaviour.
 const FIRST_SENSITIVE_KEY = SELF_EDIT_FIELDS.find((f) => f.sensitive)?.key;
 
-// Mirrors EmployeeFormPage — combined gendered forms; displayGendered() picks
+// Mirrors EmployeeFormPage – combined gendered forms; displayGendered() picks
 // the variant on read.
 const MARITAL_STATUSES = ["svobodný/á", "ženatý/vdaná", "rozvedený/á", "vdovec/vdova"];
 
@@ -266,7 +266,7 @@ export default function EmployeeSelfPage() {
     // Auto-reveal editable sensitive fields so the employee sees what they're
     // changing (TODO 41). Each reveal hits POST /me/employee/reveal, which logs
     // a "reveal" audit action. Done in parallel; failures leave the input blank.
-    // Gated by sensitive.reveal.self: without it we never decrypt — the inputs
+    // Gated by sensitive.reveal.self: without it we never decrypt – the inputs
     // stay blank and buildChanges() treats the original as "" (so an untouched
     // sensitive field is simply not submitted).
     if (!canRevealSelf) {
@@ -298,7 +298,7 @@ export default function EmployeeSelfPage() {
   function buildChanges() {
     const changes: { field: string; label: string; newValue: string; oldValue?: string }[] = [];
     for (const f of SELF_EDIT_FIELDS) {
-      // Document fields hidden for the current nationality are never submitted —
+      // Document fields hidden for the current nationality are never submitted –
       // their inputs aren't shown, so any leftover value is irrelevant (TODO 14).
       if (!isFieldVisible(f)) continue;
 
@@ -378,7 +378,7 @@ export default function EmployeeSelfPage() {
     const raw = obj ? obj[f.key] : undefined;
     if (f.sensitive) {
       const isRevealed = revealed[f.key] !== undefined;
-      if (raw !== MASK && !isRevealed) return <span className={styles.muted}>—</span>;
+      if (raw !== MASK && !isRevealed) return <span className={styles.muted}>–</span>;
       return (
         <span>
           {isRevealed ? revealed[f.key] : MASK}
@@ -397,7 +397,7 @@ export default function EmployeeSelfPage() {
         </span>
       );
     }
-    if (raw == null || raw === "") return <span className={styles.muted}>—</span>;
+    if (raw == null || raw === "") return <span className={styles.muted}>–</span>;
     if (f.kind === "date") return <span>{formatDateCZ(String(raw))}</span>;
     // maritalStatus is stored combined ("ženatý/vdaná"); show the gender variant.
     if (f.key === "maritalStatus") {
@@ -422,7 +422,7 @@ export default function EmployeeSelfPage() {
     if (f.key === "maritalStatus") {
       return (
         <select className={styles.input} value={value} onChange={(e) => set(e.target.value)}>
-          <option value="">— vyberte —</option>
+          <option value="">– vyberte –</option>
           {MARITAL_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
       );
@@ -430,7 +430,7 @@ export default function EmployeeSelfPage() {
     if (f.key === "education") {
       return (
         <select className={styles.input} value={value} onChange={(e) => set(e.target.value)}>
-          <option value="">— vyberte —</option>
+          <option value="">– vyberte –</option>
           {educationOptions.map((s) => <option key={s} value={s}>{s}</option>)}
           {value && !educationOptions.includes(value) && <option value={value}>{value}</option>}
         </select>
@@ -442,7 +442,7 @@ export default function EmployeeSelfPage() {
         type={f.kind === "date" ? "date" : "text"}
         value={value}
         onChange={(e) => set(e.target.value)}
-        placeholder={f.sensitive ? "Nová hodnota — prázdné = beze změny" : undefined}
+        placeholder={f.sensitive ? "Nová hodnota – prázdné = beze změny" : undefined}
       />
     );
   }
@@ -469,7 +469,7 @@ export default function EmployeeSelfPage() {
   const hasPending = requests.some((r) => r.status === "pending");
 
   // Employment-history overview shows an entry ONLY when it has a matching
-  // SIGNED contract — an employee should see only finalised history. Entries
+  // SIGNED contract – an employee should see only finalised history. Entries
   // whose contract is still unsigned (being prepared for signing) AND entries
   // with no contract generated yet are both hidden, since to the employee both
   // are "not finalised". (A Nástup with no signed contract hides its whole
@@ -495,7 +495,7 @@ export default function EmployeeSelfPage() {
         )}
       </div>
       <p className={styles.subtitle}>
-        Změny osobních údajů odešlete ke schválení — projeví se až po schválení administrátorem.
+        Změny osobních údajů odešlete ke schválení – projeví se až po schválení administrátorem.
       </p>
 
       <DocumentExpiryBar alerts={docAlerts} />
@@ -556,17 +556,17 @@ export default function EmployeeSelfPage() {
                   <>
                     <div className={styles.field}>
                       <span className={styles.fieldLabel}>Jméno</span>
-                      <span className={styles.fieldValue}>{emp?.firstName || "—"}</span>
+                      <span className={styles.fieldValue}>{emp?.firstName || "–"}</span>
                     </div>
                     <div className={styles.field}>
                       <span className={styles.fieldLabel}>Příjmení</span>
-                      <span className={styles.fieldValue}>{emp?.lastName || "—"}</span>
+                      <span className={styles.fieldValue}>{emp?.lastName || "–"}</span>
                     </div>
                     <div className={styles.field}>
                       <span className={styles.fieldLabel}>Datum narození</span>
-                      <span className={styles.fieldValue}>{emp?.dateOfBirth ? formatDateCZ(emp.dateOfBirth) : "—"}</span>
+                      <span className={styles.fieldValue}>{emp?.dateOfBirth ? formatDateCZ(emp.dateOfBirth) : "–"}</span>
                     </div>
-                    {/* Pohlaví is intentionally not shown on Můj profil — employees don't need
+                    {/* Pohlaví is intentionally not shown on Můj profil – employees don't need
                         to see their own gender. It remains on the Employee detail page, and
                         emp.gender is still used here to pick the maritalStatus variant. */}
                   </>
@@ -586,15 +586,15 @@ export default function EmployeeSelfPage() {
             <div className={styles.grid}>
               <div className={styles.field}>
                 <span className={styles.fieldLabel}>Pozice</span>
-                <span className={styles.fieldValue}>{emp?.currentJobTitle || "—"}</span>
+                <span className={styles.fieldValue}>{emp?.currentJobTitle || "–"}</span>
               </div>
               <div className={styles.field}>
                 <span className={styles.fieldLabel}>Oddělení</span>
-                <span className={styles.fieldValue}>{emp?.currentDepartment || "—"}</span>
+                <span className={styles.fieldValue}>{emp?.currentDepartment || "–"}</span>
               </div>
               <div className={styles.field}>
                 <span className={styles.fieldLabel}>Typ smlouvy</span>
-                <span className={styles.fieldValue}>{emp?.currentContractType || "—"}</span>
+                <span className={styles.fieldValue}>{emp?.currentContractType || "–"}</span>
               </div>
             </div>
             {visibleEmployment.length > 0 && (
@@ -655,7 +655,7 @@ export default function EmployeeSelfPage() {
                         <span className={styles.changeArrow}>→</span>
                       </>
                     ) : null}
-                    <span>{c.newValue ?? "—"}</span>
+                    <span>{c.newValue ?? "–"}</span>
                   </div>
                 ))}
               </div>

@@ -3,7 +3,7 @@ import type { ContractType } from "./contractVariables";
 /**
  * Subset of an employment row that the naming function needs. Kept
  * separate from EmploymentRow (defined in EmployeeDetailPage) to
- * avoid a circular import — naming logic lives in lib/, EmploymentRow
+ * avoid a circular import – naming logic lives in lib/, EmploymentRow
  * is a UI-side type.
  */
 export interface ContractNameRow {
@@ -25,7 +25,7 @@ function changeLabel(change: { changeKind: string; value: string }): string {
     case "úvazek":
       return "změna úvazku";
     case "délka smlouvy":
-      // Value is "doba určitá" or "doba neurčitá" — use it directly.
+      // Value is "doba určitá" or "doba neurčitá" – use it directly.
       return change.value || "změna délky smlouvy";
     case "počet hodin":
       return "změna úvazku";
@@ -43,7 +43,7 @@ function yearOf(iso: string | undefined): string {
 /**
  * Build the human-readable display name for a generated contract. The
  * name is stored on the contract doc at generation time and surfaces
- * through the download endpoint's Content-Disposition header — what
+ * through the download endpoint's Content-Disposition header – what
  * the user sees in their browser's "Save as…" dialog.
  *
  * Examples:
@@ -95,7 +95,7 @@ export function buildContractName(
       return `Multisport ${name}`;
 
     default:
-      // Custom standalone template — fall back to the user-supplied label
+      // Custom standalone template – fall back to the user-supplied label
       // (the template's `name` field) or the slug id if none was passed.
       return `${fallbackLabel || type} ${name}`.replace(/\s+/g, " ").trim();
   }

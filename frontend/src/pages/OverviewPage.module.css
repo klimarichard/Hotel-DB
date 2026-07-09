@@ -253,7 +253,7 @@
 }
 
 .subBlock:first-of-type {
-  /* first sub-block follows the heading — still needs spacing but no divider */
+  /* first sub-block follows the heading – still needs spacing but no divider */
   border-top: none;
   padding-top: 0;
   margin-top: 1rem;
@@ -364,7 +364,7 @@
   transform: translateY(1px);
 }
 
-/* Definite min-height instead of aspect-ratio:1/1 — Safari resolves a flex/grid
+/* Definite min-height instead of aspect-ratio:1/1 – Safari resolves a flex/grid
    item's cross-size from (empty) content BEFORE applying aspect-ratio, which
    collapsed these tiles to near-zero. A min-height keeps near-square tiles
    without depending on intrinsic sizing. */

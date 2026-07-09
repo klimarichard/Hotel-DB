@@ -42,7 +42,7 @@
 
 .uploadBtn {
   cursor: pointer;
-  /* native <label> wrapping a hidden file input — looks like a button */
+  /* native <label> wrapping a hidden file input – looks like a button */
 }
 
 .deleteBtn {

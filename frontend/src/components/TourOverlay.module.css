@@ -1,4 +1,4 @@
-/* Full-screen transparent click blocker — keeps interaction on the tour. */
+/* Full-screen transparent click blocker – keeps interaction on the tour. */
 .blocker {
   position: fixed;
   inset: 0;
@@ -73,7 +73,7 @@
   color: var(--color-text, #374151);
 }
 
-/* Section-jump row — skip whole pages forward/back. Sits above the step nav,
+/* Section-jump row – skip whole pages forward/back. Sits above the step nav,
    separated by a hairline so the two control tiers read distinctly. */
 .sectionNav {
   display: flex;

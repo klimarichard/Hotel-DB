@@ -27,7 +27,7 @@ function fmtShort(d: Date): string {
  * toggle) that shows the test-clock state at a glance and opens a modal to jump
  * the app's "current time" or revert to real time. Replaces the former
  * Settings → Čas tab so the control is one click away. Renders nothing where
- * faking time isn't permitted (production) — same backend `allowed` gate as the
+ * faking time isn't permitted (production) – same backend `allowed` gate as the
  * old tab. Setting/clearing reloads the app (handled by the context) so every
  * clock.now() call site picks up the new offset.
  */
@@ -100,7 +100,7 @@ export default function TimeOverrideControl() {
           setValue(toLocalInput(clockNow()));
           setOpen(true);
         }}
-        title={enabled ? "Testovací čas je aktivní — kliknutím upravit" : "Nastavit testovací čas"}
+        title={enabled ? "Testovací čas je aktivní – kliknutím upravit" : "Nastavit testovací čas"}
       >
         <span className={styles.footerBtnGlyph}>🕒</span>
         {enabled && targetISO ? fmtShort(new Date(targetISO)) : "Čas (test)"}
@@ -128,7 +128,7 @@ export default function TimeOverrideControl() {
                     <div className={styles.statusTitle}>🕒 Testovací čas je aktivní</div>
                     <div>
                       Nastaveno na:{" "}
-                      <strong>{targetISO ? fmtCZ(new Date(targetISO)) : "—"}</strong>
+                      <strong>{targetISO ? fmtCZ(new Date(targetISO)) : "–"}</strong>
                     </div>
                     <div className={styles.statusMeta}>
                       Aktuálně: {fmtCZ(clockNow())}
@@ -137,7 +137,7 @@ export default function TimeOverrideControl() {
                     </div>
                   </>
                 ) : (
-                  <div>Testovací čas není aktivní — aplikace používá reálný čas.</div>
+                  <div>Testovací čas není aktivní – aplikace používá reálný čas.</div>
                 )}
               </div>
 

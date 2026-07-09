@@ -137,7 +137,7 @@ export default function PayrollNotesModal({
     <div className={styles.overlay}>
       <div className={styles.modal}>
         <div className={styles.header}>
-          <span className={styles.title}>Poznámky — {employeeLabel}</span>
+          <span className={styles.title}>Poznámky – {employeeLabel}</span>
           <button className={styles.close} onClick={onClose}>✕</button>
         </div>
 
@@ -191,7 +191,7 @@ export default function PayrollNotesModal({
                       <>
                         <p className={`${styles.noteText} ${n.read ? styles.noteRead : ""}`}>{n.text}</p>
                         <div className={styles.noteMeta}>
-                          — {n.createdByName || "?"}, {metaDate}
+                          – {n.createdByName || "?"}, {metaDate}
                           {editedDate && <> · upraveno {editedDate}{n.editedByName ? ` (${n.editedByName})` : ""}</>}
                           {readDate && <> · přečteno {readDate}{n.readByName ? ` (${n.readByName})` : ""}</>}
                         </div>
@@ -199,7 +199,7 @@ export default function PayrollNotesModal({
                           {n.auto ? (
                             <span className={styles.carryLabel}>Automatická poznámka (jen toto období)</span>
                           ) : n.read ? (
-                            <span className={styles.carryLabel}>Přečteno — skryto v dalších měsících</span>
+                            <span className={styles.carryLabel}>Přečteno – skryto v dalších měsících</span>
                           ) : n.carryForward === false ? (
                             <span className={styles.carryLabel}>Jen pro tento měsíc</span>
                           ) : (
@@ -212,13 +212,13 @@ export default function PayrollNotesModal({
                                   className={styles.iconBtn}
                                   onClick={() => setReadTarget(n)}
                                   disabled={busy}
-                                  title="Označit jako přečteno — zmizí z dalších měsíců"
+                                  title="Označit jako přečteno – zmizí z dalších měsíců"
                                 >
                                   Označit přečteno
                                 </button>
                               )}
                               {/* System-generated notes (e.g. pre-contract worked
-                                  hours) are read-only — only "mark read" applies. */}
+                                  hours) are read-only – only "mark read" applies. */}
                               {n.createdBy !== "system" && (
                                 <>
                                   <button

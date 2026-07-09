@@ -1,4 +1,4 @@
-/* Předávací protokol (cash handover) — cash tables, účty (incl. the sm / sm
+/* Předávací protokol (cash handover) – cash tables, účty (incl. the sm / sm
    trezor / wata special rows), poznámky, summary, signature blocks, sm + wata
    modals. Ported from the recepce hub branch, permission-driven rebuild. */
 
@@ -104,7 +104,7 @@
   align-self: stretch;
 }
 
-/* Souhrn — mirrors the on-screen .summary two-group (CZK | EUR) box. */
+/* Souhrn – mirrors the on-screen .summary two-group (CZK | EUR) box. */
 .printSummary {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -131,7 +131,7 @@
   font-weight: 700;
 }
 
-/* Účty — flex column; list grows, CELKEM sits at the section bottom. */
+/* Účty – flex column; list grows, CELKEM sits at the section bottom. */
 .printAccounts {
   display: flex;
   flex-direction: column;
@@ -311,7 +311,7 @@
   color: var(--color-text-muted);
 }
 
-/* An undone entry (above the cursor) — redoable, shown struck through. */
+/* An undone entry (above the cursor) – redoable, shown struck through. */
 .historyUndone .historyLabel {
   text-decoration: line-through;
   color: var(--color-text-muted);
@@ -572,7 +572,7 @@
   }
 }
 
-/* ── Cash table — base + per-drawer tints ─────────────────────────────── */
+/* ── Cash table – base + per-drawer tints ─────────────────────────────── */
 
 .cashTable {
   --tint: var(--color-bg);
@@ -586,7 +586,7 @@
   flex-direction: column;
 }
 
-/* Light-mode tints — base / alt-row / header-strong */
+/* Light-mode tints – base / alt-row / header-strong */
 .cashTable.kasaCZK {
   --tint: #eff6ff;
   --tint-alt: #e0eafc;
@@ -608,7 +608,7 @@
   --tint-strong: #d1fae5;
 }
 
-/* Dark-mode tints — desaturated, low-luminance */
+/* Dark-mode tints – desaturated, low-luminance */
 [data-theme="dark"] .cashTable.kasaCZK {
   --tint: #15294a;
   --tint-alt: #1a3155;
@@ -666,7 +666,7 @@
   color: var(--color-text-secondary);
 }
 
-/* No spinner buttons — receptionist types the count, the up/down clickers
+/* No spinner buttons – receptionist types the count, the up/down clickers
    are not useful at the resolution the inputs have. */
 .cashInput {
   width: 100%;
@@ -782,7 +782,7 @@
   border-top: 2px solid var(--color-border);
 }
 
-/* sm sits at the top, then the regular rows below — separated by an empty
+/* sm sits at the top, then the regular rows below – separated by an empty
    band with a thin line so the visual break is unmistakable. */
 .accountSeparator {
   height: 1px;
@@ -979,7 +979,7 @@
   color: var(--color-text-muted);
 }
 
-/* ── Summary panel — sits in cashLayout grid, spans cols 1-2 ────────────── */
+/* ── Summary panel – sits in cashLayout grid, spans cols 1-2 ────────────── */
 
 .summary {
   grid-area: summary;

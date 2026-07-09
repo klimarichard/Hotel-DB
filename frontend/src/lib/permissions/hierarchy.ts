@@ -1,14 +1,14 @@
 /**
  * Dependency-resolution for the hierarchical permission matrix. Pure + framework-
  * free so it's unit-testable and shared by both editors (UserTypesTab + the
- * per-user UserPermissionsModal). The hierarchy is a UI affordance only — the
+ * per-user UserPermissionsModal). The hierarchy is a UI affordance only – the
  * backend stores/validates a flat array and never sees any of this.
  *
  * Rules (from PERMISSIONS_LIST.md, see catalog.ts):
  *  - A section master (level 0) is always toggleable; it gates the whole section.
  *  - A level-1 item is enabled (clickable) only when its section master is checked.
- *  - A level-N≥2 item is enabled only when its parent — the nearest preceding
- *    level-(N-1) item within the same subsection — is checked.
+ *  - A level-N≥2 item is enabled only when its parent – the nearest preceding
+ *    level-(N-1) item within the same subsection – is checked.
  *  - Unchecking a parent cascades off all its descendants (the contiguous run of
  *    deeper-level items after it, up to the next equal-or-higher-order item or the
  *    end of the subsection; the master's subtree is the whole section).
@@ -163,15 +163,15 @@ export function resolveToggle(checked: ReadonlySet<string>, key: string): Set<st
  *
  * Repair is capability-PRESERVING: rather than dropping a child whose parent is
  * missing, we add the missing ancestors (a parent is an enabling prerequisite,
- * never more privileged than its child — so adding it can't grant unintended
+ * never more privileged than its child – so adding it can't grant unintended
  * power). Mutual-exclusion conflicts are then resolved by keeping the first-in-
  * order member and dropping the rest with their subtrees. Unknown keys (not in
- * the catalog) pass through untouched — a frontend/backend key gap must never
+ * the catalog) pass through untouched – a frontend/backend key gap must never
  * silently drop a stored grant.
  */
 export function normalize(set: ReadonlySet<string>): Set<string> {
   const work = new Set<string>(set); // keeps unknown keys as-is
-  // Pass A — repair upward: ensure every present item's full ancestor chain.
+  // Pass A – repair upward: ensure every present item's full ancestor chain.
   for (const it of FLAT) {
     if (!work.has(it.key)) continue;
     let p = it.parentIdx;
@@ -180,7 +180,7 @@ export function normalize(set: ReadonlySet<string>): Set<string> {
       p = FLAT[p].parentIdx;
     }
   }
-  // Pass B — mutual exclusion: per group keep the first-in-order member, drop the
+  // Pass B – mutual exclusion: per group keep the first-in-order member, drop the
   // rest + their now-orphaned subtrees (runs after A so an ancestor A added into a
   // group joins the contest).
   for (const idxs of GROUPS.values()) {

@@ -52,7 +52,7 @@ interface StaffingResult {
   modEmployee: PlanEmployee | undefined;
 }
 
-// Hotel day rolls over at 07:00 local time — a shift worked on the night of
+// Hotel day rolls over at 07:00 local time – a shift worked on the night of
 // the 20th that ends at 06:00 on the 21st is still part of the 20th. Before
 // 07:00 we show the previous calendar date as "dnes".
 const DAY_CUTOFF_HOUR = 7;
@@ -269,7 +269,7 @@ function StaffingTable({
 
   const renderCell = (items: StaffItem[]) =>
     items.length === 0 ? (
-      <span className={styles.dash}>—</span>
+      <span className={styles.dash}>–</span>
     ) : (
       <div className={styles.nameList}>{items.map((item) => renderName(item))}</div>
     );
@@ -311,7 +311,7 @@ function StaffingTable({
         </tbody>
       </table>
 
-      {/* Phone: one card per hotel, day/night stacked — the fixed-layout table
+      {/* Phone: one card per hotel, day/night stacked – the fixed-layout table
           crams the hotel columns to ~60px each and mangles the names. */}
       <div className={styles.staffingCards}>
         {staffing.visibleHotels.map((h) => {
@@ -361,7 +361,7 @@ function ModBlock({ staffing }: { staffing: StaffingResult }) {
       </div>
     );
   }
-  return <span className={styles.dash}>—</span>;
+  return <span className={styles.dash}>–</span>;
 }
 
 export default function OverviewPage() {
@@ -377,7 +377,7 @@ export default function OverviewPage() {
   const { employeeId, can } = useAuth();
   const showTasks = can("dashboard.tasks.view");
   // Accountant gets a stats-only dashboard: the HR headcount graphs, none of
-  // the shift-staffing sections (they have no shifts access — /shifts/plans 403s).
+  // the shift-staffing sections (they have no shifts access – /shifts/plans 403s).
   // Stats-only viewer (built-in accountant): has the HR stats dashboard but no
   // shift access, so we skip the shift-staffing fetch and personal tiles.
   const isStatsOnlyViewer =

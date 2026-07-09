@@ -49,7 +49,7 @@ export default function ShiftCell({
   const displayParsed = useMemo(() => parseShiftExpression(rawInput), [rawInput]);
 
   // Focus management: when `focused` prop becomes true, focus the cell or input.
-  // Intentionally excludes `editing` from deps — adding it would cause the input
+  // Intentionally excludes `editing` from deps – adding it would cause the input
   // to be focused synchronously during the keydown→keypress sequence, making the
   // first typed character appear twice.
   useEffect(() => {
@@ -224,7 +224,7 @@ export default function ShiftCell({
 
   // #29: a numeric "worked hours" cell can be tagged with the shift type it was
   // worked as (counts toward that type in the tally; no pay effect). The tag
-  // affordance is shown ONLY to users who can edit shifts in every plan state —
+  // affordance is shown ONLY to users who can edit shifts in every plan state –
   // i.e. full editors (onSaveTypeTag is passed only to them and readOnly is then
   // false in all states). Read-only viewers and self-service users see nothing.
   const isNumericCell = isPureNumericExpression(displayParsed);
@@ -232,9 +232,9 @@ export default function ShiftCell({
   const showTag = tagEditable;
 
   // Badge colour: for the 12 occupancy types the badge wears that shift type's
-  // own colour — its label (e.g. "DA", "NPQ") parses to its code+hotel, so
+  // own colour – its label (e.g. "DA", "NPQ") parses to its code+hotel, so
   // getCellColor returns the same colour the type's cell uses. The 4
-  // annotation-only tags (R/HO/ZD/ZN — no counter key) keep the neutral badge.
+  // annotation-only tags (R/HO/ZD/ZN – no counter key) keep the neutral badge.
   const tagColor =
     typeTag && typeTagToCounterKey(typeTag)
       ? getCellColor(parseShiftExpression(typeTag), dark)
@@ -283,10 +283,10 @@ export default function ShiftCell({
         outline: saveError ? "2px solid #dc2626" : focused ? "2px solid #3b82f6" : "none",
         outlineOffset: "-2px",
       }}
-      title={saveError ?? (rawInput ? `${rawInput} — ${hoursComputed}h${typeTag ? ` (${typeTag})` : ""}` : undefined)}
+      title={saveError ?? (rawInput ? `${rawInput} – ${hoursComputed}h${typeTag ? ` (${typeTag})` : ""}` : undefined)}
       onClick={() => {
         if (readOnly) return;
-        // On an X-toggle cell (OPEN plan) a click only focuses — double-click
+        // On an X-toggle cell (OPEN plan) a click only focuses – double-click
         // toggles the X, and typing still opens the editor. This keeps the
         // double-click from first entering edit mode, which would race the
         // toggle's save.
@@ -306,12 +306,12 @@ export default function ShiftCell({
     >
       {saveError ? "!" : (rawInput || null)}
       {!saveError && showTag && (
-        // Absolutely-positioned corner badge — out of normal flow so the tag
+        // Absolutely-positioned corner badge – out of normal flow so the tag
         // never adds to the cell's content width (the 40px column stays fixed
         // regardless of number length, e.g. "10.5", or a 3-letter tag "NPQ").
         <span
           onClick={openTagMenu}
-          title={typeTag ? `Typ směny: ${typeTag} — kliknutím změníte` : "Přiřadit typ směny"}
+          title={typeTag ? `Typ směny: ${typeTag} – kliknutím změníte` : "Přiřadit typ směny"}
           style={{
             position: "absolute",
             top: 0,

@@ -73,7 +73,7 @@ export default function PayrollRecalcModal({ entry, onClose, onConfirm }: Props)
     <div className={styles.modalOverlay}>
       <div className={styles.modal}>
         <div className={styles.modalHeader}>
-          <span className={styles.modalTitle}>Přepočítat — {employeeDisplayName(entry)}</span>
+          <span className={styles.modalTitle}>Přepočítat – {employeeDisplayName(entry)}</span>
           <button className={styles.modalClose} onClick={onClose}>✕</button>
         </div>
         <div className={styles.modalBody}>

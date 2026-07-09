@@ -124,14 +124,14 @@ export default function App() {
         <Route path="upozorneni" element={<RequirePermission allow={["nav.alerts.view"]}><AlertsPage /></RequirePermission>} />
         <Route path="nastaveni" element={<RequirePermission allow={["nav.settings.view"]}><SettingsPage /></RequirePermission>} />
         <Route path="audit" element={<RequirePermission allow={["nav.audit.view"]}><AuditLogPage /></RequirePermission>} />
-        {/* Help is available to every authenticated user — no permission gate. */}
+        {/* Help is available to every authenticated user – no permission gate. */}
         <Route path="napoveda" element={<HelpPage />} />
-        {/* Tour-only demo routes — REAL pages fed by mock data (no backend).
+        {/* Tour-only demo routes – REAL pages fed by mock data (no backend).
             The employee-detail demo reuses the real /zamestnanci/:id route with
             the sentinel id "tour-demo" (no separate route needed). */}
         {/* `key` forces a remount (and thus a re-fetch of the mock data) when the
             tour navigates between demo routes that render the same page component
-            — e.g. shifts opened → published, or payroll period → empty. Without it
+            – e.g. shifts opened → published, or payroll period → empty. Without it
             React reuses the instance and the page keeps its first-loaded state. */}
         <Route path="napoveda/ukazka-profil" element={<TourDemoRoute scenario="self"><EmployeeSelfPage key="demo-self" /></TourDemoRoute>} />
         <Route path="napoveda/ukazka-mzdy" element={<TourDemoRoute scenario="payroll"><PayrollPage key="demo-payroll" /></TourDemoRoute>} />

@@ -158,7 +158,7 @@
   border-top: 3px solid var(--color-text-muted);
 }
 
-/* Current user highlight — yellow row with forced dark text for legibility */
+/* Current user highlight – yellow row with forced dark text for legibility */
 .currentEmpRow {
   background: #fef9c3;
   border-top: 3px solid #ca8a04;
@@ -170,7 +170,7 @@
   color: #1c1917;
 }
 
-/* Yellow wins over weekend/holiday tints — uniform colour throughout all days */
+/* Yellow wins over weekend/holiday tints – uniform colour throughout all days */
 .currentEmpRow .weekend,
 .currentEmpRow .holiday {
   background: #fef9c3;
@@ -335,7 +335,7 @@
   padding: 2px 0;
 }
 
-/* Dark mode: swap — saturated bg + light text */
+/* Dark mode: swap – saturated bg + light text */
 [data-theme="dark"] .counterCell0 { background: #dc2626; color: #fee2e2; }
 [data-theme="dark"] .counterCell1 { background: #15803d; color: #dcfce7; }
 [data-theme="dark"] .counterCell2 { background: #1d4ed8; color: #dbeafe; }
@@ -384,7 +384,7 @@
   text-align: center;
 }
 
-/* Claimable free-shift chip (uncovered slot) — mirrors a real shift cell so the
+/* Claimable free-shift chip (uncovered slot) – mirrors a real shift cell so the
    colour matches how the shift appears in the plan. The bg/text colour is set
    inline via getCellColor (per code+hotel, theme-aware). */
 .freeChip {
@@ -411,7 +411,7 @@
   outline-offset: -2px;
 }
 
-/* Covered slot marker — centered ✓ (td centers it via .freeCell + vertical-align) */
+/* Covered slot marker – centered ✓ (td centers it via .freeCell + vertical-align) */
 .freeCovered {
   font-size: 0.7rem;
   color: var(--color-text-subtle);
@@ -433,7 +433,7 @@
   opacity: 0.7;
 }
 
-/* Keep MOD row uniform in dark mode — weekend/holiday tints don't apply */
+/* Keep MOD row uniform in dark mode – weekend/holiday tints don't apply */
 [data-theme="dark"] .modRow .weekend,
 [data-theme="dark"] .modRow .holiday { background: var(--color-mod-bg); }
 
@@ -571,7 +571,7 @@
   color: var(--color-text-secondary);
 }
 
-/* Over the effective limit — flag it red */
+/* Over the effective limit – flag it red */
 .xBadgeOver {
   color: var(--color-danger);
 }

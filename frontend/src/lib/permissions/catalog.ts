@@ -1,19 +1,19 @@
 /**
- * RBAC permission catalog (frontend mirror) — HIERARCHICAL structure.
+ * RBAC permission catalog (frontend mirror) – HIERARCHICAL structure.
  *
  * KEYS must stay in sync with functions/src/auth/permissions.ts (the backend is the
  * real gate; this drives the in-app permission matrix UI and the `can()` helper).
- * The two packages can't share code, so this is a manual mirror — labels may differ,
+ * The two packages can't share code, so this is a manual mirror – labels may differ,
  * keys must not. (scripts/_verify-perm-mapping.js asserts the key sets are equal.)
  *
  * Structure source of truth: PERMISSIONS_LIST.md (repo root). Each app page is a
  * SECTION; sections may have SUBSECTIONS. Every item carries a `level`:
- *   0 = the section master ("-!", always a nav.X.view key — gates the whole section)
+ *   0 = the section master ("-!", always a nav.X.view key – gates the whole section)
  *   1..4 = "-".."----" nesting. A level-N item is only grantable in the UI once its
  *   parent (nearest preceding level-(N-1) item within the same subsection; the master
  *   for level 1) is granted. `exclusiveGroup` marks mutually-exclusive siblings.
  *
- * The hierarchy is a FRONTEND affordance only — the backend stores/validates a flat
+ * The hierarchy is a FRONTEND affordance only – the backend stores/validates a flat
  * permission array and never sees this tree. See lib/permissions/hierarchy.ts for the
  * dependency-resolution logic and components/permissions/PermissionMatrix.tsx for rendering.
  */
@@ -313,7 +313,7 @@ export const PERMISSION_SECTIONS = [
     subsections: [
       {
         items: [
-          // Umbrella master — inert server-side (no requirePermission checks it);
+          // Umbrella master – inert server-side (no requirePermission checks it);
           // it only gates the three system rights below in the matrix hierarchy.
           { key: "system.access", label: "Přístup k systémovým funkcím", level: 0 },
           { key: "system.admin", label: "Superadmin (vše)", level: 1 },
@@ -328,7 +328,7 @@ export const PERMISSION_SECTIONS = [
 
 type _CatalogItem =
   (typeof PERMISSION_SECTIONS)[number]["subsections"][number]["items"][number];
-/** Literal union of every permission key — preserves typo-safety in `can("…")`. */
+/** Literal union of every permission key – preserves typo-safety in `can("…")`. */
 export type Permission = _CatalogItem["key"];
 
 /** Flat list of every permission key, in catalog order. */
@@ -337,7 +337,7 @@ export const ALL_PERMISSIONS: Permission[] = PERMISSION_SECTIONS.flatMap((s) =>
 );
 
 /**
- * Flat `{ group, items }` view of the catalog — group = section (page) title.
+ * Flat `{ group, items }` view of the catalog – group = section (page) title.
  * Back-compat for consumers that just want permission→group labelling and don't
  * need the hierarchy (e.g. the Nápověda HelpPage groups help by page section).
  */
@@ -356,7 +356,7 @@ export function hasPermission(set: ReadonlySet<string>, perm: Permission): boole
 
 /**
  * Permissions that may never be granted through the in-app RBAC editors. Mirrors
- * the backend NON_GRANTABLE_PERMISSIONS — the server strips these regardless; this
+ * the backend NON_GRANTABLE_PERMISSIONS – the server strips these regardless; this
  * keeps the UI from offering a toggle that can't take effect. `system.admin` is
  * shown (disabled) in its section but conferred only by the protected `admin` type.
  */

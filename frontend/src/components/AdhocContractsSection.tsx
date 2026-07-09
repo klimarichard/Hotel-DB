@@ -71,7 +71,7 @@ export default function AdhocContractsSection({
                   >
                     {c.signingDate
                       ? formatDateCZ(c.signingDate)
-                      : (formatTimestampCZ(c.generatedAt) ?? "—")}
+                      : (formatTimestampCZ(c.generatedAt) ?? "–")}
                   </span>
                 </div>
                 <ContractActionButtons

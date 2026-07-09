@@ -133,7 +133,7 @@
   border-color: var(--color-text-subtle);
 }
 
-/* Destructive toolbar action (delete period) — red-outline, mirrors lockBtn sizing. */
+/* Destructive toolbar action (delete period) – red-outline, mirrors lockBtn sizing. */
 .dangerBtn {
   background: none;
   border: 1px solid var(--color-danger-border);
@@ -264,7 +264,7 @@
   color: var(--color-text);
 }
 
-/* Per-employee recalc — row trigger (↻), mirrors nemocBtn sizing. */
+/* Per-employee recalc – row trigger (↻), mirrors nemocBtn sizing. */
 .recalcRowBtn {
   background: none;
   border: none;
@@ -356,7 +356,7 @@
   letter-spacing: 0.03em;
 }
 
-/* Row tints per contract type — clearly distinguishable in both light and dark.
+/* Row tints per contract type – clearly distinguishable in both light and dark.
    PPP = blue, DPP = amber. Kept identical to EmployeesPage.module.css. */
 .pppRow {
   background: #dbeafe;
@@ -439,7 +439,7 @@
   opacity: 0.7;
 }
 
-/* Auto-cascade override — blue tint, ↺ indicator */
+/* Auto-cascade override – blue tint, ↺ indicator */
 .cellValue.autoOverridden {
   background: var(--color-info-bg);
   color: var(--color-info-text);
@@ -454,7 +454,7 @@
   opacity: 0.65;
 }
 
-/* Per-cell "restore original" — shown only on manually-overridden (amber) cells */
+/* Per-cell "restore original" – shown only on manually-overridden (amber) cells */
 .resetBtn {
   background: none;
   border: none;
@@ -473,7 +473,7 @@
   color: var(--color-danger-text, #b91c1c);
 }
 
-/* Two-line NAVÍC display — column wrapper keeps numbers stacked
+/* Two-line NAVÍC display – column wrapper keeps numbers stacked
    even when the parent cell uses inline-flex */
 .navicStack {
   display: inline-flex;
@@ -853,7 +853,7 @@
     text-align: left;
     flex: 0 0 auto;
   }
-  /* Column labels by position — payroll columns are fixed order, and the name
+  /* Column labels by position – payroll columns are fixed order, and the name
      cell is child 1, so the 11 metric cells are children 2–12. */
   .foldOpen .numCell:nth-child(2)::before { content: "Hodiny"; }
   .foldOpen .numCell:nth-child(3)::before { content: "Výkaz"; }

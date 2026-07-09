@@ -6,7 +6,7 @@
  *
  * The offset is fed by TimeOverrideContext (which fetches it from
  * GET /api/settings/time-override). localStorage caches it purely to avoid a
- * flash of real time on first paint — the server is the source of truth, and
+ * flash of real time on first paint – the server is the source of truth, and
  * in production the server always reports offset 0, so the cache self-corrects.
  *
  * NOTE: in production this is always a no-op (offset stays 0); the backend

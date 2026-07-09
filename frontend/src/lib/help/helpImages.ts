@@ -2,7 +2,7 @@
  * Optional screenshots for the Nápověda (Help) page sections.
  *
  * Drop an image into `frontend/src/assets/help/` named after the section's slug
- * (see SLUG_BY_GROUP below) — e.g. `smeny.png` for the "Směny" section — and it
+ * (see SLUG_BY_GROUP below) – e.g. `smeny.png` for the "Směny" section – and it
  * appears automatically. No code change needed: Vite globs the folder at build
  * time. Sections with no matching file simply render without an image.
  *
@@ -10,7 +10,7 @@
  */
 
 // Eagerly resolve every file in src/assets/help/ to its bundled URL. Returns an
-// empty object (no images) until screenshots are added — never breaks the build.
+// empty object (no images) until screenshots are added – never breaks the build.
 const files = import.meta.glob("../../assets/help/*.{png,jpg,jpeg,webp,svg}", {
   eager: true,
   as: "url",

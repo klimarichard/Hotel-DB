@@ -53,7 +53,7 @@ export interface ContractRecord {
 }
 
 /**
- * Effective state of an employment session — what the contract looks like
+ * Effective state of an employment session – what the contract looks like
  * "right now" after walking the Nástup row and folding any subsequent
  * Dodatek `changes[]` on top.
  */
@@ -73,7 +73,7 @@ export interface EffectiveState {
 /**
  * One employment "session": a Nástup row, all Dodatek rows that followed
  * (in chronological order), and the Ukončení row that closed it (if any).
- * Sessions are derived client-side — they aren't stored in Firestore.
+ * Sessions are derived client-side – they aren't stored in Firestore.
  */
 export interface EmploymentSession {
   nastup: EmploymentRow;
@@ -83,13 +83,13 @@ export interface EmploymentSession {
   rows: EmploymentRow[];
   /**
    * Parental-leave (RODIČOVSKÁ) periods that fall within this session.
-   * Purely informational — they never fold into `effective` or affect
+   * Purely informational – they never fold into `effective` or affect
    * `terminated`; shown in the session header with their start–end dates.
    */
   rodicovska: EmploymentRow[];
   effective: EffectiveState;
   /**
-   * Session has ended — either an explicit Ukončení row exists, or the
+   * Session has ended – either an explicit Ukončení row exists, or the
    * effective endDate is in the past (a fixed-term Nástup that ran out
    * without anyone filing the termination paperwork). The UI treats the
    * two cases identically: no "+ Dodatek" / "Ukončit smlouvu" buttons,
@@ -102,7 +102,7 @@ export interface EmploymentSession {
  * Group employment rows into sessions. Walks rows in startDate-asc order;
  * each `nástup` opens a new session, `změna smlouvy` rows append to the
  * current session, and `ukončení` closes it. Returns sessions in their
- * natural (chronological) order — newest last. Caller can reverse for
+ * natural (chronological) order – newest last. Caller can reverse for
  * newest-first display.
  */
 export function groupBySession(rows: EmploymentRow[]): EmploymentSession[] {
@@ -115,7 +115,7 @@ export function groupBySession(rows: EmploymentRow[]): EmploymentSession[] {
     rodicovska: EmploymentRow[];
   } | null = null;
 
-  // Today as YYYY-MM-DD in local time — both startDate / endDate are
+  // Today as YYYY-MM-DD in local time – both startDate / endDate are
   // stored in this same form, so a lex comparison is correct.
   const today = clock.today();
 
@@ -149,10 +149,10 @@ export function groupBySession(rows: EmploymentRow[]): EmploymentSession[] {
     } else if (r.changeType === "ukončení" && current) {
       current.ukonceni = r;
     } else if (r.changeType === "rodičovská" && current) {
-      // Informational only — collected for header display, never folded.
+      // Informational only – collected for header display, never folded.
       current.rodicovska.push(r);
     }
-    // Orphan rows (no preceding Nástup) are silently dropped — rare in practice
+    // Orphan rows (no preceding Nástup) are silently dropped – rare in practice
     // and would indicate dirty data; the row still persists in Firestore.
   }
   flush();
@@ -180,7 +180,7 @@ export function computeEffectiveState(
   let contractType = nastup.contractType ?? "";
   let hoursPerWeek = nastup.hoursPerWeek ?? null;
 
-  // Only fold Dodatky whose validity (startDate) has arrived — a future-dated
+  // Only fold Dodatky whose validity (startDate) has arrived – a future-dated
   // Dodatek must not change the effective salary/position/úvazek until its day.
   const applicable = dodatky.filter((d) => (d.startDate ?? "") <= asOfDate);
   for (const dod of applicable) {
@@ -230,7 +230,7 @@ export function computeEffectiveState(
  * Map an úvazek-change value (free text from the Dodatek form, e.g.
  * "poloviční pracovní úvazek, tj. 20 hod./týdně") to the HPP/PPP
  * contract-type code. Returns null when the wording isn't recognisable
- * — in that case the previous contractType is preserved.
+ * – in that case the previous contractType is preserved.
  */
 export function uvazekToContractType(value: string): "HPP" | "PPP" | null {
   const v = value.toLowerCase();
@@ -247,7 +247,7 @@ export function uvazekToContractType(value: string): "HPP" | "PPP" | null {
  *
  * For `jobTitle`, "pracovní pozice" Dodatek changes feed the chain.
  * For `contractType`, "úvazek" Dodatek changes are mapped through
- * uvazekToContractType — values that don't map (unrecognised wording)
+ * uvazekToContractType – values that don't map (unrecognised wording)
  * are skipped rather than terminating the chain.
  */
 export function collectFieldChain(
@@ -275,7 +275,7 @@ export function collectFieldChain(
 }
 
 /**
- * For each row, find the contract record that "matches" it — i.e. was
+ * For each row, find the contract record that "matches" it – i.e. was
  * generated against this row id, with the right template type, and whose
  * stored snapshot still matches the row's current parameters. Returns a
  * Map keyed by row id. If multiple matches exist (e.g. regenerations),
@@ -304,7 +304,7 @@ export function mapContractsToRows(
 
 /**
  * The contract template types that could legitimately be generated for a
- * given employment row — used to filter which contracts on the employee
+ * given employment row – used to filter which contracts on the employee
  * "belong" to which row.
  *   - nástup HPP → ["nastup_hpp"], etc.
  *   - ukončení   → all three termination templates

@@ -23,7 +23,7 @@ function pad(n: number): string {
  * date/time. Scheduling stores an instant on the user; a Cloud Function fires
  * the deactivation within ~5 min of that time.
  *
- * Date/time is assembled from numeric parts into a LOCAL Date — never
+ * Date/time is assembled from numeric parts into a LOCAL Date – never
  * `new Date("YYYY-MM-DD")`, which parses as UTC midnight and drifts a day in
  * UTC+2 (see CLAUDE.md). `.toISOString()` on a local-parts Date is correct.
  */
@@ -50,7 +50,7 @@ export default function DeactivateUserModal({ user, saving, error, onCancel, onC
     }
     const [y, m, d] = date.split("-").map(Number);
     const [hh, mm] = time.split(":").map(Number);
-    const when = new Date(y, m - 1, d, hh, mm); // local time — see note above
+    const when = new Date(y, m - 1, d, hh, mm); // local time – see note above
     if (isNaN(when.getTime())) {
       setLocalError("Neplatné datum a čas.");
       return;

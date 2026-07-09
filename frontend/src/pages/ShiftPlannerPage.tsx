@@ -219,7 +219,7 @@ export default function ShiftPlannerPage() {
   // Self-service worker (built-in "employee"): edits only own X, no full cell edit.
   const selfServiceOnly = can("shifts.cells.editOwnX") && !can("shifts.cells.edit");
   // "Moje žádosti" is for users who can submit their own requests (change /
-  // exception / free-shift claim) — not reviewers, and not types with no
+  // exception / free-shift claim) – not reviewers, and not types with no
   // request rights at all (e.g. personalista).
   const canSubmitRequests =
     can("shifts.changeRequest.submit") || can("shifts.override.submit") || can("shifts.freeShift.claim");
@@ -228,7 +228,7 @@ export default function ShiftPlannerPage() {
   // else (e.g. personalista, FOM).
   const canSeeFreeShifts = can("shifts.freeShift.claim") || can("shifts.freeShift.manage");
 
-  // Local draft for deadline inputs — avoids live-saving on every keystroke
+  // Local draft for deadline inputs – avoids live-saving on every keystroke
   const [deadlineDraft, setDeadlineDraft] = useState({ openedAt: "", closedAt: "", publishedAt: "" });
 
   // Sync draft whenever the plan loads, changes month, or status changes
@@ -438,7 +438,7 @@ export default function ShiftPlannerPage() {
     if (!plan) return;
     setConfirmModal({
       title: "Smazat plán",
-      message: `Opravdu smazat plán ${MONTH_NAMES[plan.month - 1]} ${plan.year}? Tato akce je nevratná — smažou se všechny směny i zaměstnanci v plánu.`,
+      message: `Opravdu smazat plán ${MONTH_NAMES[plan.month - 1]} ${plan.year}? Tato akce je nevratná – smažou se všechny směny i zaměstnanci v plánu.`,
       confirmLabel: "Smazat",
       danger: true,
       onConfirm: async () => {
@@ -938,7 +938,7 @@ export default function ShiftPlannerPage() {
   }
 
   // Count of vacation-origin Xs (source:"vacation") for an employee this month. A
-  // non-zero count means the employee has an approved vacation overlapping the month —
+  // non-zero count means the employee has an approved vacation overlapping the month –
   // the only situation in which admin may raise the X limit.
   function vacationXCount(shifts: ShiftDoc[], employeeId: string): number {
     return shifts.filter(
@@ -961,7 +961,7 @@ export default function ShiftPlannerPage() {
   }
 
   // A day counts toward the voluntary X limit only when it's an employee-entered
-  // X — vacation-origin Xs (source:"vacation") are tracked separately and excluded.
+  // X – vacation-origin Xs (source:"vacation") are tracked separately and excluded.
   function isVoluntaryX(s: ShiftDoc): boolean {
     return s.status === "day_off" && s.source !== "vacation";
   }
@@ -1029,7 +1029,7 @@ export default function ShiftPlannerPage() {
   // Double-click on an editable cell of an OPEN plan toggles the X marker. It
   // delegates to handleCellSave, so the X-limit exception dialog, the
   // "6 X in a row" block and the coverage checks all fire exactly as when the X
-  // is typed. Only toggles empty ↔ X — never clobbers a real shift value.
+  // is typed. Only toggles empty ↔ X – never clobbers a real shift value.
   async function handleCellToggleX(employeeId: string, date: string) {
     if (!plan || plan.status !== "opened") return;
     const cur = (plan.shifts.find((s) => s.id === `${employeeId}_${date}`)?.rawInput ?? "")
@@ -1042,7 +1042,7 @@ export default function ShiftPlannerPage() {
   async function handleCellSave(employeeId: string, date: string, rawInput: string) {
     if (!plan) return;
 
-    // Employees may only enter X or clear a cell — silently discard anything else
+    // Employees may only enter X or clear a cell – silently discard anything else
     if (selfServiceOnly && rawInput.trim() !== "") {
       const parsed = parseShiftExpression(rawInput);
       if (!parsed.isValid || !parsed.segments.every((s) => s.code === "X")) {
@@ -1051,14 +1051,14 @@ export default function ShiftPlannerPage() {
     }
 
     if (rawInput.trim() === "") {
-      // Check if an approved vacation covers this date — warn before deleting
+      // Check if an approved vacation covers this date – warn before deleting
       const { hasVacation } = await api.get<{ hasVacation: boolean }>(
         `/vacation/check?employeeId=${encodeURIComponent(employeeId)}&date=${date}`
       );
       if (hasVacation) {
         // Show warning modal; the actual delete runs from onConfirm
         setConfirmModal({
-          title: "Smazání X — schválená dovolená",
+          title: "Smazání X – schválená dovolená",
           message:
             "Tento den je součástí schválené dovolené. Opravdu chcete X smazat? " +
             "Dovolená zůstane schválená, ale X v plánu zmizí.",
@@ -1077,7 +1077,7 @@ export default function ShiftPlannerPage() {
               .catch((e) => setError(e instanceof Error ? e.message : "Chyba při mazání"));
           },
         });
-        // Return without deleting — let the modal handle it.
+        // Return without deleting – let the modal handle it.
         // ShiftCell will re-display the original value since setPlan wasn't called.
         return;
       }
@@ -1095,7 +1095,7 @@ export default function ShiftPlannerPage() {
       parsed.segments.length > 0 && parsed.segments.every((s) => s.code === "X");
 
     if (isAllX && !can("shifts.xAllowance.manage")) {
-      // Hard block: no more than 6 consecutive Xs — no override allowed
+      // Hard block: no more than 6 consecutive Xs – no override allowed
       if (consecutiveXRun(plan.shifts, employeeId, date) > 6) {
         setConfirmModal({
           title: "Příliš mnoho X za sebou",
@@ -1184,7 +1184,7 @@ export default function ShiftPlannerPage() {
 
   return (
     <div style={{ "--sticky-top": `${chromeHidden ? 0 : stickyTop}px` } as CSSProperties}>
-      {/* Header — month nav centred as the page's primary control */}
+      {/* Header – month nav centred as the page's primary control */}
       <div
         className={`${styles.header}${chromeHidden ? ` ${styles.chromeHidden}` : ""}`}
         ref={headerRef}
@@ -1400,7 +1400,7 @@ export default function ShiftPlannerPage() {
               </Button>
             )}
 
-            {/* Export — anyone with shifts.export (built-in admin/director, plus
+            {/* Export – anyone with shifts.export (built-in admin/director, plus
                 custom types like Rezervace that are granted export rights) */}
             {plan && can("shifts.export") && plan.employees.length > 0 && (
               <div data-tour="shift-export" className={styles.exportWrapper} ref={exportMenuRef}>
@@ -1456,7 +1456,7 @@ export default function ShiftPlannerPage() {
             )}
           </div>
 
-          {/* Deadline bar — visible to all when there is a saved deadline or user can edit.
+          {/* Deadline bar – visible to all when there is a saved deadline or user can edit.
               Each upcoming transition's deadline can be set from any earlier state, so from
               "created" admin can schedule all three at once (Otevření/Uzavření/Publikování).
               The cron advances one step per run, so a full chain cascades correctly. */}
@@ -1622,7 +1622,7 @@ export default function ShiftPlannerPage() {
             />
           )}
 
-          {/* Shift change requests panel — admin/director only (full review mode) */}
+          {/* Shift change requests panel – admin/director only (full review mode) */}
           {plan && showChangeRequests && can("shifts.changeRequest.review") && (
             <ShiftChangeRequestPanel
               planId={plan.id}
@@ -1631,14 +1631,14 @@ export default function ShiftPlannerPage() {
               onResolved={() => {
                 setPlanChangeRequestCount((c) => Math.max(0, c - 1));
                 refreshChangeRequestCount();
-                // Auto-applied changes land on the plan cells — reload so the
+                // Auto-applied changes land on the plan cells – reload so the
                 // grid reflects them without a manual page refresh.
                 loadPlan(true);
               }}
             />
           )}
 
-          {/* My requests panel — employee/manager (read-only, own requests only) */}
+          {/* My requests panel – employee/manager (read-only, own requests only) */}
           {plan && showMyRequests && !canPublish && canSubmitRequests && (
             <div data-tour="shift-my-requests">
               <MyRequestsPanel planId={plan.id} />
@@ -1655,7 +1655,7 @@ export default function ShiftPlannerPage() {
             <div data-tour="shift-grid">
             <ShiftGrid
               // Remount when plan membership changes so removing a row triggers a
-              // clean re-layout — the sticky + table-layout:fixed grid mis-renders
+              // clean re-layout – the sticky + table-layout:fixed grid mis-renders
               // when a row is dropped in place (fixed on refresh otherwise). #35.
               // Sorted ids → changes on add/remove only, not on reorder.
               key={[...plan.employees].map((e) => e.id).sort().join(",")}
@@ -1678,7 +1678,7 @@ export default function ShiftPlannerPage() {
               onCellRequestChange={
                 can("shifts.changeRequest.submit") && plan.status === "published"
                   ? (employeeId, date, currentRawInput) => {
-                      // #32 — stamp the moment of the click, carried through to the POST
+                      // #32 – stamp the moment of the click, carried through to the POST
                       setPendingChangeRequest({
                         employeeId, date, currentRawInput,
                         clickedAt: clock.now().toISOString(),

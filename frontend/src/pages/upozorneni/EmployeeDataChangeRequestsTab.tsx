@@ -54,7 +54,7 @@ export default function EmployeeDataChangeRequestsTab() {
       const res = await api.post<{ value: string }>(`/employee-change-requests/${id}/reveal`, { field });
       setRevealed((p) => ({ ...p, [`${id}:${field}`]: res.value }));
     } catch {
-      /* ignore — value stays masked */
+      /* ignore – value stays masked */
     }
   }
 
