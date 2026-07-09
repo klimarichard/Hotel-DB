@@ -68,6 +68,21 @@ function sanitizeDenomMap(raw: unknown, allowed: readonly string[]): Record<stri
   return out;
 }
 
+/**
+ * Epoch millis of a Firestore Timestamp — the optimistic-concurrency token for the
+ * content PUT. Computed from seconds+nanoseconds (NOT toMillis) so it matches the
+ * client's own `tsMillis` formula exactly (client & server agree bit-for-bit).
+ * Tolerates the already-serialized `_seconds`/`_nanoseconds` shape as well.
+ */
+function tsMillis(ts: unknown): number | null {
+  if (!ts || typeof ts !== "object") return null;
+  const t = ts as { seconds?: number; nanoseconds?: number; _seconds?: number; _nanoseconds?: number };
+  const seconds = typeof t.seconds === "number" ? t.seconds : t._seconds;
+  const nanos = typeof t.nanoseconds === "number" ? t.nanoseconds : t._nanoseconds;
+  if (typeof seconds !== "number") return null;
+  return seconds * 1000 + Math.floor((nanos ?? 0) / 1e6);
+}
+
 function sanitizeCashCounts(raw: unknown): Record<DrawerKey, Record<string, number>> {
   const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   return {
@@ -552,6 +567,45 @@ handoversRouter.put(
     const ref = handoverCol(hotel).doc(id);
     const beforeSnap = await ref.get();
     const before = beforeSnap.exists ? (beforeSnap.data() as HandoverDoc) : null;
+
+    // Optimistic concurrency. The client sends the `updatedAt` (millis) of the
+    // version it holds; `baseUpdatedAt` is null when it believes it is CREATING.
+    // If the stored doc has moved since then, reject with 409 instead of silently
+    // clobbering a colleague's edit — the client reloads / notifies on 409. This
+    // runs BEFORE the freeze + create-permission checks so "someone signed/created/
+    // deleted while I edited" surfaces as a reload-conflict, not a confusing 403.
+    const baseUpdatedAt =
+      typeof (body as { baseUpdatedAt?: unknown }).baseUpdatedAt === "number"
+        ? (body as { baseUpdatedAt: number }).baseUpdatedAt
+        : null;
+    if (beforeSnap.exists && baseUpdatedAt === null) {
+      res.status(409).json({
+        error: "Protokol byl mezitím vytvořen jiným uživatelem.",
+        conflict: true,
+        current: { id, ...before },
+      });
+      return;
+    }
+    if (!beforeSnap.exists && baseUpdatedAt !== null) {
+      // The doc the client held was deleted since — do NOT resurrect it from stale state.
+      res.status(409).json({
+        error: "Protokol byl mezitím smazán jiným uživatelem.",
+        conflict: true,
+        current: null,
+      });
+      return;
+    }
+    if (beforeSnap.exists && baseUpdatedAt !== null) {
+      const currentMs = tsMillis((before as { updatedAt?: unknown }).updatedAt);
+      if (currentMs !== null && currentMs !== baseUpdatedAt) {
+        res.status(409).json({
+          error: "Protokol byl mezitím upraven jiným uživatelem.",
+          conflict: true,
+          current: { id, ...before },
+        });
+        return;
+      }
+    }
 
     // On create, the previous shift's doc drives two things: the create-permission
     // exception (a handover continuation from a fully-signed previous shift needs
