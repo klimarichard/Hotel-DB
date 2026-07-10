@@ -743,11 +743,12 @@ independently editable and deletable later.
 **Never-hang contract.** This handler is `async` and the app runs on Express 4,
 where a rejected async handler that doesn't forward the error sends **no
 response** and the client's fetch hangs forever (a "Ukládám…" that never
-resolves — e.g. when a cold Firestore read in `readConfig` rejects). The whole
-body is therefore wrapped in `try/catch` that forwards via `next(err)` to the
-JSON-500 error middleware in `index.ts`, so the modal always gets an answer.
-(The sibling single POST/PUT/DELETE here — and the taxi/walkiny handlers — still
-share the bare-async pattern; hardening them is a follow-up.)
+resolves — e.g. when a cold Firestore read in `readConfig` rejects). This is
+handled **globally** by `installAsyncRouteErrorForwarding()` (see
+`middleware/asyncRouteErrors.ts`, installed first in `index.ts`), which patches
+Express so *every* async handler's rejection reaches the JSON-500 error
+middleware. No per-handler `try/catch` is needed here or anywhere else — see
+`docs/other-features-and-ui.md` → "Async error forwarding (never-hang)".
 
 Editing an existing sale still edits a single row: `SaleModal` collapses to one
 line (with its own currency) and PUTs it on its own.

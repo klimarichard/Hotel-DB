@@ -380,63 +380,57 @@ lobbyBarRouter.post(
   "/:hotel/batch",
   requireAuth,
   requireLobbyBarPerm("view"),
-  // NOTE: this handler MUST forward any rejection via next(err). On Express 4 an
-  // async handler that rejects without doing so never sends a response, so the
-  // client's fetch hangs forever (the "Ukládám…" that never finishes). A cold
-  // Firestore read in readConfig is enough to trigger it. The try/catch routes
-  // every failure to the JSON-500 error middleware in index.ts instead.
-  async (req: AuthRequest, res: Response, next: NextFunction) => {
-    try {
-      const hotel = req.params.hotel as HotelSlug;
-      const parsed = parseSaleBatch(req.body, await readConfig(hotel));
-      if ("error" in parsed) {
-        res.status(400).json({ error: parsed.error });
-        return;
-      }
-      if (!isManage(req, hotel) && !inRange(parsed[0].date, await readRange(hotel))) {
-        res.status(403).json({ error: "Datum je mimo povolené období." });
-        return;
-      }
-
-      const batch = db().batch();
-      const refs = parsed.map((sale) => {
-        const ref = lobbyBarCol(hotel).doc();
-        batch.set(ref, {
-          ...sale,
-          createdBy: req.uid,
-          updatedBy: req.uid,
-          createdAt: FieldValue.serverTimestamp(),
-          updatedAt: FieldValue.serverTimestamp(),
-        });
-        return ref;
-      });
-      await batch.commit();
-
-      // One audit entry per row, matching the single-sale POST: each row is
-      // independently editable/deletable later, so each needs its own resourceId.
-      const ctx = actorCtx(await resolveOnDutyActor(req, hotel));
-      await Promise.all(
-        refs.map((ref, i) =>
-          logCreate(ctx, {
-            collection: "lobbyBarSales",
-            resourceId: ref.id,
-            subResourceId: hotel,
-            summary: {
-              date: parsed[i].date,
-              itemName: parsed[i].itemName,
-              quantity: parsed[i].quantity,
-              currency: parsed[i].currency,
-              price: parsed[i].price,
-            },
-          })
-        )
-      );
-
-      const saved = await Promise.all(refs.map((r) => r.get()));
-      res.json(saved.map((s) => ({ id: s.id, ...s.data() })));
-    } catch (err) {
-      next(err);
+  // Any rejection here (e.g. a cold Firestore read) is forwarded to the JSON-500
+  // error middleware by the global async-error patch (index.ts →
+  // installAsyncRouteErrorForwarding), so this handler never hangs the request.
+  async (req: AuthRequest, res: Response) => {
+    const hotel = req.params.hotel as HotelSlug;
+    const parsed = parseSaleBatch(req.body, await readConfig(hotel));
+    if ("error" in parsed) {
+      res.status(400).json({ error: parsed.error });
+      return;
     }
+    if (!isManage(req, hotel) && !inRange(parsed[0].date, await readRange(hotel))) {
+      res.status(403).json({ error: "Datum je mimo povolené období." });
+      return;
+    }
+
+    const batch = db().batch();
+    const refs = parsed.map((sale) => {
+      const ref = lobbyBarCol(hotel).doc();
+      batch.set(ref, {
+        ...sale,
+        createdBy: req.uid,
+        updatedBy: req.uid,
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+      return ref;
+    });
+    await batch.commit();
+
+    // One audit entry per row, matching the single-sale POST: each row is
+    // independently editable/deletable later, so each needs its own resourceId.
+    const ctx = actorCtx(await resolveOnDutyActor(req, hotel));
+    await Promise.all(
+      refs.map((ref, i) =>
+        logCreate(ctx, {
+          collection: "lobbyBarSales",
+          resourceId: ref.id,
+          subResourceId: hotel,
+          summary: {
+            date: parsed[i].date,
+            itemName: parsed[i].itemName,
+            quantity: parsed[i].quantity,
+            currency: parsed[i].currency,
+            price: parsed[i].price,
+          },
+        })
+      )
+    );
+
+    const saved = await Promise.all(refs.map((r) => r.get()));
+    res.json(saved.map((s) => ({ id: s.id, ...s.data() })));
   }
 );
 
