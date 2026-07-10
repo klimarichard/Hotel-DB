@@ -43,13 +43,19 @@
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 1.1rem;
 }
 
 .entry {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
+}
+
+/* A little margin (and a subtle divider) between top-level version sections. */
+.entry + .entry {
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--color-border);
 }
 
 .entryHead {

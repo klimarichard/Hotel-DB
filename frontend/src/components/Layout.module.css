@@ -99,20 +99,20 @@
   letter-spacing: 0.03em;
 }
 
-/* Clickable version (changelog permission): button reset + a subtle affordance. */
+/* Clickable version (changelog permission): looks identical to the plain text —
+   only a button reset + pointer cursor. Font size/color/spacing stay from
+   `.version` (do NOT set `font`/`font-size` here — the shorthand resets size). */
 .versionButton {
+  appearance: none;
+  -webkit-appearance: none;
   background: none;
   border: none;
   padding: 0;
   margin: 0;
-  font: inherit;
+  font-family: inherit;
+  font-weight: inherit;
+  line-height: inherit;
   cursor: pointer;
-  text-decoration: underline dotted;
-  text-underline-offset: 2px;
-}
-
-.versionButton:hover {
-  color: var(--color-text-heading, #e2e8f0);
 }
 
 .logoutBtn {
