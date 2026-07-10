@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api, errorMessage } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import Button from "@/components/Button";
@@ -590,6 +590,8 @@ function SaleModal({
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // Ensures the "on shift now" default is applied at most once (initial load).
+  const defaultAppliedRef = useRef(false);
 
   const month = date.slice(0, 7);
 
@@ -598,10 +600,24 @@ function SaleModal({
     let cancelled = false;
     void (async () => {
       try {
-        const list = await api.get<EmployeeOption[]>(
+        const res = await api.get<{ employees: EmployeeOption[]; onShiftEmployeeId: string | null }>(
           `/lobby-bar/${hotel.slug}/employees?date=${encodeURIComponent(date)}`
         );
-        if (!cancelled) setEmployees(list);
+        if (cancelled) return;
+        setEmployees(res.employees);
+        // New sale: pre-select whoever is on shift now — once, and only if that
+        // person is actually in the pool (the dropdown is empty until this lands,
+        // so there's no user choice to clobber).
+        if (!isEdit && !defaultAppliedRef.current) {
+          defaultAppliedRef.current = true;
+          const onDuty = res.onShiftEmployeeId
+            ? res.employees.find((e) => e.employeeId === res.onShiftEmployeeId)
+            : undefined;
+          if (onDuty) {
+            setEmployeeId(onDuty.employeeId);
+            setEmployeeName(onDuty.name);
+          }
+        }
       } catch {
         if (!cancelled) setEmployees([]);
       }
