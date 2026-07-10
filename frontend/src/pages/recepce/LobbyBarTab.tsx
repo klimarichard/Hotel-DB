@@ -94,6 +94,40 @@ function computePreview(
   return { price, provision, doSpolecne };
 }
 
+/**
+ * Preview for a whole multi-line sale. Each line is rounded on its own – exactly
+ * like the server, which stores one document per line – and only then summed, so
+ * the previewed total always equals the sum of the rows that end up in the table.
+ */
+function computeLinesPreview(
+  lines: { itemId: string; quantity: number }[],
+  currency: Currency,
+  cfg: LobbyBarConfig
+): { price: number; provision: number; doSpolecne: number } {
+  const sum = lines.reduce(
+    (acc, l) => {
+      const p = computePreview(
+        cfg.items.find((i) => i.id === l.itemId),
+        l.quantity,
+        currency,
+        cfg
+      );
+      return {
+        price: acc.price + p.price,
+        provision: acc.provision + p.provision,
+        doSpolecne: acc.doSpolecne + p.doSpolecne,
+      };
+    },
+    { price: 0, provision: 0, doSpolecne: 0 }
+  );
+  // Re-round the sums: adding several 2-decimal EUR values reintroduces float noise.
+  return {
+    price: roundMoney(sum.price, currency),
+    provision: roundMoney(sum.provision, currency),
+    doSpolecne: roundMoney(sum.doSpolecne, currency),
+  };
+}
+
 function PencilIcon() {
   return (
     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -444,7 +478,25 @@ export default function LobbyBarTab({ hotel }: { hotel: Hotel }) {
 // month shift plan and refetches when the month changes; a non-manage user's
 // date is bounded by the visible range. Cena / Provize / Do společné are shown
 // as a read-only preview only – the stored values are computed server-side.
+//
+// Adding: the modal takes N item lines that share one date / employee / currency
+// (one guest, one payment) and posts them to /batch, which writes one sale
+// document per line atomically. Editing: a stored row is one item, so the modal
+// collapses to a single line and PUTs it back on its own.
 // ─────────────────────────────────────────────────────────────────────────────
+
+/** One item line in the add form. `quantity` stays a string so the field can be cleared. */
+interface DraftLine {
+  _key: string;
+  itemId: string;
+  quantity: string;
+}
+
+/** Czech plural of "položka" for the submit button: 2–4 položky, 5+ položek. */
+function polozkyLabel(n: number): string {
+  return n >= 2 && n <= 4 ? `${n} položky` : `${n} položek`;
+}
+
 function SaleModal({
   hotel,
   canManage,
@@ -464,8 +516,11 @@ function SaleModal({
 }) {
   const isEdit = !!initial;
   const [date, setDate] = useState(initial?.date ?? todayLocal());
-  const [itemId, setItemId] = useState(initial?.itemId ?? "");
-  const [quantity, setQuantity] = useState<string>(initial ? String(initial.quantity) : "1");
+  const [lines, setLines] = useState<DraftLine[]>([
+    initial
+      ? { _key: genId(), itemId: initial.itemId, quantity: String(initial.quantity) }
+      : { _key: genId(), itemId: "", quantity: "1" },
+  ]);
   const [currency, setCurrency] = useState<Currency>(initial?.currency ?? "CZK");
   const [employeeId, setEmployeeId] = useState(initial?.employeeId ?? "");
   const [employeeName, setEmployeeName] = useState(initial?.employeeName ?? "");
@@ -510,25 +565,41 @@ function SaleModal({
     if (found) setEmployeeName(found.name);
   }
 
-  const qtyNum = Math.floor(Number(quantity));
-  const selectedItem = useMemo(() => config.items.find((i) => i.id === itemId), [config.items, itemId]);
-  const preview = useMemo(
-    () => computePreview(selectedItem, qtyNum, currency, config),
-    [selectedItem, qtyNum, currency, config]
+  function updateLine(key: string, patch: Partial<DraftLine>) {
+    setLines((prev) => prev.map((l) => (l._key === key ? { ...l, ...patch } : l)));
+  }
+  function addLine() {
+    setLines((prev) => [...prev, { _key: genId(), itemId: "", quantity: "1" }]);
+  }
+  function removeLine(key: string) {
+    setLines((prev) => (prev.length <= 1 ? prev : prev.filter((l) => l._key !== key)));
+  }
+
+  /** Lines with a parsed integer quantity, used for both validation and the preview. */
+  const parsedLines = useMemo(
+    () => lines.map((l) => ({ itemId: l.itemId, quantity: Math.floor(Number(l.quantity)) })),
+    [lines]
   );
+  const preview = useMemo(() => computeLinesPreview(parsedLines, currency, config), [parsedLines, currency, config]);
 
   const dateMin = !canManage && range.from ? range.from : undefined;
   const dateMax = !canManage && range.to ? range.to : undefined;
-  const valid = itemId !== "" && Number.isInteger(qtyNum) && qtyNum >= 1 && employeeId !== "";
+  const linesValid = parsedLines.every((l) => l.itemId !== "" && Number.isInteger(l.quantity) && l.quantity >= 1);
+  const valid = linesValid && lines.length >= 1 && employeeId !== "";
 
   async function submit() {
     if (!valid) return;
     setBusy(true);
     setErr(null);
-    const body = { date, itemId, quantity: qtyNum, currency, employeeId, employeeName };
     try {
-      if (isEdit) await api.put(`/lobby-bar/${hotel.slug}/${initial!.id}`, body);
-      else await api.post(`/lobby-bar/${hotel.slug}`, body);
+      if (isEdit) {
+        const { itemId, quantity } = parsedLines[0];
+        await api.put(`/lobby-bar/${hotel.slug}/${initial!.id}`, { date, itemId, quantity, currency, employeeId, employeeName });
+      } else {
+        // One request for all lines: the server writes them in a single batch,
+        // so a rejected line never leaves half the round saved.
+        await api.post(`/lobby-bar/${hotel.slug}/batch`, { date, currency, employeeId, employeeName, lines: parsedLines });
+      }
       onSaved();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Uložení se nezdařilo.");
@@ -539,48 +610,22 @@ function SaleModal({
 
   return (
     <div className={styles.modalOverlay}>
-      <div className={styles.modal}>
+      <div className={`${styles.modal} ${styles.modalSale}`}>
         <div className={styles.modalHeader}>
           <h2 className={styles.modalTitle}>{isEdit ? "Upravit prodej" : "Nový prodej"}</h2>
           <IconButton variant="close" aria-label="Zavřít" onClick={onCancel} />
         </div>
         <div className={styles.modalBody}>
-          <label className={styles.field}>
-            Datum
-            <input
-              type="date"
-              className={styles.input}
-              value={date}
-              min={dateMin}
-              max={dateMax}
-              onChange={(e) => e.target.value && setDate(e.target.value)}
-              disabled={busy}
-            />
-          </label>
-          <label className={styles.field}>
-            Položka
-            <select className={styles.select} value={itemId} onChange={(e) => setItemId(e.target.value)} disabled={busy}>
-              <option value="" disabled>
-                {config.items.length === 0 ? "Žádné položky v ceníku" : "Vyberte položku…"}
-              </option>
-              {config.items.map((it) => (
-                <option key={it.id} value={it.id}>
-                  {it.name}
-                </option>
-              ))}
-            </select>
-          </label>
           <div className={styles.row2}>
             <label className={styles.field}>
-              Počet
+              Datum
               <input
-                type="number"
-                min={1}
-                step={1}
-                className={`${styles.input} ${styles.inputNumber}`}
-                value={quantity}
-                onChange={(e) => setQuantity(e.target.value)}
-                placeholder="1"
+                type="date"
+                className={styles.input}
+                value={date}
+                min={dateMin}
+                max={dateMax}
+                onChange={(e) => e.target.value && setDate(e.target.value)}
                 disabled={busy}
               />
             </label>
@@ -606,10 +651,80 @@ function SaleModal({
             </select>
           </label>
 
+          <div className={styles.lines}>
+            <table className={styles.routesTable}>
+              <thead>
+                <tr>
+                  <th>Položka</th>
+                  <th className={styles.lineQtyHead}>Počet</th>
+                  {!isEdit && <th aria-label="Akce" />}
+                </tr>
+              </thead>
+              <tbody>
+                {lines.map((l) => (
+                  <tr key={l._key}>
+                    <td>
+                      <select
+                        className={styles.routeInput}
+                        value={l.itemId}
+                        onChange={(e) => updateLine(l._key, { itemId: e.target.value })}
+                        aria-label="Položka"
+                        disabled={busy}
+                      >
+                        <option value="" disabled>
+                          {config.items.length === 0 ? "Žádné položky v ceníku" : "Vyberte položku…"}
+                        </option>
+                        {config.items.map((it) => (
+                          <option key={it.id} value={it.id}>
+                            {it.name}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td>
+                      <input
+                        type="number"
+                        min={1}
+                        step={1}
+                        className={`${styles.routeInput} ${styles.routeNum}`}
+                        value={l.quantity}
+                        onChange={(e) => updateLine(l._key, { quantity: e.target.value })}
+                        aria-label="Počet"
+                        placeholder="1"
+                        disabled={busy}
+                      />
+                    </td>
+                    {!isEdit && (
+                      <td>
+                        <div className={styles.rowActions}>
+                          <button
+                            type="button"
+                            className={`${styles.rowIconBtn} ${styles.rowIconBtnTrash}`}
+                            aria-label="Odebrat položku"
+                            title="Odebrat položku"
+                            onClick={() => removeLine(l._key)}
+                            disabled={busy || lines.length <= 1}
+                          >
+                            <TrashIcon />
+                          </button>
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {!isEdit && (
+              <Button variant="secondary" size="sm" type="button" onClick={addLine} disabled={busy || config.items.length === 0}>
+                + Přidat položku
+              </Button>
+            )}
+          </div>
+
           <div className={styles.preview}>
             <span className={styles.previewTitle}>Náhled (vypočítá se automaticky)</span>
             <div className={styles.previewRow}>
-              <span>Cena</span>
+              <span>{isEdit ? "Cena" : "Celkem"}</span>
               <span className={styles.previewValue}>{formatMoney(preview.price, currency)}</span>
             </div>
             <div className={styles.previewRow}>
@@ -628,7 +743,7 @@ function SaleModal({
             Zrušit
           </Button>
           <Button type="button" onClick={submit} disabled={busy || !valid}>
-            {busy ? "Ukládám…" : isEdit ? "Uložit" : "Přidat"}
+            {busy ? "Ukládám…" : isEdit ? "Uložit" : lines.length > 1 ? `Přidat ${polozkyLabel(lines.length)}` : "Přidat"}
           </Button>
         </div>
       </div>

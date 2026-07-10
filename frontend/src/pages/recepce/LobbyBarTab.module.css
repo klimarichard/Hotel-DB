@@ -300,6 +300,24 @@
   width: 640px;
 }
 
+/* Sale modal: a touch wider than the default so the item line (select + počet
+   + remove) doesn't crowd. */
+.modalSale {
+  width: 540px;
+}
+
+/* The repeatable item lines of the sale modal. */
+.lines {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.lineQtyHead {
+  width: 90px;
+}
+
 .modalHeader {
   display: flex;
   align-items: center;
