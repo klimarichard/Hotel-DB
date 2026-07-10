@@ -9,6 +9,7 @@ import {
   ROLE_TYPES_COLLECTION,
 } from "../auth/permissions";
 import { ctxFromReq, logCreate, logUpdate } from "../services/auditLog";
+import { isHotelSlug, hotelViewPerm, type HotelSlug } from "../services/hotels";
 import * as clock from "../services/clock";
 import { deactivateUserCore } from "../services/userDeactivation";
 
@@ -539,11 +540,24 @@ authRouter.patch(
   async (req: AuthRequest, res) => {
     const { uid } = req.params;
     const { name, email } = req.body as { name?: string; email?: string };
+    const body = req.body as { recepceDefaultHotel?: unknown };
     const wantName = typeof name === "string" && name.trim().length > 0;
     const wantEmail = typeof email === "string" && email.trim().length > 0;
-    if (!wantName && !wantEmail) {
+    // Absent = leave alone; null = clear. Distinguished with `in`, so that
+    // clearing the default isn't read as "nothing to save".
+    const wantDefaultHotel = "recepceDefaultHotel" in body;
+    if (!wantName && !wantEmail && !wantDefaultHotel) {
       res.status(400).json({ error: "Není co uložit (jméno ani e-mail)." });
       return;
+    }
+    let defaultHotel: HotelSlug | null = null;
+    if (wantDefaultHotel) {
+      const raw = body.recepceDefaultHotel;
+      if (raw !== null && !isHotelSlug(raw)) {
+        res.status(400).json({ error: "Neplatný hotel." });
+        return;
+      }
+      defaultHotel = raw;
     }
 
     const userRef = admin.firestore().collection("users").doc(uid);
@@ -554,22 +568,43 @@ authRouter.patch(
     }
     const before = beforeSnap.data() as Record<string, unknown>;
 
+    // A default hotel picks which accessible hotel opens first; it must never be
+    // a hotel the TARGET user cannot see. Validate against *their* effective
+    // permissions, not the admin's — the admin can see every hotel.
+    if (wantDefaultHotel && defaultHotel !== null) {
+      const theirPerms = await resolveEffectivePermissions({
+        roleType: before.roleType as string | undefined,
+        extra: (before.extraPermissions as string[] | undefined) ?? [],
+        revoked: (before.revokedPermissions as string[] | undefined) ?? [],
+      });
+      if (!theirPerms.has(hotelViewPerm(defaultHotel)) && !theirPerms.has("system.admin")) {
+        res.status(400).json({ error: "Uživatel nemá k tomuto hotelu přístup." });
+        return;
+      }
+    }
+
     try {
       const authUpdate: { displayName?: string; email?: string } = {};
       const fsUpdate: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp() };
       if (wantName) { authUpdate.displayName = name!.trim(); fsUpdate.name = name!.trim(); }
       if (wantEmail) { authUpdate.email = email!.trim(); fsUpdate.email = email!.trim(); }
+      if (wantDefaultHotel) fsUpdate.recepceDefaultHotel = defaultHotel;
 
       // Update the Auth record first (it's the one that can fail on a duplicate
-      // email); only then mirror into Firestore.
-      await admin.auth().updateUser(uid, authUpdate);
+      // email); only then mirror into Firestore. Skipped when only the default
+      // hotel changed — there is nothing in the Auth record to touch.
+      if (wantName || wantEmail) await admin.auth().updateUser(uid, authUpdate);
       await userRef.update(fsUpdate);
 
       await logUpdate(ctxFromReq(req), {
         collection: "users",
         resourceId: uid,
-        before: { name: before.name, email: before.email },
-        after: { name: fsUpdate.name ?? before.name, email: fsUpdate.email ?? before.email },
+        before: { name: before.name, email: before.email, recepceDefaultHotel: before.recepceDefaultHotel ?? null },
+        after: {
+          name: fsUpdate.name ?? before.name,
+          email: fsUpdate.email ?? before.email,
+          recepceDefaultHotel: wantDefaultHotel ? defaultHotel : (before.recepceDefaultHotel ?? null),
+        },
       });
       res.json({ success: true });
     } catch (err) {
@@ -644,6 +679,44 @@ authRouter.put("/me/theme", requireAuth, async (req: AuthRequest, res) => {
     { merge: true }
   );
   res.json({ theme });
+});
+
+/**
+ * GET /api/auth/me/recepce-default
+ * The hotel the Recepce hub opens on for this user, or null when unset.
+ */
+authRouter.get("/me/recepce-default", requireAuth, async (req: AuthRequest, res) => {
+  const doc = await admin.firestore().collection("users").doc(req.uid!).get();
+  const hotel = doc.exists ? (doc.data()?.recepceDefaultHotel ?? null) : null;
+  res.json({ hotel });
+});
+
+/**
+ * PUT /api/auth/me/recepce-default
+ * Body: { hotel: HotelSlug | null }. Self-service, like the theme preference —
+ * requireAuth only, no permission key, because a user may only ever set their
+ * OWN default. `null` clears it.
+ *
+ * The default picks which accessible hotel opens first; it never GRANTS access.
+ * Rejecting a hotel the caller cannot view keeps the stored value honest, and
+ * the read path filters it against live permissions anyway, so a default left
+ * behind by a later revoke simply falls through to the next candidate.
+ */
+authRouter.put("/me/recepce-default", requireAuth, async (req: AuthRequest, res) => {
+  const { hotel } = req.body as { hotel: unknown };
+  if (hotel !== null && !isHotelSlug(hotel)) {
+    res.status(400).json({ error: "Neplatný hotel." });
+    return;
+  }
+  if (hotel !== null && !(req.permissions ?? new Set<string>()).has(hotelViewPerm(hotel)) && !(req.permissions ?? new Set<string>()).has("system.admin")) {
+    res.status(403).json({ error: "K tomuto hotelu nemáte přístup." });
+    return;
+  }
+  await admin.firestore().collection("users").doc(req.uid!).set(
+    { recepceDefaultHotel: hotel, updatedAt: FieldValue.serverTimestamp() },
+    { merge: true }
+  );
+  res.json({ hotel });
 });
 
 /**

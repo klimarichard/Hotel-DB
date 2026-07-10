@@ -18,6 +18,12 @@ interface AuthState {
   name: string | null;
   /** Display name of the user's type (roleType), for the sidebar label. */
   roleTypeName: string | null;
+  /**
+   * The hotel the Recepce hub opens on for this user; null when unset (then the
+   * last-used hotel, else the first accessible one). Never grants access — it is
+   * filtered against `permissions` on read.
+   */
+  recepceDefaultHotel: string | null;
   /** Effective permission set from /auth/me (resolved server-side from role). */
   permissions: ReadonlySet<string>;
   loading: boolean;
@@ -42,6 +48,7 @@ export function useAuth(): AuthValue {
     employeeId: null,
     name: null,
     roleTypeName: null,
+    recepceDefaultHotel: null,
     permissions: EMPTY_PERMS,
     loading: true,
   });
@@ -51,8 +58,8 @@ export function useAuth(): AuthValue {
       if (user) {
         const tokenResult = await user.getIdTokenResult();
         const profile = await api
-          .get<{ employeeId: string | null; name?: string | null; permissions?: string[]; roleTypeName?: string | null; roleType?: string | null }>("/auth/me")
-          .catch(() => ({ employeeId: null, name: null, permissions: [] as string[], roleTypeName: null, roleType: null }));
+          .get<{ employeeId: string | null; name?: string | null; permissions?: string[]; roleTypeName?: string | null; roleType?: string | null; recepceDefaultHotel?: string | null }>("/auth/me")
+          .catch(() => ({ employeeId: null, name: null, permissions: [] as string[], roleTypeName: null, roleType: null, recepceDefaultHotel: null }));
         setState({
           user,
           role: (tokenResult.claims.role as UserRole) ?? null,
@@ -60,11 +67,12 @@ export function useAuth(): AuthValue {
           employeeId: profile.employeeId ?? null,
           name: profile.name ?? null,
           roleTypeName: profile.roleTypeName ?? null,
+          recepceDefaultHotel: profile.recepceDefaultHotel ?? null,
           permissions: new Set(profile.permissions ?? []),
           loading: false,
         });
       } else {
-        setState({ user: null, role: null, roleType: null, employeeId: null, name: null, roleTypeName: null, permissions: EMPTY_PERMS, loading: false });
+        setState({ user: null, role: null, roleType: null, employeeId: null, name: null, roleTypeName: null, recepceDefaultHotel: null, permissions: EMPTY_PERMS, loading: false });
       }
     });
   }, []);
