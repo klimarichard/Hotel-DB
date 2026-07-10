@@ -1,6 +1,6 @@
 {
   "name": "hpm-intranet",
-  "version": "4.2.2",
+  "version": "4.2.3",
   "private": true,
   "description": "HPM Intranet — root-level deploy orchestration for the frontend + Cloud Functions across environments.",
   "scripts": {
