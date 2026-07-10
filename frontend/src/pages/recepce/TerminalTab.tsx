@@ -343,7 +343,15 @@ function PaymentModal({
 
   const dateMin = !canManage && range.from ? range.from : undefined;
   const dateMax = !canManage && range.to ? range.to : undefined;
-  const valid = /^\d{4}-\d{2}-\d{2}$/.test(date) && Number.isFinite(amount) && type !== "";
+  // "Jiné…" carries no type of its own, so the note is the only record of what
+  // the payment was — required there, optional everywhere else. Enforced on the
+  // server too; this only saves a round-trip.
+  const noteRequired = type === "other";
+  const valid =
+    /^\d{4}-\d{2}-\d{2}$/.test(date) &&
+    Number.isFinite(amount) &&
+    type !== "" &&
+    (!noteRequired || note.trim() !== "");
 
   async function submit() {
     if (!valid) return;
@@ -407,15 +415,18 @@ function PaymentModal({
             </select>
           </label>
           <label className={styles.field}>
-            Poznámka (nepovinné)
+            {noteRequired ? "Poznámka (povinná)" : "Poznámka (nepovinné)"}
             <input
               type="text"
               className={styles.input}
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              placeholder="Nepovinná poznámka"
+              placeholder={noteRequired ? "Popište, o co šlo" : "Nepovinná poznámka"}
               disabled={busy}
             />
+            {noteRequired && note.trim() === "" && (
+              <span className={styles.fieldHint}>U typu „Jiné…“ popište, o jakou platbu šlo.</span>
+            )}
           </label>
           {err && <div className={styles.error}>{err}</div>}
         </div>

@@ -165,7 +165,7 @@ export const APP_TOUR_STEPS: TourStep[] = [
   { permission: "recepce.ambiance.lobbyBar.manage", addedInVersion: 13, hideOnMobile: true, anchor: "lobbybar-totals", route: DEMO_LOBBY_BAR, title: "Souhrny za období", body: "Součty provize a částky do společné za zobrazené období. Koruny a eura se sčítají zvlášť. Ceník i sazby provize upravíte tlačítkem „Upravit“ nad ceníkem.", placement: "top" },
 
   // ── Recepce → Terminál (demo tab; jen Amigo & Alqush) ────────────────────────
-  { permission: "recepce.amigo.terminal.view", addedInVersion: 13, hideOnMobile: true, anchor: "terminal-add", route: DEMO_TERMINAL, title: "Platby z terminálu", body: "Tímto tlačítkem zapíšete platbu: datum, částku v korunách a typ transakce (late C/O, laundry, snídaně, extra bed, parking, tour, nebo „Jiné…“). Poznámka je nepovinná – hodí se právě u volby „Jiné…“.", placement: "bottom" },
+  { permission: "recepce.amigo.terminal.view", addedInVersion: 13, hideOnMobile: true, anchor: "terminal-add", route: DEMO_TERMINAL, title: "Platby z terminálu", body: "Tímto tlačítkem zapíšete platbu: datum, částku v korunách a typ transakce (late C/O, laundry, snídaně, extra bed, parking, tour, nebo „Jiné…“). U volby „Jiné…“ je poznámka povinná – jinak by nebylo poznat, o jakou platbu šlo. U ostatních typů je nepovinná.", placement: "bottom" },
   { permission: "recepce.amigo.terminal.manage", addedInVersion: 13, hideOnMobile: true, anchor: "terminal-settled", route: DEMO_TERMINAL, title: "Předáno", body: "Zaškrtnutím označíte platbu jako předanou. Sloupec vidí a mění jen uživatel s oprávněním spravovat terminál; zaznamená se, kdo a kdy platbu předal.", placement: "left" },
 
   // ── Zaměstnanci – seznam (/zamestnanci) ──────────────────────────────────────

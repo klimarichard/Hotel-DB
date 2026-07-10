@@ -76,8 +76,13 @@ function parseEntry(raw: unknown): ParsedEntry | { error: string } {
   const amount = typeof b.amount === "number" && Number.isFinite(b.amount) ? b.amount : NaN;
   if (!Number.isFinite(amount)) return { error: "Neplatná částka." };
   if (!isTerminalType(b.type)) return { error: "Neplatný typ transakce." };
-  // Note is optional for EVERY type (including "other").
+  // The note is optional for the named types, but MANDATORY for "Jiné…" — it is
+  // the only record of what the payment actually was. Mirrors the taxi rule for
+  // a ride booked off the ceník.
   const note = typeof b.note === "string" ? b.note.trim() : "";
+  if (b.type === "other" && note === "") {
+    return { error: "U typu „Jiné…“ je poznámka povinná." };
+  }
   // Amount is CZK only — round to a whole number.
   return { date: b.date as string, amount: Math.round(amount), type: b.type, note };
 }
