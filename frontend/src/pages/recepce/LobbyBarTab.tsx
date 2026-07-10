@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { api } from "@/lib/api";
+import { api, errorMessage } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import Button from "@/components/Button";
 import IconButton from "@/components/IconButton";
@@ -20,6 +20,10 @@ interface LobbyBarConfig {
   items: LobbyBarItem[];
   provisionCZK: number;
   provisionEUR: number;
+  /** Manager-only "Prodáno" tally: units sold per itemId since the last reset. */
+  sold?: Record<string, number>;
+  /** ISO of the last "Prodáno" reset, or null; only sent to managers. */
+  soldResetAt?: string | null;
 }
 
 interface LobbyBarSale {
@@ -92,6 +96,56 @@ function computePreview(
   const provision = roundMoney(quantity * rate, currency);
   const doSpolecne = roundMoney(price - provision, currency);
   return { price, provision, doSpolecne };
+}
+
+/** A money total kept strictly separate per currency – the two are never mixed. */
+type ByCurrency = Record<Currency, number>;
+
+/**
+ * Preview for a whole multi-line sale. Each line is rounded on its own – exactly
+ * like the server, which stores one document per line – and only then summed, so
+ * the previewed total always equals the sum of the rows that end up in the table.
+ * Lines may carry different currencies, so every total is accumulated per
+ * currency and nothing is ever converted.
+ */
+function computeLinesPreview(
+  lines: { itemId: string; quantity: number; currency: Currency }[],
+  cfg: LobbyBarConfig
+): { price: ByCurrency; provision: ByCurrency; doSpolecne: ByCurrency } {
+  const acc = {
+    price: { CZK: 0, EUR: 0 } as ByCurrency,
+    provision: { CZK: 0, EUR: 0 } as ByCurrency,
+    doSpolecne: { CZK: 0, EUR: 0 } as ByCurrency,
+  };
+  for (const l of lines) {
+    const p = computePreview(
+      cfg.items.find((i) => i.id === l.itemId),
+      l.quantity,
+      l.currency,
+      cfg
+    );
+    acc.price[l.currency] += p.price;
+    acc.provision[l.currency] += p.provision;
+    acc.doSpolecne[l.currency] += p.doSpolecne;
+  }
+  // Re-round the sums: adding several 2-decimal EUR values reintroduces float noise.
+  for (const key of ["price", "provision", "doSpolecne"] as const) {
+    acc[key].CZK = roundMoney(acc[key].CZK, "CZK");
+    acc[key].EUR = roundMoney(acc[key].EUR, "EUR");
+  }
+  return acc;
+}
+
+/**
+ * Render a per-currency total, dropping a currency whose sub-total is 0. When
+ * both are 0 (nothing filled in yet) it still shows a zero in `fallback`, so the
+ * preview never renders as an empty string.
+ */
+function formatByCurrency(m: ByCurrency, fallback: Currency): string {
+  const parts: string[] = [];
+  if (m.CZK !== 0) parts.push(formatMoney(m.CZK, "CZK"));
+  if (m.EUR !== 0) parts.push(formatMoney(m.EUR, "EUR"));
+  return parts.length > 0 ? parts.join(" · ") : formatMoney(0, fallback);
 }
 
 function PencilIcon() {
@@ -218,6 +272,37 @@ export default function LobbyBarTab({ hotel }: { hotel: Hotel }) {
     }
   }
 
+  // Reset the "Prodáno" tally to zero (manage only). Sales are not deleted — the
+  // server just moves the count's start point to now — so this confirms first.
+  function requestResetSold() {
+    setConfirm({
+      title: "Vynulovat Prodáno?",
+      message:
+        "Všechna čísla ve sloupci „Prodáno“ se vynulují a počítání začne znovu od této chvíle. Zapsané prodeje se nesmažou.",
+      danger: true,
+      confirmLabel: "Vynulovat",
+      onConfirm: () => void doResetSold(),
+    });
+  }
+  async function doResetSold() {
+    try {
+      const res = await api.post<{ sold: Record<string, number>; soldResetAt: string | null }>(
+        `/lobby-bar/${hotel.slug}/reset-sold`,
+        {}
+      );
+      setConfig((prev) => ({ ...prev, sold: res.sold, soldResetAt: res.soldResetAt }));
+      setConfirm(null);
+    } catch (err) {
+      setConfirm({
+        title: "Chyba",
+        message: errorMessage(err, "Vynulování se nezdařilo."),
+        showCancel: false,
+        confirmLabel: "OK",
+        onConfirm: () => setConfirm(null),
+      });
+    }
+  }
+
   const hasRange = !!(range.from || range.to);
 
   // Totals over the sales inside the effective visible period – only the
@@ -308,10 +393,10 @@ export default function LobbyBarTab({ hotel }: { hotel: Hotel }) {
                 <thead>
                   <tr>
                     <th>Datum</th>
+                    <th>Prodal</th>
                     <th>Položka</th>
                     <th className={styles.numCellLeft}>Počet</th>
                     <th>Měna</th>
-                    <th>Prodal</th>
                     <th className={styles.numCellLeft}>Cena</th>
                     <th className={styles.numCellLeft}>Provize</th>
                     <th className={styles.numCellLeft}>Do společné</th>
@@ -329,10 +414,10 @@ export default function LobbyBarTab({ hotel }: { hotel: Hotel }) {
                   {sales.map((s) => (
                     <tr key={s.id}>
                       <td>{formatDate(s.date)}</td>
+                      <td>{s.employeeName}</td>
                       <td>{s.itemName}</td>
                       <td className={styles.numCellLeft}>{s.quantity}</td>
                       <td>{currencySymbol(s.currency)}</td>
-                      <td>{s.employeeName}</td>
                       <td className={styles.numCellLeft}>{formatMoney(s.price, s.currency)}</td>
                       <td className={styles.numCellLeft}>{formatMoney(s.provision, s.currency)}</td>
                       <td className={styles.numCellLeft}>{formatMoney(s.doSpolecne, s.currency)}</td>
@@ -357,9 +442,14 @@ export default function LobbyBarTab({ hotel }: { hotel: Hotel }) {
             <div className={styles.pricelistHeader}>
               <h3 className={styles.pricelistTitle}>Ceník položek</h3>
               {canManage && (
-                <Button variant="secondary" size="sm" onClick={() => setItemsOpen(true)}>
-                  Upravit
-                </Button>
+                <div className={styles.pricelistActions}>
+                  <Button variant="secondary" size="sm" onClick={() => setItemsOpen(true)}>
+                    Upravit
+                  </Button>
+                  <Button variant="danger" size="sm" onClick={requestResetSold}>
+                    Reset
+                  </Button>
+                </div>
               )}
             </div>
             <div className={styles.pricelistBody}>
@@ -369,12 +459,13 @@ export default function LobbyBarTab({ hotel }: { hotel: Hotel }) {
                     <th className={styles.itemNameCell}>Položka</th>
                     <th className={styles.numCellLeft}>CZK</th>
                     <th className={styles.numCellLeft}>EUR</th>
+                    {canManage && <th className={styles.numCellLeft}>Prodáno</th>}
                   </tr>
                 </thead>
                 <tbody>
                   {config.items.length === 0 && (
                     <tr>
-                      <td colSpan={3} className={styles.empty}>
+                      <td colSpan={canManage ? 4 : 3} className={styles.empty}>
                         Žádné položky.
                       </td>
                     </tr>
@@ -384,6 +475,9 @@ export default function LobbyBarTab({ hotel }: { hotel: Hotel }) {
                       <td className={styles.itemNameCell}>{it.name}</td>
                       <td className={styles.numCellLeft}>{it.priceCZK.toLocaleString("cs-CZ")} Kč</td>
                       <td className={styles.numCellLeft}>{it.priceEUR.toLocaleString("cs-CZ")} €</td>
+                      {canManage && (
+                        <td className={styles.numCellLeft}>{(config.sold?.[it.id] ?? 0).toLocaleString("cs-CZ")}</td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -417,7 +511,10 @@ export default function LobbyBarTab({ hotel }: { hotel: Hotel }) {
           hotel={hotel}
           config={config}
           onSaved={(next) => {
-            setConfig(next);
+            // The items PUT returns items + provisions only; keep the current
+            // Prodáno tally (keyed by stable itemId) so the column doesn't blank
+            // out after a catalogue edit.
+            setConfig((prev) => ({ ...next, sold: prev.sold, soldResetAt: prev.soldResetAt }));
             setItemsOpen(false);
           }}
           onCancel={() => setItemsOpen(false)}
@@ -444,7 +541,26 @@ export default function LobbyBarTab({ hotel }: { hotel: Hotel }) {
 // month shift plan and refetches when the month changes; a non-manage user's
 // date is bounded by the visible range. Cena / Provize / Do společné are shown
 // as a read-only preview only – the stored values are computed server-side.
+//
+// Adding: the modal takes N item lines that share one date / employee / currency
+// (one guest, one payment) and posts them to /batch, which writes one sale
+// document per line atomically. Editing: a stored row is one item, so the modal
+// collapses to a single line and PUTs it back on its own.
 // ─────────────────────────────────────────────────────────────────────────────
+
+/** One item line in the add form. `quantity` stays a string so the field can be cleared. */
+interface DraftLine {
+  _key: string;
+  itemId: string;
+  quantity: string;
+  currency: Currency;
+}
+
+/** Czech plural of "položka" for the submit button: 2–4 položky, 5+ položek. */
+function polozkyLabel(n: number): string {
+  return n >= 2 && n <= 4 ? `${n} položky` : `${n} položek`;
+}
+
 function SaleModal({
   hotel,
   canManage,
@@ -464,9 +580,11 @@ function SaleModal({
 }) {
   const isEdit = !!initial;
   const [date, setDate] = useState(initial?.date ?? todayLocal());
-  const [itemId, setItemId] = useState(initial?.itemId ?? "");
-  const [quantity, setQuantity] = useState<string>(initial ? String(initial.quantity) : "1");
-  const [currency, setCurrency] = useState<Currency>(initial?.currency ?? "CZK");
+  const [lines, setLines] = useState<DraftLine[]>([
+    initial
+      ? { _key: genId(), itemId: initial.itemId, quantity: String(initial.quantity), currency: initial.currency }
+      : { _key: genId(), itemId: "", quantity: "1", currency: "CZK" },
+  ]);
   const [employeeId, setEmployeeId] = useState(initial?.employeeId ?? "");
   const [employeeName, setEmployeeName] = useState(initial?.employeeName ?? "");
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
@@ -510,28 +628,49 @@ function SaleModal({
     if (found) setEmployeeName(found.name);
   }
 
-  const qtyNum = Math.floor(Number(quantity));
-  const selectedItem = useMemo(() => config.items.find((i) => i.id === itemId), [config.items, itemId]);
-  const preview = useMemo(
-    () => computePreview(selectedItem, qtyNum, currency, config),
-    [selectedItem, qtyNum, currency, config]
+  function updateLine(key: string, patch: Partial<DraftLine>) {
+    setLines((prev) => prev.map((l) => (l._key === key ? { ...l, ...patch } : l)));
+  }
+  function addLine() {
+    // A new line inherits the last line's currency: a round is usually paid in
+    // one currency, and mixing is the exception rather than the rule.
+    setLines((prev) => [
+      ...prev,
+      { _key: genId(), itemId: "", quantity: "1", currency: prev[prev.length - 1]?.currency ?? "CZK" },
+    ]);
+  }
+  function removeLine(key: string) {
+    setLines((prev) => (prev.length <= 1 ? prev : prev.filter((l) => l._key !== key)));
+  }
+
+  /** Lines with a parsed integer quantity, used for both validation and the preview. */
+  const parsedLines = useMemo(
+    () => lines.map((l) => ({ itemId: l.itemId, quantity: Math.floor(Number(l.quantity)), currency: l.currency })),
+    [lines]
   );
+  const preview = useMemo(() => computeLinesPreview(parsedLines, config), [parsedLines, config]);
 
   const dateMin = !canManage && range.from ? range.from : undefined;
   const dateMax = !canManage && range.to ? range.to : undefined;
-  const valid = itemId !== "" && Number.isInteger(qtyNum) && qtyNum >= 1 && employeeId !== "";
+  const linesValid = parsedLines.every((l) => l.itemId !== "" && Number.isInteger(l.quantity) && l.quantity >= 1);
+  const valid = linesValid && lines.length >= 1 && employeeId !== "";
 
   async function submit() {
     if (!valid) return;
     setBusy(true);
     setErr(null);
-    const body = { date, itemId, quantity: qtyNum, currency, employeeId, employeeName };
     try {
-      if (isEdit) await api.put(`/lobby-bar/${hotel.slug}/${initial!.id}`, body);
-      else await api.post(`/lobby-bar/${hotel.slug}`, body);
+      if (isEdit) {
+        const { itemId, quantity, currency } = parsedLines[0];
+        await api.put(`/lobby-bar/${hotel.slug}/${initial!.id}`, { date, itemId, quantity, currency, employeeId, employeeName });
+      } else {
+        // One request for all lines: the server writes them in a single batch,
+        // so a rejected line never leaves half the round saved.
+        await api.post(`/lobby-bar/${hotel.slug}/batch`, { date, employeeId, employeeName, lines: parsedLines });
+      }
       onSaved();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Uložení se nezdařilo.");
+      setErr(errorMessage(e, "Uložení se nezdařilo."));
     } finally {
       setBusy(false);
     }
@@ -539,86 +678,136 @@ function SaleModal({
 
   return (
     <div className={styles.modalOverlay}>
-      <div className={styles.modal}>
+      <div className={`${styles.modal} ${styles.modalSale}`}>
         <div className={styles.modalHeader}>
           <h2 className={styles.modalTitle}>{isEdit ? "Upravit prodej" : "Nový prodej"}</h2>
           <IconButton variant="close" aria-label="Zavřít" onClick={onCancel} />
         </div>
         <div className={styles.modalBody}>
-          <label className={styles.field}>
-            Datum
-            <input
-              type="date"
-              className={styles.input}
-              value={date}
-              min={dateMin}
-              max={dateMax}
-              onChange={(e) => e.target.value && setDate(e.target.value)}
-              disabled={busy}
-            />
-          </label>
-          <label className={styles.field}>
-            Položka
-            <select className={styles.select} value={itemId} onChange={(e) => setItemId(e.target.value)} disabled={busy}>
-              <option value="" disabled>
-                {config.items.length === 0 ? "Žádné položky v ceníku" : "Vyberte položku…"}
-              </option>
-              {config.items.map((it) => (
-                <option key={it.id} value={it.id}>
-                  {it.name}
-                </option>
-              ))}
-            </select>
-          </label>
           <div className={styles.row2}>
             <label className={styles.field}>
-              Počet
+              Datum
               <input
-                type="number"
-                min={1}
-                step={1}
-                className={`${styles.input} ${styles.inputNumber}`}
-                value={quantity}
-                onChange={(e) => setQuantity(e.target.value)}
-                placeholder="1"
+                type="date"
+                className={styles.input}
+                value={date}
+                min={dateMin}
+                max={dateMax}
+                onChange={(e) => e.target.value && setDate(e.target.value)}
                 disabled={busy}
               />
             </label>
             <label className={styles.field}>
-              Měna
-              <select className={styles.select} value={currency} onChange={(e) => setCurrency(e.target.value as Currency)} disabled={busy}>
-                <option value="CZK">Kč</option>
-                <option value="EUR">€</option>
+              Prodal
+              <select className={styles.select} value={employeeId} onChange={(e) => selectEmployee(e.target.value)} disabled={busy}>
+                <option value="" disabled>
+                  {options.length === 0 ? "Žádní zaměstnanci v plánu" : "Vyberte zaměstnance…"}
+                </option>
+                {options.map((o) => (
+                  <option key={o.employeeId} value={o.employeeId}>
+                    {o.name}
+                  </option>
+                ))}
               </select>
             </label>
           </div>
-          <label className={styles.field}>
-            Prodal
-            <select className={styles.select} value={employeeId} onChange={(e) => selectEmployee(e.target.value)} disabled={busy}>
-              <option value="" disabled>
-                {options.length === 0 ? "Žádní zaměstnanci v plánu" : "Vyberte zaměstnance…"}
-              </option>
-              {options.map((o) => (
-                <option key={o.employeeId} value={o.employeeId}>
-                  {o.name}
-                </option>
-              ))}
-            </select>
-          </label>
+
+          <div className={styles.lines}>
+            <table className={styles.routesTable}>
+              <thead>
+                <tr>
+                  <th>Položka</th>
+                  <th className={styles.lineQtyHead}>Počet</th>
+                  <th className={styles.lineCurrencyHead}>Měna</th>
+                  {!isEdit && <th aria-label="Akce" />}
+                </tr>
+              </thead>
+              <tbody>
+                {lines.map((l) => (
+                  <tr key={l._key}>
+                    <td>
+                      <select
+                        className={styles.routeInput}
+                        value={l.itemId}
+                        onChange={(e) => updateLine(l._key, { itemId: e.target.value })}
+                        aria-label="Položka"
+                        disabled={busy}
+                      >
+                        <option value="" disabled>
+                          {config.items.length === 0 ? "Žádné položky v ceníku" : "Vyberte položku…"}
+                        </option>
+                        {config.items.map((it) => (
+                          <option key={it.id} value={it.id}>
+                            {it.name}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td>
+                      <input
+                        type="number"
+                        min={1}
+                        step={1}
+                        className={`${styles.routeInput} ${styles.routeNum}`}
+                        value={l.quantity}
+                        onChange={(e) => updateLine(l._key, { quantity: e.target.value })}
+                        aria-label="Počet"
+                        placeholder="1"
+                        disabled={busy}
+                      />
+                    </td>
+                    <td>
+                      <select
+                        className={`${styles.routeInput} ${styles.routeCurrency}`}
+                        value={l.currency}
+                        onChange={(e) => updateLine(l._key, { currency: e.target.value as Currency })}
+                        aria-label="Měna"
+                        disabled={busy}
+                      >
+                        <option value="CZK">Kč</option>
+                        <option value="EUR">€</option>
+                      </select>
+                    </td>
+                    {!isEdit && (
+                      <td>
+                        <div className={styles.rowActions}>
+                          <button
+                            type="button"
+                            className={`${styles.rowIconBtn} ${styles.rowIconBtnTrash}`}
+                            aria-label="Odebrat položku"
+                            title="Odebrat položku"
+                            onClick={() => removeLine(l._key)}
+                            disabled={busy || lines.length <= 1}
+                          >
+                            <TrashIcon />
+                          </button>
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {!isEdit && (
+              <Button variant="secondary" size="sm" type="button" onClick={addLine} disabled={busy || config.items.length === 0}>
+                + Přidat položku
+              </Button>
+            )}
+          </div>
 
           <div className={styles.preview}>
             <span className={styles.previewTitle}>Náhled (vypočítá se automaticky)</span>
             <div className={styles.previewRow}>
-              <span>Cena</span>
-              <span className={styles.previewValue}>{formatMoney(preview.price, currency)}</span>
+              <span>{isEdit ? "Cena" : "Celkem"}</span>
+              <span className={styles.previewValue}>{formatByCurrency(preview.price, lines[0].currency)}</span>
             </div>
             <div className={styles.previewRow}>
               <span>Provize</span>
-              <span className={styles.previewValue}>{formatMoney(preview.provision, currency)}</span>
+              <span className={styles.previewValue}>{formatByCurrency(preview.provision, lines[0].currency)}</span>
             </div>
             <div className={styles.previewRow}>
               <span>Do společné</span>
-              <span className={styles.previewValue}>{formatMoney(preview.doSpolecne, currency)}</span>
+              <span className={styles.previewValue}>{formatByCurrency(preview.doSpolecne, lines[0].currency)}</span>
             </div>
           </div>
           {err && <div className={styles.error}>{err}</div>}
@@ -628,7 +817,7 @@ function SaleModal({
             Zrušit
           </Button>
           <Button type="button" onClick={submit} disabled={busy || !valid}>
-            {busy ? "Ukládám…" : isEdit ? "Uložit" : "Přidat"}
+            {busy ? "Ukládám…" : isEdit ? "Uložit" : lines.length > 1 ? `Přidat ${polozkyLabel(lines.length)}` : "Přidat"}
           </Button>
         </div>
       </div>

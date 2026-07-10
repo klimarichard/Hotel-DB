@@ -298,6 +298,35 @@ The distinction matters because the employment-row `status` field can lag the de
 
 ---
 
+## Async error forwarding (never-hang)
+
+The backend runs on **Express 4**, whose router predates `async` handlers. Its
+`Layer.handle_request` wraps the handler in a `try/catch` that catches only
+**synchronous** throws; when an `async` handler *rejects*, the returned promise
+is dropped and **no response is ever sent** — the client's `fetch` hangs until it
+times out. (Symptom seen in the wild: a Lobby bar save whose "Ukládám…" never
+finished when a cold Firestore read rejected.)
+
+`functions/src/middleware/asyncRouteErrors.ts` fixes this globally.
+`installAsyncRouteErrorForwarding()` is called **first** in `index.ts`, before any
+route is registered. It patches `Layer.prototype.handle_request` / `handle_error`
+so that when a handler returns a thenable, its rejection is routed to `next(err)`
+and reaches the JSON-500 error middleware at the bottom of `index.ts`. This is the
+same mechanism as the `express-async-errors` package, reimplemented locally to
+avoid adding a Cloud Functions dependency.
+
+- **No per-handler `try/catch` for the hang** — every one of the ~200 async
+  handlers is covered by the single patch. Handlers still `try/catch` where they
+  need *specific* error semantics (a tailored 400/409), but they no longer need a
+  catch-all just to avoid hanging.
+- **Fails safe on an Express upgrade.** It reaches an internal module path
+  (`express/lib/router/layer`) that has no public API. If a future Express moves
+  or reshapes it, the patch quietly no-ops (stock behavior) instead of crashing
+  startup — it can only reintroduce the original hang risk, which the behavior
+  test guards against. Re-verify the patch when bumping Express major.
+- Idempotent (guarded by an `__asyncErrorsPatched` flag); a normally-resolving
+  async handler is unaffected and still returns its own response.
+
 ## Dark Mode
 
 - `ThemeContext.tsx`: `ThemeProvider` + `useTheme()`. Authoritative preference is the `theme` field on `users/{uid}` Firestore doc, fetched on login via `GET /api/auth/me/theme` and written on toggle via `PUT /api/auth/me/theme` (`functions/src/routes/auth.ts`). `localStorage` (`hotel_hr_theme_{uid}`) is kept as a flash-prevention cache — applied immediately on mount, then reconciled when the backend response lands. Guest (pre-login) preference stored under `hotel_hr_theme_guest` in `localStorage` only. Applies `data-theme="dark"` to `<html>`.

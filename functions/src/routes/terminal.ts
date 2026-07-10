@@ -1,4 +1,5 @@
 import { Router, Response, NextFunction } from "express";
+import * as admin from "firebase-admin";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { requireAuth, AuthRequest } from "../middleware/auth";
 import { ctxFromReq, logCreate, logUpdate, logDelete } from "../services/auditLog";
@@ -7,15 +8,23 @@ import { isHotelSlug, HotelSlug, terminalViewPerm, terminalManagePerm } from "..
 import {
   TerminalPayment,
   TerminalRange,
-  TerminalType,
-  isTerminalType,
+  TerminalTypeItem,
+  DEFAULT_TERMINAL_TYPES,
+  OTHER_TYPE_ID,
+  OTHER_TYPE_LABEL,
   isDateStr,
   terminalCol,
   terminalRangeRef,
+  terminalTypesRef,
   inRange,
 } from "../services/terminalShared";
 
 export const terminalRouter = Router();
+
+/** A fresh Firestore auto-id (no write), used for stable payment-type ids. */
+function newId(): string {
+  return admin.firestore().collection("_ids").doc().id;
+}
 
 /** Validates the :hotel URL segment. Rejects unknown slugs with 404. */
 function validateHotelParam(req: AuthRequest, res: Response, next: NextFunction): void {
@@ -61,30 +70,73 @@ async function readRange(hotel: HotelSlug): Promise<TerminalRange> {
   };
 }
 
+/**
+ * Sanitize the payment-type catalogue like lobby bar's sanitizeItems: trim
+ * labels, drop empty-label rows, assign a fresh id when missing/duplicate, and
+ * preserve order. The built-in `other` id is reserved so a custom type can never
+ * shadow "Jiné…".
+ */
+function sanitizeTypes(raw: unknown): TerminalTypeItem[] {
+  if (!Array.isArray(raw)) return [];
+  const out: TerminalTypeItem[] = [];
+  const seen = new Set<string>([OTHER_TYPE_ID]);
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue;
+    const e = entry as Record<string, unknown>;
+    const label = typeof e.label === "string" ? e.label.trim() : "";
+    if (label === "") continue;
+    let id = typeof e.id === "string" && e.id !== "" ? e.id : "";
+    if (id === "" || seen.has(id)) id = newId();
+    seen.add(id);
+    out.push({ id, label });
+  }
+  return out;
+}
+
+/**
+ * The configurable types for a hotel (excluding the built-in "other", which the
+ * client appends). An ABSENT doc falls back to the defaults; an explicitly-saved
+ * empty list is respected (leaving only "Jiné…").
+ */
+async function readTypes(hotel: HotelSlug): Promise<TerminalTypeItem[]> {
+  const snap = await terminalTypesRef(hotel).get();
+  if (!snap.exists) return [...DEFAULT_TERMINAL_TYPES];
+  return sanitizeTypes((snap.data() as Record<string, unknown>).types);
+}
+
 interface ParsedEntry {
   date: string;
   amount: number;
-  type: TerminalType;
+  type: string;
+  typeLabel: string;
   note: string;
 }
 
-/** Validate + normalize a payment body. Returns { error } on the first problem.
- *  `settled` is deliberately NOT parsed here — see the create/update handlers. */
-function parseEntry(raw: unknown): ParsedEntry | { error: string } {
+/**
+ * Validate + normalize a payment body against the CURRENT type catalogue. The
+ * type must be the built-in `other` or a catalogue id; the label is snapshotted
+ * server-side so a later rename/delete never rewrites this row. `settled` is
+ * deliberately NOT parsed here — see the create/update handlers.
+ */
+function parseEntry(raw: unknown, types: TerminalTypeItem[]): ParsedEntry | { error: string } {
   const b = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   if (!isDateStr(b.date)) return { error: "Neplatné datum (YYYY-MM-DD)." };
   const amount = typeof b.amount === "number" && Number.isFinite(b.amount) ? b.amount : NaN;
   if (!Number.isFinite(amount)) return { error: "Neplatná částka." };
-  if (!isTerminalType(b.type)) return { error: "Neplatný typ transakce." };
-  // The note is optional for the named types, but MANDATORY for "Jiné…" — it is
+  const typeId = typeof b.type === "string" ? b.type : "";
+  const isOther = typeId === OTHER_TYPE_ID;
+  const item = types.find((t) => t.id === typeId);
+  if (!isOther && !item) return { error: "Neplatný typ transakce." };
+  const typeLabel = isOther ? OTHER_TYPE_LABEL : (item as TerminalTypeItem).label;
+  // The note is optional for catalogue types, but MANDATORY for "Jiné…" — it is
   // the only record of what the payment actually was. Mirrors the taxi rule for
   // a ride booked off the ceník.
   const note = typeof b.note === "string" ? b.note.trim() : "";
-  if (b.type === "other" && note === "") {
+  if (isOther && note === "") {
     return { error: "U typu „Jiné…“ je poznámka povinná." };
   }
   // Amount is CZK only — round to a whole number.
-  return { date: b.date as string, amount: Math.round(amount), type: b.type, note };
+  return { date: b.date as string, amount: Math.round(amount), type: typeId, typeLabel, note };
 }
 
 terminalRouter.use("/:hotel", validateHotelParam);
@@ -129,6 +181,44 @@ terminalRouter.put(
   }
 );
 
+// ── Configurable payment-type catalogue ───────────────────────────────────────
+// Registered BEFORE `/:hotel/:id` so "types" isn't captured as an :id segment.
+
+/** GET the payment-type catalogue (view — needed to fill the Typ dropdown). The
+ *  built-in "Jiné…" is appended by the client, not stored here. */
+terminalRouter.get(
+  "/:hotel/types",
+  requireAuth,
+  requireTerminalPerm("view"),
+  async (req: AuthRequest, res: Response) => {
+    res.json({ types: await readTypes(req.params.hotel as HotelSlug) });
+  }
+);
+
+/** PUT the payment-type catalogue (terminal.manage). */
+terminalRouter.put(
+  "/:hotel/types",
+  requireAuth,
+  requireTerminalPerm("manage"),
+  async (req: AuthRequest, res: Response) => {
+    const hotel = req.params.hotel as HotelSlug;
+    const before = await readTypes(hotel);
+    const types = sanitizeTypes((req.body as { types?: unknown }).types);
+    await terminalTypesRef(hotel).set(
+      { types, updatedBy: req.uid, updatedAt: FieldValue.serverTimestamp() },
+      { merge: true }
+    );
+    await logUpdate(ctxFromReq(req), {
+      collection: "terminalTypes",
+      resourceId: "types",
+      subResourceId: hotel,
+      before: { count: before.length },
+      after: { count: types.length },
+    });
+    res.json({ types });
+  }
+);
+
 /**
  * GET /api/terminal/:hotel — the continuous list, newest first. Managers see all;
  * everyone else is bounded by the visible range (inequality + orderBy on the same
@@ -159,7 +249,7 @@ terminalRouter.post(
   requireTerminalPerm("view"),
   async (req: AuthRequest, res: Response) => {
     const hotel = req.params.hotel as HotelSlug;
-    const parsed = parseEntry(req.body);
+    const parsed = parseEntry(req.body, await readTypes(hotel));
     if ("error" in parsed) {
       res.status(400).json({ error: parsed.error });
       return;
@@ -209,7 +299,7 @@ terminalRouter.put(
       return;
     }
     const before = snap.data() as TerminalPayment;
-    const parsed = parseEntry(req.body);
+    const parsed = parseEntry(req.body, await readTypes(hotel));
     if ("error" in parsed) {
       res.status(400).json({ error: parsed.error });
       return;

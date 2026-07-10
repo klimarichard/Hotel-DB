@@ -126,6 +126,12 @@
   border-bottom: 1px solid var(--color-border);
 }
 
+.pricelistActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
 .pricelistTitle {
   margin: 0;
   font-size: 0.85rem;
@@ -298,6 +304,33 @@
 
 .modalWide {
   width: 640px;
+}
+
+/* Sale modal: wider than the default so an item line (položka + počet + měna +
+   remove) doesn't crowd. */
+.modalSale {
+  width: 580px;
+}
+
+/* The repeatable item lines of the sale modal. */
+.lines {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.lineQtyHead {
+  width: 80px;
+}
+
+.lineCurrencyHead {
+  width: 76px;
+}
+
+/* Per-line currency picker — narrow, sits next to the počet field. */
+.routeCurrency {
+  width: 72px;
 }
 
 .modalHeader {

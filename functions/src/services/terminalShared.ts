@@ -2,33 +2,53 @@ import * as admin from "firebase-admin";
 import { HotelSlug } from "./hotels";
 
 /**
- * Card-terminal payment types. Each id maps to a Czech label shown in the UI.
- * The reference workbook ("TERMINÁL bar.xlsx") is dominated by "late C/O", with
- * a long tail of one-off items that live under "Jiné…" plus a free-text note.
+ * The permanent built-in payment type. "Jiné…" always exists (managers can't
+ * delete or rename it) and is the ONLY type that forces a note — it carries no
+ * type of its own, so the note is the only record of what the payment was. Every
+ * other type is manager-configurable (see `TerminalTypeItem` / `config/terminalTypes`).
  */
-export const TERMINAL_TYPES = [
-  "late-co",
-  "laundry",
-  "snidane",
-  "extra-bed",
-  "parking",
-  "tour",
-  "other",
-] as const;
-export type TerminalType = (typeof TERMINAL_TYPES)[number];
-export function isTerminalType(v: unknown): v is TerminalType {
-  return typeof v === "string" && (TERMINAL_TYPES as readonly string[]).includes(v);
+export const OTHER_TYPE_ID = "other";
+export const OTHER_TYPE_LABEL = "Jiné…";
+
+/**
+ * A configurable payment type in the per-hotel catalogue
+ * (`hotels/{hotel}/config/terminalTypes`). `id` is stable (assigned once, kept
+ * across renames) so a payment referencing it survives a label change; the entry
+ * `type` snapshots the label at write time regardless. The built-in "other" is
+ * NOT stored here — it is appended in code.
+ */
+export interface TerminalTypeItem {
+  id: string;
+  label: string;
 }
 
-/** Czech labels for the payment types (id → label). */
-export const TERMINAL_TYPE_LABELS: Record<TerminalType, string> = {
+/**
+ * The default catalogue used when a hotel has no `terminalTypes` doc yet — the
+ * original hard-coded list (minus the built-in "other"). Keeps existing payments'
+ * type ids resolving to labels and gives new hotels a sensible starting set.
+ */
+export const DEFAULT_TERMINAL_TYPES: readonly TerminalTypeItem[] = [
+  { id: "late-co", label: "late C/O" },
+  { id: "laundry", label: "laundry" },
+  { id: "snidane", label: "snídaně" },
+  { id: "extra-bed", label: "extra bed" },
+  { id: "parking", label: "parking" },
+  { id: "tour", label: "tour" },
+];
+
+/**
+ * Legacy label fallback for OLD payments that predate label snapshotting (they
+ * stored only a type id, no `typeLabel`). Covers the original enum ids incl.
+ * "other". New payments always carry their own `typeLabel`.
+ */
+export const LEGACY_TYPE_LABELS: Record<string, string> = {
   "late-co": "late C/O",
   laundry: "laundry",
   snidane: "snídaně",
   "extra-bed": "extra bed",
   parking: "parking",
   tour: "tour",
-  other: "Jiné…",
+  other: OTHER_TYPE_LABEL,
 };
 
 export function isDateStr(v: unknown): v is string {
@@ -40,11 +60,18 @@ export function isDateStr(v: unknown): v is string {
  * column). `note` is an optional free-text detail available on every type
  * (e.g. "hračka", "(Hop-On, Hop-Off)"). `settled` mirrors the "Předáno" column;
  * it can only be flipped by a manage user, who is recorded in settledBy/At.
+ *
+ * `type` is an id — either the built-in `other` or an id from the per-hotel
+ * catalogue. `typeLabel` snapshots the catalogue label at write time so a later
+ * rename or delete of a type never rewrites past rows (mirrors lobby bar's
+ * `itemName`). Old payments predating this carry no `typeLabel`; the UI falls
+ * back to `LEGACY_TYPE_LABELS`.
  */
 export interface TerminalPayment {
   date: string; // YYYY-MM-DD
   amount: number; // CZK, whole number
-  type: TerminalType;
+  type: string; // built-in "other" or a catalogue id
+  typeLabel?: string; // snapshot of the label at write time
   note: string;
   settled: boolean; // "Předáno" — OK vs blank
   settledBy?: string | null;
@@ -71,6 +98,11 @@ export function terminalCol(hotel: HotelSlug): admin.firestore.CollectionReferen
 /** Config doc holding the visible range: hotels/{hotel}/config/terminal. */
 export function terminalRangeRef(hotel: HotelSlug): admin.firestore.DocumentReference {
   return admin.firestore().collection("hotels").doc(hotel).collection("config").doc("terminal");
+}
+
+/** Config doc holding the configurable payment-type catalogue: hotels/{hotel}/config/terminalTypes. */
+export function terminalTypesRef(hotel: HotelSlug): admin.firestore.DocumentReference {
+  return admin.firestore().collection("hotels").doc(hotel).collection("config").doc("terminalTypes");
 }
 
 /** Whether a date falls inside a range (open bounds count as satisfied). */

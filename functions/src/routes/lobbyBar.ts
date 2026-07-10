@@ -1,6 +1,6 @@
 import { Router, Response, NextFunction } from "express";
 import * as admin from "firebase-admin";
-import { FieldValue } from "firebase-admin/firestore";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { requireAuth, AuthRequest } from "../middleware/auth";
 import { ctxFromReq, logCreate, logUpdate, logDelete } from "../services/auditLog";
 import { actorCtx, resolveOnDutyActor } from "../services/recepceActor";
@@ -123,6 +123,40 @@ async function readConfig(hotel: HotelSlug): Promise<LobbyBarConfig> {
   };
 }
 
+/**
+ * The "Prodáno" tally reset marker, stored alongside the catalogue on the
+ * lobbyBarItems doc. Sales recorded (`createdAt`) at or after it count toward the
+ * running per-item total; a manager zeroes the tally by moving it to "now". Null
+ * (absent) means count every sale ever.
+ */
+async function readSoldResetAt(hotel: HotelSlug): Promise<Timestamp | null> {
+  const snap = await lobbyBarItemsRef(hotel).get();
+  const raw = snap.exists ? (snap.data() as Record<string, unknown>).soldResetAt : null;
+  return raw instanceof Timestamp ? raw : null;
+}
+
+/**
+ * Per-item units sold since `resetAt` (or since forever when null): the sum of
+ * each sale's `quantity`, keyed by `itemId`. Uses `createdAt` (when the sale was
+ * recorded) rather than the sale's business `date`, so "reset now, count from
+ * here" is exact regardless of back-dated entries. A single-field `createdAt`
+ * range is covered by Firestore's automatic index — no composite index needed.
+ */
+async function computeSold(hotel: HotelSlug, resetAt: Timestamp | null): Promise<Record<string, number>> {
+  let query: admin.firestore.Query = lobbyBarCol(hotel);
+  if (resetAt) query = query.where("createdAt", ">=", resetAt);
+  const snap = await query.get();
+  const sold: Record<string, number> = {};
+  for (const doc of snap.docs) {
+    const s = doc.data() as LobbyBarSale;
+    const qty = typeof s.quantity === "number" && Number.isFinite(s.quantity) ? s.quantity : 0;
+    if (typeof s.itemId === "string" && s.itemId !== "") {
+      sold[s.itemId] = (sold[s.itemId] ?? 0) + qty;
+    }
+  }
+  return sold;
+}
+
 interface ParsedSale {
   date: string;
   itemId: string;
@@ -138,13 +172,39 @@ interface ParsedSale {
 }
 
 /**
- * Validate + normalize a sale body against the CURRENT catalogue. The item name
- * and every money field are computed/snapshotted server-side here — client-sent
- * money is never trusted. Returns { error } on the first problem.
+ * The fields a sale shares with its siblings when several are added at once.
+ * `currency` is deliberately NOT here — it belongs to the individual line, so
+ * one modal can mix a CZK item and a EUR item.
  */
-function parseSale(raw: unknown, cfg: LobbyBarConfig): ParsedSale | { error: string } {
-  const b = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+interface SaleHeader {
+  date: string;
+  employeeId: string;
+  employeeName: string;
+}
+
+/** Upper bound on lines in one batch — well under Firestore's 500-op WriteBatch limit. */
+const MAX_BATCH_LINES = 50;
+
+/** Validate the date / employee shared by every row of a sale. */
+function parseHeader(b: Record<string, unknown>): SaleHeader | { error: string } {
   if (!isDateStr(b.date)) return { error: "Neplatné datum (YYYY-MM-DD)." };
+  const employeeId = typeof b.employeeId === "string" ? b.employeeId.trim() : "";
+  if (employeeId === "") return { error: "Vyberte zaměstnance." };
+  return {
+    date: b.date as string,
+    employeeId,
+    employeeName: typeof b.employeeName === "string" ? b.employeeName.trim() : "",
+  };
+}
+
+/**
+ * Resolve one { itemId, quantity, currency } line against the CURRENT catalogue.
+ * The item name and every money field are computed/snapshotted server-side here
+ * — client-sent money is never trusted. The single-sale POST/PUT passes its whole
+ * body here, since that body carries the same three line fields at the top level.
+ */
+function parseLine(raw: unknown, header: SaleHeader, cfg: LobbyBarConfig): ParsedSale | { error: string } {
+  const b = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const itemId = typeof b.itemId === "string" ? b.itemId.trim() : "";
   const item = cfg.items.find((i) => i.id === itemId);
   if (!item) return { error: "Neznámá položka." };
@@ -152,21 +212,43 @@ function parseSale(raw: unknown, cfg: LobbyBarConfig): ParsedSale | { error: str
     typeof b.quantity === "number" && Number.isInteger(b.quantity) && b.quantity >= 1 ? b.quantity : NaN;
   if (!Number.isFinite(quantity)) return { error: "Neplatný počet." };
   if (!isCurrency(b.currency)) return { error: "Neplatná měna." };
-  const employeeId = typeof b.employeeId === "string" ? b.employeeId.trim() : "";
-  if (employeeId === "") return { error: "Vyberte zaměstnance." };
-  const employeeName = typeof b.employeeName === "string" ? b.employeeName.trim() : "";
-
-  const money = computeSale(item, quantity, b.currency, cfg);
   return {
-    date: b.date as string,
+    ...header,
     itemId: item.id,
     itemName: item.name,
     quantity,
     currency: b.currency,
-    employeeId,
-    employeeName,
-    ...money,
+    ...computeSale(item, quantity, b.currency, cfg),
   };
+}
+
+/** Validate + normalize a single-sale body (POST / PUT of one row). */
+function parseSale(raw: unknown, cfg: LobbyBarConfig): ParsedSale | { error: string } {
+  const b = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const header = parseHeader(b);
+  if ("error" in header) return header;
+  return parseLine(b, header, cfg);
+}
+
+/**
+ * Validate + normalize a multi-line sale body: one shared header (date +
+ * employee) plus N { itemId, quantity, currency } lines. Every line is resolved
+ * BEFORE anything is written, so a bad line aborts the whole batch instead of
+ * half-saving it.
+ */
+function parseSaleBatch(raw: unknown, cfg: LobbyBarConfig): ParsedSale[] | { error: string } {
+  const b = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const header = parseHeader(b);
+  if ("error" in header) return header;
+  if (!Array.isArray(b.lines) || b.lines.length === 0) return { error: "Přidejte alespoň jednu položku." };
+  if (b.lines.length > MAX_BATCH_LINES) return { error: `Najednou lze uložit nejvýše ${MAX_BATCH_LINES} položek.` };
+  const out: ParsedSale[] = [];
+  for (const line of b.lines) {
+    const parsed = parseLine(line, header, cfg);
+    if ("error" in parsed) return parsed;
+    out.push(parsed);
+  }
+  return out;
 }
 
 // ── Sub-resource routes registered BEFORE `/:hotel/:id` so the fixed segments
@@ -222,14 +304,26 @@ lobbyBarRouter.put(
   }
 );
 
-/** GET the item catalogue + provision rates (view — needed to fill the sale form). */
+/**
+ * GET the item catalogue + provision rates (view — needed to fill the sale form).
+ * Managers additionally receive the "Prodáno" tally: `sold` (units per itemId
+ * since the last reset) and `soldResetAt` (ISO of that reset, or null). These are
+ * omitted for non-managers, who never see the column.
+ */
 lobbyBarRouter.get(
   "/:hotel/items",
   requireAuth,
   requireLobbyBarPerm("view"),
   async (req: AuthRequest, res: Response) => {
-    const cfg = await readConfig(req.params.hotel as HotelSlug);
-    res.json({ items: cfg.items, provisionCZK: cfg.provisionCZK, provisionEUR: cfg.provisionEUR });
+    const hotel = req.params.hotel as HotelSlug;
+    const cfg = await readConfig(hotel);
+    const base = { items: cfg.items, provisionCZK: cfg.provisionCZK, provisionEUR: cfg.provisionEUR };
+    if (!isManage(req, hotel)) {
+      res.json(base);
+      return;
+    }
+    const resetAt = await readSoldResetAt(hotel);
+    res.json({ ...base, sold: await computeSold(hotel, resetAt), soldResetAt: resetAt ? resetAt.toDate().toISOString() : null });
   }
 );
 
@@ -257,6 +351,35 @@ lobbyBarRouter.put(
       after: { count: items.length, provisionCZK, provisionEUR },
     });
     res.json({ items, provisionCZK, provisionEUR });
+  }
+);
+
+/**
+ * POST reset the "Prodáno" tally (lobbyBar.manage). Moves `soldResetAt` to now,
+ * so every per-item count returns to zero and counting restarts from this moment.
+ * Sales are never deleted — only the tally cutoff moves. Returns the fresh (empty)
+ * tally so the client can render zeros without a second round trip.
+ */
+lobbyBarRouter.post(
+  "/:hotel/reset-sold",
+  requireAuth,
+  requireLobbyBarPerm("manage"),
+  async (req: AuthRequest, res: Response) => {
+    const hotel = req.params.hotel as HotelSlug;
+    const before = await readSoldResetAt(hotel);
+    const now = Timestamp.now();
+    await lobbyBarItemsRef(hotel).set(
+      { soldResetAt: now, updatedBy: req.uid, updatedAt: FieldValue.serverTimestamp() },
+      { merge: true }
+    );
+    await logUpdate(ctxFromReq(req), {
+      collection: "lobbyBarItems",
+      resourceId: "soldReset",
+      subResourceId: hotel,
+      before: { soldResetAt: before ? before.toDate().toISOString() : null },
+      after: { soldResetAt: now.toDate().toISOString() },
+    });
+    res.json({ sold: await computeSold(hotel, now), soldResetAt: now.toDate().toISOString() });
   }
 );
 
@@ -315,6 +438,74 @@ lobbyBarRouter.post(
       summary: { date: parsed.date, itemName: parsed.itemName, quantity: parsed.quantity, currency: parsed.currency, price: parsed.price },
     });
     res.json({ id: ref.id, ...saved.data() });
+  }
+);
+
+/**
+ * POST /api/lobby-bar/:hotel/batch — add several sales in one go (lobbyBar.view).
+ *
+ * The body is one shared header (date, currency, employee) plus `lines`
+ * [{ itemId, quantity }]. Each line becomes its own sale document, exactly as if
+ * it had been added one at a time, so the table, totals and per-row edit/delete
+ * are unchanged. Every line is validated first and the writes go out in a single
+ * WriteBatch: either all rows land or none do — a receptionist never has to
+ * guess which half of a round got saved.
+ */
+lobbyBarRouter.post(
+  "/:hotel/batch",
+  requireAuth,
+  requireLobbyBarPerm("view"),
+  // Any rejection here (e.g. a cold Firestore read) is forwarded to the JSON-500
+  // error middleware by the global async-error patch (index.ts →
+  // installAsyncRouteErrorForwarding), so this handler never hangs the request.
+  async (req: AuthRequest, res: Response) => {
+    const hotel = req.params.hotel as HotelSlug;
+    const parsed = parseSaleBatch(req.body, await readConfig(hotel));
+    if ("error" in parsed) {
+      res.status(400).json({ error: parsed.error });
+      return;
+    }
+    if (!isManage(req, hotel) && !inRange(parsed[0].date, await readRange(hotel))) {
+      res.status(403).json({ error: "Datum je mimo povolené období." });
+      return;
+    }
+
+    const batch = db().batch();
+    const refs = parsed.map((sale) => {
+      const ref = lobbyBarCol(hotel).doc();
+      batch.set(ref, {
+        ...sale,
+        createdBy: req.uid,
+        updatedBy: req.uid,
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+      return ref;
+    });
+    await batch.commit();
+
+    // One audit entry per row, matching the single-sale POST: each row is
+    // independently editable/deletable later, so each needs its own resourceId.
+    const ctx = actorCtx(await resolveOnDutyActor(req, hotel));
+    await Promise.all(
+      refs.map((ref, i) =>
+        logCreate(ctx, {
+          collection: "lobbyBarSales",
+          resourceId: ref.id,
+          subResourceId: hotel,
+          summary: {
+            date: parsed[i].date,
+            itemName: parsed[i].itemName,
+            quantity: parsed[i].quantity,
+            currency: parsed[i].currency,
+            price: parsed[i].price,
+          },
+        })
+      )
+    );
+
+    const saved = await Promise.all(refs.map((r) => r.get()));
+    res.json(saved.map((s) => ({ id: s.id, ...s.data() })));
   }
 );
 
