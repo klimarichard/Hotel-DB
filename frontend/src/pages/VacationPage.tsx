@@ -174,10 +174,16 @@ export default function VacationPage() {
   // list forever. `!= null` treats both null and a missing field as "no edit".
   const needsAttention = (r: VacationRequest) =>
     r.status === "pending" || r.pendingEdit != null;
+  // Anything awaiting a decision (a new pending request, or a pendingEdit on an
+  // approved one) sorts to the TOP so reviewers see it first; once approved or
+  // rejected it drops back into its by-date place. Within each group: by start date.
   const futureRequests = requests
     .filter((r) => needsAttention(r) || r.endDate >= todayYMD)
     .slice()
-    .sort((a, b) => a.startDate.localeCompare(b.startDate));
+    .sort((a, b) => {
+      const rank = (needsAttention(a) ? 0 : 1) - (needsAttention(b) ? 0 : 1);
+      return rank !== 0 ? rank : a.startDate.localeCompare(b.startDate);
+    });
   const pastRequests = requests
     .filter((r) => !needsAttention(r) && r.endDate < todayYMD)
     .slice()
