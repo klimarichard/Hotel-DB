@@ -457,6 +457,15 @@ Pojistky: **nemůžete si odebrat vlastní administrátorská práva** a **posle
 
 > **Poznámka:** sloupec **„Typ"** rychle změní typ uživatele přímo v seznamu; tlačítko **„Oprávnění"** umožní navíc doladit jednotlivá práva (typ + individuální výjimky). Skutečná oprávnění uživatele určuje právě tato kombinace.
 
+### Výchozí hotel v Recepci
+
+V dialogu **„Upravit uživatele"** (tlačítko u řádku uživatele) se u uživatelů, kteří mají přístup k **více než jednomu** hotelu v sekci Recepce, zobrazuje pole **„Výchozí hotel v Recepci"** – rozbalovací seznam nabízí pouze hotely, ke kterým daný uživatel má oprávnění, a volbu **„(žádný – naposledy použitý)"** pro zrušení výchozího hotelu.
+
+- Vybraný hotel se uživateli v sekci Recepce otevře jako první – pokud ale přijde na Recepci přes přímý odkaz na konkrétní hotel, ten má vždy přednost.
+- Bez výchozího hotelu (volba „(žádný – naposledy použitý)") se uživateli otevře hotel, který použil naposledy.
+- Uživatel si výchozí hotel může nastavit i sám – tlačítkem u lišty hotelů přímo v Recepci (viz uživatelská příručka v [README](../README.md#recepce-uživatelská-příručka)).
+- U uživatelů s přístupem k nejvýše jednomu hotelu se pole nezobrazuje – u jednoho hotelu nemá výchozí volba smysl.
+
 > 📝 **Zobrazení v seznamu uživatelů:** Jméno propojeného zaměstnance se zobrazuje u každého uživatele vždy. Sloupec *Typ* zobrazuje buď rozbalovací seznam pro změnu typu (pokud máte oprávnění typ měnit), nebo prostý textový popisek aktuálního typu (pokud toto oprávnění nemáte). **Propojení účtu se zaměstnancem** (tlačítko v řádku uživatele) je nově podmíněno samostatným oprávněním **„Propojit zaměstnance s účtem"** — bez tohoto oprávnění tlačítko pro propojení/odpojení nevidíte.
 
 ### Deaktivace uživatele — ihned nebo naplánovaná

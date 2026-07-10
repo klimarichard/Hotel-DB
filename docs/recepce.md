@@ -25,6 +25,87 @@ hotel; visibility is derived purely from the caller's permission set:
   `localStorage` (`recepce.lastHotel`) as the fallback when no `:hotel` param is
   present.
 
+### Per-user default hotel — `users/{uid}.recepceDefaultHotel`
+
+A new optional field, `recepceDefaultHotel: HotelSlug | null`, picks which
+accessible hotel the hub opens on for a given user, ahead of the pre-existing
+last-used fallback. It never grants access on its own.
+
+**Resolution order** (`RecepcePage.tsx`, `selectedHotel`):
+
+1. the URL `:hotel` param, if it names a hotel the user can access;
+2. the user's saved default (`recepceDefaultHotel`) — server-side, so it
+   survives a new browser/device and can't be clobbered by whoever last used a
+   shared reception terminal;
+3. the last-used hotel (`localStorage` `recepce.lastHotel`), for users with no
+   saved default;
+4. the first accessible hotel.
+
+The default is filtered through `hotels` (the caller's `accessibleHotels(can)`
+list) exactly like every other candidate, so it **can never grant access**: a
+stale default left behind by a later permission revoke simply fails the
+`hotels.find((h) => h.slug === defaultHotel)` lookup and resolution falls
+through to the next candidate.
+
+**Two write paths, two validation scopes:**
+
+- **Self-service** — `PUT /api/auth/me/recepce-default` (body `{ hotel:
+  HotelSlug | null }`), `GET /api/auth/me/recepce-default`. Gated by
+  `requireAuth` only, **no permission key** — same precedent as the `theme`
+  preference (a user may only ever set their *own* default). The handler
+  validates the requested slug against the **caller's own** effective
+  permissions (`hotelViewPerm(hotel)` in `req.permissions`, or
+  `system.admin`) and 403s otherwise; `hotel: null` clears it. This path is
+  **not** audit-logged (again mirroring `theme`).
+- **Admin** — `PATCH /api/auth/users/:uid` now also accepts
+  `recepceDefaultHotel` in its body, alongside the existing `name`/`email`
+  fields, gated on the already-required `users.manage`. The handler validates
+  the slug against the **target user's** effective permissions
+  (`resolveEffectivePermissions` over their stored `roleType` +
+  `extraPermissions`/`revokedPermissions` — never the admin's own, since an
+  admin can see every hotel) and 400s otherwise. This path **is**
+  audit-logged (`logUpdate`, before/after including `recepceDefaultHotel`).
+- `recepceDefaultHotel` is **absent-vs-`null` sensitive** on
+  `PATCH /users/:uid`: absent means "leave alone", `null` means "clear",
+  distinguished with `"recepceDefaultHotel" in body`. The frontend
+  (`SettingsPage.tsx`'s `doSaveEdit`) only includes the field when it actually
+  changed — the dropdown doesn't render for a user with fewer than two
+  accessible hotels, so unconditionally sending it would silently clear such a
+  user's default every time an admin edited only their name or e-mail.
+
+**UI:**
+
+- A ★/☆ toggle button on the Recepce hotel bar (`RecepcePage.tsx`), shown only
+  when the user can access more than one hotel — with a single accessible
+  hotel there is nothing to choose between. Toggling calls
+  `authApi.setRecepceDefault(slug | null)` and applies the result optimistically.
+  The default hotel's pill additionally shows a ★ marker.
+- An admin dropdown in Nastavení → Uživatelé → **Upravit uživatele**, labelled
+  "Výchozí hotel v Recepci", listing only the *target* user's accessible
+  hotels (`hotelsFor(u)` in `SettingsPage.tsx` — mirrors the backend's
+  `resolveEffectivePermissions` client-side, purely to decide which options to
+  offer; the backend re-validates on save) plus a "(žádný – naposledy
+  použitý)" option for clearing it. Same >1-hotel gate as the self-service
+  toggle: the field doesn't render at all for a user with 0 or 1 accessible
+  hotels.
+
+**⚠️ Gotcha — read `recepceDefaultHotel` straight from `useAuth` during
+render, never mirror it into local state via `useEffect`.** Effects run
+*after* the render that reads them: on the first render following auth
+resolution, a `useState` mirror seeded by an effect would still be `null`,
+`selectedHotel` would fall through to the last-used hotel, and the
+URL-canonicalizing effect would `navigate()` there before the real default
+ever arrived — a visible flash to the wrong hotel. `RecepcePage.tsx` instead
+reads `recepceDefaultHotel` directly off `useAuth()` and holds only an
+optional `pendingDefault` (`string | null | undefined`) purely as an
+*optimistic override* for the ★ toggle — `undefined` means "no local
+override, use whatever the server holds". This is a concrete instance of the
+general **"`useAuth` is per-component — gate on `loading`"** hazard (each
+`useAuth()` call refetches `/auth/me` starting from an empty/default state; see
+[Auth, Roles & Permissions — Frontend](auth-and-permissions.md#frontend)):
+`RecepcePage` also now early-returns `null` while `authLoading`, for the same
+reason the canonicalizing effect itself is gated on it.
+
 ### Hotel registry — `frontend/src/lib/hotels.ts` (frontend) / `functions/src/services/hotels.ts` (backend)
 
 Both files are the single source of truth for the slug → shift-code → label →

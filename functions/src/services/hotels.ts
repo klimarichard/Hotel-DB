@@ -40,6 +40,11 @@ export function isHotelSlug(value: unknown): value is HotelSlug {
   return typeof value === "string" && (HOTEL_SLUGS as readonly string[]).includes(value);
 }
 
+/** `recepce.<stem>.view` — required to open the hotel at all (its sub-nav pill). */
+export function hotelViewPerm(slug: HotelSlug): string {
+  return `recepce.${SLUG_TO_STEM[slug]}.view`;
+}
+
 /** `recepce.<stem>.protokol.view` — required to READ a hotel's handover protocol. */
 export function handoverViewPerm(slug: HotelSlug): string {
   return `recepce.${SLUG_TO_STEM[slug]}.protokol.view`;

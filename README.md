@@ -63,7 +63,12 @@ Přístup do sekce **Recepce** není vázaný na jednu konkrétní roli — ří
 3. Pod lištou hotelů se zobrazí záložky dostupné pro vybraný hotel — typicky **Předávací protokol**, **Walkiny** a **Taxi**. Nabídka záložek se liší hotel od hotelu podle toho, jaká oprávnění máte.
 4. Kliknutím na záložku otevřete danou sekci.
 
-> 📝 Nemáte-li přístup k žádnému hotelu, zobrazí se hláška „Žádný přístupný hotel" — obraťte se na administrátora.
+**Výchozí hotel** – máte-li přístup k více než jednomu hotelu, vedle lišty hotelů se zobrazuje tlačítko **☆ Nastavit jako výchozí** / **★ Výchozí hotel**. Kliknutím určíte, který hotel se vám má v Recepci otevírat jako první – vybraný hotel je pak v liště označen hvězdičkou ★. Nastavení je uloženo k vašemu účtu, takže platí i po odhlášení nebo na jiném počítači. Administrátor může výchozí hotel nastavit i za vás, v Nastavení → Uživatelé → tlačítko **„Upravit"** u daného uživatele, výběrem z pole **„Výchozí hotel v Recepci"**.
+
+- Přímý odkaz na konkrétní hotel (např. z historie prohlížeče nebo záložky) má vždy přednost před výchozím hotelem.
+- Bez nastaveného výchozího hotelu se vám při vstupu do Recepce otevře naposledy použitý hotel.
+
+> 📝 Nemáte-li přístup k žádnému hotelu, zobrazí se hláška „Žádný přístupný hotel" – obraťte se na administrátora.
 
 ### Předávací protokol
 

@@ -71,6 +71,8 @@ Each user document gains three optional RBAC fields (mirrored as Firebase Auth c
 
 Effective permissions = `roleType.permissions ∪ extraPermissions − revokedPermissions`. The legacy **`role`** field is retained (still drives menu-order config, the sidebar label, and a few inline checks).
 
+`users/{uid}` also carries a handful of self-service/admin preference fields outside the RBAC set above, e.g. `theme: "light" | "dark" | null` and `recepceDefaultHotel: HotelSlug | null` — the hotel the [Recepce](recepce.md#per-user-default-hotel--usersuidrecepcedefaulthotel) hub opens on for this user. Both follow the same shape: a self-service `GET`/`PUT /api/auth/me/*` endpoint gated on `requireAuth` only (no permission key — a user may only ever set their own preference), plus, for `recepceDefaultHotel` only, an admin-side write through `PATCH /api/auth/users/:uid` under the existing `users.manage` gate. See [Auth, Roles & Permissions — Endpoints](auth-and-permissions.md#endpoints).
+
 ---
 
 ## Build Phases
