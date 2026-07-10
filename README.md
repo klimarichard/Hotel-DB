@@ -120,7 +120,7 @@ Předávací protokol eviduje hotovost, účty a poznámky pro jednu konkrétní
 
 - Tlačítkem **Historie** otevřete panel se seznamem provedených změn (kdo, co a kdy změnil) v chronologickém pořadí.
 - Vytvoření protokolu se do historie zapíše jako jediný záznam – „Protokol vytvořen" (u prázdného protokolu), nebo „Protokol vytvořen převzetím z předchozí směny" (u protokolu založeného tlačítkem **Vytvořit protokol pro další směnu**). Tento záznam nejde vrátit tlačítkem **↶ Zpět** – protokol jako celek lze pouze nevratně smazat tlačítkem **Smazat protokol**.
-- Psaní textu (poznámka, název nebo částka účtu) se do historie zapisuje jako **jeden záznam za celou úpravu**, ne po jednotlivých znacích – jedno kliknutí na **↶ Zpět** tak vrátí celou úpravu najednou. Napíšete-li text a poté ho smažete zpět na původní hodnotu, v historii po této úpravě nezůstane žádný záznam.
+- Psaní textu (poznámka, název nebo částka účtu) se do historie zapisuje jako **jeden záznam za celou úpravu**, ne po jednotlivých znacích. Úprava je uzavřena ve chvíli, kdy z pole odejdete – kliknete jinam, přejdete tabulátorem dál, nebo úpravu ukončíte tlačítkem **✓ Hotovo**. Vrátíte-li se do stejného pole později, začíná nová úprava a vznikne nový záznam. Jedno kliknutí na **↶ Zpět** vrátí celou úpravu najednou. Napíšete-li text a poté ho smažete zpět na původní hodnotu, v historii po této úpravě nezůstane žádný záznam.
 - Dokud protokol není podepsaný, jsou k dispozici tlačítka **↶ Zpět** a **↷ Vpřed** – vrátí, respektive znovu provedou poslední změnu. Po podpisu jsou nedostupná pro všechny.
 
 **Tisk**

@@ -136,6 +136,15 @@ function dot(a: [number, number, number], b: [number, number, number]): number {
   return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 }
 
+/**
+ * The client's edit-session token (one focus-to-blur pass over one input). Opaque
+ * to the server — only ever compared for equality against the tip history entry's
+ * — so it just has to be a short, harmless string.
+ */
+function sanitizeEditSession(raw: unknown): string | undefined {
+  return typeof raw === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(raw) ? raw : undefined;
+}
+
 function sanitizeNotes(raw: unknown): NoteRow[] {
   if (!Array.isArray(raw)) return [];
   const out: NoteRow[] = [];
@@ -554,6 +563,7 @@ handoversRouter.put(
       cashCounts?: unknown;
       accounts?: unknown;
       smCounts?: unknown;
+      editSession?: unknown;
     };
 
     if (!isShiftDate(body.shiftDate)) {
@@ -694,7 +704,8 @@ handoversRouter.put(
       readCursor((before as unknown as Record<string, unknown>) ?? undefined),
       changes,
       actor,
-      afterContent
+      afterContent,
+      sanitizeEditSession(body.editSession)
     );
 
     if (!beforeSnap.exists) {

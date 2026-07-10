@@ -301,15 +301,18 @@ not an on-doc array, to avoid O(n) rewrite cost on every save):
   creation and emits Czech-labelled `HandoverChange` records (e.g. `"Poznámka
   změněna: „a“ → „b“"`, `"Hotovost kasa 500 Kč: 3 → 5 ks"`, `"SM počet #1: 10 →
   12"`).
-- **Coalescing free-typing edits.** Content autosaves ~800 ms after the last
-  keystroke, so typing one Poznámka would otherwise produce a fresh history
-  entry per thinking-pause. A save carrying **exactly one** change to a
-  "typing" field (`note.text`, `account.name`, `account.amount`, any `cash`
-  denomination, any `sm` count — `isTypingField()`) is a coalescing candidate:
-  `tryCoalesce()` folds it into the entry at the **tip** of the stack instead of
-  appending a new one, provided the tip is by the same `byUid`, not `undone`,
-  there is no redo tail (`histCursor === histSeq`), and it's within
-  `COALESCE_WINDOW_MS` (2 minutes) of the tip's `at`. Two shapes fold:
+- **Coalescing free-typing edits — gated on focus/blur.** Content autosaves
+  ~800 ms after the last keystroke, so typing one Poznámka would otherwise
+  produce a fresh history entry per thinking-pause. What delimits "one edit" is
+  the client's **`editSession` token**: `HandoverTab.tsx` mints one on `onFocus`
+  of an input and seals it on `onBlur` (`beginEdit`/`endEdit`), sending it on the
+  content `PUT`. A save carrying **exactly one** change to a "typing" field
+  (`note.text`, `account.name`, `account.amount`, any `cash` denomination, any
+  `sm` count — `isTypingField()`) is a coalescing candidate: `tryCoalesce()`
+  folds it into the entry at the **tip** of the stack instead of appending,
+  provided the tip is by the same `byUid`, not `undone`, there is no redo tail
+  (`histCursor === histSeq`), and **`tip.editSession === editSession`**. Two
+  shapes fold:
   - **same field edited again** — the merged entry keeps the tip's *original*
     `before` (so one Undo reverts the whole edit, not just the last keystroke);
     `after` and the label are updated to the new value (`labelFor()` rebuilds the
@@ -318,10 +321,39 @@ not an on-doc array, to avoid O(n) rewrite cost on every save):
   - **a field of the row the tip entry itself just added** — e.g. typing into a
     freshly-added Poznámka's text keeps the whole thing a single `"Přidána
     poznámka…"` entry rather than an "added" entry followed by a "changed" one.
+    This works because the input `autoFocus`es, so the token exists before the
+    row-add's own autosave fires 800 ms later, and both saves carry it.
   - If a fold would return the field to its value **before the tip entry**
-    (typed, then undone by hand within the window), the entry is **deleted
-    outright** and the cursor rewinds to `prevActiveSeq` — "typed it, then
-    deleted it" leaves no trace in the history panel at all.
+    (typed, then deleted back by hand), the entry is **deleted outright** and the
+    cursor rewinds to `prevActiveSeq` — "typed it, then deleted it" leaves no
+    trace in the history panel at all.
+  - A save with **no token** — a checkbox, the pre-signature flush, a bulk sm
+    modal save — never folds. Neither does a save from a different user, even
+    with the same token.
+
+  **Why not a time window.** An earlier revision keyed coalescing on a 2-minute
+  window instead of the token. A timer necessarily guesses: a slow typist pausing
+  three minutes mid-sentence got two entries, while a typo fixed ninety seconds
+  after finishing got merged into the original. Focus/blur knows exactly what the
+  timer was estimating. `COALESCE_MAX_AGE_MS` (12 h) survives only as a sanity
+  bound, so a replayed or hung token cannot rewrite a long-settled entry.
+
+  **Why the entry is not withheld until blur.** The obvious reading of "one entry
+  per edit" is to write nothing until the field is left. That cannot be done
+  safely: the 800 ms autosave exists so a closed tab never loses text, and the
+  `history` subcollection *is* the undo stack. Withholding the entry would let the
+  content advance while history and undo silently forgot the change ever happened.
+  So the entry is created on the first autosave and **updated in place**; blur
+  seals it. Visible only if the history panel is open in another window while
+  typing; the end state is identical.
+
+  The token is `${clientId}-${n}` (a per-mount UUID plus a counter), so two tabs
+  of the same user cannot collide. A sealed session is marked `closed` rather than
+  dropped — if `endEdit`'s immediate flush loses a race with a save already in
+  flight, the straggler autosave that follows still carries the token and folds,
+  instead of opening a second entry. The token is discarded once a save carrying
+  a closed session succeeds, so a later unrelated single-change save cannot
+  inherit it.
   - A save carrying more than one change (a bulk edit — paste, or an add+remove
     in one flush) is never a coalescing candidate, only a single-change save is.
 - **Undo/redo is a command-pattern cursor** (`histCursor`/`histSeq` on the parent

@@ -597,6 +597,13 @@ function ProtocolEditor({
   const savedPayloadRef = useRef<string>(JSON.stringify(toPayload([], emptyCashCounts(), [], [0, 0, 0])));
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isSavingRef = useRef(false);
+  // The input currently being typed into, if any (see beginEdit/endEdit). `key`
+  // identifies the field so re-focusing the same one after a blur still mints a
+  // new token; `id` is what the server matches on and must be unique per client,
+  // since two tabs of the same user would otherwise collide.
+  const editRef = useRef<{ key: string; id: string; closed: boolean } | null>(null);
+  const editSeqRef = useRef(0);
+  const clientIdRef = useRef(genId());
   // Latest values mirrored into refs so the change-detection poll can read them
   // without re-subscribing its interval/listeners on every keystroke.
   const loadedRef = useRef<Handover | null>(null);
@@ -772,6 +779,36 @@ function ProtocolEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [notes, cashCounts, accounts, smCounts, loading, loaded, dirty, canEdit, externalChange]);
 
+  // ── Edit sessions (history coalescing) ─────────────────────────────────────
+  // One token per focus-to-blur pass over one input. The server folds successive
+  // autosaves carrying the same token into a single history entry, so typing a
+  // poznámka leaves one entry rather than one per 800 ms pause — see
+  // `tryCoalesce` in functions/src/services/handoverHistory.ts.
+  //
+  // A blurred session is marked `closed`, NOT dropped: if the flush below loses a
+  // race with a save already in flight, the straggler autosave that follows must
+  // still carry the token and fold, rather than opening a second entry. Only a
+  // fresh focus mints a new token.
+  function beginEdit(key: string) {
+    const cur = editRef.current;
+    if (cur && !cur.closed && cur.key === key) return;
+    endEdit();
+    editSeqRef.current += 1;
+    editRef.current = { key, id: `${clientIdRef.current}-${editSeqRef.current}`, closed: false };
+  }
+
+  /** Seal the current session and push the final value out without waiting 800 ms. */
+  function endEdit() {
+    const sess = editRef.current;
+    if (!sess || sess.closed) return;
+    sess.closed = true;
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    if (dirtyRef.current && canEdit && !externalRef.current) void save();
+  }
+
   async function save(): Promise<boolean> {
     if (isSavingRef.current) return false;
     isSavingRef.current = true;
@@ -786,10 +823,15 @@ function ProtocolEditor({
         // rejects the save (409) if the stored doc has moved since, rather than
         // silently overwriting a colleague's edit.
         baseUpdatedAt: tsMillis(loaded?.updatedAt),
+        editSession: editRef.current?.id ?? null,
       });
       setLoaded(saved);
       savedPayloadRef.current = JSON.stringify(payload);
       setAutosaveError(null);
+      // A sealed session has now reached the server, stragglers included. Drop the
+      // token so a later, unrelated single-change save can't inherit it and fold
+      // into the entry this session produced. A failed save keeps it, to retry.
+      if (editRef.current?.closed) editRef.current = null;
       return true;
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
@@ -1453,6 +1495,8 @@ function ProtocolEditor({
                         className={styles.cashInput}
                         value={ks === 0 ? "" : ks}
                         onChange={(e) => setDenomCount(drawer, d, Number(e.target.value))}
+                        onFocus={() => beginEdit(`cash:${drawer}:${d}`)}
+                        onBlur={endEdit}
                         placeholder="0"
                         disabled={!canEdit}
                       />
@@ -1561,6 +1605,8 @@ function ProtocolEditor({
                           className={styles.accountName}
                           value={acc.name}
                           onChange={(e) => setAccountName(idx, e.target.value)}
+                          onFocus={() => beginEdit(`acct:${acc.id}:name`)}
+                          onBlur={endEdit}
                           placeholder="Název (např. Květiny)"
                           autoFocus
                         />
@@ -1576,6 +1622,8 @@ function ProtocolEditor({
                           className={styles.accountAmount}
                           value={acc.amount === 0 ? "" : acc.amount}
                           onChange={(e) => setAccountAmount(idx, Number(e.target.value))}
+                          onFocus={() => beginEdit(`acct:${acc.id}:amount`)}
+                          onBlur={endEdit}
                           placeholder="0"
                         />
                       ) : (
@@ -1650,6 +1698,8 @@ function ProtocolEditor({
                         className={n.done ? `${styles.noteText} ${styles.noteTextDone}` : styles.noteText}
                         value={n.text}
                         onChange={(e) => setNoteText(i, e.target.value)}
+                        onFocus={() => beginEdit(`note:${n.id}:text`)}
+                        onBlur={endEdit}
                         placeholder="Poznámka…"
                         autoFocus
                       />
