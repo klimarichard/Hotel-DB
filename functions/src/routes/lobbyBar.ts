@@ -137,36 +137,79 @@ interface ParsedSale {
   doSpolecne: number;
 }
 
-/**
- * Validate + normalize a sale body against the CURRENT catalogue. The item name
- * and every money field are computed/snapshotted server-side here — client-sent
- * money is never trusted. Returns { error } on the first problem.
- */
-function parseSale(raw: unknown, cfg: LobbyBarConfig): ParsedSale | { error: string } {
-  const b = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+/** The fields a sale shares with its siblings when several are added at once. */
+interface SaleHeader {
+  date: string;
+  currency: Currency;
+  employeeId: string;
+  employeeName: string;
+}
+
+/** Upper bound on lines in one batch — well under Firestore's 500-op WriteBatch limit. */
+const MAX_BATCH_LINES = 50;
+
+/** Validate the date / currency / employee shared by every row of a sale. */
+function parseHeader(b: Record<string, unknown>): SaleHeader | { error: string } {
   if (!isDateStr(b.date)) return { error: "Neplatné datum (YYYY-MM-DD)." };
+  if (!isCurrency(b.currency)) return { error: "Neplatná měna." };
+  const employeeId = typeof b.employeeId === "string" ? b.employeeId.trim() : "";
+  if (employeeId === "") return { error: "Vyberte zaměstnance." };
+  return {
+    date: b.date as string,
+    currency: b.currency,
+    employeeId,
+    employeeName: typeof b.employeeName === "string" ? b.employeeName.trim() : "",
+  };
+}
+
+/**
+ * Resolve one { itemId, quantity } line against the CURRENT catalogue. The item
+ * name and every money field are computed/snapshotted server-side here —
+ * client-sent money is never trusted.
+ */
+function parseLine(raw: unknown, header: SaleHeader, cfg: LobbyBarConfig): ParsedSale | { error: string } {
+  const b = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const itemId = typeof b.itemId === "string" ? b.itemId.trim() : "";
   const item = cfg.items.find((i) => i.id === itemId);
   if (!item) return { error: "Neznámá položka." };
   const quantity =
     typeof b.quantity === "number" && Number.isInteger(b.quantity) && b.quantity >= 1 ? b.quantity : NaN;
   if (!Number.isFinite(quantity)) return { error: "Neplatný počet." };
-  if (!isCurrency(b.currency)) return { error: "Neplatná měna." };
-  const employeeId = typeof b.employeeId === "string" ? b.employeeId.trim() : "";
-  if (employeeId === "") return { error: "Vyberte zaměstnance." };
-  const employeeName = typeof b.employeeName === "string" ? b.employeeName.trim() : "";
-
-  const money = computeSale(item, quantity, b.currency, cfg);
   return {
-    date: b.date as string,
+    ...header,
     itemId: item.id,
     itemName: item.name,
     quantity,
-    currency: b.currency,
-    employeeId,
-    employeeName,
-    ...money,
+    ...computeSale(item, quantity, header.currency, cfg),
   };
+}
+
+/** Validate + normalize a single-sale body (POST / PUT of one row). */
+function parseSale(raw: unknown, cfg: LobbyBarConfig): ParsedSale | { error: string } {
+  const b = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const header = parseHeader(b);
+  if ("error" in header) return header;
+  return parseLine(b, header, cfg);
+}
+
+/**
+ * Validate + normalize a multi-line sale body: one shared header plus N
+ * { itemId, quantity } lines. Every line is resolved BEFORE anything is written,
+ * so a bad line aborts the whole batch instead of half-saving it.
+ */
+function parseSaleBatch(raw: unknown, cfg: LobbyBarConfig): ParsedSale[] | { error: string } {
+  const b = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const header = parseHeader(b);
+  if ("error" in header) return header;
+  if (!Array.isArray(b.lines) || b.lines.length === 0) return { error: "Přidejte alespoň jednu položku." };
+  if (b.lines.length > MAX_BATCH_LINES) return { error: `Najednou lze uložit nejvýše ${MAX_BATCH_LINES} položek.` };
+  const out: ParsedSale[] = [];
+  for (const line of b.lines) {
+    const parsed = parseLine(line, header, cfg);
+    if ("error" in parsed) return parsed;
+    out.push(parsed);
+  }
+  return out;
 }
 
 // ── Sub-resource routes registered BEFORE `/:hotel/:id` so the fixed segments
@@ -315,6 +358,71 @@ lobbyBarRouter.post(
       summary: { date: parsed.date, itemName: parsed.itemName, quantity: parsed.quantity, currency: parsed.currency, price: parsed.price },
     });
     res.json({ id: ref.id, ...saved.data() });
+  }
+);
+
+/**
+ * POST /api/lobby-bar/:hotel/batch — add several sales in one go (lobbyBar.view).
+ *
+ * The body is one shared header (date, currency, employee) plus `lines`
+ * [{ itemId, quantity }]. Each line becomes its own sale document, exactly as if
+ * it had been added one at a time, so the table, totals and per-row edit/delete
+ * are unchanged. Every line is validated first and the writes go out in a single
+ * WriteBatch: either all rows land or none do — a receptionist never has to
+ * guess which half of a round got saved.
+ */
+lobbyBarRouter.post(
+  "/:hotel/batch",
+  requireAuth,
+  requireLobbyBarPerm("view"),
+  async (req: AuthRequest, res: Response) => {
+    const hotel = req.params.hotel as HotelSlug;
+    const parsed = parseSaleBatch(req.body, await readConfig(hotel));
+    if ("error" in parsed) {
+      res.status(400).json({ error: parsed.error });
+      return;
+    }
+    if (!isManage(req, hotel) && !inRange(parsed[0].date, await readRange(hotel))) {
+      res.status(403).json({ error: "Datum je mimo povolené období." });
+      return;
+    }
+
+    const batch = db().batch();
+    const refs = parsed.map((sale) => {
+      const ref = lobbyBarCol(hotel).doc();
+      batch.set(ref, {
+        ...sale,
+        createdBy: req.uid,
+        updatedBy: req.uid,
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+      return ref;
+    });
+    await batch.commit();
+
+    // One audit entry per row, matching the single-sale POST: each row is
+    // independently editable/deletable later, so each needs its own resourceId.
+    const ctx = actorCtx(await resolveOnDutyActor(req, hotel));
+    await Promise.all(
+      refs.map((ref, i) =>
+        logCreate(ctx, {
+          collection: "lobbyBarSales",
+          resourceId: ref.id,
+          subResourceId: hotel,
+          summary: {
+            date: parsed[i].date,
+            itemName: parsed[i].itemName,
+            quantity: parsed[i].quantity,
+            currency: parsed[i].currency,
+            price: parsed[i].price,
+          },
+        })
+      )
+    );
+
+    const saved = await Promise.all(refs.map((r) => r.get()));
+    res.json(saved.map((s) => ({ id: s.id, ...s.data() })));
   }
 );
 
