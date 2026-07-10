@@ -182,7 +182,8 @@ Záložka **Lobby bar** (jen hotel **Ambiance**) eviduje prodeje z lobby baru.
 - Koruny a eura se mezi sebou nikdy nepřepočítávají – prodej zadaný v eurech se celý počítá v eurech.
 - Vpravo je panel **Ceník položek** – u každé položky je uvedena cena v Kč i v €. Uživatelé s oprávněním **„Spravovat lobby bar"** zde tlačítkem **Upravit** otevřou editaci ceníku, včetně sazeb provize.
 - Změna ceníku **neovlivní už zapsané prodeje** – u nich zůstává v platnosti cena, která platila v okamžiku prodeje.
-- Uživatelé s oprávněním **„Spravovat lobby bar"** navíc nastavují **viditelné období** a vidí nad tabulkou souhrny provize a částky do společné, samostatně pro koruny a eura.
+- Uživatelé s oprávněním **„Spravovat lobby bar"** navíc v ceníku vidí sloupec **Prodáno** – u každé položky je součet prodaných kusů. Vedle tlačítka **Upravit** je červené tlačítko **Reset**: po potvrzení se všechna čísla ve sloupci **Prodáno** vynulují a počítání začne znovu od té chvíle. **Zapsané prodeje se nesmažou** – jen se posune okamžik, od kterého se počítá.
+- Uživatelé s oprávněním **„Spravovat lobby bar"** také nastavují **viditelné období** a vidí nad tabulkou souhrny provize a částky do společné, samostatně pro koruny a eura.
 
 > 📷 *(Místo pro snímek obrazovky: Lobby bar – tabulka prodejů a ceník položek)*
 
@@ -191,7 +192,8 @@ Záložka **Lobby bar** (jen hotel **Ambiance**) eviduje prodeje z lobby baru.
 Záložka **Terminál** (jen hotel **Amigo & Alqush**) eviduje platby z platebního terminálu.
 
 - Tabulka zobrazuje **datum, částku, typ** a **poznámku**; uživatelům s oprávněním **„Spravovat terminál"** se navíc zobrazí sloupec **Předáno**.
-- Novou platbu přidáte tlačítkem **+ Přidat platbu**: zadáte **datum**, **částku** v korunách a **typ** transakce – **late C/O**, **laundry**, **snídaně**, **extra bed**, **parking**, **tour**, nebo **„Jiné…"**. U volby **„Jiné…"** je **poznámka povinná** – popíšete v ní, o jakou platbu šlo, jinak by to z tabulky nešlo poznat. U ostatních typů je poznámka nepovinná.
+- Novou platbu přidáte tlačítkem **+ Přidat platbu**: zadáte **datum**, **částku** v korunách a **typ** transakce z nabídky. U volby **„Jiné…"** je **poznámka povinná** – popíšete v ní, o jakou platbu šlo, jinak by to z tabulky nešlo poznat. U ostatních typů je poznámka nepovinná.
+- **Nabídku typů si spravují sami** uživatelé s oprávněním **„Spravovat terminál"**: tlačítkem **Upravit typy plateb** otevřou editor, kde mohou typy **přidávat, přejmenovávat, mazat a přeřazovat**. Typ **„Jiné…"** je vždy k dispozici a nelze jej odstranit. Přejmenování nebo smazání typu **neovlivní už zapsané platby** – u nich zůstane název, který platil v okamžiku zápisu.
 - Sloupec **Předáno** se zaškrtávacím políčkem vidí a mění jen uživatelé s oprávněním **„Spravovat terminál"** – zaznamená se, kdo a kdy platbu předal.
 - Uživatelé s oprávněním **„Spravovat terminál"** také nastavují **viditelné období**.
 
