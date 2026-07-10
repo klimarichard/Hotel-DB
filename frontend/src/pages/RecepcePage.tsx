@@ -165,7 +165,6 @@ export default function RecepcePage() {
               size="sm"
               onClick={toggleDefault}
               disabled={savingDefault}
-              data-tour="recepce-default-hotel"
               title="Tento hotel se otevře, kdykoliv kliknete na Recepci"
             >
               {defaultHotel === selectedHotel.slug ? "★ Výchozí hotel" : "☆ Nastavit jako výchozí"}
