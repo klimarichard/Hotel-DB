@@ -81,6 +81,12 @@ export interface HistoryEntry extends HandoverChange {
    */
   viaUid?: string;
   viaEmail?: string;
+  /**
+   * The client's edit session that produced this entry — one focus-to-blur pass
+   * over a single input. Successive autosaves carrying the same token fold into
+   * this entry rather than appending. Absent on entries not born of typing.
+   */
+  editSession?: string;
 }
 
 /** Who a history entry is attributed to (see `viaUid` above). */
@@ -409,13 +415,26 @@ export function readCursor(doc: Record<string, unknown> | undefined): CursorStat
 // ─── Coalescing ──────────────────────────────────────────────────────────────
 //
 // Content is autosaved ~800 ms after the last keystroke, so typing one poznámka
-// produces a save (and therefore a history entry) per thinking pause. Rather than
-// delay the save — which would risk losing text — successive saves that keep
-// editing the SAME field are folded into the entry already at the tip of the
-// stack. The merged entry keeps the OLDEST `before`, so one undo reverts the
-// whole edit, and the label is rebuilt to describe it end to end.
+// produces a save (and therefore a history entry) per thinking pause. Delaying
+// the save until the user finishes is not an option — a closed tab would lose
+// the text, and the history subcollection doubles as the undo stack, so it may
+// never fall behind the content. Instead successive saves that keep editing the
+// SAME field are folded into the entry already at the tip of the stack. The
+// merged entry keeps the OLDEST `before`, so one undo reverts the whole edit,
+// and the label is rebuilt to describe it end to end.
+//
+// What delimits "the same edit" is the client's `editSession` token: one token
+// per focus-to-blur pass over one input (see HandoverTab.tsx). Blur seals the
+// entry; the next focus mints a new token and therefore a new entry. This is
+// strictly better than a time window, which would split a slow typist's pause
+// into two entries and merge a typo fix made moments after finishing.
 
-const COALESCE_WINDOW_MS = 2 * 60 * 1000;
+/**
+ * Upper bound on how old the tip may be to still be folded into. The session
+ * token is the real rule; this only stops a replayed or hung token from
+ * rewriting a long-settled entry.
+ */
+const COALESCE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 
 /** Free-typing fields: repeated edits within the window are one logical edit. */
 function isTypingField(t: ChangeTarget): boolean {
@@ -464,6 +483,10 @@ async function tipEntry(hotel: HotelSlug, id: string, cursor: CursorState): Prom
  *
  * A fold that returns a field to its original value deletes the entry outright
  * and rewinds the cursor, so "typed it, then deleted it" leaves no trace.
+ *
+ * Folding requires the caller's `editSession` to match the tip's: the same
+ * uninterrupted focus on the same input. Without a token (a save not driven by
+ * typing — a checkbox, a signature flush, an older client) nothing folds.
  */
 async function tryCoalesce(
   hotel: HotelSlug,
@@ -472,13 +495,16 @@ async function tryCoalesce(
   change: HandoverChange,
   actor: HistoryActor,
   now: Timestamp,
-  content?: HandoverContent
+  content?: HandoverContent,
+  editSession?: string
 ): Promise<CursorState | null> {
+  if (!editSession) return null;
   if (!isTypingField(change.target)) return null;
   const tip = await tipEntry(hotel, id, cursor);
   if (!tip || tip.undone) return null;
   if (tip.byUid !== actor.uid) return null;
-  if (now.toMillis() - tip.at.toMillis() > COALESCE_WINDOW_MS) return null;
+  if (tip.editSession !== editSession) return null;
+  if (now.toMillis() - tip.at.toMillis() > COALESCE_MAX_AGE_MS) return null;
 
   const col = historyCol(hotel, id);
   const ref = col.doc(String(tip.seq).padStart(9, "0"));
@@ -523,6 +549,9 @@ async function tryCoalesce(
  *
  * A save carrying exactly ONE change is a candidate for coalescing into the tip
  * entry (see tryCoalesce) — a multi-change save is a bulk edit, never typing.
+ * `editSession` is the client's focus-to-blur token for the input being typed
+ * into; it both gates the fold and is stamped on the entry so the next save of
+ * the same session can find it.
  */
 export async function appendHistory(
   hotel: HotelSlug,
@@ -530,13 +559,14 @@ export async function appendHistory(
   cursor: CursorState,
   changes: HandoverChange[],
   actor: HistoryActor,
-  content?: HandoverContent
+  content?: HandoverContent,
+  editSession?: string
 ): Promise<CursorState> {
   if (changes.length === 0) return cursor;
 
   const at = Timestamp.fromDate(clock.now());
   if (changes.length === 1) {
-    const folded = await tryCoalesce(hotel, id, cursor, changes[0], actor, at, content);
+    const folded = await tryCoalesce(hotel, id, cursor, changes[0], actor, at, content, editSession);
     if (folded) return folded;
   }
 
@@ -560,6 +590,9 @@ export async function appendHistory(
       byEmail: actor.email,
       undone: false,
       ...(actor.viaUid ? { viaUid: actor.viaUid, viaEmail: actor.viaEmail ?? "" } : {}),
+      // Stamped on every change of the save, so that a row-add followed by
+      // typing into that row folds together (shape 2 in tryCoalesce).
+      ...(editSession ? { editSession } : {}),
     };
     batch.set(col.doc(String(seq).padStart(9, "0")), entry);
   }
