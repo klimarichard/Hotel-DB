@@ -5,7 +5,8 @@ import { requireAuth, AuthRequest } from "../middleware/auth";
 import { ctxFromReq, logCreate, logUpdate, logDelete } from "../services/auditLog";
 import { actorCtx, resolveOnDutyActor } from "../services/recepceActor";
 import { isHotelSlug, HotelSlug, lobbyBarViewPerm, lobbyBarManagePerm } from "../services/hotels";
-import { listRecepceEmployees, todayPrague } from "../services/recepceEmployees";
+import { listRecepceEmployees, todayPrague, currentReceptionShiftPrague } from "../services/recepceEmployees";
+import { scheduledEmployeeId } from "../services/scheduleLookup";
 import {
   LobbyBarConfig,
   LobbyBarItem,
@@ -254,13 +255,24 @@ function parseSaleBatch(raw: unknown, cfg: LobbyBarConfig): ParsedSale[] | { err
 // ── Sub-resource routes registered BEFORE `/:hotel/:id` so the fixed segments
 //    ("employees", "range", "items") aren't swallowed by the :id param. ─────────
 
-/** GET the "who sold this" employee dropdown for the entry's month. */
+/**
+ * GET the "who sold this" employee dropdown for the entry's month, plus
+ * `onShiftEmployeeId` — whoever is scheduled for the reception shift happening now
+ * (independent of the queried `date`), so a new sale defaults to the person at the
+ * desk. Null when nobody is scheduled / there's no plan.
+ */
 lobbyBarRouter.get(
   "/:hotel/employees",
   requireAuth,
   requireLobbyBarPerm("view"),
   async (req: AuthRequest, res: Response) => {
-    res.json(await listRecepceEmployees(isDateStr(req.query.date) ? (req.query.date as string) : todayPrague()));
+    const hotel = req.params.hotel as HotelSlug;
+    const dateStr = isDateStr(req.query.date) ? (req.query.date as string) : todayPrague();
+    const cur = currentReceptionShiftPrague();
+    res.json({
+      employees: await listRecepceEmployees(dateStr),
+      onShiftEmployeeId: await scheduledEmployeeId(hotel, cur.date, cur.shift),
+    });
   }
 );
 
