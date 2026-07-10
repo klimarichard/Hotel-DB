@@ -146,6 +146,8 @@ export default function App() {
         <Route path="napoveda/ukazka-protokol-podepsany" element={<TourDemoRoute scenario="protokol-signed"><RecepceDemoPage tab="protokol" key="demo-protokol-signed" /></TourDemoRoute>} />
         <Route path="napoveda/ukazka-walkiny" element={<TourDemoRoute scenario="walkiny"><RecepceDemoPage tab="walkiny" key="demo-walkiny" /></TourDemoRoute>} />
         <Route path="napoveda/ukazka-taxi" element={<TourDemoRoute scenario="taxi"><RecepceDemoPage tab="taxi" key="demo-taxi" /></TourDemoRoute>} />
+        <Route path="napoveda/ukazka-lobby-bar" element={<TourDemoRoute scenario="lobby-bar"><RecepceDemoPage tab="lobbyBar" key="demo-lobby-bar" /></TourDemoRoute>} />
+        <Route path="napoveda/ukazka-terminal" element={<TourDemoRoute scenario="terminal"><RecepceDemoPage tab="terminal" key="demo-terminal" /></TourDemoRoute>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

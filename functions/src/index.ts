@@ -28,6 +28,8 @@ import { handoversRouter } from "./routes/handovers";
 import { handoverWarningsRouter } from "./routes/handoverWarnings";
 import { walkinsRouter } from "./routes/walkins";
 import { taxiRouter } from "./routes/taxi";
+import { lobbyBarRouter } from "./routes/lobbyBar";
+import { terminalRouter } from "./routes/terminal";
 import * as clock from "./services/clock";
 import { requireAuth, AuthRequest } from "./middleware/auth";
 import { requirePermission } from "./auth/permissions";
@@ -120,6 +122,8 @@ app.use("/handovers", handoversRouter);
 app.use("/handover-warnings", handoverWarningsRouter);
 app.use("/walkins", walkinsRouter);
 app.use("/taxi", taxiRouter);
+app.use("/lobby-bar", lobbyBarRouter);
+app.use("/terminal", terminalRouter);
 
 // Health check
 app.get("/health", (_req, res) => {

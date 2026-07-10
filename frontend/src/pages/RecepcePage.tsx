@@ -219,9 +219,9 @@ function TabBody({ hotel, tab }: { hotel: Hotel; tab: TabId }) {
     case "taxi":
       return <TaxiTab hotel={hotel} />;
     case "lobbyBar":
-      return <LobbyBarTab />;
+      return <LobbyBarTab hotel={hotel} />;
     case "terminal":
-      return <TerminalTab />;
+      return <TerminalTab hotel={hotel} />;
     default:
       return null;
   }
