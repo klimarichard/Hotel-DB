@@ -746,10 +746,13 @@ function walkinsFixture(
   if (clean.endsWith("/employees")) {
     return {
       hit: true,
-      value: [
-        { employeeId: "demo-e1", name: "Nováková Jana" },
-        { employeeId: "demo-e2", name: "Svoboda Petr" },
-      ],
+      value: {
+        employees: [
+          { employeeId: "demo-e1", name: "Nováková Jana" },
+          { employeeId: "demo-e2", name: "Svoboda Petr" },
+        ],
+        onShiftEmployeeId: "demo-e1",
+      },
     };
   }
   // List: /walkins/{slug}
@@ -814,10 +817,13 @@ function lobbyBarFixture(
   if (clean.endsWith("/employees")) {
     return {
       hit: true,
-      value: [
-        { employeeId: "demo-e1", name: "Nováková Jana" },
-        { employeeId: "demo-e2", name: "Svoboda Petr" },
-      ],
+      value: {
+        employees: [
+          { employeeId: "demo-e1", name: "Nováková Jana" },
+          { employeeId: "demo-e2", name: "Svoboda Petr" },
+        ],
+        onShiftEmployeeId: "demo-e1",
+      },
     };
   }
   // List: /lobby-bar/{slug}. Money mirrors the server: price = qty·unit,

@@ -598,6 +598,19 @@ shared `functions/src/services/recepceEmployees.ts`, not duplicated in
 same "who's on shift this month, falling back to reception-position employees"
 pool, so both routers import the one implementation.
 
+**Default to who's on shift now.** The `/employees` response is
+`{ employees, onShiftEmployeeId }`. `onShiftEmployeeId` is whoever is scheduled
+for the reception shift happening **right now** — `scheduledEmployeeId(hotel,
+currentReceptionShiftPrague())`, where the current shift is today + den/noc by the
+Prague hour (den 07:00–18:59, else noc), mirroring the protokol page's
+`defaultShiftForNow`. It is computed from `clock.now()` and is **independent of the
+queried `date`**, so it always names the person at the desk. The Walkiny/Lobby-bar
+add modals pre-select it for a **new** entry (once, only if that person is in the
+pool); editing an existing entry never changes the employee. `scheduledEmployeeId`
+is the login-free half of `scheduledSigner` (`scheduleLookup.ts`) — the handover
+sign modal reuses the same lookup, so both default to the same person. Null (left
+blank) when no one is scheduled or there's no plan.
+
 ## Taxi
 
 `frontend/src/pages/recepce/TaxiTab.tsx`, `functions/src/routes/taxi.ts` +
@@ -792,8 +805,10 @@ PUT response and the next reload.
 ### "Prodal" employee dropdown
 
 `GET /lobby-bar/:hotel/employees?date=` — identical pool/fallback logic to
-Walkiny's dropdown, via the shared `listRecepceEmployees()` (see "Employee
-dropdown" under Walkiny above).
+Walkiny's dropdown, and the same `{ employees, onShiftEmployeeId }` shape with the
+**"default to who's on shift now"** pre-selection, via the shared
+`listRecepceEmployees()` + `scheduledEmployeeId()` (see "Employee dropdown" under
+Walkiny above).
 
 ### Manager-only totals
 

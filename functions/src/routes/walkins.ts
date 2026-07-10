@@ -4,7 +4,8 @@ import { requireAuth, AuthRequest } from "../middleware/auth";
 import { ctxFromReq, logCreate, logUpdate, logDelete } from "../services/auditLog";
 import { actorCtx, resolveOnDutyActor } from "../services/recepceActor";
 import { isHotelSlug, HotelSlug, walkinViewPerm, walkinManagePerm } from "../services/hotels";
-import { listRecepceEmployees, todayPrague } from "../services/recepceEmployees";
+import { listRecepceEmployees, todayPrague, currentReceptionShiftPrague } from "../services/recepceEmployees";
+import { scheduledEmployeeId } from "../services/scheduleLookup";
 import {
   WalkinDoc,
   WalkinRange,
@@ -93,15 +94,23 @@ walkinsRouter.use("/:hotel", validateHotelParam);
 /**
  * GET /api/walkins/:hotel/employees?date=YYYY-MM-DD
  * Everyone in that date's month shift plan (active planEmployees), deduped by
- * employeeId. Empty when the month has no plan. Registered BEFORE `/:hotel/:id`.
+ * employeeId, plus `onShiftEmployeeId` — whoever is scheduled for the reception
+ * shift happening now (independent of the queried `date`), so a new walk-in
+ * defaults to the person at the desk. Null when nobody is scheduled / no plan.
+ * Registered BEFORE `/:hotel/:id`.
  */
 walkinsRouter.get(
   "/:hotel/employees",
   requireAuth,
   requireWalkinPerm("view"),
   async (req: AuthRequest, res: Response) => {
+    const hotel = req.params.hotel as HotelSlug;
     const dateStr = isDateStr(req.query.date) ? (req.query.date as string) : todayPrague();
-    res.json(await listRecepceEmployees(dateStr));
+    const cur = currentReceptionShiftPrague();
+    res.json({
+      employees: await listRecepceEmployees(dateStr),
+      onShiftEmployeeId: await scheduledEmployeeId(hotel, cur.date, cur.shift),
+    });
   }
 );
 

@@ -143,7 +143,7 @@ Předávací protokol eviduje hotovost, účty a poznámky pro jednu konkrétní
 Záložka **Walkiny** eviduje prodeje typu „walk-in" — zákazník bez rezervace přijde přímo na recepci.
 
 - Tabulka zobrazuje **datum**, **zaměstnance**, **číslo rezervace v Protelu** a **částku** (v Kč nebo €), řazeno od nejnovějšího záznamu.
-- Nový záznam přidáte tlačítkem **+ Přidat walk-in**: vyberete **datum**, **zaměstnance** (nabídka se plní ze zaměstnanců naplánovaných na směnu ve zvoleném měsíci), zadáte **číslo rezervace**, **částku** a **měnu**.
+- Nový záznam přidáte tlačítkem **+ Přidat walk-in**: vyberete **datum**, **zaměstnance** (nabídka se plní ze zaměstnanců naplánovaných na směnu ve zvoleném měsíci), zadáte **číslo rezervace**, **částku** a **měnu**. Pole **zaměstnanec** se předvyplní tím, kdo má právě teď službu na recepci daného hotelu (stejně jako se v Předávacím protokolu předvyplňuje podpis) — v případě potřeby jej lze změnit.
 - Existující záznam upravíte nebo smažete ikonami tužky a koše u řádku.
 - Uživatelé s oprávněním **Spravovat walkiny** navíc nastavují **viditelné období** (rozsah od–do) — tím určují, jaké datum smí ostatní uživatelé zadat a jaké záznamy vidí. Bez tohoto oprávnění vidíte jen informační řádek s aktuálně nastaveným obdobím.
 
@@ -170,7 +170,7 @@ Záložka **Taxi** eviduje objednané taxi jízdy hotelových hostů včetně pr
 Záložka **Lobby bar** (jen hotel **Ambiance**) eviduje prodeje z lobby baru.
 
 - Tabulka zobrazuje **datum, položku, počet, měnu, kdo prodal, cenu, provizi** a **částku do společné**, řazeno od nejnovějšího záznamu.
-- Nový prodej přidáte tlačítkem **+ Přidat prodej**: nahoře zvolíte **datum** a kdo **prodal** – tyto údaje platí pro celý prodej. Pod nimi vyplníte jednotlivé položky, u každé **položku** z ceníku, **počet** kusů a **měnu** (Kč nebo €).
+- Nový prodej přidáte tlačítkem **+ Přidat prodej**: nahoře zvolíte **datum** a kdo **prodal** – tyto údaje platí pro celý prodej. Pole **Prodal** se předvyplní tím, kdo má právě teď službu na recepci (stejně jako podpis v Předávacím protokolu); lze jej změnit. Pod nimi vyplníte jednotlivé položky, u každé **položku** z ceníku, **počet** kusů a **měnu** (Kč nebo €).
 - **Jedním prodejem lze zapsat i více položek najednou** (např. 2× pivo a 1× víno pro stejného hosta). Tlačítkem **+ Přidat položku** přidáte další řádek, ikonou koše řádek odeberete.
 - **Měna se volí u každé položky zvlášť**, takže v jednom prodeji můžete mít část v korunách a část v eurech. Náhled dole ukazuje celkovou cenu, provizi a částku do společné **odděleně za koruny a za eura** – měny se nikdy nesčítají dohromady.
   - Po uložení se **každá položka zapíše do tabulky jako samostatný řádek**, takže ji lze později zvlášť upravit nebo smazat. Buď se uloží všechny řádky, nebo (při chybě) žádný – nikdy jen část.

@@ -8,6 +8,8 @@
  * position, so a fresh month is never a dropdown with nothing in it.
  */
 import * as admin from "firebase-admin";
+import * as clock from "./clock";
+import { ShiftType } from "./handoverShared";
 
 const db = () => admin.firestore();
 
@@ -19,6 +21,21 @@ export interface RecepceEmployee {
 /** YYYY-MM-DD in Europe/Prague — guards against a late-shift record past midnight. */
 export function todayPrague(): string {
   return new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Prague" }).format(new Date());
+}
+
+/**
+ * The reception shift happening RIGHT NOW in Prague: today's date + den/noc by the
+ * hour (den 07:00–18:59, else noc). Mirrors the protokol page's
+ * `defaultShiftForNow` so the "who's on shift" default is consistent with the
+ * handover sign modal. Uses `clock.now()` so the non-prod test clock can drive it.
+ */
+export function currentReceptionShiftPrague(): { date: string; shift: ShiftType } {
+  const now = clock.now();
+  const date = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Prague" }).format(now);
+  const hour = Number(
+    new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Prague", hour: "2-digit", hourCycle: "h23" }).format(now)
+  );
+  return { date, shift: hour >= 7 && hour < 19 ? "den" : "noc" };
 }
 
 /**
