@@ -113,6 +113,10 @@
   font-weight: inherit;
   line-height: inherit;
   cursor: pointer;
+  /* The footer is a stretch flex column; a <button> would otherwise fill the
+     width and centre its text. Shrink to content + left, matching the span. */
+  align-self: flex-start;
+  text-align: left;
 }
 
 .logoutBtn {
