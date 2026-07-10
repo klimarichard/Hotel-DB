@@ -5,6 +5,14 @@ import * as admin from "firebase-admin";
 import express from "express";
 import cors from "cors";
 
+import { installAsyncRouteErrorForwarding } from "./middleware/asyncRouteErrors";
+
+// Install BEFORE anything creates routes: makes every async handler's rejection
+// reach the error middleware instead of hanging the request (Express 4). Patches
+// a prototype used at request time, so ordering only needs to precede traffic,
+// but doing it first keeps the guarantee obvious.
+installAsyncRouteErrorForwarding();
+
 import { authRouter } from "./routes/auth";
 import { employeesRouter, refreshEffectiveRootForAllActive } from "./routes/employees";
 import { alertsRouter } from "./routes/alerts";

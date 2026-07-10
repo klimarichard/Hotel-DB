@@ -358,10 +358,10 @@ export default function LobbyBarTab({ hotel }: { hotel: Hotel }) {
                 <thead>
                   <tr>
                     <th>Datum</th>
+                    <th>Prodal</th>
                     <th>Položka</th>
                     <th className={styles.numCellLeft}>Počet</th>
                     <th>Měna</th>
-                    <th>Prodal</th>
                     <th className={styles.numCellLeft}>Cena</th>
                     <th className={styles.numCellLeft}>Provize</th>
                     <th className={styles.numCellLeft}>Do společné</th>
@@ -379,10 +379,10 @@ export default function LobbyBarTab({ hotel }: { hotel: Hotel }) {
                   {sales.map((s) => (
                     <tr key={s.id}>
                       <td>{formatDate(s.date)}</td>
+                      <td>{s.employeeName}</td>
                       <td>{s.itemName}</td>
                       <td className={styles.numCellLeft}>{s.quantity}</td>
                       <td>{currencySymbol(s.currency)}</td>
-                      <td>{s.employeeName}</td>
                       <td className={styles.numCellLeft}>{formatMoney(s.price, s.currency)}</td>
                       <td className={styles.numCellLeft}>{formatMoney(s.provision, s.currency)}</td>
                       <td className={styles.numCellLeft}>{formatMoney(s.doSpolecne, s.currency)}</td>
