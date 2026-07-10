@@ -118,6 +118,7 @@ export const PERMISSION_SECTIONS = [
           { key: "recepce.ambiance.taxi.view", label: "Taxi", level: 2 },
           { key: "recepce.ambiance.taxi.manage", label: "Spravovat taxi", level: 3 },
           { key: "recepce.ambiance.lobbyBar.view", label: "Lobby bar", level: 2 },
+          { key: "recepce.ambiance.lobbyBar.manage", label: "Spravovat lobby bar", level: 3 },
         ],
       },
       {
@@ -147,6 +148,7 @@ export const PERMISSION_SECTIONS = [
           { key: "recepce.amigo.taxi.view", label: "Taxi", level: 2 },
           { key: "recepce.amigo.taxi.manage", label: "Spravovat taxi", level: 3 },
           { key: "recepce.amigo.terminal.view", label: "Terminál", level: 2 },
+          { key: "recepce.amigo.terminal.manage", label: "Spravovat terminál", level: 3 },
         ],
       },
       {

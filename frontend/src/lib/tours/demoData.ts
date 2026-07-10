@@ -57,7 +57,9 @@ export type TourScenario =
   | "protokol-empty"
   | "protokol-signed"
   | "walkiny"
-  | "taxi";
+  | "taxi"
+  | "lobby-bar"
+  | "terminal";
 export const tourDemo: { active: boolean; scenario: TourScenario | null } = {
   active: false,
   scenario: null,
@@ -790,6 +792,66 @@ function taxiFixture(
   };
 }
 
+const demoLobbyBarItems: unknown = [
+  { id: "i1", name: "voda", priceCZK: 50, priceEUR: 2 },
+  { id: "i2", name: "Cola", priceCZK: 50, priceEUR: 2 },
+  { id: "i3", name: "pivo", priceCZK: 70, priceEUR: 3 },
+  { id: "i4", name: "víno", priceCZK: 90, priceEUR: 4 },
+];
+
+/** Serve mocks for /lobby-bar/* while the lobby-bar demo is active. */
+function lobbyBarFixture(
+  isGet: boolean,
+  clean: string
+): { hit: boolean; value?: unknown } | null {
+  if (clean !== "/lobby-bar" && !clean.startsWith("/lobby-bar/")) return null;
+  if (clean.endsWith("/items")) {
+    return { hit: true, value: { items: demoLobbyBarItems, provisionCZK: 20, provisionEUR: 1 } };
+  }
+  if (!isGet) return { hit: true, value: {} };
+  const { d05, d11, today } = demoMonthDates();
+  if (clean.endsWith("/range")) return { hit: true, value: { from: `${today.slice(0, 7)}-01`, to: today } };
+  if (clean.endsWith("/employees")) {
+    return {
+      hit: true,
+      value: [
+        { employeeId: "demo-e1", name: "Nováková Jana" },
+        { employeeId: "demo-e2", name: "Svoboda Petr" },
+      ],
+    };
+  }
+  // List: /lobby-bar/{slug}. Money mirrors the server: price = qty·unit,
+  // provision = qty·rate, doSpolecne = price − provision, per currency.
+  return {
+    hit: true,
+    value: [
+      { id: "lb1", date: d05, itemId: "i3", itemName: "pivo", quantity: 2, currency: "CZK", employeeId: "demo-e1", employeeName: "Nováková Jana", unitPrice: 70, price: 140, provision: 40, doSpolecne: 100 },
+      { id: "lb2", date: d11, itemId: "i2", itemName: "Cola", quantity: 1, currency: "EUR", employeeId: "demo-e2", employeeName: "Svoboda Petr", unitPrice: 2, price: 2, provision: 1, doSpolecne: 1 },
+      { id: "lb3", date: today, itemId: "i4", itemName: "víno", quantity: 3, currency: "CZK", employeeId: "demo-e1", employeeName: "Nováková Jana", unitPrice: 90, price: 270, provision: 60, doSpolecne: 210 },
+    ],
+  };
+}
+
+/** Serve mocks for /terminal/* while the terminál demo is active. */
+function terminalFixture(
+  isGet: boolean,
+  clean: string
+): { hit: boolean; value?: unknown } | null {
+  if (clean !== "/terminal" && !clean.startsWith("/terminal/")) return null;
+  if (!isGet) return { hit: true, value: {} };
+  const { d05, d11, today } = demoMonthDates();
+  if (clean.endsWith("/range")) return { hit: true, value: { from: `${today.slice(0, 7)}-01`, to: today } };
+  // List: /terminal/{slug} — one settled, one not, and one "Jiné…" with a note.
+  return {
+    hit: true,
+    value: [
+      { id: "tp1", date: d05, amount: 500, type: "late-co", note: "", settled: true, settledBy: null, settledAt: null },
+      { id: "tp2", date: d11, amount: 840, type: "laundry", note: "", settled: false, settledBy: null, settledAt: null },
+      { id: "tp3", date: today, amount: 600, type: "other", note: "hračka", settled: false, settledBy: null, settledAt: null },
+    ],
+  };
+}
+
 // ─── Dispatcher ───────────────────────────────────────────────────────────────
 
 /** Strip a query string (and any trailing slash noise) for matching. */
@@ -890,6 +952,8 @@ function activeScenario(): TourScenario | null {
     case "/napoveda/ukazka-protokol-podepsany": return "protokol-signed";
     case "/napoveda/ukazka-walkiny": return "walkiny";
     case "/napoveda/ukazka-taxi": return "taxi";
+    case "/napoveda/ukazka-lobby-bar": return "lobby-bar";
+    case "/napoveda/ukazka-terminal": return "terminal";
     default: return null;
   }
 }
@@ -966,6 +1030,10 @@ export function getDemoResponse(
       return walkinsFixture(isGet, clean) ?? { hit: false };
     case "taxi":
       return taxiFixture(isGet, clean) ?? { hit: false };
+    case "lobby-bar":
+      return lobbyBarFixture(isGet, clean) ?? { hit: false };
+    case "terminal":
+      return terminalFixture(isGet, clean) ?? { hit: false };
     default:
       return { hit: false };
   }

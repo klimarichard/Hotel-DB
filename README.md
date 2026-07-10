@@ -165,6 +165,38 @@ Záložka **Taxi** eviduje objednané taxi jízdy hotelových hostů včetně pr
 
 > 📷 *(Místo pro snímek obrazovky: Taxi — tabulka jízd a ceník tras)*
 
+### Lobby bar
+
+Záložka **Lobby bar** (jen hotel **Ambiance**) eviduje prodeje z lobby baru.
+
+- Tabulka zobrazuje **datum, položku, počet, měnu, kdo prodal, cenu, provizi** a **částku do společné**, řazeno od nejnovějšího záznamu.
+- Nový prodej přidáte tlačítkem **+ Přidat prodej**: zvolíte **datum**, **položku** z ceníku, **počet** kusů, **měnu** (Kč nebo €) a kdo **prodal**.
+- **Cena, provize a částka do společné se dopočítají samy** a nejdou zadat ručně:
+  - **Cena** = počet kusů × cena položky v dané měně.
+  - **Provize** = počet kusů × sazba za kus (výchozí **20 Kč**, resp. **1 €**).
+  - **Do společné** = cena minus provize.
+- Koruny a eura se mezi sebou nikdy nepřepočítávají – prodej zadaný v eurech se celý počítá v eurech.
+- Vpravo je panel **Ceník položek** – u každé položky je uvedena cena v Kč i v €. Uživatelé s oprávněním **„Spravovat lobby bar"** zde tlačítkem **Upravit** otevřou editaci ceníku, včetně sazeb provize.
+- Změna ceníku **neovlivní už zapsané prodeje** – u nich zůstává v platnosti cena, která platila v okamžiku prodeje.
+- Uživatelé s oprávněním **„Spravovat lobby bar"** navíc nastavují **viditelné období** a vidí nad tabulkou souhrny provize a částky do společné, samostatně pro koruny a eura.
+
+> 📷 *(Místo pro snímek obrazovky: Lobby bar – tabulka prodejů a ceník položek)*
+
+### Terminál
+
+Záložka **Terminál** (jen hotel **Amigo & Alqush**) eviduje platby z platebního terminálu.
+
+- Tabulka zobrazuje **datum, částku, typ** a **poznámku**; uživatelům s oprávněním **„Spravovat terminál"** se navíc zobrazí sloupec **Předáno**.
+- Novou platbu přidáte tlačítkem **+ Přidat platbu**: zadáte **datum**, **částku** v korunách a **typ** transakce – **late C/O**, **laundry**, **snídaně**, **extra bed**, **parking**, **tour**, nebo **„Jiné…"**. U volby **„Jiné…"** je **poznámka povinná** – popíšete v ní, o jakou platbu šlo, jinak by to z tabulky nešlo poznat. U ostatních typů je poznámka nepovinná.
+- Sloupec **Předáno** se zaškrtávacím políčkem vidí a mění jen uživatelé s oprávněním **„Spravovat terminál"** – zaznamená se, kdo a kdy platbu předal.
+- Uživatelé s oprávněním **„Spravovat terminál"** také nastavují **viditelné období**.
+
+> 📝 Celkové součty za jednotlivé typy plateb zatím nejsou k dispozici; doplní se později.
+
+> 📷 *(Místo pro snímek obrazovky: Terminál – tabulka plateb)*
+
+> 📝 Záložky **Lobby bar** i **Terminál** se zobrazí jen uživatelům s příslušným oprávněním, a to jen u hotelu, kterému náleží.
+
 ### Průvodce aplikací
 
 I Recepci (Předávací protokol, Walkiny i Taxi) pokrývá úvodní **Prohlídka aplikace** — interaktivní průvodce, který se spustí automaticky při prvním přihlášení a je kdykoli znovu dostupný tlačítkem **„? Nápověda"** vlevo dole. Zobrazuje jen kroky odpovídající vašim oprávněním, takže uvidíte pouze ty části Recepce, ke kterým máte přístup.
