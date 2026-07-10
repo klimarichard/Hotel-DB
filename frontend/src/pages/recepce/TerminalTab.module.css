@@ -272,3 +272,48 @@
   color: var(--color-danger, #dc2626);
   font-size: 0.8125rem;
 }
+
+/* ── Typy plateb editor (TypesModal) ─────────────────────────────────────── */
+.typesTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.typesTable th {
+  text-align: left;
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid var(--color-border);
+  font-weight: 700;
+  color: var(--color-text-heading);
+  white-space: nowrap;
+}
+
+.typesTable td {
+  padding: 0.3rem 0.4rem;
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: middle;
+}
+
+.typeInput {
+  width: 100%;
+  min-width: 0;
+  padding: 0.35rem 0.45rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  background: var(--color-input-bg, var(--color-bg));
+  color: var(--color-text-heading);
+  font-size: 0.9rem;
+}
+
+/* The permanent built-in "Jiné…" row — shown but not editable. */
+.builtinRow td {
+  color: var(--color-text-secondary);
+  font-weight: 600;
+}
+
+.builtinHint {
+  font-weight: 400;
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+}

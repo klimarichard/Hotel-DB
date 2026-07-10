@@ -1,6 +1,6 @@
 import { Router, Response, NextFunction } from "express";
 import * as admin from "firebase-admin";
-import { FieldValue } from "firebase-admin/firestore";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { requireAuth, AuthRequest } from "../middleware/auth";
 import { ctxFromReq, logCreate, logUpdate, logDelete } from "../services/auditLog";
 import { actorCtx, resolveOnDutyActor } from "../services/recepceActor";
@@ -121,6 +121,40 @@ async function readConfig(hotel: HotelSlug): Promise<LobbyBarConfig> {
     provisionCZK: clampRate(d.provisionCZK, DEFAULT_PROVISION_CZK),
     provisionEUR: clampRate(d.provisionEUR, DEFAULT_PROVISION_EUR),
   };
+}
+
+/**
+ * The "Prodáno" tally reset marker, stored alongside the catalogue on the
+ * lobbyBarItems doc. Sales recorded (`createdAt`) at or after it count toward the
+ * running per-item total; a manager zeroes the tally by moving it to "now". Null
+ * (absent) means count every sale ever.
+ */
+async function readSoldResetAt(hotel: HotelSlug): Promise<Timestamp | null> {
+  const snap = await lobbyBarItemsRef(hotel).get();
+  const raw = snap.exists ? (snap.data() as Record<string, unknown>).soldResetAt : null;
+  return raw instanceof Timestamp ? raw : null;
+}
+
+/**
+ * Per-item units sold since `resetAt` (or since forever when null): the sum of
+ * each sale's `quantity`, keyed by `itemId`. Uses `createdAt` (when the sale was
+ * recorded) rather than the sale's business `date`, so "reset now, count from
+ * here" is exact regardless of back-dated entries. A single-field `createdAt`
+ * range is covered by Firestore's automatic index — no composite index needed.
+ */
+async function computeSold(hotel: HotelSlug, resetAt: Timestamp | null): Promise<Record<string, number>> {
+  let query: admin.firestore.Query = lobbyBarCol(hotel);
+  if (resetAt) query = query.where("createdAt", ">=", resetAt);
+  const snap = await query.get();
+  const sold: Record<string, number> = {};
+  for (const doc of snap.docs) {
+    const s = doc.data() as LobbyBarSale;
+    const qty = typeof s.quantity === "number" && Number.isFinite(s.quantity) ? s.quantity : 0;
+    if (typeof s.itemId === "string" && s.itemId !== "") {
+      sold[s.itemId] = (sold[s.itemId] ?? 0) + qty;
+    }
+  }
+  return sold;
 }
 
 interface ParsedSale {
@@ -270,14 +304,26 @@ lobbyBarRouter.put(
   }
 );
 
-/** GET the item catalogue + provision rates (view — needed to fill the sale form). */
+/**
+ * GET the item catalogue + provision rates (view — needed to fill the sale form).
+ * Managers additionally receive the "Prodáno" tally: `sold` (units per itemId
+ * since the last reset) and `soldResetAt` (ISO of that reset, or null). These are
+ * omitted for non-managers, who never see the column.
+ */
 lobbyBarRouter.get(
   "/:hotel/items",
   requireAuth,
   requireLobbyBarPerm("view"),
   async (req: AuthRequest, res: Response) => {
-    const cfg = await readConfig(req.params.hotel as HotelSlug);
-    res.json({ items: cfg.items, provisionCZK: cfg.provisionCZK, provisionEUR: cfg.provisionEUR });
+    const hotel = req.params.hotel as HotelSlug;
+    const cfg = await readConfig(hotel);
+    const base = { items: cfg.items, provisionCZK: cfg.provisionCZK, provisionEUR: cfg.provisionEUR };
+    if (!isManage(req, hotel)) {
+      res.json(base);
+      return;
+    }
+    const resetAt = await readSoldResetAt(hotel);
+    res.json({ ...base, sold: await computeSold(hotel, resetAt), soldResetAt: resetAt ? resetAt.toDate().toISOString() : null });
   }
 );
 
@@ -305,6 +351,35 @@ lobbyBarRouter.put(
       after: { count: items.length, provisionCZK, provisionEUR },
     });
     res.json({ items, provisionCZK, provisionEUR });
+  }
+);
+
+/**
+ * POST reset the "Prodáno" tally (lobbyBar.manage). Moves `soldResetAt` to now,
+ * so every per-item count returns to zero and counting restarts from this moment.
+ * Sales are never deleted — only the tally cutoff moves. Returns the fresh (empty)
+ * tally so the client can render zeros without a second round trip.
+ */
+lobbyBarRouter.post(
+  "/:hotel/reset-sold",
+  requireAuth,
+  requireLobbyBarPerm("manage"),
+  async (req: AuthRequest, res: Response) => {
+    const hotel = req.params.hotel as HotelSlug;
+    const before = await readSoldResetAt(hotel);
+    const now = Timestamp.now();
+    await lobbyBarItemsRef(hotel).set(
+      { soldResetAt: now, updatedBy: req.uid, updatedAt: FieldValue.serverTimestamp() },
+      { merge: true }
+    );
+    await logUpdate(ctxFromReq(req), {
+      collection: "lobbyBarItems",
+      resourceId: "soldReset",
+      subResourceId: hotel,
+      before: { soldResetAt: before ? before.toDate().toISOString() : null },
+      after: { soldResetAt: now.toDate().toISOString() },
+    });
+    res.json({ sold: await computeSold(hotel, now), soldResetAt: now.toDate().toISOString() });
   }
 );
 

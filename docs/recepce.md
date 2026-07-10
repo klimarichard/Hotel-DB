@@ -769,6 +769,26 @@ array order (order **is** the persisted display order). Provision rates
 defaults (20 / 1) when invalid. Editable via `ItemsModal` in `LobbyBarTab.tsx`
 (add/remove/reorder rows + the two provision-rate fields).
 
+### "Prodáno" tally + reset (manager-only)
+
+The ceník has a manager-only **Prodáno** column: units sold per item since the
+last reset. It is computed server-side (`computeSold()`) as the sum of each
+sale's `quantity` grouped by `itemId`, over sales whose **`createdAt`** is at or
+after `soldResetAt`. Using the recording time (not the sale's business `date`)
+makes "reset now, count from here" exact even for back-dated entries. The count
+rides on the items GET: `GET /lobby-bar/:hotel/items` adds `sold` (a
+`{ [itemId]: number }` map) and `soldResetAt` (ISO or null) **only for managers**;
+non-managers get neither and never see the column.
+
+`soldResetAt` is a `Timestamp` stored on the same `config/lobbyBarItems` doc
+(merged, so it survives catalogue edits). The red **Reset** button
+(`POST /lobby-bar/:hotel/reset-sold`, `lobbyBar.manage`) moves it to now, zeroing
+every count from that moment. **No sales are deleted** — only the tally cutoff
+moves — and the action is audit-logged (`resourceId: "soldReset"`). The client
+confirms via `ConfirmModal` (danger) first. Editing the catalogue preserves the
+in-memory tally (keyed by stable `itemId`) so the column doesn't blank between the
+PUT response and the next reload.
+
 ### "Prodal" employee dropdown
 
 `GET /lobby-bar/:hotel/employees?date=` — identical pool/fallback logic to
@@ -798,42 +818,52 @@ flag.
 hotels/amigo-alqush/terminalPayments/{autoId} = {
   date: string;           // YYYY-MM-DD
   amount: number;         // CZK only — there is no currency field, whole number
-  type: TerminalType;     // enum, see below
+  type: string;           // built-in "other" or a catalogue id (see below)
+  typeLabel?: string;     // snapshot of the type's label at write time
   note: string;           // optional — EXCEPT type "other", where it is mandatory
   settled: boolean;       // "Předáno" — OK vs blank
   settledBy?: string | null;
   settledAt?: Timestamp | null;
   createdBy?, updatedBy?, createdAt?, updatedAt?;
 }
-hotels/amigo-alqush/config/terminal = { from: string|null, to: string|null }  -- visible range
+hotels/amigo-alqush/config/terminal      = { from: string|null, to: string|null }  -- visible range
+hotels/amigo-alqush/config/terminalTypes = { types: [{ id, label }] }              -- configurable type catalogue
 ```
 
-`TerminalType` (`functions/src/services/terminalShared.ts`) is a fixed 7-value
-enum, each id with a Czech display label:
+### Configurable payment types (`config/terminalTypes`)
 
-| id | Label |
-|---|---|
-| `late-co` | late C/O |
-| `laundry` | laundry |
-| `snidane` | snídaně |
-| `extra-bed` | extra bed |
-| `parking` | parking |
-| `tour` | tour |
-| `other` | Jiné… |
+The "Typ" list is **manager-editable**, mirroring lobby bar's ceník. Each entry is
+`{ id, label }`; `id` is stable across renames so a payment referencing it
+survives a label change, and every payment also **snapshots `typeLabel`** at write
+time (like lobby bar's `itemName`) so a later rename or delete never rewrites past
+rows. Old payments predating the snapshot carry no `typeLabel`; the UI falls back
+to `LEGACY_TYPE_LABELS` (the original enum ids), then the raw id.
 
-The source spreadsheet's "Položka" column was free text (e.g. "hračka", "tour
-(Hop-On, Hop-Off)") for a long tail of one-off items dominated by "late C/O".
-That free text now lives in `note`, while `type` stays a closed enum specifically
-so the deferred F1:P1 SUMIF-style per-type totals (see below) can aggregate
-cleanly on it — a free-text `type` would fragment the same transaction under a
-dozen spellings.
+- `GET /terminal/:hotel/types` (`terminal.view` — fills the Typ dropdown) returns
+  the custom catalogue; the client appends the built-in "Jiné…".
+- `PUT /terminal/:hotel/types` (`terminal.manage`) sanitizes like `sanitizeItems`
+  (trim label, drop empty, fresh id on missing/duplicate, preserve order), then
+  saves. Edited via `TypesModal` in `TerminalTab.tsx` (add/rename/remove/reorder).
+- **Defaults**: when the doc is ABSENT, `readTypes()` returns the original six
+  named types (`DEFAULT_TERMINAL_TYPES`), so existing payments' ids still resolve
+  and a fresh hotel starts sensible. An explicitly-saved **empty** list is
+  respected (leaving only "Jiné…").
 
-The note is optional for the six named types and **mandatory for `other`**
-(`parseEntry` rejects an empty one with `"U typu „Jiné…“ je poznámka povinná."`).
-`other` carries no meaning of its own, so without the note the row records only
-that *some* money arrived — the same reason a taxi ride booked off the ceník
-requires one. The client disables the save button and shows an inline hint, but
-the server is the gate.
+**"Jiné…" (`other`) is a permanent built-in**, not stored in the catalogue and
+never deletable/renamable (`OTHER_TYPE_ID`/`OTHER_TYPE_LABEL`). It is the only
+type that forces a note: `parseEntry` rejects an empty note there with
+`"U typu „Jiné…“ je poznámka povinná."` — `other` carries no meaning of its own,
+so without the note the row records only that *some* money arrived (the same
+reason a taxi ride booked off the ceník requires one). The client disables save +
+shows an inline hint, but the server is the gate. `parseEntry` validates `type`
+against the current catalogue **plus** `other`; the reserved `other` id can never
+be shadowed by a custom type (`sanitizeTypes` seeds the seen-set with it).
+
+The source spreadsheet's "Položka" column was free text for a long tail of one-off
+items dominated by "late C/O". That free text lives in `note`; `type` stays a
+closed (now configurable) set so the deferred F1:P1 SUMIF-style per-type totals
+(see below) can aggregate cleanly on the stable `id` — a free-text `type` would
+fragment the same transaction under a dozen spellings.
 
 ### `settled` ("Předáno") — manage-only, never client-set on create/edit
 
