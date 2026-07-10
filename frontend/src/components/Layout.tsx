@@ -212,7 +212,6 @@ export default function Layout() {
         onToggleTheme={toggleTheme}
         onLogout={handleLogout}
         versionLabel={canViewVersion ? `v${__APP_VERSION__}` : null}
-        onVersionClick={canChangelog ? () => setChangelogOpen(true) : undefined}
         timeControl={<TimeOverrideControl />}
         userLabel={name?.trim() || user?.email}
         userRole={roleTypeName ?? role}
