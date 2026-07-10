@@ -366,9 +366,9 @@ export default function LobbyBarTab({ hotel }: { hotel: Hotel }) {
               <table className={styles.priceTable}>
                 <thead>
                   <tr>
-                    <th>Položka</th>
-                    <th className={styles.numCell}>CZK</th>
-                    <th className={styles.numCell}>EUR</th>
+                    <th className={styles.itemNameCell}>Položka</th>
+                    <th className={styles.numCellLeft}>CZK</th>
+                    <th className={styles.numCellLeft}>EUR</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -381,9 +381,9 @@ export default function LobbyBarTab({ hotel }: { hotel: Hotel }) {
                   )}
                   {config.items.map((it) => (
                     <tr key={it.id}>
-                      <td>{it.name}</td>
-                      <td className={styles.numCell}>{it.priceCZK.toLocaleString("cs-CZ")} Kč</td>
-                      <td className={styles.numCell}>{it.priceEUR.toLocaleString("cs-CZ")} €</td>
+                      <td className={styles.itemNameCell}>{it.name}</td>
+                      <td className={styles.numCellLeft}>{it.priceCZK.toLocaleString("cs-CZ")} Kč</td>
+                      <td className={styles.numCellLeft}>{it.priceEUR.toLocaleString("cs-CZ")} €</td>
                     </tr>
                   ))}
                 </tbody>
