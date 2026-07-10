@@ -3,6 +3,7 @@ import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireAuth, AuthRequest } from "../middleware/auth";
 import { ctxFromReq, logCreate, logUpdate, logDelete } from "../services/auditLog";
+import { actorCtx, resolveOnDutyActor } from "../services/recepceActor";
 import {
   isHotelSlug,
   HotelSlug,
@@ -270,7 +271,9 @@ taxiRouter.post(
       updatedAt: FieldValue.serverTimestamp(),
     });
     const saved = await ref.get();
-    await logCreate(ctxFromReq(req), {
+    // Reception writes are attributed to the person on shift (last "Převzal"),
+    // not the shared terminal account that may be logged in.
+    await logCreate(actorCtx(await resolveOnDutyActor(req, hotel)), {
       collection: "taxiRides",
       resourceId: ref.id,
       subResourceId: hotel,
@@ -307,7 +310,7 @@ taxiRouter.put(
     }
     await ref.set({ ...parsed, updatedBy: req.uid, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
     const saved = await ref.get();
-    await logUpdate(ctxFromReq(req), {
+    await logUpdate(actorCtx(await resolveOnDutyActor(req, hotel)), {
       collection: "taxiRides",
       resourceId: ref.id,
       subResourceId: hotel,
@@ -336,7 +339,7 @@ taxiRouter.delete(
       return;
     }
     await ref.delete();
-    await logDelete(ctxFromReq(req), {
+    await logDelete(actorCtx(await resolveOnDutyActor(req, hotel)), {
       collection: "taxiRides",
       resourceId: req.params.id,
       subResourceId: hotel,

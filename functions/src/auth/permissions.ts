@@ -388,6 +388,13 @@ export interface RoleTypeData {
   permissions: string[];
   /** Whether holders count as "management" for employee-record scoping. */
   management: boolean;
+  /**
+   * Whether this type is a shared terminal login (a front-desk machine several
+   * people sign into as one account). Recepce writes made from such a session
+   * are attributed to whoever signed Převzal on the previous shift's protocol,
+   * not to the generic account. See services/recepceActor.ts.
+   */
+  sharedTerminal: boolean;
 }
 
 /** Built-in management classification — the fallback when a roleTypes doc is
@@ -406,11 +413,12 @@ async function loadRoleTypes(): Promise<Map<string, RoleTypeData> | null> {
     const snap = await admin.firestore().collection(ROLE_TYPES_COLLECTION).get();
     const map = new Map<string, RoleTypeData>();
     for (const d of snap.docs) {
-      const data = d.data() as { permissions?: unknown; management?: unknown };
+      const data = d.data() as { permissions?: unknown; management?: unknown; sharedTerminal?: unknown };
       if (Array.isArray(data.permissions)) {
         map.set(d.id, {
           permissions: data.permissions.filter((p): p is string => typeof p === "string"),
           management: data.management === true,
+          sharedTerminal: data.sharedTerminal === true,
         });
       }
     }
@@ -447,6 +455,18 @@ export async function getManagementTypeIds(): Promise<Set<string>> {
   // Back-fill built-in management roles not present as docs (partial-seed safety).
   for (const r of builtinMgmt) if (!map.has(r)) ids.add(r);
   return ids;
+}
+
+/**
+ * Is this user type a shared terminal login? Never true for the built-in types
+ * (they have no doc field), so an unseeded/unreachable roleTypes collection
+ * simply means "ordinary login" — attribution falls back to the session account
+ * rather than failing the write.
+ */
+export async function isSharedTerminalType(roleType: string | undefined): Promise<boolean> {
+  if (!roleType) return false;
+  const map = await loadRoleTypes();
+  return map?.get(roleType)?.sharedTerminal === true;
 }
 
 export interface EffectivePermissionInput {
