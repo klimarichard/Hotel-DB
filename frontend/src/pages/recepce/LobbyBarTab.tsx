@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { api } from "@/lib/api";
+import { api, errorMessage } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import Button from "@/components/Button";
 import IconButton from "@/components/IconButton";
@@ -94,38 +94,54 @@ function computePreview(
   return { price, provision, doSpolecne };
 }
 
+/** A money total kept strictly separate per currency – the two are never mixed. */
+type ByCurrency = Record<Currency, number>;
+
 /**
  * Preview for a whole multi-line sale. Each line is rounded on its own – exactly
  * like the server, which stores one document per line – and only then summed, so
  * the previewed total always equals the sum of the rows that end up in the table.
+ * Lines may carry different currencies, so every total is accumulated per
+ * currency and nothing is ever converted.
  */
 function computeLinesPreview(
-  lines: { itemId: string; quantity: number }[],
-  currency: Currency,
+  lines: { itemId: string; quantity: number; currency: Currency }[],
   cfg: LobbyBarConfig
-): { price: number; provision: number; doSpolecne: number } {
-  const sum = lines.reduce(
-    (acc, l) => {
-      const p = computePreview(
-        cfg.items.find((i) => i.id === l.itemId),
-        l.quantity,
-        currency,
-        cfg
-      );
-      return {
-        price: acc.price + p.price,
-        provision: acc.provision + p.provision,
-        doSpolecne: acc.doSpolecne + p.doSpolecne,
-      };
-    },
-    { price: 0, provision: 0, doSpolecne: 0 }
-  );
-  // Re-round the sums: adding several 2-decimal EUR values reintroduces float noise.
-  return {
-    price: roundMoney(sum.price, currency),
-    provision: roundMoney(sum.provision, currency),
-    doSpolecne: roundMoney(sum.doSpolecne, currency),
+): { price: ByCurrency; provision: ByCurrency; doSpolecne: ByCurrency } {
+  const acc = {
+    price: { CZK: 0, EUR: 0 } as ByCurrency,
+    provision: { CZK: 0, EUR: 0 } as ByCurrency,
+    doSpolecne: { CZK: 0, EUR: 0 } as ByCurrency,
   };
+  for (const l of lines) {
+    const p = computePreview(
+      cfg.items.find((i) => i.id === l.itemId),
+      l.quantity,
+      l.currency,
+      cfg
+    );
+    acc.price[l.currency] += p.price;
+    acc.provision[l.currency] += p.provision;
+    acc.doSpolecne[l.currency] += p.doSpolecne;
+  }
+  // Re-round the sums: adding several 2-decimal EUR values reintroduces float noise.
+  for (const key of ["price", "provision", "doSpolecne"] as const) {
+    acc[key].CZK = roundMoney(acc[key].CZK, "CZK");
+    acc[key].EUR = roundMoney(acc[key].EUR, "EUR");
+  }
+  return acc;
+}
+
+/**
+ * Render a per-currency total, dropping a currency whose sub-total is 0. When
+ * both are 0 (nothing filled in yet) it still shows a zero in `fallback`, so the
+ * preview never renders as an empty string.
+ */
+function formatByCurrency(m: ByCurrency, fallback: Currency): string {
+  const parts: string[] = [];
+  if (m.CZK !== 0) parts.push(formatMoney(m.CZK, "CZK"));
+  if (m.EUR !== 0) parts.push(formatMoney(m.EUR, "EUR"));
+  return parts.length > 0 ? parts.join(" · ") : formatMoney(0, fallback);
 }
 
 function PencilIcon() {
@@ -490,6 +506,7 @@ interface DraftLine {
   _key: string;
   itemId: string;
   quantity: string;
+  currency: Currency;
 }
 
 /** Czech plural of "položka" for the submit button: 2–4 položky, 5+ položek. */
@@ -518,10 +535,9 @@ function SaleModal({
   const [date, setDate] = useState(initial?.date ?? todayLocal());
   const [lines, setLines] = useState<DraftLine[]>([
     initial
-      ? { _key: genId(), itemId: initial.itemId, quantity: String(initial.quantity) }
-      : { _key: genId(), itemId: "", quantity: "1" },
+      ? { _key: genId(), itemId: initial.itemId, quantity: String(initial.quantity), currency: initial.currency }
+      : { _key: genId(), itemId: "", quantity: "1", currency: "CZK" },
   ]);
-  const [currency, setCurrency] = useState<Currency>(initial?.currency ?? "CZK");
   const [employeeId, setEmployeeId] = useState(initial?.employeeId ?? "");
   const [employeeName, setEmployeeName] = useState(initial?.employeeName ?? "");
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
@@ -569,7 +585,12 @@ function SaleModal({
     setLines((prev) => prev.map((l) => (l._key === key ? { ...l, ...patch } : l)));
   }
   function addLine() {
-    setLines((prev) => [...prev, { _key: genId(), itemId: "", quantity: "1" }]);
+    // A new line inherits the last line's currency: a round is usually paid in
+    // one currency, and mixing is the exception rather than the rule.
+    setLines((prev) => [
+      ...prev,
+      { _key: genId(), itemId: "", quantity: "1", currency: prev[prev.length - 1]?.currency ?? "CZK" },
+    ]);
   }
   function removeLine(key: string) {
     setLines((prev) => (prev.length <= 1 ? prev : prev.filter((l) => l._key !== key)));
@@ -577,10 +598,10 @@ function SaleModal({
 
   /** Lines with a parsed integer quantity, used for both validation and the preview. */
   const parsedLines = useMemo(
-    () => lines.map((l) => ({ itemId: l.itemId, quantity: Math.floor(Number(l.quantity)) })),
+    () => lines.map((l) => ({ itemId: l.itemId, quantity: Math.floor(Number(l.quantity)), currency: l.currency })),
     [lines]
   );
-  const preview = useMemo(() => computeLinesPreview(parsedLines, currency, config), [parsedLines, currency, config]);
+  const preview = useMemo(() => computeLinesPreview(parsedLines, config), [parsedLines, config]);
 
   const dateMin = !canManage && range.from ? range.from : undefined;
   const dateMax = !canManage && range.to ? range.to : undefined;
@@ -593,16 +614,16 @@ function SaleModal({
     setErr(null);
     try {
       if (isEdit) {
-        const { itemId, quantity } = parsedLines[0];
+        const { itemId, quantity, currency } = parsedLines[0];
         await api.put(`/lobby-bar/${hotel.slug}/${initial!.id}`, { date, itemId, quantity, currency, employeeId, employeeName });
       } else {
         // One request for all lines: the server writes them in a single batch,
         // so a rejected line never leaves half the round saved.
-        await api.post(`/lobby-bar/${hotel.slug}/batch`, { date, currency, employeeId, employeeName, lines: parsedLines });
+        await api.post(`/lobby-bar/${hotel.slug}/batch`, { date, employeeId, employeeName, lines: parsedLines });
       }
       onSaved();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Uložení se nezdařilo.");
+      setErr(errorMessage(e, "Uložení se nezdařilo."));
     } finally {
       setBusy(false);
     }
@@ -630,26 +651,19 @@ function SaleModal({
               />
             </label>
             <label className={styles.field}>
-              Měna
-              <select className={styles.select} value={currency} onChange={(e) => setCurrency(e.target.value as Currency)} disabled={busy}>
-                <option value="CZK">Kč</option>
-                <option value="EUR">€</option>
+              Prodal
+              <select className={styles.select} value={employeeId} onChange={(e) => selectEmployee(e.target.value)} disabled={busy}>
+                <option value="" disabled>
+                  {options.length === 0 ? "Žádní zaměstnanci v plánu" : "Vyberte zaměstnance…"}
+                </option>
+                {options.map((o) => (
+                  <option key={o.employeeId} value={o.employeeId}>
+                    {o.name}
+                  </option>
+                ))}
               </select>
             </label>
           </div>
-          <label className={styles.field}>
-            Prodal
-            <select className={styles.select} value={employeeId} onChange={(e) => selectEmployee(e.target.value)} disabled={busy}>
-              <option value="" disabled>
-                {options.length === 0 ? "Žádní zaměstnanci v plánu" : "Vyberte zaměstnance…"}
-              </option>
-              {options.map((o) => (
-                <option key={o.employeeId} value={o.employeeId}>
-                  {o.name}
-                </option>
-              ))}
-            </select>
-          </label>
 
           <div className={styles.lines}>
             <table className={styles.routesTable}>
@@ -657,6 +671,7 @@ function SaleModal({
                 <tr>
                   <th>Položka</th>
                   <th className={styles.lineQtyHead}>Počet</th>
+                  <th className={styles.lineCurrencyHead}>Měna</th>
                   {!isEdit && <th aria-label="Akce" />}
                 </tr>
               </thead>
@@ -694,6 +709,18 @@ function SaleModal({
                         disabled={busy}
                       />
                     </td>
+                    <td>
+                      <select
+                        className={`${styles.routeInput} ${styles.routeCurrency}`}
+                        value={l.currency}
+                        onChange={(e) => updateLine(l._key, { currency: e.target.value as Currency })}
+                        aria-label="Měna"
+                        disabled={busy}
+                      >
+                        <option value="CZK">Kč</option>
+                        <option value="EUR">€</option>
+                      </select>
+                    </td>
                     {!isEdit && (
                       <td>
                         <div className={styles.rowActions}>
@@ -725,15 +752,15 @@ function SaleModal({
             <span className={styles.previewTitle}>Náhled (vypočítá se automaticky)</span>
             <div className={styles.previewRow}>
               <span>{isEdit ? "Cena" : "Celkem"}</span>
-              <span className={styles.previewValue}>{formatMoney(preview.price, currency)}</span>
+              <span className={styles.previewValue}>{formatByCurrency(preview.price, lines[0].currency)}</span>
             </div>
             <div className={styles.previewRow}>
               <span>Provize</span>
-              <span className={styles.previewValue}>{formatMoney(preview.provision, currency)}</span>
+              <span className={styles.previewValue}>{formatByCurrency(preview.provision, lines[0].currency)}</span>
             </div>
             <div className={styles.previewRow}>
               <span>Do společné</span>
-              <span className={styles.previewValue}>{formatMoney(preview.doSpolecne, currency)}</span>
+              <span className={styles.previewValue}>{formatByCurrency(preview.doSpolecne, lines[0].currency)}</span>
             </div>
           </div>
           {err && <div className={styles.error}>{err}</div>}

@@ -137,10 +137,13 @@ interface ParsedSale {
   doSpolecne: number;
 }
 
-/** The fields a sale shares with its siblings when several are added at once. */
+/**
+ * The fields a sale shares with its siblings when several are added at once.
+ * `currency` is deliberately NOT here — it belongs to the individual line, so
+ * one modal can mix a CZK item and a EUR item.
+ */
 interface SaleHeader {
   date: string;
-  currency: Currency;
   employeeId: string;
   employeeName: string;
 }
@@ -148,24 +151,23 @@ interface SaleHeader {
 /** Upper bound on lines in one batch — well under Firestore's 500-op WriteBatch limit. */
 const MAX_BATCH_LINES = 50;
 
-/** Validate the date / currency / employee shared by every row of a sale. */
+/** Validate the date / employee shared by every row of a sale. */
 function parseHeader(b: Record<string, unknown>): SaleHeader | { error: string } {
   if (!isDateStr(b.date)) return { error: "Neplatné datum (YYYY-MM-DD)." };
-  if (!isCurrency(b.currency)) return { error: "Neplatná měna." };
   const employeeId = typeof b.employeeId === "string" ? b.employeeId.trim() : "";
   if (employeeId === "") return { error: "Vyberte zaměstnance." };
   return {
     date: b.date as string,
-    currency: b.currency,
     employeeId,
     employeeName: typeof b.employeeName === "string" ? b.employeeName.trim() : "",
   };
 }
 
 /**
- * Resolve one { itemId, quantity } line against the CURRENT catalogue. The item
- * name and every money field are computed/snapshotted server-side here —
- * client-sent money is never trusted.
+ * Resolve one { itemId, quantity, currency } line against the CURRENT catalogue.
+ * The item name and every money field are computed/snapshotted server-side here
+ * — client-sent money is never trusted. The single-sale POST/PUT passes its whole
+ * body here, since that body carries the same three line fields at the top level.
  */
 function parseLine(raw: unknown, header: SaleHeader, cfg: LobbyBarConfig): ParsedSale | { error: string } {
   const b = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
@@ -175,12 +177,14 @@ function parseLine(raw: unknown, header: SaleHeader, cfg: LobbyBarConfig): Parse
   const quantity =
     typeof b.quantity === "number" && Number.isInteger(b.quantity) && b.quantity >= 1 ? b.quantity : NaN;
   if (!Number.isFinite(quantity)) return { error: "Neplatný počet." };
+  if (!isCurrency(b.currency)) return { error: "Neplatná měna." };
   return {
     ...header,
     itemId: item.id,
     itemName: item.name,
     quantity,
-    ...computeSale(item, quantity, header.currency, cfg),
+    currency: b.currency,
+    ...computeSale(item, quantity, b.currency, cfg),
   };
 }
 
@@ -193,9 +197,10 @@ function parseSale(raw: unknown, cfg: LobbyBarConfig): ParsedSale | { error: str
 }
 
 /**
- * Validate + normalize a multi-line sale body: one shared header plus N
- * { itemId, quantity } lines. Every line is resolved BEFORE anything is written,
- * so a bad line aborts the whole batch instead of half-saving it.
+ * Validate + normalize a multi-line sale body: one shared header (date +
+ * employee) plus N { itemId, quantity, currency } lines. Every line is resolved
+ * BEFORE anything is written, so a bad line aborts the whole batch instead of
+ * half-saving it.
  */
 function parseSaleBatch(raw: unknown, cfg: LobbyBarConfig): ParsedSale[] | { error: string } {
   const b = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
@@ -375,54 +380,63 @@ lobbyBarRouter.post(
   "/:hotel/batch",
   requireAuth,
   requireLobbyBarPerm("view"),
-  async (req: AuthRequest, res: Response) => {
-    const hotel = req.params.hotel as HotelSlug;
-    const parsed = parseSaleBatch(req.body, await readConfig(hotel));
-    if ("error" in parsed) {
-      res.status(400).json({ error: parsed.error });
-      return;
-    }
-    if (!isManage(req, hotel) && !inRange(parsed[0].date, await readRange(hotel))) {
-      res.status(403).json({ error: "Datum je mimo povolené období." });
-      return;
-    }
+  // NOTE: this handler MUST forward any rejection via next(err). On Express 4 an
+  // async handler that rejects without doing so never sends a response, so the
+  // client's fetch hangs forever (the "Ukládám…" that never finishes). A cold
+  // Firestore read in readConfig is enough to trigger it. The try/catch routes
+  // every failure to the JSON-500 error middleware in index.ts instead.
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const hotel = req.params.hotel as HotelSlug;
+      const parsed = parseSaleBatch(req.body, await readConfig(hotel));
+      if ("error" in parsed) {
+        res.status(400).json({ error: parsed.error });
+        return;
+      }
+      if (!isManage(req, hotel) && !inRange(parsed[0].date, await readRange(hotel))) {
+        res.status(403).json({ error: "Datum je mimo povolené období." });
+        return;
+      }
 
-    const batch = db().batch();
-    const refs = parsed.map((sale) => {
-      const ref = lobbyBarCol(hotel).doc();
-      batch.set(ref, {
-        ...sale,
-        createdBy: req.uid,
-        updatedBy: req.uid,
-        createdAt: FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp(),
+      const batch = db().batch();
+      const refs = parsed.map((sale) => {
+        const ref = lobbyBarCol(hotel).doc();
+        batch.set(ref, {
+          ...sale,
+          createdBy: req.uid,
+          updatedBy: req.uid,
+          createdAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+        return ref;
       });
-      return ref;
-    });
-    await batch.commit();
+      await batch.commit();
 
-    // One audit entry per row, matching the single-sale POST: each row is
-    // independently editable/deletable later, so each needs its own resourceId.
-    const ctx = actorCtx(await resolveOnDutyActor(req, hotel));
-    await Promise.all(
-      refs.map((ref, i) =>
-        logCreate(ctx, {
-          collection: "lobbyBarSales",
-          resourceId: ref.id,
-          subResourceId: hotel,
-          summary: {
-            date: parsed[i].date,
-            itemName: parsed[i].itemName,
-            quantity: parsed[i].quantity,
-            currency: parsed[i].currency,
-            price: parsed[i].price,
-          },
-        })
-      )
-    );
+      // One audit entry per row, matching the single-sale POST: each row is
+      // independently editable/deletable later, so each needs its own resourceId.
+      const ctx = actorCtx(await resolveOnDutyActor(req, hotel));
+      await Promise.all(
+        refs.map((ref, i) =>
+          logCreate(ctx, {
+            collection: "lobbyBarSales",
+            resourceId: ref.id,
+            subResourceId: hotel,
+            summary: {
+              date: parsed[i].date,
+              itemName: parsed[i].itemName,
+              quantity: parsed[i].quantity,
+              currency: parsed[i].currency,
+              price: parsed[i].price,
+            },
+          })
+        )
+      );
 
-    const saved = await Promise.all(refs.map((r) => r.get()));
-    res.json(saved.map((s) => ({ id: s.id, ...s.data() })));
+      const saved = await Promise.all(refs.map((r) => r.get()));
+      res.json(saved.map((s) => ({ id: s.id, ...s.data() })));
+    } catch (err) {
+      next(err);
+    }
   }
 );
 
