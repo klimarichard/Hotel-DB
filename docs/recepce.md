@@ -950,23 +950,27 @@ future addition to `JobsTab.tsx`.
 
 ## Guided tour & demo routes
 
-**20 permission-driven Recepce tour steps** in total
+**18 permission-driven Recepce tour steps** in total
 (`frontend/src/lib/tours/appTour.ts`): the `nav-recepce` sidebar entry (1,
 `appTour.version: 12`), the full Předávací protokol walkthrough (10: shift
 toolbar, cash/trezor counting, Účty, sm/sm-trezor/wata special rows, Poznámky,
 signatures, next-shift creation, history/undo-redo, print, plus a separate
 "založení protokolu" step — all v12), Walkiny (2: table, add form — v12), Taxi
 (2: ride table + "Jiné…", ceník — v12), and — added at **`appTour.version: 13`**
-— **Lobby bar** (3: add-sale button, ceník, manager-only souhrny; Ambiance only)
-and **Terminál** (2: add-payment button, manager-only "Předáno" column; Amigo &
-Alqush only). All deep steps are `hideOnMobile: true` — they spotlight wide
-grids/tables that don't lay out on a phone; only the top-level `nav-recepce` step
-(which points at the "Více" sheet on phones via `mobileAnchor:
-"bottomnav-more"`) survives on mobile.
+— **Lobby bar** (2: add-sale button, ceník; Ambiance only) and **Terminál**
+(1: add-payment button; Amigo & Alqush only). All deep steps are
+`hideOnMobile: true` — they spotlight wide grids/tables that don't lay out on a
+phone; only the top-level `nav-recepce` step (which points at the "Více" sheet on
+phones via `mobileAnchor: "bottomnav-more"`) survives on mobile.
+
+All three v13 steps are gated on the tab's `.view` key. The manager-only surfaces
+— the lobby-bar souhrny block and the Terminál "Předáno" column — keep their
+`data-tour` anchors (`lobbybar-totals`, `terminal-settled`) but have no step, so
+a step can be reinstated later without touching the components.
 
 **Demo architecture** — `RecepceDemoPage.tsx` wraps a single real tab
-(`HandoverTab`/`WalkinsTab`/`TaxiTab`) fed by mock fixtures, mounted at dedicated
-`/napoveda/ukazka-*` routes:
+(`HandoverTab`/`WalkinsTab`/`TaxiTab`/`LobbyBarTab`/`TerminalTab`) fed by mock
+fixtures, mounted at dedicated `/napoveda/ukazka-*` routes:
 
 | Route | Scenario | Purpose |
 |---|---|---|
