@@ -843,7 +843,11 @@ to `LEGACY_TYPE_LABELS` (the original enum ids), then the raw id.
   the custom catalogue; the client appends the built-in "Jiné…".
 - `PUT /terminal/:hotel/types` (`terminal.manage`) sanitizes like `sanitizeItems`
   (trim label, drop empty, fresh id on missing/duplicate, preserve order), then
-  saves. Edited via `TypesModal` in `TerminalTab.tsx` (add/rename/remove/reorder).
+  saves. Managers see a right-side **Typy plateb** panel (same aside format as
+  Lobby bar's ceník / Taxi's routes, `TerminalTab.tsx`) — gated entirely to
+  `terminal.manage`, unlike those two whose asides are visible to all. Its
+  **Upravit** button opens `TypesModal` (add/rename/remove/reorder), with the
+  built-in "Jiné…" shown as a fixed, non-editable row.
 - **Defaults**: when the doc is ABSENT, `readTypes()` returns the original six
   named types (`DEFAULT_TERMINAL_TYPES`), so existing payments' ids still resolve
   and a fresh hotel starts sensible. An explicitly-saved **empty** list is
