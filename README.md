@@ -170,8 +170,9 @@ Záložka **Taxi** eviduje objednané taxi jízdy hotelových hostů včetně pr
 Záložka **Lobby bar** (jen hotel **Ambiance**) eviduje prodeje z lobby baru.
 
 - Tabulka zobrazuje **datum, položku, počet, měnu, kdo prodal, cenu, provizi** a **částku do společné**, řazeno od nejnovějšího záznamu.
-- Nový prodej přidáte tlačítkem **+ Přidat prodej**: nahoře zvolíte **datum**, **měnu** (Kč nebo €) a kdo **prodal** – tyto údaje platí pro celý prodej. Pod nimi vyberete **položku** z ceníku a **počet** kusů.
-- **Jedním prodejem lze zapsat i více položek najednou** (např. 2× pivo a 1× víno pro stejného hosta). Tlačítkem **+ Přidat položku** přidáte další řádek, ikonou koše řádek odeberete. Náhled dole průběžně ukazuje **celkovou** cenu, provizi a částku do společné za všechny řádky dohromady.
+- Nový prodej přidáte tlačítkem **+ Přidat prodej**: nahoře zvolíte **datum** a kdo **prodal** – tyto údaje platí pro celý prodej. Pod nimi vyplníte jednotlivé položky, u každé **položku** z ceníku, **počet** kusů a **měnu** (Kč nebo €).
+- **Jedním prodejem lze zapsat i více položek najednou** (např. 2× pivo a 1× víno pro stejného hosta). Tlačítkem **+ Přidat položku** přidáte další řádek, ikonou koše řádek odeberete.
+- **Měna se volí u každé položky zvlášť**, takže v jednom prodeji můžete mít část v korunách a část v eurech. Náhled dole ukazuje celkovou cenu, provizi a částku do společné **odděleně za koruny a za eura** – měny se nikdy nesčítají dohromady.
   - Po uložení se **každá položka zapíše do tabulky jako samostatný řádek**, takže ji lze později zvlášť upravit nebo smazat. Buď se uloží všechny řádky, nebo (při chybě) žádný – nikdy jen část.
   - Při **úpravě** už zapsaného prodeje se edituje vždy jen ten jeden řádek.
 - **Cena, provize a částka do společné se dopočítají samy** a nejdou zadat ručně:

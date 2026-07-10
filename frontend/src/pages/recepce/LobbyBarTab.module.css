@@ -300,10 +300,10 @@
   width: 640px;
 }
 
-/* Sale modal: a touch wider than the default so the item line (select + počet
-   + remove) doesn't crowd. */
+/* Sale modal: wider than the default so an item line (položka + počet + měna +
+   remove) doesn't crowd. */
 .modalSale {
-  width: 540px;
+  width: 580px;
 }
 
 /* The repeatable item lines of the sale modal. */
@@ -315,7 +315,16 @@
 }
 
 .lineQtyHead {
-  width: 90px;
+  width: 80px;
+}
+
+.lineCurrencyHead {
+  width: 76px;
+}
+
+/* Per-line currency picker — narrow, sits next to the počet field. */
+.routeCurrency {
+  width: 72px;
 }
 
 .modalHeader {

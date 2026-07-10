@@ -714,32 +714,47 @@ date falls outside the range.
 
 ### Multi-item sale (`POST /lobby-bar/:hotel/batch`)
 
-The add form takes **several item lines at once**. Date, currency and the selling
-employee are shared by the whole form (one guest, one payment); each line
-contributes an `{ itemId, quantity }` pair. The endpoint writes **one sale
-document per line** — the storage shape is unchanged, so the table, the totals
-and per-row edit/delete keep working exactly as before.
+The add form takes **several item lines at once**. Date and the selling employee
+are shared by the whole form; **currency is per line**, so one round can mix a
+CZK item and a EUR item. Each line contributes an `{ itemId, quantity, currency }`
+triple. The endpoint writes **one sale document per line** — the storage shape is
+unchanged, so the table, the totals and per-row edit/delete keep working exactly
+as before.
 
 ```jsonc
 POST /api/lobby-bar/hotel-x/batch
-{ "date": "2026-07-10", "currency": "CZK",
+{ "date": "2026-07-10",
   "employeeId": "dtb_novak_jan", "employeeName": "Novák Jan",
-  "lines": [ { "itemId": "a", "quantity": 2 }, { "itemId": "b", "quantity": 1 } ] }
+  "lines": [ { "itemId": "a", "quantity": 2, "currency": "CZK" },
+             { "itemId": "b", "quantity": 1, "currency": "EUR" } ] }
 ```
 
 Validation is shared with the single-sale POST/PUT: `parseHeader()` checks the
-date / currency / employee, `parseLine()` resolves each line against the current
-catalogue and snapshots its money via `computeSale()` (client-sent money is never
-trusted). **Every** line is parsed before anything is written, then the rows go
-out in one Firestore `WriteBatch` — a bad line or an out-of-range date aborts the
-whole request rather than half-saving a round. Capped at `MAX_BATCH_LINES` (50),
-far below the 500-op batch limit. Permission is `lobbyBar.view`, same as the
-single POST, and the same range check applies to non-managers. Audit logging
-emits **one `logCreate` per row**, since each row is independently editable and
-deletable later.
+date + employee, `parseLine()` resolves each line's `{ itemId, quantity, currency }`
+against the current catalogue and snapshots its money via `computeSale()`
+(client-sent money is never trusted). **Every** line is parsed before anything is
+written, then the rows go out in one Firestore `WriteBatch` — a bad line or an
+out-of-range date aborts the whole request rather than half-saving a round.
+Capped at `MAX_BATCH_LINES` (50), far below the 500-op batch limit. Permission is
+`lobbyBar.view`, same as the single POST, and the same range check applies to
+non-managers. Audit logging emits **one `logCreate` per row**, since each row is
+independently editable and deletable later.
+
+**Never-hang contract.** This handler is `async` and the app runs on Express 4,
+where a rejected async handler that doesn't forward the error sends **no
+response** and the client's fetch hangs forever (a "Ukládám…" that never
+resolves — e.g. when a cold Firestore read in `readConfig` rejects). The whole
+body is therefore wrapped in `try/catch` that forwards via `next(err)` to the
+JSON-500 error middleware in `index.ts`, so the modal always gets an answer.
+(The sibling single POST/PUT/DELETE here — and the taxi/walkiny handlers — still
+share the bare-async pattern; hardening them is a follow-up.)
 
 Editing an existing sale still edits a single row: `SaleModal` collapses to one
-line and PUTs it on its own.
+line (with its own currency) and PUTs it on its own.
+
+The frontend preview (`computeLinesPreview()`) accumulates totals **per currency**
+into `{ CZK, EUR }` and renders them with `formatByCurrency()` (a `·`-joined
+string, dropping a zero side) — CZK and EUR are never summed into one number.
 
 ### Item catalogue + provision editor
 
