@@ -309,12 +309,12 @@ export default function LobbyBarTab({ hotel }: { hotel: Hotel }) {
                   <tr>
                     <th>Datum</th>
                     <th>Položka</th>
-                    <th>Počet</th>
+                    <th className={styles.numCellLeft}>Počet</th>
                     <th>Měna</th>
                     <th>Prodal</th>
-                    <th className={styles.numCell}>Cena</th>
-                    <th className={styles.numCell}>Provize</th>
-                    <th className={styles.numCell}>Do společné</th>
+                    <th className={styles.numCellLeft}>Cena</th>
+                    <th className={styles.numCellLeft}>Provize</th>
+                    <th className={styles.numCellLeft}>Do společné</th>
                     <th aria-label="Akce" />
                   </tr>
                 </thead>
@@ -330,12 +330,12 @@ export default function LobbyBarTab({ hotel }: { hotel: Hotel }) {
                     <tr key={s.id}>
                       <td>{formatDate(s.date)}</td>
                       <td>{s.itemName}</td>
-                      <td className={styles.numCell}>{s.quantity}</td>
+                      <td className={styles.numCellLeft}>{s.quantity}</td>
                       <td>{currencySymbol(s.currency)}</td>
                       <td>{s.employeeName}</td>
-                      <td className={styles.numCell}>{formatMoney(s.price, s.currency)}</td>
-                      <td className={styles.numCell}>{formatMoney(s.provision, s.currency)}</td>
-                      <td className={styles.numCell}>{formatMoney(s.doSpolecne, s.currency)}</td>
+                      <td className={styles.numCellLeft}>{formatMoney(s.price, s.currency)}</td>
+                      <td className={styles.numCellLeft}>{formatMoney(s.provision, s.currency)}</td>
+                      <td className={styles.numCellLeft}>{formatMoney(s.doSpolecne, s.currency)}</td>
                       <td className={styles.actionsCell}>
                         <div className={styles.rowActions}>
                           <button type="button" className={styles.rowIconBtn} aria-label="Upravit" onClick={() => setEditing(s)}>
@@ -367,8 +367,8 @@ export default function LobbyBarTab({ hotel }: { hotel: Hotel }) {
                 <thead>
                   <tr>
                     <th>Položka</th>
-                    <th>CZK</th>
-                    <th>EUR</th>
+                    <th className={styles.numCell}>CZK</th>
+                    <th className={styles.numCell}>EUR</th>
                   </tr>
                 </thead>
                 <tbody>
