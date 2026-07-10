@@ -126,6 +126,8 @@ export interface UserProfile {
   revokedPermissions?: string[];
   /** ISO instant of a pending scheduled auto-deactivation, or null if none. */
   scheduledDeactivationAt?: string | null;
+  /** Hotel the Recepce hub opens on for this user; null/absent = no default set. */
+  recepceDefaultHotel?: string | null;
 }
 
 export interface RoleType {
@@ -133,6 +135,8 @@ export interface RoleType {
   name: string;
   permissions: string[];
   management: boolean;
+  /** Shared front-desk login: Recepce writes are attributed to the person on shift. */
+  sharedTerminal: boolean;
   system: boolean;
 }
 
@@ -143,10 +147,17 @@ export const roleTypesApi = {
     api
       .get<RoleType[]>("/role-types")
       .then((l) => [...l].sort((a, b) => a.name.localeCompare(b.name, "cs"))),
-  create: (body: { name: string; permissions?: string[]; management?: boolean; cloneFrom?: string }) =>
-    api.post<{ id: string }>("/role-types", body),
-  update: (id: string, body: { name?: string; permissions?: string[]; management?: boolean }) =>
-    api.patch<{ ok: boolean }>(`/role-types/${id}`, body),
+  create: (body: {
+    name: string;
+    permissions?: string[];
+    management?: boolean;
+    sharedTerminal?: boolean;
+    cloneFrom?: string;
+  }) => api.post<{ id: string }>("/role-types", body),
+  update: (
+    id: string,
+    body: { name?: string; permissions?: string[]; management?: boolean; sharedTerminal?: boolean }
+  ) => api.patch<{ ok: boolean }>(`/role-types/${id}`, body),
   remove: (id: string) => api.delete<{ ok: boolean }>(`/role-types/${id}`),
 };
 
@@ -156,7 +167,9 @@ export const authApi = {
   // reset link the admin can send (resetLink is null only if link generation failed).
   createUser: (body: { email: string; password?: string; name: string; roleType: string; employeeId?: string }) =>
     api.post<{ uid: string; resetLink: string | null }>("/auth/create-user", body),
-  updateUser: (uid: string, body: { name?: string; email?: string }) =>
+  // `recepceDefaultHotel`: omit to leave alone, null to clear. The server checks
+  // it against the TARGET user's permissions, not the caller's.
+  updateUser: (uid: string, body: { name?: string; email?: string; recepceDefaultHotel?: string | null }) =>
     api.patch<{ success: boolean }>(`/auth/users/${uid}`, body),
   deactivateUser: (uid: string) =>
     api.patch<{ success: boolean }>(`/auth/deactivate-user/${uid}`, {}),
@@ -181,6 +194,10 @@ export const authApi = {
   getTheme: () => api.get<{ theme: "light" | "dark" | null }>("/auth/me/theme"),
   setTheme: (theme: "light" | "dark") =>
     api.put<{ theme: "light" | "dark" }>("/auth/me/theme", { theme }),
+  /** The user's own default Recepce hotel. `null` clears it. Self-service (no permission). */
+  getRecepceDefault: () => api.get<{ hotel: string | null }>("/auth/me/recepce-default"),
+  setRecepceDefault: (hotel: string | null) =>
+    api.put<{ hotel: string | null }>("/auth/me/recepce-default", { hotel }),
   getTours: () => api.get<{ toursSeen: Record<string, number> }>("/auth/me/tours"),
   markTourSeen: (tourId: string, version: number) =>
     api.put<{ ok: boolean }>("/auth/me/tours", { tourId, version }),

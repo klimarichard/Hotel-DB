@@ -53,6 +53,8 @@ Přístup do sekce **Recepce** není vázaný na jednu konkrétní roli — ří
 
 > 📷 *(Místo pro snímek obrazovky: hub Recepce s lištou hotelů a záložkami)*
 
+> 📝 **Sdílený terminál:** Pracuje-li na některém pracovišti víc lidí ze společného účtu (typicky recepce), může administrátor v Nastavení → Uživatelské typy zapnout u příslušného uživatelského typu volbu **„Sdílený terminál"**. Je-li zapnutá, zápisy provedené v Recepci (protokol, Walkiny, Taxi) se v historii i v Logu změn nepřiřadí společnému účtu, ale osobě, která na protokolu předchozí směny podepsala **Převzal**. Manažer nebo administrátor přihlášený pod svým vlastním účtem se podepíše vždy sám za sebe. Pokud protokol pro předchozí směnu neexistuje nebo není podepsaný, použije se přihlášený účet.
+
 ### Otevření Recepce a výběr hotelu
 
 1. V levém menu klikněte na položku **Recepce**. Položka se v menu zobrazí jen uživatelům, kteří mají alespoň jedno oprávnění v této sekci — pokud ji nevidíte, obraťte se na administrátora.
@@ -61,7 +63,12 @@ Přístup do sekce **Recepce** není vázaný na jednu konkrétní roli — ří
 3. Pod lištou hotelů se zobrazí záložky dostupné pro vybraný hotel — typicky **Předávací protokol**, **Walkiny** a **Taxi**. Nabídka záložek se liší hotel od hotelu podle toho, jaká oprávnění máte.
 4. Kliknutím na záložku otevřete danou sekci.
 
-> 📝 Nemáte-li přístup k žádnému hotelu, zobrazí se hláška „Žádný přístupný hotel" — obraťte se na administrátora.
+**Výchozí hotel** – máte-li přístup k více než jednomu hotelu, vedle lišty hotelů se zobrazuje tlačítko **☆ Nastavit jako výchozí** / **★ Výchozí hotel**. Kliknutím určíte, který hotel se vám má v Recepci otevírat jako první – vybraný hotel je pak v liště označen hvězdičkou ★. Nastavení je uloženo k vašemu účtu, takže platí i po odhlášení nebo na jiném počítači. Administrátor může výchozí hotel nastavit i za vás, v Nastavení → Uživatelé → tlačítko **„Upravit"** u daného uživatele, výběrem z pole **„Výchozí hotel v Recepci"**.
+
+- Přímý odkaz na konkrétní hotel (např. z historie prohlížeče nebo záložky) má vždy přednost před výchozím hotelem.
+- Bez nastaveného výchozího hotelu se vám při vstupu do Recepce otevře naposledy použitý hotel.
+
+> 📝 Nemáte-li přístup k žádnému hotelu, zobrazí se hláška „Žádný přístupný hotel" – obraťte se na administrátora.
 
 ### Předávací protokol
 
@@ -74,7 +81,8 @@ Předávací protokol eviduje hotovost, účty a poznámky pro jednu konkrétní
 
 **Vytvoření protokolu**
 
-- Pokud pro zvolenou směnu ještě žádný protokol neexistuje, zobrazí se tlačítko **Vytvořit prázdný protokol** (vidí ho jen uživatelé s oprávněním protokol vytvářet). Kliknutím vznikne prázdný protokol připravený k vyplnění.
+- Pokud pro zvolenou směnu ještě žádný protokol neexistuje, zobrazí se tlačítko **Vytvořit prázdný protokol** – ale jen tehdy, když protokol pro **předchozí** směnu buď neexistuje, nebo ještě není podepsaný. Tlačítko vidí jen uživatelé s oprávněním protokol vytvářet. Kliknutím vznikne prázdný protokol připravený k vyplnění.
+- Je-li protokol pro **předchozí** směnu už podepsaný, tlačítko **Vytvořit prázdný protokol** se nenabízí – nový protokol se v tom případě zakládá z předchozí směny tlačítkem **Vytvořit protokol pro další směnu** (viz „Protokol pro další směnu" níže), které převede hotovost, účty i nedokončené poznámky.
 
 **Počítání hotovosti — KASA a TREZOR**
 
@@ -98,6 +106,7 @@ Předávací protokol eviduje hotovost, účty a poznámky pro jednu konkrétní
 - V panelu **Poznámky** přidáte poznámku tlačítkem **+ Přidat poznámku**.
 - Zaškrtávacím políčkem označíte poznámku jako **vyřízenou** (přeškrtne se).
 - Poznámku lze stejně jako účet upravit, smazat a uživatelé s oprávněním **Spravovat protokol** ji mohou uzamknout.
+- Do protokolu pro navazující směnu (tlačítko **Vytvořit protokol pro další směnu**, viz níže) se přenášejí jen **nedokončené** poznámky. Poznámka odškrtnutá jako vyřízená zůstává u směny, ve které byla dokončena, a dál se nepřenáší – ani jako přeškrtnutá.
 
 **Předání směny (podpis)**
 
@@ -110,12 +119,14 @@ Předávací protokol eviduje hotovost, účty a poznámky pro jednu konkrétní
 
 **Protokol pro další směnu**
 
-- Po podpisu *Převzal* se objeví tlačítko **Vytvořit protokol pro další směnu** — vytvoří přesnou kopii aktuálního protokolu (hotovost, účty, poznámky, bez podpisů) pro navazující směnu a rovnou vás do ní přepne. Tlačítko se nezobrazí, pokud protokol pro další směnu už existuje.
+- Po podpisu *Převzal* se objeví tlačítko **Vytvořit protokol pro další směnu** – vytvoří přesnou kopii aktuálního protokolu (hotovost, účty, **nedokončené** poznámky, bez podpisů) pro navazující směnu a rovnou vás do ní přepne. Tlačítko se nezobrazí, pokud protokol pro další směnu už existuje.
 
 **Historie změn a krok zpět/vpřed**
 
 - Tlačítkem **Historie** otevřete panel se seznamem provedených změn (kdo, co a kdy změnil) v chronologickém pořadí.
-- Dokud protokol není podepsaný, jsou k dispozici tlačítka **↶ Zpět** a **↷ Vpřed** — vrátí, respektive znovu provedou poslední změnu. Po podpisu jsou nedostupná pro všechny.
+- Vytvoření protokolu se do historie zapíše jako jediný záznam – „Protokol vytvořen" (u prázdného protokolu), nebo „Protokol vytvořen převzetím z předchozí směny" (u protokolu založeného tlačítkem **Vytvořit protokol pro další směnu**). Tento záznam nejde vrátit tlačítkem **↶ Zpět** – protokol jako celek lze pouze nevratně smazat tlačítkem **Smazat protokol**.
+- Psaní textu (poznámka, název nebo částka účtu) se do historie zapisuje jako **jeden záznam za celou úpravu**, ne po jednotlivých znacích. Úprava je uzavřena ve chvíli, kdy z pole odejdete – kliknete jinam, přejdete tabulátorem dál, nebo úpravu ukončíte tlačítkem **✓ Hotovo**. Vrátíte-li se do stejného pole později, začíná nová úprava a vznikne nový záznam. Jedno kliknutí na **↶ Zpět** vrátí celou úpravu najednou. Napíšete-li text a poté ho smažete zpět na původní hodnotu, v historii po této úpravě nezůstane žádný záznam.
+- Dokud protokol není podepsaný, jsou k dispozici tlačítka **↶ Zpět** a **↷ Vpřed** – vrátí, respektive znovu provedou poslední změnu. Po podpisu jsou nedostupná pro všechny.
 
 **Tisk**
 

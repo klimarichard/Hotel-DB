@@ -571,6 +571,15 @@ function ProtocolEditor({
   const [signError, setSignError] = useState<string | null>(null);
   // Whether the NEXT shift already has a protocol (hides the create-next button).
   const [nextExists, setNextExists] = useState(false);
+  /**
+   * Only meaningful in the empty state. `true` once we know the previous shift's
+   * protocol exists AND is fully signed — that shift is supposed to hand this one
+   * over ("Vytvořit protokol pro další směnu"), so creating a blank one here would
+   * silently drop the cash, účty and open poznámky it should have carried across.
+   * `null` while unknown; an unsigned or missing previous shift leaves it false so
+   * the chain can never deadlock.
+   */
+  const [prevHandedOver, setPrevHandedOver] = useState<boolean | null>(null);
   // Set when another user has changed (or deleted) this doc since we loaded it and
   // we have unsaved edits: a non-destructive banner lets the user reload. `current`
   // is the server's version (null = it was deleted). While set, autosave is paused.
@@ -588,6 +597,13 @@ function ProtocolEditor({
   const savedPayloadRef = useRef<string>(JSON.stringify(toPayload([], emptyCashCounts(), [], [0, 0, 0])));
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isSavingRef = useRef(false);
+  // The input currently being typed into, if any (see beginEdit/endEdit). `key`
+  // identifies the field so re-focusing the same one after a blur still mints a
+  // new token; `id` is what the server matches on and must be unique per client,
+  // since two tabs of the same user would otherwise collide.
+  const editRef = useRef<{ key: string; id: string; closed: boolean } | null>(null);
+  const editSeqRef = useRef(0);
+  const clientIdRef = useRef(genId());
   // Latest values mirrored into refs so the change-detection poll can read them
   // without re-subscribing its interval/listeners on every keystroke.
   const loadedRef = useRef<Handover | null>(null);
@@ -727,6 +743,28 @@ function ProtocolEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prevzal]);
 
+  // Empty state only: does the previous shift already exist and stand signed off?
+  // If it does, this protocol must be born from its "další směna" button so the
+  // balances carry over — so the blank-create button is withheld here.
+  useEffect(() => {
+    if (loading || loaded) return;
+    let cancelled = false;
+    const prev = previousShift(shiftDate, shiftType);
+    void (async () => {
+      try {
+        const doc = await api.get<Handover>(`/handovers/${hotel.slug}/${prev.date}_${prev.shift}`);
+        if (!cancelled) setPrevHandedOver(!!(doc.predal && doc.prevzal));
+      } catch {
+        // 404 (no previous protocol) or a network error: allow the blank create.
+        if (!cancelled) setPrevHandedOver(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, loaded]);
+
   // Debounced autosave – active once a record exists and while it's not frozen.
   useEffect(() => {
     if (loading || !loaded) return;
@@ -740,6 +778,36 @@ function ProtocolEditor({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [notes, cashCounts, accounts, smCounts, loading, loaded, dirty, canEdit, externalChange]);
+
+  // ── Edit sessions (history coalescing) ─────────────────────────────────────
+  // One token per focus-to-blur pass over one input. The server folds successive
+  // autosaves carrying the same token into a single history entry, so typing a
+  // poznámka leaves one entry rather than one per 800 ms pause — see
+  // `tryCoalesce` in functions/src/services/handoverHistory.ts.
+  //
+  // A blurred session is marked `closed`, NOT dropped: if the flush below loses a
+  // race with a save already in flight, the straggler autosave that follows must
+  // still carry the token and fold, rather than opening a second entry. Only a
+  // fresh focus mints a new token.
+  function beginEdit(key: string) {
+    const cur = editRef.current;
+    if (cur && !cur.closed && cur.key === key) return;
+    endEdit();
+    editSeqRef.current += 1;
+    editRef.current = { key, id: `${clientIdRef.current}-${editSeqRef.current}`, closed: false };
+  }
+
+  /** Seal the current session and push the final value out without waiting 800 ms. */
+  function endEdit() {
+    const sess = editRef.current;
+    if (!sess || sess.closed) return;
+    sess.closed = true;
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    if (dirtyRef.current && canEdit && !externalRef.current) void save();
+  }
 
   async function save(): Promise<boolean> {
     if (isSavingRef.current) return false;
@@ -755,10 +823,15 @@ function ProtocolEditor({
         // rejects the save (409) if the stored doc has moved since, rather than
         // silently overwriting a colleague's edit.
         baseUpdatedAt: tsMillis(loaded?.updatedAt),
+        editSession: editRef.current?.id ?? null,
       });
       setLoaded(saved);
       savedPayloadRef.current = JSON.stringify(payload);
       setAutosaveError(null);
+      // A sealed session has now reached the server, stragglers included. Drop the
+      // token so a later, unrelated single-change save can't inherit it and fold
+      // into the entry this session produced. A failed save keeps it, to retry.
+      if (editRef.current?.closed) editRef.current = null;
       return true;
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
@@ -996,10 +1069,14 @@ function ProtocolEditor({
         if (!(e instanceof ApiError && e.status === 404)) throw e;
       }
       if (!doc) {
+        // Poznámky ticked off during this shift stay with it — the next shift
+        // inherits only what is still outstanding, not a list of struck-through
+        // leftovers. (The backend drops any that slip through on a create.)
+        const outstanding = notes.filter((n) => !n.done);
         doc = await api.put<Handover>(`/handovers/${hotel.slug}`, {
           shiftDate: next.date,
           shiftType: next.shift,
-          ...toPayload(notes, cashCounts, accounts, smCounts),
+          ...toPayload(outstanding, cashCounts, accounts, smCounts),
         });
       }
       onNavigate(next.date, next.shift, doc);
@@ -1282,15 +1359,20 @@ function ProtocolEditor({
       <>
         <div className={styles.placeholder}>
           <p className={styles.placeholderTitle}>Pro tuto směnu zatím není žádný záznam</p>
-          {canCreate ? (
+          {!canCreate ? (
+            <p className={styles.placeholderHint}>Nemáte oprávnění vytvořit nový protokol.</p>
+          ) : prevHandedOver === null ? null : prevHandedOver ? (
+            <p className={styles.placeholderHint}>
+              Předchozí směna je podepsaná. Otevřete její protokol a použijte tlačítko „Vytvořit protokol pro další
+              směnu“ – tím se převede hotovost, účty i nedokončené poznámky.
+            </p>
+          ) : (
             <>
               <p className={styles.placeholderHint}>Vytvořte prázdný předávací protokol a začněte vyplňovat.</p>
               <Button onClick={createEmpty} disabled={creating} data-tour="protokol-create">
                 {creating ? "Vytvářím…" : "Vytvořit prázdný protokol"}
               </Button>
             </>
-          ) : (
-            <p className={styles.placeholderHint}>Nemáte oprávnění vytvořit nový protokol.</p>
           )}
         </div>
         {confirmModal}
@@ -1413,6 +1495,8 @@ function ProtocolEditor({
                         className={styles.cashInput}
                         value={ks === 0 ? "" : ks}
                         onChange={(e) => setDenomCount(drawer, d, Number(e.target.value))}
+                        onFocus={() => beginEdit(`cash:${drawer}:${d}`)}
+                        onBlur={endEdit}
                         placeholder="0"
                         disabled={!canEdit}
                       />
@@ -1521,6 +1605,8 @@ function ProtocolEditor({
                           className={styles.accountName}
                           value={acc.name}
                           onChange={(e) => setAccountName(idx, e.target.value)}
+                          onFocus={() => beginEdit(`acct:${acc.id}:name`)}
+                          onBlur={endEdit}
                           placeholder="Název (např. Květiny)"
                           autoFocus
                         />
@@ -1536,6 +1622,8 @@ function ProtocolEditor({
                           className={styles.accountAmount}
                           value={acc.amount === 0 ? "" : acc.amount}
                           onChange={(e) => setAccountAmount(idx, Number(e.target.value))}
+                          onFocus={() => beginEdit(`acct:${acc.id}:amount`)}
+                          onBlur={endEdit}
                           placeholder="0"
                         />
                       ) : (
@@ -1610,6 +1698,8 @@ function ProtocolEditor({
                         className={n.done ? `${styles.noteText} ${styles.noteTextDone}` : styles.noteText}
                         value={n.text}
                         onChange={(e) => setNoteText(i, e.target.value)}
+                        onFocus={() => beginEdit(`note:${n.id}:text`)}
+                        onBlur={endEdit}
                         placeholder="Poznámka…"
                         autoFocus
                       />

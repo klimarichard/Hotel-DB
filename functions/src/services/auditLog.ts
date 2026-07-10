@@ -112,6 +112,14 @@ export interface AuditContext {
   email: string;
   /** The actor's user-type id at the time of the change (for forensics). */
   roleType: string;
+  /**
+   * Shared-terminal attribution. When `uid` was resolved to the person actually
+   * on shift (rather than the account that holds the session — see
+   * services/recepceActor.ts), these record the session account the write
+   * physically came through. Absent for ordinary logins.
+   */
+  viaUid?: string;
+  viaEmail?: string;
 }
 
 /**
@@ -130,6 +138,9 @@ export interface AuditEntry {
   userEmail: string;
   /** Stored field name kept as `userRole` for back-compat; holds the type id. */
   userRole: string;
+  /** Shared-terminal session account, when `userId` is the resolved on-shift person. */
+  viaUid?: string;
+  viaEmail?: string;
   action: AuditAction;
   collection: string;
   resourceId?: string;
@@ -227,6 +238,9 @@ function baseEntry(
     userId: ctx.uid,
     userEmail: ctx.email,
     userRole: ctx.roleType,
+    // Dropped by stripUndefined at write time when this is an ordinary login.
+    viaUid: ctx.viaUid,
+    viaEmail: ctx.viaEmail,
     action,
     collection,
     resourceId,

@@ -48,6 +48,8 @@ The `auditLog/` collection stores one document per changed field for `update` ac
   userId,          // Firebase Auth UID, or "system" for automated actions
   userEmail,       // at time of write; "" for system actions
   userRole,        // user-type id at time of write (stored as "userRole" for back-compat)
+  viaUid?,         // shared-terminal session uid, when userId was substituted (Recepce only)
+  viaEmail?,       // shared-terminal session email, alongside viaUid
   action: "create" | "update" | "delete" | "reveal" | "export" | "manual-trigger",
   collection,      // e.g. "employees", "shiftPlans/shifts", "employees/contact"
   resourceId?,     // top-level doc id
@@ -71,6 +73,14 @@ The `auditLog/` collection stores one document per changed field for `update` ac
 ```
 
 All new fields are additive. Legacy entries lack them and fall back to client-side render-derivation (see `deriveLegacyEventId` below).
+
+**`viaUid`/`viaEmail`** are only ever populated for **Recepce** writes made from a
+`sharedTerminal`-flagged user type's session, where `userId`/`userEmail` are the
+*resolved on-shift person* (whoever signed Převzal) rather than the logged-in
+account — `via*` preserves which shared-terminal session the write physically
+came through, so the substitution never loses information. See
+[Recepce — Shared-terminal write attribution](recepce.md#shared-terminal-write-attribution).
+Absent (stripped by `stripUndefined`) for every ordinary login.
 
 ### Backend helper — `functions/src/services/auditLog.ts`
 

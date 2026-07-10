@@ -9,6 +9,7 @@ import styles from "./UserTypesTab.module.css";
 interface Draft {
   name: string;
   management: boolean;
+  sharedTerminal: boolean;
   perms: Set<string>;
 }
 
@@ -62,14 +63,24 @@ export default function UserTypesTab() {
       setOriginal(null);
       return;
     }
-    const d: Draft = { name: selected.name, management: selected.management, perms: new Set(selected.permissions) };
-    setDraft({ name: d.name, management: d.management, perms: new Set(d.perms) });
-    setOriginal({ name: d.name, management: d.management, perms: new Set(d.perms) });
+    const d: Draft = {
+      name: selected.name,
+      management: selected.management,
+      sharedTerminal: selected.sharedTerminal === true,
+      perms: new Set(selected.permissions),
+    };
+    setDraft({ ...d, perms: new Set(d.perms) });
+    setOriginal({ ...d, perms: new Set(d.perms) });
   }, [selected]);
 
   const isDirty = useMemo(() => {
     if (!draft || !original) return false;
-    return draft.name !== original.name || draft.management !== original.management || !setsEqual(draft.perms, original.perms);
+    return (
+      draft.name !== original.name ||
+      draft.management !== original.management ||
+      draft.sharedTerminal !== original.sharedTerminal ||
+      !setsEqual(draft.perms, original.perms)
+    );
   }, [draft, original]);
 
   function togglePerm(key: string) {
@@ -89,6 +100,7 @@ export default function UserTypesTab() {
         // mutual-exclusion) on save; conforming sets pass through unchanged.
         permissions: [...normalize(draft.perms)],
         management: draft.management,
+        sharedTerminal: draft.sharedTerminal,
       });
       setSaveMsg("Uloženo");
       await reload(selected.id);
@@ -104,7 +116,9 @@ export default function UserTypesTab() {
     const name = newName.trim();
     if (!name) return;
     try {
-      const res = await roleTypesApi.create(cloneFrom ? { name, cloneFrom } : { name, permissions: [], management: false });
+      const res = await roleTypesApi.create(
+        cloneFrom ? { name, cloneFrom } : { name, permissions: [], management: false, sharedTerminal: false }
+      );
       setCreating(false);
       setNewName("");
       setCloneFrom("");
@@ -213,6 +227,19 @@ export default function UserTypesTab() {
                 onChange={(e) => setDraft((p) => (p ? { ...p, management: e.target.checked } : p))}
               />
               <span>Vedení – záznamy zaměstnanců s tímto typem se skryjí personalistovi (a podobným).</span>
+            </label>
+
+            <label className={styles.mgmtRow}>
+              <input
+                type="checkbox"
+                checked={draft.sharedTerminal}
+                disabled={isSystem}
+                onChange={(e) => setDraft((p) => (p ? { ...p, sharedTerminal: e.target.checked } : p))}
+              />
+              <span>
+                Sdílený terminál – zápisy v Recepci se přiřadí tomu, kdo podepsal „Převzal“ na protokolu předchozí
+                směny, ne tomuto společnému účtu.
+              </span>
             </label>
 
             <PermissionMatrix

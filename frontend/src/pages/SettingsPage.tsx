@@ -12,7 +12,8 @@ import MenuOrderTab from "./settings/MenuOrderTab";
 import UserTypesTab from "./settings/UserTypesTab";
 import JobsTab from "./settings/JobsTab";
 import UserPermissionsModal from "@/components/UserPermissionsModal";
-import type { Permission } from "@/lib/permissions/catalog";
+import { hasPermission, type Permission } from "@/lib/permissions/catalog";
+import { accessibleHotels } from "@/lib/hotels";
 import styles from "./SettingsPage.module.css";
 
 const EyeIcon = () => (
@@ -199,7 +200,8 @@ export default function SettingsPage() {
   // Edit-user (name/email) state
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
   const [permsUser, setPermsUser] = useState<UserProfile | null>(null);
-  const [editForm, setEditForm] = useState({ name: "", email: "" });
+  // `defaultHotel`: "" means no default (sent to the API as null).
+  const [editForm, setEditForm] = useState({ name: "", email: "", defaultHotel: "" });
   const [editError, setEditError] = useState<string | null>(null);
   const [editSaving, setEditSaving] = useState(false);
   const [confirmEmailChange, setConfirmEmailChange] = useState(false);
@@ -779,9 +781,23 @@ export default function SettingsPage() {
     }
   }
 
+  /**
+   * The Recepce hotels a given user can open — their type's permissions plus
+   * their own grants, minus their revokes. Mirrors the backend's
+   * `resolveEffectivePermissions`, and only ever drives which options the
+   * default-hotel dropdown offers; the backend re-checks it on save.
+   */
+  function hotelsFor(u: UserProfile) {
+    const base = roleTypes.find((t) => t.id === (u.roleType ?? u.role))?.permissions ?? [];
+    const perms = new Set(base);
+    (u.extraPermissions ?? []).forEach((p) => perms.add(p));
+    (u.revokedPermissions ?? []).forEach((p) => perms.delete(p));
+    return accessibleHotels((p) => hasPermission(perms, p));
+  }
+
   function openEditUser(u: UserProfile) {
     setEditingUser(u);
-    setEditForm({ name: u.name ?? "", email: u.email ?? "" });
+    setEditForm({ name: u.name ?? "", email: u.email ?? "", defaultHotel: u.recepceDefaultHotel ?? "" });
     setEditError(null);
     setConfirmEmailChange(false);
   }
@@ -801,9 +817,14 @@ export default function SettingsPage() {
     setEditSaving(true);
     setEditError(null);
     try {
+      // Only send the default when it actually changed. The dropdown doesn't
+      // render for a user with fewer than two hotels, so always sending it would
+      // silently clear such a user's default whenever an admin edited their name.
+      const defaultChanged = editForm.defaultHotel !== (editingUser.recepceDefaultHotel ?? "");
       await authApi.updateUser(editingUser.uid, {
         name: editForm.name.trim() || undefined,
         email: editForm.email.trim() || undefined,
+        ...(defaultChanged ? { recepceDefaultHotel: editForm.defaultHotel || null } : {}),
       });
       setEditingUser(null);
       await loadUsers();
@@ -2169,6 +2190,28 @@ export default function SettingsPage() {
                 </p>
               )}
             </div>
+            {/* Only offered when the user can reach more than one Recepce hotel –
+                with none there is nothing to default to, with one it is moot. */}
+            {hotelsFor(editingUser).length > 1 && (
+              <div className={styles.field}>
+                <label className={styles.label}>Výchozí hotel v Recepci</label>
+                <select
+                  className={styles.input}
+                  value={editForm.defaultHotel}
+                  onChange={(e) => setEditForm({ ...editForm, defaultHotel: e.target.value })}
+                >
+                  <option value="">(žádný – naposledy použitý)</option>
+                  {hotelsFor(editingUser).map((h) => (
+                    <option key={h.slug} value={h.slug}>
+                      {h.label}
+                    </option>
+                  ))}
+                </select>
+                <p className={styles.fieldHint}>
+                  Tento hotel se uživateli otevře, kdykoliv klikne na Recepci. Uživatel si jej může sám změnit.
+                </p>
+              </div>
+            )}
             {editError && <p className={styles.formError}>{editError}</p>}
             <div className={styles.formActions}>
               <Button variant="secondary" onClick={() => setEditingUser(null)} disabled={editSaving}>

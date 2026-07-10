@@ -106,9 +106,10 @@ What used to be hard-coded roles are now **editable user types** stored in Fires
 
 ```
 roleTypes/{id} = {
-  name: string,            // display label, e.g. "Ředitel"
-  permissions: string[],   // permission keys this type grants
+  name: string,             // display label, e.g. "Ředitel"
+  permissions: string[],    // permission keys this type grants
   management: boolean,      // holders count as "management" for record scoping
+  sharedTerminal: boolean,  // shared front-desk login — see below
   system: boolean           // protected built-in (only `admin`)
 }
 ```
@@ -118,6 +119,16 @@ Five built-ins are seeded: `admin`, `director`, `manager`, `employee`, `accounta
 - **Only `admin` is `system: true`** — protected: it can't be edited or deleted and always has all permissions.
 - The other four (`director`, `manager`, `employee`, `accountant`) are **fully editable AND deletable**.
 - **`management: true`** means holders count as "management" for employee-record scoping (this replaces the old hard-coded admin/director/manager list). Built-ins `admin`/`director`/`manager` are management; `employee`/`accountant` are not.
+- **`sharedTerminal: true`** marks a type as a **shared front-desk login** — a
+  generic account several people sign into as one (e.g. a reception terminal).
+  It is unrelated to the permission set: it only affects **Recepce write
+  attribution** — history/audit entries for a `sharedTerminal` session's Recepce
+  writes are attributed to whoever most recently signed **Převzal** on the
+  relevant protocol, not to the shared account itself. Edited via the "Sdílený
+  terminál" checkbox in Nastavení → Uživatelské typy, next to "Vedení". Defaults
+  to `false` for every type, including all five built-ins, so this is a no-op
+  until an admin opts a type in. Full mechanism: [Recepce — Shared-terminal
+  write attribution](recepce.md#shared-terminal-write-attribution).
 
 ### Per-user assignment & overrides
 
@@ -211,8 +222,10 @@ When adding a new UI section, check whether it is a subset of something a higher
 | `POST /api/users/trigger-scheduled-deactivations` | Manually run the scheduled-deactivation sweep (v3.7.0) | `system.triggers`; mirrors the `checkScheduledDeactivations` job, writes a `manual-trigger` audit entry. Not wired into the Settings → Úlohy UI (backend/testing only) |
 | `POST /api/auth/create-user` | Create a new user account | `users.manage`; if `employeeId` is supplied in the body, also requires `users.linkEmployee` (or `system.admin`) — a `users.manage` holder without `users.linkEmployee` receives 403 when they include `employeeId` (v3.2.1) |
 | `PATCH /api/auth/users/:uid/employee` | Link or unlink an employee record to a user | `users.linkEmployee`; body `{ employeeId: string \| null }` |
+| `PATCH /api/auth/users/:uid` | Edit a user's name/email and/or their **Recepce default hotel** | `users.manage`; body `{ name?, email?, recepceDefaultHotel? }` — `recepceDefaultHotel` is absent-vs-`null` sensitive (absent = leave alone, `null` = clear); a non-null value is validated against the **target** user's own effective permissions (`resolveEffectivePermissions`), 400 if they can't see that hotel; audit-logged |
 | `GET /api/auth/users` | List all users | `users.view`; each entry includes `roleTypeName` and `employeeName` (see below) |
 | `GET /api/auth/me` | Returns the resolved `permissions` array (plus the user profile, including `roleTypeName`) | authenticated |
+| `GET/PUT /api/auth/me/recepce-default` | The caller's own Recepce default hotel (`{ hotel: HotelSlug \| null }`) | `requireAuth` only, **no permission key** (self-service, same precedent as `/me/theme`); `PUT` validates the slug against the **caller's own** permissions, 403 otherwise; not audit-logged. See [Recepce — Per-user default hotel](recepce.md#per-user-default-hotel--usersuidrecepcedefaulthotel) |
 
 **Seeding** — `scripts/seed-role-types.js` seeds the six built-ins (additive; the resolver falls back to the built-ins if unseeded).
 

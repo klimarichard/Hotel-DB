@@ -72,6 +72,15 @@
   filter: brightness(0.96);
 }
 
+/* Marks the user's default hotel on its pill. Inherits the pill's colour so it
+   reads correctly on both the active (accent) and inactive backgrounds. */
+.defaultStar {
+  margin-left: 0.45rem;
+  font-size: 0.85em;
+  line-height: 1;
+  opacity: 0.85;
+}
+
 .hotelPillActive {
   background: var(--hotel-accent);
   color: #fff;

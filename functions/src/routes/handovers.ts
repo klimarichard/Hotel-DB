@@ -32,6 +32,7 @@ import { scheduledSigner } from "../services/scheduleLookup";
 import {
   HandoverContent,
   diffHandover,
+  createdChange,
   applyChange,
   appendHistory,
   readCursor,
@@ -40,6 +41,7 @@ import {
   markUndone,
   canUndoRedo,
 } from "../services/handoverHistory";
+import { actorCtx, resolveRecepceActor } from "../services/recepceActor";
 
 const db = () => admin.firestore();
 
@@ -132,6 +134,15 @@ async function readSmRates(): Promise<[number, number, number]> {
 /** Σ aᵢ·bᵢ — the sm dot product (rates·counts, or rates·transfer amounts). */
 function dot(a: [number, number, number], b: [number, number, number]): number {
   return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+
+/**
+ * The client's edit-session token (one focus-to-blur pass over one input). Opaque
+ * to the server — only ever compared for equality against the tip history entry's
+ * — so it just has to be a short, harmless string.
+ */
+function sanitizeEditSession(raw: unknown): string | undefined {
+  return typeof raw === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(raw) ? raw : undefined;
 }
 
 function sanitizeNotes(raw: unknown): NoteRow[] {
@@ -552,6 +563,7 @@ handoversRouter.put(
       cashCounts?: unknown;
       accounts?: unknown;
       smCounts?: unknown;
+      editSession?: unknown;
     };
 
     if (!isShiftDate(body.shiftDate)) {
@@ -615,6 +627,7 @@ handoversRouter.put(
     // fields can't be bypassed at creation.
     let seedSmTrezor = 0;
     let seedWata = 0;
+    let prevClosed = false;
     if (!beforeSnap.exists) {
       const set = req.permissions ?? new Set<string>();
       const prev = previousShift(body.shiftDate, body.shiftType);
@@ -622,14 +635,12 @@ handoversRouter.put(
       const prevDoc = prevSnap.exists ? (prevSnap.data() as HandoverDoc) : null;
       seedSmTrezor = finiteOr(prevDoc?.smTrezor, 0);
       seedWata = finiteOr(prevDoc?.wata, 0);
+      prevClosed = !!(prevDoc?.predal && prevDoc?.prevzal);
 
       const hasCreate = set.has("system.admin") || set.has(handoverCreatePerm(hotel));
-      if (!hasCreate) {
-        const prevClosed = !!(prevDoc?.predal && prevDoc?.prevzal);
-        if (!prevClosed) {
-          res.status(403).json({ error: "Nemáte oprávnění vytvořit protokol." });
-          return;
-        }
+      if (!hasCreate && !prevClosed) {
+        res.status(403).json({ error: "Nemáte oprávnění vytvořit protokol." });
+        return;
       }
     }
 
@@ -643,10 +654,19 @@ handoversRouter.put(
 
     const set = req.permissions ?? new Set<string>();
     const isManage = set.has("system.admin") || set.has(handoverManagePerm(hotel));
+    // A brand-new protocol never starts with finished poznámky. The next shift
+    // carries the outstanding ones forward; the ones ticked off in the shift that
+    // just ended stay behind with it — not even struck through. Enforced here so
+    // it holds no matter what the client sends.
+    const incomingNotes = sanitizeNotes(body.notes);
     const after = {
       shiftDate: body.shiftDate,
       shiftType: body.shiftType,
-      notes: mergeLockable<NoteRow>(before?.notes ?? [], sanitizeNotes(body.notes), isManage),
+      notes: mergeLockable<NoteRow>(
+        before?.notes ?? [],
+        beforeSnap.exists ? incomingNotes : incomingNotes.filter((n) => !n.done),
+        isManage
+      ),
       cashCounts: sanitizeCashCounts(body.cashCounts),
       accounts: mergeLockable<AccountRow>(before?.accounts ?? [], sanitizeAccounts(body.accounts), isManage),
       // sm counts flow through the normal content PUT (any protocol-edit user).
@@ -660,24 +680,32 @@ handoversRouter.put(
     // changed note / účet / cash denomination / sm count is recorded on its own
     // (drives the in-protocol history panel + undo/redo). Computed BEFORE the
     // write, from the doc as it currently stands.
+    //
+    // Creation is the exception: it is NOT diffed against an empty document. A
+    // protocol carried over from the previous shift arrives with all of its
+    // notes, účty and cash already populated, and diffing that against nothing
+    // recorded dozens of "Přidáno…" entries. One "Protokol vytvořen" instead.
     const afterContent: HandoverContent = {
       notes: after.notes,
       accounts: after.accounts,
       cashCounts: after.cashCounts,
       smCounts: after.smCounts,
     };
-    const changes = diffHandover(
-      before
-        ? { notes: before.notes, accounts: before.accounts, cashCounts: before.cashCounts, smCounts: before.smCounts }
-        : null,
-      afterContent
-    );
+    const changes = beforeSnap.exists
+      ? diffHandover(
+          { notes: before?.notes, accounts: before?.accounts, cashCounts: before?.cashCounts, smCounts: before?.smCounts },
+          afterContent
+        )
+      : [createdChange(prevClosed)];
+    const actor = await resolveRecepceActor(req, hotel, body.shiftDate, body.shiftType);
     const newCursor = await appendHistory(
       hotel,
       id,
       readCursor((before as unknown as Record<string, unknown>) ?? undefined),
       changes,
-      { uid: req.uid ?? "", email: req.userEmail ?? "" }
+      actor,
+      afterContent,
+      sanitizeEditSession(body.editSession)
     );
 
     if (!beforeSnap.exists) {
@@ -692,11 +720,11 @@ handoversRouter.put(
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       });
-      await logCreate(ctxFromReq(req), {
+      await logCreate(actorCtx(actor), {
         collection: "shiftHandovers",
         resourceId: id,
         subResourceId: hotel,
-        summary: { shiftDate: body.shiftDate, shiftType: body.shiftType, authorUid: req.uid },
+        summary: { shiftDate: body.shiftDate, shiftType: body.shiftType, authorUid: actor.uid },
       });
     } else {
       // update() (NOT set-merge): a set with { merge:true } deep-merges the
@@ -712,9 +740,10 @@ handoversRouter.put(
 
     // One compact audit entry per save — the element-level detail lives in the
     // protocol's history subcollection, not duplicated into auditLog. Skipped on
-    // a no-op flush (autosave can fire with nothing actually changed).
-    if (changes.length > 0) {
-      await writeAudit(ctxFromReq(req), {
+    // a no-op flush (autosave can fire with nothing actually changed), and on
+    // creation, where logCreate above already stands for the whole document.
+    if (beforeSnap.exists && changes.length > 0) {
+      await writeAudit(actorCtx(actor), {
         action: "update",
         collection: "shiftHandovers",
         resourceId: id,
@@ -1021,7 +1050,7 @@ handoversRouter.post(
       { smCounts: newCounts, smTrezor: newTrezor, updatedBy: req.uid, updatedAt: FieldValue.serverTimestamp() },
       { merge: true }
     );
-    await logUpdate(ctxFromReq(req), {
+    await logUpdate(actorCtx(await resolveRecepceActor(req, hotel, before.shiftDate, before.shiftType)), {
       collection: "shiftHandovers",
       resourceId: req.params.id,
       subResourceId: hotel,
@@ -1050,7 +1079,7 @@ handoversRouter.post(
       { smTrezor: 0, updatedBy: req.uid, updatedAt: FieldValue.serverTimestamp() },
       { merge: true }
     );
-    await logUpdate(ctxFromReq(req), {
+    await logUpdate(actorCtx(await resolveRecepceActor(req, hotel, before.shiftDate, before.shiftType)), {
       collection: "shiftHandovers",
       resourceId: req.params.id,
       subResourceId: hotel,
@@ -1081,7 +1110,7 @@ handoversRouter.post(
       { wata: next, updatedBy: req.uid, updatedAt: FieldValue.serverTimestamp() },
       { merge: true }
     );
-    await logUpdate(ctxFromReq(req), {
+    await logUpdate(actorCtx(await resolveRecepceActor(req, hotel, before.shiftDate, before.shiftType)), {
       collection: "shiftHandovers",
       resourceId: req.params.id,
       subResourceId: hotel,
@@ -1192,7 +1221,7 @@ function stepHandler(dir: "undo" | "redo") {
       updatedAt: FieldValue.serverTimestamp(),
     });
     await markUndone(hotel, id, plan.seq, dir === "undo");
-    await writeAudit(ctxFromReq(req), {
+    await writeAudit(actorCtx(await resolveRecepceActor(req, hotel, before.shiftDate, before.shiftType)), {
       action: "update",
       collection: "shiftHandovers",
       resourceId: id,
