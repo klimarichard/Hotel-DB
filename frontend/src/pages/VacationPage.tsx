@@ -167,8 +167,13 @@ export default function VacationPage() {
   // of date; otherwise anything whose end date hasn't passed yet is "future"
   // (which includes ongoing vacations). Decided requests whose end date has
   // passed go into the collapsible "Starší žádosti".
+  //
+  // Use loose `!= null` (matching the backend): legacy requests created before
+  // the pendingEdit field existed omit it entirely, so a strict `!== null` read
+  // `undefined !== null` as true and pinned every such past request to the main
+  // list forever. `!= null` treats both null and a missing field as "no edit".
   const needsAttention = (r: VacationRequest) =>
-    r.status === "pending" || r.pendingEdit !== null;
+    r.status === "pending" || r.pendingEdit != null;
   const futureRequests = requests
     .filter((r) => needsAttention(r) || r.endDate >= todayYMD)
     .slice()
