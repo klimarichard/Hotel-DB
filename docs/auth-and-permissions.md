@@ -106,9 +106,10 @@ What used to be hard-coded roles are now **editable user types** stored in Fires
 
 ```
 roleTypes/{id} = {
-  name: string,            // display label, e.g. "Ředitel"
-  permissions: string[],   // permission keys this type grants
+  name: string,             // display label, e.g. "Ředitel"
+  permissions: string[],    // permission keys this type grants
   management: boolean,      // holders count as "management" for record scoping
+  sharedTerminal: boolean,  // shared front-desk login — see below
   system: boolean           // protected built-in (only `admin`)
 }
 ```
@@ -118,6 +119,16 @@ Five built-ins are seeded: `admin`, `director`, `manager`, `employee`, `accounta
 - **Only `admin` is `system: true`** — protected: it can't be edited or deleted and always has all permissions.
 - The other four (`director`, `manager`, `employee`, `accountant`) are **fully editable AND deletable**.
 - **`management: true`** means holders count as "management" for employee-record scoping (this replaces the old hard-coded admin/director/manager list). Built-ins `admin`/`director`/`manager` are management; `employee`/`accountant` are not.
+- **`sharedTerminal: true`** marks a type as a **shared front-desk login** — a
+  generic account several people sign into as one (e.g. a reception terminal).
+  It is unrelated to the permission set: it only affects **Recepce write
+  attribution** — history/audit entries for a `sharedTerminal` session's Recepce
+  writes are attributed to whoever most recently signed **Převzal** on the
+  relevant protocol, not to the shared account itself. Edited via the "Sdílený
+  terminál" checkbox in Nastavení → Uživatelské typy, next to "Vedení". Defaults
+  to `false` for every type, including all five built-ins, so this is a no-op
+  until an admin opts a type in. Full mechanism: [Recepce — Shared-terminal
+  write attribution](recepce.md#shared-terminal-write-attribution).
 
 ### Per-user assignment & overrides
 
