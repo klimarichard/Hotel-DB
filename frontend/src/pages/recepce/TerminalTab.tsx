@@ -256,82 +256,112 @@ export default function TerminalTab({ hotel }: { hotel: Hotel }) {
         </div>
       )}
 
-      <div className={styles.toolbar}>
-        <Button size="sm" onClick={() => setEditing("new")} data-tour="terminal-add">
-          + Přidat platbu
-        </Button>
-        {canManage && (
-          <Button variant="secondary" size="sm" onClick={() => setTypesOpen(true)}>
-            Upravit typy plateb
-          </Button>
-        )}
-      </div>
-
       {loading ? (
         <div className={styles.empty}>Načítám…</div>
       ) : loadError ? (
         <div className={`${styles.empty} ${styles.statusError}`}>{loadError}</div>
       ) : (
-        <div className={styles.tableWrap} data-tour="terminal-table">
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <th>Datum</th>
-                <th className={styles.numCell}>Částka</th>
-                <th>Typ</th>
-                <th>Poznámka</th>
-                {canManage && <th data-tour="terminal-settled">Předáno</th>}
-                <th aria-label="Akce" />
-              </tr>
-            </thead>
-            <tbody>
-              {payments.length === 0 && (
-                <tr>
-                  <td colSpan={colCount} className={styles.empty}>
-                    Žádné platby z terminálu.
-                  </td>
-                </tr>
-              )}
-              {payments.map((p) => (
-                <tr key={p.id}>
-                  <td>{formatDate(p.date)}</td>
-                  <td className={styles.numCell}>{p.amount.toLocaleString("cs-CZ")} Kč</td>
-                  {/* The "other" label already reads "Jiné…" — a second "jiné" tag
-                      (as Taxi has next to a real route name) would just repeat it. */}
-                  <td>{typeLabelOf(p)}</td>
-                  <td className={p.note ? styles.noteCell : `${styles.noteCell} ${styles.noteEmpty}`} title={p.note}>
-                    {p.note || "–"}
-                  </td>
-                  {canManage && (
-                    <td className={styles.settledCell}>
-                      <input
-                        type="checkbox"
-                        className={styles.settledCheck}
-                        checked={p.settled}
-                        onChange={(e) => void toggleSettled(p, e.target.checked)}
-                        aria-label="Předáno"
-                      />
-                    </td>
+        <div className={styles.content}>
+          <div className={styles.left}>
+            <div className={styles.toolbar}>
+              <Button size="sm" onClick={() => setEditing("new")} data-tour="terminal-add">
+                + Přidat platbu
+              </Button>
+            </div>
+            <div className={styles.tableWrap} data-tour="terminal-table">
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th>Datum</th>
+                    <th className={styles.numCell}>Částka</th>
+                    <th>Typ</th>
+                    <th>Poznámka</th>
+                    {canManage && <th data-tour="terminal-settled">Předáno</th>}
+                    <th aria-label="Akce" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {payments.length === 0 && (
+                    <tr>
+                      <td colSpan={colCount} className={styles.empty}>
+                        Žádné platby z terminálu.
+                      </td>
+                    </tr>
                   )}
-                  <td className={styles.actionsCell}>
-                    <div className={styles.rowActions}>
-                      <button type="button" className={styles.rowIconBtn} aria-label="Upravit" onClick={() => setEditing(p)}>
-                        <PencilIcon />
-                      </button>
-                      <button
-                        type="button"
-                        className={`${styles.rowIconBtn} ${styles.rowIconBtnTrash}`}
-                        aria-label="Smazat"
-                        onClick={() => requestDelete(p)}
-                      >
-                        <TrashIcon />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  {payments.map((p) => (
+                    <tr key={p.id}>
+                      <td>{formatDate(p.date)}</td>
+                      <td className={styles.numCell}>{p.amount.toLocaleString("cs-CZ")} Kč</td>
+                      {/* The "other" label already reads "Jiné…" — a second "jiné" tag
+                          (as Taxi has next to a real route name) would just repeat it. */}
+                      <td>{typeLabelOf(p)}</td>
+                      <td className={p.note ? styles.noteCell : `${styles.noteCell} ${styles.noteEmpty}`} title={p.note}>
+                        {p.note || "–"}
+                      </td>
+                      {canManage && (
+                        <td className={styles.settledCell}>
+                          <input
+                            type="checkbox"
+                            className={styles.settledCheck}
+                            checked={p.settled}
+                            onChange={(e) => void toggleSettled(p, e.target.checked)}
+                            aria-label="Předáno"
+                          />
+                        </td>
+                      )}
+                      <td className={styles.actionsCell}>
+                        <div className={styles.rowActions}>
+                          <button type="button" className={styles.rowIconBtn} aria-label="Upravit" onClick={() => setEditing(p)}>
+                            <PencilIcon />
+                          </button>
+                          <button
+                            type="button"
+                            className={`${styles.rowIconBtn} ${styles.rowIconBtnTrash}`}
+                            aria-label="Smazat"
+                            onClick={() => requestDelete(p)}
+                          >
+                            <TrashIcon />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {canManage && (
+            <aside className={styles.pricelist}>
+              <div className={styles.pricelistHeader}>
+                <h3 className={styles.pricelistTitle}>Typy plateb</h3>
+                <Button variant="secondary" size="sm" onClick={() => setTypesOpen(true)}>
+                  Upravit
+                </Button>
+              </div>
+              <div className={styles.pricelistBody}>
+                <table className={styles.typeListTable}>
+                  <thead>
+                    <tr>
+                      <th>Typ</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {types.map((t) => (
+                      <tr key={t.id}>
+                        <td>{t.label}</td>
+                      </tr>
+                    ))}
+                    <tr className={styles.builtinRow}>
+                      <td>
+                        {OTHER_TYPE_LABEL} <span className={styles.builtinHint}>(vždy, pozn. povinná)</span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </aside>
+          )}
         </div>
       )}
 
