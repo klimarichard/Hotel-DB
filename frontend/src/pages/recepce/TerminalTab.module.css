@@ -93,8 +93,10 @@
   background: var(--color-surface-3, var(--color-surface-2));
 }
 
+/* "Částka" is left-aligned by request. tabular-nums still keeps the digits in
+   vertical columns, so the amounts stay easy to scan. */
 .numCell {
-  text-align: right;
+  text-align: left;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }

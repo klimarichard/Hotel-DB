@@ -204,10 +204,19 @@
   background: var(--color-surface-3, var(--color-surface-2));
 }
 
+/* Right-aligned numbers. Still used by the ceník aside's CZK/EUR columns. */
 .numCell {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   text-align: right;
+}
+
+/* The sales table's numeric columns (Počet, Cena, Provize, Do společné) are
+   left-aligned by request. tabular-nums keeps the digits in vertical columns. */
+.numCellLeft {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-align: left;
 }
 
 .actionsCell {
