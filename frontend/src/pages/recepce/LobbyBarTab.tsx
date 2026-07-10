@@ -20,6 +20,10 @@ interface LobbyBarConfig {
   items: LobbyBarItem[];
   provisionCZK: number;
   provisionEUR: number;
+  /** Manager-only "Prodáno" tally: units sold per itemId since the last reset. */
+  sold?: Record<string, number>;
+  /** ISO of the last "Prodáno" reset, or null; only sent to managers. */
+  soldResetAt?: string | null;
 }
 
 interface LobbyBarSale {
@@ -268,6 +272,37 @@ export default function LobbyBarTab({ hotel }: { hotel: Hotel }) {
     }
   }
 
+  // Reset the "Prodáno" tally to zero (manage only). Sales are not deleted — the
+  // server just moves the count's start point to now — so this confirms first.
+  function requestResetSold() {
+    setConfirm({
+      title: "Vynulovat Prodáno?",
+      message:
+        "Všechna čísla ve sloupci „Prodáno“ se vynulují a počítání začne znovu od této chvíle. Zapsané prodeje se nesmažou.",
+      danger: true,
+      confirmLabel: "Vynulovat",
+      onConfirm: () => void doResetSold(),
+    });
+  }
+  async function doResetSold() {
+    try {
+      const res = await api.post<{ sold: Record<string, number>; soldResetAt: string | null }>(
+        `/lobby-bar/${hotel.slug}/reset-sold`,
+        {}
+      );
+      setConfig((prev) => ({ ...prev, sold: res.sold, soldResetAt: res.soldResetAt }));
+      setConfirm(null);
+    } catch (err) {
+      setConfirm({
+        title: "Chyba",
+        message: errorMessage(err, "Vynulování se nezdařilo."),
+        showCancel: false,
+        confirmLabel: "OK",
+        onConfirm: () => setConfirm(null),
+      });
+    }
+  }
+
   const hasRange = !!(range.from || range.to);
 
   // Totals over the sales inside the effective visible period – only the
@@ -407,9 +442,14 @@ export default function LobbyBarTab({ hotel }: { hotel: Hotel }) {
             <div className={styles.pricelistHeader}>
               <h3 className={styles.pricelistTitle}>Ceník položek</h3>
               {canManage && (
-                <Button variant="secondary" size="sm" onClick={() => setItemsOpen(true)}>
-                  Upravit
-                </Button>
+                <div className={styles.pricelistActions}>
+                  <Button variant="secondary" size="sm" onClick={() => setItemsOpen(true)}>
+                    Upravit
+                  </Button>
+                  <Button variant="danger" size="sm" onClick={requestResetSold}>
+                    Reset
+                  </Button>
+                </div>
               )}
             </div>
             <div className={styles.pricelistBody}>
@@ -419,12 +459,13 @@ export default function LobbyBarTab({ hotel }: { hotel: Hotel }) {
                     <th className={styles.itemNameCell}>Položka</th>
                     <th className={styles.numCellLeft}>CZK</th>
                     <th className={styles.numCellLeft}>EUR</th>
+                    {canManage && <th className={styles.numCellLeft}>Prodáno</th>}
                   </tr>
                 </thead>
                 <tbody>
                   {config.items.length === 0 && (
                     <tr>
-                      <td colSpan={3} className={styles.empty}>
+                      <td colSpan={canManage ? 4 : 3} className={styles.empty}>
                         Žádné položky.
                       </td>
                     </tr>
@@ -434,6 +475,9 @@ export default function LobbyBarTab({ hotel }: { hotel: Hotel }) {
                       <td className={styles.itemNameCell}>{it.name}</td>
                       <td className={styles.numCellLeft}>{it.priceCZK.toLocaleString("cs-CZ")} Kč</td>
                       <td className={styles.numCellLeft}>{it.priceEUR.toLocaleString("cs-CZ")} €</td>
+                      {canManage && (
+                        <td className={styles.numCellLeft}>{(config.sold?.[it.id] ?? 0).toLocaleString("cs-CZ")}</td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -467,7 +511,10 @@ export default function LobbyBarTab({ hotel }: { hotel: Hotel }) {
           hotel={hotel}
           config={config}
           onSaved={(next) => {
-            setConfig(next);
+            // The items PUT returns items + provisions only; keep the current
+            // Prodáno tally (keyed by stable itemId) so the column doesn't blank
+            // out after a catalogue edit.
+            setConfig((prev) => ({ ...next, sold: prev.sold, soldResetAt: prev.soldResetAt }));
             setItemsOpen(false);
           }}
           onCancel={() => setItemsOpen(false)}
