@@ -1,7 +1,8 @@
 # Recepce (Reception)
 
 This document covers the **Recepce** feature area: the per-hotel hub, the Předávací
-protokol (shift handover), Walkiny (walk-in sales), Taxi, and the cross-cutting
+protokol (shift handover), Walkiny (walk-in sales), Taxi, Lobby bar (Ambiance
+only), Terminál (Amigo & Alqush only), and the cross-cutting
 concurrency/retention/permission machinery that supports them. Everything here is
 new — there is no legacy predecessor to reconcile against.
 
@@ -123,11 +124,10 @@ sync manually, same rule as `parseShiftExpression`).
 stem `amigo` (keys are `recepce.amigo.*`). This mapping exists **only** in these
 two registry files — never hard-code the stem elsewhere.
 
-**Lobby bar** (Ambiance only) and **Terminál** (Amigo & Alqush only) are
-placeholder tabs today — `LobbyBarTab.tsx` / `TerminalTab.tsx` render a
-"Připravujeme" (coming soon) notice. Their `recepce.<stem>.lobbyBar.view` /
-`recepce.amigo.terminal.view` permission keys exist and gate the tab already, so
-no catalogue change will be needed when they ship.
+**Lobby bar** (Ambiance only) and **Terminál** (Amigo & Alqush only) are two
+hotel-specific tabs, not shared across all four hotels like Předávací
+protokol/Walkiny/Taxi — see [Lobby bar](#lobby-bar) and [Terminál](#terminal)
+below.
 
 ### Mobile gating — `recepce.mobile.view`
 
@@ -155,17 +155,17 @@ gating](auth-and-permissions.md#mobile-only-gating-mobilepermission--mobileallow
 ## Permission model
 
 The **Recepce** catalogue group (`functions/src/auth/permissions.ts`,
-`frontend/src/lib/permissions/catalog.ts`) holds **41 keys**, plus the
-`nav.recepce.view` master in the "Stránky / navigace" group — **42 Recepce-related
+`frontend/src/lib/permissions/catalog.ts`) holds **43 keys**, plus the
+`nav.recepce.view` master in the "Stránky / navigace" group — **44 Recepce-related
 keys total**:
 
 - **Global (3):** `recepce.sm.manage` ("Spravovat sm"), `recepce.taxi.manageRates`
   ("Spravovat ceník taxi"), `recepce.mobile.view` ("Zobrazit Recepci na mobilu").
-- **Per-hotel (38, ~9-10 per hotel):** `recepce.<stem>.view` (hotel master) +
+- **Per-hotel (40, ~10 per hotel):** `recepce.<stem>.view` (hotel master) +
   `recepce.<stem>.protokol.{view,create,delete,manage}` +
   `recepce.<stem>.walkiny.{view,manage}` + `recepce.<stem>.taxi.{view,manage}` +
-  `recepce.ambiance.lobbyBar.view` (Ambiance only) +
-  `recepce.amigo.terminal.view` (Amigo & Alqush only).
+  `recepce.ambiance.lobbyBar.{view,manage}` (Ambiance only) +
+  `recepce.amigo.terminal.{view,manage}` (Amigo & Alqush only).
 
 **No built-in user type is granted any Recepce permission by default** —
 `BUILTIN_TYPE_PERMISSIONS` has no `recepce.*` entries for `director`/`manager`/
@@ -191,6 +191,10 @@ use the feature.**
 | `recepce.<stem>.taxi.view` | See the Taxi tab; add/edit/delete rides (subject to the visible range for non-managers). |
 | `recepce.<stem>.taxi.manage` ("Spravovat taxi") | Set the taxi visible date range; see/add rides with no restriction; see the manager-only Provize total. |
 | `recepce.taxi.manageRates` ("Spravovat ceník taxi") | Global: edit the shared common-routes ceník (`settings/taxiRoutes`) — all hotels. |
+| `recepce.ambiance.lobbyBar.view` | See the Ambiance Lobby bar tab; add/edit/delete sales (subject to the visible range for non-managers). |
+| `recepce.ambiance.lobbyBar.manage` ("Spravovat lobby bar") | Set the lobby bar visible date range; see/add sales with no restriction; edit the item catalogue (`hotels/ambiance/config/lobbyBarItems`) — names, per-currency prices, per-currency provision rates; see the Provize/Do společné totals. |
+| `recepce.amigo.terminal.view` | See the Amigo & Alqush Terminál tab; add/edit/delete payments (subject to the visible range for non-managers). Never confers ticking "Předáno". |
+| `recepce.amigo.terminal.manage` ("Spravovat terminál") | Set the terminál visible date range; see/add payments with no restriction; see and tick the "Předáno" column (`PUT .../:id/settled`). |
 
 `system.admin` always satisfies every Recepce gate, on both frontend and backend.
 
@@ -583,10 +587,16 @@ new date on edit.
 `GET /:hotel/employees?date=` returns the employees to pick from: everyone active
 in that date's month shift plan (deduped by `employeeId`). When the month has **no
 plan**, it falls back to non-terminated employees whose `currentJobTitle`
-case-insensitively matches a fixed reception-role set
-(`WALKIN_FALLBACK_POSITIONS`: recepční, portýr, noční portýr, noční recepční,
-front office manager, senior front office manager, director of front office,
-general manager) — so the dropdown is never empty even before a plan exists.
+case-insensitively matches a fixed reception-role set (recepční, portýr, noční
+portýr, noční recepční, front office manager, senior front office manager,
+director of front office, general manager) — so the dropdown is never empty even
+before a plan exists.
+
+This logic — `listRecepceEmployees(dateStr)` + `todayPrague()` — lives in the
+shared `functions/src/services/recepceEmployees.ts`, not duplicated in
+`walkins.ts`: **Lobby bar's "Prodal" dropdown** (see below) needs exactly the
+same "who's on shift this month, falling back to reception-position employees"
+pool, so both routers import the one implementation.
 
 ## Taxi
 
@@ -638,6 +648,185 @@ gating as Walkiny (`taxi.manage` bypasses; others bounded, checked in-app).
 unfiltered from the API — `visibleProvize` in `TaxiTab.tsx` mirrors the backend's
 one-sided range semantics). Rendered above the toolbar, right-aligned to match the
 rides table's right border.
+
+## Lobby bar
+
+**Ambiance only.** `frontend/src/pages/recepce/LobbyBarTab.tsx`,
+`functions/src/routes/lobbyBar.ts` + `functions/src/services/lobbyBarShared.ts`.
+Records item sales at the lobby bar (Excel's "Lobby bar" sheet), split per sale
+between the seller's provision and the shared "do společné" pot.
+
+### Data model
+
+```
+hotels/ambiance/lobbyBarSales/{autoId} = {
+  date: string;               // YYYY-MM-DD
+  itemId: string; itemName: string;   // itemName SNAPSHOTTED at sale time
+  quantity: number;           // positive integer ("Počet")
+  currency: "CZK" | "EUR";    // never converted between the two
+  employeeId: string; employeeName: string;  // "Prodal", snapshotted
+  unitPrice: number;          // list price for `currency`, SNAPSHOTTED
+  price: number;               // quantity * unitPrice
+  provision: number;           // quantity * that currency's provision rate
+  doSpolecne: number;          // price - provision
+  createdBy?, updatedBy?, createdAt?, updatedAt?;
+}
+hotels/ambiance/config/lobbyBar = { from: string|null, to: string|null }  -- visible range
+hotels/ambiance/config/lobbyBarItems = {
+  items: [{ id, name, priceCZK, priceEUR }];
+  provisionCZK: number;   // default 20
+  provisionEUR: number;   // default 1
+}
+```
+
+Each catalogue item (`LobbyBarItem`) carries **two independent unit prices**, one
+per currency (e.g. voda 50 Kč / 2 €) — a sale picks the one matching its own
+`currency`; the two are never derived from each other or converted.
+
+### Server-side money computation + snapshotting
+
+`price`, `provision`, `doSpolecne`, `itemName`, and `unitPrice` are all computed
+**server-side** (`computeSale()` in `lobbyBarShared.ts`) from the *current*
+catalogue and written verbatim onto the sale row — client-sent money is never
+trusted (`parseSale()` in `lobbyBar.ts` re-derives them from `itemId` + `quantity`
++ `currency` on every POST/PUT). This snapshot is deliberate, for the same reason
+Taxi snapshots a route's price onto a ride: a client cannot dictate its own
+provision, and re-pricing an item or changing the provision rate later must not
+retroactively change past sales' `price`/`provision`/`doSpolecne` — a sale row
+keeps its own copy rather than re-deriving from the live catalogue on read.
+
+Money rounds **per currency**: CZK to a whole number, EUR to two decimals
+(`roundMoney()`). The frontend's `SaleModal` mirrors `computeSale()` client-side
+(`computePreview()`) purely to show a live preview in the add/edit form — the
+stored row always comes from the server's own computation, not the preview.
+
+### Continuous table + visible range
+
+Same shape as Walkiny/Taxi: `GET /lobby-bar/:hotel` returns every sale, newest
+first (`orderBy("date","desc")`, single field, no composite index). Managers
+(`lobbyBar.manage` or `system.admin`) see everything; everyone else is bounded by
+the hotel's visible range, applied **in-app** so a one-sided range gates only that
+side. Non-managers adding/editing/deleting a sale are 403'd if the (old or new)
+date falls outside the range.
+
+### Item catalogue + provision editor
+
+`GET /lobby-bar/:hotel/items` (any `lobbyBar.view` holder — needed to fill the
+sale form) / `PUT /lobby-bar/:hotel/items` (`lobbyBar.manage` only). The PUT
+sanitizes the incoming array the same way Taxi's routes ceník does
+(`sanitizeItems()`): trims names, drops empty-name rows, clamps both prices to
+finite ≥ 0 (else 0), assigns a fresh id when missing/duplicate, and preserves
+array order (order **is** the persisted display order). Provision rates
+(`provisionCZK`/`provisionEUR`) are clamped the same way, falling back to the
+defaults (20 / 1) when invalid. Editable via `ItemsModal` in `LobbyBarTab.tsx`
+(add/remove/reorder rows + the two provision-rate fields).
+
+### "Prodal" employee dropdown
+
+`GET /lobby-bar/:hotel/employees?date=` — identical pool/fallback logic to
+Walkiny's dropdown, via the shared `listRecepceEmployees()` (see "Employee
+dropdown" under Walkiny above).
+
+### Manager-only totals
+
+`LobbyBarTab.tsx` shows Provize and Do společné totals (`lobbyBar.manage` only),
+summed over the sales inside the **effective visible period** — re-applied
+client-side the same way Taxi's Provize total is, since managers receive *all*
+sales unfiltered from the API. **CZK and EUR are summed and displayed
+independently** (`joinCurrencies()` drops a currency whose sub-total is 0 rather
+than combining the two into one number).
+
+## Terminál
+
+**Amigo & Alqush only.** `frontend/src/pages/recepce/TerminalTab.tsx`,
+`functions/src/routes/terminal.ts` + `functions/src/services/terminalShared.ts`.
+Records card-terminal payments (Excel's "TERMINÁL bar.xlsx"), each tagged with a
+transaction type and an optional note, plus a manager-only "Předáno" (settled)
+flag.
+
+### Data model
+
+```
+hotels/amigo-alqush/terminalPayments/{autoId} = {
+  date: string;           // YYYY-MM-DD
+  amount: number;         // CZK only — there is no currency field, whole number
+  type: TerminalType;     // enum, see below
+  note: string;           // optional — EXCEPT type "other", where it is mandatory
+  settled: boolean;       // "Předáno" — OK vs blank
+  settledBy?: string | null;
+  settledAt?: Timestamp | null;
+  createdBy?, updatedBy?, createdAt?, updatedAt?;
+}
+hotels/amigo-alqush/config/terminal = { from: string|null, to: string|null }  -- visible range
+```
+
+`TerminalType` (`functions/src/services/terminalShared.ts`) is a fixed 7-value
+enum, each id with a Czech display label:
+
+| id | Label |
+|---|---|
+| `late-co` | late C/O |
+| `laundry` | laundry |
+| `snidane` | snídaně |
+| `extra-bed` | extra bed |
+| `parking` | parking |
+| `tour` | tour |
+| `other` | Jiné… |
+
+The source spreadsheet's "Položka" column was free text (e.g. "hračka", "tour
+(Hop-On, Hop-Off)") for a long tail of one-off items dominated by "late C/O".
+That free text now lives in `note`, while `type` stays a closed enum specifically
+so the deferred F1:P1 SUMIF-style per-type totals (see below) can aggregate
+cleanly on it — a free-text `type` would fragment the same transaction under a
+dozen spellings.
+
+The note is optional for the six named types and **mandatory for `other`**
+(`parseEntry` rejects an empty one with `"U typu „Jiné…“ je poznámka povinná."`).
+`other` carries no meaning of its own, so without the note the row records only
+that *some* money arrived — the same reason a taxi ride booked off the ceník
+requires one. The client disables the save button and shows an inline hint, but
+the server is the gate.
+
+### `settled` ("Předáno") — manage-only, never client-set on create/edit
+
+The "Předáno" flag is intentionally isolated from the ordinary payment
+create/edit path:
+
+- `POST /terminal/:hotel` **strips `settled` from the body entirely** — every
+  newly-created payment is unconditionally written with `settled: false,
+  settledBy: null, settledAt: null`, regardless of what the client sends.
+- `PUT /terminal/:hotel/:id` (edit date/amount/type/note) likewise never touches
+  `settled` — `parsed` (the sanitized body) simply doesn't contain the field, so
+  the stored value survives an edit untouched, for either a view or a manage
+  caller.
+- The **only** way to flip it is the dedicated `PUT /terminal/:hotel/:id/settled`
+  endpoint, gated `terminal.manage`. Setting `settled: true` stamps `settledBy:
+  req.uid` and `settledAt: Timestamp.now()`; unsetting it (`false`) nulls both
+  back out.
+- The column is **not rendered at all** for non-managers in `TerminalTab.tsx`
+  (`canManage && <th>Předáno</th>…`) — a view-only user cannot see, let alone
+  toggle, who settled what.
+
+This mirrors the protokol's `predal`/`prevzal` signature pattern in spirit
+(a privileged, separately-gated state transition that isn't part of the regular
+content edit), though it's a plain boolean+audit-fields flip rather than a
+password-verified signature.
+
+### Continuous table + visible range
+
+Same shape as Walkiny/Taxi/Lobby bar: `GET /terminal/:hotel` returns every
+payment, newest first (single-field `orderBy("date","desc")`, no composite
+index). Managers see everything; everyone else is bounded by the visible range,
+applied in-app. Non-managers adding/editing/deleting a payment are 403'd if the
+(old or new) date falls outside the range.
+
+### Out of scope — F1:P1 aggregate totals
+
+The reference workbook's `F1:P1` row holds a SUMIF-style per-type total (sum of
+`amount` grouped by `type`, across the visible period). This aggregate is
+**deliberately not implemented yet** — `TerminalTab.tsx` shows only the raw
+table. `type` was kept a closed enum (see above) specifically so this can be
+added later without a data migration.
 
 ## Shared-terminal write attribution
 
@@ -692,16 +881,21 @@ the session account; attribution resolution failing never blocks a write.
 ### What is / isn't substituted
 
 - **Substituted**: protokol content `PUT`, protokol undo/redo, sm-transfer,
-  sm-trezor/clear, wata (all via `resolveRecepceActor`); Walkiny + Taxi entry
-  create/update/delete (via `resolveOnDutyActor`).
+  sm-trezor/clear, wata (all via `resolveRecepceActor`); Walkiny, Taxi, Lobby
+  bar, and Terminál entry create/update/delete (via `resolveOnDutyActor`).
 - **Deliberately NOT substituted**:
   - **Signature endpoints** (`predal`/`prevzal` stamp + revert) — they already
     record the password-verified signer directly (see "Virtual signature"
     above); there is nothing to substitute.
-  - **Config endpoints** — the Walkiny/Taxi visible `range` (per hotel) and the
-    global Taxi `/routes` ceník — stay on the ordinary `ctxFromReq(req)` context.
-    These are manager/admin actions on shared configuration, not shift-floor
-    activity, so the session account is the correct attribution as-is.
+  - **Config endpoints** — the Walkiny/Taxi/Lobby-bar/Terminál visible `range`
+    (per hotel), the global Taxi `/routes` ceník, and the Lobby bar item/provision
+    catalogue — stay on the ordinary `ctxFromReq(req)` context. These are
+    manager/admin actions on shared configuration, not shift-floor activity, so
+    the session account is the correct attribution as-is.
+  - **Terminál's "Předáno" toggle** (`PUT .../:id/settled`) — also stays on
+    `ctxFromReq(req)`, not `resolveOnDutyActor`: settling is itself a
+    manage-gated, individually-attributed action (`settledBy`/`settledAt`
+    already record who and when), unlike a shift-floor sale/payment entry.
 
 ### `viaUid`/`viaEmail` — the substitution is never silent
 
@@ -732,9 +926,16 @@ Deletes only the **change history** of the Recepce features once it's 6 months o
 older (`RETENTION_MONTHS = 6`), computed from the [test clock](deployment.md#test-clock-non-prod-time-override)
 so it can be exercised on staging without waiting for real time:
 
-- `auditLog` entries whose `collection` is `shiftHandovers`, `walkins`, or
-  `taxiRides` (the compact per-save summaries + money/signature entries) older
-  than the cutoff.
+- `auditLog` entries whose `collection` is `shiftHandovers`, `walkins`,
+  `taxiRides`, `lobbyBarSales` or `terminalPayments` (the compact per-save
+  summaries + money/signature entries) older than the cutoff.
+
+  Only these high-volume **entry** tags are swept. The config tags —
+  `walkinConfig`, `taxiConfig`, `lobbyBarConfig`, `terminalConfig`,
+  `lobbyBarItems`, `taxiRoutes` — are deliberately absent: changing a visible
+  range or repricing a ceník is a rare manager action whose audit trail is worth
+  keeping indefinitely. Add a new entry collection here when you add a Recepce
+  table, or its audit entries accumulate forever.
 - The per-protocol `history` subcollections (a `collectionGroup("history")` query
   on the `at` field — the sole reason `firestore.indexes.json` declares a
   `fieldOverrides` exemption for `history.at`, see
@@ -749,15 +950,19 @@ future addition to `JobsTab.tsx`.
 
 ## Guided tour & demo routes
 
-14 permission-driven Recepce tour steps, added at `appTour.version: 12`
-(`frontend/src/lib/tours/appTour.ts`), covering: the `nav-recepce` sidebar entry
-(1), the full Předávací protokol walkthrough (9 steps: shift toolbar, cash/trezor
-counting, Účty, sm/sm-trezor/wata special rows, Poznámky, signatures, next-shift
-creation, history/undo-redo, print — plus a separate "založení protokolu" step),
-Walkiny (2: table, add form), and Taxi (2: ride table + "Jiné…", ceník). All are
-`hideOnMobile: true` — they spotlight wide grids/tables that don't lay out on a
-phone; only the top-level `nav-recepce` step (which points at the "Více" sheet on
-phones via `mobileAnchor: "bottomnav-more"`) survives on mobile.
+**20 permission-driven Recepce tour steps** in total
+(`frontend/src/lib/tours/appTour.ts`): the `nav-recepce` sidebar entry (1,
+`appTour.version: 12`), the full Předávací protokol walkthrough (10: shift
+toolbar, cash/trezor counting, Účty, sm/sm-trezor/wata special rows, Poznámky,
+signatures, next-shift creation, history/undo-redo, print, plus a separate
+"založení protokolu" step — all v12), Walkiny (2: table, add form — v12), Taxi
+(2: ride table + "Jiné…", ceník — v12), and — added at **`appTour.version: 13`**
+— **Lobby bar** (3: add-sale button, ceník, manager-only souhrny; Ambiance only)
+and **Terminál** (2: add-payment button, manager-only "Předáno" column; Amigo &
+Alqush only). All deep steps are `hideOnMobile: true` — they spotlight wide
+grids/tables that don't lay out on a phone; only the top-level `nav-recepce` step
+(which points at the "Více" sheet on phones via `mobileAnchor:
+"bottomnav-more"`) survives on mobile.
 
 **Demo architecture** — `RecepceDemoPage.tsx` wraps a single real tab
 (`HandoverTab`/`WalkinsTab`/`TaxiTab`) fed by mock fixtures, mounted at dedicated
@@ -770,6 +975,8 @@ phones via `mobileAnchor: "bottomnav-more"`) survives on mobile.
 | `/napoveda/ukazka-protokol-podepsany` | `protokol-signed` | Both signatures present → next-shift + print buttons |
 | `/napoveda/ukazka-walkiny` | `walkiny` | Populated walk-ins table |
 | `/napoveda/ukazka-taxi` | `taxi` | Populated rides + routes ceník |
+| `/napoveda/ukazka-lobby-bar` | `lobby-bar` | Populated sales + item ceník (Ambiance only) |
+| `/napoveda/ukazka-terminal` | `terminal` | Populated payments (Amigo & Alqush only) |
 
 Mock responses are served by `frontend/src/lib/tours/demoData.ts`'s
 `getDemoResponse()` intercept (the same single wiring point used by every other
@@ -777,13 +984,25 @@ tour demo — see [Onboarding Tour & Nápověda — demo-route
 architecture](onboarding-and-help.md#demo-route-architecture)); non-GET requests
 are swallowed, so the tour can never write real data even from a Recepce demo tab.
 
-**Hotel choice on the demo page** — among the hotels the current user can access,
-`RecepceDemoPage` prefers one where the user also holds the tab's **manage** key
-(`protokolCreatePerm`/`protokolManagePerm`, `walkinyManagePerm`, `taxiManagePerm`),
-so manager-only controls the tour spotlights (protokol create button, the
-walkiny/taxi visible-range editor, the taxi Provize total) actually render for
-that step. Users with no accessible hotel simply render nothing (they never reach
-these steps — permission-gated away upstream).
+**Hotel choice on the demo page**, in two steps (`RecepceDemoPage.tsx`):
+
+1. **Filter to hotels that actually have this tab.** Předávací
+   protokol/Walkiny/Taxi exist at every hotel, but **Lobby bar is Ambiance-only**
+   and **Terminál is Amigo & Alqush-only** — `hotels.filter((h) =>
+   h.tabs.some((t) => t.id === tab))` narrows the candidate list *before*
+   anything else. Skipping this step could pick a hotel that doesn't have the
+   tab at all, mounting the wrong content and calling an endpoint gated on a key
+   nobody holds for that hotel.
+2. Among what's left, prefer one where the user also holds the tab's **manage**
+   key (`protokolCreatePerm`/`protokolManagePerm`, `walkinyManagePerm`,
+   `taxiManagePerm`, `lobbyBarManagePerm`, `terminalManagePerm`), so manager-only
+   controls the tour spotlights (protokol create button, the
+   walkiny/taxi/lobbyBar/terminal visible-range editor, the taxi Provize total,
+   the lobby-bar souhrny, the terminál "Předáno" column) actually render for that
+   step.
+
+Users with no accessible/tab-holding hotel simply render nothing (they never
+reach these steps — permission-gated away upstream).
 
 ## Server-side shift business-rule enforcement (self-service X)
 

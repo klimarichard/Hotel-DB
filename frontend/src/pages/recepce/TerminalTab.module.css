@@ -1,0 +1,272 @@
+/* Terminál – continuous payment-terminal transaction table + add/edit modal. */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem;
+  /* Cap the width so the few columns stay close together and readable. */
+  max-width: 760px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.rangeEditor {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+}
+
+.rangeLabel {
+  font-weight: 600;
+  color: var(--color-text-heading);
+}
+
+.rangeInfo {
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+}
+
+.dateInput {
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  background: var(--color-input-bg, var(--color-bg));
+  color: var(--color-text-heading);
+  font-size: 0.85rem;
+}
+
+.statusText {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.statusError {
+  color: var(--color-danger, #dc2626);
+}
+
+/* + Přidat platbu toolbar, right-aligned above the table. */
+.toolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.tableWrap {
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.table th {
+  text-align: left;
+  padding: 0.6rem 0.75rem;
+  background: var(--color-surface-2, var(--color-surface));
+  border-bottom: 1px solid var(--color-border);
+  font-weight: 700;
+  color: var(--color-text-heading);
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-heading);
+  vertical-align: middle;
+}
+
+.table tbody tr:nth-child(even) td {
+  background: var(--color-surface-3, var(--color-surface-2));
+}
+
+.numCell {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.noteCell {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.noteEmpty {
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+/* Small muted tag next to the "Jiné…" type, mirroring Taxi's otherTag. */
+
+.settledCell {
+  text-align: center;
+  white-space: nowrap;
+}
+
+.settledCheck {
+  width: 1.05rem;
+  height: 1.05rem;
+  cursor: pointer;
+  accent-color: var(--color-primary);
+}
+
+.actionsCell {
+  width: 1%;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.rowActions {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.rowIconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.rowIconBtn:hover {
+  background: var(--color-surface-2, var(--color-surface));
+  color: var(--color-text-heading);
+}
+
+.rowIconBtnTrash:hover {
+  color: var(--color-danger, #dc2626);
+}
+
+.empty {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+}
+
+/* ── modal ────────────────────────────────────────────────────────────────── */
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: var(--overlay-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  width: 440px;
+  max-width: calc(100vw - 2rem);
+  box-shadow: 0 20px 60px var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+}
+
+.modalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.modalTitle {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-heading);
+}
+
+.modalBody {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.input,
+.select {
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  background: var(--color-input-bg, var(--color-bg));
+  color: var(--color-text-heading);
+  font-size: 0.9rem;
+  font-weight: normal;
+}
+
+.input:disabled,
+.select:disabled {
+  background: var(--color-surface-2, var(--color-surface));
+  color: var(--color-text-muted);
+}
+
+.inputNumber {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.inputNumber::-webkit-inner-spin-button,
+.inputNumber::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.modalFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--color-border);
+}
+
+/* Inline nudge under the note field when „Jiné…" leaves it empty. */
+.fieldHint {
+  margin-top: 4px;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.error {
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--color-danger-soft, rgba(220, 38, 38, 0.1));
+  color: var(--color-danger, #dc2626);
+  font-size: 0.8125rem;
+}

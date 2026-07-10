@@ -16,7 +16,7 @@ Two password-reset flows using Firebase Auth built-in email:
 
 ### Permission catalogue (fixed vocabulary)
 
-Permissions are a **fixed vocabulary of ~131 granular keys** — a catalogue, not free-form strings. (Went from ~87 to ~131 when the **Recepce** group was added — 42 keys: 1 `nav.recepce.view` master + 41 global/per-hotel keys — see [Recepce → Permission model](recepce.md#permission-model).)
+Permissions are a **fixed vocabulary of ~133 granular keys** — a catalogue, not free-form strings. (Went from ~87 to ~131 when the **Recepce** group was added — 42 keys: 1 `nav.recepce.view` master + 41 global/per-hotel keys — then to ~133 when the Lobby bar and Terminál tabs shipped and added `recepce.ambiance.lobbyBar.manage` + `recepce.amigo.terminal.manage` — see [Recepce → Permission model](recepce.md#permission-model).)
 
 - **Backend source of truth**: `functions/src/auth/permissions.ts` (`PERMISSION_CATALOG`) — a **flat** list of `{ group, items: [{ key, label }] }`. The backend stores and validates a flat permission array and is unaware of the frontend hierarchy.
 - **Frontend mirror**: `frontend/src/lib/permissions/catalog.ts` — keys must stay in sync with the backend (a manual mirror; `scripts/_smoke-permissions-hierarchy.js` asserts the two key sets are equal). Since **v2.2.0** the frontend catalogue is **hierarchical** (`PERMISSION_SECTIONS`, one section per app page) — see "Hierarchical permission matrix" below.
@@ -49,7 +49,7 @@ The special `system.admin` permission **expands to ALL permissions** and cannot 
 
 #### Recepce permissions
 
-A dedicated **"Recepce"** catalogue group (42 keys total, including the
+A dedicated **"Recepce"** catalogue group (44 keys total, including the
 `nav.recepce.view` master in "Stránky / navigace") gates the per-hotel reception
 hub — full breakdown, per-key semantics, and the `recepce.<stem>.*` per-hotel
 naming scheme are documented in [Recepce → Permission
@@ -63,6 +63,12 @@ model](recepce.md#permission-model). Two points worth surfacing here:
 - Recepce also introduces the **`recepce.mobile.view`** key, part of a general
   phone-only gating pattern — see "Mobile-only gating (`mobilePermission` /
   `mobileAllow`)" below.
+- Two hotel-specific tabs each have their own `.view`/`.manage` pair, not shared
+  by every hotel: `recepce.ambiance.lobbyBar.{view,manage}` (Lobby bar, Ambiance
+  only) and `recepce.amigo.terminal.{view,manage}` (Terminál, Amigo & Alqush
+  only). `.manage` is level 3, nested under the tab's own `.view` (level 2) —
+  same shape as `walkiny`/`taxi`. See [Recepce → Lobby
+  bar](recepce.md#lobby-bar) / [Recepce → Terminál](recepce.md#terminal).
 
 ### Mobile-only gating (`mobilePermission` / `mobileAllow`)
 

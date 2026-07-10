@@ -108,3 +108,27 @@ export function taxiManagePerm(slug: HotelSlug): string {
 /** `recepce.taxi.manageRates` ("Spravovat ceník taxi") — GLOBAL: edit the shared
  *  common-routes price/provision table (settings/taxiRoutes) for all hotels. */
 export const TAXI_MANAGE_RATES_PERM = "recepce.taxi.manageRates";
+
+/** `recepce.<stem>.lobbyBar.view` — see the Lobby bar tab + add/edit/delete sales.
+ *  Only Ambiance has the tab, but the key is built per-hotel like every other. */
+export function lobbyBarViewPerm(slug: HotelSlug): string {
+  return `recepce.${SLUG_TO_STEM[slug]}.lobbyBar.view`;
+}
+
+/** `recepce.<stem>.lobbyBar.manage` ("Spravovat lobby bar") — set the visible date
+ *  range, add/edit sales with no range restriction, and edit the item list +
+ *  provision rates (hotels/<hotel>/config/lobbyBarItems). */
+export function lobbyBarManagePerm(slug: HotelSlug): string {
+  return `recepce.${SLUG_TO_STEM[slug]}.lobbyBar.manage`;
+}
+
+/** `recepce.<stem>.terminal.view` — see the Terminál tab + add/edit/delete payments. */
+export function terminalViewPerm(slug: HotelSlug): string {
+  return `recepce.${SLUG_TO_STEM[slug]}.terminal.view`;
+}
+
+/** `recepce.<stem>.terminal.manage` ("Spravovat terminál") — set the visible date
+ *  range, work outside it, and tick the "Předáno" (settled) column. */
+export function terminalManagePerm(slug: HotelSlug): string {
+  return `recepce.${SLUG_TO_STEM[slug]}.terminal.manage`;
+}

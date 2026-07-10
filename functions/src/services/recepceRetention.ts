@@ -23,8 +23,20 @@ import * as clock from "./clock";
 const RETENTION_MONTHS = 6;
 
 // The auditLog `collection` tags written by the recepce routes. Kept in sync
-// with routes/{handovers,walkins,taxi}.ts.
-const RECEPCE_AUDIT_COLLECTIONS = ["shiftHandovers", "walkins", "taxiRides"] as const;
+// with routes/{handovers,walkins,taxi,lobbyBar,terminal}.ts.
+//
+// Only the high-volume ENTRY collections are swept. The config tags
+// (`walkinConfig`, `taxiConfig`, `lobbyBarConfig`, `terminalConfig`,
+// `lobbyBarItems`, `taxiRoutes`) are deliberately absent: those are rare manager
+// actions — changing a visible range, repricing the ceník — and their audit trail
+// is worth keeping indefinitely.
+const RECEPCE_AUDIT_COLLECTIONS = [
+  "shiftHandovers",
+  "walkins",
+  "taxiRides",
+  "lobbyBarSales",
+  "terminalPayments",
+] as const;
 
 const BATCH = 400; // under Firestore's 500-write batch cap
 

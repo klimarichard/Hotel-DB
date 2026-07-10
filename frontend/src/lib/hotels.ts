@@ -49,6 +49,16 @@ export interface Hotel {
   readonly taxiViewPerm: Permission;
   /** `recepce.<stem>.taxi.manage` – gates setting the taxi visible date range + seeing all rides. */
   readonly taxiManagePerm: Permission;
+  /**
+   * `recepce.<stem>.lobbyBar.manage` – visible range, unrestricted entry, and the
+   * item list + provision rates. Only Ambiance has a Lobby bar tab, hence optional.
+   */
+  readonly lobbyBarManagePerm?: Permission;
+  /**
+   * `recepce.<stem>.terminal.manage` – visible range, unrestricted entry, and the
+   * "Předáno" column. Only Amigo & Alqush has a Terminál tab, hence optional.
+   */
+  readonly terminalManagePerm?: Permission;
   readonly tabs: readonly HotelTab[];
 }
 
@@ -67,6 +77,7 @@ export const HOTELS: readonly Hotel[] = [
     walkinyManagePerm: "recepce.ambiance.walkiny.manage",
     taxiViewPerm: "recepce.ambiance.taxi.view",
     taxiManagePerm: "recepce.ambiance.taxi.manage",
+    lobbyBarManagePerm: "recepce.ambiance.lobbyBar.manage",
     tabs: [
       { id: "protokol", label: "Předávací protokol", viewPerm: "recepce.ambiance.protokol.view" },
       { id: "walkiny", label: "Walkiny", viewPerm: "recepce.ambiance.walkiny.view" },
@@ -106,6 +117,7 @@ export const HOTELS: readonly Hotel[] = [
     walkinyManagePerm: "recepce.amigo.walkiny.manage",
     taxiViewPerm: "recepce.amigo.taxi.view",
     taxiManagePerm: "recepce.amigo.taxi.manage",
+    terminalManagePerm: "recepce.amigo.terminal.manage",
     tabs: [
       { id: "protokol", label: "Předávací protokol", viewPerm: "recepce.amigo.protokol.view" },
       { id: "walkiny", label: "Walkiny", viewPerm: "recepce.amigo.walkiny.view" },
