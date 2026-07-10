@@ -282,10 +282,48 @@ queues) — it's a data-integrity flag, not a review backlog item.
 count — against a per-protocol `history` subcollection (one small doc per change,
 not an on-doc array, to avoid O(n) rewrite cost on every save):
 
+- **Creation floor.** A protocol's very first history entry is always a
+  synthetic `{ target: { kind: "created" } }` change (`createdChange()`), never a
+  diff against an empty document — carrying a signed shift's content forward
+  would otherwise record every note, účet, denomination and sm count as a
+  separate "Přidáno…" entry. Its label is `"Protokol vytvořen"` for a blank
+  create, or `"Protokol vytvořen převzetím z předchozí směny"` when the previous
+  shift's protocol was fully signed at creation time (`prevClosed` in
+  `handovers.ts` — covers both "Vytvořit prázdný protokol" landing on an
+  already-signed chain and "Vytvořit protokol pro další směnu"). It carries no
+  `before`/`after` and `applyChange` is a no-op on it. It is the **floor of the
+  undo stack**: `planUndo` returns `null` once the cursor reaches it (you cannot
+  undo the protocol into existence — deleting the doc is `DELETE
+  /:hotel/:id`'s job), and `canUndoRedo` correspondingly reports `canUndo:
+  false` at that point, so the Undo button never offers a step that would 409.
 - **Diff** (`diffHandover`) compares before/after snapshots of the four content
-  fields (`notes`, `accounts`, `cashCounts`, `smCounts`) and emits Czech-labelled
-  `HandoverChange` records (e.g. `"Poznámka změněna: „a“ → „b“"`,
-  `"Hotovost kasa 500 Kč: 3 → 5 ks"`, `"SM počet #1: 10 → 12"`).
+  fields (`notes`, `accounts`, `cashCounts`, `smCounts`) on every save **after**
+  creation and emits Czech-labelled `HandoverChange` records (e.g. `"Poznámka
+  změněna: „a“ → „b“"`, `"Hotovost kasa 500 Kč: 3 → 5 ks"`, `"SM počet #1: 10 →
+  12"`).
+- **Coalescing free-typing edits.** Content autosaves ~800 ms after the last
+  keystroke, so typing one Poznámka would otherwise produce a fresh history
+  entry per thinking-pause. A save carrying **exactly one** change to a
+  "typing" field (`note.text`, `account.name`, `account.amount`, any `cash`
+  denomination, any `sm` count — `isTypingField()`) is a coalescing candidate:
+  `tryCoalesce()` folds it into the entry at the **tip** of the stack instead of
+  appending a new one, provided the tip is by the same `byUid`, not `undone`,
+  there is no redo tail (`histCursor === histSeq`), and it's within
+  `COALESCE_WINDOW_MS` (2 minutes) of the tip's `at`. Two shapes fold:
+  - **same field edited again** — the merged entry keeps the tip's *original*
+    `before` (so one Undo reverts the whole edit, not just the last keystroke);
+    `after` and the label are updated to the new value (`labelFor()` rebuilds the
+    label from the before/after pair, since the entry's stored label described
+    only the slice of edit that produced it, not the merged span).
+  - **a field of the row the tip entry itself just added** — e.g. typing into a
+    freshly-added Poznámka's text keeps the whole thing a single `"Přidána
+    poznámka…"` entry rather than an "added" entry followed by a "changed" one.
+  - If a fold would return the field to its value **before the tip entry**
+    (typed, then undone by hand within the window), the entry is **deleted
+    outright** and the cursor rewinds to `prevActiveSeq` — "typed it, then
+    deleted it" leaves no trace in the history panel at all.
+  - A save carrying more than one change (a bulk edit — paste, or an add+remove
+    in one flush) is never a coalescing candidate, only a single-change save is.
 - **Undo/redo is a command-pattern cursor** (`histCursor`/`histSeq` on the parent
   doc). Undo moves the cursor back and applies the *inverse* of one change; redo
   moves forward and re-applies; a brand-new edit **truncates the redo tail**
@@ -297,8 +335,15 @@ not an on-doc array, to avoid O(n) rewrite cost on every save):
   `POST /:hotel/:id/undo` / `.../redo` step the cursor.
 - **Audit log**: one **compact** entry per save (`event: "recepce.protokol.edit"`,
   up to 6 change labels in `extra.changeLabels`) — the element-level detail lives
-  in the `history` subcollection, not duplicated into `auditLog`. Undo/redo write
-  their own compact events (`recepce.protokol.undo` / `.redo`).
+  in the `history` subcollection, not duplicated into `auditLog`. **Skipped on
+  creation** (guarded by `beforeSnap.exists && changes.length > 0`) — `logCreate`
+  already stands for the whole new document there, including its `created`
+  history entry, so creating a protocol writes exactly one audit entry, not two.
+  Undo/redo write their own compact events (`recepce.protokol.undo` / `.redo`).
+- **Attribution.** Every history entry's `byUid`/`byEmail` is the resolved actor
+  (see "Shared-terminal write attribution" below) and carries
+  `viaUid`/`viaEmail` when that actor was substituted from a Převzal signature
+  rather than being the session account.
 
 ### Concurrency guard (optimistic, no realtime channel)
 
@@ -346,12 +391,39 @@ client-side in `createNextShift()` (`HandoverTab.tsx`): `GET` the next shift's d
 `onNavigate()` into it — the created/fetched doc is handed to the target editor
 directly so it renders without a racy read-after-write GET.
 
-⚠️ **Verify**: the onboarding-tour copy for this feature states that a checked
-("done") Poznámka is excluded from the copy into the next shift. The current
-`createNextShift()` implementation copies `notes` verbatim (no `done` filter) —
-this looks like a drift between the tour description and the shipped behaviour,
-not a documented design decision. Worth a product/behaviour check before relying
-on either description.
+**Poznámky marked `done` are NOT carried to the next shift** — only the still
+outstanding ones are. `createNextShift()` filters `notes.filter((n) => !n.done)`
+client-side before the `PUT`; the same rule is additionally enforced **server-
+side** as an invariant on the PUT's create branch (`incomingNotes.filter((n) =>
+!n.done)`, only applied `!beforeSnap.exists` — see `handovers.ts`), so a
+`done` note can never slip into a brand-new protocol no matter what the client
+sends. A note ticked off *during* the shift that just ended stays behind with
+that shift's record — not even struck through in the new one, simply absent.
+
+### Blank-create ("Vytvořit prázdný protokol") frontend gate
+
+The empty state's "Vytvořit prázdný protokol" button is **hidden** whenever the
+*previous* shift's protocol both exists and is fully signed (`predal &&
+prevzal`) — on mount, `HandoverTab.tsx` probes `GET /:hotel/:id` for the previous
+shift (`prevHandedOver` state) and, when that comes back true, shows a hint to
+open that protocol and use "Vytvořit protokol pro další směnu" instead (the only
+path that actually carries `smTrezor`/`wata`/outstanding poznámky forward). An
+**unsigned or missing** previous protocol still shows the blank-create button, so
+the handover chain can never deadlock waiting on a previous shift that may never
+get signed.
+
+⚠️ **Known limitation — frontend-only gate.** This is enforced **only** in the
+UI. `PUT /:hotel` — the very same endpoint both the hidden button and "Vytvořit
+protokol pro další směnu" call — cannot distinguish the two flows server-side; it
+has no signal for "the client arrived via the button that should have been
+hidden": a carry-over from an *empty* previous protocol and a blank create send
+byte-identical bodies. A client that bypasses the UI (a stale tab, a direct API
+call) can therefore still create a blank protocol when the previous shift is
+signed. The running balances survive it — `smTrezor`/`wata` are seeded
+server-side from the previous shift on **every** create, never from the body —
+but the outstanding poznámky and účty that "Vytvořit protokol pro další směnu"
+would have carried across are silently lost. Accepted as a UX nudge against an
+easy mistake, not a data-integrity guarantee.
 
 ### Create exception
 
@@ -453,6 +525,89 @@ gating as Walkiny (`taxi.manage` bypasses; others bounded, checked in-app).
 unfiltered from the API — `visibleProvize` in `TaxiTab.tsx` mirrors the backend's
 one-sided range semantics). Rendered above the toolbar, right-aligned to match the
 rides table's right border.
+
+## Shared-terminal write attribution
+
+`functions/src/services/recepceActor.ts`. The front desk typically runs on a
+**shared terminal** — one generic account stays logged in all day and every
+receptionist uses it — so attributing history/audit entries to that account
+records nothing useful ("recepce" edited the protokol tells you nobody edited
+it). The person actually at the desk already proved their identity, though: they
+signed **Převzal** on the *previous* shift's protocol with a password check (see
+"Virtual signature" above) — that signature *is* the handover, so it names
+whoever is standing at the desk now.
+
+### `sharedTerminal` roleType flag
+
+A boolean field on `roleTypes/{id}` (`RoleTypeData.sharedTerminal`; see also
+[Auth & Permissions — User types](auth-and-permissions.md#user-types-editable-data)),
+edited via the **"Sdílený terminál"** checkbox in Nastavení → Uživatelské typy
+(alongside the existing "Vedení" checkbox). Attribution substitution only
+happens when the caller's session user type has this flag set — it defaults to
+`false` for every type, including all the seeded built-ins. A manager or admin
+who opens Recepce from their own personal account holds an ordinary user type,
+so they are attributed to themselves, exactly as everywhere else in the app.
+
+⚠️ **Post-deploy step.** Because the flag defaults to `false`, this feature is a
+no-op until an admin explicitly ticks "Sdílený terminál" on the reception user
+type in Nastavení → Uživatelské typy. Deploying the code alone changes nothing
+observable — attribution keeps naming the shared account until the flag is set.
+
+### Resolvers
+
+- **`resolveRecepceActor(req, hotel, shiftDate, shiftType)`** — attribution for a
+  write against **one named protocol**: the person who signed Převzal on the
+  shift immediately before it. Exact by construction (no clock involved) — the
+  protocol being edited says which shift it belongs to. Used by the protokol
+  content `PUT`, undo/redo, sm-transfer, sm-trezor/clear, and wata.
+- **`resolveOnDutyActor(req, hotel)`** — attribution for **Walkiny and Taxi**
+  entries, which are filed against a date but not a shift: the newest
+  `prevzal.at` signature across the hotel's protocols (`orderBy("prevzal.at",
+  "desc").limit(1)` — `prevzal.at` is a scalar subfield, so Firestore's
+  automatic single-field index already serves this query), ignored (falls back
+  to the session account) if older than **36 hours** (`ON_DUTY_MAX_AGE_MS`) —
+  covers a long shift plus a chain left unsigned overnight, without attributing
+  a write to someone who went home two days ago. Used by the Walkiny/Taxi entry
+  `POST`/`PUT`/`DELETE` handlers.
+
+Both resolvers fall back to the plain **session actor** (`sessionActor(req)`) —
+never block or error — whenever: the caller's type isn't `sharedTerminal`, there
+is no previous protocol, the previous protocol has no Převzal signature, the
+signature has no resolvable `uid`, or any lookup throws. Every fallback path is
+the session account; attribution resolution failing never blocks a write.
+
+### What is / isn't substituted
+
+- **Substituted**: protokol content `PUT`, protokol undo/redo, sm-transfer,
+  sm-trezor/clear, wata (all via `resolveRecepceActor`); Walkiny + Taxi entry
+  create/update/delete (via `resolveOnDutyActor`).
+- **Deliberately NOT substituted**:
+  - **Signature endpoints** (`predal`/`prevzal` stamp + revert) — they already
+    record the password-verified signer directly (see "Virtual signature"
+    above); there is nothing to substitute.
+  - **Config endpoints** — the Walkiny/Taxi visible `range` (per hotel) and the
+    global Taxi `/routes` ceník — stay on the ordinary `ctxFromReq(req)` context.
+    These are manager/admin actions on shared configuration, not shift-floor
+    activity, so the session account is the correct attribution as-is.
+
+### `viaUid`/`viaEmail` — the substitution is never silent
+
+When an actor is substituted, the **session account is preserved**, never
+discarded:
+
+- `RecepceActor.viaUid`/`viaEmail` carry the shared-terminal session's uid/email.
+- `actorCtx(actor)` (adapts a `RecepceActor` to `AuditContext`, shape-compatible
+  with `ctxFromReq`) copies them onto `AuditContext.viaUid`/`viaEmail`; the audit
+  writer's `baseEntry()` stamps them onto `AuditEntry.viaUid`/`viaEmail` (dropped
+  by `stripUndefined` at write time for an ordinary, non-substituted login — see
+  [Other Features & UI — Audit log](other-features-and-ui.md#audit-log--log-změn)).
+- `appendHistory()`'s `HistoryActor.viaUid`/`viaEmail` are stamped onto
+  `HistoryEntry.viaUid`/`viaEmail` the same way, feeding the protokol history
+  panel.
+
+So an entry attributed to the on-shift receptionist still records *which
+terminal session* the write physically came through — the substitution adds
+information, it never loses any.
 
 ## Retention sweep
 

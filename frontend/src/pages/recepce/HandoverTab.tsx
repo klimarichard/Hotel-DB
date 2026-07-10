@@ -571,6 +571,15 @@ function ProtocolEditor({
   const [signError, setSignError] = useState<string | null>(null);
   // Whether the NEXT shift already has a protocol (hides the create-next button).
   const [nextExists, setNextExists] = useState(false);
+  /**
+   * Only meaningful in the empty state. `true` once we know the previous shift's
+   * protocol exists AND is fully signed — that shift is supposed to hand this one
+   * over ("Vytvořit protokol pro další směnu"), so creating a blank one here would
+   * silently drop the cash, účty and open poznámky it should have carried across.
+   * `null` while unknown; an unsigned or missing previous shift leaves it false so
+   * the chain can never deadlock.
+   */
+  const [prevHandedOver, setPrevHandedOver] = useState<boolean | null>(null);
   // Set when another user has changed (or deleted) this doc since we loaded it and
   // we have unsaved edits: a non-destructive banner lets the user reload. `current`
   // is the server's version (null = it was deleted). While set, autosave is paused.
@@ -726,6 +735,28 @@ function ProtocolEditor({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prevzal]);
+
+  // Empty state only: does the previous shift already exist and stand signed off?
+  // If it does, this protocol must be born from its "další směna" button so the
+  // balances carry over — so the blank-create button is withheld here.
+  useEffect(() => {
+    if (loading || loaded) return;
+    let cancelled = false;
+    const prev = previousShift(shiftDate, shiftType);
+    void (async () => {
+      try {
+        const doc = await api.get<Handover>(`/handovers/${hotel.slug}/${prev.date}_${prev.shift}`);
+        if (!cancelled) setPrevHandedOver(!!(doc.predal && doc.prevzal));
+      } catch {
+        // 404 (no previous protocol) or a network error: allow the blank create.
+        if (!cancelled) setPrevHandedOver(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, loaded]);
 
   // Debounced autosave – active once a record exists and while it's not frozen.
   useEffect(() => {
@@ -996,10 +1027,14 @@ function ProtocolEditor({
         if (!(e instanceof ApiError && e.status === 404)) throw e;
       }
       if (!doc) {
+        // Poznámky ticked off during this shift stay with it — the next shift
+        // inherits only what is still outstanding, not a list of struck-through
+        // leftovers. (The backend drops any that slip through on a create.)
+        const outstanding = notes.filter((n) => !n.done);
         doc = await api.put<Handover>(`/handovers/${hotel.slug}`, {
           shiftDate: next.date,
           shiftType: next.shift,
-          ...toPayload(notes, cashCounts, accounts, smCounts),
+          ...toPayload(outstanding, cashCounts, accounts, smCounts),
         });
       }
       onNavigate(next.date, next.shift, doc);
@@ -1282,15 +1317,20 @@ function ProtocolEditor({
       <>
         <div className={styles.placeholder}>
           <p className={styles.placeholderTitle}>Pro tuto směnu zatím není žádný záznam</p>
-          {canCreate ? (
+          {!canCreate ? (
+            <p className={styles.placeholderHint}>Nemáte oprávnění vytvořit nový protokol.</p>
+          ) : prevHandedOver === null ? null : prevHandedOver ? (
+            <p className={styles.placeholderHint}>
+              Předchozí směna je podepsaná. Otevřete její protokol a použijte tlačítko „Vytvořit protokol pro další
+              směnu“ – tím se převede hotovost, účty i nedokončené poznámky.
+            </p>
+          ) : (
             <>
               <p className={styles.placeholderHint}>Vytvořte prázdný předávací protokol a začněte vyplňovat.</p>
               <Button onClick={createEmpty} disabled={creating} data-tour="protokol-create">
                 {creating ? "Vytvářím…" : "Vytvořit prázdný protokol"}
               </Button>
             </>
-          ) : (
-            <p className={styles.placeholderHint}>Nemáte oprávnění vytvořit nový protokol.</p>
           )}
         </div>
         {confirmModal}

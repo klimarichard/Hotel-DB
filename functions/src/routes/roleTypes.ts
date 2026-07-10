@@ -66,6 +66,7 @@ roleTypesRouter.get(
           name: (data.name as string) ?? d.id,
           permissions: Array.isArray(data.permissions) ? data.permissions : [],
           management: data.management === true,
+          sharedTerminal: data.sharedTerminal === true,
           system: data.system === true,
         };
       })
@@ -83,6 +84,7 @@ roleTypesRouter.post(
       name?: string;
       permissions?: unknown;
       management?: unknown;
+      sharedTerminal?: unknown;
       cloneFrom?: string;
     };
     const name = typeof body.name === "string" ? body.name.trim() : "";
@@ -94,12 +96,14 @@ roleTypesRouter.post(
     // Permissions: explicit list wins; else clone source; else blank ("strip all").
     let permissions = sanitizePerms(body.permissions);
     let management = body.management === true;
+    let sharedTerminal = body.sharedTerminal === true;
     if (body.cloneFrom && !Array.isArray(body.permissions)) {
       const src = await db().collection(ROLE_TYPES_COLLECTION).doc(body.cloneFrom).get();
       if (src.exists) {
         const sd = src.data() as Record<string, unknown>;
         permissions = sanitizePerms(sd.permissions);
         if (body.management === undefined) management = sd.management === true;
+        if (body.sharedTerminal === undefined) sharedTerminal = sd.sharedTerminal === true;
       }
     }
 
@@ -108,6 +112,7 @@ roleTypesRouter.post(
       name,
       permissions,
       management,
+      sharedTerminal,
       system: false,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
@@ -117,7 +122,7 @@ roleTypesRouter.post(
     await logCreate(ctxFromReq(req), {
       collection: ROLE_TYPES_COLLECTION,
       resourceId: id,
-      summary: { name, permissions: permissions.length, management, clonedFrom: body.cloneFrom ?? null },
+      summary: { name, permissions: permissions.length, management, sharedTerminal, clonedFrom: body.cloneFrom ?? null },
     });
     res.status(201).json({ id });
   }
@@ -140,7 +145,12 @@ roleTypesRouter.patch(
       return;
     }
 
-    const body = req.body as { name?: string; permissions?: unknown; management?: unknown };
+    const body = req.body as {
+      name?: string;
+      permissions?: unknown;
+      management?: unknown;
+      sharedTerminal?: unknown;
+    };
     const patch: Record<string, unknown> = {
       updatedAt: FieldValue.serverTimestamp(),
       updatedBy: req.uid ?? null,
@@ -148,6 +158,7 @@ roleTypesRouter.patch(
     if (typeof body.name === "string" && body.name.trim()) patch.name = body.name.trim();
     if ("permissions" in body) patch.permissions = sanitizePerms(body.permissions);
     if ("management" in body) patch.management = body.management === true;
+    if ("sharedTerminal" in body) patch.sharedTerminal = body.sharedTerminal === true;
 
     await ref.update(patch);
     clearRoleTypeCache();

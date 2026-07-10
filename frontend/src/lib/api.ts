@@ -133,6 +133,8 @@ export interface RoleType {
   name: string;
   permissions: string[];
   management: boolean;
+  /** Shared front-desk login: Recepce writes are attributed to the person on shift. */
+  sharedTerminal: boolean;
   system: boolean;
 }
 
@@ -143,10 +145,17 @@ export const roleTypesApi = {
     api
       .get<RoleType[]>("/role-types")
       .then((l) => [...l].sort((a, b) => a.name.localeCompare(b.name, "cs"))),
-  create: (body: { name: string; permissions?: string[]; management?: boolean; cloneFrom?: string }) =>
-    api.post<{ id: string }>("/role-types", body),
-  update: (id: string, body: { name?: string; permissions?: string[]; management?: boolean }) =>
-    api.patch<{ ok: boolean }>(`/role-types/${id}`, body),
+  create: (body: {
+    name: string;
+    permissions?: string[];
+    management?: boolean;
+    sharedTerminal?: boolean;
+    cloneFrom?: string;
+  }) => api.post<{ id: string }>("/role-types", body),
+  update: (
+    id: string,
+    body: { name?: string; permissions?: string[]; management?: boolean; sharedTerminal?: boolean }
+  ) => api.patch<{ ok: boolean }>(`/role-types/${id}`, body),
   remove: (id: string) => api.delete<{ ok: boolean }>(`/role-types/${id}`),
 };
 

@@ -3,6 +3,7 @@ import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireAuth, AuthRequest } from "../middleware/auth";
 import { ctxFromReq, logCreate, logUpdate, logDelete } from "../services/auditLog";
+import { actorCtx, resolveOnDutyActor } from "../services/recepceActor";
 import { isHotelSlug, HotelSlug, walkinViewPerm, walkinManagePerm } from "../services/hotels";
 import {
   WalkinDoc,
@@ -268,7 +269,9 @@ walkinsRouter.post(
       updatedAt: FieldValue.serverTimestamp(),
     });
     const saved = await ref.get();
-    await logCreate(ctxFromReq(req), {
+    // Reception writes are attributed to the person on shift (last "Převzal"),
+    // not the shared terminal account.
+    await logCreate(actorCtx(await resolveOnDutyActor(req, hotel)), {
       collection: "walkins",
       resourceId: ref.id,
       subResourceId: hotel,
@@ -309,7 +312,7 @@ walkinsRouter.put(
       { merge: true }
     );
     const saved = await ref.get();
-    await logUpdate(ctxFromReq(req), {
+    await logUpdate(actorCtx(await resolveOnDutyActor(req, hotel)), {
       collection: "walkins",
       resourceId: ref.id,
       subResourceId: hotel,
@@ -339,7 +342,7 @@ walkinsRouter.delete(
       return;
     }
     await ref.delete();
-    await logDelete(ctxFromReq(req), {
+    await logDelete(actorCtx(await resolveOnDutyActor(req, hotel)), {
       collection: "walkins",
       resourceId: req.params.id,
       subResourceId: hotel,
