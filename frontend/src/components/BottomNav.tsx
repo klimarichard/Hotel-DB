@@ -30,7 +30,8 @@ interface BottomNavProps {
   theme: "light" | "dark";
   onToggleTheme: () => void;
   onLogout: () => void;
-  /** Pre-gated version string (e.g. "v2.3.4") or null when not permitted. */
+  /** Pre-gated version string (e.g. "v2.3.4") or null when not permitted. On
+   *  mobile the version is display-only — the changelog is desktop-only. */
   versionLabel: string | null;
   /** <TimeOverrideControl/> – self-styled; only renders where allowed. */
   timeControl?: ReactNode;

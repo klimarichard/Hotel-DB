@@ -402,7 +402,7 @@ The `--bottom-nav-height` CSS token (`56px`) is defined in `index.css` `:root`. 
 
 **"Více" sheet** (`styles.sheetOverlay` / `styles.sheet`):
 - Slides up from the bottom (`align-items: flex-end`). Max height `80dvh`, scrollable item list.
-- Header with "Více" title and a ✕ close button; sheet footer with theme toggle, Nápověda, Odhlásit, `<TimeOverrideControl>` (renders only in emulator/staging), and the version string (gated by `system.version.view`).
+- Header with "Více" title and a ✕ close button; sheet footer with theme toggle, Nápověda, Odhlásit, `<TimeOverrideControl>` (renders only in emulator/staging), and the version string (gated by `system.version.view`; **display-only on mobile** — the clickable changelog is desktop-only, so `BottomNav` never renders it as a button).
 - Dismisses via the ✕ button, selecting a list item, or Escape key. **Not on backdrop click** — consistent with the project modal-dismissal rule. The overlay `<div>` has no `onClick` handler.
 - Body scroll is locked (`document.body.style.overflow = "hidden"`) while the sheet is open; restored (to whatever the previous value was) on close/unmount.
 - Footer utilities are passed to `BottomNav` as plain values and handlers (`theme`, `onToggleTheme`, `onLogout`, `versionLabel`, `timeControl`) rather than reusing the dark sidebar JSX — this lets the sheet render them against the themed `--color-surface` background instead of the always-dark sidebar palette.

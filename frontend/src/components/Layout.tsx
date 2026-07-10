@@ -15,6 +15,7 @@ import { resolveOrderByPermission } from "@/lib/menuItems";
 import TimeOverrideBanner from "@/components/TimeOverrideBanner";
 import TimeOverrideControl from "@/components/TimeOverrideControl";
 import BottomNav from "@/components/BottomNav";
+import ChangelogModal from "@/components/ChangelogModal";
 import logoMark from "@/assets/logo.svg";
 import styles from "./Layout.module.css";
 
@@ -91,6 +92,9 @@ export default function Layout() {
   // Per-type saved menu order (admin-configurable in Settings → Menu); the
   // endpoint keys by the user's type. null = default order from menuItems.ts.
   const [savedOrder, setSavedOrder] = useState<string[] | null>(null);
+  const [changelogOpen, setChangelogOpen] = useState(false);
+  const canViewVersion = can("system.version.view");
+  const canChangelog = canViewVersion && can("system.version.changelog");
 
   useEffect(() => {
     if (!user) return;
@@ -178,9 +182,19 @@ export default function Layout() {
           {/* App version (vX.Y.Z) – always the last footer element so it pins to
               the very bottom (below the test-clock control in staging). Gated by
               system.version.view; admins see it by default (system.admin). */}
-          {can("system.version.view") && (
-            <span className={styles.version}>v{__APP_VERSION__}</span>
-          )}
+          {canViewVersion &&
+            (canChangelog ? (
+              <button
+                type="button"
+                className={`${styles.version} ${styles.versionButton}`}
+                onClick={() => setChangelogOpen(true)}
+                title="Zobrazit změny verzí"
+              >
+                v{__APP_VERSION__}
+              </button>
+            ) : (
+              <span className={styles.version}>v{__APP_VERSION__}</span>
+            ))}
         </div>
       </nav>
       <main className={styles.main}>
@@ -197,11 +211,12 @@ export default function Layout() {
         theme={theme}
         onToggleTheme={toggleTheme}
         onLogout={handleLogout}
-        versionLabel={can("system.version.view") ? `v${__APP_VERSION__}` : null}
+        versionLabel={canViewVersion ? `v${__APP_VERSION__}` : null}
         timeControl={<TimeOverrideControl />}
         userLabel={name?.trim() || user?.email}
         userRole={roleTypeName ?? role}
       />
+      {changelogOpen && <ChangelogModal onClose={() => setChangelogOpen(false)} />}
     </div>
   );
 }
