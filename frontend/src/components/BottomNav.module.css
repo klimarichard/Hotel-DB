@@ -209,25 +209,6 @@
   letter-spacing: 0.03em;
 }
 
-/* Tappable version (changelog permission): identical to the plain text, just a
-   button reset + pointer. Do NOT set `font`/`font-size` (keeps `.sheetVersion`). */
-.sheetVersionButton {
-  appearance: none;
-  -webkit-appearance: none;
-  background: none;
-  border: none;
-  padding: 0;
-  margin: 0;
-  font-family: inherit;
-  font-weight: inherit;
-  line-height: inherit;
-  cursor: pointer;
-  /* Shrink to content + left, matching the plain <span> (the sheet footer is a
-     stretch flex column, which would otherwise centre the button text). */
-  align-self: flex-start;
-  text-align: left;
-}
-
 /* Logged-in user – the phone equivalent of the sidebar footer's user line. */
 .sheetUser {
   display: flex;

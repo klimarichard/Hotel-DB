@@ -209,7 +209,7 @@ I Recepci (Předávací protokol, Walkiny i Taxi) pokrývá úvodní **Prohlídk
 
 ### Verze aplikace a přehled změn
 
-Vlevo dole (v mobilu v nabídce **„Více"**) se zobrazuje aktuální **verze aplikace** (např. `v4.2.4`) — jen uživatelům s oprávněním **„Zobrazit verzi aplikace"**. Máte-li navíc oprávnění **„Zobrazit změny verzí"**, je verze **klikací** a po kliknutí se otevře okno se **seznamem změn** v jednotlivých verzích (co nového přibylo). Bez tohoto oprávnění se verze zobrazí jen jako text.
+Vlevo dole (na mobilu v nabídce **„Více"**) se zobrazuje aktuální **verze aplikace** (např. `v4.2.4`) — jen uživatelům s oprávněním **„Zobrazit verzi aplikace"**. Na počítači platí: máte-li navíc oprávnění **„Zobrazit změny verzí"**, je verze **klikací** a po kliknutí se otevře okno se **seznamem změn** v jednotlivých verzích. Bez tohoto oprávnění (a na mobilu) se verze zobrazí jen jako text.
 
 ## Developer documentation
 
