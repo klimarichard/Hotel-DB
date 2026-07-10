@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { api, errorMessage } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import Button from "@/components/Button";
 import IconButton from "@/components/IconButton";
@@ -7,24 +7,35 @@ import ConfirmModal from "@/components/ConfirmModal";
 import type { Hotel } from "@/lib/hotels";
 import styles from "./TerminalTab.module.css";
 
-// Transaction types – id → Czech label. Mirror the backend exactly.
-const TERMINAL_TYPES = [
-  { id: "late-co", label: "late C/O" },
-  { id: "laundry", label: "laundry" },
-  { id: "snidane", label: "snídaně" },
-  { id: "extra-bed", label: "extra bed" },
-  { id: "parking", label: "parking" },
-  { id: "tour", label: "tour" },
-  { id: "other", label: "Jiné…" },
-] as const;
+// The permanent built-in type: always available, always shown last, and the only
+// type that forces a note. Every OTHER type is manager-configurable via the Typy
+// plateb editor. Mirror the backend (terminalShared.ts).
+const OTHER_TYPE_ID = "other";
+const OTHER_TYPE_LABEL = "Jiné…";
+const OTHER_TYPE: TerminalTypeItem = { id: OTHER_TYPE_ID, label: OTHER_TYPE_LABEL };
 
-const TYPE_LABELS: Record<string, string> = Object.fromEntries(TERMINAL_TYPES.map((t) => [t.id, t.label]));
+// Fallback labels for OLD payments that stored only a type id (pre-snapshot).
+const LEGACY_TYPE_LABELS: Record<string, string> = {
+  "late-co": "late C/O",
+  laundry: "laundry",
+  snidane: "snídaně",
+  "extra-bed": "extra bed",
+  parking: "parking",
+  tour: "tour",
+  other: OTHER_TYPE_LABEL,
+};
+
+interface TerminalTypeItem {
+  id: string;
+  label: string;
+}
 
 interface TerminalPayment {
   id: string;
   date: string;
   amount: number;
   type: string;
+  typeLabel?: string;
   note: string;
   settled: boolean;
   settledBy: string | null;
@@ -45,6 +56,19 @@ function formatDate(iso: string): string {
   return new Date(`${iso}T00:00:00`).toLocaleDateString("cs-CZ");
 }
 
+/** Label to display for a payment: its snapshot, else a legacy fallback, else the id. */
+function typeLabelOf(p: TerminalPayment): string {
+  return p.typeLabel || LEGACY_TYPE_LABELS[p.type] || p.type;
+}
+
+function genId(): string {
+  try {
+    return crypto.randomUUID();
+  } catch {
+    return `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+  }
+}
+
 // ── Inline row-action icons (feather-style, matching the other recepce tabs) ──
 function PencilIcon() {
   return (
@@ -59,6 +83,20 @@ function TrashIcon() {
     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M3 6h18" />
       <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V6" />
+    </svg>
+  );
+}
+function ChevronUpIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m18 15-6-6-6 6" />
+    </svg>
+  );
+}
+function ChevronDownIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m6 9 6 6 6-6" />
     </svg>
   );
 }
@@ -78,10 +116,12 @@ export default function TerminalTab({ hotel }: { hotel: Hotel }) {
 
   const [payments, setPayments] = useState<TerminalPayment[]>([]);
   const [range, setRange] = useState<Range>({ from: null, to: null });
+  const [types, setTypes] = useState<TerminalTypeItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const [editing, setEditing] = useState<TerminalPayment | "new" | null>(null);
+  const [typesOpen, setTypesOpen] = useState(false);
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
 
   // Range editor (manage only).
@@ -90,16 +130,21 @@ export default function TerminalTab({ hotel }: { hotel: Hotel }) {
   const [rangeSaving, setRangeSaving] = useState(false);
   const [rangeError, setRangeError] = useState<string | null>(null);
 
+  // The Typ dropdown options: the configurable catalogue plus the built-in "Jiné…".
+  const typeOptions = [...types, OTHER_TYPE];
+
   async function load() {
     setLoading(true);
     setLoadError(null);
     try {
-      const [list, rng] = await Promise.all([
+      const [list, rng, typesRes] = await Promise.all([
         api.get<TerminalPayment[]>(`/terminal/${hotel.slug}`),
         api.get<Range>(`/terminal/${hotel.slug}/range`),
+        api.get<{ types: TerminalTypeItem[] }>(`/terminal/${hotel.slug}/types`),
       ]);
       setPayments(list);
       setRange(rng);
+      setTypes(typesRes.types);
       setRangeFrom(rng.from ?? "");
       setRangeTo(rng.to ?? "");
     } catch (err) {
@@ -151,7 +196,7 @@ export default function TerminalTab({ hotel }: { hotel: Hotel }) {
   function requestDelete(p: TerminalPayment) {
     setConfirm({
       title: "Smazat platbu?",
-      message: `Opravdu chcete smazat platbu z ${formatDate(p.date)} (${TYPE_LABELS[p.type] ?? p.type}, ${p.amount.toLocaleString("cs-CZ")} Kč)?`,
+      message: `Opravdu chcete smazat platbu z ${formatDate(p.date)} (${typeLabelOf(p)}, ${p.amount.toLocaleString("cs-CZ")} Kč)?`,
       danger: true,
       confirmLabel: "Smazat",
       onConfirm: () => void doDelete(p.id),
@@ -215,6 +260,11 @@ export default function TerminalTab({ hotel }: { hotel: Hotel }) {
         <Button size="sm" onClick={() => setEditing("new")} data-tour="terminal-add">
           + Přidat platbu
         </Button>
+        {canManage && (
+          <Button variant="secondary" size="sm" onClick={() => setTypesOpen(true)}>
+            Upravit typy plateb
+          </Button>
+        )}
       </div>
 
       {loading ? (
@@ -248,7 +298,7 @@ export default function TerminalTab({ hotel }: { hotel: Hotel }) {
                   <td className={styles.numCell}>{p.amount.toLocaleString("cs-CZ")} Kč</td>
                   {/* The "other" label already reads "Jiné…" — a second "jiné" tag
                       (as Taxi has next to a real route name) would just repeat it. */}
-                  <td>{TYPE_LABELS[p.type] ?? p.type}</td>
+                  <td>{typeLabelOf(p)}</td>
                   <td className={p.note ? styles.noteCell : `${styles.noteCell} ${styles.noteEmpty}`} title={p.note}>
                     {p.note || "–"}
                   </td>
@@ -290,12 +340,25 @@ export default function TerminalTab({ hotel }: { hotel: Hotel }) {
           hotel={hotel}
           canManage={canManage}
           range={range}
+          typeOptions={typeOptions}
           initial={editing === "new" ? null : editing}
           onSaved={() => {
             setEditing(null);
             void load();
           }}
           onCancel={() => setEditing(null)}
+        />
+      )}
+
+      {typesOpen && (
+        <TypesModal
+          hotel={hotel}
+          types={types}
+          onSaved={(next) => {
+            setTypes(next);
+            setTypesOpen(false);
+          }}
+          onCancel={() => setTypesOpen(false)}
         />
       )}
 
@@ -322,6 +385,7 @@ function PaymentModal({
   hotel,
   canManage,
   range,
+  typeOptions,
   initial,
   onSaved,
   onCancel,
@@ -329,6 +393,7 @@ function PaymentModal({
   hotel: Hotel;
   canManage: boolean;
   range: Range;
+  typeOptions: TerminalTypeItem[];
   initial: TerminalPayment | null;
   onSaved: () => void;
   onCancel: () => void;
@@ -343,10 +408,16 @@ function PaymentModal({
 
   const dateMin = !canManage && range.from ? range.from : undefined;
   const dateMax = !canManage && range.to ? range.to : undefined;
+  // A stored payment can reference a type since deleted from the catalogue; keep
+  // it selectable while editing so the dropdown still shows the current value.
+  const options =
+    type !== "" && !typeOptions.some((t) => t.id === type)
+      ? [{ id: type, label: typeLabelOf({ type, typeLabel: initial?.typeLabel } as TerminalPayment) }, ...typeOptions]
+      : typeOptions;
   // "Jiné…" carries no type of its own, so the note is the only record of what
   // the payment was — required there, optional everywhere else. Enforced on the
   // server too; this only saves a round-trip.
-  const noteRequired = type === "other";
+  const noteRequired = type === OTHER_TYPE_ID;
   const valid =
     /^\d{4}-\d{2}-\d{2}$/.test(date) &&
     Number.isFinite(amount) &&
@@ -405,9 +476,9 @@ function PaymentModal({
             Typ
             <select className={styles.select} value={type} onChange={(e) => setType(e.target.value)} disabled={busy}>
               <option value="" disabled>
-                Vyberte typ…
+                {options.length === 0 ? "Žádné typy plateb" : "Vyberte typ…"}
               </option>
-              {TERMINAL_TYPES.map((t) => (
+              {options.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.label}
                 </option>
@@ -436,6 +507,142 @@ function PaymentModal({
           </Button>
           <Button type="button" onClick={submit} disabled={busy || !valid}>
             {busy ? "Ukládám…" : isEdit ? "Uložit" : "Přidat"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Payment-type catalogue editor (manage only). Mirrors lobby bar's ItemsModal:
+// add/rename/remove/reorder the configurable types. The built-in "Jiné…" is
+// shown as a fixed, non-editable row — it always exists and always forces a note.
+// ─────────────────────────────────────────────────────────────────────────────
+interface DraftType extends TerminalTypeItem {
+  _key: string;
+}
+
+function TypesModal({
+  hotel,
+  types,
+  onSaved,
+  onCancel,
+}: {
+  hotel: Hotel;
+  types: TerminalTypeItem[];
+  onSaved: (next: TerminalTypeItem[]) => void;
+  onCancel: () => void;
+}) {
+  const [draft, setDraft] = useState<DraftType[]>(types.map((t) => ({ ...t, _key: t.id || genId() })));
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  function update(key: string, label: string) {
+    setDraft((prev) => prev.map((t) => (t._key === key ? { ...t, label } : t)));
+  }
+  function remove(key: string) {
+    setDraft((prev) => prev.filter((t) => t._key !== key));
+  }
+  function add() {
+    setDraft((prev) => [...prev, { _key: genId(), id: "", label: "" }]);
+  }
+  /** Reorder a type (order is persisted verbatim as the array position). */
+  function move(key: string, dir: -1 | 1) {
+    setDraft((prev) => {
+      const i = prev.findIndex((t) => t._key === key);
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= prev.length) return prev;
+      const next = [...prev];
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
+  }
+
+  async function save() {
+    setBusy(true);
+    setErr(null);
+    const payload = {
+      types: draft.filter((t) => t.label.trim() !== "").map((t) => ({ id: t.id, label: t.label.trim() })),
+    };
+    try {
+      const res = await api.put<{ types: TerminalTypeItem[] }>(`/terminal/${hotel.slug}/types`, payload);
+      onSaved(res.types);
+    } catch (e) {
+      setErr(errorMessage(e, "Uložení se nezdařilo."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className={styles.modalOverlay}>
+      <div className={styles.modal}>
+        <div className={styles.modalHeader}>
+          <h2 className={styles.modalTitle}>Typy plateb</h2>
+          <IconButton variant="close" aria-label="Zavřít" onClick={onCancel} />
+        </div>
+        <div className={styles.modalBody}>
+          <table className={styles.typesTable}>
+            <thead>
+              <tr>
+                <th>Typ</th>
+                <th aria-label="Akce" />
+              </tr>
+            </thead>
+            <tbody>
+              {draft.length === 0 && (
+                <tr>
+                  <td colSpan={2} className={styles.empty}>
+                    Žádné vlastní typy.
+                  </td>
+                </tr>
+              )}
+              {draft.map((t, idx) => (
+                <tr key={t._key}>
+                  <td>
+                    <input
+                      className={styles.typeInput}
+                      value={t.label}
+                      onChange={(e) => update(t._key, e.target.value)}
+                      placeholder="název typu"
+                      disabled={busy}
+                    />
+                  </td>
+                  <td>
+                    <div className={styles.rowActions}>
+                      <button type="button" className={styles.rowIconBtn} aria-label="Posunout nahoru" title="Posunout nahoru" onClick={() => move(t._key, -1)} disabled={busy || idx === 0}>
+                        <ChevronUpIcon />
+                      </button>
+                      <button type="button" className={styles.rowIconBtn} aria-label="Posunout dolů" title="Posunout dolů" onClick={() => move(t._key, 1)} disabled={busy || idx === draft.length - 1}>
+                        <ChevronDownIcon />
+                      </button>
+                      <button type="button" className={`${styles.rowIconBtn} ${styles.rowIconBtnTrash}`} aria-label="Odstranit typ" onClick={() => remove(t._key)} disabled={busy}>
+                        <TrashIcon />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              <tr className={styles.builtinRow}>
+                <td>
+                  {OTHER_TYPE_LABEL} <span className={styles.builtinHint}>(vždy k dispozici, poznámka povinná)</span>
+                </td>
+                <td />
+              </tr>
+            </tbody>
+          </table>
+          {err && <div className={styles.error}>{err}</div>}
+        </div>
+        <div className={styles.modalFooter}>
+          <Button variant="secondary" size="sm" type="button" onClick={add} disabled={busy} style={{ marginRight: "auto" }}>
+            + Přidat typ
+          </Button>
+          <Button variant="secondary" type="button" onClick={onCancel} disabled={busy}>
+            Zrušit
+          </Button>
+          <Button type="button" onClick={save} disabled={busy}>
+            {busy ? "Ukládám…" : "Uložit"}
           </Button>
         </div>
       </div>
