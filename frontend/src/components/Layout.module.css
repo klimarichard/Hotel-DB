@@ -99,6 +99,22 @@
   letter-spacing: 0.03em;
 }
 
+/* Clickable version (changelog permission): button reset + a subtle affordance. */
+.versionButton {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+}
+
+.versionButton:hover {
+  color: var(--color-text-heading, #e2e8f0);
+}
+
 .logoutBtn {
   background: none;
   border: 1px solid #2d3f54;

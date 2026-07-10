@@ -32,6 +32,8 @@ interface BottomNavProps {
   onLogout: () => void;
   /** Pre-gated version string (e.g. "v2.3.4") or null when not permitted. */
   versionLabel: string | null;
+  /** When set, the version becomes tappable and opens the changelog. */
+  onVersionClick?: () => void;
   /** <TimeOverrideControl/> – self-styled; only renders where allowed. */
   timeControl?: ReactNode;
   /** Logged-in user's display name/email – shown in the "Více" sheet (the phone
@@ -91,6 +93,7 @@ export default function BottomNav({
   onToggleTheme,
   onLogout,
   versionLabel,
+  onVersionClick,
   timeControl,
   userLabel,
   userRole,
@@ -292,9 +295,18 @@ export default function BottomNav({
                 </div>
               )}
               {timeControl}
-              {versionLabel && (
-                <span className={styles.sheetVersion}>{versionLabel}</span>
-              )}
+              {versionLabel &&
+                (onVersionClick ? (
+                  <button
+                    type="button"
+                    className={`${styles.sheetVersion} ${styles.sheetVersionButton}`}
+                    onClick={onVersionClick}
+                  >
+                    {versionLabel}
+                  </button>
+                ) : (
+                  <span className={styles.sheetVersion}>{versionLabel}</span>
+                ))}
             </div>
           </div>
         </div>

@@ -322,6 +322,7 @@ export const PERMISSION_SECTIONS = [
           { key: "system.triggers", label: "Ruční spuštění naplánovaných úloh", level: 1 },
           { key: "system.timeOverride", label: "Testovací hodiny (mimo produkci)", level: 1 },
           { key: "system.version.view", label: "Zobrazit verzi aplikace", level: 1 },
+          { key: "system.version.changelog", label: "Zobrazit změny verzí", level: 2 },
         ],
       },
     ],

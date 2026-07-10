@@ -249,6 +249,9 @@ export const PERMISSION_CATALOG = [
       // Display-only: gates whether the app version ("vX.Y.Z") shows in the
       // sidebar footer. Inert server-side (no requirePermission checks it).
       { key: "system.version.view", label: "Zobrazit verzi aplikace" },
+      // Display-only child of version.view: makes the version text clickable to
+      // open the changelog modal. Inert server-side.
+      { key: "system.version.changelog", label: "Zobrazit změny verzí" },
     ],
   },
   {
