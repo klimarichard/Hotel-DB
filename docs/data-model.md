@@ -16,6 +16,11 @@ This document describes the Firestore data model (top-level collections, sub-col
 | `hotels/{slug}/walkins/{autoId}` | Walk-in sale entries. |
 | `hotels/{slug}/taxiRides/{autoId}` | Taxi ride entries. |
 | `hotels/{slug}/config/walkins`, `hotels/{slug}/config/taxi` | Per-hotel visible date range (`{ from, to }`) that `walkiny.manage`/`taxi.manage` set to bound non-manager visibility. |
+| `hotels/ambiance/lobbyBarSales/{autoId}` | Lobby bar item sales (Ambiance only) — `itemName`/`unitPrice`/`price`/`provision`/`doSpolecne` are computed server-side and SNAPSHOTTED at sale time, never re-derived from the live catalogue on read. |
+| `hotels/ambiance/config/lobbyBar` | Lobby bar's visible date range (`{ from, to }`), set by `lobbyBar.manage`. |
+| `hotels/ambiance/config/lobbyBarItems` | Lobby bar item catalogue + per-currency provision rates: `{ items: [{ id, name, priceCZK, priceEUR }], provisionCZK, provisionEUR }` (defaults 20 / 1), `lobbyBar.manage`-only. |
+| `hotels/amigo-alqush/terminalPayments/{autoId}` | Card-terminal payments (Amigo & Alqush only) — `amount` is CZK-only, `type` a fixed 7-value enum, `note` optional on every type, `settled`/`settledBy`/`settledAt` settable only via the dedicated `terminal.manage`-gated endpoint. |
+| `hotels/amigo-alqush/config/terminal` | Terminál's visible date range (`{ from, to }`), set by `terminal.manage`. |
 
 `handoverWarnings/{hotel}_{shiftDate}_{shiftType}` — "Nenavazující předání" flags
 (a handover chain break), surfaced on the Upozornění hub. `settings/sm` and

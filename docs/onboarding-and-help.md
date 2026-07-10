@@ -150,14 +150,14 @@ When `anchor` is `null` (welcome, outro, or fallback) the overlay dims the full 
 
 ## Tour version & "what's new" delta
 
-`appTour.version` (currently **12** — the Recepce section's steps) is the highest `addedInVersion` value present in the step list. It lives in `frontend/src/lib/tours/appTour.ts`:
+`appTour.version` (currently **13** — the Lobby bar/Terminál steps) is the highest `addedInVersion` value present in the step list. It lives in `frontend/src/lib/tours/appTour.ts`:
 
 ```ts
 export const appTour: TourDefinition = {
   id: "app",
   // Highest step `addedInVersion` in the list. Bump it (and stamp the new steps'
   // `addedInVersion`) whenever you add steps for a new feature.
-  version: 12,
+  version: 13,
   ...
 };
 ```
@@ -174,7 +174,7 @@ If a user's permissions don't include any of the new steps, the delta is empty a
 **`toursSeen` Firestore field:**
 
 ```
-users/{uid}.toursSeen = { "app": 12 }   // tourId → last seen version
+users/{uid}.toursSeen = { "app": 13 }   // tourId → last seen version
 ```
 
 The `PUT /api/auth/me/tours` body is `{ tourId, version }` and uses `merge: true` so other tour entries are preserved.
@@ -191,7 +191,7 @@ The master step list is organised into **13 active sections** defined in the `SE
 | Přehled | Nav-item step (Přehled) + dnešní datum header, Dnes/Zítra staffing, Moje směny tile, Úkoly, Statistiky |
 | Směny | All shift-plan steps (view, edit, create, transitions, free shifts, export, …) |
 | Dovolená | Vacation request form, all-requests panel, approved-colleagues view |
-| Recepce | Nav-item step (Recepce, `appTour.version: 12`) + 13 further steps: Předávací protokol (shift toolbar, cash/trezor counting, Účty, sm special rows, Poznámky, signatures, next-shift creation, history/undo-redo, print, "založení protokolu"), Walkiny (table, add form), Taxi (ride table + "Jiné…", ceník). All deep steps `hideOnMobile: true`. See [Recepce — Guided tour & demo routes](recepce.md#guided-tour--demo-routes). |
+| Recepce | Nav-item step (Recepce, `appTour.version: 12`) + 19 further steps: Předávací protokol (shift toolbar, cash/trezor counting, Účty, sm special rows, Poznámky, signatures, next-shift creation, history/undo-redo, print, "založení protokolu"), Walkiny (table, add form), Taxi (ride table + "Jiné…", ceník), Lobby bar (add-sale button, ceník, manager-only souhrny — `appTour.version: 13`, Ambiance only), Terminál (add-payment button, manager-only "Předáno" column — `appTour.version: 13`, Amigo & Alqush only). All deep steps `hideOnMobile: true`. See [Recepce — Guided tour & demo routes](recepce.md#guided-tour--demo-routes). |
 | Zaměstnanci | Employee list + filters + create/export; employee card (edit, delete, sensitive reveal, benefits, employment history, contracts, documents) |
 | Můj profil | Self-page title, Navrhnout úpravu, own sensitive reveal, pending requests |
 | Šablony smluv | Template list, new template |
@@ -212,7 +212,7 @@ Sections are used only for the overlay's "Předchozí/Další sekce" navigation 
 The backend stores one Firestore field on the user document:
 
 ```
-users/{uid}.toursSeen = { "app": 12 }   // tourId → last seen version
+users/{uid}.toursSeen = { "app": 13 }   // tourId → last seen version
 ```
 
 Two endpoints in `functions/src/routes/auth.ts`:
@@ -264,9 +264,21 @@ For pages where the mock depends on the app state (Směny, Mzdy, Můj profil), t
 /napoveda/ukazka-protokol-podepsany → "protokol-signed"    (both signatures present → next-shift + print buttons)
 /napoveda/ukazka-walkiny            → "walkiny"            (RecepceDemoPage tab="walkiny", populated table)
 /napoveda/ukazka-taxi               → "taxi"               (RecepceDemoPage tab="taxi", populated rides + ceník)
+/napoveda/ukazka-lobby-bar          → "lobby-bar"          (RecepceDemoPage tab="lobbyBar", populated sales + item ceník; Ambiance only)
+/napoveda/ukazka-terminal           → "terminal"           (RecepceDemoPage tab="terminal", populated payments; Amigo & Alqush only)
 ```
 
-The three Recepce tabs share a single wrapper, `RecepceDemoPage.tsx`, rather than each getting its own `TourDemoRoute`-wrapped page component — it renders one real tab (`HandoverTab`/`WalkinsTab`/`TaxiTab`) for a hotel chosen from the current user's accessible hotels (preferring one where they also hold the tab's manage permission, so manager-only spotlighted controls actually render). See [Recepce — Guided tour & demo routes](recepce.md#guided-tour--demo-routes) for the full mock-hotel-selection logic.
+The five Recepce tabs share a single wrapper, `RecepceDemoPage.tsx`, rather than each getting its own `TourDemoRoute`-wrapped page component — it renders one real tab (`HandoverTab`/`WalkinsTab`/`TaxiTab`/`LobbyBarTab`/`TerminalTab`) for a hotel chosen from the current user's accessible hotels (preferring one where they also hold the tab's manage permission, so manager-only spotlighted controls actually render). See [Recepce — Guided tour & demo routes](recepce.md#guided-tour--demo-routes) for the full mock-hotel-selection logic.
+
+**⚠️ Gotcha — filter by tab availability *before* preferring a manage-holding
+hotel.** Unlike Předávací protokol/Walkiny/Taxi (present at every hotel),
+Lobby bar only exists at Ambiance and Terminál only at Amigo & Alqush.
+`RecepceDemoPage` first narrows the candidate hotel list to ones that actually
+have the requested tab (`hotels.filter((h) => h.tabs.some((t) => t.id ===
+tab))`) — *then* applies the manage-preference. Reversing the order (prefer-manage
+first) could pick a hotel that doesn't have the tab at all whenever the user's
+only manage grant for that tab lives elsewhere, rendering the wrong content or
+calling an endpoint gated on a key nobody holds for that hotel.
 
 Each route is registered in `App.tsx` with a per-route `key` (the path), so when the tour navigates between two demo routes that render the same page component (e.g. shifts-opened → shifts-published), React **unmounts and remounts** the page, ensuring a fresh fetch is fired with the new scenario already set.
 
