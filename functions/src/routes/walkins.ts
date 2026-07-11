@@ -4,7 +4,7 @@ import { requireAuth, AuthRequest } from "../middleware/auth";
 import { ctxFromReq, logCreate, logUpdate, logDelete } from "../services/auditLog";
 import { actorCtx, resolveOnDutyActor } from "../services/recepceActor";
 import { isHotelSlug, HotelSlug, walkinViewPerm, walkinManagePerm } from "../services/hotels";
-import { listRecepceEmployees, todayPrague, currentReceptionShiftPrague } from "../services/recepceEmployees";
+import { listRecepceEmployees, todayPrague, currentReceptionShiftPrague, resolveEmployeeDisplays } from "../services/recepceEmployees";
 import { scheduledEmployeeId } from "../services/scheduleLookup";
 import {
   WalkinDoc,
@@ -173,7 +173,11 @@ walkinsRouter.get(
       const range = await readRange(hotel);
       rows = rows.filter((r) => inRange(r.date, range));
     }
-    res.json(rows);
+    // Show each row under the employee's CURRENT name (displayName || "First
+    // Last"), re-resolved live; fall back to the stored snapshot if the employee
+    // record is gone.
+    const displays = await resolveEmployeeDisplays(rows.map((r) => r.employeeId));
+    res.json(rows.map((r) => (displays.has(r.employeeId) ? { ...r, employeeName: displays.get(r.employeeId)!.name } : r)));
   }
 );
 
