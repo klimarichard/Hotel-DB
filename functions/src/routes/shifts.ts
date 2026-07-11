@@ -3,6 +3,9 @@ import * as admin from "firebase-admin";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { requireAuth, AuthRequest } from "../middleware/auth";
 import { requirePermission, isSharedTerminalType } from "../auth/permissions";
+import { HOTEL_SLUGS, hotelViewPerm } from "../services/hotels";
+import { scheduledEmployeeId } from "../services/scheduleLookup";
+import { currentReceptionShiftPrague } from "../services/recepceEmployees";
 import { parseShiftExpression, HOTEL_CODES, isPureNumericExpression, sanitizeTypeTag } from "../services/shiftParser";
 import { snapshotShifts, deleteCollection, autoFillManagerRShifts } from "../services/planTransitions";
 import { createOrUpdatePayrollPeriod } from "../services/payrollCalculator";
@@ -1723,6 +1726,28 @@ async function resolveSharedTerminalRequester(
   if (snap.empty) return { error: "Vybraný zaměstnanec není v tomto plánu směn." };
   return { id };
 }
+
+// GET /shifts/on-shift-requester — default for the shared-terminal "who is
+// requesting?" picker: the employee scheduled on the reception shift happening
+// now. Resolved ONLY when the shared terminal maps to exactly ONE accessible
+// hotel; with zero or several accessible hotels the "current hotel" is ambiguous,
+// so we return null and the picker stays empty (the admin owns that setup). Empty
+// for non-shared-terminal callers — they don't see the picker.
+shiftsRouter.get("/on-shift-requester", requireAuth, async (req: AuthRequest, res) => {
+  if (!(await isSharedTerminalType(req.roleType))) {
+    res.json({ employeeId: null });
+    return;
+  }
+  const perms = req.permissions ?? new Set<string>();
+  const accessible = HOTEL_SLUGS.filter((slug) => perms.has(hotelViewPerm(slug)));
+  if (accessible.length !== 1) {
+    res.json({ employeeId: null });
+    return;
+  }
+  const cur = currentReceptionShiftPrague();
+  const employeeId = await scheduledEmployeeId(accessible[0], cur.date, cur.shift);
+  res.json({ employeeId: employeeId ?? null });
+});
 
 // POST /shifts/plans/:planId/shiftOverrides — submit override request
 shiftsRouter.post(

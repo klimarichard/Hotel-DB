@@ -180,6 +180,18 @@ export default function ShiftPlannerPage() {
   } | null>(null);
   const [pendingX, setPendingX] = useState<PendingXRequest | null>(null);
   const [pendingFreeClaim, setPendingFreeClaim] = useState<{ date: string; code: string; hotel: string } | null>(null);
+  // Shared terminal only: default the "who is requesting?" picker to whoever is on
+  // the reception shift now — but only when the terminal maps to a single hotel
+  // (else null; see GET /shifts/on-shift-requester). Same source as the Walkiny /
+  // Lobby bar "on shift now" default.
+  const [defaultRequester, setDefaultRequester] = useState<string | null>(null);
+  useEffect(() => {
+    if (!sharedTerminal) return;
+    api
+      .get<{ employeeId: string | null }>("/shifts/on-shift-requester")
+      .then((r) => setDefaultRequester(r.employeeId ?? null))
+      .catch(() => {});
+  }, [sharedTerminal]);
   const [editingEmployee, setEditingEmployee] = useState<PlanEmployee | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [confirmModal, setConfirmModal] = useState<{
@@ -1908,6 +1920,7 @@ export default function ShiftPlannerPage() {
           violations={pendingX.violations}
           planEmployees={plan.employees}
           sharedTerminal={sharedTerminal}
+          defaultRequesterEmployeeId={defaultRequester ?? undefined}
           onSubmit={async (reason, requestedByEmployeeId) => {
             await api.post(`/shifts/plans/${plan.id}/shiftOverrides`, {
               employeeId: pendingX.employeeId,
@@ -1935,6 +1948,7 @@ export default function ShiftPlannerPage() {
           planEmployees={plan.employees}
           requesterEmployeeId={pendingChangeRequest.employeeId}
           sharedTerminal={sharedTerminal}
+          defaultRequesterEmployeeId={defaultRequester ?? undefined}
           onSubmit={async ({ requestedChange, reason, requestedByEmployeeId }) => {
             await api.post(`/shifts/plans/${plan.id}/shiftChangeRequests`, {
               employeeId: pendingChangeRequest.employeeId,
@@ -1959,6 +1973,7 @@ export default function ShiftPlannerPage() {
           hotel={pendingFreeClaim.hotel}
           planEmployees={plan.employees}
           sharedTerminal={sharedTerminal}
+          defaultRequesterEmployeeId={defaultRequester ?? undefined}
           onConfirm={submitFreeClaim}
           onCancel={() => setPendingFreeClaim(null)}
         />

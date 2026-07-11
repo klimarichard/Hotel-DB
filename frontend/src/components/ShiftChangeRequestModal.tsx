@@ -37,6 +37,8 @@ interface Props {
   requesterEmployeeId: string;
   /** Shared terminal (e.g. Recepce): require picking who is really requesting. */
   sharedTerminal?: boolean;
+  /** Pre-selected picker value (the on-shift employee), when unambiguously resolved. */
+  defaultRequesterEmployeeId?: string;
   onSubmit: (payload: { requestedChange: RequestedChange; reason: string; requestedByEmployeeId?: string }) => Promise<void>;
   onClose: () => void;
 }
@@ -48,13 +50,18 @@ export default function ShiftChangeRequestModal({
   planEmployees,
   requesterEmployeeId,
   sharedTerminal = false,
+  defaultRequesterEmployeeId,
   onSubmit,
   onClose,
 }: Props) {
   const [sel, setSel] = useState<Selection>({ kind: "none" });
   const [hours, setHours] = useState("");
   const [other, setOther] = useState("");
-  const [requestedBy, setRequestedBy] = useState("");
+  const [requestedBy, setRequestedBy] = useState(() =>
+    defaultRequesterEmployeeId && planEmployees.some((e) => e.employeeId === defaultRequesterEmployeeId)
+      ? defaultRequesterEmployeeId
+      : "",
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { theme } = useTheme();

@@ -14,13 +14,19 @@ interface Props {
   planEmployees: PlanEmployee[];
   /** Shared terminal (e.g. Recepce): require picking who claims the shift. */
   sharedTerminal?: boolean;
+  /** Pre-selected claimant (the on-shift employee), when unambiguously resolved. */
+  defaultRequesterEmployeeId?: string;
   /** Resolves with the picked claimant employeeId on a shared terminal, else undefined. */
   onConfirm: (claimantEmployeeId?: string) => Promise<void> | void;
   onCancel: () => void;
 }
 
-export default function FreeClaimModal({ date, code, hotel, planEmployees, sharedTerminal = false, onConfirm, onCancel }: Props) {
-  const [claimant, setClaimant] = useState("");
+export default function FreeClaimModal({ date, code, hotel, planEmployees, sharedTerminal = false, defaultRequesterEmployeeId, onConfirm, onCancel }: Props) {
+  const [claimant, setClaimant] = useState(() =>
+    defaultRequesterEmployeeId && planEmployees.some((e) => e.employeeId === defaultRequesterEmployeeId)
+      ? defaultRequesterEmployeeId
+      : "",
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

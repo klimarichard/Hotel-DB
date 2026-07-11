@@ -14,6 +14,8 @@ interface Props {
   planEmployees: PlanEmployee[];
   /** Shared terminal (e.g. Recepce): require picking who is really requesting. */
   sharedTerminal?: boolean;
+  /** Pre-selected picker value (the on-shift employee), when unambiguously resolved. */
+  defaultRequesterEmployeeId?: string;
   onSubmit: (reason: string, requestedByEmployeeId?: string) => Promise<void>;
   onCancel: () => void;
 }
@@ -29,9 +31,13 @@ function violationText(v: ViolationInfo): string {
   }
 }
 
-export default function XOverrideModal({ employeeName, date, violations, planEmployees, sharedTerminal = false, onSubmit, onCancel }: Props) {
+export default function XOverrideModal({ employeeName, date, violations, planEmployees, sharedTerminal = false, defaultRequesterEmployeeId, onSubmit, onCancel }: Props) {
   const [reason, setReason] = useState("");
-  const [requestedBy, setRequestedBy] = useState("");
+  const [requestedBy, setRequestedBy] = useState(() =>
+    defaultRequesterEmployeeId && planEmployees.some((e) => e.employeeId === defaultRequesterEmployeeId)
+      ? defaultRequesterEmployeeId
+      : "",
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
