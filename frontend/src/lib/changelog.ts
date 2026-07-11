@@ -19,6 +19,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "4.2.11",
+    date: "2026-07-11",
+    changes: [
+      "Předávací protokol – Účty: uzamčené účty se nyní řadí nad všechny nezamčené (pod třemi speciálními řádky) a oddělují se od nich vodorovnou čárou. Stejné chování jako u Poznámek.",
+      "Předávací protokol – Poznámky: mezi uzamčenými a nezamčenými poznámkami je nově výrazná dělicí čára pro lepší přehlednost.",
+    ],
+  },
+  {
     version: "4.2.10",
     date: "2026-07-11",
     changes: [
