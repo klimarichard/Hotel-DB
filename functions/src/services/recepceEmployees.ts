@@ -57,6 +57,51 @@ function normalizePosition(v: unknown): string {
   return typeof v === "string" ? v.trim().toLowerCase() : "";
 }
 
+/** A name-bearing record (an employee doc OR a planEmployees snapshot). */
+interface NameParts {
+  displayName?: unknown;
+  firstName?: unknown;
+  lastName?: unknown;
+}
+const nstr = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
+
+/**
+ * Reception display name: the employee's own `displayName` when set, else
+ * "First Last". Deliberately first-name-first (unlike the app-wide "Surname
+ * First") so the reception pickers and tables read naturally; the pickers still
+ * SORT by surname via {@link recepceSortKey}.
+ */
+export function recepceDisplayName(e: NameParts): string {
+  return nstr(e.displayName) || `${nstr(e.firstName)} ${nstr(e.lastName)}`.trim();
+}
+
+/** Surname-first key so pickers stay findable by surname while showing "First Last". */
+export function recepceSortKey(e: NameParts): string {
+  return (`${nstr(e.lastName)} ${nstr(e.firstName)}`.trim() || recepceDisplayName(e)).toLowerCase();
+}
+
+/**
+ * Batch-resolve employeeId → { name, sortKey } from the LIVE employee records, so
+ * a display-name edit propagates everywhere without rewriting stored snapshots.
+ * Missing/deleted employees are absent from the map (callers fall back).
+ */
+export async function resolveEmployeeDisplays(
+  ids: readonly string[]
+): Promise<Map<string, { name: string; sortKey: string }>> {
+  const out = new Map<string, { name: string; sortKey: string }>();
+  const uniq = [...new Set(ids.filter((x): x is string => typeof x === "string" && x !== ""))];
+  if (uniq.length === 0) return out;
+  const snaps = await db().getAll(...uniq.map((id) => db().collection("employees").doc(id)));
+  for (const s of snaps) {
+    if (!s.exists) continue;
+    out.set(s.id, {
+      name: recepceDisplayName(s.data() as NameParts),
+      sortKey: recepceSortKey(s.data() as NameParts),
+    });
+  }
+  return out;
+}
+
 /**
  * Everyone on `dateStr`'s month shift plan (all planEmployees roster rows, deduped
  * by employeeId), sorted by Czech collation. Falls back to reception-position
@@ -71,7 +116,7 @@ export async function listRecepceEmployees(dateStr: string): Promise<RecepceEmpl
   const year = Number(dateStr.slice(0, 4));
   const month = Number(dateStr.slice(5, 7));
 
-  const out: RecepceEmployee[] = [];
+  const entries: Array<{ employeeId: string; name: string; sortKey: string }> = [];
   const planSnap = await db()
     .collection("shiftPlans")
     .where("year", "==", year)
@@ -82,45 +127,34 @@ export async function listRecepceEmployees(dateStr: string): Promise<RecepceEmpl
   if (!planSnap.empty) {
     const emps = await planSnap.docs[0].ref.collection("planEmployees").get();
     const seen = new Set<string>();
+    const snapshotFallback = new Map<string, { name: string; sortKey: string }>();
+    const ids: string[] = [];
     for (const d of emps.docs) {
-      const data = d.data() as {
-        employeeId?: unknown;
-        displayName?: unknown;
-        firstName?: unknown;
-        lastName?: unknown;
-      };
+      const data = d.data() as { employeeId?: unknown } & NameParts;
       if (typeof data.employeeId !== "string") continue;
       if (seen.has(data.employeeId)) continue;
       seen.add(data.employeeId);
-      const name =
-        typeof data.displayName === "string" && data.displayName.trim() !== ""
-          ? data.displayName
-          : `${(data.lastName as string) ?? ""} ${(data.firstName as string) ?? ""}`.trim();
-      out.push({ employeeId: data.employeeId, name: name || data.employeeId });
+      ids.push(data.employeeId);
+      snapshotFallback.set(data.employeeId, { name: recepceDisplayName(data), sortKey: recepceSortKey(data) });
+    }
+    const live = await resolveEmployeeDisplays(ids);
+    for (const id of ids) {
+      const disp = live.get(id) ?? snapshotFallback.get(id)!;
+      entries.push({ employeeId: id, name: disp.name || id, sortKey: disp.sortKey });
     }
   }
 
   // No plan (or an empty one) → fall back to reception-role employees.
-  if (out.length === 0) {
+  if (entries.length === 0) {
     const empSnap = await db().collection("employees").get();
     for (const d of empSnap.docs) {
-      const e = d.data() as {
-        currentJobTitle?: unknown;
-        status?: unknown;
-        displayName?: unknown;
-        firstName?: unknown;
-        lastName?: unknown;
-      };
+      const e = d.data() as { currentJobTitle?: unknown; status?: unknown } & NameParts;
       if (e.status === "terminated") continue;
       if (!FALLBACK_POSITIONS.has(normalizePosition(e.currentJobTitle))) continue;
-      const name =
-        typeof e.displayName === "string" && e.displayName.trim() !== ""
-          ? e.displayName
-          : `${(e.lastName as string) ?? ""} ${(e.firstName as string) ?? ""}`.trim();
-      out.push({ employeeId: d.id, name: name || d.id });
+      entries.push({ employeeId: d.id, name: recepceDisplayName(e) || d.id, sortKey: recepceSortKey(e) });
     }
   }
 
-  out.sort((a, b) => a.name.localeCompare(b.name, "cs"));
-  return out;
+  entries.sort((a, b) => a.sortKey.localeCompare(b.sortKey, "cs"));
+  return entries.map(({ employeeId, name }) => ({ employeeId, name }));
 }

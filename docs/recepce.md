@@ -333,7 +333,13 @@ off.
   (used for the password check); `label` is the display name; `name` is metadata
   only. Users with no `email` — or a deactivated account (`users/{uid}.active:
   false`) — are still skipped: they can't be authenticated, so they can't sign.
-  The revoker pool (`/revokers`) returns `email` the same way. Also returns
+  The revoker pool (`/revokers`) returns `email` the same way. **Name display
+  (v4.2.10):** `label` is resolved LIVE from the employee record via
+  `recepceDisplayName()` — the employee's `displayName` if set, else
+  first-name-first `"First Last"` — with the `planEmployees` snapshot only a
+  fallback for a since-deleted employee. The pool is sorted surname-first
+  (`recepceSortKey()`) so it stays findable while displaying first-name-first.
+  Also returns
   `scheduled: { predal, prevzal }` — the employees actually
   rostered for this shift (Předal) and the next one (Převzal), resolved via
   `scheduleLookup.ts`'s `scheduledSigner()` (matches `D`/`ZD` day or `N`/`ZN`
@@ -621,6 +627,17 @@ shared `functions/src/services/recepceEmployees.ts`, not duplicated in
 `walkins.ts`: **Lobby bar's "Prodal" dropdown** (see below) needs exactly the
 same "who's on shift this month, falling back to reception-position employees"
 pool, so both routers import the one implementation.
+
+**Name display (v4.2.10).** `recepceEmployees.ts` also exports the shared name
+helpers used everywhere reception shows an employee: `recepceDisplayName(e)` =
+`displayName` if set else first-name-first `"First Last"`; `recepceSortKey(e)` =
+surname-first sort key; and `resolveEmployeeDisplays(ids)` = a batch `getAll` →
+`Map<id, { name, sortKey }>` from the LIVE employee records. The Walkiny and Lobby
+bar **list GETs** run each row's `employeeId` through `resolveEmployeeDisplays`
+and overwrite the row's stored `employeeName` for the response — so a display-name
+edit shows on rows already recorded, without rewriting snapshots. The stored
+`employeeName` snapshot is kept as a fallback for a since-deleted employee. The
+dropdowns and the protocol sign/unsign pools use the same helpers.
 
 **Default to who's on shift now.** The `/employees` response is
 `{ employees, onShiftEmployeeId }`. `onShiftEmployeeId` is whoever is scheduled
