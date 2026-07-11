@@ -22,8 +22,10 @@ This document describes the Firestore data model (top-level collections, sub-col
 | `hotels/amigo-alqush/terminalPayments/{autoId}` | Card-terminal payments (Amigo & Alqush only) — `amount` is CZK-only, `type` a fixed 7-value enum, `note` optional on every type, `settled`/`settledBy`/`settledAt` settable only via the dedicated `terminal.manage`-gated endpoint. |
 | `hotels/amigo-alqush/config/terminal` | Terminál's visible date range (`{ from, to }`), set by `terminal.manage`. |
 
-`handoverWarnings/{hotel}_{shiftDate}_{shiftType}` — "Nenavazující předání" flags
-(a handover chain break), surfaced on the Upozornění hub. `settings/sm` and
+`handoverWarnings/{hotel}_{id}[_late]` — Předávací protokol warnings, `type`
+`"chain"` (Nenavazující předání — a handover chain break) or `"late"` (Pozdní
+příchod — Převzal after the next shift's start), surfaced on the Upozornění hub.
+`settings/sm` and
 `settings/taxiRoutes` hold the two GLOBAL (all-hotels) Recepce config docs — the
 shared sm rates and the shared taxi routes ceník, respectively.
 

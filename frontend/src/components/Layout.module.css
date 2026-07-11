@@ -31,6 +31,33 @@
   padding: 0 1.5rem 1.5rem;
   border-bottom: 1px solid #2d3f54;
   transition: opacity 0.15s;
+  position: relative; /* positioning context for the staging stamp */
+}
+
+/* Staging-only "TOP SECRET"-style rubber stamp slapped across the logo, so the
+   staging environment is instantly, unmistakably different from production. Only
+   rendered in the staging build (see IS_STAGING in Layout.tsx). */
+.stagingStamp {
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  transform: translateX(-50%) rotate(-11deg);
+  padding: 1px 9px;
+  border: 3px double #ff5a5f;
+  border-radius: 5px;
+  color: #ff5a5f;
+  font-size: 0.9rem;
+  font-weight: 800;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  line-height: 1.2;
+  white-space: nowrap;
+  opacity: 0.82;
+  /* faint inky "double-print" so it reads as a stamp, not a UI badge */
+  box-shadow: inset 0 0 0 1px rgba(255, 90, 95, 0.35);
+  text-shadow: 0 0 1px rgba(255, 90, 95, 0.5);
+  pointer-events: none; /* clicks fall through to the logo link */
+  z-index: 5;
 }
 
 .logo:hover {
