@@ -316,11 +316,16 @@ off.
   no permission needed beyond a valid password) or a `protokol.manage`/
   `system.admin` holder.
 - **Signer pool** — `GET /:hotel/signers?date=&shift=` returns the users eligible
-  to sign (`{ uid, name, email, label }`): everyone whose linked employee is in
-  that month's shift plan, falling back to **all active users** when the month has
-  no plan (never dead-ends signing). `email` is the account's real login (used for
-  the password check); `label` is the display name; `name` is metadata only. Users
-  with no `email` are skipped — they can't be authenticated, so they can't sign.
+  to sign (`{ uid, name, email, label }`): everyone whose linked employee is on
+  that month's shift-plan **roster** (`planEmployees`), falling back to **all active
+  users** when the month has no plan (never dead-ends signing). Roster presence is
+  the eligibility signal — an inactive `planEmployees` row (`active: false`) is
+  **not** skipped, because that flag only governs shift-grid row visibility, not who
+  may sign a handover; skipping it wrongly hid a rostered receptionist who works
+  shifts from the sign dialog (fixed v4.2.7). `email` is the account's real login
+  (used for the password check); `label` is the display name; `name` is metadata
+  only. Users with no `email` — or a deactivated account (`users/{uid}.active:
+  false`) — are still skipped: they can't be authenticated, so they can't sign.
   The revoker pool (`/revokers`) returns `email` the same way. Also returns
   `scheduled: { predal, prevzal }` — the employees actually
   rostered for this shift (Předal) and the next one (Převzal), resolved via
@@ -592,9 +597,13 @@ new date on edit.
 
 ### Employee dropdown
 
-`GET /:hotel/employees?date=` returns the employees to pick from: everyone active
-in that date's month shift plan (deduped by `employeeId`). When the month has **no
-plan**, it falls back to non-terminated employees whose `currentJobTitle`
+`GET /:hotel/employees?date=` returns the employees to pick from: everyone on that
+date's month shift-plan **roster** (`planEmployees`, deduped by `employeeId`).
+Roster presence is the signal — an inactive row (`active: false`) is **not**
+skipped, matching the handover signer pool (fixed v4.2.7); that flag only hides the
+row from the shift grid, it doesn't remove someone from the "who did this"
+attribution dropdown. When the month has **no plan**, it falls back to
+non-terminated employees whose `currentJobTitle`
 case-insensitively matches a fixed reception-role set (recepční, portýr, noční
 portýr, noční recepční, front office manager, senior front office manager,
 director of front office, general manager) — so the dropdown is never empty even
