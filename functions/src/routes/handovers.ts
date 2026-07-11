@@ -37,8 +37,11 @@ import {
   applyChange,
   appendHistory,
   readCursor,
-  planUndo,
-  planRedo,
+  loadHistoryEntries,
+  findUndoTarget,
+  findRedoTarget,
+  highestAppliedSeq,
+  computeCanStep,
   markUndone,
   canUndoRedo,
 } from "../services/handoverHistory";
@@ -210,6 +213,28 @@ function mergeLockable<T extends { id?: string; locked?: boolean }>(
     if (s.locked && s.id && !used.has(s.id)) result.push(s);
   }
   return result;
+}
+
+/**
+ * Lock enforcement on CREATE (no stored baseline exists yet). A new protocol is
+ * born by carrying the previous shift's outstanding notes / účty forward, so the
+ * lock state must be INHERITED from that previous shift — not trusted from the
+ * client and not stripped. A manage/admin caller controls locks directly (their
+ * incoming rows pass verbatim). A non-manage caller (the receptionist taking the
+ * shift over) may neither lock a new row nor unlock a carried one: each incoming
+ * row's `locked` is forced to whatever it was in the previous shift (matched by
+ * id), and false for anything not carried across. Without this, every handover
+ * performed by a regular receptionist silently unlocked the pinned rows.
+ */
+function seedLockedFromPrevious<T extends { id?: string; locked?: boolean }>(
+  prev: T[],
+  incoming: T[],
+  isManage: boolean
+): T[] {
+  if (isManage) return incoming;
+  const prevLocked = new Set<string>();
+  for (const p of prev) if (p.locked && p.id) prevLocked.add(p.id);
+  return incoming.map((row) => ({ ...row, locked: !!(row.id && prevLocked.has(row.id)) }));
 }
 
 /** Validates the :hotel URL segment. Rejects unknown slugs with 404. */
@@ -627,11 +652,15 @@ handoversRouter.put(
     let seedSmTrezor = 0;
     let seedWata = 0;
     let prevClosed = false;
+    // The previous shift's stored doc — read on create for the balance carry-over
+    // AND for inheriting the locked state of the carried notes / účty (see
+    // seedLockedFromPrevious). Stays null on an edit (baseUpdatedAt path).
+    let prevDoc: HandoverDoc | null = null;
     if (!beforeSnap.exists) {
       const set = req.permissions ?? new Set<string>();
       const prev = previousShift(body.shiftDate, body.shiftType);
       const prevSnap = await handoverCol(hotel).doc(docId(prev.date, prev.shift)).get();
-      const prevDoc = prevSnap.exists ? (prevSnap.data() as HandoverDoc) : null;
+      prevDoc = prevSnap.exists ? (prevSnap.data() as HandoverDoc) : null;
       seedSmTrezor = finiteOr(prevDoc?.smTrezor, 0);
       seedWata = finiteOr(prevDoc?.wata, 0);
       prevClosed = !!(prevDoc?.predal && prevDoc?.prevzal);
@@ -658,16 +687,20 @@ handoversRouter.put(
     // just ended stay behind with it — not even struck through. Enforced here so
     // it holds no matter what the client sends.
     const incomingNotes = sanitizeNotes(body.notes);
+    const incomingAccounts = sanitizeAccounts(body.accounts);
     const after = {
       shiftDate: body.shiftDate,
       shiftType: body.shiftType,
-      notes: mergeLockable<NoteRow>(
-        before?.notes ?? [],
-        beforeSnap.exists ? incomingNotes : incomingNotes.filter((n) => !n.done),
-        isManage
-      ),
+      // On edit, protect locked rows against the stored doc. On create, there is no
+      // stored baseline — inherit the locked state from the previous shift so a
+      // handover keeps its pinned rows locked (see seedLockedFromPrevious).
+      notes: beforeSnap.exists
+        ? mergeLockable<NoteRow>(before?.notes ?? [], incomingNotes, isManage)
+        : seedLockedFromPrevious<NoteRow>(prevDoc?.notes ?? [], incomingNotes.filter((n) => !n.done), isManage),
       cashCounts: sanitizeCashCounts(body.cashCounts),
-      accounts: mergeLockable<AccountRow>(before?.accounts ?? [], sanitizeAccounts(body.accounts), isManage),
+      accounts: beforeSnap.exists
+        ? mergeLockable<AccountRow>(before?.accounts ?? [], incomingAccounts, isManage)
+        : seedLockedFromPrevious<AccountRow>(prevDoc?.accounts ?? [], incomingAccounts, isManage),
       // sm counts flow through the normal content PUT (any protocol-edit user).
       // smTrezor + wata are NOT touched here — they move only via their dedicated
       // endpoints, so omitting them from the merge preserves the stored values.
@@ -1153,7 +1186,9 @@ handoversRouter.get(
       res.status(404).json({ error: "Předání nenalezeno." });
       return;
     }
-    const cursor = readCursor(snap.data() as Record<string, unknown>);
+    const doc = snap.data() as HandoverDoc;
+    const permSet = req.permissions ?? new Set<string>();
+    const isManage = permSet.has("system.admin") || permSet.has(handoverManagePerm(hotel));
     const histSnap = await ref.collection("history").orderBy("seq", "desc").get();
 
     // Resolve author display names once per distinct uid.
@@ -1175,10 +1210,10 @@ handoversRouter.get(
         label: e.label,
         by: names.get(e.byUid) ?? e.byUid,
         undone: e.undone === true,
-        applied: e.seq <= cursor.histCursor,
+        applied: e.undone !== true,
       };
     });
-    res.json({ entries, ...(await canUndoRedo(hotel, id, cursor)) });
+    res.json({ entries, ...(await canUndoRedo(hotel, id, { content: contentOf(doc), isManage })) });
   }
 );
 
@@ -1201,35 +1236,45 @@ function stepHandler(dir: "undo" | "redo") {
       res.status(403).json({ error: "Podepsaný protokol nelze vrátit zpět." });
       return;
     }
-    const cursor = readCursor(before as unknown as Record<string, unknown>);
-    const plan = dir === "undo" ? await planUndo(hotel, id, cursor) : await planRedo(hotel, id, cursor);
-    if (!plan) {
+    // Lock enforcement mirrors the content PUT's mergeLockable: a non-manage caller
+    // may not revert a change that touches a locked row. Rather than dead-ending on
+    // such a step, undo/redo SKIP it and land on the nearest change the caller may
+    // touch (findUndoTarget/findRedoTarget apply the guard). Admin/manage: no guard.
+    const set = req.permissions ?? new Set<string>();
+    const isManage = set.has("system.admin") || set.has(handoverManagePerm(hotel));
+    const content = contentOf(before);
+    const guard = { content, isManage };
+    const entries = await loadHistoryEntries(hotel, id);
+    const target = dir === "undo" ? findUndoTarget(entries, guard) : findRedoTarget(entries, guard);
+    if (!target) {
       res.status(409).json({ error: dir === "undo" ? "Není co vrátit zpět." : "Není co obnovit." });
       return;
     }
 
-    const content = contentOf(before);
-    applyChange(content, plan.change, dir);
+    applyChange(content, target, dir);
+    // Reflect the step in the in-memory list so the post-step availability below is
+    // computed against the new state without a re-read; `content` is now post-step.
+    target.undone = dir === "undo";
     await ref.update({
       notes: content.notes,
       accounts: content.accounts,
       cashCounts: content.cashCounts,
       smCounts: content.smCounts,
-      histCursor: plan.cursor.histCursor,
+      histCursor: highestAppliedSeq(entries),
       updatedBy: req.uid,
       updatedAt: FieldValue.serverTimestamp(),
     });
-    await markUndone(hotel, id, plan.seq, dir === "undo");
+    await markUndone(hotel, id, target.seq, dir === "undo");
     await writeAudit(actorCtx(await resolveRecepceActor(req, hotel, before.shiftDate, before.shiftType)), {
       action: "update",
       collection: "shiftHandovers",
       resourceId: id,
       event: dir === "undo" ? "recepce.protokol.undo" : "recepce.protokol.redo",
-      extra: { hotel, shift: before.shiftType, date: before.shiftDate, label: plan.change.label },
+      extra: { hotel, shift: before.shiftType, date: before.shiftDate, label: target.label },
     });
 
     const saved = await ref.get();
-    res.json({ id, ...saved.data(), ...(await canUndoRedo(hotel, id, plan.cursor)) });
+    res.json({ id, ...saved.data(), ...computeCanStep(entries, guard) });
   };
 }
 
