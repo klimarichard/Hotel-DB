@@ -19,6 +19,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "4.2.10",
+    date: "2026-07-11",
+    changes: [
+      "Recepce: jména zaměstnanců (v tabulkách Walkiny a Lobby bar i ve výběru podepisujícího a mazání podpisu u Předávacího protokolu) se zobrazují jako zobrazované jméno zaměstnance, je-li nastaveno; jinak jako Jméno Příjmení. Změna se projeví i u dříve zapsaných záznamů.",
+    ],
+  },
+  {
     version: "4.2.9",
     date: "2026-07-11",
     changes: [
