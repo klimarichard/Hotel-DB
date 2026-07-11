@@ -29,6 +29,7 @@ import {
   nextShift,
 } from "../services/handoverShared";
 import { scheduledSigner } from "../services/scheduleLookup";
+import { resolveEmployeeDisplays, recepceDisplayName, recepceSortKey } from "../services/recepceEmployees";
 import {
   HandoverContent,
   diffHandover,
@@ -378,8 +379,10 @@ handoversRouter.get(
     const year = Number(dateStr.slice(0, 4));
     const month = Number(dateStr.slice(5, 7));
 
-    // employeeId → friendly label, for employees in that month's plan.
-    const planLabels = new Map<string, string>();
+    // Roster membership for this month's plan, plus a name/sort snapshot used only
+    // as a fallback when a rostered employee's live record is gone.
+    const planMembers = new Set<string>();
+    const planSnapshot = new Map<string, { name: string; sortKey: string }>();
     const planSnap = await db()
       .collection("shiftPlans")
       .where("year", "==", year)
@@ -389,33 +392,29 @@ handoversRouter.get(
     if (!planSnap.empty) {
       const emps = await planSnap.docs[0].ref.collection("planEmployees").get();
       for (const d of emps.docs) {
-        const data = d.data() as {
-          employeeId?: unknown;
-          displayName?: unknown;
-          firstName?: unknown;
-          lastName?: unknown;
-        };
+        const data = d.data() as { employeeId?: unknown; displayName?: unknown; firstName?: unknown; lastName?: unknown };
         // Presence in the month's roster is what makes someone an eligible signer;
         // the `active` flag only governs grid-row visibility, so we deliberately do
         // NOT skip inactive roster rows here. A receptionist who is on the plan (even
         // with an inactive row) and works shifts must still appear in the handover
         // sign dialog — otherwise they can never sign a Předat/Převzít.
         if (typeof data.employeeId !== "string") continue;
-        const label =
-          typeof data.displayName === "string" && data.displayName.trim() !== ""
-            ? data.displayName
-            : `${(data.lastName as string) ?? ""} ${(data.firstName as string) ?? ""}`.trim();
-        planLabels.set(data.employeeId, label || data.employeeId);
+        planMembers.add(data.employeeId);
+        planSnapshot.set(data.employeeId, { name: recepceDisplayName(data), sortKey: recepceSortKey(data) });
       }
     }
-    const usePlan = planLabels.size > 0;
+    const usePlan = planMembers.size > 0;
 
     // Map active users → signer entries; when a plan exists, keep only users whose
     // linked employee is in it. The users collection is small, so one read is fine.
     // Dedupe by employeeId — if several accounts link to the same employee (a data
     // anomaly, but nothing prevents it) they'd otherwise appear as identical rows.
     const usersSnap = await db().collection("users").get();
-    const out: Array<{ uid: string; name: string; email: string; label: string }> = [];
+    // Live display names (displayName || "First Last") for every linked employee.
+    const displays = await resolveEmployeeDisplays(
+      usersSnap.docs.map((d) => (d.data() as { employeeId?: unknown }).employeeId as string)
+    );
+    const out: Array<{ uid: string; name: string; email: string; label: string; sortKey: string }> = [];
     const seenEmp = new Set<string>();
     for (const d of usersSnap.docs) {
       const u = d.data() as { name?: unknown; email?: unknown; employeeId?: unknown; active?: unknown };
@@ -427,19 +426,21 @@ handoversRouter.get(
       if (email.trim() === "") continue;
       const empId = typeof u.employeeId === "string" ? u.employeeId : null;
       if (usePlan) {
-        if (!empId || !planLabels.has(empId)) continue;
+        if (!empId || !planMembers.has(empId)) continue;
         if (seenEmp.has(empId)) continue;
         seenEmp.add(empId);
-        out.push({ uid: d.id, name, email, label: planLabels.get(empId) ?? name });
-      } else {
-        if (empId) {
-          if (seenEmp.has(empId)) continue;
-          seenEmp.add(empId);
-        }
-        out.push({ uid: d.id, name, email, label: name || email });
+      } else if (empId) {
+        if (seenEmp.has(empId)) continue;
+        seenEmp.add(empId);
       }
+      // Prefer the LIVE employee name; fall back to the plan snapshot, then the
+      // user's own name / email so an entry always has a readable label.
+      const disp = empId ? displays.get(empId) ?? planSnapshot.get(empId) : undefined;
+      const label = disp?.name || name || email;
+      const sortKey = disp?.sortKey || label.toLowerCase();
+      out.push({ uid: d.id, name, email, label, sortKey });
     }
-    out.sort((a, b) => a.label.localeCompare(b.label, "cs"));
+    out.sort((a, b) => a.sortKey.localeCompare(b.sortKey, "cs"));
 
     // Default signers: whoever is scheduled for THIS shift (Předal) and the NEXT
     // shift (Převzal) in the plan. null when nobody is scheduled → no default.
@@ -454,7 +455,7 @@ handoversRouter.get(
       scheduled = { predal: cur?.uid ?? null, prevzal: nxt?.uid ?? null };
     }
 
-    res.json({ signers: out, scheduled });
+    res.json({ signers: out.map(({ sortKey, ...s }) => s), scheduled });
   }
 );
 
@@ -511,30 +512,17 @@ handoversRouter.get(
       included.push({ uid: d.id, name, email, employeeId: empId });
     }
 
-    // Resolve employee-name labels for the (few) included users.
-    const out = await Promise.all(
-      included.map(async (e) => {
-        let label = e.name;
-        if (e.employeeId) {
-          try {
-            const emp = await db().collection("employees").doc(e.employeeId).get();
-            if (emp.exists) {
-              const ed = emp.data() as Record<string, unknown>;
-              const dn =
-                typeof ed.displayName === "string" && ed.displayName.trim() !== ""
-                  ? ed.displayName
-                  : `${(ed.lastName as string) ?? ""} ${(ed.firstName as string) ?? ""}`.trim();
-              if (dn) label = dn;
-            }
-          } catch {
-            // keep username as the label
-          }
-        }
-        return { uid: e.uid, name: e.name, email: e.email, label };
-      })
-    );
-    out.sort((a, b) => a.label.localeCompare(b.label, "cs"));
-    res.json(out);
+    // Resolve LIVE employee-name labels (displayName || "First Last") for the
+    // (few) included users, sorted surname-first — same convention as /signers.
+    const displays = await resolveEmployeeDisplays(included.map((e) => e.employeeId ?? ""));
+    const out = included.map((e) => {
+      const disp = e.employeeId ? displays.get(e.employeeId) : undefined;
+      const label = disp?.name || e.name;
+      const sortKey = disp?.sortKey || label.toLowerCase();
+      return { uid: e.uid, name: e.name, email: e.email, label, sortKey };
+    });
+    out.sort((a, b) => a.sortKey.localeCompare(b.sortKey, "cs"));
+    res.json(out.map(({ sortKey, ...s }) => s));
   }
 );
 
