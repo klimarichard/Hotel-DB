@@ -35,7 +35,9 @@ interface Props {
   currentShift: string;  // current rawInput shown for context
   planEmployees: PlanEmployee[];
   requesterEmployeeId: string;
-  onSubmit: (payload: { requestedChange: RequestedChange; reason: string }) => Promise<void>;
+  /** Shared terminal (e.g. Recepce): require picking who is really requesting. */
+  sharedTerminal?: boolean;
+  onSubmit: (payload: { requestedChange: RequestedChange; reason: string; requestedByEmployeeId?: string }) => Promise<void>;
   onClose: () => void;
 }
 
@@ -45,16 +47,30 @@ export default function ShiftChangeRequestModal({
   currentShift,
   planEmployees,
   requesterEmployeeId,
+  sharedTerminal = false,
   onSubmit,
   onClose,
 }: Props) {
   const [sel, setSel] = useState<Selection>({ kind: "none" });
   const [hours, setHours] = useState("");
   const [other, setOther] = useState("");
+  const [requestedBy, setRequestedBy] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { theme } = useTheme();
   const isDark = theme === "dark";
+
+  // On a shared terminal the requester is picked here (everyone in the plan,
+  // surname-sorted). Not a swap — this is "who is filing the request".
+  const roster = useMemo(
+    () =>
+      [...planEmployees].sort(
+        (a, b) =>
+          csCollator.compare(a.lastName ?? "", b.lastName ?? "") ||
+          csCollator.compare(a.firstName ?? "", b.firstName ?? ""),
+      ),
+    [planEmployees],
+  );
 
   // Everyone in this month's plan, surname-sorted (cs), excluding the requester.
   const swapCandidates = useMemo(
@@ -103,10 +119,18 @@ export default function ShiftChangeRequestModal({
       );
       return;
     }
+    if (sharedTerminal && !requestedBy) {
+      setError("Vyberte, kdo o změnu žádá.");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
-      await onSubmit({ requestedChange: rc, reason: other.trim() });
+      await onSubmit({
+        requestedChange: rc,
+        reason: other.trim(),
+        ...(sharedTerminal ? { requestedByEmployeeId: requestedBy } : {}),
+      });
       // Parent closes the modal on success.
     } catch (e) {
       setError(e instanceof Error ? e.message : "Chyba při odesílání");
@@ -114,7 +138,7 @@ export default function ShiftChangeRequestModal({
     }
   }
 
-  const canSubmit = !saving && buildRequestedChange() !== null;
+  const canSubmit = !saving && buildRequestedChange() !== null && (!sharedTerminal || !!requestedBy);
 
   return (
     <div className={shell.overlay}>
@@ -128,6 +152,25 @@ export default function ShiftChangeRequestModal({
             <strong>{employeeName}</strong> – {formatDateCZ(date)} – aktuálně:{" "}
             <strong>{currentShift || "–"}</strong>
           </p>
+
+          {sharedTerminal && (
+            <div className={styles.swapRow}>
+              <div className={styles.sectionLabel}>Kdo o změnu žádá:</div>
+              <select
+                className={styles.select}
+                disabled={saving}
+                value={requestedBy}
+                onChange={(e) => { setError(null); setRequestedBy(e.target.value); }}
+              >
+                <option value="">– vyberte zaměstnance –</option>
+                {roster.map((e) => (
+                  <option key={e.employeeId} value={e.employeeId}>
+                    {employeeSurnameFirst(e)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div className={styles.sectionLabel}>Požadovaná změna na:</div>
           <div className={styles.grid}>
