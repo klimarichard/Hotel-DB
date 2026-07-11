@@ -19,6 +19,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "4.2.8",
+    date: "2026-07-11",
+    changes: [
+      "Nápověda (prohlídka aplikace): krok pro záložku Terminál se nyní správně zobrazí. Dříve se ukázková stránka nenačetla a z prohlídky nešlo odejít.",
+    ],
+  },
+  {
     version: "4.2.7",
     date: "2026-07-11",
     changes: [

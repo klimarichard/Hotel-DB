@@ -847,6 +847,19 @@ function terminalFixture(
   if (!isGet) return { hit: true, value: {} };
   const { d05, d11, today } = demoMonthDates();
   if (clean.endsWith("/range")) return { hit: true, value: { from: `${today.slice(0, 7)}-01`, to: today } };
+  // Types catalogue: TerminalTab reads `{ types }` from here and spreads it into
+  // the Typ dropdown — without this branch it fell through to the payments-array
+  // return below, so `typesRes.types` was undefined and `[...types]` crashed the
+  // whole tour page. The built-in "Jiné…" is appended client-side, not listed here.
+  if (clean.endsWith("/types")) {
+    return {
+      hit: true,
+      value: { types: [
+        { id: "late-co", label: "late C/O" },
+        { id: "laundry", label: "laundry" },
+      ] },
+    };
+  }
   // List: /terminal/{slug} — one settled, one not, and one "Jiné…" with a note.
   return {
     hit: true,
