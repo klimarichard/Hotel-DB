@@ -290,11 +290,15 @@ account, but Předat/Převzít must attribute the action to the actual person si
 off.
 
 - **`frontend/src/lib/secondaryAuth.ts`** — a **second Firebase App instance**
-  (`initializeApp(config, "secondary")`) holds its own `Auth`. `verifyCredential(username, password)`
+  (`initializeApp(config, "secondary")`) holds its own `Auth`. `verifyCredential(email, password)`
   signs in on this secondary instance, captures the resulting `idToken`, then
   **always signs the secondary instance back out** (`finally`) — the primary
-  session (`auth.currentUser`) is never touched. `usernameToEmail()` applies the
-  same `@hotel.local` convention as the login page.
+  session (`auth.currentUser`) is never touched. The credential passed in is the
+  signer's **real login email** (`Signer.email`, supplied by the signer pool
+  below); `usernameToEmail()` passes any `@`-address through verbatim, so it no
+  longer manufactures `${name}@hotel.local` from a display name. (Doing so was the
+  v4.2.6 bug — no account logs in with a `@hotel.local` address, so every sign
+  attempt hit a non-existent user and surfaced as "invalid password".)
 - `SignModal.tsx` — a shared credential-prompt component (name dropdown + password
   field) used for Předat, Převzít, and self/manage-unsign. Closes only via its
   buttons (✕/Zrušit), never backdrop click, per the project modal rule.
@@ -312,9 +316,13 @@ off.
   no permission needed beyond a valid password) or a `protokol.manage`/
   `system.admin` holder.
 - **Signer pool** — `GET /:hotel/signers?date=&shift=` returns the users eligible
-  to sign: everyone whose linked employee is in that month's shift plan, falling
-  back to **all active users** when the month has no plan (never dead-ends
-  signing). Also returns `scheduled: { predal, prevzal }` — the employees actually
+  to sign (`{ uid, name, email, label }`): everyone whose linked employee is in
+  that month's shift plan, falling back to **all active users** when the month has
+  no plan (never dead-ends signing). `email` is the account's real login (used for
+  the password check); `label` is the display name; `name` is metadata only. Users
+  with no `email` are skipped — they can't be authenticated, so they can't sign.
+  The revoker pool (`/revokers`) returns `email` the same way. Also returns
+  `scheduled: { predal, prevzal }` — the employees actually
   rostered for this shift (Předal) and the next one (Převzal), resolved via
   `scheduleLookup.ts`'s `scheduledSigner()` (matches `D`/`ZD` day or `N`/`ZN`
   night reception segments for the hotel), used as the modal's pre-selected
