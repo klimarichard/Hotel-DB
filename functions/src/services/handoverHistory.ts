@@ -467,8 +467,13 @@ function sameValue(a: unknown, b: unknown): boolean {
 
 /** The entry currently at the tip of the stack, or null. */
 async function tipEntry(hotel: HotelSlug, id: string, cursor: CursorState): Promise<HistoryEntry | null> {
-  // Only meaningful with no redo tail — otherwise the tip is about to be truncated.
-  if (cursor.histSeq === 0 || cursor.histCursor !== cursor.histSeq) return null;
+  if (cursor.histSeq === 0) return null;
+  // Fold only in a clean linear state — no undone entries at all. Any undone entry
+  // means a redo tail (or a non-manage skip-hole) is present, and folding across it
+  // could rewrite history on the wrong side of the divide. Cheaper than it looks:
+  // the query is a single-field filter (no composite index) capped at one doc.
+  const anyUndone = await historyCol(hotel, id).where("undone", "==", true).limit(1).get();
+  if (!anyUndone.empty) return null;
   const snap = await historyCol(hotel, id).doc(String(cursor.histSeq).padStart(9, "0")).get();
   return snap.exists ? (snap.data() as HistoryEntry) : null;
 }
@@ -573,13 +578,16 @@ export async function appendHistory(
   const col = historyCol(hotel, id);
   const batch = admin.firestore().batch();
 
-  // Truncate the redo tail: a new edit invalidates everything above the cursor.
-  if (cursor.histCursor < cursor.histSeq) {
-    const tail = await col.where("seq", ">", cursor.histCursor).get();
-    tail.docs.forEach((d) => batch.delete(d.ref));
-  }
+  // Truncate the redo tail: a new edit invalidates every currently-undone entry —
+  // they can no longer be redone. With per-entry `undone` as the source of truth
+  // (rather than a single cursor), "the redo tail" is simply every undone entry,
+  // which also correctly discards any skip-holes a non-manage undo left behind.
+  const undoneTail = await col.where("undone", "==", true).get();
+  undoneTail.docs.forEach((d) => batch.delete(d.ref));
 
-  let seq = cursor.histCursor; // continue numbering from the (possibly rewound) cursor
+  // Number above the highest seq ever assigned (gaps are fine) so a new entry can
+  // never collide with a kept applied entry that outranks a just-deleted hole.
+  let seq = cursor.histSeq;
   for (const change of changes) {
     seq += 1;
     const entry: HistoryEntry = {
@@ -600,13 +608,8 @@ export async function appendHistory(
   return { histSeq: seq, histCursor: seq };
 }
 
-/** The entry at a given seq, or null. */
-async function entryAtSeq(hotel: HotelSlug, id: string, seq: number): Promise<HistoryEntry | null> {
-  const snap = await historyCol(hotel, id).where("seq", "==", seq).limit(1).get();
-  return snap.empty ? null : (snap.docs[0].data() as HistoryEntry);
-}
-
-/** The active entry immediately below `seq` (for the new cursor after an undo). */
+/** The active entry immediately below `seq` — the new tip after a coalesce that
+ *  deletes the current tip (typed then deleted back to the original value). */
 async function prevActiveSeq(hotel: HotelSlug, id: string, seq: number): Promise<number> {
   const snap = await historyCol(hotel, id)
     .where("seq", "<", seq)
@@ -616,44 +619,75 @@ async function prevActiveSeq(hotel: HotelSlug, id: string, seq: number): Promise
   return snap.empty ? 0 : (snap.docs[0].data() as HistoryEntry).seq;
 }
 
-/** The lowest entry strictly above the cursor (the next redo target). */
-async function nextRedo(hotel: HotelSlug, id: string, cursorSeq: number): Promise<HistoryEntry | null> {
-  const snap = await historyCol(hotel, id)
-    .where("seq", ">", cursorSeq)
-    .orderBy("seq", "asc")
-    .limit(1)
-    .get();
-  return snap.empty ? null : (snap.docs[0].data() as HistoryEntry);
+// ─── Undo / redo planning ────────────────────────────────────────────────────
+//
+// Per-entry `undone` is the source of truth: applied ≙ undone === false, reverted
+// ≙ undone === true. (The old single `histCursor` integer could not express a
+// non-manage user reverting entry N while a locked entry N+1 above it stays
+// applied — a "skip-hole" — which the skip-over behaviour requires.) The whole
+// history is loaded once (a small, retention-swept collection) and scanned in
+// memory, so undo, redo and availability share a single read and no composite
+// index is needed. On a doc that has never been skipped this reduces exactly to
+// the previous linear behaviour: undone entries form a contiguous top suffix.
+
+/** Load the whole history, ascending by seq. */
+export async function loadHistoryEntries(hotel: HotelSlug, id: string): Promise<HistoryEntry[]> {
+  const snap = await historyCol(hotel, id).orderBy("seq", "asc").get();
+  return snap.docs.map((d) => d.data() as HistoryEntry);
 }
 
-export interface StepResult {
-  change: HandoverChange;
-  seq: number;
-  cursor: CursorState;
+/** Which entries a caller may revert. Manage/admin: any. Non-manage: anything
+ *  that is not a locked-row change (mirrors the content PUT's mergeLockable). */
+export interface StepGuard {
+  content: HandoverContent;
+  isManage: boolean;
+}
+function available(entry: HistoryEntry, guard?: StepGuard): boolean {
+  if (!guard || guard.isManage) return true;
+  return !changeTouchesLockedRow(guard.content, entry);
 }
 
 /**
- * Compute the next undo step: the entry to reverse and the resulting cursor.
- * Returns null when there is nothing to undo. Does NOT write — the caller
- * applies `change` to the doc and persists `cursor` + marks the entry undone.
+ * The entry an UNDO reverts: the highest-seq APPLIED entry the caller may touch.
+ * Entries the caller may not touch (a manage-locked row, for a non-manage user)
+ * are SKIPPED, so undo lands on the nearest available one beneath them instead of
+ * dead-ending. The `created` marker is the floor and is never undone. Skipping is
+ * data-safe because a non-manage caller only ever reverts unlocked rows, which are
+ * disjoint from the locked rows left applied above — element-local, order-free.
  */
-export async function planUndo(hotel: HotelSlug, id: string, cursor: CursorState): Promise<StepResult | null> {
-  if (cursor.histCursor <= 0) return null;
-  const entry = await entryAtSeq(hotel, id, cursor.histCursor);
-  if (!entry) return null;
-  // The creation marker is the floor of the stack — you cannot undo the protocol
-  // into existence. Deleting it is what DELETE /:hotel/:id is for.
-  if (entry.target.kind === "created") return null;
-  const newCursor = await prevActiveSeq(hotel, id, entry.seq);
-  return { change: entry, seq: entry.seq, cursor: { histSeq: cursor.histSeq, histCursor: newCursor } };
+export function findUndoTarget(entries: HistoryEntry[], guard?: StepGuard): HistoryEntry | null {
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const e = entries[i];
+    if (e.undone) continue; // already reverted
+    if (e.target.kind === "created") continue; // floor
+    if (!available(e, guard)) continue; // skip a locked-row change (non-manage)
+    return e;
+  }
+  return null;
 }
 
-/** Compute the next redo step, or null when there is nothing to redo. */
-export async function planRedo(hotel: HotelSlug, id: string, cursor: CursorState): Promise<StepResult | null> {
-  if (cursor.histCursor >= cursor.histSeq) return null;
-  const entry = await nextRedo(hotel, id, cursor.histCursor);
-  if (!entry) return null;
-  return { change: entry, seq: entry.seq, cursor: { histSeq: cursor.histSeq, histCursor: entry.seq } };
+/** The entry a REDO re-applies: the lowest-seq REVERTED entry the caller may
+ *  touch. Locked-row changes are skipped, symmetric with findUndoTarget. */
+export function findRedoTarget(entries: HistoryEntry[], guard?: StepGuard): HistoryEntry | null {
+  for (const e of entries) {
+    if (!e.undone) continue; // still applied
+    if (!available(e, guard)) continue; // skip a locked-row change (non-manage)
+    return e;
+  }
+  return null;
+}
+
+/** Highest applied seq (0 when none). Persisted as the parent doc's `histCursor`
+ *  for back-compat only — the `undone` flags, not this scalar, drive decisions. */
+export function highestAppliedSeq(entries: HistoryEntry[]): number {
+  let max = 0;
+  for (const e of entries) if (!e.undone && e.seq > max) max = e.seq;
+  return max;
+}
+
+/** Undo/redo availability computed from an already-loaded entry list. */
+export function computeCanStep(entries: HistoryEntry[], guard?: StepGuard): { canUndo: boolean; canRedo: boolean } {
+  return { canUndo: !!findUndoTarget(entries, guard), canRedo: !!findRedoTarget(entries, guard) };
 }
 
 /** Flag a history entry as (un)done after an undo/redo has been applied. */
@@ -687,30 +721,15 @@ export function changeTouchesLockedRow(content: HandoverContent, change: Handove
 }
 
 /**
- * Undo/redo availability. `guard`, when supplied for a NON-manage caller, also
- * withholds a step whose change touches a locked row — so the button reflects
- * what the caller may actually do (the server still hard-refuses in stepHandler).
- * Undo is strictly LIFO, so a locked change at the tip correctly blocks undoing
- * anything beneath it too.
+ * Undo/redo availability. `guard`, when supplied for a NON-manage caller, hides a
+ * step whose only candidates are locked-row changes — the button reflects what the
+ * caller can actually reach after skipping. Loads the history; callers that
+ * already hold the entry list use computeCanStep directly.
  */
 export async function canUndoRedo(
   hotel: HotelSlug,
   id: string,
-  cursor: CursorState,
-  guard?: { content: HandoverContent; isManage: boolean }
+  guard?: StepGuard
 ): Promise<{ canUndo: boolean; canRedo: boolean }> {
-  // Sitting on the creation marker means the stack is exhausted — mirrors the
-  // floor check in planUndo, so the button never offers an undo that 409s.
-  let canUndo = cursor.histCursor > 0;
-  if (canUndo) {
-    const entry = await entryAtSeq(hotel, id, cursor.histCursor);
-    if (entry?.target.kind === "created") canUndo = false;
-    else if (entry && guard && !guard.isManage && changeTouchesLockedRow(guard.content, entry)) canUndo = false;
-  }
-  let canRedo = cursor.histCursor < cursor.histSeq;
-  if (canRedo && guard && !guard.isManage) {
-    const entry = await nextRedo(hotel, id, cursor.histCursor);
-    if (entry && changeTouchesLockedRow(guard.content, entry)) canRedo = false;
-  }
-  return { canUndo, canRedo };
+  return computeCanStep(await loadHistoryEntries(hotel, id), guard);
 }
