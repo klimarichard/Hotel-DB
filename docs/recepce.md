@@ -275,12 +275,15 @@ content PUT:
 `NoteRow { id, text, done, locked? }`. Checking a note `done` strikes it through.
 `AccountRow { id, name, amount, locked? }` — likewise lockable.
 
-**Poznámky display** (HandoverTab): note text wraps to multiple lines (read-only
-`white-space: pre-wrap`; editing uses an auto-growing `<textarea>`), never
-ellipsis-truncated. Locked notes render **above** unlocked ones via a
-**display-only** stable sort (`sort` on a `{ n, idx }` view, locked-first) —
-handlers still key off each note's original array index, so the stored order,
-in-progress edit state, and element-level history diffs are all unchanged.
+**Poznámky & Účty display** (HandoverTab): note text wraps to multiple lines
+(read-only `white-space: pre-wrap`; editing uses an auto-growing `<textarea>`),
+never ellipsis-truncated. In **both** lists locked rows render **above** unlocked
+ones via a **display-only** stable sort (`sort` on a `{ n, idx }` / `{ acc, idx }`
+view, locked-first) — handlers still key off each row's original array index, so
+the stored order, in-progress edit state, and element-level history diffs are all
+unchanged. At the locked→unlocked boundary a `.accountSeparator` divider (the same
+1px line used between the Účty special rows and receipts) is rendered so the two
+groups are visually distinct.
 
 **Locking**: any `protokol.manage` holder may lock/unlock a Poznámky or Účty row.
 A **locked** row can only be changed by a `manage` holder — `mergeLockable()` in
