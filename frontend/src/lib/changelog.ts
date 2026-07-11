@@ -19,6 +19,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "4.2.7",
+    date: "2026-07-11",
+    changes: [
+      "Recepce: při podpisu Předávacího protokolu (Předat/Převzít) i ve výběru zaměstnance u Walkinů a Lobby baru se nově nabízí každý, kdo je v daném měsíčním plánu směn – i když má v plánu skrytý řádek. Dříve takový zaměstnanec v nabídce chyběl, přestože měl na daný měsíc směny.",
+    ],
+  },
+  {
     version: "4.2.6",
     date: "2026-07-11",
     changes: [
