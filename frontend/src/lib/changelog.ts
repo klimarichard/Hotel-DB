@@ -19,6 +19,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "4.2.12",
+    date: "2026-07-11",
+    changes: [
+      "Předávací protokol – Účty: při přidávání nebo úpravě účtu se ovládací ikony (upravit, smazat, zámek) už nevejdou mimo rámeček sekce. Pole Název je nyní širší než pole Částka (poměr 2:1).",
+    ],
+  },
+  {
     version: "4.2.11",
     date: "2026-07-11",
     changes: [
