@@ -275,6 +275,13 @@ content PUT:
 `NoteRow { id, text, done, locked? }`. Checking a note `done` strikes it through.
 `AccountRow { id, name, amount, locked? }` — likewise lockable.
 
+**Poznámky display** (HandoverTab): note text wraps to multiple lines (read-only
+`white-space: pre-wrap`; editing uses an auto-growing `<textarea>`), never
+ellipsis-truncated. Locked notes render **above** unlocked ones via a
+**display-only** stable sort (`sort` on a `{ n, idx }` view, locked-first) —
+handlers still key off each note's original array index, so the stored order,
+in-progress edit state, and element-level history diffs are all unchanged.
+
 **Locking**: any `protokol.manage` holder may lock/unlock a Poznámky or Účty row.
 A **locked** row can only be changed by a `manage` holder — `mergeLockable()` in
 `handovers.ts` enforces this server-side on every content PUT: for a non-manage
