@@ -31,6 +31,18 @@ handoverWarningsRouter.get(
   }
 );
 
+// GET /api/handover-warnings/unread-count — unread total (both types) for the
+// Upozornění tab + sidebar badge. Single-field filter → no composite index.
+handoverWarningsRouter.get(
+  "/unread-count",
+  requireAuth,
+  requirePermission("changeRequests.review"),
+  async (_req: AuthRequest, res) => {
+    const snap = await db().collection(COL).where("read", "==", false).count().get();
+    res.json({ count: snap.data().count });
+  }
+);
+
 // POST /api/handover-warnings/read — mark the given ids read (or unread).
 handoverWarningsRouter.post(
   "/read",
