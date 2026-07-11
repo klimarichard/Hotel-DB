@@ -956,12 +956,6 @@
   background: var(--color-surface-3, var(--color-surface-2));
 }
 
-/* Gap + divider separating locked (pinned) notes from unlocked ones. */
-.noteRowUnlockedStart {
-  margin-top: 0.75rem;
-  border-top: 1px solid var(--color-border);
-}
-
 .noteCheck {
   width: 1.05rem;
   height: 1.05rem;
