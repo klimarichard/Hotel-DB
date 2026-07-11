@@ -1694,11 +1694,19 @@ function ProtocolEditor({
               {notes
                 .map((n, idx) => ({ n, idx }))
                 .sort((a, b) => Number(b.n.locked) - Number(a.n.locked))
-                .map(({ n, idx }, pos) => {
+                .map(({ n, idx }, pos, sorted) => {
                   const isEditingNote = editingNoteIdx === idx;
                   const rowEditable = canEdit && (!n.locked || canManage);
+                  // First unlocked note that follows a locked one: mark the
+                  // group boundary so a gap separates pinned notes from the rest.
+                  const isGroupBoundary = !n.locked && pos > 0 && sorted[pos - 1].n.locked;
                   return (
-                    <div key={n.id ?? idx} className={`${styles.noteRow} ${pos % 2 === 1 ? styles.noteRowAlt : ""}`}>
+                    <div
+                      key={n.id ?? idx}
+                      className={`${styles.noteRow} ${pos % 2 === 1 ? styles.noteRowAlt : ""} ${
+                        isGroupBoundary ? styles.noteRowUnlockedStart : ""
+                      }`}
+                    >
                       <input
                         type="checkbox"
                         className={styles.noteCheck}
