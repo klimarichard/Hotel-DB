@@ -938,7 +938,7 @@
 .noteRow {
   display: grid;
   grid-template-columns: auto 1fr auto;
-  align-items: center;
+  align-items: start;
   gap: 0.6rem;
   padding: 0.5rem 0.75rem;
 }
@@ -947,9 +947,8 @@
   padding: 0.35rem 0;
   font-size: 0.875rem;
   color: var(--color-text-heading);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   min-width: 0;
 }
 
@@ -962,6 +961,7 @@
   height: 1.05rem;
   cursor: pointer;
   accent-color: var(--color-primary);
+  margin-top: 0.4rem;
 }
 
 .noteText {
@@ -972,6 +972,14 @@
   background: var(--color-input-bg, var(--color-bg));
   color: var(--color-text-heading);
   font-size: 0.875rem;
+  font-family: inherit;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  resize: vertical;
+  overflow: hidden;
+  min-height: 2.1rem;
+  display: block;
 }
 
 .noteTextDone {

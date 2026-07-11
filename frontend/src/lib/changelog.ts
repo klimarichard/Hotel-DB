@@ -19,6 +19,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "4.2.9",
+    date: "2026-07-11",
+    changes: [
+      "Předávací protokol – Poznámky: dlouhé poznámky se nyní zobrazují na více řádků (celý text), místo aby se ořízly třemi tečkami.",
+      "Předávací protokol – Poznámky: zamčené poznámky se řadí nad všechny nezamčené.",
+    ],
+  },
+  {
     version: "4.2.8",
     date: "2026-07-11",
     changes: [

@@ -305,6 +305,14 @@ function TrashActionButton({ ariaLabel, onClick }: { ariaLabel: string; onClick:
   );
 }
 
+/** Size a note textarea to fit its content (no inner scrollbar), so long notes
+ *  show every line. Used as a ref callback (mount) and on each edit. */
+function autoGrow(el: HTMLTextAreaElement | null) {
+  if (!el) return;
+  el.style.height = "auto";
+  el.style.height = `${el.scrollHeight}px`;
+}
+
 function LockIcon({ locked }: { locked: boolean }) {
   return (
     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1680,58 +1688,68 @@ function ProtocolEditor({
             </div>
             <div className={styles.notesList}>
               {notes.length === 0 && <div className={styles.accountsEmpty}>Žádné poznámky.</div>}
-              {notes.map((n, i) => {
-                const isEditingNote = editingNoteIdx === i;
-                const rowEditable = canEdit && (!n.locked || canManage);
-                return (
-                  <div key={i} className={`${styles.noteRow} ${i % 2 === 1 ? styles.noteRowAlt : ""}`}>
-                    <input
-                      type="checkbox"
-                      className={styles.noteCheck}
-                      checked={n.done}
-                      onChange={(e) => setNoteDone(i, e.target.checked)}
-                      disabled={!rowEditable}
-                      aria-label={n.done ? "Označit jako nevyřízené" : "Označit jako vyřízené"}
-                    />
-                    {isEditingNote ? (
+              {/* Locked notes float to the top (manage-locked = pinned/important).
+                  This is a DISPLAY-only order: handlers keep the note's original
+                  array index, so persistence order and edit state are untouched. */}
+              {notes
+                .map((n, idx) => ({ n, idx }))
+                .sort((a, b) => Number(b.n.locked) - Number(a.n.locked))
+                .map(({ n, idx }, pos) => {
+                  const isEditingNote = editingNoteIdx === idx;
+                  const rowEditable = canEdit && (!n.locked || canManage);
+                  return (
+                    <div key={n.id ?? idx} className={`${styles.noteRow} ${pos % 2 === 1 ? styles.noteRowAlt : ""}`}>
                       <input
-                        type="text"
-                        className={n.done ? `${styles.noteText} ${styles.noteTextDone}` : styles.noteText}
-                        value={n.text}
-                        onChange={(e) => setNoteText(i, e.target.value)}
-                        onFocus={() => beginEdit(`note:${n.id}:text`)}
-                        onBlur={endEdit}
-                        placeholder="Poznámka…"
-                        autoFocus
+                        type="checkbox"
+                        className={styles.noteCheck}
+                        checked={n.done}
+                        onChange={(e) => setNoteDone(idx, e.target.checked)}
+                        disabled={!rowEditable}
+                        aria-label={n.done ? "Označit jako nevyřízené" : "Označit jako vyřízené"}
                       />
-                    ) : (
-                      <span className={n.done ? `${styles.noteTextRO} ${styles.noteTextDone}` : styles.noteTextRO}>
-                        {n.text || <em className={styles.accountNameEmpty}>(prázdná poznámka)</em>}
-                      </span>
-                    )}
-                    <div className={styles.rowActions}>
-                      {rowEditable && (
-                        <EditActionButton
-                          editing={isEditingNote}
-                          ariaLabel={isEditingNote ? "Hotovo" : "Upravit"}
-                          onClick={() => setEditingNoteIdx(isEditingNote ? null : i)}
+                      {isEditingNote ? (
+                        <textarea
+                          ref={autoGrow}
+                          className={n.done ? `${styles.noteText} ${styles.noteTextDone}` : styles.noteText}
+                          value={n.text}
+                          onChange={(e) => {
+                            setNoteText(idx, e.target.value);
+                            autoGrow(e.currentTarget);
+                          }}
+                          onFocus={() => beginEdit(`note:${n.id}:text`)}
+                          onBlur={endEdit}
+                          placeholder="Poznámka…"
+                          rows={1}
+                          autoFocus
                         />
-                      )}
-                      {rowEditable && (
-                        <TrashActionButton ariaLabel="Odstranit poznámku" onClick={() => requestDeleteNote(i)} />
-                      )}
-                      {canManage && canEdit && (
-                        <LockActionButton locked={n.locked} onClick={() => setNoteLocked(i, !n.locked)} />
-                      )}
-                      {n.locked && !canManage && (
-                        <span className={styles.rowLockedIndicator} title="Uzamčeno">
-                          <LockIcon locked />
+                      ) : (
+                        <span className={n.done ? `${styles.noteTextRO} ${styles.noteTextDone}` : styles.noteTextRO}>
+                          {n.text || <em className={styles.accountNameEmpty}>(prázdná poznámka)</em>}
                         </span>
                       )}
+                      <div className={styles.rowActions}>
+                        {rowEditable && (
+                          <EditActionButton
+                            editing={isEditingNote}
+                            ariaLabel={isEditingNote ? "Hotovo" : "Upravit"}
+                            onClick={() => setEditingNoteIdx(isEditingNote ? null : idx)}
+                          />
+                        )}
+                        {rowEditable && (
+                          <TrashActionButton ariaLabel="Odstranit poznámku" onClick={() => requestDeleteNote(idx)} />
+                        )}
+                        {canManage && canEdit && (
+                          <LockActionButton locked={n.locked} onClick={() => setNoteLocked(idx, !n.locked)} />
+                        )}
+                        {n.locked && !canManage && (
+                          <span className={styles.rowLockedIndicator} title="Uzamčeno">
+                            <LockIcon locked />
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
             </div>
           </div>
         </div>
