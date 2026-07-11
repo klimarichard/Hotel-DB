@@ -4,6 +4,7 @@ import { formatDateCZ } from "@/lib/dateFormat";
 import { hotelBySlug } from "@/lib/hotels";
 import Button from "@/components/Button";
 import ConfirmModal from "@/components/ConfirmModal";
+import { useHandoverWarningsContext } from "@/context/HandoverWarningsContext";
 import styles from "../AlertsPage.module.css";
 
 /**
@@ -61,6 +62,7 @@ export default function HandoverWarningsTab() {
   const [warnings, setWarnings] = useState<HandoverWarning[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { refresh: refreshBadge } = useHandoverWarningsContext();
 
   useEffect(() => {
     api
@@ -75,6 +77,7 @@ export default function HandoverWarningsTab() {
     setWarnings((prev) => prev.map((w) => (ids.includes(w.id) ? { ...w, read } : w)));
     try {
       await api.post("/handover-warnings/read", { ids, read });
+      refreshBadge(); // keep the tab count + sidebar badge in sync
     } catch {
       api.get<HandoverWarning[]>("/handover-warnings").then(setWarnings).catch(() => {});
       setError("Změnu se nepodařilo uložit. Zkuste to prosím znovu.");
