@@ -19,6 +19,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "4.2.6",
+    date: "2026-07-11",
+    changes: [
+      "Předávací protokol: podepsání směny (Předat/Převzít) i odebrání podpisu už funguje – ověření hesla se nově dělá proti skutečnému přihlašovacímu e-mailu účtu. Dříve to u všech účtů hlásilo „Neplatné jméno nebo heslo“.",
+    ],
+  },
+  {
     version: "4.2.5",
     date: "2026-07-10",
     changes: [

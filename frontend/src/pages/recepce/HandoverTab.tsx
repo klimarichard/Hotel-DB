@@ -1008,6 +1008,7 @@ function ProtocolEditor({
     const fallback: Signer = {
       uid: stamp.uid,
       name: (stamp.email || "").split("@")[0],
+      email: stamp.email || "",
       label: stamp.displayName,
     };
     try {
@@ -1026,7 +1027,7 @@ function ProtocolEditor({
     setSignBusy(true);
     setSignError(null);
     try {
-      const cred = await verifyCredential(signer.name, password);
+      const cred = await verifyCredential(signer.email, password);
       const base = `/handovers/${hotel.slug}/${docId}/${signAction.slot}`;
       if (signAction.mode === "sign") {
         // Persist any pending edits BEFORE freezing the content. If that save hits
