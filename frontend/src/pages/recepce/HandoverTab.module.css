@@ -760,10 +760,10 @@
 
 .accountRow {
   display: grid;
-  /* minmax(0, …) lets the name column shrink below the input's intrinsic
+  /* minmax(0, …) lets the columns shrink below the inputs' intrinsic
      min-content width; without it the row overflows and the trailing action
-     buttons (tick/trash/lock) spill out of the Účty container. */
-  grid-template-columns: minmax(0, 1fr) 110px auto auto;
+     buttons (tick/trash/lock) spill out of the Účty container. Name:amount 2:1. */
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 0.6rem;
   padding: 0.5rem 0.75rem;
