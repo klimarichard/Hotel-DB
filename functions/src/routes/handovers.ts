@@ -847,6 +847,7 @@ async function syncChainWarning(hotel: HotelSlug, id: string): Promise<void> {
     await warnRef.set({
       hotel,
       handoverId: id,
+      type: "chain",
       shiftDate: doc.shiftDate,
       shiftType: doc.shiftType,
       actorUid: doc.predal.uid,
@@ -863,14 +864,87 @@ async function syncChainWarning(hotel: HotelSlug, id: string): Promise<void> {
   }
 }
 
-/** After a predal/prevzal change, resync the affected protocol's chain warning:
- *  a predal change affects THIS protocol; a prevzal change affects the NEXT one. */
+/**
+ * "Pozdní příchod" (late arrival) warning: the incoming receptionist (Převzal) is
+ * expected by the NEXT shift's start — 19:00 for the night shift, 07:00 for the
+ * day shift — so a den protocol's handover is due 19:00 the same day and a noc
+ * protocol's due 07:00 the next morning. Comparison is in Europe/Prague wall-clock
+ * at minute precision (07:00:59 still counts as on time). The Předal stamp is
+ * irrelevant. Keyed by `${hotel}_${id}_late` so it is independent of the chain
+ * warning on the same protocol; self-healing on re-sign/revert.
+ */
+function evaluatePrevzalLateness(
+  shiftDate: string,
+  shiftType: HandoverDoc["shiftType"],
+  at: Timestamp
+): { late: boolean; cutoffLabel: string; prevzalLabel: string } {
+  // The shift the Převzal signer is taking over drives the deadline.
+  const next = nextShift(shiftDate, shiftType);
+  const cutoffHour = next.shift === "noc" ? 19 : 7;
+  const cutoffLabel = `${String(cutoffHour).padStart(2, "0")}:00`;
+  const cutoffKey = `${next.date.replace(/-/g, "")}${String(cutoffHour).padStart(2, "0")}00`;
+
+  // Prague wall-clock parts of the signature time (hourCycle h23 → 00–23, never 24).
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Prague",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(at.toDate());
+  const p = (t: string) => parts.find((x) => x.type === t)?.value ?? "00";
+  const prevzalKey = `${p("year")}${p("month")}${p("day")}${p("hour")}${p("minute")}`;
+  const prevzalLabel = `${p("day")}.${p("month")}.${p("year")} ${p("hour")}:${p("minute")}`;
+  return { late: prevzalKey > cutoffKey, cutoffLabel, prevzalLabel };
+}
+
+async function syncLateWarning(hotel: HotelSlug, id: string): Promise<void> {
+  const warnRef = db().collection("handoverWarnings").doc(`${hotel}_${id}_late`);
+  const snap = await handoverCol(hotel).doc(id).get();
+  const doc = snap.exists ? (snap.data() as HandoverDoc) : null;
+  const at = doc?.prevzal?.at;
+  if (!doc || !doc.prevzal || !at || typeof (at as { toDate?: unknown }).toDate !== "function") {
+    await warnRef.delete().catch(() => undefined);
+    return;
+  }
+  const { late, cutoffLabel, prevzalLabel } = evaluatePrevzalLateness(doc.shiftDate, doc.shiftType, at);
+  if (!late) {
+    await warnRef.delete().catch(() => undefined);
+    return;
+  }
+  await warnRef.set({
+    hotel,
+    handoverId: id,
+    type: "late",
+    shiftDate: doc.shiftDate,
+    shiftType: doc.shiftType,
+    actorUid: doc.prevzal.uid,
+    actorName: doc.prevzal.displayName,
+    prevzalAt: at,
+    prevzalLabel,
+    cutoffLabel,
+    createdAt: FieldValue.serverTimestamp(),
+    read: false,
+    readAt: null,
+    readBy: null,
+  });
+}
+
+/**
+ * Resync the handover warnings a signature change affects:
+ *  - chain warning: a predal change affects THIS protocol; a prevzal change the NEXT.
+ *  - late-arrival warning: a prevzal change affects THIS protocol (was Převzal on time?).
+ * A predal change never touches the late warning (the Předal stamp is irrelevant to it).
+ */
 async function resyncChainAfter(hotel: HotelSlug, doc: HandoverDoc, slot: SignatureSlot): Promise<void> {
   if (slot === "predal") {
     await syncChainWarning(hotel, docId(doc.shiftDate, doc.shiftType));
   } else {
     const next = nextShift(doc.shiftDate, doc.shiftType);
     await syncChainWarning(hotel, docId(next.date, next.shift));
+    await syncLateWarning(hotel, docId(doc.shiftDate, doc.shiftType));
   }
 }
 

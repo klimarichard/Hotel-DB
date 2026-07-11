@@ -161,7 +161,7 @@ export default function AlertsPage() {
             className={tab === "predani" ? styles.tabActive : styles.tabBtn}
             onClick={() => setTab("predani")}
           >
-            Nenavazující předání
+            Předávací protokol
           </button>
         )}
       </div>
