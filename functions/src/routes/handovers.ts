@@ -360,8 +360,9 @@ handoversRouter.get(
  * The pool of people who may sign Předat/Převzít: users whose linked employee is
  * in that month's shift plan. Falls back to ALL active users when the month has
  * no plan (or an empty one) so signing is never dead-ended. Returns
- * `[{ uid, name, label }]` — `name` (username) drives the `${name}@hotel.local`
- * credential, `label` is the friendly display name for the dropdown.
+ * `[{ uid, name, email, label }]` — `email` is the account's real login, used to
+ * verify the signature; `label` is the friendly display name for the dropdown;
+ * `name` is the username (metadata only, no longer drives the credential).
  * Registered BEFORE `/:hotel/:id` so "signers" isn't captured as a doc id.
  */
 handoversRouter.get(
@@ -411,25 +412,28 @@ handoversRouter.get(
     // Dedupe by employeeId — if several accounts link to the same employee (a data
     // anomaly, but nothing prevents it) they'd otherwise appear as identical rows.
     const usersSnap = await db().collection("users").get();
-    const out: Array<{ uid: string; name: string; label: string }> = [];
+    const out: Array<{ uid: string; name: string; email: string; label: string }> = [];
     const seenEmp = new Set<string>();
     for (const d of usersSnap.docs) {
-      const u = d.data() as { name?: unknown; employeeId?: unknown; active?: unknown };
+      const u = d.data() as { name?: unknown; email?: unknown; employeeId?: unknown; active?: unknown };
       if (u.active === false) continue;
       const name = typeof u.name === "string" ? u.name : "";
-      if (name.trim() === "") continue; // no username → can't derive the login email
+      const email = typeof u.email === "string" ? u.email : "";
+      // The signature is verified by signing in with this real login email; an
+      // account with no email can't be authenticated, so it can never sign.
+      if (email.trim() === "") continue;
       const empId = typeof u.employeeId === "string" ? u.employeeId : null;
       if (usePlan) {
         if (!empId || !planLabels.has(empId)) continue;
         if (seenEmp.has(empId)) continue;
         seenEmp.add(empId);
-        out.push({ uid: d.id, name, label: planLabels.get(empId) ?? name });
+        out.push({ uid: d.id, name, email, label: planLabels.get(empId) ?? name });
       } else {
         if (empId) {
           if (seenEmp.has(empId)) continue;
           seenEmp.add(empId);
         }
-        out.push({ uid: d.id, name, label: name });
+        out.push({ uid: d.id, name, email, label: name || email });
       }
     }
     out.sort((a, b) => a.label.localeCompare(b.label, "cs"));
@@ -455,7 +459,8 @@ handoversRouter.get(
  * GET /api/handovers/:hotel/signers is for signing; this is for REVERTING a
  * signature — a narrower pool: the person who signed it (`?signer=<uid>`, always
  * allowed to self-unsign) plus everyone holding the per-hotel manage permission
- * (or system.admin). Returns `[{ uid, name, label }]` with employee-name labels.
+ * (or system.admin). Returns `[{ uid, name, email, label }]` with employee-name
+ * labels; `email` is the real login used to verify the un-sign.
  * Registered BEFORE `/:hotel/:id` so "revokers" isn't captured as a doc id.
  */
 handoversRouter.get(
@@ -468,11 +473,12 @@ handoversRouter.get(
     const managePerm = handoverManagePerm(hotel);
 
     const usersSnap = await db().collection("users").get();
-    const included: Array<{ uid: string; name: string; employeeId: string | null }> = [];
+    const included: Array<{ uid: string; name: string; email: string; employeeId: string | null }> = [];
     const seenEmp = new Set<string>();
     for (const d of usersSnap.docs) {
       const u = d.data() as {
         name?: unknown;
+        email?: unknown;
         employeeId?: unknown;
         active?: unknown;
         roleType?: unknown;
@@ -481,7 +487,9 @@ handoversRouter.get(
       };
       if (u.active === false) continue;
       const name = typeof u.name === "string" ? u.name : "";
-      if (name.trim() === "") continue;
+      const email = typeof u.email === "string" ? u.email : "";
+      // Un-signing also re-verifies the password, so a signer needs a real email.
+      if (email.trim() === "") continue;
       let ok = d.id === signerUid; // the signer may always self-unsign
       if (!ok) {
         const perms = await resolveEffectivePermissions({
@@ -497,7 +505,7 @@ handoversRouter.get(
         if (seenEmp.has(empId)) continue;
         seenEmp.add(empId);
       }
-      included.push({ uid: d.id, name, employeeId: empId });
+      included.push({ uid: d.id, name, email, employeeId: empId });
     }
 
     // Resolve employee-name labels for the (few) included users.
@@ -519,7 +527,7 @@ handoversRouter.get(
             // keep username as the label
           }
         }
-        return { uid: e.uid, name: e.name, label };
+        return { uid: e.uid, name: e.name, email: e.email, label };
       })
     );
     out.sort((a, b) => a.label.localeCompare(b.label, "cs"));
