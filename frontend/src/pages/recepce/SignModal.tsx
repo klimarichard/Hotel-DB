@@ -5,8 +5,10 @@ import styles from "./SignModal.module.css";
 
 export interface Signer {
   uid: string;
-  /** username – drives the `${name}@hotel.local` login email. */
+  /** account username (metadata only – no longer used for the credential). */
   name: string;
+  /** the account's real login email – drives the password check. */
+  email: string;
   /** friendly display label for the dropdown. */
   label: string;
 }
