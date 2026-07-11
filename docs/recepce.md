@@ -227,8 +227,8 @@ interface HandoverDoc {
   wata?: number;                    // free +/- scalar, carries shift→shift, may go negative
   predal?: StampedSignature | null;
   prevzal?: StampedSignature | null;
-  histSeq?: number;                 // undo/redo cursor bookkeeping
-  histCursor?: number;
+  histSeq?: number;                 // highest history seq ever assigned (numbering)
+  histCursor?: number;              // legacy/back-compat only — see "History & undo/redo"
   createdBy?, updatedBy?, createdAt?, updatedAt?;
 }
 ```
@@ -286,11 +286,22 @@ unchanged. At the locked→unlocked boundary a `.accountSeparator` divider (the 
 groups are visually distinct.
 
 **Locking**: any `protokol.manage` holder may lock/unlock a Poznámky or Účty row.
-A **locked** row can only be changed by a `manage` holder — `mergeLockable()` in
-`handovers.ts` enforces this server-side on every content PUT: for a non-manage
-caller, any stored row with `locked: true` is preserved verbatim regardless of
-what the client sent for that row id, and a non-manage caller can never newly set
-`locked: true` on an incoming row (`{ ...inc, locked: false }`).
+A **locked** row can only be changed by a `manage` holder, enforced server-side on
+every write path:
+
+- **Edit** (PUT on an existing doc) — `mergeLockable()` in `handovers.ts`: for a
+  non-manage caller, any stored row with `locked: true` is preserved verbatim
+  regardless of what the client sent for that row id, and a non-manage caller can
+  never newly set `locked: true` on an incoming row (`{ ...inc, locked: false }`).
+- **Create / handover carry-over** (PUT on a new doc) — there is no stored
+  baseline, so `mergeLockable` with `stored=[]` used to strip every carried row to
+  `locked: false`; since the receptionist taking a shift over is normally
+  non-manage, locks silently vanished on every handover. `seedLockedFromPrevious()`
+  now **inherits** each carried row's lock from the server-side *previous-shift*
+  doc (matched by id, never trusting the client): a non-manage caller still can't
+  lock new rows or unlock carried ones; a manage caller passes verbatim.
+- **Undo / redo** — writes content directly (bypassing `mergeLockable`), so it has
+  its own guard; see "History & undo/redo".
 
 ### Virtual signature (Předat / Převzít / revert)
 
@@ -406,10 +417,10 @@ not an on-doc array, to avoid O(n) rewrite cost on every save):
   `handovers.ts` — covers both "Vytvořit prázdný protokol" landing on an
   already-signed chain and "Vytvořit protokol pro další směnu"). It carries no
   `before`/`after` and `applyChange` is a no-op on it. It is the **floor of the
-  undo stack**: `planUndo` returns `null` once the cursor reaches it (you cannot
-  undo the protocol into existence — deleting the doc is `DELETE
-  /:hotel/:id`'s job), and `canUndoRedo` correspondingly reports `canUndo:
-  false` at that point, so the Undo button never offers a step that would 409.
+  undo stack**: `findUndoTarget` skips it (you cannot undo the protocol into
+  existence — deleting the doc is `DELETE /:hotel/:id`'s job), and `canUndoRedo`
+  correspondingly reports `canUndo: false` at that point, so the Undo button never
+  offers a step that would 409.
 - **Diff** (`diffHandover`) compares before/after snapshots of the four content
   fields (`notes`, `accounts`, `cashCounts`, `smCounts`) on every save **after**
   creation and emits Czech-labelled `HandoverChange` records (e.g. `"Poznámka
@@ -424,9 +435,9 @@ not an on-doc array, to avoid O(n) rewrite cost on every save):
   (`note.text`, `account.name`, `account.amount`, any `cash` denomination, any
   `sm` count — `isTypingField()`) is a coalescing candidate: `tryCoalesce()`
   folds it into the entry at the **tip** of the stack instead of appending,
-  provided the tip is by the same `byUid`, not `undone`, there is no redo tail
-  (`histCursor === histSeq`), and **`tip.editSession === editSession`**. Two
-  shapes fold:
+  provided the tip is by the same `byUid`, not `undone`, there are **no undone
+  entries at all** (a clean linear state — no redo tail and no skip-hole), and
+  **`tip.editSession === editSession`**. Two shapes fold:
   - **same field edited again** — the merged entry keeps the tip's *original*
     `before` (so one Undo reverts the whole edit, not just the last keystroke);
     `after` and the label are updated to the new value (`labelFor()` rebuilds the
@@ -470,15 +481,34 @@ not an on-doc array, to avoid O(n) rewrite cost on every save):
   inherit it.
   - A save carrying more than one change (a bulk edit — paste, or an add+remove
     in one flush) is never a coalescing candidate, only a single-change save is.
-- **Undo/redo is a command-pattern cursor** (`histCursor`/`histSeq` on the parent
-  doc). Undo moves the cursor back and applies the *inverse* of one change; redo
-  moves forward and re-applies; a brand-new edit **truncates the redo tail**
-  (deletes history entries above the cursor). Scoped to a single protocol
-  document — can never reach across shifts.
+- **Undo/redo — per-entry `undone` is the source of truth.** Each history entry
+  carries an `undone` flag: applied ≙ `undone === false`, reverted ≙ `undone ===
+  true`. `loadHistoryEntries` reads the whole (small, retention-swept) subcollection
+  and the pure `findUndoTarget` / `findRedoTarget` scan it in memory — undo reverses
+  the highest-seq applied entry, redo re-applies the lowest-seq reverted one. A
+  brand-new edit **truncates the redo tail** by deleting **every** `undone` entry
+  and numbers new entries above the highest seq ever assigned (gaps are fine).
+  Scoped to a single protocol document — can never reach across shifts.
+  - **Lock-aware skip (non-manage).** `findUndoTarget`/`findRedoTarget` take an
+    optional `{ content, isManage }` guard. For a non-manage caller, a step whose
+    change touches a **locked** row (`changeTouchesLockedRow` — locked in the
+    current content, or a locked-row snapshot) is **skipped**, so undo/redo lands on
+    the nearest change the caller may actually revert rather than dead-ending. This
+    is data-safe: a non-manage caller only ever reverts unlocked rows, disjoint and
+    element-local from the locked rows left applied above (a "skip-hole"). Managers /
+    admins pass no guard, so nothing is skipped and behaviour is the plain linear
+    stack. `cash`/`sm` changes are never lock-protected.
+  - **Why not the old single `histCursor` integer.** A cursor cannot express a
+    skip-hole (entry N reverted while locked entry N+1 above it stays applied). The
+    `undone` flags already encoded the applied/reverted split (applied entries
+    `false`, redo tail `true`), so switching to them as the source of truth was
+    **migration-safe** — no data migration. `histCursor` remains on the doc for
+    back-compat only (set to the highest applied seq) and drives no decisions.
 - Money moves (sm→trezor, wata) and signatures are **not** part of the content
   PUT and therefore never enter history or the undo stack.
-- `GET /:hotel/:id/history` returns entries newest-first plus `canUndo`/`canRedo`;
-  `POST /:hotel/:id/undo` / `.../redo` step the cursor.
+- `GET /:hotel/:id/history` returns entries newest-first plus `canUndo`/`canRedo`
+  (computed with the caller's guard, so the button reflects what they can reach);
+  `POST /:hotel/:id/undo` / `.../redo` perform one skip-aware step.
 - **Audit log**: one **compact** entry per save (`event: "recepce.protokol.edit"`,
   up to 6 change labels in `extra.changeLabels`) — the element-level detail lives
   in the `history` subcollection, not duplicated into `auditLog`. **Skipped on
@@ -545,6 +575,12 @@ side** as an invariant on the PUT's create branch (`incomingNotes.filter((n) =>
 `done` note can never slip into a brand-new protocol no matter what the client
 sends. A note ticked off *during* the shift that just ended stays behind with
 that shift's record — not even struck through in the new one, simply absent.
+
+**Locked Poznámky/Účty stay locked across the handover.** The carried rows keep
+their `locked` flag: on the create branch the server runs `seedLockedFromPrevious()`
+(not `mergeLockable`), inheriting each row's lock from the *previous-shift* doc by
+id, so a non-manage receptionist creating the next protocol can neither strip an
+inherited lock nor forge a new one (see "Locking" above).
 
 ### Blank-create ("Vytvořit prázdný protokol") frontend gate
 

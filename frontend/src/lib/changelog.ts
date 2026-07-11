@@ -19,6 +19,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "4.2.13",
+    date: "2026-07-11",
+    changes: [
+      "Předávací protokol: uzamčené Poznámky a Účty zůstávají uzamčené i po předání směny a krok zpět/vpřed je u uživatelů bez práva na správu přeskočí.",
+    ],
+  },
+  {
     version: "4.2.12",
     date: "2026-07-11",
     changes: [
