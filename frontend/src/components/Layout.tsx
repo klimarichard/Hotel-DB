@@ -19,6 +19,11 @@ import ChangelogModal from "@/components/ChangelogModal";
 import logoMark from "@/assets/logo.svg";
 import styles from "./Layout.module.css";
 
+// True only in the staging build (`vite --mode staging`). Baked at build time, so
+// the STAGING stamp below is dead-code-eliminated from the production bundle — it
+// can never render on prod. Same signal used by main.tsx (tab title) and tours.
+const IS_STAGING = import.meta.env.MODE === "staging";
+
 const SunIcon = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <circle cx="12" cy="12" r="5"/>
@@ -126,6 +131,14 @@ export default function Layout() {
         <Link to="/prehled" className={styles.logo} title="Přehled" aria-label="Přehled">
           <img src={logoMark} alt="" className={styles.logoMark} />
           <span>HPM Intranet</span>
+          {/* Staging-only "rubber stamp" over the logo so staging is never mistaken
+              for production. Gated on the build mode (see IS_STAGING) — absent from
+              the prod bundle. pointer-events:none via CSS so the logo link still works. */}
+          {IS_STAGING && (
+            <span className={styles.stagingStamp} aria-hidden="true">
+              STAGING
+            </span>
+          )}
         </Link>
         <ul className={styles.nav}>
           {items.map((item) => {
