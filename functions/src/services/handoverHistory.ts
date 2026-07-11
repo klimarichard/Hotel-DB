@@ -661,13 +661,56 @@ export async function markUndone(hotel: HotelSlug, id: string, seq: number, undo
   await historyCol(hotel, id).doc(String(seq).padStart(9, "0")).set({ undone }, { merge: true });
 }
 
-export async function canUndoRedo(hotel: HotelSlug, id: string, cursor: CursorState): Promise<{ canUndo: boolean; canRedo: boolean }> {
+/** Is the row addressed by `id` currently locked in `rows`? */
+function isRowLocked(rows: Array<{ id?: string; locked?: boolean }>, id: string): boolean {
+  return rows.some((r, i) => rowKey(r, i) === id && r.locked === true);
+}
+
+/**
+ * Does applying `change` touch a LOCKED note / účet — i.e. a change only a manage
+ * user is allowed to undo or redo? True when the targeted row is locked in the
+ * current content, OR when the change's own before/after snapshot is a locked row
+ * (that catches undoing/redoing the add or delete of a row that is locked, where
+ * the row may be absent from the current content). Cash and sm counts are never
+ * lock-protected, so they always return false. This is the undo/redo counterpart
+ * of the content PUT's mergeLockable guard: without it, a non-manage user could
+ * revert a manage-locked row through the history stack.
+ */
+export function changeTouchesLockedRow(content: HandoverContent, change: HandoverChange): boolean {
+  const t = change.target;
+  if (t.kind !== "note" && t.kind !== "account") return false;
+  const rows = t.kind === "note" ? content.notes : content.accounts;
+  if (isRowLocked(rows, t.id)) return true;
+  const snapLocked = (v: unknown): boolean =>
+    !!v && typeof v === "object" && (v as { locked?: unknown }).locked === true;
+  return snapLocked(change.before) || snapLocked(change.after);
+}
+
+/**
+ * Undo/redo availability. `guard`, when supplied for a NON-manage caller, also
+ * withholds a step whose change touches a locked row — so the button reflects
+ * what the caller may actually do (the server still hard-refuses in stepHandler).
+ * Undo is strictly LIFO, so a locked change at the tip correctly blocks undoing
+ * anything beneath it too.
+ */
+export async function canUndoRedo(
+  hotel: HotelSlug,
+  id: string,
+  cursor: CursorState,
+  guard?: { content: HandoverContent; isManage: boolean }
+): Promise<{ canUndo: boolean; canRedo: boolean }> {
   // Sitting on the creation marker means the stack is exhausted — mirrors the
   // floor check in planUndo, so the button never offers an undo that 409s.
   let canUndo = cursor.histCursor > 0;
   if (canUndo) {
     const entry = await entryAtSeq(hotel, id, cursor.histCursor);
     if (entry?.target.kind === "created") canUndo = false;
+    else if (entry && guard && !guard.isManage && changeTouchesLockedRow(guard.content, entry)) canUndo = false;
   }
-  return { canUndo, canRedo: cursor.histCursor < cursor.histSeq };
+  let canRedo = cursor.histCursor < cursor.histSeq;
+  if (canRedo && guard && !guard.isManage) {
+    const entry = await nextRedo(hotel, id, cursor.histCursor);
+    if (entry && changeTouchesLockedRow(guard.content, entry)) canRedo = false;
+  }
+  return { canUndo, canRedo };
 }

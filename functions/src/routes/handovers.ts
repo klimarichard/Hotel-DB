@@ -41,6 +41,7 @@ import {
   planRedo,
   markUndone,
   canUndoRedo,
+  changeTouchesLockedRow,
 } from "../services/handoverHistory";
 import { actorCtx, resolveRecepceActor } from "../services/recepceActor";
 
@@ -210,6 +211,28 @@ function mergeLockable<T extends { id?: string; locked?: boolean }>(
     if (s.locked && s.id && !used.has(s.id)) result.push(s);
   }
   return result;
+}
+
+/**
+ * Lock enforcement on CREATE (no stored baseline exists yet). A new protocol is
+ * born by carrying the previous shift's outstanding notes / účty forward, so the
+ * lock state must be INHERITED from that previous shift — not trusted from the
+ * client and not stripped. A manage/admin caller controls locks directly (their
+ * incoming rows pass verbatim). A non-manage caller (the receptionist taking the
+ * shift over) may neither lock a new row nor unlock a carried one: each incoming
+ * row's `locked` is forced to whatever it was in the previous shift (matched by
+ * id), and false for anything not carried across. Without this, every handover
+ * performed by a regular receptionist silently unlocked the pinned rows.
+ */
+function seedLockedFromPrevious<T extends { id?: string; locked?: boolean }>(
+  prev: T[],
+  incoming: T[],
+  isManage: boolean
+): T[] {
+  if (isManage) return incoming;
+  const prevLocked = new Set<string>();
+  for (const p of prev) if (p.locked && p.id) prevLocked.add(p.id);
+  return incoming.map((row) => ({ ...row, locked: !!(row.id && prevLocked.has(row.id)) }));
 }
 
 /** Validates the :hotel URL segment. Rejects unknown slugs with 404. */
@@ -627,11 +650,15 @@ handoversRouter.put(
     let seedSmTrezor = 0;
     let seedWata = 0;
     let prevClosed = false;
+    // The previous shift's stored doc — read on create for the balance carry-over
+    // AND for inheriting the locked state of the carried notes / účty (see
+    // seedLockedFromPrevious). Stays null on an edit (baseUpdatedAt path).
+    let prevDoc: HandoverDoc | null = null;
     if (!beforeSnap.exists) {
       const set = req.permissions ?? new Set<string>();
       const prev = previousShift(body.shiftDate, body.shiftType);
       const prevSnap = await handoverCol(hotel).doc(docId(prev.date, prev.shift)).get();
-      const prevDoc = prevSnap.exists ? (prevSnap.data() as HandoverDoc) : null;
+      prevDoc = prevSnap.exists ? (prevSnap.data() as HandoverDoc) : null;
       seedSmTrezor = finiteOr(prevDoc?.smTrezor, 0);
       seedWata = finiteOr(prevDoc?.wata, 0);
       prevClosed = !!(prevDoc?.predal && prevDoc?.prevzal);
@@ -658,16 +685,20 @@ handoversRouter.put(
     // just ended stay behind with it — not even struck through. Enforced here so
     // it holds no matter what the client sends.
     const incomingNotes = sanitizeNotes(body.notes);
+    const incomingAccounts = sanitizeAccounts(body.accounts);
     const after = {
       shiftDate: body.shiftDate,
       shiftType: body.shiftType,
-      notes: mergeLockable<NoteRow>(
-        before?.notes ?? [],
-        beforeSnap.exists ? incomingNotes : incomingNotes.filter((n) => !n.done),
-        isManage
-      ),
+      // On edit, protect locked rows against the stored doc. On create, there is no
+      // stored baseline — inherit the locked state from the previous shift so a
+      // handover keeps its pinned rows locked (see seedLockedFromPrevious).
+      notes: beforeSnap.exists
+        ? mergeLockable<NoteRow>(before?.notes ?? [], incomingNotes, isManage)
+        : seedLockedFromPrevious<NoteRow>(prevDoc?.notes ?? [], incomingNotes.filter((n) => !n.done), isManage),
       cashCounts: sanitizeCashCounts(body.cashCounts),
-      accounts: mergeLockable<AccountRow>(before?.accounts ?? [], sanitizeAccounts(body.accounts), isManage),
+      accounts: beforeSnap.exists
+        ? mergeLockable<AccountRow>(before?.accounts ?? [], incomingAccounts, isManage)
+        : seedLockedFromPrevious<AccountRow>(prevDoc?.accounts ?? [], incomingAccounts, isManage),
       // sm counts flow through the normal content PUT (any protocol-edit user).
       // smTrezor + wata are NOT touched here — they move only via their dedicated
       // endpoints, so omitting them from the merge preserves the stored values.
@@ -1153,7 +1184,10 @@ handoversRouter.get(
       res.status(404).json({ error: "Předání nenalezeno." });
       return;
     }
+    const doc = snap.data() as HandoverDoc;
     const cursor = readCursor(snap.data() as Record<string, unknown>);
+    const permSet = req.permissions ?? new Set<string>();
+    const isManage = permSet.has("system.admin") || permSet.has(handoverManagePerm(hotel));
     const histSnap = await ref.collection("history").orderBy("seq", "desc").get();
 
     // Resolve author display names once per distinct uid.
@@ -1178,7 +1212,7 @@ handoversRouter.get(
         applied: e.seq <= cursor.histCursor,
       };
     });
-    res.json({ entries, ...(await canUndoRedo(hotel, id, cursor)) });
+    res.json({ entries, ...(await canUndoRedo(hotel, id, cursor, { content: contentOf(doc), isManage })) });
   }
 );
 
@@ -1208,7 +1242,18 @@ function stepHandler(dir: "undo" | "redo") {
       return;
     }
 
+    // Lock enforcement, mirroring the content PUT's mergeLockable: a non-manage
+    // caller may not revert (undo or redo) a change that touches a locked row —
+    // no unlocking, no editing/removing a manage-locked note or účet through the
+    // history stack. Admins and manage holders are exempt.
+    const set = req.permissions ?? new Set<string>();
+    const isManage = set.has("system.admin") || set.has(handoverManagePerm(hotel));
     const content = contentOf(before);
+    if (!isManage && changeTouchesLockedRow(content, plan.change)) {
+      res.status(403).json({ error: "Uzamčený záznam může vrátit zpět jen správce protokolu." });
+      return;
+    }
+
     applyChange(content, plan.change, dir);
     await ref.update({
       notes: content.notes,
@@ -1229,7 +1274,11 @@ function stepHandler(dir: "undo" | "redo") {
     });
 
     const saved = await ref.get();
-    res.json({ id, ...saved.data(), ...(await canUndoRedo(hotel, id, plan.cursor)) });
+    res.json({
+      id,
+      ...saved.data(),
+      ...(await canUndoRedo(hotel, id, plan.cursor, { content, isManage })),
+    });
   };
 }
 
