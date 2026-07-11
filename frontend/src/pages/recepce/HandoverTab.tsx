@@ -1601,12 +1601,21 @@ function ProtocolEditor({
               )}
               <div className={styles.accountSeparator} />
               {accounts.length === 0 && <div className={styles.accountsEmpty}>Žádné účty.</div>}
-              {accounts.map((acc, idx) => {
+              {/* Locked accounts float to the top (manage-locked = pinned), the
+                  same as Poznámky. Display-only order: handlers keep the account's
+                  original array index, so persistence and edit state are untouched. */}
+              {accounts
+                .map((acc, idx) => ({ acc, idx }))
+                .sort((a, b) => Number(b.acc.locked) - Number(a.acc.locked))
+                .map(({ acc, idx }, pos, sorted) => {
                 const isEditing = editingIdx === idx;
-                const altRow = idx % 2 === 1;
+                const altRow = pos % 2 === 1;
                 const rowEditable = canEdit && (!acc.locked || canManage);
+                // First unlocked account after a locked one: divider between groups.
+                const isGroupBoundary = !acc.locked && pos > 0 && sorted[pos - 1].acc.locked;
                 return (
-                  <Fragment key={idx}>
+                  <Fragment key={acc.id ?? idx}>
+                    {isGroupBoundary && <div className={styles.accountSeparator} />}
                     <div className={`${styles.accountRow} ${altRow ? styles.accountRowAlt : ""}`}>
                       {isEditing ? (
                         <input
@@ -1694,11 +1703,17 @@ function ProtocolEditor({
               {notes
                 .map((n, idx) => ({ n, idx }))
                 .sort((a, b) => Number(b.n.locked) - Number(a.n.locked))
-                .map(({ n, idx }, pos) => {
+                .map(({ n, idx }, pos, sorted) => {
                   const isEditingNote = editingNoteIdx === idx;
                   const rowEditable = canEdit && (!n.locked || canManage);
+                  // First unlocked note that follows a locked one: render a
+                  // divider (same as the Účty special-row separator) so pinned
+                  // notes are visually split from the rest.
+                  const isGroupBoundary = !n.locked && pos > 0 && sorted[pos - 1].n.locked;
                   return (
-                    <div key={n.id ?? idx} className={`${styles.noteRow} ${pos % 2 === 1 ? styles.noteRowAlt : ""}`}>
+                    <Fragment key={n.id ?? idx}>
+                      {isGroupBoundary && <div className={styles.accountSeparator} />}
+                      <div className={`${styles.noteRow} ${pos % 2 === 1 ? styles.noteRowAlt : ""}`}>
                       <input
                         type="checkbox"
                         className={styles.noteCheck}
@@ -1748,6 +1763,7 @@ function ProtocolEditor({
                         )}
                       </div>
                     </div>
+                    </Fragment>
                   );
                 })}
             </div>

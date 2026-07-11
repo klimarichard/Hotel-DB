@@ -95,6 +95,7 @@ Předávací protokol eviduje hotovost, účty a poznámky pro jednu konkrétní
 - Tlačítkem **+ Přidat účet** přidáte nový řádek, zadáte jeho **název** a **částku** v Kč.
 - U každého řádku můžete přes ikony tužky a koše záznam **upravit** nebo **smazat**.
 - Uživatelé s oprávněním **Spravovat protokol** mohou řádek navíc **uzamknout** ikonou zámku — uzamčený řádek pak nejde upravit ani smazat nikým jiným, dokud jej stejný uživatel znovu neodemkne.
+- **Uzamčené účty se řadí nad všechny nezamčené** (pod třemi speciálními řádky) a oddělují se od nich vodorovnou čárou, aby byly dobře vidět.
 - Nad běžnými účty jsou natrvalo tři speciální řádky:
   - **sm** — hodnota se počítá automaticky z počtu kusů zadaných po kliknutí na řádek; sazby nastavují uživatelé s oprávněním **Spravovat sm**.
   - **sm trezor** — částka převedená z „sm" do trezoru; vynulovat ji (po fyzickém odvedení hotovosti) mohou uživatelé s oprávněním **Spravovat sm**. Ostatním se řádek zobrazí, jen má-li nenulovou hodnotu.
@@ -105,7 +106,7 @@ Předávací protokol eviduje hotovost, účty a poznámky pro jednu konkrétní
 
 - V panelu **Poznámky** přidáte poznámku tlačítkem **+ Přidat poznámku**.
 - Zaškrtávacím políčkem označíte poznámku jako **vyřízenou** (přeškrtne se).
-- Poznámku lze stejně jako účet upravit, smazat a uživatelé s oprávněním **Spravovat protokol** ji mohou uzamknout.
+- Poznámku lze stejně jako účet upravit, smazat a uživatelé s oprávněním **Spravovat protokol** ji mohou uzamknout. **Uzamčené poznámky se řadí nad všechny nezamčené** a oddělují se od nich vodorovnou čárou.
 - Do protokolu pro navazující směnu (tlačítko **Vytvořit protokol pro další směnu**, viz níže) se přenášejí jen **nedokončené** poznámky. Poznámka odškrtnutá jako vyřízená zůstává u směny, ve které byla dokončena, a dál se nepřenáší – ani jako přeškrtnutá.
 
 **Předání směny (podpis)**
