@@ -394,9 +394,12 @@ handoversRouter.get(
           displayName?: unknown;
           firstName?: unknown;
           lastName?: unknown;
-          active?: unknown;
         };
-        if (data.active === false) continue;
+        // Presence in the month's roster is what makes someone an eligible signer;
+        // the `active` flag only governs grid-row visibility, so we deliberately do
+        // NOT skip inactive roster rows here. A receptionist who is on the plan (even
+        // with an inactive row) and works shifts must still appear in the handover
+        // sign dialog — otherwise they can never sign a Předat/Převzít.
         if (typeof data.employeeId !== "string") continue;
         const label =
           typeof data.displayName === "string" && data.displayName.trim() !== ""

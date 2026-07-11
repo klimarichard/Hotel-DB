@@ -58,9 +58,14 @@ function normalizePosition(v: unknown): string {
 }
 
 /**
- * Everyone on `dateStr`'s month shift plan (active planEmployees, deduped by
- * employeeId), sorted by Czech collation. Falls back to reception-position
+ * Everyone on `dateStr`'s month shift plan (all planEmployees roster rows, deduped
+ * by employeeId), sorted by Czech collation. Falls back to reception-position
  * employees when that month has no plan. Never throws on missing data.
+ *
+ * Presence in the roster is the eligibility signal, mirroring the handover signer
+ * pool: the `active` flag only governs shift-grid row visibility, so an inactive
+ * roster row is NOT skipped here — otherwise someone who is on the plan and works
+ * shifts would be missing from the Walkiny / Lobby bar "who did this" dropdown.
  */
 export async function listRecepceEmployees(dateStr: string): Promise<RecepceEmployee[]> {
   const year = Number(dateStr.slice(0, 4));
@@ -83,9 +88,7 @@ export async function listRecepceEmployees(dateStr: string): Promise<RecepceEmpl
         displayName?: unknown;
         firstName?: unknown;
         lastName?: unknown;
-        active?: unknown;
       };
-      if (data.active === false) continue;
       if (typeof data.employeeId !== "string") continue;
       if (seen.has(data.employeeId)) continue;
       seen.add(data.employeeId);
