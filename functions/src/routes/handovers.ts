@@ -37,11 +37,13 @@ import {
   applyChange,
   appendHistory,
   readCursor,
-  planUndo,
-  planRedo,
+  loadHistoryEntries,
+  findUndoTarget,
+  findRedoTarget,
+  highestAppliedSeq,
+  computeCanStep,
   markUndone,
   canUndoRedo,
-  changeTouchesLockedRow,
 } from "../services/handoverHistory";
 import { actorCtx, resolveRecepceActor } from "../services/recepceActor";
 
@@ -1185,7 +1187,6 @@ handoversRouter.get(
       return;
     }
     const doc = snap.data() as HandoverDoc;
-    const cursor = readCursor(snap.data() as Record<string, unknown>);
     const permSet = req.permissions ?? new Set<string>();
     const isManage = permSet.has("system.admin") || permSet.has(handoverManagePerm(hotel));
     const histSnap = await ref.collection("history").orderBy("seq", "desc").get();
@@ -1209,10 +1210,10 @@ handoversRouter.get(
         label: e.label,
         by: names.get(e.byUid) ?? e.byUid,
         undone: e.undone === true,
-        applied: e.seq <= cursor.histCursor,
+        applied: e.undone !== true,
       };
     });
-    res.json({ entries, ...(await canUndoRedo(hotel, id, cursor, { content: contentOf(doc), isManage })) });
+    res.json({ entries, ...(await canUndoRedo(hotel, id, { content: contentOf(doc), isManage })) });
   }
 );
 
@@ -1235,50 +1236,45 @@ function stepHandler(dir: "undo" | "redo") {
       res.status(403).json({ error: "Podepsaný protokol nelze vrátit zpět." });
       return;
     }
-    const cursor = readCursor(before as unknown as Record<string, unknown>);
-    const plan = dir === "undo" ? await planUndo(hotel, id, cursor) : await planRedo(hotel, id, cursor);
-    if (!plan) {
+    // Lock enforcement mirrors the content PUT's mergeLockable: a non-manage caller
+    // may not revert a change that touches a locked row. Rather than dead-ending on
+    // such a step, undo/redo SKIP it and land on the nearest change the caller may
+    // touch (findUndoTarget/findRedoTarget apply the guard). Admin/manage: no guard.
+    const set = req.permissions ?? new Set<string>();
+    const isManage = set.has("system.admin") || set.has(handoverManagePerm(hotel));
+    const content = contentOf(before);
+    const guard = { content, isManage };
+    const entries = await loadHistoryEntries(hotel, id);
+    const target = dir === "undo" ? findUndoTarget(entries, guard) : findRedoTarget(entries, guard);
+    if (!target) {
       res.status(409).json({ error: dir === "undo" ? "Není co vrátit zpět." : "Není co obnovit." });
       return;
     }
 
-    // Lock enforcement, mirroring the content PUT's mergeLockable: a non-manage
-    // caller may not revert (undo or redo) a change that touches a locked row —
-    // no unlocking, no editing/removing a manage-locked note or účet through the
-    // history stack. Admins and manage holders are exempt.
-    const set = req.permissions ?? new Set<string>();
-    const isManage = set.has("system.admin") || set.has(handoverManagePerm(hotel));
-    const content = contentOf(before);
-    if (!isManage && changeTouchesLockedRow(content, plan.change)) {
-      res.status(403).json({ error: "Uzamčený záznam může vrátit zpět jen správce protokolu." });
-      return;
-    }
-
-    applyChange(content, plan.change, dir);
+    applyChange(content, target, dir);
+    // Reflect the step in the in-memory list so the post-step availability below is
+    // computed against the new state without a re-read; `content` is now post-step.
+    target.undone = dir === "undo";
     await ref.update({
       notes: content.notes,
       accounts: content.accounts,
       cashCounts: content.cashCounts,
       smCounts: content.smCounts,
-      histCursor: plan.cursor.histCursor,
+      histCursor: highestAppliedSeq(entries),
       updatedBy: req.uid,
       updatedAt: FieldValue.serverTimestamp(),
     });
-    await markUndone(hotel, id, plan.seq, dir === "undo");
+    await markUndone(hotel, id, target.seq, dir === "undo");
     await writeAudit(actorCtx(await resolveRecepceActor(req, hotel, before.shiftDate, before.shiftType)), {
       action: "update",
       collection: "shiftHandovers",
       resourceId: id,
       event: dir === "undo" ? "recepce.protokol.undo" : "recepce.protokol.redo",
-      extra: { hotel, shift: before.shiftType, date: before.shiftDate, label: plan.change.label },
+      extra: { hotel, shift: before.shiftType, date: before.shiftDate, label: target.label },
     });
 
     const saved = await ref.get();
-    res.json({
-      id,
-      ...saved.data(),
-      ...(await canUndoRedo(hotel, id, plan.cursor, { content, isManage })),
-    });
+    res.json({ id, ...saved.data(), ...computeCanStep(entries, guard) });
   };
 }
 
