@@ -2,7 +2,7 @@ import { Router } from "express";
 import * as admin from "firebase-admin";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { requireAuth, AuthRequest } from "../middleware/auth";
-import { requirePermission } from "../auth/permissions";
+import { requirePermission, isSharedTerminalType } from "../auth/permissions";
 import { parseShiftExpression, HOTEL_CODES, isPureNumericExpression, sanitizeTypeTag } from "../services/shiftParser";
 import { snapshotShifts, deleteCollection, autoFillManagerRShifts } from "../services/planTransitions";
 import { createOrUpdatePayrollPeriod } from "../services/payrollCalculator";
@@ -1701,6 +1701,29 @@ shiftsRouter.get(
   }
 );
 
+/**
+ * Shared-terminal attribution for self-service shift requests. A shared-terminal
+ * account (e.g. Recepce) is used by many people, so `req.uid` names nobody — the
+ * person actually requesting must be picked explicitly in the dialog and sent as
+ * `requestedByEmployeeId`. Returns:
+ *   - `{ id }` (a validated, plan-rostered employeeId) for a shared-terminal caller,
+ *   - `{ id: null }` for a normal caller (attribution stays the authenticated uid),
+ *   - `{ error }` when a shared-terminal caller omitted or mis-picked the person.
+ * The picked id is stored as `requestedByEmployeeId` on the request doc.
+ */
+async function resolveSharedTerminalRequester(
+  req: AuthRequest,
+  planRef: admin.firestore.DocumentReference,
+  body: Record<string, unknown>
+): Promise<{ id: string | null } | { error: string }> {
+  if (!(await isSharedTerminalType(req.roleType))) return { id: null };
+  const id = typeof body.requestedByEmployeeId === "string" ? body.requestedByEmployeeId.trim() : "";
+  if (!id) return { error: "Vyberte, kdo žádost podává." };
+  const snap = await planRef.collection("planEmployees").where("employeeId", "==", id).limit(1).get();
+  if (snap.empty) return { error: "Vybraný zaměstnanec není v tomto plánu směn." };
+  return { id };
+}
+
 // POST /shifts/plans/:planId/shiftOverrides — submit override request
 shiftsRouter.post(
   "/plans/:planId/shiftOverrides",
@@ -1729,24 +1752,28 @@ shiftsRouter.post(
       return;
     }
 
-    const ref = await db()
-      .collection("shiftPlans")
-      .doc(planId)
-      .collection("shiftOverrideRequests")
-      .add({
-        employeeId,
-        date,
-        requestedInput,
-        reason,
-        violationTypes,
-        status: "pending",
-        requestedBy: req.uid ?? null,
-        requestedAt: FieldValue.serverTimestamp(),
-        reviewedBy: null,
-        reviewedAt: null,
-        rejectionReason: null,
-      });
-    await db().collection("shiftPlans").doc(planId).update({ updatedAt: FieldValue.serverTimestamp() });
+    const planRef = db().collection("shiftPlans").doc(planId);
+    const requester = await resolveSharedTerminalRequester(req, planRef, body);
+    if ("error" in requester) {
+      res.status(400).json({ error: requester.error });
+      return;
+    }
+
+    const ref = await planRef.collection("shiftOverrideRequests").add({
+      employeeId,
+      date,
+      requestedInput,
+      reason,
+      violationTypes,
+      status: "pending",
+      requestedBy: req.uid ?? null,
+      ...(requester.id ? { requestedByEmployeeId: requester.id } : {}),
+      requestedAt: FieldValue.serverTimestamp(),
+      reviewedBy: null,
+      reviewedAt: null,
+      rejectionReason: null,
+    });
+    await planRef.update({ updatedAt: FieldValue.serverTimestamp() });
     await logCreate(ctxFromReq(req), {
       collection: "shiftPlans/shiftOverrideRequests",
       resourceId: planId,
@@ -2067,6 +2094,14 @@ shiftsRouter.post(
       return;
     }
 
+    // Shared terminal: the person really requesting (for a free-claim, the person
+    // the shift is claimed FOR) must be picked in the dialog and validated here.
+    const requester = await resolveSharedTerminalRequester(req, planRef, body);
+    if ("error" in requester) {
+      res.status(400).json({ error: requester.error });
+      return;
+    }
+
     const docData: Record<string, unknown> = {
       employeeId,
       date,
@@ -2075,6 +2110,7 @@ shiftsRouter.post(
       reason,
       status: "pending",
       requestedBy: req.uid ?? null,
+      ...(requester.id ? { requestedByEmployeeId: requester.id } : {}),
       requestedAt: clientTimestampOrServer(requestedAtClient),
       reviewedBy: null,
       reviewedAt: null,
