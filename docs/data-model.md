@@ -31,7 +31,7 @@ shared sm rates and the shared taxi routes ceník, respectively.
 
 The `benefits` sub-doc carries the insurance/bank/Multisport fields plus `nepodepiseProhlaseni: boolean` ("Nepodepíše prohlášení poplatníka" — drives the "Nepodepsané prohlášení" banner on the employee detail page) and `zaucovani: boolean` + `zaucovaniDo: string` (YYYY-MM-DD) — the "Zaučování" (training) flag and its end date, which drive a "Zaučování" banner that auto-hides once `zaucovaniDo` passes. **`zaucovani` + `zaucovaniDo` are also denormalized onto the root `employees/{id}` doc** (written by the `PUT /employees/:id/benefits` handler) so the Employees list — which reads only root docs — can render the "V zácviku" badge without joining the benefits sub-doc; the badge's auto-expiry is computed live from `zaucovaniDo` on read.
 
-**Sub-collections under `shiftPlans/{id}`:** `planEmployees`, `shifts`, `rules`, `unavailabilityRequests`, `shiftOverrideRequests`, `shiftChangeRequests`, `shiftsSnapshot`
+**Sub-collections under `shiftPlans/{id}`:** `planEmployees`, `shifts`, `rules`, `unavailabilityRequests`, `shiftOverrideRequests`, `shiftChangeRequests`, `shiftsSnapshot`. Request docs carry `requestedBy` (author uid) and, when filed at a shared terminal, `requestedByEmployeeId` (the picked real person — see [shifts.md](shifts.md#shared-terminal-attribution--who-is-really-requesting-v4215)).
 
 **Sub-collections under `payrollPeriods/{id}`:** `entries`
 

@@ -231,7 +231,7 @@ When adding a new UI section, check whether it is a subset of something a higher
 | `PATCH /api/auth/users/:uid/employee` | Link or unlink an employee record to a user | `users.linkEmployee`; body `{ employeeId: string \| null }` |
 | `PATCH /api/auth/users/:uid` | Edit a user's name/email and/or their **Recepce default hotel** | `users.manage`; body `{ name?, email?, recepceDefaultHotel? }` — `recepceDefaultHotel` is absent-vs-`null` sensitive (absent = leave alone, `null` = clear); a non-null value is validated against the **target** user's own effective permissions (`resolveEffectivePermissions`), 400 if they can't see that hotel; audit-logged |
 | `GET /api/auth/users` | List all users | `users.view`; each entry includes `roleTypeName` and `employeeName` (see below) |
-| `GET /api/auth/me` | Returns the resolved `permissions` array (plus the user profile, including `roleTypeName`) | authenticated |
+| `GET /api/auth/me` | Returns the resolved `permissions` array (plus the user profile, including `roleTypeName` and **`sharedTerminal`** — whether the caller's type is a shared terminal, read from the roleType doc; drives the shift-request "who is really requesting?" picker) | authenticated |
 | `GET/PUT /api/auth/me/recepce-default` | The caller's own Recepce default hotel (`{ hotel: HotelSlug \| null }`) | `requireAuth` only, **no permission key** (self-service, same precedent as `/me/theme`); `PUT` validates the slug against the **caller's own** permissions, 403 otherwise; not audit-logged. See [Recepce — Per-user default hotel](recepce.md#per-user-default-hotel--usersuidrecepcedefaulthotel) |
 
 **Seeding** — `scripts/seed-role-types.js` seeds the six built-ins (additive; the resolver falls back to the built-ins if unseeded).

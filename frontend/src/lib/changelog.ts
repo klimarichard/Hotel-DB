@@ -19,17 +19,24 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "4.2.15",
+    date: "2026-07-11",
+    changes: [
+      "Recepce (sdílený účet): u žádosti o změnu směny, o výjimku a u převzetí volné směny se nově vybírá, kdo o ni skutečně žádá (předvyplní se osoba, která má právě službu). Žádost se přiřadí zvolené osobě.",
+    ],
+  },
+  {
     version: "4.2.14",
     date: "2026-07-11",
     changes: [
-      "Upozornění – Předávací protokol: k „Nenavazujícím předáním“ přibyla sekce „Pozdní příchody“ (převzetí směny po 7:00 u noční / po 19:00 u denní). Nepřečtená se započítávají do odznaku.",
+      "Upozornění – Předávací protokol: k „Nenavazujícím předáním“ přibyla sekce „Pozdní příchody“ (převzetí směny po 7:00 u noční / po 19:00 u denní).",
     ],
   },
   {
     version: "4.2.13",
     date: "2026-07-11",
     changes: [
-      "Předávací protokol: uzamčené Poznámky a Účty zůstávají uzamčené i po předání směny a krok zpět/vpřed je u uživatelů bez práva na správu přeskočí.",
+      "Předávací protokol: uzamčené Poznámky a Účty zůstávají uzamčené i po předání směny a krok zpět/vpřed je u uživatelů bez práva na uzamykání přeskočí.",
     ],
   },
   {
