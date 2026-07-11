@@ -73,6 +73,15 @@ The endpoint validates the `requestedChange` from the body for `kind === "change
 
 `requestedChange` is stored on the doc only when present; legacy reason-only docs (no `requestedChange`) continue to coexist.
 
+#### Shared-terminal attribution — "who is really requesting?" (v4.2.15)
+
+The three self-service shift actions — **change request, X-override request, and free-shift claim** — are attributed to `requestedBy: req.uid`. On a **shared terminal** (a user type with `roleTypes.sharedTerminal === true`, e.g. Recepce — one login used by many people) `req.uid` names nobody, so the real person must be picked in the dialog:
+
+- The three dialogs (`ShiftChangeRequestModal`, `XOverrideModal`, `FreeClaimModal`) render a required **"Kdo žádá / přebírá"** dropdown of the plan roster (surname-sorted) when `useAuth().sharedTerminal` is true. `GET /auth/me` now returns `sharedTerminal` (read from the roleType doc) to drive this. Non-shared-terminal users see the dialogs unchanged.
+- The picked id is sent as `requestedByEmployeeId`. `resolveSharedTerminalRequester()` (shifts.ts) **requires and validates** it (must be rostered in `planEmployees`) for shared-terminal callers, and is a no-op returning `null` for everyone else. It is stored on both `shiftChangeRequests` and `shiftOverrideRequests` docs. For a **free-claim** the picked person is also the claimant (`employeeId`), so the shift is assigned to them on approval — not to the shared account.
+- **Default pre-selection**: `GET /shifts/on-shift-requester` returns the employee scheduled on the reception shift happening now (`scheduledEmployeeId` + `currentReceptionShiftPrague`), but **only when the shared terminal maps to exactly one accessible hotel** (a single `hotelViewPerm`); with zero or several it returns `null` and the picker stays empty (admin's responsibility). Same source as the Walkiny / Lobby bar "on shift now" default. The pre-selection is applied only if that employee is in the plan roster.
+- The review tabs (`PendingShiftChangeRequestsTab`, `PendingShiftOverridesTab`) show **"Přes recepci: ‹jméno›"** when `requestedByEmployeeId` is present, so the reviewer sees who actually filed it. Reuses the existing submit permissions — no new key. Distinct from the [Recepce shared-terminal *write* attribution](recepce.md) (which infers the actor from the previous Převzal signature); this is an explicit picker.
+
 #### Auto-apply on approval — `PATCH /shifts/plans/:planId/shiftChangeRequests/:reqId`
 
 When approving a structured change request (`status === "approved"`, `kind !== "free-claim"`, and `requestedChange` is present), the handler **auto-applies** the change to the plan cells before marking the request approved:

@@ -15,6 +15,7 @@ import ShiftOverridePanel from "../components/ShiftOverridePanel";
 import ShiftChangeRequestPanel from "../components/ShiftChangeRequestPanel";
 import MyRequestsPanel from "../components/MyRequestsPanel";
 import ShiftChangeRequestModal from "../components/ShiftChangeRequestModal";
+import FreeClaimModal from "../components/FreeClaimModal";
 import Button from "../components/Button";
 import { useShiftOverridesContext } from "../context/ShiftOverridesContext";
 import { useShiftChangeRequestsContext } from "../context/ShiftChangeRequestsContext";
@@ -162,7 +163,7 @@ function StatusBadge({ status }: { status: PlanStatus }) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ShiftPlannerPage() {
-  const { can, employeeId: currentEmployeeId } = useAuth();
+  const { can, employeeId: currentEmployeeId, sharedTerminal } = useAuth();
   const now = clock.now();
 
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
@@ -179,6 +180,18 @@ export default function ShiftPlannerPage() {
   } | null>(null);
   const [pendingX, setPendingX] = useState<PendingXRequest | null>(null);
   const [pendingFreeClaim, setPendingFreeClaim] = useState<{ date: string; code: string; hotel: string } | null>(null);
+  // Shared terminal only: default the "who is requesting?" picker to whoever is on
+  // the reception shift now — but only when the terminal maps to a single hotel
+  // (else null; see GET /shifts/on-shift-requester). Same source as the Walkiny /
+  // Lobby bar "on shift now" default.
+  const [defaultRequester, setDefaultRequester] = useState<string | null>(null);
+  useEffect(() => {
+    if (!sharedTerminal) return;
+    api
+      .get<{ employeeId: string | null }>("/shifts/on-shift-requester")
+      .then((r) => setDefaultRequester(r.employeeId ?? null))
+      .catch(() => {});
+  }, [sharedTerminal]);
   const [editingEmployee, setEditingEmployee] = useState<PlanEmployee | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [confirmModal, setConfirmModal] = useState<{
@@ -592,16 +605,22 @@ export default function ShiftPlannerPage() {
     }
   }
 
-  async function submitFreeClaim() {
-    if (!plan || !pendingFreeClaim || !currentEmployeeId) return;
+  async function submitFreeClaim(claimantEmployeeId?: string) {
+    if (!plan || !pendingFreeClaim) return;
+    // On a shared terminal the claimant is picked in the dialog; otherwise it's
+    // the logged-in user's own employee. The picked person both receives the shift
+    // (employeeId) and is recorded as the requester (requestedByEmployeeId).
+    const claimant = sharedTerminal ? claimantEmployeeId : currentEmployeeId;
+    if (!claimant) return;
     const { date, code, hotel } = pendingFreeClaim;
     try {
       await api.post(`/shifts/plans/${plan.id}/shiftChangeRequests`, {
-        employeeId: currentEmployeeId,
+        employeeId: claimant,
         date,
         kind: "free-claim",
         code,
         hotel,
+        ...(sharedTerminal ? { requestedByEmployeeId: claimant } : {}),
         requestedAtClient: clock.now().toISOString(),
       });
       setPendingFreeClaim(null);
@@ -1899,13 +1918,17 @@ export default function ShiftPlannerPage() {
           })()}
           date={pendingX.date}
           violations={pendingX.violations}
-          onSubmit={async (reason) => {
+          planEmployees={plan.employees}
+          sharedTerminal={sharedTerminal}
+          defaultRequesterEmployeeId={defaultRequester ?? undefined}
+          onSubmit={async (reason, requestedByEmployeeId) => {
             await api.post(`/shifts/plans/${plan.id}/shiftOverrides`, {
               employeeId: pendingX.employeeId,
               date: pendingX.date,
               requestedInput: pendingX.rawInput,
               reason,
               violationTypes: pendingX.violations.map((v) => v.type),
+              ...(requestedByEmployeeId ? { requestedByEmployeeId } : {}),
             });
             setPendingX(null);
             setPlanOverrideCount((c) => c + 1);
@@ -1924,13 +1947,16 @@ export default function ShiftPlannerPage() {
           currentShift={pendingChangeRequest.currentRawInput}
           planEmployees={plan.employees}
           requesterEmployeeId={pendingChangeRequest.employeeId}
-          onSubmit={async ({ requestedChange, reason }) => {
+          sharedTerminal={sharedTerminal}
+          defaultRequesterEmployeeId={defaultRequester ?? undefined}
+          onSubmit={async ({ requestedChange, reason, requestedByEmployeeId }) => {
             await api.post(`/shifts/plans/${plan.id}/shiftChangeRequests`, {
               employeeId: pendingChangeRequest.employeeId,
               date: pendingChangeRequest.date,
               currentRawInput: pendingChangeRequest.currentRawInput,
               requestedChange,
               reason,
+              ...(requestedByEmployeeId ? { requestedByEmployeeId } : {}),
               requestedAtClient: pendingChangeRequest.clickedAt,
             });
             setPendingChangeRequest(null);
@@ -1940,14 +1966,14 @@ export default function ShiftPlannerPage() {
           onClose={() => setPendingChangeRequest(null)}
         />
       )}
-      {pendingFreeClaim && (
-        <ConfirmModal
-          title="Zažádat o volnou směnu"
-          message={(() => {
-            const [y, m, d] = pendingFreeClaim.date.split("-").map(Number);
-            return `Zažádat o volnou směnu ${pendingFreeClaim.code}${pendingFreeClaim.hotel} dne ${d}. ${m}. ${y}? Žádost posoudí FOM.`;
-          })()}
-          confirmLabel="Zažádat"
+      {pendingFreeClaim && plan && (
+        <FreeClaimModal
+          date={pendingFreeClaim.date}
+          code={pendingFreeClaim.code}
+          hotel={pendingFreeClaim.hotel}
+          planEmployees={plan.employees}
+          sharedTerminal={sharedTerminal}
+          defaultRequesterEmployeeId={defaultRequester ?? undefined}
           onConfirm={submitFreeClaim}
           onCancel={() => setPendingFreeClaim(null)}
         />

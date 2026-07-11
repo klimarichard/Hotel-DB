@@ -646,11 +646,16 @@ authRouter.get("/me", requireAuth, async (req: AuthRequest, res) => {
   const data = doc.data() as Record<string, unknown>;
   const typeId = (data.roleType as string) || "";
   let roleTypeName: string | null = null;
+  // Shared-terminal flag drives the "who is really requesting?" picker on the
+  // shift planner (Recepce etc. share one login). Read from the same roleType doc.
+  let sharedTerminal = false;
   if (typeId) {
     const t = await admin.firestore().collection(ROLE_TYPES_COLLECTION).doc(typeId).get();
-    roleTypeName = t.exists ? ((t.data() as Record<string, unknown>).name as string) ?? typeId : typeId;
+    const td = t.exists ? (t.data() as Record<string, unknown>) : null;
+    roleTypeName = td ? ((td.name as string) ?? typeId) : typeId;
+    sharedTerminal = td?.sharedTerminal === true;
   }
-  res.json({ uid: doc.id, ...data, permissions, roleTypeName });
+  res.json({ uid: doc.id, ...data, permissions, roleTypeName, sharedTerminal });
 });
 
 /**
