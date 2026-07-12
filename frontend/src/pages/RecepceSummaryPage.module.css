@@ -1,0 +1,164 @@
+/* Cross-hotel Recepce summary page. */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1.5rem;
+  max-width: 1100px;
+}
+
+.headerRow {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.title {
+  margin: 0;
+  font-size: 1.4rem;
+  font-weight: var(--font-weight-semibold, 600);
+  color: var(--color-text-heading);
+}
+
+.controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.control {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.input {
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  background: var(--color-input-bg, var(--color-bg));
+  color: var(--color-text-heading);
+  font-size: 0.875rem;
+  font-weight: normal;
+}
+
+.inputNumber {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  width: 7rem;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.inputNumber::-webkit-inner-spin-button,
+.inputNumber::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.paramInput {
+  width: 5rem;
+  padding: 0.3rem 0.45rem;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: var(--font-weight-semibold, 600);
+  color: var(--color-text-heading);
+}
+
+.note {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  max-width: 70ch;
+}
+
+.tableWrap {
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.table th {
+  text-align: left;
+  padding: 0.55rem 0.75rem;
+  background: var(--color-surface-2, var(--color-surface));
+  border-bottom: 1px solid var(--color-border);
+  font-weight: 700;
+  color: var(--color-text-heading);
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-heading);
+  vertical-align: middle;
+}
+
+.table tbody tr:nth-child(even) td {
+  background: var(--color-surface-3, var(--color-surface-2));
+}
+
+.table tfoot td {
+  border-top: 2px solid var(--color-border-strong);
+  border-bottom: none;
+  background: var(--color-surface-2, var(--color-surface));
+}
+
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.strong {
+  font-weight: 700;
+  color: var(--color-text-heading);
+}
+
+.hotelCell {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.empty {
+  padding: 1.5rem 1rem;
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+}
+
+.muted {
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+}
+
+.error {
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: var(--color-danger-soft, rgba(220, 38, 38, 0.1));
+  color: var(--color-danger, #dc2626);
+  font-size: 0.85rem;
+}
