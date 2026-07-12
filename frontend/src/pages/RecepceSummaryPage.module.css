@@ -88,10 +88,17 @@
   gap: 1rem;
 }
 
-/* Grouped hotel header (spans the směny + Kč sub-columns). */
-.groupHead {
+/* Grouped hotel header (spans the směny + Kč sub-columns). Compound selector so
+   it beats the base `.table th { text-align: left }` rule. */
+.table th.groupHead {
   text-align: center;
-  border-left: 1px solid var(--color-border);
+}
+
+/* Vertical separator at the start of each hotel's double-column (and before the
+   trailing provision columns). Compound selector to beat `.table td/th`. */
+.table th.hotelStart,
+.table td.hotelStart {
+  border-left: 2px solid var(--color-border-strong);
 }
 
 .note {
@@ -314,4 +321,79 @@
   gap: 10px;
   padding: 14px 20px;
   border-top: 1px solid var(--color-border);
+}
+
+/* ── print: three tables on one A4, order Podle hotelu → Počet směn → minus ─── */
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 8mm;
+  }
+  /* Show only this page — hide the app chrome (sidebar/header) generically. */
+  body * {
+    visibility: hidden;
+  }
+  .page,
+  .page * {
+    visibility: visible;
+  }
+  .page {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    gap: 8px;
+    color: #000;
+  }
+  .noPrint {
+    display: none !important;
+  }
+  .page button {
+    display: none !important;
+  }
+  .title {
+    font-size: 13px;
+  }
+  .sectionTitle {
+    font-size: 10px;
+  }
+  .section {
+    gap: 3px;
+    break-inside: avoid;
+  }
+  .printOrder1 {
+    order: 1;
+  }
+  .printOrder2 {
+    order: 2;
+  }
+  .printOrder3 {
+    order: 3;
+  }
+  .tableWrap {
+    overflow: visible;
+    border: 1px solid #999;
+    border-radius: 0;
+  }
+  .table {
+    font-size: 7.5px;
+  }
+  .table th,
+  .table td {
+    padding: 1px 3px;
+  }
+  /* Render the hand-entered inputs as plain values (no input chrome). */
+  .paramInput,
+  .inputNumber {
+    border: none;
+    background: transparent;
+    padding: 0;
+    width: auto;
+    min-width: 0;
+    font-size: 7.5px;
+    color: #000;
+  }
 }

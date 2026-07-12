@@ -8,15 +8,11 @@ import styles from "./RecepceSummaryPage.module.css";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Cross-hotel Recepce summary (admin-only, gated by recepce.summary.view).
-// A settable date range drives three tables:
-//   • Provize minus — server-persisted manual per-employee deductions (top),
-//   • Podle hotelu  — per-hotel taxi provision + č/př/wal + walk-in provision,
-//                     a Součet (taxi+č+př+wal−provize), a hand-filled Celková
-//                     částka (the pool), and its per-shift value,
-//   • Počet směn    — per-employee shift counts + per-hotel money shares
-//                     (pool ÷ total shifts × the employee's shifts), walk-in
-//                     provision, Provize minus, and a final Součet.
-// Everything settable except Provize minus is page-local (localStorage).
+// A settable date range drives three tables (screen order: Provize minus,
+// Podle hotelu, Počet směn, Walk-iny; PRINT order: Podle hotelu, Počet směn,
+// Provize minus — one A4). "Na 1 směnu" is hand-entered per hotel (with a
+// Součet-derived suggestion beside it) and is what the Počet směn Kč shares
+// use. Everything settable except Provize minus is page-local (localStorage).
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface WalkinTotals {
@@ -68,7 +64,7 @@ interface HotelParams {
 const LS_RANGE = "recepce.summary.range";
 const LS_RATE = "recepce.summary.rate";
 const LS_PARAMS = "recepce.summary.params";
-const LS_TOTALMONEY = "recepce.summary.totalMoney";
+const LS_PERSHIFT = "recepce.summary.perShift";
 
 const WALKIN_PROVISION_RATE = 0.1; // 10 % of the CZK-converted walk-in total.
 
@@ -145,10 +141,10 @@ function loadParams(): Record<HotelSlug, HotelParams> {
   }
   return base;
 }
-function loadTotalMoney(): Record<HotelSlug, number> {
+function loadPerShift(): Record<HotelSlug, number> {
   const base = zeroNums();
   try {
-    const p = JSON.parse(window.localStorage.getItem(LS_TOTALMONEY) || "null") as Record<string, unknown> | null;
+    const p = JSON.parse(window.localStorage.getItem(LS_PERSHIFT) || "null") as Record<string, unknown> | null;
     if (p) for (const h of HOTELS) base[h.slug] = Number(p[h.slug]) || 0;
   } catch {
     /* ignore */
@@ -162,7 +158,8 @@ export default function RecepceSummaryPage() {
   const [to, setTo] = useState(initialRange.to);
   const [rate, setRate] = useState<number>(loadRate);
   const [params, setParams] = useState<Record<HotelSlug, HotelParams>>(loadParams);
-  const [totalMoney, setTotalMoney] = useState<Record<HotelSlug, number>>(loadTotalMoney);
+  // Hand-entered per-shift value per hotel — feeds the Počet směn Kč shares.
+  const [perShift, setPerShift] = useState<Record<HotelSlug, number>>(loadPerShift);
 
   const [data, setData] = useState<SummaryResponse | null>(null);
   const [provizeMinus, setProvizeMinus] = useState<ProvizeMinusEntry[]>([]);
@@ -249,11 +246,11 @@ export default function RecepceSummaryPage() {
   }, [params]);
   useEffect(() => {
     try {
-      window.localStorage.setItem(LS_TOTALMONEY, JSON.stringify(totalMoney));
+      window.localStorage.setItem(LS_PERSHIFT, JSON.stringify(perShift));
     } catch {
       /* ignore */
     }
-  }, [totalMoney]);
+  }, [perShift]);
 
   function setParam(slug: HotelSlug, key: keyof HotelParams, value: number) {
     setParams((prev) => ({ ...prev, [slug]: { ...prev[slug], [key]: value } }));
@@ -272,7 +269,7 @@ export default function RecepceSummaryPage() {
 
   const emps = data?.employees ?? [];
 
-  // Per-hotel aggregates (walk-in provision, total shifts, per-shift value).
+  // Per-hotel aggregates (walk-in provision, total shifts).
   const perHotel = useMemo(() => {
     const walkinProv = zeroNums();
     const shifts = zeroNums();
@@ -282,11 +279,9 @@ export default function RecepceSummaryPage() {
         shifts[h.slug] += e.byHotel[h.slug] ?? 0;
       }
     }
-    const perShift = zeroNums();
-    for (const h of HOTELS) perShift[h.slug] = shifts[h.slug] > 0 ? totalMoney[h.slug] / shifts[h.slug] : 0;
-    return { walkinProv, shifts, perShift };
+    return { walkinProv, shifts };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, rate, totalMoney]);
+  }, [data, rate]);
 
   // Provize minus summed per employee (entries already filtered to the range).
   const minusByEmp = useMemo(() => {
@@ -295,9 +290,20 @@ export default function RecepceSummaryPage() {
     return m;
   }, [provizeMinus]);
 
-  // A single employee's Kč share at a hotel: shifts × per-shift value, floored to 10.
+  // Podle hotelu Součet (point 2) = taxi + č + př + wal − walk-in provision.
+  function hotelSoucet(slug: HotelSlug): number {
+    const p = params[slug];
+    return (data?.taxiProvisionByHotel[slug] ?? 0) + p.c + p.pr + p.wal - perHotel.walkinProv[slug];
+  }
+  // Suggested per-shift value from the Součet (Součet ÷ total shifts) — the user
+  // reads it, then types the real value into the editable "Na 1 směnu" column.
+  function suggestedPerShift(slug: HotelSlug): number {
+    return perHotel.shifts[slug] > 0 ? hotelSoucet(slug) / perHotel.shifts[slug] : 0;
+  }
+
+  // A single employee's Kč share at a hotel: shifts × hand-entered per-shift, floored to 10.
   function shareMoney(e: EmployeeRow, slug: HotelSlug): number {
-    return floor10((e.byHotel[slug] ?? 0) * perHotel.perShift[slug]);
+    return floor10((e.byHotel[slug] ?? 0) * perShift[slug]);
   }
   // The employee's final Součet: Σ hotel shares + walk-in provision − Provize minus.
   function employeeTotal(e: EmployeeRow): number {
@@ -305,18 +311,11 @@ export default function RecepceSummaryPage() {
     return floor10(shares + walkinProvision(e) - (minusByEmp[e.employeeId] ?? 0));
   }
 
-  // Podle hotelu Součet (point 2) = taxi + č + př + wal − walk-in provision.
-  function hotelSoucet(slug: HotelSlug): number {
-    const p = params[slug];
-    return (data?.taxiProvisionByHotel[slug] ?? 0) + p.c + p.pr + p.wal - perHotel.walkinProv[slug];
-  }
-
   // Footer totals.
   const totals = useMemo(() => {
     const taxi = HOTELS.reduce((s, h) => s + (data?.taxiProvisionByHotel[h.slug] ?? 0), 0);
     const walkinProv = HOTELS.reduce((s, h) => s + perHotel.walkinProv[h.slug], 0);
     const soucetHotel = HOTELS.reduce((s, h) => s + hotelSoucet(h.slug), 0);
-    const pool = HOTELS.reduce((s, h) => s + totalMoney[h.slug], 0);
     const shiftMoneyByHotel = zeroNums();
     let empTotal = 0;
     let minusTotal = 0;
@@ -326,9 +325,9 @@ export default function RecepceSummaryPage() {
       minusTotal += minusByEmp[e.employeeId] ?? 0;
     }
     const shiftsTotal = HOTELS.reduce((s, h) => s + perHotel.shifts[h.slug], 0);
-    return { taxi, walkinProv, soucetHotel, pool, shiftMoneyByHotel, empTotal, minusTotal, shiftsTotal };
+    return { taxi, walkinProv, soucetHotel, shiftMoneyByHotel, empTotal, minusTotal, shiftsTotal };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, rate, totalMoney, params, provizeMinus]);
+  }, [data, rate, params, perShift, provizeMinus]);
 
   // ── Provize minus CRUD ──────────────────────────────────────────────────────
   function requestDeleteMinus(entry: ProvizeMinusEntry) {
@@ -342,11 +341,7 @@ export default function RecepceSummaryPage() {
           setConfirm(null);
           await loadProvizeMinus();
         } catch (err) {
-          setConfirm({
-            title: "Chyba",
-            message: errorMessage(err, "Nepodařilo se smazat."),
-            onConfirm: () => setConfirm(null),
-          });
+          setConfirm({ title: "Chyba", message: errorMessage(err, "Nepodařilo se smazat."), onConfirm: () => setConfirm(null) });
         }
       },
     });
@@ -356,7 +351,7 @@ export default function RecepceSummaryPage() {
     <div className={styles.page}>
       <div className={styles.headerRow}>
         <h1 className={styles.title}>Souhrn recepce</h1>
-        <div className={styles.controls}>
+        <div className={`${styles.controls} ${styles.noPrint}`}>
           <label className={styles.control}>
             <span>Od</span>
             <input type="date" className={styles.input} value={from} max={to} onChange={(e) => e.target.value && setFrom(e.target.value)} />
@@ -376,6 +371,9 @@ export default function RecepceSummaryPage() {
               onChange={(e) => setRate(Number(e.target.value) || 0)}
             />
           </label>
+          <Button variant="secondary" size="sm" onClick={() => window.print()} disabled={!data}>
+            Tisk
+          </Button>
         </div>
       </div>
 
@@ -384,11 +382,11 @@ export default function RecepceSummaryPage() {
 
       {data && !loading && (
         <>
-          {/* ── Provize minus (persistent, top) ─────────────────────────────── */}
-          <section className={styles.section}>
+          {/* ── Provize minus (persistent) — screen top, PRINT bottom ────────── */}
+          <section className={`${styles.section} ${styles.printOrder3}`}>
             <div className={styles.sectionHead}>
               <h2 className={styles.sectionTitle}>Provize minus</h2>
-              <Button size="sm" onClick={() => setEditingMinus("new")}>
+              <Button size="sm" className={styles.noPrint} onClick={() => setEditingMinus("new")}>
                 + Přidat
               </Button>
             </div>
@@ -400,7 +398,7 @@ export default function RecepceSummaryPage() {
                     <th>Zaměstnanec</th>
                     <th className={styles.num}>Částka</th>
                     <th>Poznámka</th>
-                    <th aria-label="Akce" />
+                    <th className={styles.noPrint} aria-label="Akce" />
                   </tr>
                 </thead>
                 <tbody>
@@ -419,7 +417,7 @@ export default function RecepceSummaryPage() {
                         {p.amount === 0 ? <span className={styles.muted}>0 Kč (neurčeno)</span> : fmtCzk(p.amount)}
                       </td>
                       <td>{p.note}</td>
-                      <td className={styles.actionsCell}>
+                      <td className={`${styles.actionsCell} ${styles.noPrint}`}>
                         <div className={styles.rowActions}>
                           <button type="button" className={styles.rowIconBtn} aria-label="Upravit" onClick={() => setEditingMinus(p)}>
                             ✎
@@ -441,8 +439,8 @@ export default function RecepceSummaryPage() {
             </div>
           </section>
 
-          {/* ── Podle hotelu (top computation table) ────────────────────────── */}
-          <section className={styles.section}>
+          {/* ── Podle hotelu — screen + PRINT top ────────────────────────────── */}
+          <section className={`${styles.section} ${styles.printOrder1}`}>
             <h2 className={styles.sectionTitle}>Podle hotelu</h2>
             <div className={styles.tableWrap}>
               <table className={styles.table}>
@@ -455,7 +453,7 @@ export default function RecepceSummaryPage() {
                     <th className={styles.num}>wal</th>
                     <th className={styles.num}>Provize walkiny</th>
                     <th className={styles.num}>Součet</th>
-                    <th className={styles.num}>Celková částka</th>
+                    <th className={styles.num}>Na 1 směnu (dle součtu)</th>
                     <th className={styles.num}>Na 1 směnu</th>
                   </tr>
                 </thead>
@@ -479,18 +477,18 @@ export default function RecepceSummaryPage() {
                       ))}
                       <td className={styles.num}>{fmtCzk(perHotel.walkinProv[h.slug])}</td>
                       <td className={`${styles.num} ${styles.strong}`}>{fmtCzk(hotelSoucet(h.slug))}</td>
+                      <td className={`${styles.num} ${styles.muted}`}>{fmtCzk(suggestedPerShift(h.slug))}</td>
                       <td className={styles.num}>
                         <input
                           type="number"
                           step="any"
                           className={`${styles.input} ${styles.inputNumber} ${styles.paramInput}`}
-                          value={totalMoney[h.slug] === 0 ? "" : totalMoney[h.slug]}
+                          value={perShift[h.slug] === 0 ? "" : perShift[h.slug]}
                           placeholder="0"
-                          onChange={(ev) => setTotalMoney((prev) => ({ ...prev, [h.slug]: Number(ev.target.value) || 0 }))}
-                          aria-label={`${h.label} celková částka`}
+                          onChange={(ev) => setPerShift((prev) => ({ ...prev, [h.slug]: Number(ev.target.value) || 0 }))}
+                          aria-label={`${h.label} na 1 směnu`}
                         />
                       </td>
-                      <td className={styles.num}>{fmtCzk(perHotel.perShift[h.slug])}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -501,36 +499,35 @@ export default function RecepceSummaryPage() {
                     <td colSpan={3} />
                     <td className={`${styles.num} ${styles.strong}`}>{fmtCzk(totals.walkinProv)}</td>
                     <td className={`${styles.num} ${styles.strong}`}>{fmtCzk(totals.soucetHotel)}</td>
-                    <td className={`${styles.num} ${styles.strong}`}>{fmtCzk(totals.pool)}</td>
-                    <td />
+                    <td colSpan={2} />
                   </tr>
                 </tfoot>
               </table>
             </div>
           </section>
 
-          {/* ── Počet směn (per-employee distribution) ──────────────────────── */}
-          <section className={styles.section}>
+          {/* ── Počet směn — screen + PRINT middle ───────────────────────────── */}
+          <section className={`${styles.section} ${styles.printOrder2}`}>
             <h2 className={styles.sectionTitle}>Počet směn</h2>
-            <p className={styles.note}>
+            <p className={`${styles.note} ${styles.noPrint}`}>
               Počítají se pouze recepční denní/noční směny podle hotelu. Dvojité směny (např. DA²) a zaškolovací směny se
               nepočítají; hodinová buňka označená typem směny se počítá jako část směny (hodiny ÷ 12). Částky za směny =
-              podíl na částce hotelu podle počtu směn (zaokrouhleno dolů na 10 Kč).
+              směny × „Na 1 směnu“ (zaokrouhleno dolů na 10 Kč).
             </p>
             <div className={styles.tableWrap}>
               <table className={styles.table}>
                 <thead>
                   <tr>
                     <th rowSpan={2}>Zaměstnanec</th>
-                    {HOTELS.map((h) => (
-                      <th key={h.slug} colSpan={2} className={styles.groupHead}>
-                        {h.slug === "amigo-alqush" ? "A&A" : h.label}
-                      </th>
-                    ))}
                     <th rowSpan={2} className={styles.num}>
                       Celkem směn
                     </th>
-                    <th rowSpan={2} className={styles.num}>
+                    {HOTELS.map((h) => (
+                      <th key={h.slug} colSpan={2} className={`${styles.groupHead} ${styles.hotelStart}`}>
+                        {h.slug === "amigo-alqush" ? "A&A" : h.label}
+                      </th>
+                    ))}
+                    <th rowSpan={2} className={`${styles.num} ${styles.hotelStart}`}>
                       Provize walk-in
                     </th>
                     <th rowSpan={2} className={styles.num}>
@@ -543,7 +540,7 @@ export default function RecepceSummaryPage() {
                   <tr>
                     {HOTELS.map((h) => (
                       <Fragment key={h.slug}>
-                        <th className={styles.num}>směny</th>
+                        <th className={`${styles.num} ${styles.hotelStart}`}>směny</th>
                         <th className={styles.num}>Kč</th>
                       </Fragment>
                     ))}
@@ -560,14 +557,14 @@ export default function RecepceSummaryPage() {
                   {emps.map((e) => (
                     <tr key={e.employeeId}>
                       <td>{e.name}</td>
+                      <td className={`${styles.num} ${styles.strong}`}>{fmtShifts(e.totalShifts)}</td>
                       {HOTELS.map((h) => (
                         <Fragment key={h.slug}>
-                          <td className={styles.num}>{fmtShifts(e.byHotel[h.slug] ?? 0)}</td>
+                          <td className={`${styles.num} ${styles.hotelStart}`}>{fmtShifts(e.byHotel[h.slug] ?? 0)}</td>
                           <td className={styles.num}>{fmtCzk(shareMoney(e, h.slug))}</td>
                         </Fragment>
                       ))}
-                      <td className={`${styles.num} ${styles.strong}`}>{fmtShifts(e.totalShifts)}</td>
-                      <td className={styles.num}>{fmtCzk(walkinProvision(e))}</td>
+                      <td className={`${styles.num} ${styles.hotelStart}`}>{fmtCzk(walkinProvision(e))}</td>
                       <td className={styles.num}>{fmtCzk(minusByEmp[e.employeeId] ?? 0)}</td>
                       <td className={`${styles.num} ${styles.strong}`}>{fmtCzk(employeeTotal(e))}</td>
                     </tr>
@@ -577,14 +574,14 @@ export default function RecepceSummaryPage() {
                   <tfoot>
                     <tr>
                       <td className={styles.strong}>Celkem</td>
+                      <td className={`${styles.num} ${styles.strong}`}>{fmtShifts(totals.shiftsTotal)}</td>
                       {HOTELS.map((h) => (
                         <Fragment key={h.slug}>
-                          <td className={`${styles.num} ${styles.strong}`}>{fmtShifts(perHotel.shifts[h.slug])}</td>
+                          <td className={`${styles.num} ${styles.strong} ${styles.hotelStart}`}>{fmtShifts(perHotel.shifts[h.slug])}</td>
                           <td className={`${styles.num} ${styles.strong}`}>{fmtCzk(totals.shiftMoneyByHotel[h.slug])}</td>
                         </Fragment>
                       ))}
-                      <td className={`${styles.num} ${styles.strong}`}>{fmtShifts(totals.shiftsTotal)}</td>
-                      <td className={`${styles.num} ${styles.strong}`}>{fmtCzk(totals.walkinProv)}</td>
+                      <td className={`${styles.num} ${styles.strong} ${styles.hotelStart}`}>{fmtCzk(totals.walkinProv)}</td>
                       <td className={`${styles.num} ${styles.strong}`}>{fmtCzk(totals.minusTotal)}</td>
                       <td className={`${styles.num} ${styles.strong}`}>{fmtCzk(totals.empTotal)}</td>
                     </tr>
@@ -594,8 +591,8 @@ export default function RecepceSummaryPage() {
             </div>
           </section>
 
-          {/* ── Walk-in list (collapsible, bottom) ──────────────────────────── */}
-          <section className={styles.section}>
+          {/* ── Walk-in list (collapsible, screen bottom, NOT printed) ───────── */}
+          <section className={`${styles.section} ${styles.noPrint}`}>
             <button
               type="button"
               className={styles.collapseHeader}
