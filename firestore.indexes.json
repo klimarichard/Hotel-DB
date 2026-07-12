@@ -244,6 +244,15 @@
   ],
   "fieldOverrides": [
     {
+      "collectionGroup": "shifts",
+      "fieldPath": "date",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "DESCENDING", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    },
+    {
       "collectionGroup": "benefits",
       "fieldPath": "multisport",
       "indexes": [
