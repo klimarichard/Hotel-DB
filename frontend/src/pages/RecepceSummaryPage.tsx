@@ -205,9 +205,12 @@ export default function RecepceSummaryPage() {
     setParams((prev) => ({ ...prev, [slug]: { ...prev[slug], [key]: value } }));
   }
 
-  // 10 % of each receptionist's CZK-converted walk-in total (EUR × page rate).
+  // 10 % of each receptionist's CZK-converted walk-in total (EUR × page rate),
+  // floored to the nearest 10 CZK per person. The Celkem row sums these already-
+  // floored per-person values (round-then-sum, not sum-then-round).
   function walkinProvision(e: EmployeeRow): number {
-    return (e.walkinCzk + e.walkinEur * rate) * WALKIN_PROVISION_RATE;
+    const raw = (e.walkinCzk + e.walkinEur * rate) * WALKIN_PROVISION_RATE;
+    return Math.floor(raw / 10) * 10;
   }
 
   // Column totals for the shift matrix footer.
@@ -231,6 +234,9 @@ export default function RecepceSummaryPage() {
     () => HOTELS.reduce((sum, h) => sum + (data?.taxiProvisionByHotel[h.slug] ?? 0), 0),
     [data]
   );
+
+  // Walk-in list is secondary detail — collapsed by default, at the bottom.
+  const [walkinsOpen, setWalkinsOpen] = useState(false);
 
   return (
     <div className={styles.page}>
@@ -264,40 +270,48 @@ export default function RecepceSummaryPage() {
 
       {data && !loading && (
         <>
-          {/* ── Walk-in list (all hotels) ──────────────────────────────────── */}
+          {/* ── Per-hotel: taxi provisions + č / př / wal (top) ─────────────── */}
           <section className={styles.section}>
-            <h2 className={styles.sectionTitle}>Walk-iny</h2>
+            <h2 className={styles.sectionTitle}>Podle hotelu</h2>
             <div className={styles.tableWrap}>
               <table className={styles.table}>
                 <thead>
                   <tr>
                     <th>Hotel</th>
-                    <th>Datum</th>
-                    <th>Zaměstnanec</th>
-                    <th>č. rez. v Protelu</th>
-                    <th className={styles.num}>Částka</th>
+                    <th className={styles.num}>Provize taxi</th>
+                    <th className={styles.num}>č</th>
+                    <th className={styles.num}>př</th>
+                    <th className={styles.num}>wal</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {data.walkins.length === 0 && (
-                    <tr>
-                      <td colSpan={5} className={styles.empty}>
-                        Žádné walk-in záznamy v období.
-                      </td>
-                    </tr>
-                  )}
-                  {data.walkins.map((w, i) => (
-                    <tr key={`${w.hotel}-${i}`}>
-                      <td className={styles.hotelCell}>{w.hotelLabel}</td>
-                      <td>{formatDate(w.date)}</td>
-                      <td>{w.employeeName}</td>
-                      <td>{w.resNo}</td>
-                      <td className={styles.num}>
-                        {w.amount.toLocaleString("cs-CZ")} {currencySymbol(w.currency)}
-                      </td>
+                  {HOTELS.map((h) => (
+                    <tr key={h.slug}>
+                      <td className={styles.hotelCell}>{h.label}</td>
+                      <td className={styles.num}>{fmtCzk(data.taxiProvisionByHotel[h.slug] ?? 0)}</td>
+                      {(["c", "pr", "wal"] as const).map((key) => (
+                        <td key={key} className={styles.num}>
+                          <input
+                            type="number"
+                            step="any"
+                            className={`${styles.input} ${styles.inputNumber} ${styles.paramInput}`}
+                            value={params[h.slug][key] === 0 ? "" : params[h.slug][key]}
+                            placeholder="0"
+                            onChange={(ev) => setParam(h.slug, key, Number(ev.target.value) || 0)}
+                            aria-label={`${h.label} ${key}`}
+                          />
+                        </td>
+                      ))}
                     </tr>
                   ))}
                 </tbody>
+                <tfoot>
+                  <tr>
+                    <td className={styles.strong}>Celkem</td>
+                    <td className={`${styles.num} ${styles.strong}`}>{fmtCzk(totalTaxiProvision)}</td>
+                    <td colSpan={3} />
+                  </tr>
+                </tfoot>
               </table>
             </div>
           </section>
@@ -316,7 +330,7 @@ export default function RecepceSummaryPage() {
                     <th>Zaměstnanec</th>
                     {HOTELS.map((h) => (
                       <th key={h.slug} className={styles.num}>
-                        {h.label}
+                        {h.slug === "amigo-alqush" ? "A&A" : h.label}
                       </th>
                     ))}
                     <th className={styles.num}>Celkem směn</th>
@@ -362,50 +376,55 @@ export default function RecepceSummaryPage() {
             </div>
           </section>
 
-          {/* ── Per-hotel: taxi provisions + č / př / wal ───────────────────── */}
+          {/* ── Walk-in list (all hotels) — collapsible, at the bottom ──────── */}
           <section className={styles.section}>
-            <h2 className={styles.sectionTitle}>Podle hotelu</h2>
-            <div className={styles.tableWrap}>
-              <table className={styles.table}>
-                <thead>
-                  <tr>
-                    <th>Hotel</th>
-                    <th className={styles.num}>Provize taxi</th>
-                    <th className={styles.num}>č</th>
-                    <th className={styles.num}>př</th>
-                    <th className={styles.num}>wal</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {HOTELS.map((h) => (
-                    <tr key={h.slug}>
-                      <td className={styles.hotelCell}>{h.label}</td>
-                      <td className={styles.num}>{fmtCzk(data.taxiProvisionByHotel[h.slug] ?? 0)}</td>
-                      {(["c", "pr", "wal"] as const).map((key) => (
-                        <td key={key} className={styles.num}>
-                          <input
-                            type="number"
-                            step="any"
-                            className={`${styles.input} ${styles.inputNumber} ${styles.paramInput}`}
-                            value={params[h.slug][key] === 0 ? "" : params[h.slug][key]}
-                            placeholder="0"
-                            onChange={(ev) => setParam(h.slug, key, Number(ev.target.value) || 0)}
-                            aria-label={`${h.label} ${key}`}
-                          />
-                        </td>
-                      ))}
+            <button
+              type="button"
+              className={styles.collapseHeader}
+              onClick={() => setWalkinsOpen((o) => !o)}
+              aria-expanded={walkinsOpen}
+            >
+              <span className={styles.collapseChevron} data-open={walkinsOpen}>
+                ▸
+              </span>
+              <h2 className={styles.sectionTitle}>Walk-iny</h2>
+              <span className={styles.collapseCount}>{data.walkins.length}</span>
+            </button>
+            {walkinsOpen && (
+              <div className={styles.tableWrap}>
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      <th>Hotel</th>
+                      <th>Datum</th>
+                      <th>Zaměstnanec</th>
+                      <th>č. rez. v Protelu</th>
+                      <th className={styles.num}>Částka</th>
                     </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr>
-                    <td className={styles.strong}>Celkem</td>
-                    <td className={`${styles.num} ${styles.strong}`}>{fmtCzk(totalTaxiProvision)}</td>
-                    <td colSpan={3} />
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {data.walkins.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className={styles.empty}>
+                          Žádné walk-in záznamy v období.
+                        </td>
+                      </tr>
+                    )}
+                    {data.walkins.map((w, i) => (
+                      <tr key={`${w.hotel}-${i}`}>
+                        <td className={styles.hotelCell}>{w.hotelLabel}</td>
+                        <td>{formatDate(w.date)}</td>
+                        <td>{w.employeeName}</td>
+                        <td>{w.resNo}</td>
+                        <td className={styles.num}>
+                          {w.amount.toLocaleString("cs-CZ")} {currencySymbol(w.currency)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </section>
         </>
       )}
