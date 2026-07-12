@@ -363,7 +363,14 @@ export default function RecepceSummaryPage() {
   return (
     <div className={styles.page}>
       <div className={styles.headerRow}>
-        <h1 className={styles.title}>Souhrn recepce</h1>
+        <div className={styles.titleGroup}>
+          <h1 className={styles.title}>Souhrn recepce</h1>
+          {rangeValid && (
+            <span className={styles.rangeLabel}>
+              {formatDate(from)} – {formatDate(to)}
+            </span>
+          )}
+        </div>
         <div className={`${styles.controls} ${styles.noPrint}`}>
           <label className={styles.control}>
             <span>Od</span>
@@ -491,7 +498,7 @@ export default function RecepceSummaryPage() {
                       ))}
                       <td className={styles.num}>{money(perHotel.walkinProv[h.slug])}</td>
                       <td className={`${styles.num} ${styles.strong}`}>{money(hotelSoucet(h.slug))}</td>
-                      <td className={`${styles.num} ${styles.muted}`}>{money(suggestedPerShift(h.slug))}</td>
+                      <td className={`${styles.num} ${styles.muted}`}>{money(Math.floor(suggestedPerShift(h.slug)))}</td>
                       <td className={styles.num}>
                         <input
                           type="number"
