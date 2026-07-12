@@ -364,6 +364,12 @@
     gap: 16px;
     color: #000;
   }
+  /* Force ALL text black — the app may be in dark theme, whose light
+     --color-text-* variables would otherwise print as unreadable pale grey. */
+  .page,
+  .page * {
+    color: #000 !important;
+  }
   .noPrint {
     display: none !important;
   }
