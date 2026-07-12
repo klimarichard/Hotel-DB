@@ -5,7 +5,11 @@
   flex-direction: column;
   gap: 1.5rem;
   padding: 1.5rem;
-  max-width: 1100px;
+}
+
+/* Print-only formatted value shown in place of an input (hidden on screen). */
+.printShow {
+  display: none;
 }
 
 .headerRow {
@@ -326,7 +330,7 @@
 /* ── print: three tables on one A4, order Podle hotelu → Počet směn → minus ─── */
 @media print {
   @page {
-    size: A4 landscape;
+    size: A4 portrait;
     margin: 8mm;
   }
   /* Show only this page — hide the app chrome (sidebar/header) generically. */
@@ -385,15 +389,22 @@
   .table td {
     padding: 1px 3px;
   }
-  /* Render the hand-entered inputs as plain values (no input chrome). */
-  .paramInput,
-  .inputNumber {
-    border: none;
-    background: transparent;
-    padding: 0;
-    width: auto;
-    min-width: 0;
-    font-size: 7.5px;
+  /* Show the hand-entered values as plain formatted text (hide the inputs). */
+  .printHide {
+    display: none !important;
+  }
+  .printShow {
+    display: inline !important;
+  }
+  /* Drop the "Kč" suffix from money cells to save width in portrait. */
+  .kc {
+    display: none;
+  }
+  /* Everything black on paper. */
+  .muted {
+    color: #000;
+  }
+  .strong {
     color: #000;
   }
 }
