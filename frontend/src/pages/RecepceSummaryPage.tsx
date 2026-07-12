@@ -88,9 +88,22 @@ function fmtShifts(n: number): string {
   if (!n) return "–";
   return (Math.round(n * 100) / 100).toLocaleString("cs-CZ", { maximumFractionDigits: 2 });
 }
-/** A CZK money amount (up to 2 decimals) with a trailing "Kč". */
+/** A CZK money amount (up to 2 decimals) with a trailing "Kč" — for plain strings. */
 function fmtCzk(n: number): string {
-  return `${(Math.round(n * 100) / 100).toLocaleString("cs-CZ", { maximumFractionDigits: 2 })} Kč`;
+  return `${fmtNum(n)} Kč`;
+}
+/** Just the grouped number (no suffix) — used for print + the editable inputs. */
+function fmtNum(n: number): string {
+  return (Math.round(n * 100) / 100).toLocaleString("cs-CZ", { maximumFractionDigits: 2 });
+}
+/** Money cell content: number + a "Kč" suffix that is hidden when printing. */
+function money(n: number) {
+  return (
+    <>
+      {fmtNum(n)}
+      <span className={styles.kc}>&nbsp;Kč</span>
+    </>
+  );
 }
 /** Round down to the nearest 10 CZK (the agreed rounding for provisions + shares). */
 function floor10(n: number): number {
@@ -414,7 +427,7 @@ export default function RecepceSummaryPage() {
                       <td>{formatDate(p.date)}</td>
                       <td>{p.employeeName}</td>
                       <td className={styles.num}>
-                        {p.amount === 0 ? <span className={styles.muted}>0 Kč (neurčeno)</span> : fmtCzk(p.amount)}
+                        {p.amount === 0 ? <span className={styles.muted}>0 (neurčeno)</span> : money(p.amount)}
                       </td>
                       <td>{p.note}</td>
                       <td className={`${styles.actionsCell} ${styles.noPrint}`}>
@@ -447,47 +460,49 @@ export default function RecepceSummaryPage() {
                 <thead>
                   <tr>
                     <th>Hotel</th>
-                    <th className={styles.num}>Provize taxi</th>
+                    <th className={styles.num}>Taxi</th>
                     <th className={styles.num}>č</th>
                     <th className={styles.num}>př</th>
                     <th className={styles.num}>wal</th>
-                    <th className={styles.num}>Provize walkiny</th>
-                    <th className={styles.num}>Součet</th>
-                    <th className={styles.num}>Na 1 směnu (dle součtu)</th>
-                    <th className={styles.num}>Na 1 směnu</th>
+                    <th className={styles.num}>Walkiny</th>
+                    <th className={styles.num}>CELKEM</th>
+                    <th className={styles.num}>Na směnu</th>
+                    <th className={styles.num}>Rozdělit</th>
                   </tr>
                 </thead>
                 <tbody>
                   {HOTELS.map((h) => (
                     <tr key={h.slug}>
                       <td className={styles.hotelCell}>{h.label}</td>
-                      <td className={styles.num}>{fmtCzk(data.taxiProvisionByHotel[h.slug] ?? 0)}</td>
+                      <td className={styles.num}>{money(data.taxiProvisionByHotel[h.slug] ?? 0)}</td>
                       {(["c", "pr", "wal"] as const).map((key) => (
                         <td key={key} className={styles.num}>
                           <input
                             type="number"
                             step="any"
-                            className={`${styles.input} ${styles.inputNumber} ${styles.paramInput}`}
+                            className={`${styles.input} ${styles.inputNumber} ${styles.paramInput} ${styles.printHide}`}
                             value={params[h.slug][key] === 0 ? "" : params[h.slug][key]}
                             placeholder="0"
                             onChange={(ev) => setParam(h.slug, key, Number(ev.target.value) || 0)}
                             aria-label={`${h.label} ${key}`}
                           />
+                          <span className={styles.printShow}>{fmtNum(params[h.slug][key])}</span>
                         </td>
                       ))}
-                      <td className={styles.num}>{fmtCzk(perHotel.walkinProv[h.slug])}</td>
-                      <td className={`${styles.num} ${styles.strong}`}>{fmtCzk(hotelSoucet(h.slug))}</td>
-                      <td className={`${styles.num} ${styles.muted}`}>{fmtCzk(suggestedPerShift(h.slug))}</td>
+                      <td className={styles.num}>{money(perHotel.walkinProv[h.slug])}</td>
+                      <td className={`${styles.num} ${styles.strong}`}>{money(hotelSoucet(h.slug))}</td>
+                      <td className={`${styles.num} ${styles.muted}`}>{money(suggestedPerShift(h.slug))}</td>
                       <td className={styles.num}>
                         <input
                           type="number"
                           step="any"
-                          className={`${styles.input} ${styles.inputNumber} ${styles.paramInput}`}
+                          className={`${styles.input} ${styles.inputNumber} ${styles.paramInput} ${styles.printHide}`}
                           value={perShift[h.slug] === 0 ? "" : perShift[h.slug]}
                           placeholder="0"
                           onChange={(ev) => setPerShift((prev) => ({ ...prev, [h.slug]: Number(ev.target.value) || 0 }))}
-                          aria-label={`${h.label} na 1 směnu`}
+                          aria-label={`${h.label} rozdělit na směnu`}
                         />
+                        <span className={styles.printShow}>{fmtNum(perShift[h.slug])}</span>
                       </td>
                     </tr>
                   ))}
@@ -495,10 +510,10 @@ export default function RecepceSummaryPage() {
                 <tfoot>
                   <tr>
                     <td className={styles.strong}>Celkem</td>
-                    <td className={`${styles.num} ${styles.strong}`}>{fmtCzk(totals.taxi)}</td>
+                    <td className={`${styles.num} ${styles.strong}`}>{money(totals.taxi)}</td>
                     <td colSpan={3} />
-                    <td className={`${styles.num} ${styles.strong}`}>{fmtCzk(totals.walkinProv)}</td>
-                    <td className={`${styles.num} ${styles.strong}`}>{fmtCzk(totals.soucetHotel)}</td>
+                    <td className={`${styles.num} ${styles.strong}`}>{money(totals.walkinProv)}</td>
+                    <td className={`${styles.num} ${styles.strong}`}>{money(totals.soucetHotel)}</td>
                     <td colSpan={2} />
                   </tr>
                 </tfoot>
@@ -528,13 +543,13 @@ export default function RecepceSummaryPage() {
                       </th>
                     ))}
                     <th rowSpan={2} className={`${styles.num} ${styles.hotelStart}`}>
-                      Provize walk-in
+                      Walkiny
                     </th>
                     <th rowSpan={2} className={styles.num}>
-                      Provize minus
+                      Minus
                     </th>
                     <th rowSpan={2} className={styles.num}>
-                      Součet
+                      CELKEM
                     </th>
                   </tr>
                   <tr>
@@ -561,12 +576,12 @@ export default function RecepceSummaryPage() {
                       {HOTELS.map((h) => (
                         <Fragment key={h.slug}>
                           <td className={`${styles.num} ${styles.hotelStart}`}>{fmtShifts(e.byHotel[h.slug] ?? 0)}</td>
-                          <td className={styles.num}>{fmtCzk(shareMoney(e, h.slug))}</td>
+                          <td className={styles.num}>{money(shareMoney(e, h.slug))}</td>
                         </Fragment>
                       ))}
-                      <td className={`${styles.num} ${styles.hotelStart}`}>{fmtCzk(walkinProvision(e))}</td>
-                      <td className={styles.num}>{fmtCzk(minusByEmp[e.employeeId] ?? 0)}</td>
-                      <td className={`${styles.num} ${styles.strong}`}>{fmtCzk(employeeTotal(e))}</td>
+                      <td className={`${styles.num} ${styles.hotelStart}`}>{money(walkinProvision(e))}</td>
+                      <td className={styles.num}>{money(minusByEmp[e.employeeId] ?? 0)}</td>
+                      <td className={`${styles.num} ${styles.strong}`}>{money(employeeTotal(e))}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -578,12 +593,12 @@ export default function RecepceSummaryPage() {
                       {HOTELS.map((h) => (
                         <Fragment key={h.slug}>
                           <td className={`${styles.num} ${styles.strong} ${styles.hotelStart}`}>{fmtShifts(perHotel.shifts[h.slug])}</td>
-                          <td className={`${styles.num} ${styles.strong}`}>{fmtCzk(totals.shiftMoneyByHotel[h.slug])}</td>
+                          <td className={`${styles.num} ${styles.strong}`}>{money(totals.shiftMoneyByHotel[h.slug])}</td>
                         </Fragment>
                       ))}
-                      <td className={`${styles.num} ${styles.strong} ${styles.hotelStart}`}>{fmtCzk(totals.walkinProv)}</td>
-                      <td className={`${styles.num} ${styles.strong}`}>{fmtCzk(totals.minusTotal)}</td>
-                      <td className={`${styles.num} ${styles.strong}`}>{fmtCzk(totals.empTotal)}</td>
+                      <td className={`${styles.num} ${styles.strong} ${styles.hotelStart}`}>{money(totals.walkinProv)}</td>
+                      <td className={`${styles.num} ${styles.strong}`}>{money(totals.minusTotal)}</td>
+                      <td className={`${styles.num} ${styles.strong}`}>{money(totals.empTotal)}</td>
                     </tr>
                   </tfoot>
                 )}
