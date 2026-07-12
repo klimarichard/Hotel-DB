@@ -1261,3 +1261,30 @@ Předávací protokol, on the shift-plan cell grid:
   (`—`) — e.g. date ranges ("Od – Do"), the RecepceDemoPage title
   ("Recepce – Ambiance"). Keep this convention when adding new Recepce (or any
   other) UI copy.
+
+## Souhrn recepce (internal, admin-only)
+
+A deliberately low-profile cross-hotel summary/bonus page at `/recepce-souhrn`,
+gated by `recepce.summary.view` (the `admin` builtin type gets it via
+`system.admin`; nobody else until granted). Router
+`functions/src/routes/recepceSummary.ts`, mounted at `/recepce-summary`:
+
+- `GET /` — walk-ins across all four hotels, taxi provisions per hotel, and shift
+  counts per employee per hotel. Only desk day/night codes count (`DA/NA/DS/NS/DQ/
+  NQ/DK/NK`); doubles (`DA²`) count 0; trainee (`ZD/ZN`) and porter codes are
+  excluded; a numeric cell tagged with a desk type counts `hoursComputed / 12`.
+  Walk-in totals are returned per `employee × hotel`. Uses one
+  `collectionGroup("shifts")` date-range query, which **requires the `shifts.date`
+  COLLECTION_GROUP single-field index** — declared as a `fieldOverride` in
+  `firestore.indexes.json` (Firestore does not auto-create collection-group
+  single-field indexes).
+- `GET /employees` — union of the shift-plan rosters across the range's months
+  (the "Provize minus" employee dropdown).
+- `GET | POST | PUT | DELETE /provize-minus[/:id]` — persistent per-employee
+  deductions in the top-level `recepceProvizeMinus` collection (audit-logged).
+
+The frontend (`RecepceSummaryPage.tsx`) does the money distribution client-side
+(per-shift split, walk-in provision floored per `employee × hotel`, Provize minus)
+and prints the three tables to one A4. Everything settable **except** Provize
+minus (date range, EUR→CZK rate, per-hotel `č/př/wal`, per-hotel "Na 1 směnu")
+is **page-local** (`localStorage`), never persisted server-side.
