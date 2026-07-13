@@ -198,9 +198,11 @@ At most one multi-valued facet per request (Firestore allows only one `in` per q
 
 Results are ordered `timestamp desc`. Response: `{ entries: AuditEntry[], nextCursor?: string }`.
 
-`GET /api/audit/:id` — fetch a single entry by id (for the card raw-detail escape hatch).
+**Hidden entries (`isHiddenEntry`).** All three read paths drop entries produced by the "Souhrn recepce" page (`/4d`) — `collection === "recepceProvizeMinus"`, and the `settings/recepceSummaryKey` pass-key rotation. That page is deliberately unlisted and pass-key protected, so surfacing its writes in Log změn would advertise its existence. Current summary routes write no audit entries at all (see `routes/recepceSummary.ts`), so this only masks any historical rows from earlier versions; it is kept as a belt-and-braces guard. On the list route the filter runs **after** the pagination cursor is computed, so paging stays correct (a page just returns a row shorter). See `docs/recepce.md` → "No audit logging".
 
-`GET /api/audit/meta/collections` — still present for backward compat; returns distinct `collection` values from the most recent 5000 entries. (The overhauled UI no longer uses the collection dropdown, but the endpoint is retained.)
+`GET /api/audit/:id` — fetch a single entry by id (for the card raw-detail escape hatch). A hidden entry returns `404` here too, so it cannot be reached by guessing its id.
+
+`GET /api/audit/meta/collections` — still present for backward compat; returns distinct `collection` values from the most recent 5000 entries, excluding hidden ones. (The overhauled UI no longer uses the collection dropdown, but the endpoint is retained.)
 
 ### Composite indexes (`firestore.indexes.json`)
 
