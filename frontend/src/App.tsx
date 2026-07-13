@@ -21,6 +21,7 @@ import RecepceSummaryAdminPage from "@/pages/RecepceSummaryAdminPage";
 import RecepceDemoPage from "@/pages/RecepceDemoPage";
 import OverviewPage from "@/pages/OverviewPage";
 import AuditLogPage from "@/pages/AuditLogPage";
+import GuidesPage from "@/pages/GuidesPage";
 import HelpPage from "@/pages/HelpPage";
 import TourDemoRoute from "@/pages/TourDemoRoute";
 import { AlertsProvider } from "@/context/AlertsContext";
@@ -136,6 +137,7 @@ export default function App() {
         <Route path="upozorneni" element={<RequirePermission allow={["nav.alerts.view"]}><AlertsPage /></RequirePermission>} />
         <Route path="nastaveni" element={<RequirePermission allow={["nav.settings.view"]}><SettingsPage /></RequirePermission>} />
         <Route path="audit" element={<RequirePermission allow={["nav.audit.view"]}><AuditLogPage /></RequirePermission>} />
+        <Route path="navody" element={<RequirePermission allow={["nav.guides.view"]}><GuidesPage /></RequirePermission>} />
         {/* Help is available to every authenticated user – no permission gate. */}
         <Route path="napoveda" element={<HelpPage />} />
         {/* Tour-only demo routes – REAL pages fed by mock data (no backend).
@@ -160,6 +162,7 @@ export default function App() {
         <Route path="napoveda/ukazka-taxi" element={<TourDemoRoute scenario="taxi"><RecepceDemoPage tab="taxi" key="demo-taxi" /></TourDemoRoute>} />
         <Route path="napoveda/ukazka-lobby-bar" element={<TourDemoRoute scenario="lobby-bar"><RecepceDemoPage tab="lobbyBar" key="demo-lobby-bar" /></TourDemoRoute>} />
         <Route path="napoveda/ukazka-terminal" element={<TourDemoRoute scenario="terminal"><RecepceDemoPage tab="terminal" key="demo-terminal" /></TourDemoRoute>} />
+        <Route path="napoveda/ukazka-navody" element={<TourDemoRoute scenario="guides"><GuidesPage key="demo-guides" /></TourDemoRoute>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

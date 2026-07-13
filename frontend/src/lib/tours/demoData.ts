@@ -59,7 +59,8 @@ export type TourScenario =
   | "walkiny"
   | "taxi"
   | "lobby-bar"
-  | "terminal";
+  | "terminal"
+  | "guides";
 export const tourDemo: { active: boolean; scenario: TourScenario | null } = {
   active: false,
   scenario: null,
@@ -871,6 +872,76 @@ function terminalFixture(
   };
 }
 
+// ─── Návody-demo fixtures (`/guides` via /napoveda/ukazka-navody) ─────────────
+//
+// The REAL GuidesPage fed with mock data. Its ONLY mount endpoint is
+// `GET /guides` ({ categories, guides }) – a missing branch here would leave the
+// tour page blank. Opening a PDF (`GET /guides/:id/file`) is a RAW fetch that
+// bypasses lib/api, so it can't be mocked; the tour therefore only shows the
+// list and never opens a guide.
+
+const demoGuideCategories: unknown[] = [
+  { id: "gc-recepce", name: "Recepce", order: 0 },
+  { id: "gc-mzdy", name: "Mzdy", order: 1 },
+];
+
+const demoGuides: unknown[] = [
+  {
+    id: "g1",
+    title: "Předávací protokol krok za krokem",
+    description: "Jak správně vyplnit a podepsat předávací protokol na konci směny.",
+    categoryId: "gc-recepce",
+    kind: "pdf",
+    url: "",
+    fileName: "predavaci-protokol.pdf",
+    order: 0,
+  },
+  {
+    id: "g2",
+    title: "Check-in hosta v Protelu",
+    description: "Postup ubytování hosta včetně walk-inů.",
+    categoryId: "gc-recepce",
+    kind: "pdf",
+    url: "",
+    fileName: "check-in-protel.pdf",
+    order: 1,
+  },
+  {
+    id: "g3",
+    title: "Manuál k systému Protel (web)",
+    description: "Oficiální dokumentace dodavatele.",
+    categoryId: "gc-recepce",
+    kind: "link",
+    url: "https://example.com/protel",
+    fileName: "",
+    order: 2,
+  },
+  {
+    id: "g4",
+    title: "Jak číst mzdový výměr",
+    description: "Vysvětlení jednotlivých položek ve výplatní pásce.",
+    categoryId: "gc-mzdy",
+    kind: "pdf",
+    url: "",
+    fileName: "mzdovy-vymer.pdf",
+    order: 0,
+  },
+];
+
+/** Serve mocks for /guides/* while the návody demo is active. */
+function guidesFixture(
+  isGet: boolean,
+  clean: string
+): { hit: boolean; value?: unknown } | null {
+  if (clean !== "/guides" && !clean.startsWith("/guides/")) return null;
+  if (!isGet) return { hit: true, value: {} };
+  // Mount endpoint: the whole page (categories + guides) comes from here.
+  if (clean === "/guides") {
+    return { hit: true, value: { categories: demoGuideCategories, guides: demoGuides } };
+  }
+  return { hit: true, value: {} };
+}
+
 // ─── Dispatcher ───────────────────────────────────────────────────────────────
 
 /** Strip a query string (and any trailing slash noise) for matching. */
@@ -973,6 +1044,7 @@ function activeScenario(): TourScenario | null {
     case "/napoveda/ukazka-taxi": return "taxi";
     case "/napoveda/ukazka-lobby-bar": return "lobby-bar";
     case "/napoveda/ukazka-terminal": return "terminal";
+    case "/napoveda/ukazka-navody": return "guides";
     default: return null;
   }
 }
@@ -1053,6 +1125,9 @@ export function getDemoResponse(
       return lobbyBarFixture(isGet, clean) ?? { hit: false };
     case "terminal":
       return terminalFixture(isGet, clean) ?? { hit: false };
+    // ── Návody demo (list of PDF/link guides grouped by category) ──
+    case "guides":
+      return guidesFixture(isGet, clean) ?? { hit: false };
     default:
       return { hit: false };
   }

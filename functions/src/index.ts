@@ -38,6 +38,7 @@ import { walkinsRouter } from "./routes/walkins";
 import { recepceSummaryRouter } from "./routes/recepceSummary";
 import { taxiRouter } from "./routes/taxi";
 import { lobbyBarRouter } from "./routes/lobbyBar";
+import { guidesRouter } from "./routes/guides";
 import { terminalRouter } from "./routes/terminal";
 import * as clock from "./services/clock";
 import { requireAuth, AuthRequest } from "./middleware/auth";
@@ -133,6 +134,7 @@ app.use("/walkins", walkinsRouter);
 app.use("/recepce-summary", recepceSummaryRouter);
 app.use("/taxi", taxiRouter);
 app.use("/lobby-bar", lobbyBarRouter);
+app.use("/guides", guidesRouter);
 app.use("/terminal", terminalRouter);
 
 // Health check
