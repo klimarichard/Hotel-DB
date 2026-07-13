@@ -7,14 +7,19 @@ import { ctxFromReq, logCreate, logDelete, logUpdate } from "../services/auditLo
 
 /**
  * Návody (guides) — reference material for staff: uploaded PDF tutorials and
- * links to external resources (Google Drive folders, videos, …), grouped into
- * categories.
+ * links to external resources (Google Drive folders, videos, …).
  *
- * Two collections:
- *   guideCategories/{id}  { name, order }
- *   guides/{id}           { title, description, categoryId, kind, order, … }
- *                         kind "pdf"  → storagePath (+ fileName, contentType)
- *                         kind "link" → url
+ * One collection:
+ *   guides/{id}  { title, description, tags[], kind, order, … }
+ *                kind "pdf"  → storagePath (+ fileName, contentType)
+ *                kind "link" → url
+ *
+ * Guides are classified by free-form TAGS, not by a single category: a guide
+ * routinely belongs to several topics at once ("Recepce" AND "Protel"), which a
+ * one-home-per-guide category model can't express. Tags are stored on the guide
+ * itself — there is no tag collection; the tag vocabulary is simply derived from
+ * whatever tags the guides carry, which keeps it self-pruning (drop the last
+ * guide with a tag and the tag disappears).
  *
  * PDFs live in Storage under `guides/{guideId}.pdf`. storage.rules deny direct
  * client access, so uploads land here as base64 in the JSON body and downloads
@@ -22,6 +27,10 @@ import { ctxFromReq, logCreate, logDelete, logUpdate } from "../services/auditLo
  *
  * Reading is gated by `nav.guides.view` (every built-in type has it — guides are
  * reference material for everyone); every write is gated by `guides.manage`.
+ *
+ * Legacy note: guides created before tags shipped carry a `categoryId` and no
+ * `tags`. They read back as untagged (still listed, still searchable by name) —
+ * the field is ignored, never deleted.
  */
 export const guidesRouter = Router();
 
@@ -35,6 +44,9 @@ const db = () => admin.firestore();
  */
 const MAX_PDF_BYTES = 7 * 1024 * 1024;
 
+const MAX_TAGS_PER_GUIDE = 20;
+const MAX_TAG_LENGTH = 40;
+
 /** Stored URLs are rendered as links, so only http(s) may ever be persisted. */
 function isSafeHttpUrl(value: string): boolean {
   try {
@@ -45,12 +57,32 @@ function isSafeHttpUrl(value: string): boolean {
   }
 }
 
-/** Next order value within a category (append to the end). */
-async function nextGuideOrder(categoryId: string): Promise<number> {
-  const snap = await db()
-    .collection("guides")
-    .where("categoryId", "==", categoryId)
-    .get();
+/**
+ * Normalise a tag list: trim, collapse inner whitespace, drop empties, cap the
+ * length, and de-duplicate case-insensitively (keeping the first spelling, so
+ * "Recepce" and "recepce" can't both survive on one guide). Display casing is
+ * preserved — only matching is case-insensitive.
+ */
+function normalizeTags(input: unknown): string[] {
+  if (!Array.isArray(input)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of input) {
+    if (typeof raw !== "string") continue;
+    const tag = raw.trim().replace(/\s+/g, " ").slice(0, MAX_TAG_LENGTH);
+    if (!tag) continue;
+    const key = tag.toLocaleLowerCase("cs");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(tag);
+    if (out.length >= MAX_TAGS_PER_GUIDE) break;
+  }
+  return out;
+}
+
+/** Next order value (append to the end of the list). */
+async function nextGuideOrder(): Promise<number> {
+  const snap = await db().collection("guides").get();
   const max = snap.docs.reduce((acc, d) => {
     const o = d.data().order;
     return typeof o === "number" && o > acc ? o : acc;
@@ -62,46 +94,50 @@ async function nextGuideOrder(categoryId: string): Promise<number> {
 
 /**
  * GET /api/guides
- * The whole page in one call: categories + guides, each already ordered.
- * No file bytes — the PDF is fetched separately by GET /:id/file when opened.
+ * The whole page in one call: every guide, ordered, plus the derived tag
+ * vocabulary (for the filter chips and the tag autocomplete).
+ *
+ * Search is deliberately NOT done here: the guide list is small (tens of rows,
+ * no file bytes) and full-text search over title/description/tags is instant in
+ * the browser — no index, no query round-trip per keystroke.
  */
 guidesRouter.get(
   "/",
   requireAuth,
   requirePermission("nav.guides.view"),
   async (_req: AuthRequest, res) => {
-    const [catSnap, guideSnap] = await Promise.all([
-      db().collection("guideCategories").get(),
-      db().collection("guides").get(),
-    ]);
+    const snap = await db().collection("guides").get();
 
-    const byOrder = (a: { order: number }, b: { order: number }) => a.order - b.order;
-
-    const categories = catSnap.docs
-      .map((d) => ({
-        id: d.id,
-        name: (d.data().name as string) ?? "",
-        order: (d.data().order as number) ?? 0,
-      }))
-      .sort(byOrder);
-
-    const guides = guideSnap.docs
+    const guides = snap.docs
       .map((d) => {
         const data = d.data();
         return {
           id: d.id,
           title: (data.title as string) ?? "",
           description: (data.description as string) ?? "",
-          categoryId: (data.categoryId as string) ?? "",
+          tags: Array.isArray(data.tags)
+            ? (data.tags as unknown[]).filter((t): t is string => typeof t === "string")
+            : [],
           kind: (data.kind as "pdf" | "link") ?? "link",
           url: (data.url as string) ?? "",
           fileName: (data.fileName as string) ?? "",
           order: (data.order as number) ?? 0,
         };
       })
-      .sort(byOrder);
+      .sort((a, b) => a.order - b.order);
 
-    res.json({ categories, guides });
+    // Tag vocabulary, de-duplicated case-insensitively (first spelling wins),
+    // sorted with Czech collation.
+    const byKey = new Map<string, string>();
+    for (const g of guides) {
+      for (const t of g.tags) {
+        const key = t.toLocaleLowerCase("cs");
+        if (!byKey.has(key)) byKey.set(key, t);
+      }
+    }
+    const tags = [...byKey.values()].sort((a, b) => a.localeCompare(b, "cs"));
+
+    res.json({ guides, tags });
   }
 );
 
@@ -157,140 +193,8 @@ guidesRouter.get(
   }
 );
 
-// ─── Categories ───────────────────────────────────────────────────────────────
-// Declared before the /:id guide routes so "categories" is never swallowed by
-// the :id parameter.
-
-guidesRouter.post(
-  "/categories",
-  requireAuth,
-  requirePermission("guides.manage"),
-  async (req: AuthRequest, res) => {
-    const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
-    if (!name) {
-      res.status(400).json({ error: "Název kategorie je povinný." });
-      return;
-    }
-
-    const snap = await db().collection("guideCategories").get();
-    const order = snap.docs.reduce((acc, d) => {
-      const o = d.data().order;
-      return typeof o === "number" && o >= acc ? o + 1 : acc;
-    }, 0);
-
-    const ref = db().collection("guideCategories").doc();
-    await ref.set({
-      name,
-      order,
-      createdAt: FieldValue.serverTimestamp(),
-      createdBy: req.uid,
-    });
-    await logCreate(ctxFromReq(req), {
-      collection: "guideCategories",
-      resourceId: ref.id,
-      summary: { name },
-    });
-    res.status(201).json({ id: ref.id });
-  }
-);
-
-guidesRouter.put(
-  "/categories/order",
-  requireAuth,
-  requirePermission("guides.manage"),
-  async (req: AuthRequest, res) => {
-    const ids = req.body?.orderedIds;
-    if (!Array.isArray(ids) || ids.some((i) => typeof i !== "string")) {
-      res.status(400).json({ error: "orderedIds musí být pole id." });
-      return;
-    }
-
-    const batch = db().batch();
-    ids.forEach((id: string, idx: number) => {
-      batch.update(db().collection("guideCategories").doc(id), { order: idx });
-    });
-    await batch.commit();
-    res.json({ ok: true });
-  }
-);
-
-guidesRouter.put(
-  "/categories/:id",
-  requireAuth,
-  requirePermission("guides.manage"),
-  async (req: AuthRequest, res) => {
-    const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
-    if (!name) {
-      res.status(400).json({ error: "Název kategorie je povinný." });
-      return;
-    }
-
-    const ref = db().collection("guideCategories").doc(req.params.id);
-    const snap = await ref.get();
-    if (!snap.exists) {
-      res.status(404).json({ error: "Kategorie nenalezena." });
-      return;
-    }
-
-    const before = snap.data() as Record<string, unknown>;
-    await ref.update({
-      name,
-      updatedAt: FieldValue.serverTimestamp(),
-      updatedBy: req.uid,
-    });
-    await logUpdate(ctxFromReq(req), {
-      collection: "guideCategories",
-      resourceId: ref.id,
-      before: { name: before.name },
-      after: { name },
-    });
-    res.json({ ok: true });
-  }
-);
-
-/**
- * DELETE /api/guides/categories/:id
- * Refuses while the category still holds guides — deleting it silently would
- * orphan them (they'd vanish from a page that groups strictly by category).
- * The user must move or delete the guides first.
- */
-guidesRouter.delete(
-  "/categories/:id",
-  requireAuth,
-  requirePermission("guides.manage"),
-  async (req: AuthRequest, res) => {
-    const ref = db().collection("guideCategories").doc(req.params.id);
-    const snap = await ref.get();
-    if (!snap.exists) {
-      res.status(404).json({ error: "Kategorie nenalezena." });
-      return;
-    }
-
-    const used = await db()
-      .collection("guides")
-      .where("categoryId", "==", req.params.id)
-      .limit(1)
-      .get();
-    if (!used.empty) {
-      res.status(409).json({
-        error:
-          "Kategorie obsahuje návody. Nejprve je přesuňte do jiné kategorie nebo smažte.",
-      });
-      return;
-    }
-
-    const before = snap.data() as Record<string, unknown>;
-    await ref.delete();
-    await logDelete(ctxFromReq(req), {
-      collection: "guideCategories",
-      resourceId: ref.id,
-      summary: { name: before.name },
-    });
-    res.json({ ok: true });
-  }
-);
-
-// ─── Guides ───────────────────────────────────────────────────────────────────
+// ─── Write ────────────────────────────────────────────────────────────────────
+// "/order" is declared before "/:id" so it is never swallowed by the parameter.
 
 guidesRouter.put(
   "/order",
@@ -314,7 +218,7 @@ guidesRouter.put(
 
 /**
  * POST /api/guides
- * Body: { title, description?, categoryId, kind: "pdf" | "link",
+ * Body: { title, description?, tags?: string[], kind: "pdf" | "link",
  *         url? (kind=link), pdfBase64? + fileName? (kind=pdf) }
  */
 guidesRouter.post(
@@ -322,23 +226,16 @@ guidesRouter.post(
   requireAuth,
   requirePermission("guides.manage"),
   async (req: AuthRequest, res) => {
-    const {
-      title,
-      description,
-      categoryId,
-      kind,
-      url,
-      pdfBase64,
-      fileName,
-    } = req.body as {
-      title?: string;
-      description?: string;
-      categoryId?: string;
-      kind?: string;
-      url?: string;
-      pdfBase64?: string;
-      fileName?: string;
-    };
+    const { title, description, tags, kind, url, pdfBase64, fileName } =
+      req.body as {
+        title?: string;
+        description?: string;
+        tags?: unknown;
+        kind?: string;
+        url?: string;
+        pdfBase64?: string;
+        fileName?: string;
+      };
 
     const cleanTitle = typeof title === "string" ? title.trim() : "";
     if (!cleanTitle) {
@@ -349,26 +246,14 @@ guidesRouter.post(
       res.status(400).json({ error: "kind musí být 'pdf' nebo 'link'." });
       return;
     }
-    if (typeof categoryId !== "string" || !categoryId) {
-      res.status(400).json({ error: "Kategorie je povinná." });
-      return;
-    }
-
-    const catSnap = await db().collection("guideCategories").doc(categoryId).get();
-    if (!catSnap.exists) {
-      res.status(400).json({ error: "Kategorie neexistuje." });
-      return;
-    }
 
     const ref = db().collection("guides").doc();
-    const order = await nextGuideOrder(categoryId);
-
     const base = {
       title: cleanTitle,
       description: typeof description === "string" ? description.trim() : "",
-      categoryId,
+      tags: normalizeTags(tags),
       kind,
-      order,
+      order: await nextGuideOrder(),
       createdAt: FieldValue.serverTimestamp(),
       createdBy: req.uid,
     };
@@ -407,7 +292,7 @@ guidesRouter.post(
     await logCreate(ctxFromReq(req), {
       collection: "guides",
       resourceId: ref.id,
-      summary: { title: cleanTitle, kind, categoryId },
+      summary: { title: cleanTitle, kind, tags: base.tags },
     });
     res.status(201).json({ id: ref.id });
   }
@@ -415,7 +300,7 @@ guidesRouter.post(
 
 /**
  * PUT /api/guides/:id
- * Edits metadata; `pdfBase64` optionally replaces the file in place (same
+ * Edits metadata + tags; `pdfBase64` optionally replaces the file in place (same
  * storage path, so no orphaned blob). A guide never changes kind.
  */
 guidesRouter.put(
@@ -431,15 +316,14 @@ guidesRouter.put(
     }
     const before = snap.data() as Record<string, unknown>;
 
-    const { title, description, categoryId, url, pdfBase64, fileName } =
-      req.body as {
-        title?: string;
-        description?: string;
-        categoryId?: string;
-        url?: string;
-        pdfBase64?: string;
-        fileName?: string;
-      };
+    const { title, description, tags, url, pdfBase64, fileName } = req.body as {
+      title?: string;
+      description?: string;
+      tags?: unknown;
+      url?: string;
+      pdfBase64?: string;
+      fileName?: string;
+    };
 
     const cleanTitle = typeof title === "string" ? title.trim() : "";
     if (!cleanTitle) {
@@ -450,20 +334,10 @@ guidesRouter.put(
     const update: Record<string, unknown> = {
       title: cleanTitle,
       description: typeof description === "string" ? description.trim() : "",
+      tags: normalizeTags(tags),
       updatedAt: FieldValue.serverTimestamp(),
       updatedBy: req.uid,
     };
-
-    // Moving to another category appends to the end of the target group.
-    if (typeof categoryId === "string" && categoryId && categoryId !== before.categoryId) {
-      const catSnap = await db().collection("guideCategories").doc(categoryId).get();
-      if (!catSnap.exists) {
-        res.status(400).json({ error: "Kategorie neexistuje." });
-        return;
-      }
-      update.categoryId = categoryId;
-      update.order = await nextGuideOrder(categoryId);
-    }
 
     if (before.kind === "link") {
       const cleanUrl = typeof url === "string" ? url.trim() : "";
@@ -498,13 +372,13 @@ guidesRouter.put(
       before: {
         title: before.title,
         description: before.description,
-        categoryId: before.categoryId,
+        tags: Array.isArray(before.tags) ? (before.tags as string[]).join(", ") : "",
         url: before.url,
       },
       after: {
         title: update.title,
         description: update.description,
-        categoryId: update.categoryId ?? before.categoryId,
+        tags: (update.tags as string[]).join(", "),
         url: update.url ?? before.url,
       },
     });
