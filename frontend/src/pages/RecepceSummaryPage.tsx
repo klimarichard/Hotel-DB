@@ -699,11 +699,6 @@ export default function RecepceSummaryPage() {
           {/* ── Počet směn — screen + PRINT middle ───────────────────────────── */}
           <section className={`${styles.section} ${styles.printOrder2}`}>
             <h2 className={styles.sectionTitle}>Počet směn</h2>
-            <p className={`${styles.note} ${styles.noPrint}`}>
-              Počítají se pouze recepční denní/noční směny podle hotelu. Dvojité směny (např. DA²) a zaškolovací směny se
-              nepočítají; hodinová buňka označená typem směny se počítá jako část směny (hodiny ÷ 12). Částky za směny =
-              směny × „Na 1 směnu“ (zaokrouhleno dolů na 10 Kč).
-            </p>
             <div className={styles.tableWrap}>
               <table className={styles.table}>
                 <thead>

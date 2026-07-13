@@ -1,19 +1,23 @@
 import { useEffect, useState } from "react";
 import Button from "@/components/Button";
 import { api, ApiError, errorMessage } from "@/lib/api";
-import styles from "./RecepceSummaryKeyTab.module.css";
+import styles from "./RecepceSummaryAdminPage.module.css";
 
 /**
- * Settings → Souhrn recepce: set / change the numeric pass-key that guards the
- * cross-hotel Recepce summary page (/4d). Gated by the same permission as the
- * page itself (`recepce.summary.view`) – no separate permission key.
+ * Standalone admin page for the cross-hotel Recepce summary (`/4d/admin`): sets
+ * or changes the numeric pass-key that guards `/4d`. Deliberately kept OUT of the
+ * Settings page – a tab there would hint at the existence of the unlisted page.
+ * Reachable only by typing the address, gated by `recepce.summary.view` (the same
+ * permission as the page itself, no separate key).
  *
- * The current key is required whenever one is already configured; the server is
- * the only place the key is verified (`PUT /recepce-summary/key`).
+ * This page does NOT require the pass-key token itself – otherwise the initial
+ * key could never be set (chicken-and-egg). The server is the only place the key
+ * is verified (`PUT /recepce-summary/key`); the current key is required whenever
+ * one is already configured.
  */
 const PIN_RE = /^\d{4,10}$/;
 
-export default function RecepceSummaryKeyTab() {
+export default function RecepceSummaryAdminPage() {
   // null = status not loaded yet.
   const [configured, setConfigured] = useState<boolean | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -85,11 +89,6 @@ export default function RecepceSummaryKeyTab() {
 
   return (
     <div className={styles.wrap}>
-      <p className={styles.intro}>
-        Stránka Souhrn recepce je navíc chráněná číselným přístupovým klíčem. Klíč se zadává při každém
-        otevření stránky – neukládá se do prohlížeče. Zde jej můžete nastavit nebo změnit.
-      </p>
-
       {loadError && <div className={styles.err}>{loadError}</div>}
 
       {configured !== null && (
@@ -119,6 +118,7 @@ export default function RecepceSummaryKeyTab() {
               type="password"
               inputMode="numeric"
               autoComplete="off"
+              autoFocus
               className={styles.input}
               value={newPin}
               onChange={(e) => setNewPin(e.target.value)}
