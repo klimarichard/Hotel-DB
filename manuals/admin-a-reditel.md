@@ -313,6 +313,32 @@ Stránka **Šablony smluv** obsahuje editor ve stylu Wordu (TipTap): formátová
 
 > 📷 *(Místo pro snímek obrazovky: editor šablon)*
 
+#### Vlastní proměnné
+
+Kromě předdefinovaných proměnných (jméno, mzda, datum…) má každá šablona navíc **10 volných slotů** – `{{var1}}` až `{{var10}}` – jejichž **význam a typ si určíte sami**, zvlášť pro každou šablonu.
+
+**Vložení a nastavení proměnné**
+
+1. V pravém panelu proměnných najdete skupinu **„Vlastní proměnné"** s tlačítky **var1** až **var10**.
+2. Kliknutím na některé z nich (např. **var1**) jej vložíte do textu šablony na místo kurzoru – stejně jako u ostatních proměnných.
+3. Tlačítkem **⚙ Nastavit…** otevřete okno se seznamem vlastních proměnných, které jsou v šabloně skutečně použité. U každé vyplníte:
+   - **Název** – text, který se zobrazí při vyplňování hodnoty během generování dokumentu (např. „Výše pokuty").
+   - **Typ** – **Text**, **Datum**, **Číslo**, nebo **Ano/Ne**.
+4. Okno zavřete a nastavení uložíte společně se šablonou tlačítkem **Uložit**.
+
+> 📝 Název a typ platí **jen pro tuto jednu šablonu**. Stejná proměnná (např. `{{var1}}`) tak může v jedné šabloně znamenat „Výše pokuty" a v jiné „Datum školení" – aplikace si to pamatuje odděleně pro každou šablonu.
+
+**Vyplnění při generování dokumentu**
+
+- Používá-li šablona alespoň jednu vlastní proměnnou, zobrazí se v okně generování dokumentu nová sekce **„Vlastní proměnné"** s jedním polem pro každou použitou proměnnou, popsaným nastaveným **Názvem**.
+- Podle zvoleného **Typu** se nabídne odpovídající pole: **Datum** ukáže výběr data z kalendáře, **Číslo** číselné pole, **Ano/Ne** zaškrtávací políčko, **Text** obyčejné textové pole.
+
+> ⚠️ Tyto hodnoty se **nikam neukládají** – zadáváte je znovu při každém generování dokumentu, i pro tutéž šablonu.
+
+> 📝 Dokument nejde vygenerovat, dokud nejsou vyplněné všechny vlastní proměnné typu **Text**, **Datum** a **Číslo** – tlačítko **Generovat PDF** zůstane neaktivní a nad ním se zobrazí seznam chybějících proměnných. Výjimkou je typ **Ano/Ne**: nezaškrtnuté políčko je platná odpověď a generování nikdy neblokuje.
+
+> 💡 **Tip:** proměnnou typu **Ano/Ne** lze v textu šablony zkombinovat s podmíněným blokem `{{#if var1}}…{{/if}}`, takže se podle zaškrtnutí při generování zobrazí, nebo naopak skryje celý odstavec – např. doložka, která se týká jen některých smluv.
+
 ---
 
 ## Upozornění
