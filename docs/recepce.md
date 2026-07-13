@@ -1271,6 +1271,16 @@ in `MENU_ITEMS` (`frontend/src/lib/menuItems.ts`) and is reachable only by typin
 the address. The permission is still the real gate; the unlisted path is only
 about discoverability.
 
+### No audit logging (deliberate exception)
+
+**Nothing on this page is written to `auditLog/`** — not the "Provize minus"
+create/update/delete, not a pass-key rotation, and nothing added here later. This
+is an explicit, intentional exception to the project rule that every write
+endpoint calls the audit helper: an entry in the change log would advertise the
+page's existence to everyone allowed to read the log, which defeats the point of
+an unlisted, pass-key-protected page. `functions/src/routes/recepceSummary.ts`
+imports no audit helper at all — keep it that way when adding routes to it.
+
 ### Pass-key (PIN) — the second gate
 
 On top of the permission, the page is locked behind a numeric pass-key
@@ -1298,9 +1308,7 @@ every mount (refresh, or navigate away and back).
 - **Management.** `GET /key-status` → `{ configured }`; `PUT /key { newPin,
   currentPin? }` sets or rotates it (`currentPin` required once one exists).
   Both reuse the `recepce.summary.view` permission – no separate key. The UI is
-  Nastavení → **Souhrn recepce**. Rotation is audit-logged as
-  `settings/recepceSummaryKey` `passKeyUpdatedAt` (the fact and the actor, never
-  the PIN or hash).
+  Nastavení → **Souhrn recepce**. A rotation is NOT audit-logged (see above).
 - **Fail-closed bootstrap.** With no key configured, `/unlock` answers 409
   `KEY_NOT_SET` and the page tells the user to set one in Nastavení. **After
   deploying to a fresh environment the key must be set once, or the page stays
