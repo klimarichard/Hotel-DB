@@ -875,22 +875,20 @@ function terminalFixture(
 // ─── Návody-demo fixtures (`/guides` via /napoveda/ukazka-navody) ─────────────
 //
 // The REAL GuidesPage fed with mock data. Its ONLY mount endpoint is
-// `GET /guides` ({ categories, guides }) – a missing branch here would leave the
-// tour page blank. Opening a PDF (`GET /guides/:id/file`) is a RAW fetch that
-// bypasses lib/api, so it can't be mocked; the tour therefore only shows the
-// list and never opens a guide.
-
-const demoGuideCategories: unknown[] = [
-  { id: "gc-recepce", name: "Recepce", order: 0 },
-  { id: "gc-mzdy", name: "Mzdy", order: 1 },
-];
+// `GET /guides` ({ guides, tags }) – a missing branch here would leave the tour
+// page blank. Opening a PDF (`GET /guides/:id/file`) is a RAW fetch that bypasses
+// lib/api, so it can't be mocked; the tour therefore only shows the list and
+// never opens a guide.
+//
+// Guides carry several tags each – that overlap is the whole point of tags, so
+// the demo data has to show it (a guide that is both "Recepce" and "Protel").
 
 const demoGuides: unknown[] = [
   {
     id: "g1",
     title: "Předávací protokol krok za krokem",
     description: "Jak správně vyplnit a podepsat předávací protokol na konci směny.",
-    categoryId: "gc-recepce",
+    tags: ["Recepce", "Směny"],
     kind: "pdf",
     url: "",
     fileName: "predavaci-protokol.pdf",
@@ -900,7 +898,7 @@ const demoGuides: unknown[] = [
     id: "g2",
     title: "Check-in hosta v Protelu",
     description: "Postup ubytování hosta včetně walk-inů.",
-    categoryId: "gc-recepce",
+    tags: ["Recepce", "Protel"],
     kind: "pdf",
     url: "",
     fileName: "check-in-protel.pdf",
@@ -910,7 +908,7 @@ const demoGuides: unknown[] = [
     id: "g3",
     title: "Manuál k systému Protel (web)",
     description: "Oficiální dokumentace dodavatele.",
-    categoryId: "gc-recepce",
+    tags: ["Protel", "Školení"],
     kind: "link",
     url: "https://example.com/protel",
     fileName: "",
@@ -920,13 +918,16 @@ const demoGuides: unknown[] = [
     id: "g4",
     title: "Jak číst mzdový výměr",
     description: "Vysvětlení jednotlivých položek ve výplatní pásce.",
-    categoryId: "gc-mzdy",
+    tags: ["Mzdy"],
     kind: "pdf",
     url: "",
     fileName: "mzdovy-vymer.pdf",
-    order: 0,
+    order: 3,
   },
 ];
+
+/** Tag vocabulary the real backend derives from the guides; mirrored here. */
+const demoGuideTags = ["Mzdy", "Protel", "Recepce", "Směny", "Školení"];
 
 /** Serve mocks for /guides/* while the návody demo is active. */
 function guidesFixture(
@@ -935,9 +936,9 @@ function guidesFixture(
 ): { hit: boolean; value?: unknown } | null {
   if (clean !== "/guides" && !clean.startsWith("/guides/")) return null;
   if (!isGet) return { hit: true, value: {} };
-  // Mount endpoint: the whole page (categories + guides) comes from here.
+  // Mount endpoint: the whole page (guides + tag vocabulary) comes from here.
   if (clean === "/guides") {
-    return { hit: true, value: { categories: demoGuideCategories, guides: demoGuides } };
+    return { hit: true, value: { guides: demoGuides, tags: demoGuideTags } };
   }
   return { hit: true, value: {} };
 }
@@ -1125,7 +1126,7 @@ export function getDemoResponse(
       return lobbyBarFixture(isGet, clean) ?? { hit: false };
     case "terminal":
       return terminalFixture(isGet, clean) ?? { hit: false };
-    // ── Návody demo (list of PDF/link guides grouped by category) ──
+    // ── Návody demo (list of PDF/link guides with tags) ──
     case "guides":
       return guidesFixture(isGet, clean) ?? { hit: false };
     default:

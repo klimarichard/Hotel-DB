@@ -66,7 +66,6 @@ const COLLECTION_CATEGORY: Record<string, AuditCategory> = {
   payrollPeriods: "mzdy",
   contractTemplates: "sablony",
   guides: "navody",
-  guideCategories: "navody",
   employeeChangeRequests: "mujProfil",
   users: "nastaveni",
   roleTypes: "nastaveni",

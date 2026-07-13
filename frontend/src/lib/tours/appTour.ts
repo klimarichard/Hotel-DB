@@ -46,10 +46,10 @@ const DEMO_WALKINY = "/napoveda/ukazka-walkiny"; // populated walk-ins table
 const DEMO_TAXI = "/napoveda/ukazka-taxi"; // populated rides + routes ceník
 const DEMO_LOBBY_BAR = "/napoveda/ukazka-lobby-bar"; // populated sales + item ceník (Ambiance only)
 const DEMO_TERMINAL = "/napoveda/ukazka-terminal"; // populated payments (Amigo & Alqush only)
-// Návody demo: the REAL Návody page on mock categories + guides. The PDF viewer
+// Návody demo: the REAL Návody page on mock guides + tags. The PDF viewer
 // fetches its binary with a raw fetch (not via lib/api), so it CANNOT be mocked –
 // the tour only shows the list and never opens a guide.
-const DEMO_GUIDES = "/napoveda/ukazka-navody"; // populated guide list (2 categories)
+const DEMO_GUIDES = "/napoveda/ukazka-navody"; // populated guide list (tagged guides)
 
 /**
  * Section labels for the "Předchozí/Další sekce" jump buttons. Set `section` only
@@ -237,8 +237,9 @@ export const APP_TOUR_STEPS: TourStep[] = [
 
   // ── Návody (/navody) ─────────────────────────────────────────────────────────────
   { section: SECTIONS.guides, permission: "nav.guides.view", addedInVersion: 14, anchor: "nav-navody", mobileAnchor: "bottomnav-more", title: "Návody", body: "V sekci Návody najdete návody a užitečné materiály k práci s aplikací i k hotelovým systémům.", mobileBody: "V sekci Návody najdete návody a užitečné materiály k práci s aplikací i k hotelovým systémům. Na telefonu ji otevřete přes záložku Více ve spodní liště.", placement: "right" },
-  { permission: "nav.guides.view", addedInVersion: 14, anchor: "guides-page", route: DEMO_GUIDES, title: "Seznam návodů", body: "Návody jsou rozdělené do kategorií. Kliknutím na návod ho otevřete – návod ve formátu PDF se zobrazí přímo v aplikaci, odkaz se otevře na nové záložce prohlížeče.", placement: "top" },
-  { permission: "guides.manage", addedInVersion: 14, anchor: "guides-manage", route: DEMO_GUIDES, title: "Správa návodů", body: "Můžete zakládat kategorie, nahrávat návody ve formátu PDF (maximálně 7 MB) nebo přidávat odkazy na externí stránky. Existující návody i kategorie lze upravovat a mazat.", placement: "bottom" },
+  { permission: "nav.guides.view", addedInVersion: 14, anchor: "guides-page", route: DEMO_GUIDES, title: "Seznam návodů", body: "Kliknutím na návod ho otevřete – návod ve formátu PDF se zobrazí přímo v aplikaci, odkaz se otevře na nové záložce prohlížeče. Každý návod může mít několik štítků; kliknutím na štítek zobrazíte jen návody s tímto štítkem.", placement: "top" },
+  { permission: "nav.guides.view", addedInVersion: 14, anchor: "guides-search", route: DEMO_GUIDES, title: "Hledání", body: "Do vyhledávacího pole napište, co hledáte – prohledávají se názvy, popisy i štítky. Na diakritice nezáleží.", placement: "bottom" },
+  { permission: "guides.manage", addedInVersion: 14, anchor: "guides-manage", route: DEMO_GUIDES, title: "Správa návodů", body: "Můžete nahrávat návody ve formátu PDF (maximálně 7 MB) nebo přidávat odkazy na externí stránky. U každého návodu zadáte štítky, podle kterých se pak dá filtrovat a vyhledávat.", placement: "bottom" },
 
   // ── Uživatelé a oprávnění (/nastaveni) – before the číselník tabs ──────────────────
   { section: SECTIONS.settings, permission: "nav.settings.view", anchor: "nav-nastaveni", mobileAnchor: "bottomnav-more", title: "Nastavení", body: "Nastavení obsahuje seznamy (firem, pracovních pozic apod.), správu uživatelů, uživatelských typů a další konfiguraci.", mobileBody: "Nastavení obsahuje seznamy, správu uživatelů a další konfiguraci. Na telefonu je otevřete přes záložku Více ve spodní liště.", placement: "right" },

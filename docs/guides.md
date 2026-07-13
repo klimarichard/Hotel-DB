@@ -1,39 +1,49 @@
 # Guides (Návody)
 
-Reference-material feature for staff: uploaded PDF tutorials and links to external resources (Google Drive folders, videos, …), grouped into named categories. Route `/navody`, page component `frontend/src/pages/GuidesPage.tsx`, backend router `functions/src/routes/guides.ts` (mounted at `/guides` in `functions/src/index.ts`, so the public path is `/api/guides`).
+Reference-material feature for staff: uploaded PDF tutorials and links to external resources (Google Drive folders, videos, …), classified by free-form tags. Route `/navody`, page component `frontend/src/pages/GuidesPage.tsx`, backend router `functions/src/routes/guides.ts` (mounted at `/guides` in `functions/src/index.ts`, so the public path is `/api/guides`).
 
 ## Data model
 
-Two top-level Firestore collections, no sub-collections:
+One top-level Firestore collection, no sub-collections and no tag/category collection:
 
 ```
-guideCategories/{id} = {
-  name: string,
-  order: number,           // display order within the page
-  createdAt, createdBy,
-  updatedAt?, updatedBy?,
-}
-
 guides/{id} = {
   title: string,
   description: string,     // "" when omitted, never undefined
-  categoryId: string,      // guideCategories/{id}
-  kind: "pdf" | "link",    // fixed for the life of the doc — never changes on edit
-  order: number,           // display order within its category
+  tags: string[],           // free-form, normalised server-side — see below
+  kind: "pdf" | "link",     // fixed for the life of the doc — never changes on edit
+  order: number,            // display order across the whole flat list
   createdAt, createdBy,
   updatedAt?, updatedBy?,
 
   // kind === "link"
-  url: string,             // http(s) only, validated server-side
+  url: string,              // http(s) only, validated server-side
 
   // kind === "pdf"
-  storagePath: string,     // "guides/{id}.pdf"
+  storagePath: string,      // "guides/{id}.pdf"
   contentType: "application/pdf",
-  fileName: string,        // original upload filename, display-only
+  fileName: string,         // original upload filename, display-only
 }
 ```
 
-`GET /api/guides` returns `{ categories, guides }` in one call, both already sorted by `order` — the whole page loads from a single request. The PDF bytes are never included; the viewer fetches them separately only when a PDF guide is opened.
+`GET /api/guides` returns `{ guides, tags }` in one call, `guides` already sorted by `order`. There is no tag collection: `tags` is the de-duplicated (case-insensitive, Czech-collated) union of every tag on every guide, computed on each request. This makes the tag vocabulary **self-pruning** — remove the last guide carrying a tag and the tag simply stops appearing in the list. The PDF bytes are never included; the viewer fetches them separately only when a PDF guide is opened.
+
+### Why tags instead of a category
+
+A guide routinely belongs to several topics at once (e.g. "Recepce" *and* "Protel"), which a one-category-per-guide model can't express — a guide had to live in exactly one bucket, forcing an arbitrary choice or duplicate entries. Tags let a guide carry as many topics as apply, and the vocabulary derives from usage instead of being separately curated and going stale.
+
+### Tag normalisation (`normalizeTags`, `guides.ts`)
+
+Applied server-side on every create/update, so the client's raw input never lands verbatim:
+
+- Trim each tag, collapse inner whitespace to a single space, drop empty strings.
+- Cap at **40 characters** per tag.
+- Cap at **20 tags** per guide (extra tags beyond the 20th are silently dropped).
+- De-duplicate case-insensitively (Czech locale), keeping the **first spelling** seen — so a guide can't carry both "Recepce" and "recepce". Display casing is otherwise preserved.
+
+### Legacy `categoryId` — do not resurrect
+
+Guides created before this redesign shipped still carry a `categoryId` field (pointing at a now-defunct `guideCategories/{id}` doc) and no `tags`. The field is **read-tolerantly ignored** — never migrated, never deleted — so those guides simply read back as untagged: still listed, still openable, still searchable by title/description. `guideCategories` docs left over on staging are orphaned and unused; nothing reads or writes that collection anymore. If you encounter `categoryId` in old data or old code history, it is inert — do not build new logic around it.
 
 ## Storage
 
@@ -61,19 +71,24 @@ The modal closes only via its buttons (✕ / Zavřít) — never on backdrop cli
 
 A `kind: "link"` guide's `url` is rendered as `window.open(guide.url, ...)` from a plain click handler. `isSafeHttpUrl()` in `guides.ts` parses the value with `new URL(...)` and requires `protocol === "http:" || "https:"`, on both create and update. This blocks a stored `javascript:` (or other non-http scheme) URL from ever becoming a client-side XSS vector — the check exists purely because the value is persisted and later re-rendered as a navigable link, not because the input form does anything unusual.
 
-## Categories
+## Search and tag filtering (client-side)
 
-- `POST /guides/categories` — appends to the end (`order` = current max + 1).
-- `PUT /guides/categories/:id` — rename only.
-- `PUT /guides/categories/order` — bulk reorder via `{ orderedIds: string[] }`.
-- `DELETE /guides/categories/:id` — **refused with `409`** while the category still contains any guide (`Kategorie obsahuje návody. Nejprve je přesuňte do jiné kategorie nebo smažte.`). Guides are grouped strictly by `categoryId` with no "uncategorized" bucket in the UI, so a silent delete would orphan them off the page entirely; the admin must move or delete the guides first.
+`GuidesPage.tsx` renders a search box plus a row of tag-chip filters, both operating purely on the already-loaded `guides` array — no query round-trip per keystroke. This is deliberate: the guide list is small (tens of rows, no file bytes) and Firestore has no native full-text search, so filtering in the browser is both simpler and instant.
+
+- **Search box**: full-text match over `title + description + tags`, computed via the `fold()` helper — lowercase (Czech locale) + Unicode NFD normalisation + strip combining marks — so it is **diacritics-insensitive** ("uzaverka" matches "Uzávěrka"). Czech staff routinely type without diacritics; an accent-sensitive search would silently return nothing for them.
+- Multiple space-separated words in the search box are **AND**ed (narrowing) — every word must appear somewhere in the haystack.
+- **Tag chips**: clicking a tag in the filter row (or on a guide's own tag pills in the list) toggles it into `activeTags`. Several active tags are also **AND**ed — a guide must carry every active tag to remain visible.
+- The tag-chip row itself is populated from the server-derived `tags` vocabulary (`GET /api/guides` response), not from the currently-visible guides, so chips don't disappear/reappear as you filter.
+- A "Zrušit filtr" button clears both the search box and active tags; it only renders while a filter is active.
 
 ## Guides — create/edit/delete/reorder
 
-- `POST /guides` — body `{ title, description?, categoryId, kind, url? (kind=link), pdfBase64? + fileName? (kind=pdf) }`. `order` is computed server-side (append to the end of the target category).
-- `PUT /guides/:id` — edits metadata; `kind` can never change (a guide is either always a PDF or always a link). For a PDF guide, `pdfBase64` is optional — omitting it keeps the existing file; supplying it re-uploads to the **same** `storagePath`, so no blob is orphaned. Moving `categoryId` re-appends the guide to the end of the new category (`order` recomputed).
-- `PUT /guides/order` — bulk reorder within a category via `{ orderedIds: string[] }`. `GuidesPage.tsx` calls this from the ↑/↓ row buttons with an optimistic local reorder, rolling back (`load()`) on failure.
+- `POST /guides` — body `{ title, description?, tags?: string[], kind, url? (kind=link), pdfBase64? + fileName? (kind=pdf) }`. `tags` passes through `normalizeTags`. `order` is computed server-side (append to the end of the whole list — there are no per-category buckets to append within).
+- `PUT /guides/:id` — edits metadata + tags (`normalizeTags` again); `kind` can never change (a guide is either always a PDF or always a link). For a PDF guide, `pdfBase64` is optional — omitting it keeps the existing file; supplying it re-uploads to the **same** `storagePath`, so no blob is orphaned.
+- `PUT /guides/order` — bulk reorder over the **whole flat list** via `{ orderedIds: string[] }`. `GuidesPage.tsx` calls this from the ↑/↓ row buttons with an optimistic local reorder, rolling back (`load()`) on failure. The ↑/↓ buttons (and reordering generally) are only offered when the list is **unfiltered** — moving a row "up" past hidden rows would be meaningless once a search/tag filter is narrowing the visible set.
 - `DELETE /guides/:id` — best-effort deletes the Storage blob first (a missing/already-gone file does not block the Firestore delete), then removes the doc.
+
+In the edit/create modal, tags are entered as free text with Enter (or comma) committing each one; existing-tag autocomplete suggestions are drawn from the same server-derived vocabulary, filtered to exclude tags already on the draft. A tag typed but not yet committed when "Uložit" is pressed is committed automatically so it isn't silently lost.
 
 All writes are audit-logged (`logCreate`/`logUpdate`/`logDelete`, category `navody` — see below); reads are not.
 
@@ -86,7 +101,7 @@ Two keys, catalog group **"Návody"**:
 | `nav.guides.view` | Zobrazit Návody | every built-in type (in `BASE_SELF`) — guides are reference material for everyone |
 | `guides.manage` | Spravovat návody | `director`; `admin` via `system.admin` expansion |
 
-`nav.guides.view` gates the page/menu item **and** every read endpoint (`GET /guides`, `GET /guides/:id/file`) — there is no separate `guides.view`. `guides.manage` gates every write endpoint (categories + guides, including reorder). `manager`/`employee`/`accountant` can see and open guides but not manage them; nothing needs an explicit grant to view guides on a fresh environment.
+`nav.guides.view` gates the page/menu item **and** every read endpoint (`GET /guides`, `GET /guides/:id/file`) — there is no separate `guides.view`. `guides.manage` gates every write endpoint (create/edit/delete/reorder). `manager`/`employee`/`accountant` can see, search, and open guides but not manage them; nothing needs an explicit grant to view guides on a fresh environment.
 
 See [Authentication, Roles & Permissions](auth-and-permissions.md) for the general permission model, and `PERMISSIONS_LIST.md` for the flat catalog notation.
 
@@ -100,4 +115,4 @@ See [Authentication, Roles & Permissions](auth-and-permissions.md) for the gener
 
 ## Audit log
 
-`guides` and `guideCategories` both map to audit category `navody` (`COLLECTION_CATEGORY` in `functions/src/services/auditLog.ts`; Czech label `"Návody"` in `frontend/src/lib/audit/labels.ts`), so every create/update/delete on either collection shows up under the **Návody** page filter in `/audit`. There is no `reveal`/`export` surface here — guides carry no sensitive fields.
+`guides` maps to audit category `navody` (`COLLECTION_CATEGORY` in `functions/src/services/auditLog.ts`; Czech label `"Návody"` in `frontend/src/lib/audit/labels.ts`), so every create/update/delete on the collection shows up under the **Návody** page filter in `/audit`. There is no `reveal`/`export` surface here — guides carry no sensitive fields. (The old `guideCategories` entry was removed from `COLLECTION_CATEGORY` along with the collection itself.)
