@@ -21,13 +21,19 @@
  * Also hosts the persistent "Provize minus" table (a small cross-hotel
  * collection of manual per-employee deductions) and a range-wide employee
  * dropdown for it. All routes require `recepce.summary.view`.
+ *
+ * NO AUDIT LOGGING — deliberate, and an explicit exception to the project rule
+ * that every write endpoint calls the audit helper. Nothing that happens on this
+ * page (Provize minus writes, pass-key rotation, anything added later) may leave
+ * a trace in `auditLog/`, because an entry there would advertise the page's
+ * existence to everyone who can read the change log. Do not "fix" this by adding
+ * logCreate/logUpdate/logDelete calls to any route in this file.
  */
 import { Router, Response } from "express";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireAuth, AuthRequest } from "../middleware/auth";
 import { requirePermission } from "../auth/permissions";
-import { ctxFromReq, logCreate, logUpdate, logDelete } from "../services/auditLog";
 import { HOTEL_SLUGS, HotelSlug, HOTEL_LABELS, SLUG_TO_CODE } from "../services/hotels";
 import { walkinCol, WalkinDoc, isDateStr } from "../services/walkinShared";
 import { taxiRideCol, TaxiRideDoc } from "../services/taxiShared";
@@ -356,11 +362,6 @@ recepceSummaryRouter.post(
       updatedAt: FieldValue.serverTimestamp(),
     });
     const saved = await ref.get();
-    await logCreate(ctxFromReq(req), {
-      collection: "recepceProvizeMinus",
-      resourceId: ref.id,
-      summary: { date: parsed.date, employeeName: parsed.employeeName, amount: parsed.amount, note: parsed.note },
-    });
     res.json({ id: ref.id, ...saved.data() });
   }
 );
@@ -377,7 +378,6 @@ recepceSummaryRouter.put(
       res.status(404).json({ error: "Záznam nenalezen." });
       return;
     }
-    const before = snap.data() as ProvizeMinusDoc;
     const parsed = parseProvizeMinus(req.body);
     if ("error" in parsed) {
       res.status(400).json({ error: parsed.error });
@@ -385,12 +385,6 @@ recepceSummaryRouter.put(
     }
     await ref.set({ ...parsed, updatedBy: req.uid, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
     const saved = await ref.get();
-    await logUpdate(ctxFromReq(req), {
-      collection: "recepceProvizeMinus",
-      resourceId: ref.id,
-      before: before as unknown as Record<string, unknown>,
-      after: { ...(before as unknown as Record<string, unknown>), ...parsed },
-    });
     res.json({ id: ref.id, ...saved.data() });
   }
 );
@@ -407,13 +401,7 @@ recepceSummaryRouter.delete(
       res.status(404).json({ error: "Záznam nenalezen." });
       return;
     }
-    const before = snap.data() as ProvizeMinusDoc;
     await ref.delete();
-    await logDelete(ctxFromReq(req), {
-      collection: "recepceProvizeMinus",
-      resourceId: req.params.id,
-      summary: { date: before.date, employeeName: before.employeeName, amount: before.amount, note: before.note },
-    });
     res.json({ ok: true });
   }
 );
@@ -498,8 +486,8 @@ recepceSummaryRouter.post(
 /**
  * PUT /api/recepce-summary/key  { newPin, currentPin? }
  * Sets or rotates the pass-key. `currentPin` is required once a key exists, so a
- * hijacked session cannot silently replace it. The audit entry records only THAT
- * the key changed and by whom — never the PIN or its hash.
+ * hijacked session cannot silently replace it. Not audit-logged (see the file
+ * header).
  */
 recepceSummaryRouter.put(
   "/key",
@@ -548,16 +536,7 @@ recepceSummaryRouter.put(
       await clearFailures(uid);
     }
 
-    const changedAt = new Date().toISOString();
     await setPin(body.newPin, uid);
-
-    await logUpdate(ctxFromReq(req), {
-      collection: "settings",
-      resourceId: "recepceSummaryKey",
-      before: { passKeyUpdatedAt: configured ? "nastaven" : "nenastaven" },
-      after: { passKeyUpdatedAt: changedAt },
-    });
-
     res.json({ ok: true });
   }
 );
