@@ -22,14 +22,44 @@
   margin: 0;
 }
 
+/* Takes the whole gap between the left-hand controls and the right-hand save
+   buttons, so the custom-variable warning can run on a single line instead of
+   wrapping inside a narrow box. */
 .headerActions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 12px;
+  flex: 1;
+  min-width: 0;
+  margin-left: 24px; /* clearance from the "Nová šablona" button */
 }
 
 .saveMsg {
   font-size: 0.875rem;
+}
+
+/* "⚠ Bez nastavení: var2 …" – a clickable one-liner that opens the config
+   dialog. Grows to fill the header, and ellipsises rather than wrapping if the
+   window is genuinely too narrow (the full text stays in the tooltip). */
+.varWarn {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.875rem;
+  color: var(--color-danger-text-strong);
+  background: none;
+  border: 0;
+  padding: 0;
+  font-family: inherit;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.varWarn:hover {
+  text-decoration: underline;
 }
 
 .saveMsgOk {
