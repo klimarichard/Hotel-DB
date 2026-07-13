@@ -59,7 +59,8 @@ export type TourScenario =
   | "walkiny"
   | "taxi"
   | "lobby-bar"
-  | "terminal";
+  | "terminal"
+  | "guides";
 export const tourDemo: { active: boolean; scenario: TourScenario | null } = {
   active: false,
   scenario: null,
@@ -871,6 +872,77 @@ function terminalFixture(
   };
 }
 
+// ─── Návody-demo fixtures (`/guides` via /napoveda/ukazka-navody) ─────────────
+//
+// The REAL GuidesPage fed with mock data. Its ONLY mount endpoint is
+// `GET /guides` ({ guides, tags }) – a missing branch here would leave the tour
+// page blank. Opening a PDF (`GET /guides/:id/file`) is a RAW fetch that bypasses
+// lib/api, so it can't be mocked; the tour therefore only shows the list and
+// never opens a guide.
+//
+// Guides carry several tags each – that overlap is the whole point of tags, so
+// the demo data has to show it (a guide that is both "Recepce" and "Protel").
+
+const demoGuides: unknown[] = [
+  {
+    id: "g1",
+    title: "Předávací protokol krok za krokem",
+    description: "Jak správně vyplnit a podepsat předávací protokol na konci směny.",
+    tags: ["Recepce", "Směny"],
+    kind: "pdf",
+    url: "",
+    fileName: "predavaci-protokol.pdf",
+    order: 0,
+  },
+  {
+    id: "g2",
+    title: "Check-in hosta v Protelu",
+    description: "Postup ubytování hosta včetně walk-inů.",
+    tags: ["Recepce", "Protel"],
+    kind: "pdf",
+    url: "",
+    fileName: "check-in-protel.pdf",
+    order: 1,
+  },
+  {
+    id: "g3",
+    title: "Manuál k systému Protel (web)",
+    description: "Oficiální dokumentace dodavatele.",
+    tags: ["Protel", "Školení"],
+    kind: "link",
+    url: "https://example.com/protel",
+    fileName: "",
+    order: 2,
+  },
+  {
+    id: "g4",
+    title: "Jak číst mzdový výměr",
+    description: "Vysvětlení jednotlivých položek ve výplatní pásce.",
+    tags: ["Mzdy"],
+    kind: "pdf",
+    url: "",
+    fileName: "mzdovy-vymer.pdf",
+    order: 3,
+  },
+];
+
+/** Tag vocabulary the real backend derives from the guides; mirrored here. */
+const demoGuideTags = ["Mzdy", "Protel", "Recepce", "Směny", "Školení"];
+
+/** Serve mocks for /guides/* while the návody demo is active. */
+function guidesFixture(
+  isGet: boolean,
+  clean: string
+): { hit: boolean; value?: unknown } | null {
+  if (clean !== "/guides" && !clean.startsWith("/guides/")) return null;
+  if (!isGet) return { hit: true, value: {} };
+  // Mount endpoint: the whole page (guides + tag vocabulary) comes from here.
+  if (clean === "/guides") {
+    return { hit: true, value: { guides: demoGuides, tags: demoGuideTags } };
+  }
+  return { hit: true, value: {} };
+}
+
 // ─── Dispatcher ───────────────────────────────────────────────────────────────
 
 /** Strip a query string (and any trailing slash noise) for matching. */
@@ -973,6 +1045,7 @@ function activeScenario(): TourScenario | null {
     case "/napoveda/ukazka-taxi": return "taxi";
     case "/napoveda/ukazka-lobby-bar": return "lobby-bar";
     case "/napoveda/ukazka-terminal": return "terminal";
+    case "/napoveda/ukazka-navody": return "guides";
     default: return null;
   }
 }
@@ -1053,6 +1126,9 @@ export function getDemoResponse(
       return lobbyBarFixture(isGet, clean) ?? { hit: false };
     case "terminal":
       return terminalFixture(isGet, clean) ?? { hit: false };
+    // ── Návody demo (list of PDF/link guides with tags) ──
+    case "guides":
+      return guidesFixture(isGet, clean) ?? { hit: false };
     default:
       return { hit: false };
   }

@@ -18,6 +18,7 @@ export type AuditCategory =
   | "zamestnanci"
   | "mzdy"
   | "sablony"
+  | "navody"
   | "mujProfil"
   | "nastaveni"
   | "system";
@@ -64,6 +65,7 @@ const COLLECTION_CATEGORY: Record<string, AuditCategory> = {
   otherDocuments: "zamestnanci",
   payrollPeriods: "mzdy",
   contractTemplates: "sablony",
+  guides: "navody",
   employeeChangeRequests: "mujProfil",
   users: "nastaveni",
   roleTypes: "nastaveni",

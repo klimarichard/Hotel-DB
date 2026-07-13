@@ -16,7 +16,7 @@ Two password-reset flows using Firebase Auth built-in email:
 
 ### Permission catalogue (fixed vocabulary)
 
-Permissions are a **fixed vocabulary of ~133 granular keys** — a catalogue, not free-form strings. (Went from ~87 to ~131 when the **Recepce** group was added — 42 keys: 1 `nav.recepce.view` master + 41 global/per-hotel keys — then to ~133 when the Lobby bar and Terminál tabs shipped and added `recepce.ambiance.lobbyBar.manage` + `recepce.amigo.terminal.manage` — see [Recepce → Permission model](recepce.md#permission-model).)
+Permissions are a **fixed vocabulary of ~135 granular keys** — a catalogue, not free-form strings. (Went from ~87 to ~131 when the **Recepce** group was added — 42 keys: 1 `nav.recepce.view` master + 41 global/per-hotel keys — then to ~133 when the Lobby bar and Terminál tabs shipped and added `recepce.ambiance.lobbyBar.manage` + `recepce.amigo.terminal.manage`, then to ~135 when the **Návody** group added `nav.guides.view` + `guides.manage` — see [Recepce → Permission model](recepce.md#permission-model) and [Guides (Návody)](guides.md).)
 
 - **Backend source of truth**: `functions/src/auth/permissions.ts` (`PERMISSION_CATALOG`) — a **flat** list of `{ group, items: [{ key, label }] }`. The backend stores and validates a flat permission array and is unaware of the frontend hierarchy.
 - **Frontend mirror**: `frontend/src/lib/permissions/catalog.ts` — keys must stay in sync with the backend (a manual mirror; `scripts/_smoke-permissions-hierarchy.js` asserts the two key sets are equal). Since **v2.2.0** the frontend catalogue is **hierarchical** (`PERMISSION_SECTIONS`, one section per app page) — see "Hierarchical permission matrix" below.
@@ -70,6 +70,15 @@ model](recepce.md#permission-model). Two points worth surfacing here:
   only). `.manage` is level 3, nested under the tab's own `.view` (level 2) —
   same shape as `walkiny`/`taxi`. See [Recepce → Lobby
   bar](recepce.md#lobby-bar) / [Recepce → Terminál](recepce.md#terminal).
+
+#### Návody permissions
+
+| Key | Label | Granted to (built-in types) |
+|---|---|---|
+| `nav.guides.view` | Zobrazit Návody | every built-in type (`BASE_SELF`) — guides are reference material for everyone, so viewing needs no per-type grant |
+| `guides.manage` | Spravovat návody | director; admin (via `system.admin`) |
+
+Gates the `/navody` guides page (uploaded PDF tutorials + external links, classified by free-form tags — no category collection). `nav.guides.view` covers both the page/menu and every read endpoint; `guides.manage` covers every write (create/edit/delete/reorder). See [Guides (Návody)](guides.md) for the full feature writeup.
 
 ### Mobile-only gating (`mobilePermission` / `mobileAllow`)
 

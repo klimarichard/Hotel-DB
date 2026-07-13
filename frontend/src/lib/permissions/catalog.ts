@@ -268,6 +268,17 @@ export const PERMISSION_SECTIONS = [
     ],
   },
   {
+    title: "Návody",
+    subsections: [
+      {
+        items: [
+          { key: "nav.guides.view", label: "Zobrazit Návody", level: 0 },
+          { key: "guides.manage", label: "Spravovat návody", level: 1 },
+        ],
+      },
+    ],
+  },
+  {
     title: "Můj profil",
     subsections: [
       {

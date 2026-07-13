@@ -145,6 +145,7 @@ export type AuditCategory =
   | "zamestnanci"
   | "mzdy"
   | "sablony"
+  | "navody"
   | "mujProfil"
   | "nastaveni"
   | "system";
@@ -156,6 +157,7 @@ export const CATEGORIES: AuditCategory[] = [
   "zamestnanci",
   "mzdy",
   "sablony",
+  "navody",
   "mujProfil",
   "nastaveni",
   "system",
@@ -167,6 +169,7 @@ export const CATEGORY_LABELS: Record<AuditCategory, string> = {
   zamestnanci: "Zaměstnanci",
   mzdy: "Mzdy",
   sablony: "Šablony smluv",
+  navody: "Návody",
   mujProfil: "Můj profil",
   nastaveni: "Nastavení",
   system: "Systém",
