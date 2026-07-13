@@ -923,9 +923,10 @@ export default function ContractTemplatesPage() {
       const unnamed = usedCustomVars(htmlContent).filter(
         (k) => !variableDefs[k]?.label?.trim()
       );
+      // Kept to one line — the full explanation is in the button's tooltip.
       setVarWarning(
         unnamed.length > 0
-          ? `Bez nastavení: ${unnamed.join(", ")}. Nastavte název a typ (⚙ Nastavit… v panelu proměnných), jinak se při generování zobrazí jen ${unnamed[0]}.`
+          ? `Bez nastavení: ${unnamed.join(", ")} – chybí název a typ.`
           : null
       );
 
@@ -1095,17 +1096,8 @@ export default function ContractTemplatesPage() {
             {varWarning && (
               <button
                 type="button"
-                className={styles.saveMsg}
-                style={{
-                  color: "var(--color-warning-text, #92400e)",
-                  background: "none",
-                  border: 0,
-                  cursor: "pointer",
-                  textAlign: "left",
-                  maxWidth: "34rem",
-                  font: "inherit",
-                }}
-                title="Otevřít nastavení vlastních proměnných"
+                className={styles.varWarn}
+                title={`${varWarning} Kliknutím otevřete nastavení vlastních proměnných.`}
                 onClick={() => setCustomVarsOpen(true)}
               >
                 ⚠ {varWarning}
@@ -1887,7 +1879,7 @@ export default function ContractTemplatesPage() {
                     );
                     setVarWarning(
                       stillUnnamed.length > 0 && varWarning
-                        ? `Bez nastavení: ${stillUnnamed.join(", ")}. Nastavte název a typ, jinak se při generování zobrazí jen ${stillUnnamed[0]}.`
+                        ? `Bez nastavení: ${stillUnnamed.join(", ")} – chybí název a typ.`
                         : null
                     );
                     setCustomVarsOpen(false);
