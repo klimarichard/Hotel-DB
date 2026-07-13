@@ -151,6 +151,9 @@ const settings: FieldLabelMap = {
   minimumWage: "Minimální mzda",
   multisportBasePrice: "Základní cena Multisport",
   mealAllowanceMinHours: "Min. délka směny pro stravenku (h)",
+  // settings/recepceSummaryKey – only the fact + time of a rotation is logged,
+  // never the pass-key or its hash
+  passKeyUpdatedAt: "Přístupový klíč (Souhrn recepce) – změněn",
   // settings/menuOrder – per-role menu order arrays
   admin: "Pořadí menu – administrátor",
   director: "Pořadí menu – ředitel",
