@@ -41,6 +41,7 @@ export const PERMISSION_CATALOG = [
       { key: "nav.alerts.view", label: "Zobrazit Upozornění" },
       { key: "nav.contractTemplates.view", label: "Zobrazit Šablony smluv" },
       { key: "nav.audit.view", label: "Zobrazit Log změn" },
+      { key: "nav.guides.view", label: "Zobrazit Návody" },
       { key: "nav.settings.view", label: "Zobrazit Nastavení" },
       { key: "nav.profile.view", label: "Zobrazit Můj profil" },
     ],
@@ -207,6 +208,12 @@ export const PERMISSION_CATALOG = [
     ],
   },
   {
+    group: "Návody",
+    items: [
+      { key: "guides.manage", label: "Spravovat návody" },
+    ],
+  },
+  {
     group: "Přehled",
     items: [
       { key: "dashboard.view", label: "Zobrazit vlastní přehled" },
@@ -281,6 +288,8 @@ export const ALL_PERMISSIONS: Permission[] = PERMISSION_CATALOG.flatMap((g) =>
 const BASE_SELF: Permission[] = [
   "nav.dashboard.view",
   "nav.profile.view",
+  // Návody are reference material for everyone; only managing them is gated.
+  "nav.guides.view",
   "dashboard.view",
   "self.profile.requestEdit",
   "sensitive.reveal.self",
@@ -312,6 +321,7 @@ export const BUILTIN_TYPE_PERMISSIONS: Record<BuiltinTypeId, Permission[]> = {
     "vacation.view.all", "vacation.review", "vacation.request.forAny",
     "alerts.read",
     "changeRequests.review",
+    "guides.manage",
     "dashboard.tasks.view", "dashboard.stats.view", "dashboard.staffing.view",
     "settings.companies.manage", "settings.departments.manage",
     "settings.jobPositions.manage",
