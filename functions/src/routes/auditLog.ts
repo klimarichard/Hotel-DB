@@ -17,6 +17,24 @@ function multi(v: string | undefined): string[] {
 }
 
 /**
+ * Entries the change log must NEVER surface: everything produced by the
+ * "Souhrn recepce" page (`/4d`). That page is deliberately unlisted and
+ * pass-key protected, so an entry naming it in Log změn would advertise its
+ * existence to every user who can read the log.
+ *
+ * The summary routes write no audit entries at all any more (see
+ * routes/recepceSummary.ts), so this masks HISTORICAL rows written by earlier
+ * versions — and stays as a belt-and-braces guard so that anything which ever
+ * slips through remains invisible.
+ */
+function isHiddenEntry(e: Record<string, unknown>): boolean {
+  const collection = e.collection;
+  if (collection === "recepceProvizeMinus") return true;
+  if (collection === "settings" && e.resourceId === "recepceSummaryKey") return true;
+  return false;
+}
+
+/**
  * GET /api/audit
  * Admin-only. Lists audit-log entries newest-first with optional filters
  * and cursor-based pagination.
@@ -117,7 +135,12 @@ auditLogRouter.get(
       const docs = snap.docs.slice(0, limit);
       const nextCursor =
         snap.docs.length > limit ? snap.docs[limit - 1].id : undefined;
-      const entries = docs.map((d) => ({ id: d.id, ...d.data() }));
+      // Filtered AFTER the cursor is computed, so paging stays intact – a page
+      // simply comes back one or two rows shorter when it contained a hidden
+      // entry. Hidden entries are historical only; nothing writes new ones.
+      const entries = docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .filter((e) => !isHiddenEntry(e as Record<string, unknown>));
       res.json({ entries, nextCursor });
     } catch (err) {
       // A missing composite index throws FAILED_PRECONDITION (the error text
@@ -146,7 +169,7 @@ auditLogRouter.get(
   requirePermission("nav.audit.view"),
   async (req: AuthRequest, res: Response) => {
     const doc = await db().collection("auditLog").doc(req.params.id).get();
-    if (!doc.exists) {
+    if (!doc.exists || isHiddenEntry(doc.data() as Record<string, unknown>)) {
       res.status(404).json({ error: "Záznam nenalezen" });
       return;
     }
@@ -172,7 +195,9 @@ auditLogRouter.get(
       .get();
     const set = new Set<string>();
     for (const d of snap.docs) {
-      const c = (d.data() as Record<string, unknown>).collection;
+      const data = d.data() as Record<string, unknown>;
+      if (isHiddenEntry(data)) continue;
+      const c = data.collection;
       if (typeof c === "string" && c) set.add(c);
     }
     res.json([...set].sort());
