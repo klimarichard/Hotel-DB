@@ -20,7 +20,6 @@ interface Guide {
   kind: "pdf" | "link";
   url: string;
   fileName: string;
-  order: number;
 }
 
 interface GuidesResponse {
@@ -65,6 +64,9 @@ function fold(s: string): string {
  * guide routinely belongs to several topics at once. The search box does a
  * full-text, diacritics-insensitive match over name, description and tags;
  * clicking a tag filters by it (several tags = AND, i.e. narrowing).
+ *
+ * The list is always sorted alphabetically by title — there is no manual
+ * ordering, so nothing can drift out of sync when a guide is added or renamed.
  *
  * Viewing needs `nav.guides.view` (everyone); every mutation needs
  * `guides.manage`. The backend enforces both independently.
@@ -121,18 +123,23 @@ export default function GuidesPage() {
   }
 
   // Full-text over name + description + tags, plus the tag-chip filter (AND).
+  // Sorted alphabetically by title with Czech collation (so Č follows C, not Z).
+  // The backend sorts too; re-sorting here keeps the guarantee even when the data
+  // doesn't come from it (e.g. the guided-tour demo fixtures).
   const visible = useMemo(() => {
     const needles = fold(query).split(/\s+/).filter(Boolean);
-    return guides.filter((g) => {
-      if (activeTags.length > 0) {
-        const own = new Set(g.tags.map(fold));
-        if (!activeTags.every((t) => own.has(fold(t)))) return false;
-      }
-      if (needles.length === 0) return true;
-      const haystack = fold([g.title, g.description, ...g.tags].join(" "));
-      // Every word must appear somewhere — typing more words narrows.
-      return needles.every((n) => haystack.includes(n));
-    });
+    return guides
+      .filter((g) => {
+        if (activeTags.length > 0) {
+          const own = new Set(g.tags.map(fold));
+          if (!activeTags.every((t) => own.has(fold(t)))) return false;
+        }
+        if (needles.length === 0) return true;
+        const haystack = fold([g.title, g.description, ...g.tags].join(" "));
+        // Every word must appear somewhere — typing more words narrows.
+        return needles.every((n) => haystack.includes(n));
+      })
+      .sort((a, b) => a.title.localeCompare(b.title, "cs"));
   }, [guides, query, activeTags]);
 
   function toggleTag(tag: string) {
@@ -240,27 +247,6 @@ export default function GuidesPage() {
         }
       },
     });
-  }
-
-  /**
-   * Reordering applies to the full list, so it is only offered when the list is
-   * unfiltered — moving a row "up" past hidden rows would be meaningless.
-   */
-  async function moveGuide(guide: Guide, delta: -1 | 1) {
-    const ordered = [...guides].sort((a, b) => a.order - b.order);
-    const idx = ordered.findIndex((g) => g.id === guide.id);
-    const target = idx + delta;
-    if (target < 0 || target >= ordered.length) return;
-
-    [ordered[idx], ordered[target]] = [ordered[target], ordered[idx]];
-    setGuides(ordered.map((g, i) => ({ ...g, order: i })));
-
-    try {
-      await api.put("/guides/order", { orderedIds: ordered.map((g) => g.id) });
-    } catch (e) {
-      showError(errorMessage(e, "Pořadí se nepodařilo uložit."));
-      await load();
-    }
   }
 
   function openGuide(guide: Guide) {
@@ -381,28 +367,6 @@ export default function GuidesPage() {
 
             {canManage && (
               <div className={styles.itemActions}>
-                {!isFiltered && (
-                  <>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      disabled={guide.order === 0}
-                      onClick={() => moveGuide(guide, -1)}
-                    >
-                      ↑
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      disabled={guide.order === guides.length - 1}
-                      onClick={() => moveGuide(guide, 1)}
-                    >
-                      ↓
-                    </Button>
-                  </>
-                )}
                 <Button
                   type="button"
                   variant="ghost"

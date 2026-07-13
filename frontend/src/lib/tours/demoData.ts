@@ -892,7 +892,6 @@ const demoGuides: unknown[] = [
     kind: "pdf",
     url: "",
     fileName: "predavaci-protokol.pdf",
-    order: 0,
   },
   {
     id: "g2",
@@ -902,7 +901,6 @@ const demoGuides: unknown[] = [
     kind: "pdf",
     url: "",
     fileName: "check-in-protel.pdf",
-    order: 1,
   },
   {
     id: "g3",
@@ -912,7 +910,6 @@ const demoGuides: unknown[] = [
     kind: "link",
     url: "https://example.com/protel",
     fileName: "",
-    order: 2,
   },
   {
     id: "g4",
@@ -922,7 +919,6 @@ const demoGuides: unknown[] = [
     kind: "pdf",
     url: "",
     fileName: "mzdovy-vymer.pdf",
-    order: 3,
   },
 ];
 

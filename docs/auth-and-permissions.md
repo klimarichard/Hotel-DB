@@ -78,7 +78,7 @@ model](recepce.md#permission-model). Two points worth surfacing here:
 | `nav.guides.view` | Zobrazit Návody | every built-in type (`BASE_SELF`) — guides are reference material for everyone, so viewing needs no per-type grant |
 | `guides.manage` | Spravovat návody | director; admin (via `system.admin`) |
 
-Gates the `/navody` guides page (uploaded PDF tutorials + external links, classified by free-form tags — no category collection). `nav.guides.view` covers both the page/menu and every read endpoint; `guides.manage` covers every write (create/edit/delete/reorder). See [Guides (Návody)](guides.md) for the full feature writeup.
+Gates the `/navody` guides page (uploaded PDF tutorials + external links, classified by free-form tags — no category collection). `nav.guides.view` covers both the page/menu and every read endpoint; `guides.manage` covers every write (create/edit/delete). See [Guides (Návody)](guides.md) for the full feature writeup.
 
 ### Mobile-only gating (`mobilePermission` / `mobileAllow`)
 

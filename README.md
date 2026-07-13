@@ -216,6 +216,8 @@ Sekce **Návody** je knihovna instruktážních materiálů pro zaměstnance –
 2. Zobrazí se stránka s vyhledávacím polem **„Hledat v názvech, popisech a štítcích…"**, pod ním řádek klikacích **štítků** a pod tím seznam všech návodů.
 3. U každého návodu vidíte ikonu podle typu – 📄 pro PDF soubor, 🔗 pro odkaz –, jeho **název**, případně krátký **popis** a jeho **štítky**.
 
+> 📝 Seznam je vždy seřazený **abecedně podle názvu** (řazení respektuje české abecední pořadí, takže „Č" je hned za „C") a o pořadí se není třeba nijak starat – když se návod přidá, přejmenuje nebo smaže, seznam se automaticky přeřadí sám.
+
 Hledání a filtrování podle štítků lze libovolně kombinovat:
 
 - Do vyhledávacího pole napište libovolné slovo nebo jejich část – hledá se v **názvu**, **popisu** i **štítcích** návodu a nezáleží na diakritice (např. „uzaverka" najde i „Uzávěrka"). Napíšete-li víc slov, výsledek se zpřesňuje – zobrazí se jen návody, které obsahují všechna zadaná slova.
@@ -236,7 +238,7 @@ Kliknutím na název (nebo kdekoli na řádek) daného návodu jej otevřete. Ch
 
 ### Správa návodů (jen s oprávněním „Spravovat návody")
 
-Uživatelé s oprávněním **„Spravovat návody"** (typicky administrátor nebo ředitel) navíc vidí tlačítko **Nový návod** a u každého návodu tlačítka pro úpravu, mazání a přeřazení.
+Uživatelé s oprávněním **„Spravovat návody"** (typicky administrátor nebo ředitel) navíc vidí tlačítko **Nový návod** a u každého návodu tlačítka pro úpravu a mazání.
 
 1. Nový návod založíte tlačítkem **Nový návod** nahoře na stránce.
 2. Zvolíte **typ** – **PDF soubor**, nebo **Odkaz**. Typ jde zvolit jen při zakládání; u již vytvořeného návodu jej později změnit nelze.
@@ -250,8 +252,8 @@ Uživatelé s oprávněním **„Spravovat návody"** (typicky administrátor ne
 > 📝 U existujícího PDF návodu lze při úpravě (tlačítko **Upravit**) nahrát nový soubor přes pole **„Nahradit PDF (nepovinné)"** – ponecháte-li ho prázdné, zůstane uložen původní soubor.
 
 - Existující návod upravíte tlačítkem **Upravit** (otevře stejný formulář jako při zakládání, předvyplněný včetně štítků) nebo smažete tlačítkem **Smazat** – smazání je nevratné.
-- Pořadí návodů v seznamu změníte šipkami **↑** a **↓** u každého řádku – šipka nahoru přesune návod o jednu pozici výš, šipka dolů o jednu pozici níž.
-  > 📝 Šipky **↑** a **↓** se zobrazí, jen když není aktivní žádné hledání ani filtr podle štítků – přeřazování se totiž vztahuje na celý seznam najednou, takže při zúženém výběru by nedávalo smysl. Chcete-li návod přeřadit, nejdřív tlačítkem **Zrušit filtr** zobrazte celý seznam.
+
+> 📝 Pořadí návodů v seznamu se nedá nastavit ručně – seznam se řadí sám podle abecedy (viz výše), takže nově založený nebo přejmenovaný návod se automaticky objeví na správném místě.
 
 > 📷 *(Místo pro snímek obrazovky: formulář Nový návod s výběrem typu PDF/Odkaz a polem pro štítky)*
 
