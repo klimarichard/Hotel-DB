@@ -10,9 +10,12 @@ import { ctxFromReq, logCreate, logDelete, logUpdate } from "../services/auditLo
  * links to external resources (Google Drive folders, videos, …).
  *
  * One collection:
- *   guides/{id}  { title, description, tags[], kind, order, … }
+ *   guides/{id}  { title, description, tags[], kind, … }
  *                kind "pdf"  → storagePath (+ fileName, contentType)
  *                kind "link" → url
+ *
+ * The list is always sorted alphabetically by title (Czech collation) — see
+ * byTitle(). There is no stored order and no manual reordering.
  *
  * Guides are classified by free-form TAGS, not by a single category: a guide
  * routinely belongs to several topics at once ("Recepce" AND "Protel"), which a
@@ -29,8 +32,8 @@ import { ctxFromReq, logCreate, logDelete, logUpdate } from "../services/auditLo
  * reference material for everyone); every write is gated by `guides.manage`.
  *
  * Legacy note: guides created before tags shipped carry a `categoryId` and no
- * `tags`. They read back as untagged (still listed, still searchable by name) —
- * the field is ignored, never deleted.
+ * `tags`; guides created before alphabetical sorting carry an `order`. Both
+ * fields are inert — read back as untagged / ignored respectively, never deleted.
  */
 export const guidesRouter = Router();
 
@@ -46,6 +49,17 @@ const MAX_PDF_BYTES = 7 * 1024 * 1024;
 
 const MAX_TAGS_PER_GUIDE = 20;
 const MAX_TAG_LENGTH = 40;
+
+/**
+ * The list is always sorted alphabetically by title, with Czech collation (so Č
+ * sorts after C, Š after S, …). There is deliberately no stored `order` field
+ * and no manual reordering: the order is DERIVED from the title, so it can never
+ * drift out of sync with the data — adding, renaming or deleting a guide simply
+ * lands it in the right place on the next read.
+ */
+function byTitle(a: { title: string }, b: { title: string }): number {
+  return a.title.localeCompare(b.title, "cs");
+}
 
 /** Stored URLs are rendered as links, so only http(s) may ever be persisted. */
 function isSafeHttpUrl(value: string): boolean {
@@ -80,16 +94,6 @@ function normalizeTags(input: unknown): string[] {
   return out;
 }
 
-/** Next order value (append to the end of the list). */
-async function nextGuideOrder(): Promise<number> {
-  const snap = await db().collection("guides").get();
-  const max = snap.docs.reduce((acc, d) => {
-    const o = d.data().order;
-    return typeof o === "number" && o > acc ? o : acc;
-  }, -1);
-  return max + 1;
-}
-
 // ─── Read ─────────────────────────────────────────────────────────────────────
 
 /**
@@ -121,10 +125,9 @@ guidesRouter.get(
           kind: (data.kind as "pdf" | "link") ?? "link",
           url: (data.url as string) ?? "",
           fileName: (data.fileName as string) ?? "",
-          order: (data.order as number) ?? 0,
         };
       })
-      .sort((a, b) => a.order - b.order);
+      .sort(byTitle);
 
     // Tag vocabulary, de-duplicated case-insensitively (first spelling wins),
     // sorted with Czech collation.
@@ -194,27 +197,6 @@ guidesRouter.get(
 );
 
 // ─── Write ────────────────────────────────────────────────────────────────────
-// "/order" is declared before "/:id" so it is never swallowed by the parameter.
-
-guidesRouter.put(
-  "/order",
-  requireAuth,
-  requirePermission("guides.manage"),
-  async (req: AuthRequest, res) => {
-    const ids = req.body?.orderedIds;
-    if (!Array.isArray(ids) || ids.some((i) => typeof i !== "string")) {
-      res.status(400).json({ error: "orderedIds musí být pole id." });
-      return;
-    }
-
-    const batch = db().batch();
-    ids.forEach((id: string, idx: number) => {
-      batch.update(db().collection("guides").doc(id), { order: idx });
-    });
-    await batch.commit();
-    res.json({ ok: true });
-  }
-);
 
 /**
  * POST /api/guides
@@ -253,7 +235,6 @@ guidesRouter.post(
       description: typeof description === "string" ? description.trim() : "",
       tags: normalizeTags(tags),
       kind,
-      order: await nextGuideOrder(),
       createdAt: FieldValue.serverTimestamp(),
       createdBy: req.uid,
     };
