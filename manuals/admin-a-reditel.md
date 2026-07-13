@@ -313,6 +313,58 @@ Stránka **Šablony smluv** obsahuje editor ve stylu Wordu (TipTap): formátová
 
 > 📷 *(Místo pro snímek obrazovky: editor šablon)*
 
+#### Vlastní proměnné
+
+Kromě předdefinovaných proměnných (jméno, mzda, datum…) má každá šablona navíc **10 volných slotů** – `{{var1}}` až `{{var10}}` – jejichž **význam a typ si určíte sami**, zvlášť pro každou šablonu.
+
+**Vložení a nastavení proměnné**
+
+1. V pravém panelu proměnných najdete skupinu **„Vlastní proměnné"** s tlačítky **var1** až **var10**.
+2. Kliknutím na některé z nich (např. **var1**) jej vložíte do textu šablony na místo kurzoru – stejně jako u ostatních proměnných.
+3. Tlačítkem **⚙ Nastavit…** otevřete okno se seznamem vlastních proměnných, které jsou v šabloně skutečně použité. U každé vyplníte:
+   - **Název** – text, který se zobrazí při vyplňování hodnoty během generování dokumentu (např. „Výše pokuty").
+   - **Typ** – **Text**, **Datum**, **Číslo**, nebo **Ano/Ne**.
+4. Okno zavřete a nastavení uložíte společně se šablonou tlačítkem **Uložit**.
+
+> 📝 Název a typ platí **jen pro tuto jednu šablonu**. Stejná proměnná (např. `{{var1}}`) tak může v jedné šabloně znamenat „Výše pokuty" a v jiné „Datum školení" – aplikace si to pamatuje odděleně pro každou šablonu.
+
+**Upozornění „Bez nastavení"**
+
+Když proměnnou do textu vložíte, ale zapomenete jí dát **Název** a **Typ**, šablona sice funguje, ale ten, kdo bude dokument generovat, uvidí místo srozumitelného popisku jen holý kód (např. `{{var2}}` s poznámkou „v šabloně bez nastavení"). Aby se to nestalo:
+
+- Po **Uložení** šablony se v hlavičce editoru objeví oranžové upozornění, např. **„Bez nastavení: var2, var3"**.
+- **Klepnutím na toto upozornění** se rovnou otevře okno **⚙ Nastavit…**, kde chybějící názvy a typy doplníte.
+- Jakmile je doplníte, upozornění samo zmizí.
+
+> 📝 Uložení šablony to nikdy neblokuje – je to jen připomínka, ať na nastavení nezapomenete.
+
+**Vyplnění při generování dokumentu**
+
+- Používá-li šablona alespoň jednu vlastní proměnnou, zobrazí se v okně generování dokumentu nová sekce **„Vlastní proměnné"** s jedním polem pro každou použitou proměnnou, popsaným nastaveným **Názvem**.
+- Podle zvoleného **Typu** se nabídne odpovídající pole: **Datum** ukáže výběr data z kalendáře, **Číslo** číselné pole, **Ano/Ne** zaškrtávací políčko, **Text** obyčejné textové pole.
+
+> ⚠️ Tyto hodnoty se **nikam neukládají** – zadáváte je znovu při každém generování dokumentu, i pro tutéž šablonu.
+
+> 📝 Dokument nejde vygenerovat, dokud nejsou vyplněné všechny vlastní proměnné typu **Text**, **Datum** a **Číslo**. Tlačítko **Generovat PDF** ale zůstává **aktivní** – teprve když na něj klepnete a něco chybí, dokument se nevygeneruje a nad tlačítkem se zobrazí červený seznam **„Vyplňte všechny vlastní proměnné"** s tím, co ještě chybí. Jak pole doplňujete, seznam se sám zkracuje. Výjimkou je typ **Ano/Ne**: nezaškrtnuté políčko je platná odpověď a generování nikdy neblokuje.
+
+**Dva odstavce podle Ano/Ne (nejužitečnější trik)**
+
+Proměnná typu **Ano/Ne** umí řídit, **který z dvojice odstavců se do smlouvy dostane**. V okně **⚙ Nastavit…** má každá proměnná typu **Ano/Ne** ve sloupci **Odstavec** dvě tlačítka:
+
+- **Když Ano** – vloží do textu blok, který se ve smlouvě objeví **jen tehdy**, když políčko při generování **zaškrtnete**.
+- **Když Ne** – vloží blok, který se objeví **jen tehdy**, když políčko **nezaškrtnete**.
+
+Po klepnutí na tlačítko se okno zavře a kurzor stojí uvnitř nově vloženého bloku – rovnou tam napíšete text odstavce.
+
+**Příklad.** Proměnná `var1` typu **Ano/Ne** s názvem „Zaměstnanec souhlasí se srážkou ze mzdy":
+
+1. Klepněte na **Když Ano** a dovnitř bloku napište: *„Zaměstnanec souhlasí se srážkou ze mzdy ve výši uvedené v čl. III."*
+2. Znovu otevřete **⚙ Nastavit…**, klepněte na **Když Ne** a dovnitř napište: *„Zaměstnanec se srážkou ze mzdy nesouhlasí; částka bude uhrazena samostatně."*
+
+Při generování pak stačí políčko zaškrtnout, nebo nechat prázdné – do hotového PDF se propíše **vždy právě jeden** z těch dvou odstavců, ten druhý zmizí beze stopy. Jedna šablona tak pokryje obě situace a nemusíte mít dvě téměř stejné šablony.
+
+> 💡 **Tip:** oba bloky nemusíte používat v páru – klidně vložte jen **Když Ano** (odstavec, který se za určitých okolností přidá), nebo jen **Když Ne**.
+
 ---
 
 ## Upozornění

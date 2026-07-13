@@ -10,6 +10,12 @@ import {
   resolveVariables,
   fillTemplate,
   getMissingVariables,
+  usedCustomVars,
+  formatCustomValue,
+  missingCustomVars,
+  isCustomVarKey,
+  CUSTOM_VAR_TYPE_LABELS,
+  type CustomVarDefs,
 } from "@/lib/contractVariables";
 import { useContractGeneration, DEFAULT_MARGINS, type PageMargins } from "@/hooks/useContractGeneration";
 import { useAuth } from "@/hooks/useAuth";
@@ -80,11 +86,39 @@ export default function GenerateContractModal({
   // Per-field manual overrides of the automatic values (ad-hoc / back-dated
   // contracts). Held as a sparse patch so each field can be reverted to auto.
   const [editedVars, setEditedVars] = useState<Record<string, string>>({});
+  // The template's own config of the {{var1}}..{{var10}} slots (label + type).
+  const [variableDefs, setVariableDefs] = useState<CustomVarDefs>({});
+  // Raw form input per custom slot, as typed (ISO date, digits, "true"/"" for a
+  // checkbox). Formatted into the final string only at fill time.
+  const [customRaw, setCustomRaw] = useState<Record<string, string>>({});
+  // Only complain about unfilled custom variables once the user has actually
+  // tried to generate. Flagging empty fields the moment the dialog opens reads
+  // as an error the user hasn't made yet.
+  const [triedGenerate, setTriedGenerate] = useState(false);
 
   const autoVars = resolveVariables(employeeData, companyData);
-  // Working copy: automatic values with any manual edits applied on top.
-  const vars = { ...autoVars, ...editedVars };
-  const missing = template ? getMissingVariables(template, vars) : [];
+
+  // Custom slots this template uses, and the values they resolve to.
+  const customKeys = template ? usedCustomVars(template) : [];
+  const customVars: Record<string, string> = {};
+  for (const key of customKeys) {
+    const type = variableDefs[key]?.type ?? "text";
+    customVars[key] = formatCustomValue(type, customRaw[key] ?? "");
+  }
+
+  // Working copy: automatic values, manual edits, then the custom slots.
+  const vars = { ...autoVars, ...editedVars, ...customVars };
+
+  // Built-in variables with no value — a warning, generation still allowed.
+  // Custom slots are stricter: they are the whole point of the document (a
+  // penalty amount, a deadline), so an empty one BLOCKS generation. `bool` is
+  // exempt — an unticked checkbox is a real answer, not an omission.
+  const missing = template
+    ? getMissingVariables(template, vars).filter((k) => !isCustomVarKey(k))
+    : [];
+  const missingCustom = template
+    ? missingCustomVars(template, variableDefs, customRaw)
+    : [];
 
   function revertField(key: string) {
     setEditedVars((prev) => {
@@ -107,6 +141,7 @@ export default function GenerateContractModal({
           setTemplate(doc.htmlContent ?? "");
           setTemplateInactive(doc.active === false);
           if (doc.margins) setMargins(doc.margins);
+          setVariableDefs(doc.variableDefs ?? {});
         } else {
           setTemplate("");
         }
@@ -146,6 +181,12 @@ export default function GenerateContractModal({
 
   async function handleGenerate() {
     if (!template) return;
+    // Validate on submit, not on open: the button stays live so pressing it is
+    // what surfaces the list of what's still missing.
+    if (missingCustom.length > 0) {
+      setTriedGenerate(true);
+      return;
+    }
     setStep("generating");
 
     try {
@@ -213,6 +254,88 @@ export default function GenerateContractModal({
                         })}
                       </ul>
                       <p>Smlouva bude vygenerována s nevyplněnými poli.</p>
+                    </div>
+                  )}
+
+                  {customKeys.length > 0 && (
+                    <div className={styles.varTable}>
+                      <div className={styles.varTableHead}>
+                        <p className={styles.varTableTitle}>Vlastní proměnné</p>
+                      </div>
+                      <p className={styles.varTableHint}>
+                        Tyto hodnoty nejsou nikde uložené – vyplňte je pro tento
+                        dokument. Bez nich nelze dokument vygenerovat.
+                      </p>
+                      <table>
+                        <tbody>
+                          {customKeys.map((key) => {
+                            const def = variableDefs[key];
+                            const type = def?.type ?? "text";
+                            const label = def?.label || key;
+                            const raw = customRaw[key] ?? "";
+                            const setRaw = (v: string) =>
+                              setCustomRaw((prev) => ({ ...prev, [key]: v }));
+
+                            return (
+                              <tr key={key}>
+                                <td className={styles.varKey}>
+                                  {label}
+                                  {/* Slot used in the template but never given a
+                                      name/type: say so plainly instead of showing
+                                      a bare "var1" that means nothing here. */}
+                                  {!def?.label?.trim() && (
+                                    <>
+                                      {" "}
+                                      <code>{`{{${key}}}`}</code>{" "}
+                                      <span className={styles.varTableHint}>
+                                        (v šabloně bez nastavení)
+                                      </span>
+                                    </>
+                                  )}
+                                </td>
+                                <td className={styles.varVal}>
+                                  <div className={styles.varValRow}>
+                                    {type === "bool" ? (
+                                      <label className={styles.varInput} style={{ border: 0, display: "flex", alignItems: "center", gap: 6 }}>
+                                        <input
+                                          type="checkbox"
+                                          checked={raw === "true"}
+                                          onChange={(e) => setRaw(e.target.checked ? "true" : "")}
+                                        />
+                                        {raw === "true" ? "Ano" : "Ne"}
+                                      </label>
+                                    ) : (
+                                      <input
+                                        type={
+                                          type === "date"
+                                            ? "date"
+                                            : type === "number"
+                                              ? "number"
+                                              : "text"
+                                        }
+                                        className={styles.varInput}
+                                        value={raw}
+                                        placeholder={CUSTOM_VAR_TYPE_LABELS[type]}
+                                        onChange={(e) => setRaw(e.target.value)}
+                                      />
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                      {triedGenerate && missingCustom.length > 0 && (
+                        <div className={styles.missingBox}>
+                          <strong>Vyplňte všechny vlastní proměnné:</strong>
+                          <ul className={styles.missingList}>
+                            {missingCustom.map((k) => (
+                              <li key={k}>{variableDefs[k]?.label || k}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
                     </div>
                   )}
 

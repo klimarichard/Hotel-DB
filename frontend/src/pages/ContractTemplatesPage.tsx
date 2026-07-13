@@ -423,6 +423,11 @@ import {
   ContractType,
   CONTRACT_TYPE_LABELS,
   VARIABLE_GROUPS,
+  CUSTOM_VAR_KEYS,
+  CUSTOM_VAR_TYPE_LABELS,
+  usedCustomVars,
+  type CustomVarDefs,
+  type CustomVarType,
 } from "@/lib/contractVariables";
 import { formatTimestampCZ } from "@/lib/dateFormat";
 import styles from "./ContractTemplatesPage.module.css";
@@ -476,9 +481,26 @@ function marginsEqual(a: PageMargins, b: PageMargins): boolean {
   return a.top === b.top && a.bottom === b.bottom && a.left === b.left && a.right === b.right;
 }
 
+/**
+ * Warning text for custom slots that the template's text uses but never named.
+ * Such a slot still works (it falls back to Text and shows its raw key to
+ * whoever generates the document), which is exactly why it needs flagging: it
+ * looks like a bug rather than an omission.
+ *
+ * Returns null when there is nothing to warn about.
+ */
+function customVarWarning(html: string, defs: CustomVarDefs): string | null {
+  const unnamed = usedCustomVars(html).filter((k) => !defs[k]?.label?.trim());
+  if (unnamed.length === 0) return null;
+  // One line — the fuller explanation lives in the button's tooltip.
+  return `Bez nastavení: ${unnamed.join(", ")} – chybí název a typ.`;
+}
+
 interface TemplateDoc extends TemplateMeta {
   htmlContent: string;
   margins?: PageMargins;
+  /** Per-template config of the {{var1}}..{{var10}} slots. */
+  variableDefs?: CustomVarDefs;
 }
 
 function SaveIcon() {
@@ -537,6 +559,13 @@ export default function ContractTemplatesPage() {
   const findInputRef = useRef<HTMLInputElement>(null);
   const [marginsOpen, setMarginsOpen] = useState(false);
   const [margins, setMargins] = useState<PageMargins>(DEFAULT_MARGINS);
+  // Per-template config of the {{var1}}..{{var10}} slots (label + type). Saved
+  // with the template; the same slot means different things in different ones.
+  const [variableDefs, setVariableDefs] = useState<CustomVarDefs>({});
+  const [customVarsOpen, setCustomVarsOpen] = useState(false);
+  // Set on save: custom slots used in the text that have no name/type yet.
+  // Persists (unlike the "Uloženo" toast) until they are configured.
+  const [varWarning, setVarWarning] = useState<string | null>(null);
   // Force a rerender on every editor transaction so isActive(...) checks
   // (active toolbar buttons, in-table contextual buttons, etc.) reflect
   // selection changes. TipTap React v3 doesn't subscribe to these by default.
@@ -811,6 +840,12 @@ export default function ContractTemplatesPage() {
       isLoadingRef.current = true;
       editor.commands.setContent(doc.htmlContent || "<p></p>");
       setMargins(doc.margins ?? DEFAULT_MARGINS);
+      const defs = doc.variableDefs ?? {};
+      setVariableDefs(defs);
+      // Warn straight away: a template can arrive with unconfigured slots (saved
+      // before they were named, or the {{varN}} was typed by hand), and the user
+      // must not have to make an edit before hearing about it.
+      setVarWarning(customVarWarning(doc.htmlContent || "", defs));
       // Release the flag on the next tick so any synchronous `update`
       // events fired by setContent are still counted as load events.
       setTimeout(() => {
@@ -831,11 +866,38 @@ export default function ContractTemplatesPage() {
     return () => { editor.off("update", onUpdate); };
   }, [editor]);
 
-  function insertVariable(key: string, kind?: "if") {
+  // Keep the "unconfigured slot" warning current while editing: inserting
+  // {{var4}} should flag it at once, and deleting the last {{var2}} should clear
+  // it. Debounced, because it reads the whole document (getHTML) and the update
+  // event fires on every keystroke.
+  useEffect(() => {
     if (!editor) return;
-    if (kind === "if") {
-      const left = `{{#if ${key}}}`;
-      const right = `{{/if}}`;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const recompute = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        setVarWarning(customVarWarning(editor.getHTML(), variableDefs));
+      }, 400);
+    };
+    editor.on("update", recompute);
+    return () => {
+      clearTimeout(timer);
+      editor.off("update", recompute);
+    };
+  }, [editor, variableDefs]);
+
+  /**
+   * `kind`:
+   *   undefined → plain `{{key}}`
+   *   "if"      → `{{#if key}}…{{/if}}`      — block shown when the value is set
+   *   "unless"  → `{{#unless key}}…{{/unless}}` — block shown when it is NOT set
+   * The caret lands between the tags so the paragraph can be typed straight in.
+   */
+  function insertVariable(key: string, kind?: "if" | "unless") {
+    if (!editor) return;
+    if (kind === "if" || kind === "unless") {
+      const left = kind === "if" ? `{{#if ${key}}}` : `{{#unless ${key}}}`;
+      const right = kind === "if" ? `{{/if}}` : `{{/unless}}`;
       const from = editor.state.selection.from;
       editor
         .chain()
@@ -876,6 +938,7 @@ export default function ContractTemplatesPage() {
             selected,
           htmlContent,
           margins,
+          variableDefs,
         }),
       });
 
@@ -891,6 +954,9 @@ export default function ContractTemplatesPage() {
       }
       setSaveMsg("Uloženo");
       setIsDirty(false);
+
+      setVarWarning(customVarWarning(htmlContent, variableDefs));
+
       await fetchTemplates();
       setTimeout(() => setSaveMsg(null), 3000);
     } catch (err) {
@@ -1054,6 +1120,16 @@ export default function ContractTemplatesPage() {
         </div>
         {canManage && (
           <div className={styles.headerActions}>
+            {varWarning && (
+              <button
+                type="button"
+                className={styles.varWarn}
+                title={`${varWarning} Kliknutím otevřete nastavení vlastních proměnných.`}
+                onClick={() => setCustomVarsOpen(true)}
+              >
+                ⚠ {varWarning}
+              </button>
+            )}
             {saveMsg && (
               <span className={`${styles.saveMsg} ${saveMsg === "Uloženo" ? styles.saveMsgOk : styles.saveMsgErr}`}>
                 {saveMsg}
@@ -1638,9 +1714,204 @@ export default function ContractTemplatesPage() {
               ))}
             </div>
           ))}
+
+          {/* Ten free slots this template configures itself. A slot shows its
+              configured label once it has one, otherwise the bare {{varN}}. */}
+          <div className={styles.varGroup}>
+            <p className={styles.varGroupLabel}>Vlastní proměnné</p>
+            {CUSTOM_VAR_KEYS.map((key) => {
+              const def = variableDefs[key];
+              return (
+                <button
+                  key={key}
+                  className={styles.varBtn}
+                  onClick={() => insertVariable(key)}
+                  title={`{{${key}}}`}
+                >
+                  {def?.label ? `${def.label} (${key})` : key}
+                </button>
+              );
+            })}
+            <button
+              className={styles.varBtn}
+              onClick={() => setCustomVarsOpen(true)}
+              title="Nastavit název a typ použitých vlastních proměnných"
+            >
+              ⚙ Nastavit…
+            </button>
+          </div>
         </aside>
         )}
       </div>
+
+      {canManage && customVarsOpen && editor && (() => {
+        // Which slots this template actually uses, read straight from the live
+        // editor content — so a slot appears here the moment it is inserted and
+        // disappears when deleted, with no bookkeeping.
+        const used = usedCustomVars(editor.getHTML());
+        // Slots configured earlier whose placeholder is no longer in the text.
+        // Their config is kept (harmless, and lets an accidental deletion be
+        // undone) but flagged, so the list can't quietly rot.
+        const orphaned = Object.keys(variableDefs).filter((k) => !used.includes(k));
+
+        const setDef = (key: string, patch: Partial<{ label: string; type: CustomVarType }>) => {
+          setVariableDefs((prev) => ({
+            ...prev,
+            [key]: {
+              label: patch.label ?? prev[key]?.label ?? "",
+              type: patch.type ?? prev[key]?.type ?? "text",
+            },
+          }));
+          setIsDirty(true);
+        };
+
+        const hintStyle = {
+          fontSize: "0.75rem",
+          color: "var(--color-text-muted)",
+          margin: "0 0 10px",
+        } as const;
+        const fieldStyle = {
+          width: "100%",
+          padding: "6px 8px",
+          fontSize: "0.8125rem",
+          border: "1px solid var(--color-border)",
+          borderRadius: "6px",
+          background: "var(--color-surface)",
+          color: "var(--color-text)",
+        } as const;
+
+        return (
+          <div className={modalStyles.overlay}>
+            <div className={modalStyles.modal}>
+              <div className={modalStyles.header}>
+                <h2 className={modalStyles.title}>Vlastní proměnné</h2>
+              </div>
+
+              <div className={modalStyles.body}>
+                <p style={hintStyle}>
+                  Název se zobrazí při vyplňování hodnot během generování dokumentu.
+                  Nastavení platí jen pro tuto šablonu – stejná proměnná může mít
+                  v jiné šabloně jiný význam. Uloží se spolu se šablonou.
+                </p>
+                <p style={hintStyle}>
+                  U typu <strong>Ano/Ne</strong> můžete tlačítky ve sloupci Odstavec
+                  vložit odstavec, který se zobrazí jen když je zaškrtnuto
+                  („Když Ano“), nebo naopak jen když zaškrtnuto není („Když Ne“).
+                </p>
+
+                {used.length === 0 ? (
+                  <p style={hintStyle}>
+                    V šabloně zatím není použita žádná vlastní proměnná. Vložte ji
+                    kliknutím v panelu vpravo (např. <code>{"{{var1}}"}</code>).
+                  </p>
+                ) : (
+                  <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                    <thead>
+                      <tr>
+                        <th style={{ textAlign: "left", fontSize: "0.75rem", color: "var(--color-text-muted)", padding: "0 6px 4px 0" }}>Proměnná</th>
+                        <th style={{ textAlign: "left", fontSize: "0.75rem", color: "var(--color-text-muted)", padding: "0 6px 4px 0" }}>Název (co se zobrazí)</th>
+                        <th style={{ textAlign: "left", fontSize: "0.75rem", color: "var(--color-text-muted)", padding: "0 6px 4px 0" }}>Typ</th>
+                        <th style={{ textAlign: "left", fontSize: "0.75rem", color: "var(--color-text-muted)", padding: "0 0 4px 0" }}>Odstavec</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {used.map((key) => (
+                        <tr key={key}>
+                          <td style={{ padding: "3px 6px 3px 0", whiteSpace: "nowrap" }}>
+                            <code style={{ fontSize: "0.75rem" }}>{`{{${key}}}`}</code>
+                          </td>
+                          <td style={{ padding: "3px 6px 3px 0" }}>
+                            <input
+                              type="text"
+                              style={fieldStyle}
+                              value={variableDefs[key]?.label ?? ""}
+                              placeholder="např. Výše pokuty"
+                              maxLength={60}
+                              onChange={(e) => setDef(key, { label: e.target.value })}
+                            />
+                          </td>
+                          <td style={{ padding: "3px 6px 3px 0" }}>
+                            <select
+                              style={fieldStyle}
+                              value={variableDefs[key]?.type ?? "text"}
+                              onChange={(e) =>
+                                setDef(key, { type: e.target.value as CustomVarType })
+                              }
+                            >
+                              {(Object.keys(CUSTOM_VAR_TYPE_LABELS) as CustomVarType[]).map(
+                                (t) => (
+                                  <option key={t} value={t}>
+                                    {CUSTOM_VAR_TYPE_LABELS[t]}
+                                  </option>
+                                )
+                              )}
+                            </select>
+                          </td>
+                          <td style={{ padding: "3px 0", whiteSpace: "nowrap" }}>
+                            {/* An Ano/Ne slot is the one that can drive a whole
+                                paragraph: #if shows it when ticked, #unless when
+                                not. Offer both, so the pair is discoverable. */}
+                            {(variableDefs[key]?.type ?? "text") === "bool" ? (
+                              <>
+                                <button
+                                  className={styles.varBtn}
+                                  style={{ marginRight: 4 }}
+                                  title={`{{#if ${key}}}…{{/if}} – odstavec se zobrazí, když je zaškrtnuto Ano`}
+                                  onClick={() => {
+                                    insertVariable(key, "if");
+                                    setCustomVarsOpen(false);
+                                  }}
+                                >
+                                  Když Ano
+                                </button>
+                                <button
+                                  className={styles.varBtn}
+                                  title={`{{#unless ${key}}}…{{/unless}} – odstavec se zobrazí, když NENÍ zaškrtnuto`}
+                                  onClick={() => {
+                                    insertVariable(key, "unless");
+                                    setCustomVarsOpen(false);
+                                  }}
+                                >
+                                  Když Ne
+                                </button>
+                              </>
+                            ) : (
+                              <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+                                –
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+
+                {orphaned.length > 0 && (
+                  <p style={{ ...hintStyle, marginTop: 10, marginBottom: 0 }}>
+                    Nastavené, ale v textu nepoužité: {orphaned.join(", ")}. Nastavení
+                    zůstává uložené pro případ, že proměnnou vrátíte zpět.
+                  </p>
+                )}
+              </div>
+
+              <div className={modalStyles.footer}>
+                <Button
+                  variant="primary"
+                  onClick={() => {
+                    // Re-evaluate against what was just entered, so naming the
+                    // last slot clears the warning immediately.
+                    setVarWarning(customVarWarning(editor.getHTML(), variableDefs));
+                    setCustomVarsOpen(false);
+                  }}
+                >
+                  Hotovo
+                </Button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {canManage && createModalOpen && (
         <div className={modalStyles.overlay}>
