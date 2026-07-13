@@ -172,16 +172,47 @@ function isValidMargins(m: unknown): m is Margins {
   );
 }
 
+/**
+ * Per-template configuration of the ten custom variable slots {{var1}}..{{var10}}
+ * (see frontend/src/lib/contractVariables.ts). Each slot a template uses gets a
+ * display label and a value type here; the same slot means different things in
+ * different templates, which is why this lives on the template document rather
+ * than in a global catalog.
+ *
+ * Shape: { var1: { label: string, type: "text"|"date"|"number"|"bool" }, … }
+ */
+const CUSTOM_VAR_KEYS = new Set(
+  Array.from({ length: 10 }, (_, i) => `var${i + 1}`)
+);
+const CUSTOM_VAR_TYPES = new Set(["text", "date", "number", "bool"]);
+const CUSTOM_VAR_LABEL_MAX = 60;
+
+function isValidVariableDefs(v: unknown): boolean {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return false;
+  return Object.entries(v as Record<string, unknown>).every(([key, def]) => {
+    if (!CUSTOM_VAR_KEYS.has(key)) return false;
+    if (!def || typeof def !== "object") return false;
+    const d = def as Record<string, unknown>;
+    return (
+      typeof d.label === "string" &&
+      d.label.length <= CUSTOM_VAR_LABEL_MAX &&
+      typeof d.type === "string" &&
+      CUSTOM_VAR_TYPES.has(d.type)
+    );
+  });
+}
+
 contractTemplatesRouter.put(
   "/:id",
   requireAuth,
   requirePermission("contractTemplates.manage"),
   async (req: AuthRequest, res: Response) => {
-    const { type, name, htmlContent, margins } = req.body as {
+    const { type, name, htmlContent, margins, variableDefs } = req.body as {
       type: string;
       name: string;
       htmlContent: string;
       margins?: unknown;
+      variableDefs?: unknown;
     };
 
     if (!type || !name || htmlContent === undefined) {
@@ -191,6 +222,14 @@ contractTemplatesRouter.put(
 
     if (margins !== undefined && !isValidMargins(margins)) {
       res.status(400).json({ error: "margins must be {top,bottom,left,right} numbers in mm (0–100)" });
+      return;
+    }
+
+    if (variableDefs !== undefined && !isValidVariableDefs(variableDefs)) {
+      res.status(400).json({
+        error:
+          "variableDefs musí být objekt {var1..var10: {label, type}}, kde type je text|date|number|bool.",
+      });
       return;
     }
 
@@ -222,6 +261,7 @@ contractTemplatesRouter.put(
       updatedBy: req.uid,
     };
     if (margins !== undefined) payload.margins = margins;
+    if (variableDefs !== undefined) payload.variableDefs = variableDefs;
 
     const ref = db().collection("contractTemplates").doc(req.params.id);
     const beforeSnap = await ref.get();

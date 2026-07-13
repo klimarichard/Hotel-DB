@@ -73,6 +73,113 @@ export const CHANGE_TYPE_TO_CONTRACTS: Record<string, ContractType[]> = {
   "změna smlouvy": ["zmena_smlouvy"],
 };
 
+// ─── Custom (per-template) variables ─────────────────────────────────────────
+//
+// Ten free slots, {{var1}}…{{var10}}, that a template may use for values the
+// employee record simply doesn't hold (a penalty amount, a deadline, …). Each
+// template configures the slots it uses ITSELF — label + type live on the
+// template document, so the same {{var1}} means "Výše pokuty" in one template
+// and "Datum školení" in another. Values are typed in when a document is
+// generated and are never persisted.
+//
+// The placeholder is a plain word, NOT "#var1": the engine only matches
+// `{{\w+}}`, and a leading `#` is what marks a conditional block ({{#if x}}), so
+// a "{{#var1}}" would be ignored by every regex here and printed raw into the
+// PDF.
+
+export const CUSTOM_VAR_COUNT = 10;
+
+/** {{var1}} … {{var10}} — the fixed slot keys, in order. */
+export const CUSTOM_VAR_KEYS: string[] = Array.from(
+  { length: CUSTOM_VAR_COUNT },
+  (_, i) => `var${i + 1}`
+);
+
+const CUSTOM_VAR_KEY_SET = new Set(CUSTOM_VAR_KEYS);
+
+export type CustomVarType = "text" | "date" | "number" | "bool";
+
+export const CUSTOM_VAR_TYPE_LABELS: Record<CustomVarType, string> = {
+  text: "Text",
+  date: "Datum",
+  number: "Číslo",
+  bool: "Ano/Ne",
+};
+
+/** A template's configuration of one slot. */
+export interface CustomVarDef {
+  label: string;
+  type: CustomVarType;
+}
+
+/** Slot key → its configuration on a given template. Stored on contractTemplates/{id}. */
+export type CustomVarDefs = Record<string, CustomVarDef>;
+
+export function isCustomVarKey(key: string): boolean {
+  return CUSTOM_VAR_KEY_SET.has(key);
+}
+
+/**
+ * Which custom slots a template's HTML actually uses — as a plain `{{var1}}`
+ * placeholder or as a `{{#if var1}}` / `{{#unless var1}}` condition. Returned in
+ * slot order (var1, var2, …), not order of appearance, so the config UI and the
+ * generate form list them predictably.
+ */
+export function usedCustomVars(html: string): string[] {
+  const used = new Set<string>();
+  for (const m of html.matchAll(/\{\{(?:#if\s+|#unless\s+)?(\w+)\}\}/g)) {
+    if (isCustomVarKey(m[1])) used.add(m[1]);
+  }
+  return CUSTOM_VAR_KEYS.filter((k) => used.has(k));
+}
+
+/**
+ * Turn the raw form input for a slot into the string that lands in the PDF.
+ *
+ * `bool` resolves to "ano" / "" rather than "ano" / "ne" — deliberately, and
+ * consistently with the built-in `kind: "if"` variables: an empty string is what
+ * makes `{{#if var1}}` strip its block. A plain `{{var1}}` of an unchecked bool
+ * therefore prints nothing, which is the sane reading of "no".
+ */
+export function formatCustomValue(type: CustomVarType, raw: string): string {
+  const value = raw.trim();
+  if (!value) return "";
+  switch (type) {
+    case "date":
+      // raw is an <input type="date"> ISO string; formatDateCZ splits the string
+      // rather than parsing a Date, so there is no timezone off-by-one here.
+      return formatDateCZ(value);
+    case "number": {
+      const n = Number(value.replace(",", "."));
+      if (!Number.isFinite(n)) return value;
+      return new Intl.NumberFormat("cs-CZ").format(n);
+    }
+    case "bool":
+      return value === "true" ? "ano" : "";
+    case "text":
+    default:
+      return value;
+  }
+}
+
+/**
+ * Custom slots whose value the user still has to supply before a document may be
+ * generated. `bool` is never "missing": unchecked is a legitimate answer, not an
+ * omission — treating it as missing would make an unticked box block generation
+ * forever.
+ */
+export function missingCustomVars(
+  html: string,
+  defs: CustomVarDefs,
+  rawValues: Record<string, string>
+): string[] {
+  return usedCustomVars(html).filter((key) => {
+    const type = defs[key]?.type ?? "text";
+    if (type === "bool") return false;
+    return !(rawValues[key] ?? "").trim();
+  });
+}
+
 /** All available template variables with human-readable labels grouped by source */
 export type VariableDef = { key: string; label: string; kind?: "if" };
 export const VARIABLE_GROUPS: { group: string; vars: VariableDef[] }[] = [
