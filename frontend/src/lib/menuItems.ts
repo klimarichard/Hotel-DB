@@ -8,7 +8,13 @@ import type { Permission } from "@/lib/permissions/catalog";
  * IDs are stable strings used as Firestore array keys at settings/menuOrder
  * (keyed by user-type id). Add a new item here AND a matching <Route> in
  * App.tsx; the sidebar picks it up automatically (appended at the end of any
- * saved order until reordered).
+ * saved order until reordered). The id must also be added to VALID_IDS in
+ * functions/src/routes/menuOrder.ts, or the backend silently drops it from
+ * every saved order and the item keeps falling back to the bottom.
+ *
+ * Not every route belongs here: the cross-hotel Recepce summary (`/4d`) is
+ * deliberately unlisted – reachable only by typing the address, still gated by
+ * `recepce.summary.view`.
  */
 export interface MenuItem {
   id: string;

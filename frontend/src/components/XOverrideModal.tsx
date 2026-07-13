@@ -1,14 +1,22 @@
-import { useState } from "react";
-import type { ViolationInfo } from "../pages/ShiftPlannerPage";
+import { useMemo, useState } from "react";
+import type { ViolationInfo, PlanEmployee } from "../pages/ShiftPlannerPage";
+import { employeeSurnameFirst } from "../lib/employeeName";
 import Button from "./Button";
 import IconButton from "./IconButton";
 import styles from "./AddEmployeeToPlanModal.module.css";
+
+const csCollator = new Intl.Collator("cs", { sensitivity: "base", numeric: true });
 
 interface Props {
   employeeName: string;
   date: string;
   violations: ViolationInfo[];
-  onSubmit: (reason: string) => Promise<void>;
+  planEmployees: PlanEmployee[];
+  /** Shared terminal (e.g. Recepce): require picking who is really requesting. */
+  sharedTerminal?: boolean;
+  /** Pre-selected picker value (the on-shift employee), when unambiguously resolved. */
+  defaultRequesterEmployeeId?: string;
+  onSubmit: (reason: string, requestedByEmployeeId?: string) => Promise<void>;
   onCancel: () => void;
 }
 
@@ -23,20 +31,39 @@ function violationText(v: ViolationInfo): string {
   }
 }
 
-export default function XOverrideModal({ employeeName, date, violations, onSubmit, onCancel }: Props) {
+export default function XOverrideModal({ employeeName, date, violations, planEmployees, sharedTerminal = false, defaultRequesterEmployeeId, onSubmit, onCancel }: Props) {
   const [reason, setReason] = useState("");
+  const [requestedBy, setRequestedBy] = useState(() =>
+    defaultRequesterEmployeeId && planEmployees.some((e) => e.employeeId === defaultRequesterEmployeeId)
+      ? defaultRequesterEmployeeId
+      : "",
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const roster = useMemo(
+    () =>
+      [...planEmployees].sort(
+        (a, b) =>
+          csCollator.compare(a.lastName ?? "", b.lastName ?? "") ||
+          csCollator.compare(a.firstName ?? "", b.firstName ?? ""),
+      ),
+    [planEmployees],
+  );
 
   async function handleSubmit() {
     if (!reason.trim()) {
       setError("Důvod je povinný");
       return;
     }
+    if (sharedTerminal && !requestedBy) {
+      setError("Vyberte, kdo o výjimku žádá.");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
-      await onSubmit(reason.trim());
+      await onSubmit(reason.trim(), sharedTerminal ? requestedBy : undefined);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Chyba při odesílání");
     } finally {
@@ -64,6 +91,26 @@ export default function XOverrideModal({ employeeName, date, violations, onSubmi
             </ul>
           </div>
 
+          {sharedTerminal && (
+            <>
+              <label className={styles.label}>Kdo o výjimku žádá</label>
+              <select
+                className={styles.input}
+                style={{ marginBottom: "0.75rem" }}
+                value={requestedBy}
+                disabled={saving}
+                onChange={(e) => { setError(null); setRequestedBy(e.target.value); }}
+              >
+                <option value="">– vyberte zaměstnance –</option>
+                {roster.map((e) => (
+                  <option key={e.employeeId} value={e.employeeId}>
+                    {employeeSurnameFirst(e)}
+                  </option>
+                ))}
+              </select>
+            </>
+          )}
+
           <label className={styles.label}>Důvod žádosti o výjimku</label>
           <textarea
             className={styles.input}
@@ -80,7 +127,7 @@ export default function XOverrideModal({ employeeName, date, violations, onSubmi
           <Button
             variant="primary"
             onClick={handleSubmit}
-            disabled={saving || !reason.trim()}
+            disabled={saving || !reason.trim() || (sharedTerminal && !requestedBy)}
           >
             {saving ? "Odesílám…" : "Odeslat žádost o X"}
           </Button>

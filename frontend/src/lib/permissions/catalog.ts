@@ -103,6 +103,7 @@ export const PERMISSION_SECTIONS = [
           { key: "recepce.sm.manage", label: "Spravovat sm", level: 1 },
           { key: "recepce.taxi.manageRates", label: "Spravovat ceník taxi", level: 1 },
           { key: "recepce.mobile.view", label: "Zobrazit Recepci na mobilu", level: 1 },
+          { key: "recepce.summary.view", label: "4D recepce", level: 1 },
         ],
       },
       {

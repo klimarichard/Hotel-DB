@@ -15,6 +15,8 @@ interface OverrideRequest {
   requestedInput: string;
   reason: string;
   violationTypes?: string[];
+  /** Present when filed at a shared terminal — the real person who requested. */
+  requestedByEmployeeId?: string;
 }
 
 interface EmployeeMini {
@@ -70,6 +72,7 @@ export default function PendingShiftOverridesTab() {
         <tbody>
           {items.map((r) => {
             const e = empMap.get(r.employeeId);
+            const requester = r.requestedByEmployeeId ? empMap.get(r.requestedByEmployeeId) : undefined;
             return (
               <tr key={r.id}>
                 <td>
@@ -79,6 +82,11 @@ export default function PendingShiftOverridesTab() {
                     </Link>
                   ) : (
                     r.employeeId
+                  )}
+                  {r.requestedByEmployeeId && (
+                    <div style={{ fontSize: "0.78rem", opacity: 0.7, marginTop: 2 }}>
+                      Přes recepci: {requester ? employeeDisplayName(requester) : r.requestedByEmployeeId}
+                    </div>
                   )}
                 </td>
                 <td data-label="Plán">{fmtMonth(r.planYear, r.planMonth)}</td>

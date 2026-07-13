@@ -1,0 +1,483 @@
+/* Cross-hotel Recepce summary page. */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 2.5rem;
+  padding: 1.5rem;
+}
+
+.titleGroup {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.rangeLabel {
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+/* Print-only formatted value shown in place of an input (hidden on screen). */
+.printShow {
+  display: none;
+}
+
+.headerRow {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.title {
+  margin: 0;
+  font-size: 1.4rem;
+  font-weight: var(--font-weight-semibold, 600);
+  color: var(--color-text-heading);
+}
+
+.controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.control {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.input {
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  background: var(--color-input-bg, var(--color-bg));
+  color: var(--color-text-heading);
+  font-size: 0.875rem;
+  font-weight: normal;
+}
+
+.inputNumber {
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+  width: 7rem;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.inputNumber::-webkit-inner-spin-button,
+.inputNumber::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.paramInput {
+  width: 5rem;
+  padding: 0.3rem 0.45rem;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: var(--font-weight-semibold, 600);
+  color: var(--color-text-heading);
+}
+
+.sectionHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+/* Grouped hotel header (spans the směny + Kč sub-columns). Compound selector so
+   it beats the base `.table th { text-align: left }` rule. */
+.table th.groupHead {
+  text-align: center;
+}
+
+/* Vertical separator at the start of each hotel's double-column (and before the
+   trailing provision columns). Compound selector to beat `.table td/th`. */
+.table th.hotelStart,
+.table td.hotelStart {
+  border-left: 2px solid var(--color-border-strong);
+}
+
+.note {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  max-width: 70ch;
+}
+
+.tableWrap {
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.table th {
+  text-align: left;
+  padding: 0.55rem 0.75rem;
+  background: var(--color-surface-2, var(--color-surface));
+  border-bottom: 1px solid var(--color-border);
+  font-weight: 700;
+  color: var(--color-text-heading);
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-heading);
+  vertical-align: middle;
+}
+
+.table tbody tr:nth-child(even) td {
+  background: var(--color-surface-3, var(--color-surface-2));
+}
+
+.table tfoot td {
+  border-top: 2px solid var(--color-border-strong);
+  border-bottom: none;
+  background: var(--color-surface-2, var(--color-surface));
+}
+
+.num {
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.strong {
+  font-weight: 700;
+  color: var(--color-text-heading);
+}
+
+.hotelCell {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ── collapsible section header (Walk-iny) ─────────────────────────────────── */
+.collapseHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: inherit;
+  text-align: left;
+}
+
+.collapseChevron {
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+  transition: transform 0.15s ease;
+}
+
+.collapseChevron[data-open="true"] {
+  transform: rotate(90deg);
+}
+
+.collapseCount {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  background: var(--color-surface-2, var(--color-surface));
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  padding: 0.05rem 0.5rem;
+}
+
+.empty {
+  padding: 1.5rem 1rem;
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+}
+
+.muted {
+  color: var(--color-text-muted);
+}
+
+.error {
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: var(--color-danger-soft, rgba(220, 38, 38, 0.1));
+  color: var(--color-danger, #dc2626);
+  font-size: 0.85rem;
+}
+
+/* ── pass-key lock card ────────────────────────────────────────────────────── */
+.lockWrap {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 4rem 1.5rem;
+}
+
+.lockCard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  width: 340px;
+  max-width: 100%;
+  padding: 1.5rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg, 10px);
+  box-shadow: 0 10px 30px var(--shadow-md, rgba(0, 0, 0, 0.12));
+}
+
+.lockTitle {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: var(--font-weight-semibold, 600);
+  color: var(--color-text-heading);
+  text-align: center;
+}
+
+.lockText {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+.lockForm {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.lockInput {
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 6px;
+  background: var(--color-input-bg, var(--color-bg));
+  color: var(--color-text-heading);
+  font-size: 1.05rem;
+  letter-spacing: 0.2em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── row actions (Provize minus table) ─────────────────────────────────────── */
+.actionsCell {
+  width: 1%;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.rowActions {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.rowIconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1;
+}
+
+.rowIconBtn:hover {
+  background: var(--color-surface-2, var(--color-surface));
+  color: var(--color-text-heading);
+}
+
+.rowIconBtnTrash:hover {
+  color: var(--color-danger, #dc2626);
+}
+
+/* ── modal ─────────────────────────────────────────────────────────────────── */
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: var(--overlay-bg, rgba(0, 0, 0, 0.4));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg, 10px);
+  width: 420px;
+  max-width: calc(100vw - 2rem);
+  box-shadow: 0 20px 60px var(--shadow-md, rgba(0, 0, 0, 0.3));
+  display: flex;
+  flex-direction: column;
+}
+
+.modalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.modalTitle {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: var(--font-weight-semibold, 600);
+  color: var(--color-text-heading);
+}
+
+.modalBody {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.mInput {
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  background: var(--color-input-bg, var(--color-bg));
+  color: var(--color-text-heading);
+  font-size: 0.9rem;
+  font-weight: normal;
+}
+
+.modalFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--color-border);
+}
+
+/* ── print: three tables on one A4, order Podle hotelu → Počet směn → minus ─── */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 8mm;
+  }
+  /* Show only this page — hide the app chrome (sidebar/header) generically. */
+  body * {
+    visibility: hidden;
+  }
+  .page,
+  .page * {
+    visibility: visible;
+  }
+  .page {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    gap: 16px;
+    color: #000;
+  }
+  /* Force ALL text black — the app may be in dark theme, whose light
+     --color-text-* variables would otherwise print as unreadable pale grey. */
+  .page,
+  .page * {
+    color: #000 !important;
+  }
+  .noPrint {
+    display: none !important;
+  }
+  .page button {
+    display: none !important;
+  }
+  .title {
+    font-size: 13px;
+  }
+  .sectionTitle {
+    font-size: 10px;
+  }
+  .section {
+    gap: 3px;
+    break-inside: avoid;
+  }
+  .printOrder1 {
+    order: 1;
+  }
+  .printOrder2 {
+    order: 2;
+  }
+  .printOrder3 {
+    order: 3;
+  }
+  .tableWrap {
+    overflow: visible;
+    border: 1px solid #999;
+    border-radius: 0;
+  }
+  .table {
+    font-size: 7.5px;
+  }
+  .table th,
+  .table td {
+    padding: 1px 3px;
+  }
+  /* Show the hand-entered values as plain formatted text (hide the inputs). */
+  .printHide {
+    display: none !important;
+  }
+  .printShow {
+    display: inline !important;
+  }
+  /* Drop the "Kč" suffix from money cells to save width in portrait. */
+  .kc {
+    display: none;
+  }
+  /* Everything black on paper. */
+  .muted {
+    color: #000;
+  }
+  .strong {
+    color: #000;
+  }
+}

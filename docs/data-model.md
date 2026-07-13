@@ -22,14 +22,16 @@ This document describes the Firestore data model (top-level collections, sub-col
 | `hotels/amigo-alqush/terminalPayments/{autoId}` | Card-terminal payments (Amigo & Alqush only) — `amount` is CZK-only, `type` a fixed 7-value enum, `note` optional on every type, `settled`/`settledBy`/`settledAt` settable only via the dedicated `terminal.manage`-gated endpoint. |
 | `hotels/amigo-alqush/config/terminal` | Terminál's visible date range (`{ from, to }`), set by `terminal.manage`. |
 
-`handoverWarnings/{hotel}_{shiftDate}_{shiftType}` — "Nenavazující předání" flags
-(a handover chain break), surfaced on the Upozornění hub. `settings/sm` and
+`handoverWarnings/{hotel}_{id}[_late]` — Předávací protokol warnings, `type`
+`"chain"` (Nenavazující předání — a handover chain break) or `"late"` (Pozdní
+příchod — Převzal after the next shift's start), surfaced on the Upozornění hub.
+`settings/sm` and
 `settings/taxiRoutes` hold the two GLOBAL (all-hotels) Recepce config docs — the
 shared sm rates and the shared taxi routes ceník, respectively.
 
 The `benefits` sub-doc carries the insurance/bank/Multisport fields plus `nepodepiseProhlaseni: boolean` ("Nepodepíše prohlášení poplatníka" — drives the "Nepodepsané prohlášení" banner on the employee detail page) and `zaucovani: boolean` + `zaucovaniDo: string` (YYYY-MM-DD) — the "Zaučování" (training) flag and its end date, which drive a "Zaučování" banner that auto-hides once `zaucovaniDo` passes. **`zaucovani` + `zaucovaniDo` are also denormalized onto the root `employees/{id}` doc** (written by the `PUT /employees/:id/benefits` handler) so the Employees list — which reads only root docs — can render the "V zácviku" badge without joining the benefits sub-doc; the badge's auto-expiry is computed live from `zaucovaniDo` on read.
 
-**Sub-collections under `shiftPlans/{id}`:** `planEmployees`, `shifts`, `rules`, `unavailabilityRequests`, `shiftOverrideRequests`, `shiftChangeRequests`, `shiftsSnapshot`
+**Sub-collections under `shiftPlans/{id}`:** `planEmployees`, `shifts`, `rules`, `unavailabilityRequests`, `shiftOverrideRequests`, `shiftChangeRequests`, `shiftsSnapshot`. Request docs carry `requestedBy` (author uid) and, when filed at a shared terminal, `requestedByEmployeeId` (the picked real person — see [shifts.md](shifts.md#shared-terminal-attribution--who-is-really-requesting-v4215)).
 
 **Sub-collections under `payrollPeriods/{id}`:** `entries`
 

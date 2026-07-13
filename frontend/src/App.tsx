@@ -16,6 +16,8 @@ import ContractTemplatesPage from "@/pages/ContractTemplatesPage";
 import ShiftPlannerPage from "@/pages/ShiftPlannerPage";
 import VacationPage from "@/pages/VacationPage";
 import RecepcePage from "@/pages/RecepcePage";
+import RecepceSummaryPage from "@/pages/RecepceSummaryPage";
+import RecepceSummaryAdminPage from "@/pages/RecepceSummaryAdminPage";
 import RecepceDemoPage from "@/pages/RecepceDemoPage";
 import OverviewPage from "@/pages/OverviewPage";
 import AuditLogPage from "@/pages/AuditLogPage";
@@ -27,6 +29,7 @@ import { ShiftChangeRequestsProvider } from "@/context/ShiftChangeRequestsContex
 import { EmployeeChangeRequestsProvider } from "@/context/EmployeeChangeRequestsContext";
 import { SelfDocAlertsProvider } from "@/context/SelfDocAlertsContext";
 import { VacationProvider } from "@/context/VacationContext";
+import { HandoverWarningsProvider } from "@/context/HandoverWarningsContext";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { TimeOverrideProvider } from "@/context/TimeOverrideContext";
 import { OnboardingProvider } from "@/context/OnboardingContext";
@@ -95,7 +98,9 @@ export default function App() {
                       <EmployeeChangeRequestsProvider>
                         <SelfDocAlertsProvider>
                           <VacationProvider>
-                            <Layout />
+                            <HandoverWarningsProvider>
+                              <Layout />
+                            </HandoverWarningsProvider>
                           </VacationProvider>
                         </SelfDocAlertsProvider>
                       </EmployeeChangeRequestsProvider>
@@ -114,6 +119,13 @@ export default function App() {
         <Route path="recepce" element={<RequirePermission allow={["nav.recepce.view"]} mobileAllow="recepce.mobile.view"><RecepcePage /></RequirePermission>} />
         <Route path="recepce/:hotel" element={<RequirePermission allow={["nav.recepce.view"]} mobileAllow="recepce.mobile.view"><RecepcePage /></RequirePermission>} />
         <Route path="recepce/:hotel/:tab" element={<RequirePermission allow={["nav.recepce.view"]} mobileAllow="recepce.mobile.view"><RecepcePage /></RequirePermission>} />
+        {/* Unlisted (no sidebar entry) – reachable only by typing the address.
+            Still gated by recepce.summary.view; obscurity is not the gate.
+            `/4d/admin` sets the pass-key (kept off the Settings page so no tab
+            hints at the page's existence); it is intentionally NOT behind the
+            pass-key itself, or the first key could never be set. */}
+        <Route path="4d" element={<RequirePermission allow={["recepce.summary.view"]}><RecepceSummaryPage /></RequirePermission>} />
+        <Route path="4d/admin" element={<RequirePermission allow={["recepce.summary.view"]}><RecepceSummaryAdminPage /></RequirePermission>} />
         <Route path="zamestnanci" element={<RequirePermission allow={["nav.employees.view"]}><EmployeesPage /></RequirePermission>} />
         <Route path="zamestnanci/novy" element={<RequirePermission allow={["employees.create"]}><EmployeeFormPage /></RequirePermission>} />
         <Route path="zamestnanci/:id" element={<RequirePermission allow={["nav.employees.view"]}><EmployeeDetailPage /></RequirePermission>} />

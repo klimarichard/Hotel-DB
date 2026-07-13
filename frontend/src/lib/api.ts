@@ -51,10 +51,20 @@ export function errorMessage(err: unknown, fallback = "Operace se nezdařila."):
   return fallback;
 }
 
+/**
+ * Optional per-call request options. `headers` are merged into (and win over)
+ * the default auth + content-type headers. Used by the Recepce summary page to
+ * attach its short-lived `X-Summary-Key` pass-key token.
+ */
+export interface RequestOptions {
+  headers?: Record<string, string>;
+}
+
 async function request<T>(
   method: string,
   path: string,
-  body?: unknown
+  body?: unknown,
+  options?: RequestOptions
 ): Promise<T> {
   // Guided-tour demo: serve mock fixtures (no backend, no Firestore) for the
   // sentinel demo employee and – while a demo route is mounted – the self /
@@ -72,6 +82,7 @@ async function request<T>(
   const headers: Record<string, string> = {
     ...(await getAuthHeader()),
     "Content-Type": "application/json",
+    ...(options?.headers ?? {}),
   };
   const res = await fetch(`${BASE_URL}${path}`, {
     method,
@@ -94,12 +105,14 @@ async function request<T>(
   return res.json() as Promise<T>;
 }
 
+// The trailing `options` argument is optional everywhere — existing call sites
+// pass nothing and behave exactly as before.
 export const api = {
-  get: <T>(path: string) => request<T>("GET", path),
-  post: <T>(path: string, body: unknown) => request<T>("POST", path, body),
-  put: <T>(path: string, body: unknown) => request<T>("PUT", path, body),
-  patch: <T>(path: string, body: unknown) => request<T>("PATCH", path, body),
-  delete: <T>(path: string) => request<T>("DELETE", path),
+  get: <T>(path: string, options?: RequestOptions) => request<T>("GET", path, undefined, options),
+  post: <T>(path: string, body: unknown, options?: RequestOptions) => request<T>("POST", path, body, options),
+  put: <T>(path: string, body: unknown, options?: RequestOptions) => request<T>("PUT", path, body, options),
+  patch: <T>(path: string, body: unknown, options?: RequestOptions) => request<T>("PATCH", path, body, options),
+  delete: <T>(path: string, options?: RequestOptions) => request<T>("DELETE", path, undefined, options),
 };
 
 // ---- Auth helpers --------------------------------------------------------

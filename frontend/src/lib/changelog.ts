@@ -19,17 +19,81 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "4.3.3",
+    date: "2026-07-13",
+    changes: [
+      "Interní vylepšení a drobné opravy.",
+    ],
+  },
+  {
+    version: "4.3.2",
+    date: "2026-07-13",
+    changes: [
+      "Interní vylepšení a drobné opravy.",
+    ],
+  },
+  {
+    version: "4.3.1",
+    date: "2026-07-12",
+    changes: [
+      "Interní vylepšení a drobné opravy.",
+    ],
+  },
+  {
+    version: "4.3.0",
+    date: "2026-07-12",
+    changes: [
+      "Interní vylepšení a drobné opravy.",
+    ],
+  },
+  {
+    version: "4.2.15",
+    date: "2026-07-11",
+    changes: [
+      "Recepce (sdílený účet): u žádosti o změnu směny, o výjimku a u převzetí volné směny se nově vybírá, kdo o ni skutečně žádá (předvyplní se osoba, která má právě službu). Žádost se přiřadí zvolené osobě.",
+    ],
+  },
+  {
+    version: "4.2.14",
+    date: "2026-07-11",
+    changes: [
+      "Upozornění – Předávací protokol: k „Nenavazujícím předáním“ přibyla sekce „Pozdní příchody“ (převzetí směny po 7:00 u noční / po 19:00 u denní).",
+    ],
+  },
+  {
+    version: "4.2.13",
+    date: "2026-07-11",
+    changes: [
+      "Předávací protokol: uzamčené Poznámky a Účty zůstávají uzamčené i po předání směny a krok zpět/vpřed je u uživatelů bez práva na uzamykání přeskočí.",
+    ],
+  },
+  {
+    version: "4.2.12",
+    date: "2026-07-11",
+    changes: [
+      "Předávací protokol – Účty: při přidávání nebo úpravě účtu se ovládací ikony (upravit, smazat, zámek) už nezobrazují mimo rámeček sekce.",
+    ],
+  },
+  {
+    version: "4.2.11",
+    date: "2026-07-11",
+    changes: [
+      "Předávací protokol – Účty: uzamčené účty se nyní řadí nad všechny nezamčené a oddělují se od nich vodorovnou čárou.",
+      "Předávací protokol – Poznámky: mezi uzamčenými a nezamčenými poznámkami je nově výrazná dělicí čára pro lepší přehlednost.",
+    ],
+  },
+  {
     version: "4.2.10",
     date: "2026-07-11",
     changes: [
-      "Recepce: jména zaměstnanců (v tabulkách Walkiny a Lobby bar i ve výběru podepisujícího a mazání podpisu u Předávacího protokolu) se zobrazují jako zobrazované jméno zaměstnance, je-li nastaveno; jinak jako Jméno Příjmení. Změna se projeví i u dříve zapsaných záznamů.",
+      "Recepce: jména zaměstnanců (v tabulkách Walkiny a Lobby bar i ve výběru podepisujícího a mazání podpisu u Předávacího protokolu) se zobrazují jako zobrazované jméno zaměstnance, je-li nastaveno.",
     ],
   },
   {
     version: "4.2.9",
     date: "2026-07-11",
     changes: [
-      "Předávací protokol – Poznámky: dlouhé poznámky se nyní zobrazují na více řádků (celý text), místo aby se ořízly třemi tečkami.",
+      "Předávací protokol – Poznámky: dlouhé poznámky se nyní zobrazují na více řádků, místo aby se ořízly na konci řádku.",
       "Předávací protokol – Poznámky: zamčené poznámky se řadí nad všechny nezamčené.",
     ],
   },
@@ -37,28 +101,28 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
     version: "4.2.8",
     date: "2026-07-11",
     changes: [
-      "Nápověda (prohlídka aplikace): krok pro záložku Terminál se nyní správně zobrazí. Dříve se ukázková stránka nenačetla a z prohlídky nešlo odejít.",
+      "Nápověda (prohlídka aplikace): krok pro záložku Terminál se nyní správně zobrazí.",
     ],
   },
   {
     version: "4.2.7",
     date: "2026-07-11",
     changes: [
-      "Recepce: při podpisu Předávacího protokolu (Předat/Převzít) i ve výběru zaměstnance u Walkinů a Lobby baru se nově nabízí každý, kdo je v daném měsíčním plánu směn – i když má v plánu skrytý řádek. Dříve takový zaměstnanec v nabídce chyběl, přestože měl na daný měsíc směny.",
+      "Recepce: při podpisu Předávacího protokolu i ve výběru zaměstnance u Walkinů a Lobby baru se nyní nabízí každý, kdo je v daném měsíčním plánu směn.",
     ],
   },
   {
     version: "4.2.6",
     date: "2026-07-11",
     changes: [
-      "Předávací protokol: podepsání směny (Předat/Převzít) i odebrání podpisu už funguje – ověření hesla se nově dělá proti skutečnému přihlašovacímu e-mailu účtu. Dříve to u všech účtů hlásilo „Neplatné jméno nebo heslo“.",
+      "Předávací protokol: podepsání směny i odebrání podpisu už funguje – ověření hesla se nově dělá proti skutečnému přihlašovacímu e-mailu účtu.",
     ],
   },
   {
     version: "4.2.5",
     date: "2026-07-10",
     changes: [
-      "Verze aplikace vlevo dole je nově klikací (na počítači) a otevře přehled změn v jednotlivých verzích – pro uživatele s oprávněním „Zobrazit změny verzí“.",
+      "Na text s verzí aplikace lze kliknout a otevře se přehled změn v jednotlivých verzích.",
     ],
   },
   {
@@ -72,7 +136,7 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
     version: "4.2.3",
     date: "2026-07-10",
     changes: [
-      "Recepce – Walkiny a Lobby bar: pole se zaměstnancem se u nového záznamu předvyplní tím, kdo má právě službu na recepci. Lze změnit.",
+      "Recepce – Walkiny a Lobby bar: pole se zaměstnancem se u nového záznamu předvyplní tím, kdo má právě službu na recepci.",
     ],
   },
   {
@@ -86,9 +150,9 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
     version: "4.2.1",
     date: "2026-07-10",
     changes: [
-      "Lobby bar: jedním prodejem lze zapsat více položek najednou, měna se volí u každé položky zvlášť.",
+      "Lobby bar: jedním prodejem lze zapsat více položek najednou.",
       "Lobby bar: v ceníku přibyl sloupec „Prodáno“ a tlačítko „Reset“ pro jeho vynulování (jen pro správce).",
-      "Terminál: typy plateb si nyní správci sami spravují (přidání, přejmenování, mazání, řazení).",
+      "Terminál: typy plateb si nyní správci spravují sami.",
     ],
   },
   {
@@ -104,27 +168,27 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
     date: "2026-07-10",
     changes: [
       "Recepce: zápisy se přisuzují tomu, kdo má službu, i při přihlášení pod sdíleným účtem recepce.",
-      "Recepce: každý uživatel si může nastavit výchozí hotel, který se mu otevře jako první.",
+      "Recepce: každý uživatel, který má přístup k více hotelům, si může nastavit výchozí hotel, který se mu otevře jako první.",
     ],
   },
   {
     version: "4.0.1",
     date: "2026-07-09",
-    changes: ["Drobné úpravy textů v průvodci Předávacího protokolu."],
+    changes: ["Drobné úpravy textů v průvodci u Předávacího protokolu."],
   },
   {
     version: "4.0.0",
     date: "2026-07-09",
     changes: [
       "Nová sekce „Recepce“: Předávací protokol s virtuálním předáním a převzetím směny, evidence Walk-in prodejů a Taxi jízd s ceníkem a provizemi.",
-      "Předávací protokol: historie změn s vracením kroků, uzamčení po podpisu a ochrana proti souběžné úpravě.",
+      "Předávací protokol: historie změn s vracením kroků, uzamknutí po podpisu a ochrana proti souběžné úpravě.",
       "Plánování směn: pravidla (limity X, pokrytí, 6 dní v řadě) se kontrolují i na serveru.",
     ],
   },
   {
     version: "3.8.4",
     date: "2026-07-05",
-    changes: ["Mazání číselníků nebrání u ukončených zaměstnanců; upozornění při reaktivaci."],
+    changes: ["Mazání hodnot číselníků (společnosti, oddělení, pozice apod.) nebrání použití položky u ukončených zaměstnanců + upozornění při reaktivaci."],
   },
   {
     version: "3.8.3",
@@ -134,12 +198,12 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
   {
     version: "3.8.2",
     date: "2026-07-05",
-    changes: ["Mazání vlastních a deaktivace vestavěných šablon smluv."],
+    changes: ["Mazání vlastních šablon a deaktivace vestavěných šablon smluv."],
   },
   {
     version: "3.8.1",
     date: "2026-07-05",
-    changes: ["Mobil: sbalitelné položky historie zaměstnání; oprava přiblížení na iOS."],
+    changes: ["Mobil: sbalitelné položky historie zaměstnání, oprava přiblížení na iOS."],
   },
   {
     version: "3.8.0",
@@ -154,7 +218,7 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
   {
     version: "3.6.2",
     date: "2026-07-03",
-    changes: ["Odlišná fialová barva odznaku Rodičovská."],
+    changes: ["Odlišná fialová barva odznaku pro rodičovskou dovolenou."],
   },
   {
     version: "3.6.1",
@@ -174,14 +238,12 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
   {
     version: "3.5.1",
     date: "2026-07-01",
-    changes: ["Opravy počtů odznaků; Můj profil zobrazuje jen podepsané smlouvy a umožňuje jejich stažení."],
+    changes: ["Opravy počtu odznaků na stránce Zaměstnanci. Můj profil zobrazuje jen podepsané smlouvy a umožňuje jejich stažení."],
   },
   {
     version: "3.5.0",
     date: "2026-06-30",
-    changes: [
-      "Částečné úvazky, kontrola minimální mzdy, souběžné smlouvy a editovatelný konec rodičovské dovolené.",
-    ],
+    changes: ["Částečné úvazky, kontrola minimální mzdy, souběžné smlouvy a editovatelný konec rodičovské dovolené."],
   },
   {
     version: "3.4.5",
@@ -196,7 +258,7 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
   {
     version: "3.4.3",
     date: "2026-06-27",
-    changes: ["Automatická úprava spojovníků v názvech adres."],
+    changes: ["Automatická úprava spojovníků v názvech adres podle pravidel českého pravopisu."],
   },
   {
     version: "3.4.2",
@@ -211,7 +273,7 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
   {
     version: "3.4.0",
     date: "2026-06-27",
-    changes: ["Označení typu u číselných buněk směn (jen do souhrnu)."],
+    changes: ["Přidání typu směny u číselných buněk směn."],
   },
   {
     version: "3.3.1",
@@ -226,7 +288,7 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
   {
     version: "3.2.1",
     date: "2026-06-25",
-    changes: ["Bezpečnostní vylepšení."],
+    changes: ["Další bezpečnostní vylepšení."],
   },
   {
     version: "3.2.0",
@@ -236,27 +298,27 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
   {
     version: "3.1.3",
     date: "2026-06-24",
-    changes: ["Bezpečnostní vylepšení."],
+    changes: ["Audit možných mezer v bezpečnosti kódu. Bezpečnostní vylepšení."],
   },
   {
     version: "3.1.2",
     date: "2026-06-24",
-    changes: ["Průvodce aplikací zohledňuje mobil; manuály „Na mobilu“."],
+    changes: ["Průvodce aplikací zohledňuje mobil. Manuály „Na mobilu“."],
   },
   {
     version: "3.1.1",
     date: "2026-06-24",
-    changes: ["Uživatelské manuály a krok průvodce pro Rodičovskou."],
+    changes: ["Uživatelské manuály a krok průvodce pro rodičovskou dovolenou."],
   },
   {
     version: "3.1.0",
     date: "2026-06-23",
-    changes: ["Vylepšení kolem zaměstnanců a smluv."],
+    changes: ["Vylepšení stránek se zaměstnanci a smlouvami v mobilním zobrazení."],
   },
   {
     version: "3.0.2",
     date: "2026-06-23",
-    changes: ["Opravy mřížky směn."],
+    changes: ["Opravy mřížky směn v mobilním zobrazení."],
   },
   {
     version: "3.0.1",
@@ -276,12 +338,12 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
   {
     version: "2.3.3",
     date: "2026-06-22",
-    changes: ["Automatické „R“ u FOM; odznak „V zácviku“; admin zadává dovolenou komukoli; opravy rozvržení."],
+    changes: ["Automatické „R“ u FOM. Odznak „V zácviku“. Admin zadává dovolenou komukoli. Opravy rozvržení."],
   },
   {
     version: "2.3.2",
     date: "2026-06-22",
-    changes: ["Opravy Logu změn; Volné směny viditelné i v uzavřených plánech."],
+    changes: ["Opravy Logu změn. Volné směny viditelné i v uzavřených plánech."],
   },
   {
     version: "2.3.1",
@@ -306,12 +368,12 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
   {
     version: "2.2.6",
     date: "2026-06-18",
-    changes: ["Skrytí pole Pohlaví na Můj profil a neutrální zobrazení."],
+    changes: ["Skrytí pole Pohlaví na stránce Můj profil a možnost neutrálního zobrazení."],
   },
   {
     version: "2.2.5",
     date: "2026-06-17",
-    changes: ["Rozlišení názvů stažených smluv; řízení práv po řádcích."],
+    changes: ["Rozlišení názvů stažených smluv s podobnými parametry."],
   },
   {
     version: "2.2.4",
@@ -321,17 +383,17 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
   {
     version: "2.2.3",
     date: "2026-06-17",
-    changes: ["Zaměstnanci jen se jménem se zobrazují v „Před nástupem“."],
+    changes: ["Noví zaměstnanci bez smlouvy se zobrazují v sekci „Před nástupem“."],
   },
   {
     version: "2.2.2",
     date: "2026-06-12",
-    changes: ["Ochrana proti smazání zaměstnance s buňkami ve směnách; úklid navázaných záznamů."],
+    changes: ["Ochrana proti smazání zaměstnance s přidělenými směnami a úklid navázaných záznamů."],
   },
   {
     version: "2.2.1",
     date: "2026-06-12",
-    changes: ["Přesun tlačítka pro přidání společnosti do záhlaví."],
+    changes: ["Přesun tlačítka pro přidání nové společnosti do záhlaví."],
   },
   {
     version: "2.2.0",
@@ -346,17 +408,17 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
   {
     version: "2.1.3",
     date: "2026-06-11",
-    changes: ["Odznak Upozornění sčítá všechny fronty ke schválení; obnova při navigaci."],
+    changes: ["Odznak nepřečtených upozornění sčítá všechny dílčí záložky; obnova při navigaci."],
   },
   {
     version: "2.1.2",
     date: "2026-06-11",
-    changes: ["Interní úklid a zpevnění chybových hlášek."],
+    changes: ["Interní úklid v kódu aplikace a konkretizace chybových hlášek."],
   },
   {
     version: "2.1.1",
     date: "2026-06-11",
-    changes: ["Oprava: kontrola smluv už neblokuje zápisy běžných zaměstnanců."],
+    changes: ["Drobné opravy."],
   },
   {
     version: "2.1.0",
@@ -371,7 +433,7 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
   {
     version: "2.0.1",
     date: "2026-06-11",
-    changes: ["Ochrana mazání – zaměstnanci s historií a používané společnosti/pozice."],
+    changes: ["Ochrana proti smazání dat – zaměstnanci s historií a používané společnosti/pozice."],
   },
   {
     version: "2.0.0",
@@ -381,7 +443,7 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
   {
     version: "1.12.0",
     date: "2026-06-10",
-    changes: ["Bezpečnostní audit a úpravy životního cyklu zaměstnance."],
+    changes: ["Bezpečnostní audit a úpravy stavů zaměstnance (aktivní/ukončený) a přechodů mezi nimi."],
   },
   {
     version: "1.11.0",
@@ -391,7 +453,7 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
   {
     version: "1.10.0",
     date: "2026-06-03",
-    changes: ["Konfigurovatelná oprávnění – vlastní uživatelské typy."],
+    changes: ["Konfigurovatelná oprávnění – vlastní uživatelské typy a matice oprávnění."],
   },
   {
     version: "1.9.0",
@@ -411,12 +473,12 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
   {
     version: "1.6.0",
     date: "2026-05-28",
-    changes: ["Dávka oprav a vylepšení."],
+    changes: ["Drobné opravy a vylepšení."],
   },
   {
     version: "1.5.0",
     date: "2026-05-27",
-    changes: ["Dávka úprav – uživatelé, smlouvy, opravy."],
+    changes: ["Drobné úpravy – uživatelé, smlouvy, opravy."],
   },
   {
     version: "1.4.0",
@@ -436,7 +498,7 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
   {
     version: "1.1.0",
     date: "2026-05-22",
-    changes: ["Samoobsluha zaměstnance – Můj profil a schvalování navržených úprav."],
+    changes: ["Stránka Můj profil a schvalování navržených úprav."],
   },
   {
     version: "1.0.0",

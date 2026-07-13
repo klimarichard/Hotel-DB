@@ -37,8 +37,11 @@ import {
   applyChange,
   appendHistory,
   readCursor,
-  planUndo,
-  planRedo,
+  loadHistoryEntries,
+  findUndoTarget,
+  findRedoTarget,
+  highestAppliedSeq,
+  computeCanStep,
   markUndone,
   canUndoRedo,
 } from "../services/handoverHistory";
@@ -210,6 +213,28 @@ function mergeLockable<T extends { id?: string; locked?: boolean }>(
     if (s.locked && s.id && !used.has(s.id)) result.push(s);
   }
   return result;
+}
+
+/**
+ * Lock enforcement on CREATE (no stored baseline exists yet). A new protocol is
+ * born by carrying the previous shift's outstanding notes / účty forward, so the
+ * lock state must be INHERITED from that previous shift — not trusted from the
+ * client and not stripped. A manage/admin caller controls locks directly (their
+ * incoming rows pass verbatim). A non-manage caller (the receptionist taking the
+ * shift over) may neither lock a new row nor unlock a carried one: each incoming
+ * row's `locked` is forced to whatever it was in the previous shift (matched by
+ * id), and false for anything not carried across. Without this, every handover
+ * performed by a regular receptionist silently unlocked the pinned rows.
+ */
+function seedLockedFromPrevious<T extends { id?: string; locked?: boolean }>(
+  prev: T[],
+  incoming: T[],
+  isManage: boolean
+): T[] {
+  if (isManage) return incoming;
+  const prevLocked = new Set<string>();
+  for (const p of prev) if (p.locked && p.id) prevLocked.add(p.id);
+  return incoming.map((row) => ({ ...row, locked: !!(row.id && prevLocked.has(row.id)) }));
 }
 
 /** Validates the :hotel URL segment. Rejects unknown slugs with 404. */
@@ -627,11 +652,15 @@ handoversRouter.put(
     let seedSmTrezor = 0;
     let seedWata = 0;
     let prevClosed = false;
+    // The previous shift's stored doc — read on create for the balance carry-over
+    // AND for inheriting the locked state of the carried notes / účty (see
+    // seedLockedFromPrevious). Stays null on an edit (baseUpdatedAt path).
+    let prevDoc: HandoverDoc | null = null;
     if (!beforeSnap.exists) {
       const set = req.permissions ?? new Set<string>();
       const prev = previousShift(body.shiftDate, body.shiftType);
       const prevSnap = await handoverCol(hotel).doc(docId(prev.date, prev.shift)).get();
-      const prevDoc = prevSnap.exists ? (prevSnap.data() as HandoverDoc) : null;
+      prevDoc = prevSnap.exists ? (prevSnap.data() as HandoverDoc) : null;
       seedSmTrezor = finiteOr(prevDoc?.smTrezor, 0);
       seedWata = finiteOr(prevDoc?.wata, 0);
       prevClosed = !!(prevDoc?.predal && prevDoc?.prevzal);
@@ -658,16 +687,20 @@ handoversRouter.put(
     // just ended stay behind with it — not even struck through. Enforced here so
     // it holds no matter what the client sends.
     const incomingNotes = sanitizeNotes(body.notes);
+    const incomingAccounts = sanitizeAccounts(body.accounts);
     const after = {
       shiftDate: body.shiftDate,
       shiftType: body.shiftType,
-      notes: mergeLockable<NoteRow>(
-        before?.notes ?? [],
-        beforeSnap.exists ? incomingNotes : incomingNotes.filter((n) => !n.done),
-        isManage
-      ),
+      // On edit, protect locked rows against the stored doc. On create, there is no
+      // stored baseline — inherit the locked state from the previous shift so a
+      // handover keeps its pinned rows locked (see seedLockedFromPrevious).
+      notes: beforeSnap.exists
+        ? mergeLockable<NoteRow>(before?.notes ?? [], incomingNotes, isManage)
+        : seedLockedFromPrevious<NoteRow>(prevDoc?.notes ?? [], incomingNotes.filter((n) => !n.done), isManage),
       cashCounts: sanitizeCashCounts(body.cashCounts),
-      accounts: mergeLockable<AccountRow>(before?.accounts ?? [], sanitizeAccounts(body.accounts), isManage),
+      accounts: beforeSnap.exists
+        ? mergeLockable<AccountRow>(before?.accounts ?? [], incomingAccounts, isManage)
+        : seedLockedFromPrevious<AccountRow>(prevDoc?.accounts ?? [], incomingAccounts, isManage),
       // sm counts flow through the normal content PUT (any protocol-edit user).
       // smTrezor + wata are NOT touched here — they move only via their dedicated
       // endpoints, so omitting them from the merge preserves the stored values.
@@ -814,6 +847,7 @@ async function syncChainWarning(hotel: HotelSlug, id: string): Promise<void> {
     await warnRef.set({
       hotel,
       handoverId: id,
+      type: "chain",
       shiftDate: doc.shiftDate,
       shiftType: doc.shiftType,
       actorUid: doc.predal.uid,
@@ -830,14 +864,87 @@ async function syncChainWarning(hotel: HotelSlug, id: string): Promise<void> {
   }
 }
 
-/** After a predal/prevzal change, resync the affected protocol's chain warning:
- *  a predal change affects THIS protocol; a prevzal change affects the NEXT one. */
+/**
+ * "Pozdní příchod" (late arrival) warning: the incoming receptionist (Převzal) is
+ * expected by the NEXT shift's start — 19:00 for the night shift, 07:00 for the
+ * day shift — so a den protocol's handover is due 19:00 the same day and a noc
+ * protocol's due 07:00 the next morning. Comparison is in Europe/Prague wall-clock
+ * at minute precision (07:00:59 still counts as on time). The Předal stamp is
+ * irrelevant. Keyed by `${hotel}_${id}_late` so it is independent of the chain
+ * warning on the same protocol; self-healing on re-sign/revert.
+ */
+function evaluatePrevzalLateness(
+  shiftDate: string,
+  shiftType: HandoverDoc["shiftType"],
+  at: Timestamp
+): { late: boolean; cutoffLabel: string; prevzalLabel: string } {
+  // The shift the Převzal signer is taking over drives the deadline.
+  const next = nextShift(shiftDate, shiftType);
+  const cutoffHour = next.shift === "noc" ? 19 : 7;
+  const cutoffLabel = `${String(cutoffHour).padStart(2, "0")}:00`;
+  const cutoffKey = `${next.date.replace(/-/g, "")}${String(cutoffHour).padStart(2, "0")}00`;
+
+  // Prague wall-clock parts of the signature time (hourCycle h23 → 00–23, never 24).
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Prague",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(at.toDate());
+  const p = (t: string) => parts.find((x) => x.type === t)?.value ?? "00";
+  const prevzalKey = `${p("year")}${p("month")}${p("day")}${p("hour")}${p("minute")}`;
+  const prevzalLabel = `${p("day")}.${p("month")}.${p("year")} ${p("hour")}:${p("minute")}`;
+  return { late: prevzalKey > cutoffKey, cutoffLabel, prevzalLabel };
+}
+
+async function syncLateWarning(hotel: HotelSlug, id: string): Promise<void> {
+  const warnRef = db().collection("handoverWarnings").doc(`${hotel}_${id}_late`);
+  const snap = await handoverCol(hotel).doc(id).get();
+  const doc = snap.exists ? (snap.data() as HandoverDoc) : null;
+  const at = doc?.prevzal?.at;
+  if (!doc || !doc.prevzal || !at || typeof (at as { toDate?: unknown }).toDate !== "function") {
+    await warnRef.delete().catch(() => undefined);
+    return;
+  }
+  const { late, cutoffLabel, prevzalLabel } = evaluatePrevzalLateness(doc.shiftDate, doc.shiftType, at);
+  if (!late) {
+    await warnRef.delete().catch(() => undefined);
+    return;
+  }
+  await warnRef.set({
+    hotel,
+    handoverId: id,
+    type: "late",
+    shiftDate: doc.shiftDate,
+    shiftType: doc.shiftType,
+    actorUid: doc.prevzal.uid,
+    actorName: doc.prevzal.displayName,
+    prevzalAt: at,
+    prevzalLabel,
+    cutoffLabel,
+    createdAt: FieldValue.serverTimestamp(),
+    read: false,
+    readAt: null,
+    readBy: null,
+  });
+}
+
+/**
+ * Resync the handover warnings a signature change affects:
+ *  - chain warning: a predal change affects THIS protocol; a prevzal change the NEXT.
+ *  - late-arrival warning: a prevzal change affects THIS protocol (was Převzal on time?).
+ * A predal change never touches the late warning (the Předal stamp is irrelevant to it).
+ */
 async function resyncChainAfter(hotel: HotelSlug, doc: HandoverDoc, slot: SignatureSlot): Promise<void> {
   if (slot === "predal") {
     await syncChainWarning(hotel, docId(doc.shiftDate, doc.shiftType));
   } else {
     const next = nextShift(doc.shiftDate, doc.shiftType);
     await syncChainWarning(hotel, docId(next.date, next.shift));
+    await syncLateWarning(hotel, docId(doc.shiftDate, doc.shiftType));
   }
 }
 
@@ -1153,7 +1260,9 @@ handoversRouter.get(
       res.status(404).json({ error: "Předání nenalezeno." });
       return;
     }
-    const cursor = readCursor(snap.data() as Record<string, unknown>);
+    const doc = snap.data() as HandoverDoc;
+    const permSet = req.permissions ?? new Set<string>();
+    const isManage = permSet.has("system.admin") || permSet.has(handoverManagePerm(hotel));
     const histSnap = await ref.collection("history").orderBy("seq", "desc").get();
 
     // Resolve author display names once per distinct uid.
@@ -1175,10 +1284,10 @@ handoversRouter.get(
         label: e.label,
         by: names.get(e.byUid) ?? e.byUid,
         undone: e.undone === true,
-        applied: e.seq <= cursor.histCursor,
+        applied: e.undone !== true,
       };
     });
-    res.json({ entries, ...(await canUndoRedo(hotel, id, cursor)) });
+    res.json({ entries, ...(await canUndoRedo(hotel, id, { content: contentOf(doc), isManage })) });
   }
 );
 
@@ -1201,35 +1310,45 @@ function stepHandler(dir: "undo" | "redo") {
       res.status(403).json({ error: "Podepsaný protokol nelze vrátit zpět." });
       return;
     }
-    const cursor = readCursor(before as unknown as Record<string, unknown>);
-    const plan = dir === "undo" ? await planUndo(hotel, id, cursor) : await planRedo(hotel, id, cursor);
-    if (!plan) {
+    // Lock enforcement mirrors the content PUT's mergeLockable: a non-manage caller
+    // may not revert a change that touches a locked row. Rather than dead-ending on
+    // such a step, undo/redo SKIP it and land on the nearest change the caller may
+    // touch (findUndoTarget/findRedoTarget apply the guard). Admin/manage: no guard.
+    const set = req.permissions ?? new Set<string>();
+    const isManage = set.has("system.admin") || set.has(handoverManagePerm(hotel));
+    const content = contentOf(before);
+    const guard = { content, isManage };
+    const entries = await loadHistoryEntries(hotel, id);
+    const target = dir === "undo" ? findUndoTarget(entries, guard) : findRedoTarget(entries, guard);
+    if (!target) {
       res.status(409).json({ error: dir === "undo" ? "Není co vrátit zpět." : "Není co obnovit." });
       return;
     }
 
-    const content = contentOf(before);
-    applyChange(content, plan.change, dir);
+    applyChange(content, target, dir);
+    // Reflect the step in the in-memory list so the post-step availability below is
+    // computed against the new state without a re-read; `content` is now post-step.
+    target.undone = dir === "undo";
     await ref.update({
       notes: content.notes,
       accounts: content.accounts,
       cashCounts: content.cashCounts,
       smCounts: content.smCounts,
-      histCursor: plan.cursor.histCursor,
+      histCursor: highestAppliedSeq(entries),
       updatedBy: req.uid,
       updatedAt: FieldValue.serverTimestamp(),
     });
-    await markUndone(hotel, id, plan.seq, dir === "undo");
+    await markUndone(hotel, id, target.seq, dir === "undo");
     await writeAudit(actorCtx(await resolveRecepceActor(req, hotel, before.shiftDate, before.shiftType)), {
       action: "update",
       collection: "shiftHandovers",
       resourceId: id,
       event: dir === "undo" ? "recepce.protokol.undo" : "recepce.protokol.redo",
-      extra: { hotel, shift: before.shiftType, date: before.shiftDate, label: plan.change.label },
+      extra: { hotel, shift: before.shiftType, date: before.shiftDate, label: target.label },
     });
 
     const saved = await ref.get();
-    res.json({ id, ...saved.data(), ...(await canUndoRedo(hotel, id, plan.cursor)) });
+    res.json({ id, ...saved.data(), ...computeCanStep(entries, guard) });
   };
 }
 

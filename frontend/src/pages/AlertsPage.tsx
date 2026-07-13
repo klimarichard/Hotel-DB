@@ -6,6 +6,7 @@ import { useVacationContext } from "@/context/VacationContext";
 import { useShiftOverridesContext } from "@/context/ShiftOverridesContext";
 import { useShiftChangeRequestsContext } from "@/context/ShiftChangeRequestsContext";
 import { useEmployeeChangeRequestsContext } from "@/context/EmployeeChangeRequestsContext";
+import { useHandoverWarningsContext } from "@/context/HandoverWarningsContext";
 import IconButton from "@/components/IconButton";
 import ConfirmModal from "@/components/ConfirmModal";
 import DocumentExpiryTab from "./upozorneni/DocumentExpiryTab";
@@ -26,6 +27,7 @@ export default function AlertsPage() {
   const { pendingCount: overridesCount } = useShiftOverridesContext();
   const { pendingCount: changesCount } = useShiftChangeRequestsContext();
   const { pendingCount: dataChangesCount } = useEmployeeChangeRequestsContext();
+  const { unreadCount: handoverWarningCount } = useHandoverWarningsContext();
 
   // Per-tab visibility. "Doklady"/"Zkušební doba" ride on the route's alerts.view
   // gate; the review-queue tabs each require their own review permission.
@@ -161,7 +163,7 @@ export default function AlertsPage() {
             className={tab === "predani" ? styles.tabActive : styles.tabBtn}
             onClick={() => setTab("predani")}
           >
-            Nenavazující předání
+            {tabLabel("Předávací protokol", handoverWarningCount)}
           </button>
         )}
       </div>

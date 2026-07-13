@@ -57,6 +57,12 @@ functions/lib/
 # Claude Code local settings (machine-specific paths)
 .claude/settings.local.json
 
+# Local agent / tooling scratch (Claude Code skills, Playwright MCP dumps)
+.claude/
+.agents/
+.playwright-mcp/
+skills-lock.json
+
 # TypeScript
 *.tsbuildinfo
 

@@ -9,6 +9,7 @@ import { useShiftChangeRequestsContext } from "@/context/ShiftChangeRequestsCont
 import { useEmployeeChangeRequestsContext } from "@/context/EmployeeChangeRequestsContext";
 import { useSelfDocAlertsContext } from "@/context/SelfDocAlertsContext";
 import { useVacationContext } from "@/context/VacationContext";
+import { useHandoverWarningsContext } from "@/context/HandoverWarningsContext";
 import { useTheme } from "@/context/ThemeContext";
 import { api } from "@/lib/api";
 import { resolveOrderByPermission } from "@/lib/menuItems";
@@ -18,6 +19,11 @@ import BottomNav from "@/components/BottomNav";
 import ChangelogModal from "@/components/ChangelogModal";
 import logoMark from "@/assets/logo.svg";
 import styles from "./Layout.module.css";
+
+// True only in the staging build (`vite --mode staging`). Baked at build time, so
+// the STAGING stamp below is dead-code-eliminated from the production bundle — it
+// can never render on prod. Same signal used by main.tsx (tab title) and tours.
+const IS_STAGING = import.meta.env.MODE === "staging";
 
 const SunIcon = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -47,8 +53,9 @@ export default function Layout() {
   const { pendingCount: pendingDataChangeCount, refresh: refreshDataChanges } = useEmployeeChangeRequestsContext();
   const { count: selfDocAlertCount, refresh: refreshSelfDocAlerts } = useSelfDocAlertsContext();
   const { pendingCount: pendingVacationCount, refresh: refreshVacation } = useVacationContext();
+  const { unreadCount: handoverWarningCount, refresh: refreshHandoverWarnings } = useHandoverWarningsContext();
   // The "Upozornění" sidebar badge mirrors the Upozornění page total: it sums
-  // ALL six review queues shown there, each gated by the same permission that
+  // ALL seven review queues shown there, each gated by the same permission that
   // gates that page's tab. (Documents/probation are already 0 without
   // alerts.view, since AlertsContext only fetches them then.) Vacation + shift
   // queues ALSO keep their own dedicated badges below – the dedicated badge
@@ -59,7 +66,8 @@ export default function Layout() {
     (can("vacation.review") ? pendingVacationCount : 0) +
     (can("shifts.override.review") ? pendingOverrideCount : 0) +
     (can("shifts.changeRequest.review") ? pendingChangeRequestCount : 0) +
-    (can("changeRequests.review") ? pendingDataChangeCount : 0);
+    (can("changeRequests.review") ? pendingDataChangeCount : 0) +
+    (can("changeRequests.review") ? handoverWarningCount : 0);
   const shiftsBadgeCount =
     (can("shifts.override.review") ? pendingOverrideCount : 0) +
     (can("shifts.changeRequest.review") ? pendingChangeRequestCount : 0);
@@ -81,6 +89,7 @@ export default function Layout() {
       refreshDataChanges();
       refreshSelfDocAlerts();
       refreshVacation();
+      refreshHandoverWarnings();
     }
     refreshAll();
     const id = window.setInterval(refreshAll, 60_000);
@@ -126,6 +135,14 @@ export default function Layout() {
         <Link to="/prehled" className={styles.logo} title="Přehled" aria-label="Přehled">
           <img src={logoMark} alt="" className={styles.logoMark} />
           <span>HPM Intranet</span>
+          {/* Staging-only "rubber stamp" over the logo so staging is never mistaken
+              for production. Gated on the build mode (see IS_STAGING) — absent from
+              the prod bundle. pointer-events:none via CSS so the logo link still works. */}
+          {IS_STAGING && (
+            <span className={styles.stagingStamp} aria-hidden="true">
+              STAGING
+            </span>
+          )}
         </Link>
         <ul className={styles.nav}>
           {items.map((item) => {
