@@ -91,6 +91,10 @@ export default function GenerateContractModal({
   // Raw form input per custom slot, as typed (ISO date, digits, "true"/"" for a
   // checkbox). Formatted into the final string only at fill time.
   const [customRaw, setCustomRaw] = useState<Record<string, string>>({});
+  // Only complain about unfilled custom variables once the user has actually
+  // tried to generate. Flagging empty fields the moment the dialog opens reads
+  // as an error the user hasn't made yet.
+  const [triedGenerate, setTriedGenerate] = useState(false);
 
   const autoVars = resolveVariables(employeeData, companyData);
 
@@ -177,6 +181,12 @@ export default function GenerateContractModal({
 
   async function handleGenerate() {
     if (!template) return;
+    // Validate on submit, not on open: the button stays live so pressing it is
+    // what surfaces the list of what's still missing.
+    if (missingCustom.length > 0) {
+      setTriedGenerate(true);
+      return;
+    }
     setStep("generating");
 
     try {
@@ -270,10 +280,16 @@ export default function GenerateContractModal({
                               <tr key={key}>
                                 <td className={styles.varKey}>
                                   {label}
-                                  {!def && (
+                                  {/* Slot used in the template but never given a
+                                      name/type: say so plainly instead of showing
+                                      a bare "var1" that means nothing here. */}
+                                  {!def?.label?.trim() && (
                                     <>
                                       {" "}
-                                      <code>{`{{${key}}}`}</code>
+                                      <code>{`{{${key}}}`}</code>{" "}
+                                      <span className={styles.varTableHint}>
+                                        (v šabloně bez nastavení)
+                                      </span>
                                     </>
                                   )}
                                 </td>
@@ -310,7 +326,7 @@ export default function GenerateContractModal({
                           })}
                         </tbody>
                       </table>
-                      {missingCustom.length > 0 && (
+                      {triedGenerate && missingCustom.length > 0 && (
                         <div className={styles.missingBox}>
                           <strong>Vyplňte všechny vlastní proměnné:</strong>
                           <ul className={styles.missingList}>
@@ -403,15 +419,7 @@ export default function GenerateContractModal({
               <Button
                 variant="primary"
                 onClick={handleGenerate}
-                disabled={
-                  loadingTemplate ||
-                  loadingCompany ||
-                  !template ||
-                  templateInactive ||
-                  // An unfilled custom variable is a blank in the contract text
-                  // itself — never generate one.
-                  missingCustom.length > 0
-                }
+                disabled={loadingTemplate || loadingCompany || !template || templateInactive}
               >
                 Generovat PDF
               </Button>
