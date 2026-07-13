@@ -58,6 +58,23 @@
   border-top: 1px solid var(--color-border);
 }
 
+/*
+ * Heading above the pre-launch v0.x versions. It sits between two .entry
+ * siblings and so breaks the `.entry + .entry` rule above — it therefore carries
+ * that separator's top margin/border itself.
+ */
+.preReleaseDivider {
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--color-border);
+  margin-bottom: 1.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+
 .entryHead {
   display: flex;
   align-items: baseline;

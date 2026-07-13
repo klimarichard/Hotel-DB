@@ -2,16 +2,24 @@
  * User-facing release notes shown in the changelog modal (opened by clicking the
  * version in the sidebar footer — gated by `system.version.changelog`).
  *
- * Curated Czech summaries, newest first, back to the first production launch
- * (v1.0.0). Keep entries short and end-user oriented (what changed for them, not
- * the implementation). **Add a new entry here as part of every staging→prod
+ * Curated Czech summaries, newest first, back to the very first build (v0.1.0).
+ * Keep entries short and end-user oriented (what changed for them, not the
+ * implementation). **Add a new entry here as part of every staging→prod
  * promotion**, alongside the version bump.
+ *
+ * The v0.x entries predate the production launch (v1.0.0, 2026-05-21) — they are
+ * development milestones that never ran in prod, and the modal renders a divider
+ * above them. Every date below is the date of that version's tagged commit.
  */
 
 export interface ChangelogEntry {
   /** "X.Y.Z" — rendered with a leading "v". */
   version: string;
-  /** ISO date (YYYY-MM-DD) the version went to production. */
+  /**
+   * ISO date (YYYY-MM-DD) the version went to production — i.e. the date of its
+   * staging→master merge. For the pre-launch v0.x versions, the date the
+   * milestone was reached.
+   */
   date: string;
   /** Short, user-facing Czech bullets. */
   changes: string[];
@@ -504,5 +512,50 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
     version: "1.0.0",
     date: "2026-05-21",
     changes: ["První produkční spuštění aplikace."],
+  },
+  {
+    version: "0.9.0",
+    date: "2026-05-21",
+    changes: ["Nové uživatelské typy."],
+  },
+  {
+    version: "0.8.0",
+    date: "2026-05-06",
+    changes: ["Přepracovaná historie zaměstnání."],
+  },
+  {
+    version: "0.7.0",
+    date: "2026-05-04",
+    changes: ["Log změn – historie úprav dat."],
+  },
+  {
+    version: "0.6.0",
+    date: "2026-04-13",
+    changes: ["Dovolené."],
+  },
+  {
+    version: "0.5.0",
+    date: "2026-04-13",
+    changes: ["Plánovač směn."],
+  },
+  {
+    version: "0.4.0",
+    date: "2026-04-09",
+    changes: ["Smlouvy a šablony smluv."],
+  },
+  {
+    version: "0.3.0",
+    date: "2026-04-09",
+    changes: ["Evidence zaměstnanců."],
+  },
+  {
+    version: "0.2.0",
+    date: "2026-04-09",
+    changes: ["Přihlašování a uživatelské účty."],
+  },
+  {
+    version: "0.1.0",
+    date: "2026-04-08",
+    changes: ["Základ aplikace – první vývojová verze."],
   },
 ];
