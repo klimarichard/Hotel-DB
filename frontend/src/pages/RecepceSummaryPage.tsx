@@ -491,7 +491,7 @@ export default function RecepceSummaryPage() {
     return (
       <div className={styles.lockWrap}>
         <div className={styles.lockCard}>
-          <h1 className={styles.lockTitle}>Souhrn recepce</h1>
+          <h1 className={styles.lockTitle}>4D recepce</h1>
 
           {keyStatusError && <div className={styles.error}>{keyStatusError}</div>}
 
@@ -499,7 +499,7 @@ export default function RecepceSummaryPage() {
 
           {!keyStatusError && keyConfigured === false && (
             <p className={styles.lockText}>
-              Přístupový klíč zatím není nastavený. Nastavte jej prosím v sekci Nastavení → Souhrn recepce.
+              Přístupový klíč zatím není nastavený. Nastavte jej prosím na adrese /4d/admin.
             </p>
           )}
 
@@ -532,7 +532,7 @@ export default function RecepceSummaryPage() {
     <div className={styles.page}>
       <div className={styles.headerRow}>
         <div className={styles.titleGroup}>
-          <h1 className={styles.title}>Souhrn recepce</h1>
+          <h1 className={styles.title}>4D recepce</h1>
           {rangeValid && (
             <span className={styles.rangeLabel}>
               {formatDate(from)} – {formatDate(to)}
@@ -699,11 +699,6 @@ export default function RecepceSummaryPage() {
           {/* ── Počet směn — screen + PRINT middle ───────────────────────────── */}
           <section className={`${styles.section} ${styles.printOrder2}`}>
             <h2 className={styles.sectionTitle}>Počet směn</h2>
-            <p className={`${styles.note} ${styles.noPrint}`}>
-              Počítají se pouze recepční denní/noční směny podle hotelu. Dvojité směny (např. DA²) a zaškolovací směny se
-              nepočítají; hodinová buňka označená typem směny se počítá jako část směny (hodiny ÷ 12). Částky za směny =
-              směny × „Na 1 směnu“ (zaokrouhleno dolů na 10 Kč).
-            </p>
             <div className={styles.tableWrap}>
               <table className={styles.table}>
                 <thead>
