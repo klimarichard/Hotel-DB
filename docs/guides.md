@@ -12,7 +12,6 @@ guides/{id} = {
   description: string,     // "" when omitted, never undefined
   tags: string[],           // free-form, normalised server-side — see below
   kind: "pdf" | "link",     // fixed for the life of the doc — never changes on edit
-  order: number,            // display order across the whole flat list
   createdAt, createdBy,
   updatedAt?, updatedBy?,
 
@@ -26,7 +25,11 @@ guides/{id} = {
 }
 ```
 
-`GET /api/guides` returns `{ guides, tags }` in one call, `guides` already sorted by `order`. There is no tag collection: `tags` is the de-duplicated (case-insensitive, Czech-collated) union of every tag on every guide, computed on each request. This makes the tag vocabulary **self-pruning** — remove the last guide carrying a tag and the tag simply stops appearing in the list. The PDF bytes are never included; the viewer fetches them separately only when a PDF guide is opened.
+`GET /api/guides` returns `{ guides, tags }` in one call, `guides` already sorted alphabetically by `title` with Czech collation (`localeCompare(…, "cs")`, so "Č" sorts right after "C" rather than after "Z" as plain code-point sorting would). There is no tag collection: `tags` is the de-duplicated (case-insensitive, Czech-collated) union of every tag on every guide, computed on each request. This makes the tag vocabulary **self-pruning** — remove the last guide carrying a tag and the tag simply stops appearing in the list. The PDF bytes are never included; the viewer fetches them separately only when a PDF guide is opened.
+
+### Why sort order is derived, not stored
+
+There is deliberately no `order` field and no manual reordering. The display order is *derived* from `title` (`byTitle()` in `guides.ts`), so it can never drift out of sync with the data — adding, renaming or deleting a guide simply repositions it on the next read, with no bookkeeping. The sort is applied **both** server-side (`GET /guides`) and client-side (the `visible` `useMemo` in `GuidesPage.tsx`); the client-side pass is not redundant, since the guided-tour demo fixtures bypass the backend entirely and the page still has to guarantee the ordering itself.
 
 ### Why tags instead of a category
 
@@ -41,9 +44,14 @@ Applied server-side on every create/update, so the client's raw input never land
 - Cap at **20 tags** per guide (extra tags beyond the 20th are silently dropped).
 - De-duplicate case-insensitively (Czech locale), keeping the **first spelling** seen — so a guide can't carry both "Recepce" and "recepce". Display casing is otherwise preserved.
 
-### Legacy `categoryId` — do not resurrect
+### Legacy `categoryId` and `order` — do not resurrect
 
-Guides created before this redesign shipped still carry a `categoryId` field (pointing at a now-defunct `guideCategories/{id}` doc) and no `tags`. The field is **read-tolerantly ignored** — never migrated, never deleted — so those guides simply read back as untagged: still listed, still openable, still searchable by title/description. `guideCategories` docs left over on staging are orphaned and unused; nothing reads or writes that collection anymore. If you encounter `categoryId` in old data or old code history, it is inert — do not build new logic around it.
+Two fields survive from earlier schema revisions and are both **read-tolerantly ignored** — never migrated, never deleted:
+
+- `categoryId` — guides created before the tags redesign carry this field (pointing at a now-defunct `guideCategories/{id}` doc) and no `tags`. Those guides simply read back as untagged: still listed, still openable, still searchable by title/description. `guideCategories` docs left over on staging are orphaned and unused; nothing reads or writes that collection anymore.
+- `order` — guides created before alphabetical sorting shipped still carry the old manually-managed `order` number. It is never read: sorting is now always computed from `title` (see above). It is left in place on old docs rather than stripped out.
+
+If you encounter either field in old data or old code history, it is inert — do not build new logic around it.
 
 ## Storage
 
@@ -81,11 +89,10 @@ A `kind: "link"` guide's `url` is rendered as `window.open(guide.url, ...)` from
 - The tag-chip row itself is populated from the server-derived `tags` vocabulary (`GET /api/guides` response), not from the currently-visible guides, so chips don't disappear/reappear as you filter.
 - A "Zrušit filtr" button clears both the search box and active tags; it only renders while a filter is active.
 
-## Guides — create/edit/delete/reorder
+## Guides — create/edit/delete
 
-- `POST /guides` — body `{ title, description?, tags?: string[], kind, url? (kind=link), pdfBase64? + fileName? (kind=pdf) }`. `tags` passes through `normalizeTags`. `order` is computed server-side (append to the end of the whole list — there are no per-category buckets to append within).
+- `POST /guides` — body `{ title, description?, tags?: string[], kind, url? (kind=link), pdfBase64? + fileName? (kind=pdf) }`. `tags` passes through `normalizeTags`.
 - `PUT /guides/:id` — edits metadata + tags (`normalizeTags` again); `kind` can never change (a guide is either always a PDF or always a link). For a PDF guide, `pdfBase64` is optional — omitting it keeps the existing file; supplying it re-uploads to the **same** `storagePath`, so no blob is orphaned.
-- `PUT /guides/order` — bulk reorder over the **whole flat list** via `{ orderedIds: string[] }`. `GuidesPage.tsx` calls this from the ↑/↓ row buttons with an optimistic local reorder, rolling back (`load()`) on failure. The ↑/↓ buttons (and reordering generally) are only offered when the list is **unfiltered** — moving a row "up" past hidden rows would be meaningless once a search/tag filter is narrowing the visible set.
 - `DELETE /guides/:id` — best-effort deletes the Storage blob first (a missing/already-gone file does not block the Firestore delete), then removes the doc.
 
 In the edit/create modal, tags are entered as free text with Enter (or comma) committing each one; existing-tag autocomplete suggestions are drawn from the same server-derived vocabulary, filtered to exclude tags already on the draft. A tag typed but not yet committed when "Uložit" is pressed is committed automatically so it isn't silently lost.
@@ -101,7 +108,7 @@ Two keys, catalog group **"Návody"**:
 | `nav.guides.view` | Zobrazit Návody | every built-in type (in `BASE_SELF`) — guides are reference material for everyone |
 | `guides.manage` | Spravovat návody | `director`; `admin` via `system.admin` expansion |
 
-`nav.guides.view` gates the page/menu item **and** every read endpoint (`GET /guides`, `GET /guides/:id/file`) — there is no separate `guides.view`. `guides.manage` gates every write endpoint (create/edit/delete/reorder). `manager`/`employee`/`accountant` can see, search, and open guides but not manage them; nothing needs an explicit grant to view guides on a fresh environment.
+`nav.guides.view` gates the page/menu item **and** every read endpoint (`GET /guides`, `GET /guides/:id/file`) — there is no separate `guides.view`. `guides.manage` gates every write endpoint (create/edit/delete). `manager`/`employee`/`accountant` can see, search, and open guides but not manage them; nothing needs an explicit grant to view guides on a fresh environment.
 
 See [Authentication, Roles & Permissions](auth-and-permissions.md) for the general permission model, and `PERMISSIONS_LIST.md` for the flat catalog notation.
 
