@@ -548,6 +548,9 @@ export default function ContractTemplatesPage() {
   // with the template; the same slot means different things in different ones.
   const [variableDefs, setVariableDefs] = useState<CustomVarDefs>({});
   const [customVarsOpen, setCustomVarsOpen] = useState(false);
+  // Set on save: custom slots used in the text that have no name/type yet.
+  // Persists (unlike the "Uloženo" toast) until they are configured.
+  const [varWarning, setVarWarning] = useState<string | null>(null);
   // Force a rerender on every editor transaction so isActive(...) checks
   // (active toolbar buttons, in-table contextual buttons, etc.) reflect
   // selection changes. TipTap React v3 doesn't subscribe to these by default.
@@ -823,6 +826,7 @@ export default function ContractTemplatesPage() {
       editor.commands.setContent(doc.htmlContent || "<p></p>");
       setMargins(doc.margins ?? DEFAULT_MARGINS);
       setVariableDefs(doc.variableDefs ?? {});
+      setVarWarning(null); // belongs to the template we just left
       // Release the flag on the next tick so any synchronous `update`
       // events fired by setContent are still counted as load events.
       setTimeout(() => {
@@ -843,11 +847,18 @@ export default function ContractTemplatesPage() {
     return () => { editor.off("update", onUpdate); };
   }, [editor]);
 
-  function insertVariable(key: string, kind?: "if") {
+  /**
+   * `kind`:
+   *   undefined → plain `{{key}}`
+   *   "if"      → `{{#if key}}…{{/if}}`      — block shown when the value is set
+   *   "unless"  → `{{#unless key}}…{{/unless}}` — block shown when it is NOT set
+   * The caret lands between the tags so the paragraph can be typed straight in.
+   */
+  function insertVariable(key: string, kind?: "if" | "unless") {
     if (!editor) return;
-    if (kind === "if") {
-      const left = `{{#if ${key}}}`;
-      const right = `{{/if}}`;
+    if (kind === "if" || kind === "unless") {
+      const left = kind === "if" ? `{{#if ${key}}}` : `{{#unless ${key}}}`;
+      const right = kind === "if" ? `{{/if}}` : `{{/unless}}`;
       const from = editor.state.selection.from;
       editor
         .chain()
@@ -904,6 +915,20 @@ export default function ContractTemplatesPage() {
       }
       setSaveMsg("Uloženo");
       setIsDirty(false);
+
+      // A custom slot used in the text but never given a name/type still works –
+      // it falls back to Text and shows its raw key ({{var2}}) to whoever
+      // generates the document, which looks like a bug. Say so at save time,
+      // while the author is still here to fix it.
+      const unnamed = usedCustomVars(htmlContent).filter(
+        (k) => !variableDefs[k]?.label?.trim()
+      );
+      setVarWarning(
+        unnamed.length > 0
+          ? `Bez nastavení: ${unnamed.join(", ")}. Nastavte název a typ (⚙ Nastavit… v panelu proměnných), jinak se při generování zobrazí jen ${unnamed[0]}.`
+          : null
+      );
+
       await fetchTemplates();
       setTimeout(() => setSaveMsg(null), 3000);
     } catch (err) {
@@ -1067,6 +1092,25 @@ export default function ContractTemplatesPage() {
         </div>
         {canManage && (
           <div className={styles.headerActions}>
+            {varWarning && (
+              <button
+                type="button"
+                className={styles.saveMsg}
+                style={{
+                  color: "var(--color-warning-text, #92400e)",
+                  background: "none",
+                  border: 0,
+                  cursor: "pointer",
+                  textAlign: "left",
+                  maxWidth: "34rem",
+                  font: "inherit",
+                }}
+                title="Otevřít nastavení vlastních proměnných"
+                onClick={() => setCustomVarsOpen(true)}
+              >
+                ⚠ {varWarning}
+              </button>
+            )}
             {saveMsg && (
               <span className={`${styles.saveMsg} ${saveMsg === "Uloženo" ? styles.saveMsgOk : styles.saveMsgErr}`}>
                 {saveMsg}
@@ -1730,6 +1774,11 @@ export default function ContractTemplatesPage() {
                   Nastavení platí jen pro tuto šablonu – stejná proměnná může mít
                   v jiné šabloně jiný význam. Uloží se spolu se šablonou.
                 </p>
+                <p style={hintStyle}>
+                  U typu <strong>Ano/Ne</strong> můžete tlačítky ve sloupci Odstavec
+                  vložit odstavec, který se zobrazí jen když je zaškrtnuto
+                  („Když Ano“), nebo naopak jen když zaškrtnuto není („Když Ne“).
+                </p>
 
                 {used.length === 0 ? (
                   <p style={hintStyle}>
@@ -1742,7 +1791,8 @@ export default function ContractTemplatesPage() {
                       <tr>
                         <th style={{ textAlign: "left", fontSize: "0.75rem", color: "var(--color-text-muted)", padding: "0 6px 4px 0" }}>Proměnná</th>
                         <th style={{ textAlign: "left", fontSize: "0.75rem", color: "var(--color-text-muted)", padding: "0 6px 4px 0" }}>Název (co se zobrazí)</th>
-                        <th style={{ textAlign: "left", fontSize: "0.75rem", color: "var(--color-text-muted)", padding: "0 0 4px 0" }}>Typ</th>
+                        <th style={{ textAlign: "left", fontSize: "0.75rem", color: "var(--color-text-muted)", padding: "0 6px 4px 0" }}>Typ</th>
+                        <th style={{ textAlign: "left", fontSize: "0.75rem", color: "var(--color-text-muted)", padding: "0 0 4px 0" }}>Odstavec</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1761,7 +1811,7 @@ export default function ContractTemplatesPage() {
                               onChange={(e) => setDef(key, { label: e.target.value })}
                             />
                           </td>
-                          <td style={{ padding: "3px 0" }}>
+                          <td style={{ padding: "3px 6px 3px 0" }}>
                             <select
                               style={fieldStyle}
                               value={variableDefs[key]?.type ?? "text"}
@@ -1778,6 +1828,40 @@ export default function ContractTemplatesPage() {
                               )}
                             </select>
                           </td>
+                          <td style={{ padding: "3px 0", whiteSpace: "nowrap" }}>
+                            {/* An Ano/Ne slot is the one that can drive a whole
+                                paragraph: #if shows it when ticked, #unless when
+                                not. Offer both, so the pair is discoverable. */}
+                            {(variableDefs[key]?.type ?? "text") === "bool" ? (
+                              <>
+                                <button
+                                  className={styles.varBtn}
+                                  style={{ marginRight: 4 }}
+                                  title={`{{#if ${key}}}…{{/if}} – odstavec se zobrazí, když je zaškrtnuto Ano`}
+                                  onClick={() => {
+                                    insertVariable(key, "if");
+                                    setCustomVarsOpen(false);
+                                  }}
+                                >
+                                  Když Ano
+                                </button>
+                                <button
+                                  className={styles.varBtn}
+                                  title={`{{#unless ${key}}}…{{/unless}} – odstavec se zobrazí, když NENÍ zaškrtnuto`}
+                                  onClick={() => {
+                                    insertVariable(key, "unless");
+                                    setCustomVarsOpen(false);
+                                  }}
+                                >
+                                  Když Ne
+                                </button>
+                              </>
+                            ) : (
+                              <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+                                –
+                              </span>
+                            )}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -1793,7 +1877,22 @@ export default function ContractTemplatesPage() {
               </div>
 
               <div className={modalStyles.footer}>
-                <Button variant="primary" onClick={() => setCustomVarsOpen(false)}>
+                <Button
+                  variant="primary"
+                  onClick={() => {
+                    // Re-evaluate the "not configured" warning against what was
+                    // just entered, so fixing a slot clears it immediately.
+                    const stillUnnamed = used.filter(
+                      (k) => !variableDefs[k]?.label?.trim()
+                    );
+                    setVarWarning(
+                      stillUnnamed.length > 0 && varWarning
+                        ? `Bez nastavení: ${stillUnnamed.join(", ")}. Nastavte název a typ, jinak se při generování zobrazí jen ${stillUnnamed[0]}.`
+                        : null
+                    );
+                    setCustomVarsOpen(false);
+                  }}
+                >
                   Hotovo
                 </Button>
               </div>
