@@ -1264,12 +1264,12 @@ Předávací protokol, on the shift-plan cell grid:
 
 ## Souhrn recepce (internal, admin-only)
 
-A deliberately low-profile cross-hotel summary/bonus page at `/4d`, gated by
-`recepce.summary.view` (the `admin` builtin type gets it via `system.admin`;
-nobody else until granted). The page has **no sidebar entry at all** — it is not
-in `MENU_ITEMS` (`frontend/src/lib/menuItems.ts`) and is reachable only by typing
-the address. The permission is still the real gate; the unlisted path is only
-about discoverability.
+A deliberately low-profile cross-hotel summary/bonus page at `/4d` (page heading
+"4D recepce"), gated by `recepce.summary.view` (the `admin` builtin type gets it
+via `system.admin`; nobody else until granted). The page has **no sidebar entry
+at all** — it is not in `MENU_ITEMS` (`frontend/src/lib/menuItems.ts`) and is
+reachable only by typing the address. The permission is still the real gate; the
+unlisted path is only about discoverability.
 
 ### No audit logging (deliberate exception)
 
@@ -1307,12 +1307,17 @@ every mount (refresh, or navigate away and back).
   `attemptsLeft`; a lockout answers 429 `LOCKED` with `lockedUntil`.
 - **Management.** `GET /key-status` → `{ configured }`; `PUT /key { newPin,
   currentPin? }` sets or rotates it (`currentPin` required once one exists).
-  Both reuse the `recepce.summary.view` permission – no separate key. The UI is
-  Nastavení → **Souhrn recepce**. A rotation is NOT audit-logged (see above).
+  Both reuse the `recepce.summary.view` permission – no separate key. The UI is a
+  standalone, equally unlisted page at **`/4d/admin`** (`RecepceSummaryAdminPage`,
+  just the PIN dialog, no explanatory text) — deliberately NOT a Settings tab,
+  since a tab labelled "Souhrn recepce" would hint at the page's existence.
+  `/4d/admin` is gated by the same permission but is **not** itself behind the
+  pass-key (otherwise the first key could never be set). A rotation is NOT
+  audit-logged (see above).
 - **Fail-closed bootstrap.** With no key configured, `/unlock` answers 409
-  `KEY_NOT_SET` and the page tells the user to set one in Nastavení. **After
-  deploying to a fresh environment the key must be set once, or the page stays
-  locked to everyone.**
+  `KEY_NOT_SET` and the `/4d` lock screen tells the user to set one at
+  `/4d/admin`. **After deploying to a fresh environment the key must be set once,
+  or the page stays locked to everyone.**
 
 Router `functions/src/routes/recepceSummary.ts`, mounted at `/recepce-summary`:
 
