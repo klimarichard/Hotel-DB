@@ -11,6 +11,7 @@ import DeactivateUserModal from "@/components/DeactivateUserModal";
 import MenuOrderTab from "./settings/MenuOrderTab";
 import UserTypesTab from "./settings/UserTypesTab";
 import JobsTab from "./settings/JobsTab";
+import RecepceSummaryKeyTab from "./settings/RecepceSummaryKeyTab";
 import UserPermissionsModal from "@/components/UserPermissionsModal";
 import { hasPermission, type Permission } from "@/lib/permissions/catalog";
 import { accessibleHotels } from "@/lib/hotels";
@@ -147,7 +148,7 @@ const DEFAULT_COMPANY_IDS = ["HPM", "STP"];
 
 const emptyForm = { name: "", email: "", password: "", roleType: "employee", employeeId: "" };
 
-type SettingsTab = "users" | "companies" | "departments" | "jobPositions" | "education" | "payroll" | "menu" | "userTypes" | "jobs";
+type SettingsTab = "users" | "companies" | "departments" | "jobPositions" | "education" | "payroll" | "menu" | "userTypes" | "jobs" | "recepceSummaryKey";
 
 // Each tab and the permission that gates it. Order is the display order; the
 // default tab resolves to the first one the user can actually access.
@@ -160,6 +161,8 @@ const SETTINGS_TABS: { id: SettingsTab; perm: Permission }[] = [
   { id: "education", perm: "settings.educationLevels.manage" },
   { id: "payroll", perm: "settings.payroll.manage" },
   { id: "menu", perm: "settings.menuOrder.manage" },
+  // Deliberately reuses the summary page's own permission – no new key.
+  { id: "recepceSummaryKey", perm: "recepce.summary.view" },
   { id: "jobs", perm: "system.triggers" },
 ];
 
@@ -1001,6 +1004,9 @@ export default function SettingsPage() {
         )}
         {can("settings.menuOrder.manage") && (
           <button data-tour="settings-tab-menu" className={settingsTab === "menu" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("menu")}>Menu</button>
+        )}
+        {can("recepce.summary.view") && (
+          <button data-tour="settings-tab-recepceSummaryKey" className={settingsTab === "recepceSummaryKey" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("recepceSummaryKey")}>Souhrn recepce</button>
         )}
         {can("system.triggers") && (
           <button data-tour="settings-tab-jobs" className={settingsTab === "jobs" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("jobs")}>Úlohy</button>
@@ -2107,6 +2113,7 @@ export default function SettingsPage() {
       {settingsTab === "menu" && can("settings.menuOrder.manage") && <MenuOrderTab />}
       {settingsTab === "userTypes" && can("userTypes.manage") && <UserTypesTab />}
       {settingsTab === "jobs" && can("system.triggers") && <JobsTab />}
+      {settingsTab === "recepceSummaryKey" && can("recepce.summary.view") && <RecepceSummaryKeyTab />}
 
       {depDeleteId && (
         <ConfirmModal

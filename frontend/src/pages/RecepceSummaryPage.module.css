@@ -232,6 +232,61 @@
   font-size: 0.85rem;
 }
 
+/* ── pass-key lock card ────────────────────────────────────────────────────── */
+.lockWrap {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 4rem 1.5rem;
+}
+
+.lockCard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  width: 340px;
+  max-width: 100%;
+  padding: 1.5rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg, 10px);
+  box-shadow: 0 10px 30px var(--shadow-md, rgba(0, 0, 0, 0.12));
+}
+
+.lockTitle {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: var(--font-weight-semibold, 600);
+  color: var(--color-text-heading);
+  text-align: center;
+}
+
+.lockText {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+.lockForm {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.lockInput {
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 6px;
+  background: var(--color-input-bg, var(--color-bg));
+  color: var(--color-text-heading);
+  font-size: 1.05rem;
+  letter-spacing: 0.2em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ── row actions (Provize minus table) ─────────────────────────────────────── */
 .actionsCell {
   width: 1%;

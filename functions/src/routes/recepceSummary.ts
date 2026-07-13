@@ -21,18 +21,35 @@
  * Also hosts the persistent "Provize minus" table (a small cross-hotel
  * collection of manual per-employee deductions) and a range-wide employee
  * dropdown for it. All routes require `recepce.summary.view`.
+ *
+ * NO AUDIT LOGGING — deliberate, and an explicit exception to the project rule
+ * that every write endpoint calls the audit helper. Nothing that happens on this
+ * page (Provize minus writes, pass-key rotation, anything added later) may leave
+ * a trace in `auditLog/`, because an entry there would advertise the page's
+ * existence to everyone who can read the change log. Do not "fix" this by adding
+ * logCreate/logUpdate/logDelete calls to any route in this file.
  */
 import { Router, Response } from "express";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireAuth, AuthRequest } from "../middleware/auth";
 import { requirePermission } from "../auth/permissions";
-import { ctxFromReq, logCreate, logUpdate, logDelete } from "../services/auditLog";
 import { HOTEL_SLUGS, HotelSlug, HOTEL_LABELS, SLUG_TO_CODE } from "../services/hotels";
 import { walkinCol, WalkinDoc, isDateStr } from "../services/walkinShared";
 import { taxiRideCol, TaxiRideDoc } from "../services/taxiShared";
 import { resolveEmployeeDisplays, listRecepceEmployees, RecepceEmployee } from "../services/recepceEmployees";
 import { sanitizeTypeTag } from "../services/shiftParser";
+import {
+  requireSummaryKey,
+  isKeyConfigured,
+  isValidPinFormat,
+  verifyPin,
+  setPin,
+  issueToken,
+  getLockout,
+  recordFailure,
+  clearFailures,
+} from "../services/recepceSummaryKey";
 
 export const recepceSummaryRouter = Router();
 
@@ -138,7 +155,7 @@ function readRange(req: AuthRequest, res: Response): { from: string; to: string 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET / — the whole summary in one call (shift counts + per-hotel walk-in/taxi).
 // ─────────────────────────────────────────────────────────────────────────────
-recepceSummaryRouter.get("/", requireAuth, requirePermission(SUMMARY_PERM), async (req: AuthRequest, res: Response) => {
+recepceSummaryRouter.get("/", requireAuth, requirePermission(SUMMARY_PERM), requireSummaryKey, async (req: AuthRequest, res: Response) => {
   const range = readRange(req, res);
   if (!range) return;
   const { from, to } = range;
@@ -272,6 +289,7 @@ recepceSummaryRouter.get(
   "/employees",
   requireAuth,
   requirePermission(SUMMARY_PERM),
+  requireSummaryKey,
   async (req: AuthRequest, res: Response) => {
     const range = readRange(req, res);
     if (!range) return;
@@ -309,6 +327,7 @@ recepceSummaryRouter.get(
   "/provize-minus",
   requireAuth,
   requirePermission(SUMMARY_PERM),
+  requireSummaryKey,
   async (req: AuthRequest, res: Response) => {
     const range = readRange(req, res);
     if (!range) return;
@@ -328,6 +347,7 @@ recepceSummaryRouter.post(
   "/provize-minus",
   requireAuth,
   requirePermission(SUMMARY_PERM),
+  requireSummaryKey,
   async (req: AuthRequest, res: Response) => {
     const parsed = parseProvizeMinus(req.body);
     if ("error" in parsed) {
@@ -342,11 +362,6 @@ recepceSummaryRouter.post(
       updatedAt: FieldValue.serverTimestamp(),
     });
     const saved = await ref.get();
-    await logCreate(ctxFromReq(req), {
-      collection: "recepceProvizeMinus",
-      resourceId: ref.id,
-      summary: { date: parsed.date, employeeName: parsed.employeeName, amount: parsed.amount, note: parsed.note },
-    });
     res.json({ id: ref.id, ...saved.data() });
   }
 );
@@ -355,6 +370,7 @@ recepceSummaryRouter.put(
   "/provize-minus/:id",
   requireAuth,
   requirePermission(SUMMARY_PERM),
+  requireSummaryKey,
   async (req: AuthRequest, res: Response) => {
     const ref = provizeMinusCol().doc(req.params.id);
     const snap = await ref.get();
@@ -362,7 +378,6 @@ recepceSummaryRouter.put(
       res.status(404).json({ error: "Záznam nenalezen." });
       return;
     }
-    const before = snap.data() as ProvizeMinusDoc;
     const parsed = parseProvizeMinus(req.body);
     if ("error" in parsed) {
       res.status(400).json({ error: parsed.error });
@@ -370,12 +385,6 @@ recepceSummaryRouter.put(
     }
     await ref.set({ ...parsed, updatedBy: req.uid, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
     const saved = await ref.get();
-    await logUpdate(ctxFromReq(req), {
-      collection: "recepceProvizeMinus",
-      resourceId: ref.id,
-      before: before as unknown as Record<string, unknown>,
-      after: { ...(before as unknown as Record<string, unknown>), ...parsed },
-    });
     res.json({ id: ref.id, ...saved.data() });
   }
 );
@@ -384,6 +393,7 @@ recepceSummaryRouter.delete(
   "/provize-minus/:id",
   requireAuth,
   requirePermission(SUMMARY_PERM),
+  requireSummaryKey,
   async (req: AuthRequest, res: Response) => {
     const ref = provizeMinusCol().doc(req.params.id);
     const snap = await ref.get();
@@ -391,13 +401,142 @@ recepceSummaryRouter.delete(
       res.status(404).json({ error: "Záznam nenalezen." });
       return;
     }
-    const before = snap.data() as ProvizeMinusDoc;
     await ref.delete();
-    await logDelete(ctxFromReq(req), {
-      collection: "recepceProvizeMinus",
-      resourceId: req.params.id,
-      summary: { date: before.date, employeeName: before.employeeName, amount: before.amount, note: before.note },
-    });
+    res.json({ ok: true });
+  }
+);
+
+// ---- Pass-key (PIN) gate -------------------------------------------------
+//
+// A SECOND layer on top of `recepce.summary.view`: the permission says who may
+// see the page, the pass-key says who is actually sitting at the keyboard right
+// now. These three routes are the only ones NOT behind `requireSummaryKey` —
+// they are how a caller obtains the token in the first place (and how an admin
+// sets/rotates the key). The PIN is verified server-side against a salted scrypt
+// hash; see services/recepceSummaryKey.ts.
+
+/** GET /api/recepce-summary/key-status — has a pass-key been set at all? */
+recepceSummaryRouter.get(
+  "/key-status",
+  requireAuth,
+  requirePermission(SUMMARY_PERM),
+  async (_req: AuthRequest, res: Response) => {
+    res.json({ configured: await isKeyConfigured() });
+  }
+);
+
+/**
+ * POST /api/recepce-summary/unlock  { pin }
+ * On success returns a short-lived token the page must send as `X-Summary-Key`
+ * on every data request. Wrong PINs are counted per uid and lock the user out
+ * after a handful of tries, so a 4-digit PIN cannot simply be enumerated.
+ */
+recepceSummaryRouter.post(
+  "/unlock",
+  requireAuth,
+  requirePermission(SUMMARY_PERM),
+  async (req: AuthRequest, res: Response) => {
+    const uid = req.uid as string;
+
+    const lockedUntil = await getLockout(uid);
+    if (lockedUntil) {
+      res.status(429).json({
+        error: "Příliš mnoho neúspěšných pokusů. Zkuste to prosím později.",
+        code: "LOCKED",
+        lockedUntil: lockedUntil.toISOString(),
+      });
+      return;
+    }
+
+    if (!(await isKeyConfigured())) {
+      res.status(409).json({
+        error: "Přístupový klíč zatím není nastaven.",
+        code: "KEY_NOT_SET",
+      });
+      return;
+    }
+
+    const pin = (req.body ?? {}).pin;
+    // A malformed PIN is treated as a failed attempt, not a validation error:
+    // otherwise the format itself would be a free oracle for the attacker.
+    if (!isValidPinFormat(pin) || !(await verifyPin(pin))) {
+      const { attemptsLeft, lockedUntil: locked } = await recordFailure(uid);
+      if (locked) {
+        res.status(429).json({
+          error: "Příliš mnoho neúspěšných pokusů. Zkuste to prosím později.",
+          code: "LOCKED",
+          lockedUntil: locked.toISOString(),
+        });
+        return;
+      }
+      res.status(401).json({
+        error: "Nesprávný přístupový klíč.",
+        code: "INVALID_PIN",
+        attemptsLeft,
+      });
+      return;
+    }
+
+    await clearFailures(uid);
+    const { token, expiresAt } = issueToken(uid);
+    res.json({ token, expiresAt: expiresAt.toISOString() });
+  }
+);
+
+/**
+ * PUT /api/recepce-summary/key  { newPin, currentPin? }
+ * Sets or rotates the pass-key. `currentPin` is required once a key exists, so a
+ * hijacked session cannot silently replace it. Not audit-logged (see the file
+ * header).
+ */
+recepceSummaryRouter.put(
+  "/key",
+  requireAuth,
+  requirePermission(SUMMARY_PERM),
+  async (req: AuthRequest, res: Response) => {
+    const uid = req.uid as string;
+    const body = (req.body ?? {}) as { newPin?: unknown; currentPin?: unknown };
+
+    if (!isValidPinFormat(body.newPin)) {
+      res.status(400).json({
+        error: "Přístupový klíč musí být 4 až 10 číslic.",
+        code: "WEAK_PIN",
+      });
+      return;
+    }
+
+    const configured = await isKeyConfigured();
+    if (configured) {
+      const lockedUntil = await getLockout(uid);
+      if (lockedUntil) {
+        res.status(429).json({
+          error: "Příliš mnoho neúspěšných pokusů. Zkuste to prosím později.",
+          code: "LOCKED",
+          lockedUntil: lockedUntil.toISOString(),
+        });
+        return;
+      }
+      if (!isValidPinFormat(body.currentPin) || !(await verifyPin(body.currentPin))) {
+        const { attemptsLeft, lockedUntil: locked } = await recordFailure(uid);
+        if (locked) {
+          res.status(429).json({
+            error: "Příliš mnoho neúspěšných pokusů. Zkuste to prosím později.",
+            code: "LOCKED",
+            lockedUntil: locked.toISOString(),
+          });
+          return;
+        }
+        res.status(401).json({
+          error: "Současný přístupový klíč není správný.",
+          code: "INVALID_PIN",
+          attemptsLeft,
+        });
+        return;
+      }
+      await clearFailures(uid);
+    }
+
+    await setPin(body.newPin, uid);
     res.json({ ok: true });
   }
 );

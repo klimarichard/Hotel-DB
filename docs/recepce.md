@@ -1264,10 +1264,57 @@ Předávací protokol, on the shift-plan cell grid:
 
 ## Souhrn recepce (internal, admin-only)
 
-A deliberately low-profile cross-hotel summary/bonus page at `/recepce-souhrn`,
-gated by `recepce.summary.view` (the `admin` builtin type gets it via
-`system.admin`; nobody else until granted). Router
-`functions/src/routes/recepceSummary.ts`, mounted at `/recepce-summary`:
+A deliberately low-profile cross-hotel summary/bonus page at `/4d`, gated by
+`recepce.summary.view` (the `admin` builtin type gets it via `system.admin`;
+nobody else until granted). The page has **no sidebar entry at all** — it is not
+in `MENU_ITEMS` (`frontend/src/lib/menuItems.ts`) and is reachable only by typing
+the address. The permission is still the real gate; the unlisted path is only
+about discoverability.
+
+### No audit logging (deliberate exception)
+
+**Nothing on this page is written to `auditLog/`** — not the "Provize minus"
+create/update/delete, not a pass-key rotation, and nothing added here later. This
+is an explicit, intentional exception to the project rule that every write
+endpoint calls the audit helper: an entry in the change log would advertise the
+page's existence to everyone allowed to read the log, which defeats the point of
+an unlisted, pass-key-protected page. `functions/src/routes/recepceSummary.ts`
+imports no audit helper at all — keep it that way when adding routes to it.
+
+### Pass-key (PIN) — the second gate
+
+On top of the permission, the page is locked behind a numeric pass-key
+(`functions/src/services/recepceSummaryKey.ts`). After the permission check
+passes, `RecepceSummaryPage` renders only a lock card until the pass-key is
+entered; the unlocked state lives in React state ONLY, so it is asked again on
+every mount (refresh, or navigate away and back).
+
+- **Storage.** `settings/recepceSummaryKey` = `{ salt, hash, updatedAt,
+  updatedBy }`. The PIN is a 4–10 digit string, hashed with scrypt over a random
+  16-byte salt, compared timing-safely. Plaintext is never stored, and the hash
+  never leaves the server (`firestore.rules` denies all direct client access).
+- **Unlock token.** `POST /unlock { pin }` returns an HMAC token
+  `<expiryMs>.<mac>`, signed with a key derived from `ENCRYPTION_KEY` and bound
+  to the caller's uid (60-minute TTL). Every summary DATA route
+  (`GET /`, `GET /employees`, `GET|POST|PUT|DELETE /provize-minus…`) runs
+  `requireSummaryKey`, which demands that token in the `X-Summary-Key` header and
+  answers 401 `SUMMARY_KEY_REQUIRED` without it. **This is why the PIN is real
+  access control**: a permitted user calling the API directly, bypassing the
+  page, still gets nothing.
+- **Brute-force bound.** 5 consecutive wrong PINs lock that uid out for 10
+  minutes (`recepceSummaryAttempts/{uid}`); a bad *format* counts as a failed
+  attempt too, so the format is not a free oracle. Wrong-PIN responses carry
+  `attemptsLeft`; a lockout answers 429 `LOCKED` with `lockedUntil`.
+- **Management.** `GET /key-status` → `{ configured }`; `PUT /key { newPin,
+  currentPin? }` sets or rotates it (`currentPin` required once one exists).
+  Both reuse the `recepce.summary.view` permission – no separate key. The UI is
+  Nastavení → **Souhrn recepce**. A rotation is NOT audit-logged (see above).
+- **Fail-closed bootstrap.** With no key configured, `/unlock` answers 409
+  `KEY_NOT_SET` and the page tells the user to set one in Nastavení. **After
+  deploying to a fresh environment the key must be set once, or the page stays
+  locked to everyone.**
+
+Router `functions/src/routes/recepceSummary.ts`, mounted at `/recepce-summary`:
 
 - `GET /` — walk-ins across all four hotels, taxi provisions per hotel, and shift
   counts per employee per hotel. Only desk day/night codes count (`DA/NA/DS/NS/DQ/

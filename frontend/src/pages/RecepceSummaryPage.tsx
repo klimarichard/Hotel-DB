@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { api, errorMessage } from "@/lib/api";
+import { api, ApiError, errorMessage, type RequestOptions } from "@/lib/api";
 import { HOTELS, type HotelSlug } from "@/lib/hotels";
 import Button from "@/components/Button";
 import IconButton from "@/components/IconButton";
@@ -67,6 +67,37 @@ const LS_PARAMS = "recepce.summary.params";
 const LS_PERSHIFT = "recepce.summary.perShift";
 
 const WALKIN_PROVISION_RATE = 0.1; // 10 % of the CZK-converted walk-in total.
+
+// ── pass-key gate ─────────────────────────────────────────────────────────────
+// Beyond the `recepce.summary.view` permission the page is locked by a numeric
+// pass-key verified server-side. The returned token lives ONLY in React state
+// (never localStorage/sessionStorage/cookies), so the key is asked again on every
+// mount/refresh, and it is sent as `X-Summary-Key` on every summary data call.
+interface UnlockResponse {
+  token: string;
+  expiresAt: string;
+}
+interface UnlockErrorBody {
+  code?: string;
+  attemptsLeft?: number;
+  lockedUntil?: string;
+}
+/** True when the failure means the summary token is missing/expired. */
+function isSummaryKeyExpired(err: unknown): boolean {
+  return (
+    err instanceof ApiError &&
+    err.status === 401 &&
+    typeof err.body === "object" &&
+    err.body !== null &&
+    (err.body as UnlockErrorBody).code === "SUMMARY_KEY_REQUIRED"
+  );
+}
+/** "HH:MM" (Prague-local) from a full ISO instant. */
+function formatClock(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleTimeString("cs-CZ", { hour: "2-digit", minute: "2-digit" });
+}
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 function todayLocal(): string {
@@ -184,22 +215,111 @@ export default function RecepceSummaryPage() {
   const [editingMinus, setEditingMinus] = useState<ProvizeMinusEntry | "new" | null>(null);
   const [confirm, setConfirm] = useState<{ title: string; message: string; onConfirm: () => void; danger?: boolean } | null>(null);
 
+  // ── pass-key gate state (memory only) ───────────────────────────────────────
+  const [summaryToken, setSummaryToken] = useState<string | null>(null);
+  // null = key status not loaded yet.
+  const [keyConfigured, setKeyConfigured] = useState<boolean | null>(null);
+  const [keyStatusError, setKeyStatusError] = useState<string | null>(null);
+  const [pin, setPin] = useState("");
+  const [unlocking, setUnlocking] = useState(false);
+  const [unlockError, setUnlockError] = useState<string | null>(null);
+
   const rangeValid = /^\d{4}-\d{2}-\d{2}$/.test(from) && /^\d{4}-\d{2}-\d{2}$/.test(to) && from <= to;
+
+  // Header options for every summary data call; only built once unlocked.
+  const keyOpts: RequestOptions | undefined = summaryToken
+    ? { headers: { "X-Summary-Key": summaryToken } }
+    : undefined;
+
+  /** Token expired mid-session → drop it so the lock card comes back. */
+  function handleKeyExpired(err: unknown): boolean {
+    if (isSummaryKeyExpired(err)) {
+      setSummaryToken(null);
+      setPin("");
+      setUnlockError("Platnost přístupového klíče vypršela. Zadejte jej prosím znovu.");
+      return true;
+    }
+    return false;
+  }
+
+  // Is a pass-key configured at all? (permission-only endpoint)
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await api.get<{ configured: boolean }>("/recepce-summary/key-status");
+        if (!cancelled) setKeyConfigured(res.configured);
+      } catch (err) {
+        if (!cancelled) setKeyStatusError(errorMessage(err, "Stav přístupového klíče se nepodařilo načíst."));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function submitUnlock(e: React.FormEvent) {
+    e.preventDefault();
+    const value = pin.trim();
+    if (!value || unlocking) return;
+    setUnlocking(true);
+    setUnlockError(null);
+    try {
+      const res = await api.post<UnlockResponse>("/recepce-summary/unlock", { pin: value });
+      setPin("");
+      setSummaryToken(res.token);
+    } catch (err) {
+      const body: UnlockErrorBody =
+        err instanceof ApiError && typeof err.body === "object" && err.body !== null
+          ? (err.body as UnlockErrorBody)
+          : {};
+      const msg = err instanceof ApiError ? err.message : "";
+      if (body.code === "LOCKED") {
+        setUnlockError(
+          body.lockedUntil
+            ? `Příliš mnoho neúspěšných pokusů. Zkuste to znovu po ${formatClock(body.lockedUntil)}.`
+            : "Příliš mnoho neúspěšných pokusů. Zkuste to prosím později."
+        );
+      } else if (body.code === "INVALID_PIN") {
+        const base = msg || "Nesprávný přístupový klíč.";
+        setUnlockError(
+          typeof body.attemptsLeft === "number" ? `${base} Zbývá pokusů: ${body.attemptsLeft}.` : base
+        );
+      } else if (body.code === "KEY_NOT_SET") {
+        setKeyConfigured(false);
+        setUnlockError(null);
+      } else {
+        setUnlockError(errorMessage(err, "Odemknutí se nezdařilo."));
+      }
+    } finally {
+      setUnlocking(false);
+    }
+  }
 
   // ── data loading (all three sources depend on the range) ────────────────────
   async function loadProvizeMinus() {
-    if (!rangeValid) return;
+    if (!rangeValid || !summaryToken) return;
     try {
       const list = await api.get<ProvizeMinusEntry[]>(
-        `/recepce-summary/provize-minus?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`
+        `/recepce-summary/provize-minus?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+        { headers: { "X-Summary-Key": summaryToken } }
       );
       setProvizeMinus(list);
-    } catch {
-      /* surfaced by the main load */
+    } catch (err) {
+      handleKeyExpired(err);
+      /* otherwise surfaced by the main load */
     }
   }
 
   useEffect(() => {
+    // Locked: never fire a data fetch (and clear anything a previous session left).
+    if (!summaryToken) {
+      setData(null);
+      setProvizeMinus([]);
+      setRangeEmps([]);
+      setLoading(false);
+      return;
+    }
     if (!rangeValid) {
       setData(null);
       setError(from > to ? "Počáteční datum musí být před koncovým." : null);
@@ -209,12 +329,13 @@ export default function RecepceSummaryPage() {
     setLoading(true);
     setError(null);
     const q = `from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+    const opts: RequestOptions = { headers: { "X-Summary-Key": summaryToken } };
     void (async () => {
       try {
         const [summary, minus, emps] = await Promise.all([
-          api.get<SummaryResponse>(`/recepce-summary?${q}`),
-          api.get<ProvizeMinusEntry[]>(`/recepce-summary/provize-minus?${q}`),
-          api.get<{ employees: EmployeeOption[] }>(`/recepce-summary/employees?${q}`),
+          api.get<SummaryResponse>(`/recepce-summary?${q}`, opts),
+          api.get<ProvizeMinusEntry[]>(`/recepce-summary/provize-minus?${q}`, opts),
+          api.get<{ employees: EmployeeOption[] }>(`/recepce-summary/employees?${q}`, opts),
         ]);
         if (cancelled) return;
         setData(summary);
@@ -223,7 +344,8 @@ export default function RecepceSummaryPage() {
       } catch (err) {
         if (!cancelled) {
           setData(null);
-          setError(errorMessage(err, "Souhrn se nepodařilo načíst."));
+          // Expired token → back to the lock card instead of a raw error.
+          if (!handleKeyExpired(err)) setError(errorMessage(err, "Souhrn se nepodařilo načíst."));
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -233,7 +355,7 @@ export default function RecepceSummaryPage() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [from, to]);
+  }, [from, to, summaryToken]);
 
   // ── persist settables ───────────────────────────────────────────────────────
   useEffect(() => {
@@ -350,14 +472,60 @@ export default function RecepceSummaryPage() {
       danger: true,
       onConfirm: async () => {
         try {
-          await api.delete(`/recepce-summary/provize-minus/${entry.id}`);
+          await api.delete(`/recepce-summary/provize-minus/${entry.id}`, keyOpts);
           setConfirm(null);
           await loadProvizeMinus();
         } catch (err) {
+          if (handleKeyExpired(err)) {
+            setConfirm(null);
+            return;
+          }
           setConfirm({ title: "Chyba", message: errorMessage(err, "Nepodařilo se smazat."), onConfirm: () => setConfirm(null) });
         }
       },
     });
+  }
+
+  // ── locked: the pass-key card is the ONLY thing rendered ────────────────────
+  if (!summaryToken) {
+    return (
+      <div className={styles.lockWrap}>
+        <div className={styles.lockCard}>
+          <h1 className={styles.lockTitle}>Souhrn recepce</h1>
+
+          {keyStatusError && <div className={styles.error}>{keyStatusError}</div>}
+
+          {!keyStatusError && keyConfigured === null && <p className={styles.lockText}>Načítám…</p>}
+
+          {!keyStatusError && keyConfigured === false && (
+            <p className={styles.lockText}>
+              Přístupový klíč zatím není nastavený. Nastavte jej prosím v sekci Nastavení → Souhrn recepce.
+            </p>
+          )}
+
+          {!keyStatusError && keyConfigured === true && (
+            <form className={styles.lockForm} onSubmit={submitUnlock}>
+              <p className={styles.lockText}>Zadejte přístupový klíč.</p>
+              <input
+                type="password"
+                inputMode="numeric"
+                autoComplete="off"
+                autoFocus
+                className={styles.lockInput}
+                value={pin}
+                onChange={(e) => setPin(e.target.value)}
+                disabled={unlocking}
+                aria-label="Přístupový klíč"
+              />
+              {unlockError && <div className={styles.error}>{unlockError}</div>}
+              <Button type="submit" block disabled={unlocking || pin.trim() === ""}>
+                {unlocking ? "Odemykám…" : "Odemknout"}
+              </Button>
+            </form>
+          )}
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -671,6 +839,13 @@ export default function RecepceSummaryPage() {
           initial={editingMinus === "new" ? null : editingMinus}
           employees={rangeEmps}
           defaultDate={to}
+          summaryToken={summaryToken}
+          onKeyExpired={() => {
+            setEditingMinus(null);
+            setSummaryToken(null);
+            setPin("");
+            setUnlockError("Platnost přístupového klíče vypršela. Zadejte jej prosím znovu.");
+          }}
           onSaved={() => {
             setEditingMinus(null);
             void loadProvizeMinus();
@@ -701,12 +876,16 @@ function ProvizeMinusModal({
   initial,
   employees,
   defaultDate,
+  summaryToken,
+  onKeyExpired,
   onSaved,
   onCancel,
 }: {
   initial: ProvizeMinusEntry | null;
   employees: EmployeeOption[];
   defaultDate: string;
+  summaryToken: string;
+  onKeyExpired: () => void;
   onSaved: () => void;
   onCancel: () => void;
 }) {
@@ -741,11 +920,16 @@ function ProvizeMinusModal({
     setBusy(true);
     setErr(null);
     const body = { date, employeeId, employeeName, amount: Number(amount) || 0, note: note.trim() };
+    const opts: RequestOptions = { headers: { "X-Summary-Key": summaryToken } };
     try {
-      if (isEdit) await api.put(`/recepce-summary/provize-minus/${initial!.id}`, body);
-      else await api.post(`/recepce-summary/provize-minus`, body);
+      if (isEdit) await api.put(`/recepce-summary/provize-minus/${initial!.id}`, body, opts);
+      else await api.post(`/recepce-summary/provize-minus`, body, opts);
       onSaved();
     } catch (e) {
+      if (isSummaryKeyExpired(e)) {
+        onKeyExpired();
+        return;
+      }
       setErr(errorMessage(e, "Uložení se nezdařilo."));
     } finally {
       setBusy(false);
