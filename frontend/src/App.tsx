@@ -118,7 +118,9 @@ export default function App() {
         <Route path="recepce" element={<RequirePermission allow={["nav.recepce.view"]} mobileAllow="recepce.mobile.view"><RecepcePage /></RequirePermission>} />
         <Route path="recepce/:hotel" element={<RequirePermission allow={["nav.recepce.view"]} mobileAllow="recepce.mobile.view"><RecepcePage /></RequirePermission>} />
         <Route path="recepce/:hotel/:tab" element={<RequirePermission allow={["nav.recepce.view"]} mobileAllow="recepce.mobile.view"><RecepcePage /></RequirePermission>} />
-        <Route path="recepce-souhrn" element={<RequirePermission allow={["recepce.summary.view"]}><RecepceSummaryPage /></RequirePermission>} />
+        {/* Unlisted (no sidebar entry) – reachable only by typing the address.
+            Still gated by recepce.summary.view; obscurity is not the gate. */}
+        <Route path="4d" element={<RequirePermission allow={["recepce.summary.view"]}><RecepceSummaryPage /></RequirePermission>} />
         <Route path="zamestnanci" element={<RequirePermission allow={["nav.employees.view"]}><EmployeesPage /></RequirePermission>} />
         <Route path="zamestnanci/novy" element={<RequirePermission allow={["employees.create"]}><EmployeeFormPage /></RequirePermission>} />
         <Route path="zamestnanci/:id" element={<RequirePermission allow={["nav.employees.view"]}><EmployeeDetailPage /></RequirePermission>} />

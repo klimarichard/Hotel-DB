@@ -1264,9 +1264,12 @@ Předávací protokol, on the shift-plan cell grid:
 
 ## Souhrn recepce (internal, admin-only)
 
-A deliberately low-profile cross-hotel summary/bonus page at `/recepce-souhrn`,
-gated by `recepce.summary.view` (the `admin` builtin type gets it via
-`system.admin`; nobody else until granted). Router
+A deliberately low-profile cross-hotel summary/bonus page at `/4d`, gated by
+`recepce.summary.view` (the `admin` builtin type gets it via `system.admin`;
+nobody else until granted). The page has **no sidebar entry at all** — it is not
+in `MENU_ITEMS` (`frontend/src/lib/menuItems.ts`) and is reachable only by typing
+the address. The permission is still the real gate; the unlisted path is only
+about discoverability. Router
 `functions/src/routes/recepceSummary.ts`, mounted at `/recepce-summary`:
 
 - `GET /` — walk-ins across all four hotels, taxi provisions per hotel, and shift
