@@ -491,7 +491,7 @@ export default function RecepceSummaryPage() {
     return (
       <div className={styles.lockWrap}>
         <div className={styles.lockCard}>
-          <h1 className={styles.lockTitle}>Souhrn recepce</h1>
+          <h1 className={styles.lockTitle}>4D recepce</h1>
 
           {keyStatusError && <div className={styles.error}>{keyStatusError}</div>}
 
@@ -499,7 +499,7 @@ export default function RecepceSummaryPage() {
 
           {!keyStatusError && keyConfigured === false && (
             <p className={styles.lockText}>
-              Přístupový klíč zatím není nastavený. Nastavte jej prosím v sekci Nastavení → Souhrn recepce.
+              Přístupový klíč zatím není nastavený. Nastavte jej prosím na adrese /4d/admin.
             </p>
           )}
 
@@ -532,7 +532,7 @@ export default function RecepceSummaryPage() {
     <div className={styles.page}>
       <div className={styles.headerRow}>
         <div className={styles.titleGroup}>
-          <h1 className={styles.title}>Souhrn recepce</h1>
+          <h1 className={styles.title}>4D recepce</h1>
           {rangeValid && (
             <span className={styles.rangeLabel}>
               {formatDate(from)} – {formatDate(to)}
