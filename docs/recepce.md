@@ -1262,81 +1262,20 @@ Předávací protokol, on the shift-plan cell grid:
   ("Recepce – Ambiance"). Keep this convention when adding new Recepce (or any
   other) UI copy.
 
-## Souhrn recepce (internal, admin-only)
+## Souhrn recepce (internal)
 
-A deliberately low-profile cross-hotel summary/bonus page at `/4d` (page heading
-"4D recepce"), gated by `recepce.summary.view` (the `admin` builtin type gets it
-via `system.admin`; nobody else until granted). The page has **no sidebar entry
-at all** — it is not in `MENU_ITEMS` (`frontend/src/lib/menuItems.ts`) and is
-reachable only by typing the address. The permission is still the real gate; the
-unlisted path is only about discoverability.
+Deliberately low-profile. Source is the reference; this note only records the
+non-obvious constraints a maintainer must not break. Code: `RecepceSummaryPage`
++ `RecepceSummaryAdminPage` (frontend), `functions/src/routes/recepceSummary.ts`
++ `functions/src/services/recepceSummaryKey.ts` (backend, mounted at
+`/recepce-summary`).
 
-### No audit logging (deliberate exception)
-
-**Nothing on this page is written to `auditLog/`** — not the "Provize minus"
-create/update/delete, not a pass-key rotation, and nothing added here later. This
-is an explicit, intentional exception to the project rule that every write
-endpoint calls the audit helper: an entry in the change log would advertise the
-page's existence to everyone allowed to read the log, which defeats the point of
-an unlisted, pass-key-protected page. `functions/src/routes/recepceSummary.ts`
-imports no audit helper at all — keep it that way when adding routes to it.
-
-### Pass-key (PIN) — the second gate
-
-On top of the permission, the page is locked behind a numeric pass-key
-(`functions/src/services/recepceSummaryKey.ts`). After the permission check
-passes, `RecepceSummaryPage` renders only a lock card until the pass-key is
-entered; the unlocked state lives in React state ONLY, so it is asked again on
-every mount (refresh, or navigate away and back).
-
-- **Storage.** `settings/recepceSummaryKey` = `{ salt, hash, updatedAt,
-  updatedBy }`. The PIN is a 4–10 digit string, hashed with scrypt over a random
-  16-byte salt, compared timing-safely. Plaintext is never stored, and the hash
-  never leaves the server (`firestore.rules` denies all direct client access).
-- **Unlock token.** `POST /unlock { pin }` returns an HMAC token
-  `<expiryMs>.<mac>`, signed with a key derived from `ENCRYPTION_KEY` and bound
-  to the caller's uid (60-minute TTL). Every summary DATA route
-  (`GET /`, `GET /employees`, `GET|POST|PUT|DELETE /provize-minus…`) runs
-  `requireSummaryKey`, which demands that token in the `X-Summary-Key` header and
-  answers 401 `SUMMARY_KEY_REQUIRED` without it. **This is why the PIN is real
-  access control**: a permitted user calling the API directly, bypassing the
-  page, still gets nothing.
-- **Brute-force bound.** 5 consecutive wrong PINs lock that uid out for 10
-  minutes (`recepceSummaryAttempts/{uid}`); a bad *format* counts as a failed
-  attempt too, so the format is not a free oracle. Wrong-PIN responses carry
-  `attemptsLeft`; a lockout answers 429 `LOCKED` with `lockedUntil`.
-- **Management.** `GET /key-status` → `{ configured }`; `PUT /key { newPin,
-  currentPin? }` sets or rotates it (`currentPin` required once one exists).
-  Both reuse the `recepce.summary.view` permission – no separate key. The UI is a
-  standalone, equally unlisted page at **`/4d/admin`** (`RecepceSummaryAdminPage`,
-  just the PIN dialog, no explanatory text) — deliberately NOT a Settings tab,
-  since a tab labelled "Souhrn recepce" would hint at the page's existence.
-  `/4d/admin` is gated by the same permission but is **not** itself behind the
-  pass-key (otherwise the first key could never be set). A rotation is NOT
-  audit-logged (see above).
-- **Fail-closed bootstrap.** With no key configured, `/unlock` answers 409
-  `KEY_NOT_SET` and the `/4d` lock screen tells the user to set one at
-  `/4d/admin`. **After deploying to a fresh environment the key must be set once,
-  or the page stays locked to everyone.**
-
-Router `functions/src/routes/recepceSummary.ts`, mounted at `/recepce-summary`:
-
-- `GET /` — walk-ins across all four hotels, taxi provisions per hotel, and shift
-  counts per employee per hotel. Only desk day/night codes count (`DA/NA/DS/NS/DQ/
-  NQ/DK/NK`); doubles (`DA²`) count 0; trainee (`ZD/ZN`) and porter codes are
-  excluded; a numeric cell tagged with a desk type counts `hoursComputed / 12`.
-  Walk-in totals are returned per `employee × hotel`. Uses one
-  `collectionGroup("shifts")` date-range query, which **requires the `shifts.date`
-  COLLECTION_GROUP single-field index** — declared as a `fieldOverride` in
-  `firestore.indexes.json` (Firestore does not auto-create collection-group
-  single-field indexes).
-- `GET /employees` — union of the shift-plan rosters across the range's months
-  (the "Provize minus" employee dropdown).
-- `GET | POST | PUT | DELETE /provize-minus[/:id]` — persistent per-employee
-  deductions in the top-level `recepceProvizeMinus` collection (audit-logged).
-
-The frontend (`RecepceSummaryPage.tsx`) does the money distribution client-side
-(per-shift split, walk-in provision floored per `employee × hotel`, Provize minus)
-and prints the three tables to one A4. Everything settable **except** Provize
-minus (date range, EUR→CZK rate, per-hotel `č/př/wal`, per-hotel "Na 1 směnu")
-is **page-local** (`localStorage`), never persisted server-side.
+- Unlisted: not in `MENU_ITEMS`, no README/changelog detail. Gated by
+  `recepce.summary.view`; the unlisted path is discoverability only.
+- Second gate: a server-verified numeric pass-key. Data routes require the unlock
+  token (`requireSummaryKey`), so the PIN is real access control, not just UI.
+  **Fail-closed** — a fresh environment stays locked until a PIN is set once at
+  `/4d/admin`.
+- **No audit logging, ever** — `recepceSummary.ts` imports no audit helper; an
+  `auditLog/` entry would advertise the page. `auditLog` read routes also hide
+  any historical entry (`isHiddenEntry`). Do not reintroduce logging here.
