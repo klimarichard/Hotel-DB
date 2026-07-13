@@ -481,6 +481,21 @@ function marginsEqual(a: PageMargins, b: PageMargins): boolean {
   return a.top === b.top && a.bottom === b.bottom && a.left === b.left && a.right === b.right;
 }
 
+/**
+ * Warning text for custom slots that the template's text uses but never named.
+ * Such a slot still works (it falls back to Text and shows its raw key to
+ * whoever generates the document), which is exactly why it needs flagging: it
+ * looks like a bug rather than an omission.
+ *
+ * Returns null when there is nothing to warn about.
+ */
+function customVarWarning(html: string, defs: CustomVarDefs): string | null {
+  const unnamed = usedCustomVars(html).filter((k) => !defs[k]?.label?.trim());
+  if (unnamed.length === 0) return null;
+  // One line — the fuller explanation lives in the button's tooltip.
+  return `Bez nastavení: ${unnamed.join(", ")} – chybí název a typ.`;
+}
+
 interface TemplateDoc extends TemplateMeta {
   htmlContent: string;
   margins?: PageMargins;
@@ -825,8 +840,12 @@ export default function ContractTemplatesPage() {
       isLoadingRef.current = true;
       editor.commands.setContent(doc.htmlContent || "<p></p>");
       setMargins(doc.margins ?? DEFAULT_MARGINS);
-      setVariableDefs(doc.variableDefs ?? {});
-      setVarWarning(null); // belongs to the template we just left
+      const defs = doc.variableDefs ?? {};
+      setVariableDefs(defs);
+      // Warn straight away: a template can arrive with unconfigured slots (saved
+      // before they were named, or the {{varN}} was typed by hand), and the user
+      // must not have to make an edit before hearing about it.
+      setVarWarning(customVarWarning(doc.htmlContent || "", defs));
       // Release the flag on the next tick so any synchronous `update`
       // events fired by setContent are still counted as load events.
       setTimeout(() => {
@@ -846,6 +865,26 @@ export default function ContractTemplatesPage() {
     editor.on("update", onUpdate);
     return () => { editor.off("update", onUpdate); };
   }, [editor]);
+
+  // Keep the "unconfigured slot" warning current while editing: inserting
+  // {{var4}} should flag it at once, and deleting the last {{var2}} should clear
+  // it. Debounced, because it reads the whole document (getHTML) and the update
+  // event fires on every keystroke.
+  useEffect(() => {
+    if (!editor) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const recompute = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        setVarWarning(customVarWarning(editor.getHTML(), variableDefs));
+      }, 400);
+    };
+    editor.on("update", recompute);
+    return () => {
+      clearTimeout(timer);
+      editor.off("update", recompute);
+    };
+  }, [editor, variableDefs]);
 
   /**
    * `kind`:
@@ -916,19 +955,7 @@ export default function ContractTemplatesPage() {
       setSaveMsg("Uloženo");
       setIsDirty(false);
 
-      // A custom slot used in the text but never given a name/type still works –
-      // it falls back to Text and shows its raw key ({{var2}}) to whoever
-      // generates the document, which looks like a bug. Say so at save time,
-      // while the author is still here to fix it.
-      const unnamed = usedCustomVars(htmlContent).filter(
-        (k) => !variableDefs[k]?.label?.trim()
-      );
-      // Kept to one line — the full explanation is in the button's tooltip.
-      setVarWarning(
-        unnamed.length > 0
-          ? `Bez nastavení: ${unnamed.join(", ")} – chybí název a typ.`
-          : null
-      );
+      setVarWarning(customVarWarning(htmlContent, variableDefs));
 
       await fetchTemplates();
       setTimeout(() => setSaveMsg(null), 3000);
@@ -1872,16 +1899,9 @@ export default function ContractTemplatesPage() {
                 <Button
                   variant="primary"
                   onClick={() => {
-                    // Re-evaluate the "not configured" warning against what was
-                    // just entered, so fixing a slot clears it immediately.
-                    const stillUnnamed = used.filter(
-                      (k) => !variableDefs[k]?.label?.trim()
-                    );
-                    setVarWarning(
-                      stillUnnamed.length > 0 && varWarning
-                        ? `Bez nastavení: ${stillUnnamed.join(", ")} – chybí název a typ.`
-                        : null
-                    );
+                    // Re-evaluate against what was just entered, so naming the
+                    // last slot clears the warning immediately.
+                    setVarWarning(customVarWarning(editor.getHTML(), variableDefs));
                     setCustomVarsOpen(false);
                   }}
                 >
