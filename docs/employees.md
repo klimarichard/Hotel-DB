@@ -20,6 +20,28 @@ Developer documentation for the employee module: the core employee record and fo
 
 ---
 
+## Display name (Zobrazované jméno)
+
+An optional string field on the employee root doc: **`employees/{id}.displayName`**. It is a **display alias** for someone who goes by a name other than their legal first/last name (a nickname, a Western-order spelling, etc.) — it is **not** a legal name and it is **not** the Firebase Auth `displayName` on the linked `users/{uid}` account (an unrelated field on an unrelated document). Don't conflate the two when tracing a name bug.
+
+- **Edited on**: `EmployeeFormPage.tsx`, "Zobrazované jméno" field, right after Jméno/Příjmení in Osobní údaje. The input's placeholder live-mirrors whatever has been typed into Jméno + Příjmení so far (falling back to the literal text "Jméno Příjmení" when both are still empty) — it previews what will be shown if the field is left blank, it does not ship that value. Tooltip: "Zkrácené jméno zobrazené v plánu směn, mzdách a přehledech. Necháte-li prázdné, použije se „Jméno Příjmení“."
+- **Composition — `frontend/src/lib/employeeName.ts`** exports the two canonical helpers used everywhere a name is rendered:
+  ```ts
+  employeeDisplayName(e) // → e.displayName if set (non-empty, trimmed), else `${firstName} ${lastName}`
+  employeeSurnameFirst(e) // → `${lastName} ${firstName}` — ALWAYS the legal name, ignores displayName entirely
+  ```
+  `employeeSurnameFirst` deliberately never looks at `displayName`; it exists specifically for the surfaces that must sort/scan by legal surname (see below).
+- **Recepce has its own mirrored pair**, not the same functions: `recepceDisplayName(e)` / `recepceSortKey(e)` in `functions/src/services/recepceEmployees.ts`. Same idea (custom `displayName` if set, else first-name-first), but reimplemented server-side because Recepce's pickers/tables need first-name-first *display* while still sorting by surname — the opposite split from the rest of the app, where the surname-first form is also what's displayed. See [Recepce — Předávací protokol](recepce.md#předávací-protokol-shift-handover), "Name display" subsection.
+- **Where the display name IS used** (`employeeDisplayName`): the shift grid and its modals (add/edit employee in plan, change/override/free-claim requests), the Payroll screen's on-screen entry rows and note labels, Vacation requests, the Upozornění hub tabs (probation, document expiry, pending shift-change/override/vacation requests), the Overview dashboard, the Audit log actor column, the Zaměstnanci search predicate (matches the alias as well as the legal name), and the Employee detail page's hero name / page title.
+- **Where the LEGAL name is deliberately kept instead** — this is a product rule, not a gap:
+  - **Legal documents**: generated contracts (`frontend/src/lib/contractVariables.ts` maps the `{{firstName}}`/`{{lastName}}` template variables straight from `employee.firstName`/`employee.lastName`), the Prohlášení poplatníka and Osobní dotazník AcroForm PDFs (`functions/src/routes/employees.ts`, `GET /:id/questionnaire-pdf` and the Prohlášení handler both read `root.firstName`/`root.lastName` directly), and the CSV export (`frontend/src/lib/csvExport.ts` has `firstName`/`lastName` columns only — `displayName` isn't a column at all). A contract or a tax form must name someone by their legal name, never a nickname.
+  - **Surname-first lists and pickers**: the Zaměstnanci list column, employee-picker dropdowns (shift-plan add/change/override/free-claim modals, Settings user-linking), and the Payroll PDF export all call `employeeSurnameFirst()` — both to render and to sort — so they stay scannable/findable by surname.
+  - **The employee delete confirmation** (`EmployeeDetailPage.tsx`): the `ConfirmModal` message is built from the raw `employee.lastName employee.firstName`, not either helper — a destructive, identity-critical action confirms against the legal name on file.
+- **Gotcha for anyone adding a new name-bearing surface**: several collections (`shiftPlans/*/planEmployees`, `payrollPeriods/*/entries`, `vacationRequests`, `alerts`/`probationAlerts`, `employeeChangeRequests`, the Předávací protokol `predal`/`prevzal` stamps) **snapshot** first/last/display name at write time and never rewrite it — including on a payroll recalc. Adding another frontend helper does not fix a stale snapshot. The established pattern is **read-time re-resolution against the live `employees/{id}` doc**, enriching the API response — see [Data Model — Live employee-name resolution](data-model.md#live-employee-name-resolution--read-time-never-a-backfill-v460) for the shared helper (`functions/src/services/employeeNames.ts`) and the full list of endpoints that already do this. Do not add a new client-side name helper for a snapshot-staleness problem; hydrate the response instead.
+- **Unrelated flag, don't conflate**: `genderNeutralDisplay` (above) also changes how a name-adjacent value renders, but it only affects gendered `maritalStatus` resolution — it has nothing to do with `displayName`/alias handling.
+
+---
+
 ## Employee detail — session-based history (2026-05-06)
 
 The Employee detail page collapses what used to be two tabs ("Historie pracovního poměru" + "Smlouvy") into a single **Historie pracovního poměru** tab where every employment relationship is a self-contained collapsible card. The Smlouvy tab is gone; `frontend/src/components/ContractsTab.tsx` was deleted.
