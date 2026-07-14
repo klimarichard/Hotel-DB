@@ -27,6 +27,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "4.7.2",
+    date: "2026-07-14",
+    changes: [
+      "Karta zaměstnance: oprava zobrazení nabídky u tlačítka Nahrát podepsanou smlouvu.",
+    ],
+  },
+  {
     version: "4.7.1",
     date: "2026-07-14",
     changes: [
