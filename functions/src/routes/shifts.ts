@@ -1076,7 +1076,7 @@ shiftsRouter.post(
     //
     // MOD letters live on the plan as `modPersons` (letter → employeeId). Copying
     // the roster without them left the new month with no managers-on-duty, so they
-    // had to be re-assigned by hand every month. (Until v4.8.0 a hardcoded
+    // had to be re-assigned by hand every month. (Until v4.7.1 a hardcoded
     // letter → NAME table silently backfilled this, which is exactly the coupling
     // we removed - see lib/modPersons.ts.)
     //

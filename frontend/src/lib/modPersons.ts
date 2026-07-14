@@ -4,7 +4,7 @@
  * A plan stores `modPersons` as letter → employeeId. This inverts it to
  * employeeId → letter, which is what every consumer actually wants.
  *
- * WHY THIS EXISTS. Until v4.8.0 the letters were seeded from MOD_PERSONS, a
+ * WHY THIS EXISTS. Until v4.7.1 the letters were seeded from MOD_PERSONS, a
  * hardcoded table of six real employees' names in the source, matched by string
  * equality against the plan roster. That was wrong in three separate ways:
  *
