@@ -51,16 +51,18 @@
   display: inline-block;
 }
 
+/* Portalled to <body> and positioned from the button's bounding rect (top/right
+   are set inline). Fixed, not absolute: the employment-history session card sets
+   overflow:hidden to clip its rounded corners, which was cutting the menu off on
+   short sessions. z-index sits above the page but below the modal overlay. */
 .signMenu {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 4px);
+  position: fixed;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: 6px;
   box-shadow: 0 4px 12px var(--shadow-sm);
   min-width: 190px;
-  z-index: 50;
+  z-index: 900;
   overflow: hidden;
 }
 
