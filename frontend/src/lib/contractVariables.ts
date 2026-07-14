@@ -440,8 +440,8 @@ export function resolveVariables(
   return vars;
 }
 
-const IF_RE = /\{\{#if\s+(\w+)\}\}([\s\S]*?)\{\{\/if\}\}/g;
-const UNLESS_RE = /\{\{#unless\s+(\w+)\}\}([\s\S]*?)\{\{\/unless\}\}/g;
+// One token: an opener ({{#if x}} / {{#unless x}}) or a closer ({{/if}} / {{/unless}}).
+const BLOCK_TAG_RE = /\{\{(#if|#unless)\s+(\w+)\}\}|\{\{\/(if|unless)\}\}/g;
 // Sentinel that marks where a conditional block was stripped. Used so we
 // can later remove only the empty <p></p> wrappers that are adjacent to
 // the strip point, while preserving intentional blank lines elsewhere.
@@ -457,6 +457,82 @@ const P_AROUND_MARKER_RE = new RegExp(
 );
 const BARE_MARKER_RE = new RegExp(STRIP_MARKER, "g");
 
+/** Parsed template body: literal text, or a conditional block with children. */
+type BlockNode =
+  | { type: "text"; value: string }
+  | { type: "block"; kind: "if" | "unless"; key: string; children: BlockNode[] };
+
+/**
+ * Parse the conditional blocks into a tree.
+ *
+ * This replaced a pair of non-greedy regexes (one for `if`, one for `unless`).
+ * Those could not NEST: an inner `{{/if}}` closed the outer block, and the
+ * remainder was emitted as literal `{{/if}}` text into the contract — silently,
+ * and visibly, on a signed document. A real AND condition (e.g. "a foreigner who
+ * does NOT have permanent residence") was therefore impossible to express.
+ *
+ * Malformed input degrades rather than eating content: a closer with no matching
+ * opener, or a mismatched kind, is emitted as literal text (exactly what the old
+ * regexes did with it), and an unclosed opener has its literal tag and its
+ * children flushed back out.
+ */
+function parseBlocks(html: string): BlockNode[] {
+  const root: BlockNode[] = [];
+  const stack: { kind: "if" | "unless"; key: string; children: BlockNode[] }[] = [];
+  const current = () => (stack.length ? stack[stack.length - 1].children : root);
+
+  const re = new RegExp(BLOCK_TAG_RE.source, "g");
+  let last = 0;
+  let m: RegExpExecArray | null;
+
+  while ((m = re.exec(html)) !== null) {
+    if (m.index > last) current().push({ type: "text", value: html.slice(last, m.index) });
+    last = re.lastIndex;
+
+    if (m[1]) {
+      stack.push({ kind: m[1] === "#if" ? "if" : "unless", key: m[2], children: [] });
+      continue;
+    }
+
+    const closing = m[3] as "if" | "unless";
+    const top = stack[stack.length - 1];
+    if (!top || top.kind !== closing) {
+      // Stray or mismatched closer – keep it as text rather than guessing.
+      current().push({ type: "text", value: m[0] });
+      continue;
+    }
+    stack.pop();
+    current().push({ type: "block", kind: top.kind, key: top.key, children: top.children });
+  }
+
+  if (last < html.length) current().push({ type: "text", value: html.slice(last) });
+
+  // Unclosed openers: flush the opener tag literally, then its content.
+  while (stack.length > 0) {
+    const top = stack.pop()!;
+    const parent = stack.length ? stack[stack.length - 1].children : root;
+    parent.push({ type: "text", value: `{{#${top.kind} ${top.key}}}` }, ...top.children);
+  }
+
+  return root;
+}
+
+/** Render the tree: a kept block recurses (so nesting resolves), a dropped one
+ *  collapses to the strip marker exactly as before. */
+function renderBlocks(nodes: BlockNode[], vars: Record<string, string>): string {
+  let out = "";
+  for (const n of nodes) {
+    if (n.type === "text") {
+      out += n.value;
+      continue;
+    }
+    const truthy = !!vars[n.key];
+    const keep = n.kind === "if" ? truthy : !truthy;
+    out += keep ? renderBlocks(n.children, vars) : STRIP_MARKER;
+  }
+  return out;
+}
+
 /**
  * Resolve {{#if X}}…{{/if}} and {{#unless X}}…{{/unless}} blocks against
  * vars. `if` keeps the inner content when vars[X] is a truthy non-empty
@@ -466,13 +542,12 @@ const BARE_MARKER_RE = new RegExp(STRIP_MARKER, "g");
  * paragraphs that are *not* adjacent to a stripped block are preserved
  * – they're intentional blank lines authored in the template.
  *
- * Nesting is not supported: blocks are matched non-greedily and a nested
- * inner {{#if}} would close its own outer block prematurely.
+ * Blocks MAY NEST to any depth, which is how an AND is expressed:
+ *   {{#unless isCzech}}{{#unless hasPermanentResidence}}…{{/unless}}{{/unless}}
+ * A dropped outer block discards its whole subtree without evaluating it.
  */
 function processConditionals(html: string, vars: Record<string, string>): string {
-  let out = html;
-  out = out.replace(IF_RE, (_m, key, inner) => (vars[key] ? inner : STRIP_MARKER));
-  out = out.replace(UNLESS_RE, (_m, key, inner) => (vars[key] ? STRIP_MARKER : inner));
+  let out = renderBlocks(parseBlocks(html), vars);
   out = out.replace(P_AROUND_MARKER_RE, "");
   out = out.replace(BARE_MARKER_RE, "");
   return out;
