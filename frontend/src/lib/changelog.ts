@@ -27,6 +27,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "4.7.0",
+    date: "2026-07-14",
+    changes: [
+      "Šablony smluv: Nové proměnné a revize starých proměnných.",
+    ],
+  },
+  {
     version: "4.6.0",
     date: "2026-07-14",
     changes: [
