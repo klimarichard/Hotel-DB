@@ -188,16 +188,19 @@ export const VARIABLE_GROUPS: { group: string; vars: VariableDef[] }[] = [
     vars: [
       { key: "firstName", label: "Jméno" },
       { key: "lastName", label: "Příjmení" },
-      { key: "fullName", label: "Celé jméno" },
       { key: "birthDate", label: "Datum narození" },
       { key: "address", label: "Adresa" },
       { key: "passportNumber", label: "Číslo pasu" },
       { key: "visaNumber", label: "Číslo povolení k pobytu" },
       { key: "currentJobTitle", label: "Pracovní pozice" },
-      { key: "isCzech", label: "Je Čech (pro {{#if}})", kind: "if" },
-      { key: "isForeigner", label: "Je cizinec (pro {{#if}})", kind: "if" },
-      { key: "hasPermanentResidence", label: "Má trvalý pobyt (pro {{#if}})", kind: "if" },
-      { key: "noPermanentResidence", label: "Nemá trvalý pobyt (pro {{#if}})", kind: "if" },
+      // Every boolean below is stored as a SINGLE positive key. The negative case
+      // is expressed with {{#unless X}}, so no "noX" twin is needed - keeping both
+      // halves meant two keys that could silently disagree, and twice the surface
+      // to get wrong. Negatives (isForeigner / noPermanentResidence / noProbation /
+      // noEndDate) were removed in v4.7.0 and the prod templates migrated.
+      { key: "isCzech", label: "Je Čech (pro {{#if}} / {{#unless}})", kind: "if" },
+      { key: "isMale", label: "Je muž (pro {{#if}} / {{#unless}})", kind: "if" },
+      { key: "hasPermanentResidence", label: "Má trvalý pobyt (pro {{#if}} / {{#unless}})", kind: "if" },
     ],
   },
   {
@@ -212,10 +215,8 @@ export const VARIABLE_GROUPS: { group: string; vars: VariableDef[] }[] = [
       { key: "probationPeriod", label: "Zkušební doba" },
       { key: "signingDate", label: "Datum podpisu" },
       { key: "originalSigningDate", label: "Datum podpisu původní smlouvy" },
-      { key: "hasProbation", label: "Má zkušební dobu (pro {{#if}})", kind: "if" },
-      { key: "noProbation", label: "Nemá zkušební dobu (pro {{#if}})", kind: "if" },
-      { key: "hasEndDate", label: "Má datum ukončení (pro {{#if}})", kind: "if" },
-      { key: "noEndDate", label: "Nemá datum ukončení (pro {{#if}})", kind: "if" },
+      { key: "hasProbation", label: "Má zkušební dobu (pro {{#if}} / {{#unless}})", kind: "if" },
+      { key: "hasEndDate", label: "Má datum ukončení (pro {{#if}} / {{#unless}})", kind: "if" },
       { key: "agreedWorkScope", label: "Rozsah práce DPP" },
       { key: "agreedReward", label: "Odměna DPP" },
     ],
@@ -274,6 +275,7 @@ export interface EmployeeData {
   // personal fields
   birthDate?: string; // raw ISO date (YYYY-MM-DD); resolveVariables formats it
   nationality?: string; // free-form string from employee.nationality
+  gender?: string; // "m" | "f" (or empty) – drives the isMale conditional
   // document sub-doc fields (merged in by caller)
   passportNumber?: string;
   visaNumber?: string;
@@ -358,7 +360,7 @@ export function resolveVariables(
 
   // Probation: free-form string (e.g. "2 měsíce", "0", ""). Treat as
   // "has probation" only when it contains a non-zero digit, so "0",
-  // "0 měsíců", and "" all collapse to noProbation = true.
+  // "0 měsíců", and "" all collapse to hasProbation = false (use {{#unless}}).
   const probationStr = str(employee.probationPeriod).trim();
   const hasProbation = /[1-9]/.test(probationStr);
   const hasEndDate = str(employee.endDate).trim() !== "";
@@ -371,15 +373,16 @@ export function resolveVariables(
   const vars: Record<string, string> = {
     firstName: str(employee.firstName),
     lastName: str(employee.lastName),
-    fullName: [employee.firstName, employee.lastName].filter(Boolean).join(" "),
     birthDate: formatDateCZ(employee.birthDate),
     passportNumber: str(employee.passportNumber),
     visaNumber: str(employee.visaNumber),
     currentJobTitle: str(employee.currentJobTitle),
+    // Booleans are single-key + {{#unless}} for the negative case (see
+    // VARIABLE_GROUPS). "ano" / "" is the truthiness convention the conditional
+    // engine expects.
     isCzech: czech ? "ano" : "",
-    isForeigner: czech ? "" : "ano",
+    isMale: str(employee.gender).trim().toLowerCase() === "m" ? "ano" : "",
     hasPermanentResidence: hasPermanentResidence ? "ano" : "",
-    noPermanentResidence: hasPermanentResidence ? "" : "ano",
     address: str(employee.address),
     contractType: str(employee.contractType),
     salary: formatSalaryCZ(employee.salary),
@@ -390,9 +393,7 @@ export function resolveVariables(
     signingDate: formatDateCZ(employee.signingDate),
     originalSigningDate: formatDateCZ(employee.originalSigningDate),
     hasProbation: hasProbation ? "ano" : "",
-    noProbation: hasProbation ? "" : "ano",
     hasEndDate: hasEndDate ? "ano" : "",
-    noEndDate: hasEndDate ? "" : "ano",
     agreedWorkScope: str(employee.agreedWorkScope),
     agreedReward: str(employee.agreedReward),
     hoursPerWeek: str(employee.hoursPerWeek),
