@@ -14,7 +14,6 @@ import { useVacationContext } from "@/context/VacationContext";
 import {
   HOTEL_CODES,
   HOTEL_NAMES,
-  MOD_PERSONS,
   SHIFT_COLORS,
   SHIFT_TEXT_COLORS,
   getCellColor,
@@ -22,6 +21,7 @@ import {
   type HotelCode,
 } from "@/lib/shiftConstants";
 import { employeeDisplayName } from "@/lib/employeeName";
+import { modEmployeeIdForLetter } from "@/lib/modPersons";
 import type {
   PlanDetail,
   PlanEmployee,
@@ -171,17 +171,8 @@ function buildStaffing(plan: PlanDetail, dateKey: string): StaffingResult {
   const modLetter = modEntry?.code ?? "";
   let modEmployee: PlanEmployee | undefined;
   if (modLetter) {
-    const overrideEmpId = plan.modPersons?.[modLetter];
-    if (overrideEmpId) {
-      modEmployee = empById.get(overrideEmpId);
-    } else {
-      const staticName = MOD_PERSONS[modLetter];
-      if (staticName) {
-        modEmployee = plan.employees.find(
-          (e) => `${e.firstName} ${e.lastName}` === staticName
-        );
-      }
-    }
+    const empId = modEmployeeIdForLetter(plan.modPersons, modLetter);
+    if (empId) modEmployee = empById.get(empId);
   }
 
   return { day, night, absentManagers, visibleHotels, modLetter, modEmployee };
@@ -218,18 +209,12 @@ function vacationStatusForDate(
   return hasPending ? "pending" : null;
 }
 
-// The employee id of the manager-on-duty (MOD) for a given date, or undefined
-// if no MOD is set. Mirrors the MOD resolution in buildStaffing: a per-day MOD
-// letter resolves to an employee either via the plan's modPersons override map
-// or the static MOD_PERSONS name table.
+// The employee id of the manager-on-duty (MOD) for a given date, or undefined if
+// no MOD is set. The per-day MOD letter resolves through the plan's modPersons
+// map (letter → employeeId); see lib/modPersons.ts.
 function modEmployeeIdForDate(plan: PlanDetail, dateKey: string): string | undefined {
   const modLetter = plan.modShifts.find((m) => m.id === dateKey)?.code ?? "";
-  if (!modLetter) return undefined;
-  const overrideEmpId = plan.modPersons?.[modLetter];
-  if (overrideEmpId) return overrideEmpId;
-  const staticName = MOD_PERSONS[modLetter];
-  if (!staticName) return undefined;
-  return plan.employees.find((e) => `${e.firstName} ${e.lastName}` === staticName)?.employeeId;
+  return modEmployeeIdForLetter(plan.modPersons, modLetter);
 }
 
 function buildMyShifts(
@@ -355,9 +340,8 @@ function ModBlock({ staffing }: { staffing: StaffingResult }) {
     return (
       <div className={styles.modRow}>
         <span className={styles.modLetter}>{staffing.modLetter}</span>
-        <span className={styles.dash}>
-          {MOD_PERSONS[staffing.modLetter] ?? "Nepřiřazeno"}
-        </span>
+        {/* Letter is set for the day but no employee in this plan holds it. */}
+        <span className={styles.dash}>Nepřiřazeno</span>
       </div>
     );
   }

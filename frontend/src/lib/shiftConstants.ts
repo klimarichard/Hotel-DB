@@ -152,14 +152,12 @@ export function getCellColor(parsed: ParseResult, dark = false): { bg: string; t
 
 // ─── MOD (Manager on Duty) ──────────────────────────────────────────────────
 
-export const MOD_PERSONS: Record<string, string> = {
-  V: "Viktor Vondra",
-  R: "Richard Klíma",
-  N: "Anastázie Kalinina",
-  O: "Oxana Smolyak",
-  K: "Kateřina Zezulková",
-  A: "Aruzhan Kassimkulova",
-};
+// MOD_PERSONS (a hardcoded letter → employee-NAME table) was removed in v4.7.1.
+// Employee names do not belong in the source, and matching a plan roster against
+// them by string was brittle: it broke on a legal-name correction, and the four
+// call sites that reimplemented the match had drifted apart. MOD letters now live
+// only in the plan's own `modPersons` map (letter → employeeId), which is what the
+// badge editor already wrote to. See lib/modPersons.ts.
 
 export const MOD_COLORS: Record<string, { bg: string; text: string }> = {
   V: { bg: "#fef3c7", text: "#78350f" },

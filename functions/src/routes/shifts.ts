@@ -1072,6 +1072,44 @@ shiftsRouter.post(
     }
     await batch.commit();
 
+    // Carry the MOD letters over with the people they belong to.
+    //
+    // MOD letters live on the plan as `modPersons` (letter → employeeId). Copying
+    // the roster without them left the new month with no managers-on-duty, so they
+    // had to be re-assigned by hand every month. (Until v4.7.1 a hardcoded
+    // letter → NAME table silently backfilled this, which is exactly the coupling
+    // we removed - see lib/modPersons.ts.)
+    //
+    // Only letters whose holder was actually copied are carried, and an assignment
+    // already made on the target wins: the copy must not overwrite a deliberate
+    // choice, and both a letter and an employee may hold at most one of the other.
+    const sourcePlanDoc = await db().collection("shiftPlans").doc(sourcePlanId).get();
+    const sourceMod = (sourcePlanDoc.data()?.modPersons as Record<string, string>) ?? {};
+    const targetMod = (targetPlanData.modPersons as Record<string, string>) ?? {};
+    const copiedEmployeeIds = new Set(
+      sourceSnap.docs.map((d) => d.data().employeeId as string)
+    );
+
+    const mergedMod: Record<string, string> = { ...targetMod };
+    const takenLetters = new Set(Object.keys(targetMod));
+    const takenEmployees = new Set(Object.values(targetMod));
+    let carried = 0;
+    for (const [letter, employeeId] of Object.entries(sourceMod)) {
+      if (typeof employeeId !== "string" || employeeId === "") continue;
+      if (!copiedEmployeeIds.has(employeeId)) continue; // holder isn't on this plan
+      if (takenLetters.has(letter) || takenEmployees.has(employeeId)) continue;
+      mergedMod[letter] = employeeId;
+      takenLetters.add(letter);
+      takenEmployees.add(employeeId);
+      carried++;
+    }
+    if (carried > 0) {
+      await targetPlanRef.update({
+        modPersons: mergedMod,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    }
+
     // Auto-fill approved vacation days as X for each copied employee
     for (const doc of sourceSnap.docs) {
       await applyVacationXs(targetPlanRef, doc.data().employeeId as string, targetYear, targetMonth);
@@ -1081,10 +1119,10 @@ shiftsRouter.post(
       action: "create",
       collection: "shiftPlans/planEmployees",
       resourceId: planId,
-      extra: { kind: "copy-employees", sourcePlanId, copied: sourceSnap.size },
+      extra: { kind: "copy-employees", sourcePlanId, copied: sourceSnap.size, modCarried: carried },
     });
 
-    res.json({ ok: true, copied: sourceSnap.size });
+    res.json({ ok: true, copied: sourceSnap.size, modCarried: carried });
   }
 );
 

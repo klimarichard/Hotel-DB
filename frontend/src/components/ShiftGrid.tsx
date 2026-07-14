@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as clock from "../lib/clock";
 import type { PlanDetail, PlanEmployee, ShiftDoc, ModShiftDoc } from "../pages/ShiftPlannerPage";
-import { SECTION_LABELS, SECTIONS, type Section, getCzechHolidays, MOD_PERSONS, parseShiftExpression, getCellColor, isNightShiftType, sortSectionEmployees, SHIFT_TYPE_TAGS, typeTagToCounterKey } from "../lib/shiftConstants";
+import { SECTION_LABELS, SECTIONS, type Section, getCzechHolidays, parseShiftExpression, getCellColor, isNightShiftType, sortSectionEmployees, SHIFT_TYPE_TAGS, typeTagToCounterKey } from "../lib/shiftConstants";
+import { modLettersByEmployeeId } from "../lib/modPersons";
 import { employeeDisplayName } from "../lib/employeeName";
 import { useTheme } from "../context/ThemeContext";
 import ShiftCell from "./ShiftCell";
@@ -298,39 +299,12 @@ export default function ShiftGrid({
     return m;
   }, [flatEmployees]);
 
-  // Build a lookup from full name to MOD letter (for static fallback)
-  const modPersonByName = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const [letter, fullName] of Object.entries(MOD_PERSONS)) {
-      m.set(fullName, letter);
-    }
-    return m;
-  }, []);
-
-  // Effective letter per employee: per-plan overrides (plan.modPersons) take
-  // priority over the static MOD_PERSONS name match for any overridden letter.
-  const effectiveLetterByEmployeeId = useMemo(() => {
-    const m = new Map<string, string>();
-    // Seed from static name-based mapping
-    for (const emp of plan.employees) {
-      const letter = modPersonByName.get(`${emp.firstName} ${emp.lastName}`);
-      if (letter) m.set(emp.employeeId, letter);
-    }
-    // Apply per-plan overrides: any letter present in modPersons supersedes static
-    const modPersons = plan.modPersons ?? {};
-    const overriddenLetters = new Set(Object.keys(modPersons));
-    if (overriddenLetters.size > 0) {
-      // Remove static entries whose letter has been overridden
-      for (const [empId, letter] of [...m.entries()]) {
-        if (overriddenLetters.has(letter)) m.delete(empId);
-      }
-      // Apply overrides (modPersons is letter → employeeId)
-      for (const [letter, empId] of Object.entries(modPersons)) {
-        m.set(empId, letter);
-      }
-    }
-    return m;
-  }, [plan.employees, plan.modPersons, modPersonByName]);
+  // employeeId → MOD letter, straight from the plan's modPersons map. No name
+  // matching: the letter is keyed by employeeId (see lib/modPersons.ts).
+  const effectiveLetterByEmployeeId = useMemo(
+    () => modLettersByEmployeeId(plan.modPersons),
+    [plan.modPersons]
+  );
 
   // Letters already taken by some employee (for dropdown filtering)
   const takenLetterByLetter = useMemo(() => {
