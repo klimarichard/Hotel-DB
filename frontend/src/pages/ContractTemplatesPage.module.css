@@ -521,6 +521,64 @@
   flex-shrink: 0;
 }
 
+/* ── Náhled (preview) ──────────────────────────────────────────────────────
+ * Bar of per-conditional checkboxes shown above the canvas while previewing.
+ * Wraps, because a template can use several conditionals.
+ */
+.previewBar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-info-bg);
+  flex-shrink: 0;
+}
+
+.previewBarTitle {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.previewBarHint {
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+}
+
+.previewToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+/*
+ * The preview renders the SAME html inside the SAME .a4Page box with the same
+ * margins, so it inherits the page's table/page-break rules and the inline
+ * typography TipTap saved. Nothing here may change metrics - a font or spacing
+ * tweak would silently invalidate the very tab alignment being checked.
+ */
+.previewContent {
+  cursor: default;
+}
+
+/*
+ * The dashed page-break divider is an EDITOR affordance - it marks the ↧ node and
+ * prints nothing. Showing it in a preview that claims to be the real document
+ * would be a lie, and it adds 2cm of margin that isn't in the PDF, which would
+ * throw off exactly the layout being checked. The .a4Page background still shows
+ * where the paper ends.
+ */
+.previewContent [data-page-break] {
+  border-top: none;
+  margin: 0;
+}
+
 .findInput {
   flex: 1;
   min-width: 0;
