@@ -104,19 +104,21 @@ Pracovní poměr je členěn na **sezení (sessions)** — každé začíná **N
 - **Automatický přesun do „Ukončení":** zaměstnanec se do záložky *Ukončení* přesune sám, jakmile **uplyne datum ukončení** (smlouva na dobu určitou nebo zadané ukončení). Den ukončení je ještě aktivní — přesun proběhne až následující den. Naopak zaměstnanec s budoucím nástupem se zobrazuje v záložce **Před nástupem** a do záložky **Aktivní** se přesune automaticky **v den nástupu**.
 - U řádků historie si můžete **vygenerovanou smlouvu zobrazit a stáhnout** pod čitelným názvem.
 
-#### Další dokumenty
-
-Záložka **Další dokumenty** zobrazuje přílohy nahrané k zaměstnanci. Dokumenty zde pouze prohlížíte a stahujete, nic nenahráváte ani nemažete.
-
 ##### Prohlášení poplatníka
 
-Tlačítko **Prohlášení poplatníka** (vlevo od **Nahrát dokument**) vygeneruje vyplněné **Prohlášení poplatníka daně** (formulář MFin 5457, PDF) a otevře ho v nové záložce prohlížeče.
+V záhlaví této záložky je tlačítko **Prohlášení poplatníka** – vygeneruje vyplněné **Prohlášení poplatníka daně** (formulář MFin 5457, PDF) a otevře ho v nové záložce prohlížeče.
 
 Po kliknutí se nejprve zobrazí malý dialog. Do pole **Zdaňovací období** zadejte příslušné období — například `2026` (celý rok) nebo `od září 2026` (část roku). Potvrdíte tlačítkem **Generovat** a PDF se otevře v nové záložce připravené k tisku.
 
 > 📝 **Upozornění:** Formulář je vyplněn z evidenčních údajů zaměstnance. Blok pro **daňového nerezidenta** (cizince, který nepodléhá zdanění v ČR) zůstane prázdný — tyto řádky musí zaměstnanec doplnit ručně. Dokument obsahuje citlivé údaje (rodné číslo atp.) a každé vygenerování se zaznamenává do **Logu změn**.
 
-> 📷 *(Místo pro snímek obrazovky: záložka Další dokumenty s tlačítkem Prohlášení poplatníka)*
+> 📷 *(Místo pro snímek obrazovky: záložka Historie pracovního poměru s tlačítkem Prohlášení poplatníka)*
+
+#### Další dokumenty
+
+Záložka **Další dokumenty** zobrazuje jeden společný seznam všech dokumentů zaměstnance, které nejsou součástí historie pracovního poměru – nahrané přílohy i samostatně generované dokumenty (např. Multisport, Hmotná odpovědnost), řazené od nejnovějšího. Dokumenty zde pouze prohlížíte a stahujete, nic nenahráváte ani nemažete.
+
+> 📷 *(Místo pro snímek obrazovky: záložka Další dokumenty se společným seznamem dokumentů)*
 
 ---
 

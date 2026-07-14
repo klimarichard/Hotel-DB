@@ -53,6 +53,32 @@ The `benefits` sub-doc carries the insurance/bank/Multisport fields plus `nepode
 
 `employmentStartDate` and `employmentEndDate` were added in v2.2.8. Both are pure derived denormalizations (no audit log on change). They are computed in `computeEmploymentDates(rows, today)` (`functions/src/routes/employees.ts`) and persisted in `applyDerivedStatus`. Existing employees backfill on the next nightly `refreshEmployeeEffective` sweep or `trigger-effective-refresh` manual call; `POST /employees` seeds both as `null` for name-only employees. No migration script needed — additive, data-safe.
 
+### Live employee-name resolution — read-time, never a backfill (v4.6.0)
+
+Several collections **snapshot** an employee's name at write time and never rewrite it: `shiftPlans/{id}/planEmployees` (frozen when the person is added to the roster — `copy-employees` propagates the stale copy forward to the next month, and a plan predating the display-name feature carries no `displayName` key at all), `payrollPeriods/*/entries` (built from that already-stale roster, so a **recalc did not fix it**), `vacationRequests`, the `alerts`/`probationAlerts` collections, `employeeChangeRequests`, and the Předávací protokol signature stamps (`predal`/`prevzal`) + the `handoverWarnings` derived from them.
+
+**The fix is read-time re-resolution, not a backfill.** Every endpoint that returns one of these snapshots now re-resolves the name against the **live** `employees/{id}` doc before responding; the stored snapshot survives only as the fallback for an employee that has since been deleted. This is deliberate over a one-time backfill migration: a backfill would rewrite production data, fix only the rows that exist today, and re-break on the very next rename. Read-time resolution is self-healing and **writes nothing** — notably, a **locked** `payrollPeriods` period now displays the current name without the lock being touched.
+
+**Shared helper — `functions/src/services/employeeNames.ts`:**
+
+```ts
+interface EmployeeNameParts { firstName: string; lastName: string; displayName: string; }
+
+function nameParts(rec: unknown): EmployeeNameParts;                       // read the three fields off any name-bearing record
+function resolveEmployeeNameParts(ids): Promise<Map<string, EmployeeNameParts>>; // ONE batched getAll for a whole request
+function preferLive(live, employeeId, snapshot): EmployeeNameParts;         // live if present, else the snapshot's parts
+```
+
+It returns raw name **parts**, not a composed string, because callers disagree about the form they need: most surfaces show `employeeDisplayName()` ("Zobrazované jméno" if set, else "Jméno Příjmení"), while the Zaměstnanci list, employee-picker dropdowns, and the payroll PDF deliberately stay surname-first on the **legal** name (`employeeSurnameFirst()`). Composition stays with the caller — `frontend/src/lib/employeeName.ts` on the frontend.
+
+**Endpoints re-resolving via this helper:** `shifts.ts` (`GET /plans/:planId`, `GET /plans/:planId/employees`, `GET /changeRequests/pending`, `GET /plans/:planId/shiftChangeRequests` — the last two via a `withLiveSwapNames` wrapper that re-derives a swap partner's denormalized `requestedChange.swapWithName`), `payroll.ts` (the period GETs, via a `hydrateNames` helper, and the min-wage check), `payrollCalculator.ts` (an entry's `firstName`/`lastName`/`displayName` are now built from the live employee doc, never from the roster snapshot), `vacation.ts` (`GET /vacation`, `GET /vacation/approved-upcoming`), `alerts.ts` (both `GET /alerts` and the probation alerts GET, via `withLiveEmployeeNames`), and `employeeChangeRequests.ts` (`GET /employee-change-requests/pending`).
+
+**Recepce mirror — `functions/src/services/recepceEmployees.ts`.** Recepce already had this pattern (`recepceDisplayName`, `resolveEmployeeDisplays` — see [Recepce — Předávací protokol](recepce.md#předávací-protokol-shift-handover), "Name display" subsection) for surfaces keyed directly by `employeeId`. v4.6.0 adds `resolveEmployeeIdsByUid` (batch `users/{uid}.employeeId` lookup) and `resolveDisplayNamesByUid` (uid → live display name, composing the two) for surfaces that instead stamp an auth **uid** — the Předávací protokol's `predal`/`prevzal` signature stamps and the `handoverWarnings` derived from them. Only the display **label** is re-resolved; the signature's legal substance (`uid`, the proven `email`, and `at`) is the historical record and is never rewritten. See [Recepce — Předávací protokol](recepce.md#předávací-protokol-shift-handover) for the two call sites (`handovers.ts`'s `withLiveSignerNames`, `handoverWarnings.ts`).
+
+**Guidance for new surfaces:** enrich the endpoint response, don't add another name helper. Because the frontend already called `employeeDisplayName()` in most of these places before this fix, enriching the API response fixed the display with **zero frontend change** in every case above — the pattern to reach for next time a denormalized name surfaces stale is "hydrate on read", not a new client-side helper or a migration.
+
+---
+
 ### `roleTypes/{id}` — configurable user types
 
 Editable **user types** (the configurable-RBAC replacement for hard-coded roles). See [Authentication, Roles & Permissions](auth-and-permissions.md) for the full model.

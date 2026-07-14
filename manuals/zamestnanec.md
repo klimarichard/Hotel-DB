@@ -51,6 +51,8 @@ Vlevo dole v přihlášené aplikaci je vždy vidět **jméno přihlášeného u
 - kdo má dnes směnu (recepce i portýři), kdo je MOD,
 - kteří manažeři mají dovolenou.
 
+> 📝 Jméno kolegy, které u něj vidíte – zde, v plánu směn, v dovolené i jinde v aplikaci – může být jeho zkrácené **zobrazované jméno** (nastavuje administrátor na kartě zaměstnance) místo úředního jména. Netýká se to úředních dokumentů ani seznamů řazených podle příjmení, kde se vždy zobrazuje úřední jméno.
+
 Máte-li propojený zaměstnanecký záznam, zobrazí se na Přehledu **barevný pruh** (banner) s upozorněním na vaše vlastní doklady — pas nebo povolení k pobytu — u nichž platnost uplynula nebo vyprší do 30 dnů. Stejný pruh vidíte i na stránce **Můj profil**. Pokud jsou všechny vaše doklady v pořádku, pruh se nezobrazí.
 
 > 📷 *(Místo pro snímek obrazovky: Přehled)*

@@ -53,6 +53,8 @@ Vlevo dole je vždy vidět **jméno přihlášeného uživatele**. Pod ním jsou
 - kteří FOM jsou nepřítomní,
 - rychlé statistiky personálu (počty, věkové složení, národnosti, pozice).
 
+> 📝 Jméno kolegy, které u něj vidíte – zde, v plánu směn, v dovolené i jinde v aplikaci – může být jeho zkrácené **zobrazované jméno** (nastavuje administrátor na kartě zaměstnance) místo úředního jména. Netýká se to úředních dokumentů ani seznamů řazených podle příjmení, kde se vždy zobrazuje úřední jméno.
+
 ### Dlaždice úkolů
 
 V horní části Přehledu se zobrazují dlaždice s počty položek čekajících na vaše rozhodnutí (zobrazují se jen ty dlaždice, ke kterým máte oprávnění):
