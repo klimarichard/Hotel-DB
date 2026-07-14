@@ -4,6 +4,7 @@ import ConfirmModal from "./ConfirmModal";
 import Button from "./Button";
 import IconButton from "./IconButton";
 import { ContractType } from "@/lib/contractVariables";
+import { pagesAccusative } from "@/lib/czechPlural";
 import {
   bytesToBase64,
   compressScannedPdf,
@@ -25,6 +26,13 @@ const MAX_UPLOAD_BYTES = 7 * 1024 * 1024;
 
 function formatMb(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/** "Smlouva = strana 1." for a single page, "Smlouva = strany 2 až 3." for a range. */
+function pageRangeCz(label: string, from: number, to: number): string {
+  return from === to
+    ? `${label} = strana ${from}.`
+    : `${label} = strany ${from} až ${to}.`;
 }
 
 // The split dialog reuses ConfirmModal's chrome but needs its own form fields;
@@ -551,13 +559,13 @@ export default function ContractActionButtons({
             </div>
             <div className={modalStyles.body}>
               <p style={{ margin: "0 0 12px", fontSize: "0.875rem", color: "var(--color-text-secondary)" }}>
-                Dokument má {splitPrompt.pageCount} stran. Zvolte, kolik prvních stran
-                tvoří smlouvu – zbytek se uloží jako prohlášení poplatníka do Dalších
+                Dokument má {pagesAccusative(splitPrompt.pageCount)}. Zvolte, kolik prvních
+                stran tvoří smlouvu – zbytek se uloží jako prohlášení poplatníka do Dalších
                 dokumentů.
               </p>
 
               <div style={{ marginBottom: "12px" }}>
-                <label style={fieldLabelStyle}>Smlouva = strany 1 až</label>
+                <label style={fieldLabelStyle}>Počet stran smlouvy</label>
                 <input
                   type="number"
                   min={1}
@@ -576,7 +584,8 @@ export default function ContractActionButtons({
                   style={fieldInputStyle}
                 />
                 <p style={{ margin: "6px 0 0", fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
-                  Prohlášení = strany {splitAfterPage + 1} až {splitPrompt.pageCount}.
+                  {pageRangeCz("Smlouva", 1, splitAfterPage)}{" "}
+                  {pageRangeCz("Prohlášení", splitAfterPage + 1, splitPrompt.pageCount)}
                 </p>
               </div>
 

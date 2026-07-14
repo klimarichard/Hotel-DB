@@ -12,7 +12,6 @@ import GenerateContractModal from "@/components/GenerateContractModal";
 import Button from "@/components/Button";
 import IconButton from "@/components/IconButton";
 import EmploymentSessionCard from "@/components/EmploymentSession";
-import AdhocContractsSection from "@/components/AdhocContractsSection";
 import OtherDocumentsTab from "@/components/OtherDocumentsTab";
 import MultisportEditor from "@/components/MultisportEditor";
 import AuditEventCard from "@/components/AuditEventCard";
@@ -2018,13 +2017,26 @@ export default function EmployeeDetailPage() {
       )}
 
       {page === "other-docs" && (
-        <>
-          <OtherDocumentsTab
+        <OtherDocumentsTab
             employeeId={id!}
+            contracts={contracts.filter((c) => !c.employmentRowId)}
+            customTemplates={customStandalone}
+            onContractsChanged={refetchContracts}
+            onGenerateContract={(c) =>
+              setGenerateModal({
+                kind: "adhoc",
+                contractId: c.id,
+                contractType: c.type as SmlouvaContractType,
+                signingDate: c.signingDate ?? "",
+                requestedAt: c.requestedAt,
+                validFrom: c.validFrom,
+              })
+            }
             toolbarSlot={
               canGenerateContracts ? (
                 <div ref={adhocDropdownRef} style={{ position: "relative" }}>
                   <Button
+                    data-tour="emp-doc-generate"
                     variant="secondary"
                     size="sm"
                     onClick={() => setAdhocDropdownOpen((v) => !v)}
@@ -2060,24 +2072,6 @@ export default function EmployeeDetailPage() {
               ) : null
             }
           />
-
-          <AdhocContractsSection
-            contracts={contracts.filter((c) => !c.employmentRowId)}
-            customTemplates={customStandalone}
-            employeeId={id!}
-            onContractsChanged={refetchContracts}
-            onGenerate={(c) =>
-              setGenerateModal({
-                kind: "adhoc",
-                contractId: c.id,
-                contractType: c.type as SmlouvaContractType,
-                signingDate: c.signingDate ?? "",
-                requestedAt: c.requestedAt,
-                validFrom: c.validFrom,
-              })
-            }
-          />
-        </>
       )}
 
       {/* Ad-hoc signing-date prompt. Page level (not inside the Další dokumenty
