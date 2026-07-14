@@ -471,6 +471,134 @@ contractsRouter.post(
 );
 
 /**
+ * POST /api/employees/:employeeId/contracts/:contractId/signed-pdf-with-declaration
+ *
+ * The signed contract normally comes back from the employee as ONE scan whose
+ * first page(s) are the contract and whose trailing pages are the "Prohlášení
+ * poplatníka". Those belong in two different places, so this endpoint files them
+ * in one call: the contract half onto the contract record (exactly as
+ * .../signed-pdf does), the declaration half into the employee's otherDocuments
+ * (exactly as POST /employees/:id/other-documents does).
+ *
+ * The split itself happens on the client (which has already rasterised the scan
+ * to shrink it — see lib/pdfCompress.ts), so this route just receives the two
+ * halves. Doing both writes here rather than as two client calls means a partial
+ * failure can't leave the contract marked signed with the declaration missing.
+ *
+ * Requires contracts.sign (route gate) AND documents.upload, since it creates an
+ * otherDocuments record — no new permission key, just both existing ones.
+ *
+ * Body: { contractPdfBase64, declarationPdfBase64, declarationName }
+ */
+contractsRouter.post(
+  "/employees/:employeeId/contracts/:contractId/signed-pdf-with-declaration",
+  requirePermission("contracts.sign"),
+  async (req: AuthRequest, res: Response) => {
+    if (!hasPermission(req.permissions ?? new Set(), "documents.upload")) {
+      res.status(403).json({ error: "Chybí oprávnění pro nahrání dokumentu." });
+      return;
+    }
+
+    const { contractPdfBase64, declarationPdfBase64, declarationName } = req.body as {
+      contractPdfBase64?: string;
+      declarationPdfBase64?: string;
+      declarationName?: string;
+    };
+    if (!contractPdfBase64 || !declarationPdfBase64) {
+      res
+        .status(400)
+        .json({ error: "contractPdfBase64 a declarationPdfBase64 jsou povinné." });
+      return;
+    }
+    const docName =
+      typeof declarationName === "string" && declarationName.trim()
+        ? declarationName.trim()
+        : "Prohlášení poplatníka";
+
+    const employeeId = req.params.employeeId;
+    const contractId = req.params.contractId;
+
+    const contractRef = db()
+      .collection("employees")
+      .doc(employeeId)
+      .collection("contracts")
+      .doc(contractId);
+
+    const existing = await contractRef.get();
+    if (!existing.exists) {
+      res.status(404).json({ error: "Contract not found" });
+      return;
+    }
+
+    // Reserve the otherDocuments id up-front so its storage path lines up with
+    // the metadata record, same as POST /employees/:id/other-documents.
+    const docRef = db()
+      .collection("employees")
+      .doc(employeeId)
+      .collection("otherDocuments")
+      .doc();
+
+    const signedStoragePath = `contracts/${employeeId}/${contractId}_signed.pdf`;
+    const declarationStoragePath = `other-documents/${employeeId}/${docRef.id}.pdf`;
+    const uploadedBy = req.uid ?? "unknown";
+    const bucket = admin.storage().bucket();
+
+    await Promise.all([
+      bucket.file(signedStoragePath).save(Buffer.from(contractPdfBase64, "base64"), {
+        contentType: "application/pdf",
+        metadata: { metadata: { uploadedBy } },
+      }),
+      bucket
+        .file(declarationStoragePath)
+        .save(Buffer.from(declarationPdfBase64, "base64"), {
+          contentType: "application/pdf",
+          metadata: { metadata: { uploadedBy } },
+        }),
+    ]);
+
+    // Both metadata writes land together; a Storage blob orphaned by a failure
+    // here is inert (nothing points at it), whereas a half-written pair of
+    // records would show a signed contract whose declaration went missing.
+    const before = existing.data() as Record<string, unknown>;
+    const update = {
+      status: "signed",
+      signedStoragePath,
+      signedAt: FieldValue.serverTimestamp(),
+      signedUploadedBy: req.uid,
+    } as Record<string, unknown>;
+
+    const batch = db().batch();
+    batch.update(contractRef, update);
+    batch.set(docRef, {
+      name: docName,
+      storagePath: declarationStoragePath,
+      contentType: "application/pdf",
+      uploadedAt: FieldValue.serverTimestamp(),
+      uploadedBy: req.uid,
+    });
+    await batch.commit();
+
+    await logUpdate(ctxFromReq(req), {
+      collection: "employees/contracts",
+      resourceId: employeeId,
+      subResourceId: contractId,
+      employeeId,
+      before,
+      after: { ...before, ...update },
+    });
+    await logCreate(ctxFromReq(req), {
+      collection: "employees/otherDocuments",
+      resourceId: employeeId,
+      subResourceId: docRef.id,
+      employeeId,
+      summary: { name: docName },
+    });
+
+    res.json({ ok: true, signedStoragePath, declarationDocId: docRef.id });
+  }
+);
+
+/**
  * POST /api/employees/:employeeId/contracts/:contractId/unsigned-pdf
  * Attach a freshly generated (unsigned) PDF to an EXISTING contract
  * record. Used by the ad-hoc "row-first" flow: the row is created
