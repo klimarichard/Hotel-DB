@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useReducer } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, useReducer } from "react";
 import Button from "@/components/Button";
 import { useEditor, EditorContent } from "@tiptap/react";
 import { Extension, Node, mergeAttributes } from "@tiptap/core";
@@ -426,9 +426,16 @@ import {
   CUSTOM_VAR_KEYS,
   CUSTOM_VAR_TYPE_LABELS,
   usedCustomVars,
+  fillTemplate,
   type CustomVarDefs,
   type CustomVarType,
 } from "@/lib/contractVariables";
+import {
+  buildPreviewVars,
+  defaultBools,
+  usedConditionals,
+  CONDITIONAL_LABELS,
+} from "@/lib/templatePreview";
 import { formatTimestampCZ } from "@/lib/dateFormat";
 import styles from "./ContractTemplatesPage.module.css";
 
@@ -571,6 +578,18 @@ export default function ContractTemplatesPage() {
   // selection changes. TipTap React v3 doesn't subscribe to these by default.
   const [, forceRerender] = useReducer((x: number) => x + 1, 0);
 
+  // ── Náhled (preview) ──────────────────────────────────────────────────────
+  // Layout (tab stops, wraps, page breaks) is impossible to judge in the raw
+  // editor: the {{#if …}} markers themselves occupy space in the line. Preview
+  // renders the document as it will actually print, with sample data.
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewBools, setPreviewBools] = useState<Record<string, boolean>>({});
+  const [pdfPreviewLoading, setPdfPreviewLoading] = useState(false);
+  // The PDF preview goes through the same endpoint that generates real contracts,
+  // which is gated on contracts.generate. A template editor without it still gets
+  // the in-editor preview; only the PDF button is hidden.
+  const canPreviewPdf = can("contracts.generate");
+
   // The 3-column workspace + 210mm A4 canvas + TipTap toolbars aren't usable on
   // a phone, so below the phone breakpoint we show a "use a larger screen" notice
   // instead of the editor. Mirrors the matchMedia hook in ShiftPlannerPage.
@@ -644,6 +663,64 @@ export default function ContractTemplatesPage() {
       },
     },
   });
+
+  // ── Náhled (preview) – needs `editor`, so it lives below it ────────────────
+  // Both memos also depend on editor.state.doc: forceRerender fires on every
+  // transaction, so a {{#if}} typed while the preview is open picks up its
+  // checkbox and re-renders without leaving preview.
+  const editorDoc = editor?.state.doc;
+
+  /** Conditionals THIS template actually uses; only these get a checkbox. */
+  const previewConditionals = useMemo(() => {
+    if (!previewOpen || !editor) return [];
+    return usedConditionals(editor.getHTML(), variableDefs);
+  }, [previewOpen, editor, variableDefs, editorDoc]);
+
+  /** The document as it will print: variables filled, conditionals resolved. */
+  const previewHtml = useMemo(() => {
+    if (!previewOpen || !editor) return "";
+    const html = editor.getHTML();
+    return fillTemplate(html, buildPreviewVars(html, variableDefs, previewBools));
+  }, [previewOpen, editor, variableDefs, previewBools, editorDoc]);
+
+  function openPreview() {
+    if (!editor) return;
+    const keys = usedConditionals(editor.getHTML(), variableDefs);
+    // Seed any conditional we don't have state for yet, keeping the ones already
+    // flipped this session.
+    setPreviewBools((prev) => ({ ...defaultBools(keys), ...prev }));
+    setPreviewOpen(true);
+  }
+
+  /**
+   * Render the CURRENT editor content through the same Puppeteer endpoint that
+   * produces real contracts, and open the PDF. The in-editor preview uses the
+   * browser's layout engine, so it can only APPROXIMATE where a tab stop or a
+   * page break lands; this is the byte-accurate check.
+   */
+  async function handlePdfPreview() {
+    if (!editor || !user || pdfPreviewLoading) return;
+    setPdfPreviewLoading(true);
+    try {
+      const html = editor.getHTML();
+      const filled = fillTemplate(html, buildPreviewVars(html, variableDefs, previewBools));
+      const token = await user.getIdToken();
+      const resp = await fetch("/api/contracts/render-pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ html: filled, margins }),
+      });
+      if (!resp.ok) throw new Error();
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank", "noopener,noreferrer");
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch {
+      setErrorModal("Nepodařilo se vytvořit náhled PDF.");
+    } finally {
+      setPdfPreviewLoading(false);
+    }
+  }
 
   const fetchTemplates = useCallback(async () => {
     if (!user) return;
@@ -1505,6 +1582,18 @@ export default function ContractTemplatesPage() {
               title="Najít a nahradit (Ctrl+F)"
             >🔍</button>
 
+            {/* Náhled – render with sample data so the {{…}} markers stop
+                distorting the line and tab stops can actually be judged. */}
+            <button
+              className={`${styles.toolBtn} ${previewOpen ? styles.toolBtnActive : ""}`}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                if (previewOpen) setPreviewOpen(false);
+                else openPreview();
+              }}
+              title="Náhled s ukázkovými daty (bez proměnných a podmínek)"
+            >👁</button>
+
             <span className={styles.toolSep} />
 
             {/* Image upload */}
@@ -1679,6 +1768,50 @@ export default function ContractTemplatesPage() {
               >✕</button>
             </div>
           )}
+          {/* Náhled: which branch of each conditional to render. Only the
+              conditionals this template actually uses are listed. */}
+          {previewOpen && (
+            <div className={styles.previewBar}>
+              <span className={styles.previewBarTitle}>Náhled s ukázkovými daty</span>
+              {previewConditionals.length === 0 ? (
+                <span className={styles.previewBarHint}>
+                  Tato šablona nepoužívá žádné podmínkové proměnné.
+                </span>
+              ) : (
+                previewConditionals.map((key) => (
+                  <label key={key} className={styles.previewToggle}>
+                    <input
+                      type="checkbox"
+                      checked={previewBools[key] ?? true}
+                      onChange={(e) =>
+                        setPreviewBools((p) => ({ ...p, [key]: e.target.checked }))
+                      }
+                    />
+                    {CONDITIONAL_LABELS[key] ?? variableDefs[key]?.label ?? key}
+                  </label>
+                ))
+              )}
+              {canPreviewPdf && (
+                <button
+                  type="button"
+                  className={styles.findBtn}
+                  onClick={handlePdfPreview}
+                  disabled={pdfPreviewLoading}
+                  title="Vykreslí PDF stejným způsobem jako skutečnou smlouvu – přesné zalomení stránek i tabulátory"
+                >
+                  {pdfPreviewLoading ? "Generuji…" : "Náhled PDF"}
+                </button>
+              )}
+              <button
+                className={styles.findClose}
+                onClick={() => setPreviewOpen(false)}
+                title="Zpět k úpravám"
+                aria-label="Zavřít náhled"
+                type="button"
+              >✕</button>
+            </div>
+          )}
+
           <div className={styles.editor}>
             <div
               className={styles.a4Page}
@@ -1689,7 +1822,17 @@ export default function ContractTemplatesPage() {
                 paddingRight: `${margins.right}mm`,
               }}
             >
-              <EditorContent editor={editor} />
+              {previewOpen ? (
+                // Same .a4Page box, same margins, same ProseMirror content styles –
+                // only the source differs – so the preview lays out exactly like the
+                // editor does, minus the {{…}} markers.
+                <div
+                  className={styles.previewContent}
+                  dangerouslySetInnerHTML={{ __html: previewHtml }}
+                />
+              ) : (
+                <EditorContent editor={editor} />
+              )}
             </div>
           </div>
         </div>

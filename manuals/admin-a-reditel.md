@@ -322,6 +322,16 @@ Stránka **Šablony smluv** obsahuje editor ve stylu Wordu (TipTap): formátová
 
 > 📷 *(Místo pro snímek obrazovky: editor šablon)*
 
+#### Náhled šablony
+
+V panelu nástrojů editoru najdete tlačítko **👁 Náhled**. Přepne dokument do zobrazení s **ukázkovými daty** – proměnné (jméno, mzda, datum…) se vyplní smyšlenými hodnotami a podmíněné odstavce se vyhodnotí, takže v textu už nejsou vidět značky jako `{{firstName}}` nebo `{{#if isCzech}}`. Teprve v tomto zobrazení jde spolehlivě posoudit, jak budou v hotové smlouvě vypadat zarovnané tabulátory a zalomení řádků a stránek.
+
+- Nad náhledem se objeví lišta se **zaškrtávátky** – jedno pro každou podmínkovou proměnnou, kterou daná šablona používá (např. *Je Čech*, *Je muž*, *Má zkušební dobu*). Zaškrtáváním a odškrtáváním si zobrazíte obě varianty textu, tedy i tu, která by se jinak ukázala jen některým zaměstnancům.
+- Tlačítko **Náhled PDF** vygeneruje dokument úplně stejným způsobem, jakým vzniká skutečná smlouva, a otevře ho jako PDF. Náhled přímo v editoru je jen přibližný – vykresluje ho prohlížeč – zatímco náhled PDF je přesný. Chcete-li si na jistotu ověřit zarovnání tabulátorů a zalomení stránek, použijte právě **Náhled PDF**.
+- Náhled slouží jen ke čtení – nic v šabloně neupravuje. Úpravy proveďte v běžném režimu editoru a znovu uložte tlačítkem **Uložit**.
+
+> 📷 *(Místo pro snímek obrazovky: náhled šablony s vyplněnými ukázkovými daty a lištou přepínačů podmínkových proměnných)*
+
 #### Podmínkové proměnné
 
 Kromě proměnných, které se do smlouvy jen vypíšou (jméno, mzda, datum…), nabízí panel proměnných i **podmínkové proměnné**. Ty žádný text nevypisují – rozhodují jen o tom, jestli se určitý odstavec ve smlouvě **objeví, nebo neobjeví**. V seznamu proměnných je poznáte podle popisku **„(pro {{#if}})“**.
@@ -337,6 +347,18 @@ Dnes jsou k dispozici tyto podmínkové proměnné:
 Klepnutím na tlačítko podmínkové proměnné v panelu se na místo kurzoru vloží dvojice značek. Mezi ně napíšete odstavec, který se má zobrazit **jen tehdy, když je podmínka splněná** – např. `{{#if isCzech}}zde napíšete text pro Čechy{{/if}}`.
 
 **Opačná podmínka.** Pro odstavec, který se má zobrazit naopak – **když podmínka splněná není** – stačí ve vloženém textu přepsat `#if` na `#unless` a na konci bloku `/if` na `/unless` (obě značky vždy přepisujte společně). Například pro cizince tedy napíšete `{{#unless isCzech}}zde napíšete text pro cizince{{/unless}}`.
+
+**Vnořené podmínky (novinka).** Podmínky lze vkládat i jednu do druhé – tak zapíšete odstavec, který se objeví jen tehdy, když platí **obě podmínky zároveň**. Například řádek „PAS / VISA" se má tisknout jen u cizince, který navíc **nemá** trvalý pobyt:
+
+```
+{{#unless isCzech}}{{#unless hasPermanentResidence}}
+PAS / VISA: {{passportNumber}} / {{visaNumber}}
+{{/unless}}{{/unless}}
+```
+
+Platí přitom základní pravidlo: každá otevřená podmínka musí mít **svoji vlastní ukončovací značku** – `{{/if}}` patří k `{{#if}}`, `{{/unless}}` patří k `{{#unless}}`. U vnořených podmínek se proto ukončovací značky opakují, jedna za druhou.
+
+> ⚠️ Chybí-li ukončovací značka, nebo počet ukončovacích značek neodpovídá počtu otevřených podmínek, aplikace na to **neupozorní žádnou chybou** – přebytečná nebo nepárová značka se prostě vytiskne do hotové smlouvy jako obyčejný text (např. `{{/unless}}` uprostřed věty). Po úpravě vnořených podmínek proto výsledek vždy zkontrolujte tlačítkem **👁 Náhled** – je to nejrychlejší způsob, jak takovou chybu odhalit dřív, než se dostane do podepsané smlouvy.
 
 > 📝 Dřív existovala pro každou podmínku i opačná proměnná (např. „Je cizinec", „Nemá zkušební dobu"). Tyto opačné proměnné byly odstraněny, protože totéž teď spolehlivěji zajistí `{{#unless}}` – šablony tak mají méně proměnných a nehrozí, že by se kladná a záporná verze časem rozešly. Odstraněna byla i proměnná „Celé jméno" – místo ní použijte proměnné **Jméno** a **Příjmení** vedle sebe (`{{firstName}} {{lastName}}`). Existující šablony už aplikace sama převedla na nový zápis, nic tedy není třeba ručně opravovat.
 
