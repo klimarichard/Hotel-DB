@@ -1,11 +1,14 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { api } from "@/lib/api";
 import { blobToBase64 } from "@/lib/blobToBase64";
-import { formatTimestampCZ } from "@/lib/dateFormat";
+import { formatTimestampCZ, formatDateCZ } from "@/lib/dateFormat";
+import { CONTRACT_TYPE_LABELS } from "@/lib/contractVariables";
+import type { ContractRecord } from "@/lib/employmentSessions";
 import Button from "./Button";
 import IconButton from "./IconButton";
 import ConfirmModal from "./ConfirmModal";
+import ContractActionButtons from "./ContractActionButtons";
 import styles from "./OtherDocumentsTab.module.css";
 
 // Pull the filename out of a Content-Disposition header, preferring the UTF-8
@@ -19,12 +22,16 @@ function filenameFromDisposition(cd: string | null, fallback: string): string {
   return plain ? plain[1] : fallback;
 }
 
+type FirestoreTs = { seconds?: number; _seconds?: number } | null | undefined;
+
 interface OtherDocument {
   id: string;
   name: string;
-  uploadedAt: { seconds?: number; _seconds?: number } | null;
+  uploadedAt: FirestoreTs;
   uploadedBy?: string;
 }
+
+interface CustomTemplate { id: string; name: string }
 
 interface Props {
   employeeId: string;
@@ -35,11 +42,52 @@ interface Props {
    * contracts list), so it is injected rather than reimplemented.
    */
   toolbarSlot?: ReactNode;
+  /**
+   * Ad-hoc (standalone) contracts — those with no employmentRowId. They used to
+   * live in their own collapsible "Ad hoc smlouvy" card; they are now interleaved
+   * into the one document list, because from the user's point of view a generated
+   * Multisport form and an uploaded PDF are both just "another document on this
+   * person". Same reason they share the date-descending ordering.
+   */
+  contracts?: ContractRecord[];
+  customTemplates?: CustomTemplate[];
+  onContractsChanged?: () => void;
+  /** Open the generation modal for an ad-hoc row that has no PDF yet. */
+  onGenerateContract?: (contract: ContractRecord) => void;
 }
 
 const MAX_SIZE_BYTES = 15 * 1024 * 1024; // 15 MB
 
-export default function OtherDocumentsTab({ employeeId, toolbarSlot }: Props) {
+/** Firestore timestamp → ms, 0 when absent (sorts such rows last). */
+function tsToMs(t: FirestoreTs): number {
+  const s = t?.seconds ?? t?._seconds;
+  return typeof s === "number" ? s * 1000 : 0;
+}
+
+/**
+ * "YYYY-MM-DD" → ms, built from LOCAL date parts. Never `new Date(iso)` here:
+ * that parses as UTC and lands on the previous day in UTC+2 (project rule).
+ */
+function isoDateToMs(iso?: string): number {
+  if (!iso) return 0;
+  const [y, m, d] = iso.split("-").map(Number);
+  if (!y || !m || !d) return 0;
+  return new Date(y, m - 1, d).getTime();
+}
+
+/** One row of the unified list: an uploaded document or an ad-hoc contract. */
+type DocRow =
+  | { kind: "doc"; id: string; sortMs: number; doc: OtherDocument }
+  | { kind: "contract"; id: string; sortMs: number; contract: ContractRecord };
+
+export default function OtherDocumentsTab({
+  employeeId,
+  toolbarSlot,
+  contracts = [],
+  customTemplates = [],
+  onContractsChanged,
+  onGenerateContract,
+}: Props) {
   const { user, can } = useAuth();
   // Each action gated by its own permission so custom user types can be granted
   // granular access. Built-in admin/director hold all of these → unchanged.
@@ -178,6 +226,37 @@ export default function OtherDocumentsTab({ employeeId, toolbarSlot }: Props) {
 
   const canSubmit = uploadName.trim().length > 0 && uploadFile !== null && !uploading;
 
+  /** Built-in label, else the custom template's name, else the raw type id. */
+  function contractLabel(type: string): string {
+    return (
+      CONTRACT_TYPE_LABELS[type] ??
+      customTemplates.find((t) => t.id === type)?.name ??
+      type
+    );
+  }
+
+  // Uploaded documents and ad-hoc contracts interleaved into ONE list, newest
+  // first. A contract is dated by its signing date when it has one (that is the
+  // date the user thinks of it by), else by when it was generated.
+  const rows: DocRow[] = useMemo(() => {
+    const merged: DocRow[] = [
+      ...docs.map((doc) => ({
+        kind: "doc" as const,
+        id: `doc:${doc.id}`,
+        sortMs: tsToMs(doc.uploadedAt),
+        doc,
+      })),
+      ...contracts.map((contract) => ({
+        kind: "contract" as const,
+        id: `contract:${contract.id}`,
+        sortMs:
+          isoDateToMs(contract.signingDate) || tsToMs(contract.generatedAt as FirestoreTs),
+        contract,
+      })),
+    ];
+    return merged.sort((a, b) => b.sortMs - a.sortMs);
+  }, [docs, contracts]);
+
   return (
     <div className={styles.wrap}>
       {(canUpload || toolbarSlot) && (
@@ -194,34 +273,58 @@ export default function OtherDocumentsTab({ employeeId, toolbarSlot }: Props) {
       <div className={styles.card}>
         {loading ? (
           <div className={styles.empty}>Načítám…</div>
-        ) : docs.length === 0 ? (
+        ) : rows.length === 0 ? (
           <div className={styles.empty}>Žádné další dokumenty.</div>
         ) : (
-          docs.map((doc) => (
-            <div key={doc.id} className={styles.row}>
-              <div className={styles.meta}>
-                <span className={styles.name}>{doc.name}</span>
-                <span className={styles.date}>{formatTimestampCZ(doc.uploadedAt)}</span>
-              </div>
-              <div className={styles.actions}>
-                {canView && (
-                  <>
-                    <Button data-tour="emp-doc-view" variant="secondary" size="sm" onClick={() => handlePreview(doc)}>
-                      Zobrazit
+          rows.map((row) =>
+            row.kind === "doc" ? (
+              <div key={row.id} className={styles.row}>
+                <div className={styles.meta}>
+                  <span className={styles.name}>{row.doc.name}</span>
+                  <span className={styles.date}>{formatTimestampCZ(row.doc.uploadedAt)}</span>
+                </div>
+                <div className={styles.actions}>
+                  {canView && (
+                    <>
+                      <Button data-tour="emp-doc-view" variant="secondary" size="sm" onClick={() => handlePreview(row.doc)}>
+                        Zobrazit
+                      </Button>
+                      <Button variant="secondary" size="sm" onClick={() => handleDownload(row.doc)}>
+                        Stáhnout
+                      </Button>
+                    </>
+                  )}
+                  {canDelete && (
+                    <Button data-tour="emp-doc-delete" variant="danger" size="sm" onClick={() => setDeleteTarget(row.doc)}>
+                      Smazat
                     </Button>
-                    <Button variant="secondary" size="sm" onClick={() => handleDownload(doc)}>
-                      Stáhnout
-                    </Button>
-                  </>
-                )}
-                {canDelete && (
-                  <Button data-tour="emp-doc-delete" variant="danger" size="sm" onClick={() => setDeleteTarget(doc)}>
-                    Smazat
-                  </Button>
-                )}
+                  )}
+                </div>
               </div>
-            </div>
-          ))
+            ) : (
+              <div key={row.id} className={styles.row}>
+                <div className={styles.meta}>
+                  <span className={styles.name}>{contractLabel(row.contract.type)}</span>
+                  <span
+                    className={styles.date}
+                    title={row.contract.signingDate ? "Datum podpisu" : "Datum vytvoření"}
+                  >
+                    {row.contract.signingDate
+                      ? formatDateCZ(row.contract.signingDate)
+                      : (formatTimestampCZ(row.contract.generatedAt) ?? "–")}
+                  </span>
+                </div>
+                <ContractActionButtons
+                  contract={row.contract}
+                  defaultType={row.contract.type}
+                  defaultDisplayName={contractLabel(row.contract.type)}
+                  employeeId={employeeId}
+                  onGenerate={() => onGenerateContract?.(row.contract)}
+                  onChanged={() => onContractsChanged?.()}
+                />
+              </div>
+            )
+          )
         )}
       </div>
 
