@@ -395,3 +395,31 @@ Body: `{ contractPdfBase64, declarationPdfBase64, declarationName }`.
 ### Tour delta copy
 
 The `emp-contract-sign` tour step (Historie tab) and the relocated `emp-doc-tax-declaration` / `emp-doc-generate` steps (see [Employees — Employee detail restructure](employees.md#employee-detail-restructure--ad-hoc-documents-move-to-další-dokumenty-v460)) carry `deltaTitle`/`deltaBody` overrides for the "Co je nového" mini-tour, explaining the new upload menu to returning users while first-timers see neutral copy. `appTour.version` 14 → 15.
+
+---
+
+## Boolean variable de-duplication + `{{isMale}}` (v4.7.0)
+
+Every boolean permanent variable used to ship as a positive/negative pair (see "Row-sourced template variables + probation/end-date conditionals" and "Template variable pruning + hasPermanentResidence conditional" above) — two keys per concept that `{{#unless X}}` already made redundant, and that could silently disagree if a template author only updated one side. `VARIABLE_GROUPS` and `resolveVariables()` in `frontend/src/lib/contractVariables.ts` no longer emit the negative twins:
+
+- `isForeigner` → use `{{#unless isCzech}}`
+- `noPermanentResidence` → use `{{#unless hasPermanentResidence}}`
+- `noProbation` → use `{{#unless hasProbation}}`
+- `noEndDate` → use `{{#unless hasEndDate}}`
+
+`fullName` was also removed — no template referenced it, and it's trivially `{{firstName}} {{lastName}}` when needed. The surviving canonical booleans are `isCzech`, `isMale`, `hasPermanentResidence`, `hasProbation`, `hasEndDate`, plus the `isDodatek*` family.
+
+**New variable `{{isMale}}`** ("Je muž", under "Zaměstnanec") resolves from `employees.gender === "m"` (case-insensitive, trimmed) in `resolveVariables()`. `EmployeeData` gained a `gender?: string` field ("m" | "f" | empty), passed in from both `GenerateContractModal` call sites in `EmployeeDetailPage`. Before this, two prod templates had the employee's sex hand-rolled as a per-template **custom** bool (`{{var}}` slot) that had to be re-ticked on every document generated from them; it now resolves automatically from the employee record.
+
+### Changing the permanent variable catalogue — deploy-order trap
+
+Contract template HTML lives in Firestore (`contractTemplates/{id}.htmlContent`) and the code that resolves variables (`resolveVariables()` / `processConditionals()`) lives in the deployed frontend bundle — **the two deploy independently**, and a mismatch between them does **not error**. An unresolved `{{#if X}}` / `{{#unless X}}` key is simply falsy (`vars[key]` is `undefined`), so `processConditionals()` silently takes the "false" branch — `{{#if}}` drops its paragraph, `{{#unless}}` keeps it — with no warning that the wrong paragraph shipped in the PDF. (This is the same reason the flat, non-nesting conditional engine — see "Conditional blocks in templates" — was safe to rely on here: no nested-block edge cases to reason about while rewriting.)
+
+This bit the `isForeigner` → `{{#unless isCzech}}` migration directly: live templates had to have every `{{#if isForeigner}}…{{/if}}` block rewritten to `{{#unless isCzech}}…{{/unless}}` — note the **closing tag flips too**, not just the opening one — and that rewrite had to land *before* the code stopped emitting `isForeigner`, or the template would briefly resolve the old key to nothing and silently drop a paragraph that should have shown.
+
+**Rule for next time:** any removal or rename of a permanent variable must be phased, never done in one shot:
+1. Migrate live templates onto keys the **currently deployed** code already resolves.
+2. Deploy the code change (add the new key / remove the old one).
+3. Only then migrate anything that depends on a key the old code didn't have.
+
+Skipping straight to step 2 (or reordering) risks a live contract quietly rendering the wrong branch — with no exception, no 500, nothing in the logs to flag it.
