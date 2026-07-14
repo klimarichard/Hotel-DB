@@ -55,7 +55,9 @@ Toolbar additions to make the editor feel closer to Microsoft Word:
 - **Wrapping toolbars**: both `.toolbar` and `.toolbarSecondary` use `flex-wrap: wrap` + `justify-content: center` so buttons reflow onto a new centered line on narrow screens instead of overflowing.
 
 ### Conditional blocks in templates (2026-04-28)
-`fillTemplate()` resolves Handlebars-style block markers before the standard `{{key}}` substitution: `{{#if X}}…{{/if}}` keeps its inner content iff `vars[X]` is a truthy non-empty string, `{{#unless X}}…{{/unless}}` is the inverse. After stripping a block, any leftover empty `<p></p>` wrappers are removed so a hidden line doesn't leave a blank paragraph in the PDF. Nesting is intentionally not supported (non-greedy match closes on the inner `{{/if}}`). `getMissingVariables()` runs the conditional pass first so a `{{var}}` that lives inside a stripped block isn't flagged as missing data.
+`fillTemplate()` resolves Handlebars-style block markers before the standard `{{key}}` substitution: `{{#if X}}…{{/if}}` keeps its inner content iff `vars[X]` is a truthy non-empty string, `{{#unless X}}…{{/unless}}` is the inverse. After stripping a block, any leftover empty `<p></p>` wrappers are removed so a hidden line doesn't leave a blank paragraph in the PDF. `getMissingVariables()` runs the conditional pass first so a `{{var}}` that lives inside a stripped block isn't flagged as missing data.
+
+⚠️ **Superseded (v4.8.0):** blocks originally could not nest (a pair of non-greedy regexes meant an inner `{{/if}}` closed the outer block). As of v4.8.0 the engine is a real block parser and nesting works to any depth — see ["Nested conditional blocks (v4.8.0)"](#nested-conditional-blocks-v480) below for the rewrite, the bug it fixed, and the deploy-order trap it shares with the variable-catalogue rule.
 
 Three derived variables drive the typical "Czech vs foreigner" branch:
 - `nationality` — raw string from `employee.nationality`.
@@ -346,6 +348,40 @@ Both buttons close the modal so the author lands in the editor with the caret in
 **Validation is on submit, not on open.** The "Generovat PDF" button stays **enabled** even while custom slots are empty. Pressing it calls `handleGenerate`, which — when `missingCustom.length > 0` — sets `triedGenerate` and returns *instead of* generating; the red "Vyplňte všechny vlastní proměnné:" box (listing the missing slots by label) is rendered only under `triedGenerate && missingCustom.length > 0`, so it first appears after that press. Rationale: a disabled button plus a red error box the moment the dialog opens flags a mistake the user has not made yet. The list re-evaluates on every keystroke afterwards, so it shrinks as fields are filled. (`disabled` on the button is now only about the template/company still loading, or the template being inactive.)
 
 **Backend validation — `functions/src/routes/contractTemplates.ts`.** `PUT /:id` accepts an optional `variableDefs` field and rejects the write (400) via `isValidVariableDefs` when it isn't a plain object whose entries are all: a known key (`var1`..`var10` only), an object with a `type` in `{text, date, number, bool}`, and a `label` string ≤ 60 chars. Omitting `variableDefs` from a `PUT` leaves the stored config untouched (`ref.set(payload, { merge: true })` only writes the field when present) — older templates saved before this feature are unaffected.
+
+---
+
+## Nested conditional blocks (v4.8.0)
+
+`processConditionals()` in `frontend/src/lib/contractVariables.ts` used to resolve `{{#if X}}…{{/if}}` and `{{#unless X}}…{{/unless}}` with a pair of non-greedy regexes applied in two passes. Consequence: blocks **could not nest** — an inner `{{/if}}` closed the *outer* block, and the leftover tags (the real inner closer, plus whatever followed it) were emitted as literal text into the generated contract. This failed silently in the app (no error, no warning) and visibly on the printed page.
+
+That made an AND condition impossible to express through the conditional engine. The case that forced the fix: the "Nástup HPP" template prints a *Trvalý pobyt* line under `{{#if hasPermanentResidence}}` and a *PAS / VISA* line under `{{#unless isCzech}}` — a **foreigner who also holds permanent residence matched both conditions** and got both lines, which is wrong; the correct rule is "foreigner AND NOT permanent residence": `{{#unless isCzech}}{{#unless hasPermanentResidence}}…{{/unless}}{{/unless}}`.
+
+**How it works now.** `parseBlocks(html)` builds a tree of text nodes and block nodes (each block carrying `kind`, `key`, and its own children); `renderBlocks(nodes, vars)` walks the tree and recurses into a kept block so nested conditions resolve correctly. Blocks nest to any depth. A dropped outer block discards its whole subtree without evaluating the children inside it — `renderBlocks` never even inspects a nested `{{#if}}` whose enclosing block was already false.
+
+**Malformed input degrades rather than eating content** — the same contract this replaces:
+- A stray or mismatched closer (e.g. an `{{/if}}` with no open `{{#if}}`, or one that doesn't match the innermost open block's kind) is emitted as literal text — exactly what the old regex-based engine did with it.
+- An unclosed opener at end-of-document has its literal `{{#if X}}` / `{{#unless X}}` tag flushed back out, followed by its (still-parsed) children.
+
+The `STRIP_MARKER` sentinel and the empty-`<p>`-cleanup regexes that run after conditional resolution are unchanged — only how the tree is built and walked changed, not how a dropped block's surrounding whitespace is cleaned up.
+
+**Verified, not assumed.** The old two-pass regex engine and the new block-parser engine were compared render-for-render across all 13 PROD templates, for every combination of the boolean conditionals each template references — 832 total comparisons, 0 differences. (No prod template nests today, so this was a pure regression check: any difference would have meant the rewrite broke a live contract.)
+
+**Deploy-order trap.** The engine change must reach production *before* any template is saved with a nested block in it — if an older frontend bundle is still live when a nested `{{#if}}…{{#if}}…{{/if}}…{{/if}}` is saved, the running (old) code prints the raw tags into generated contracts. This is the same class of trap already documented for the permanent-variable catalogue in ["Changing the permanent variable catalogue — deploy-order trap"](#changing-the-permanent-variable-catalogue--deploy-order-trap) below — read that section for the general phasing rule; it applies here too.
+
+---
+
+## Template editor — in-editor preview + byte-accurate PDF preview (v4.8.0)
+
+`frontend/src/lib/templatePreview.ts` (new) plus a 👁 **Náhled** toggle in `ContractTemplatesPage.tsx`'s toolbar. Motivation: the raw `{{…}}` / `{{#if …}}` markers occupy space on the line, so tab stops, wraps, and page breaks could never be judged accurately while looking at the unfilled template — you were formatting against text that would never actually appear.
+
+**In-editor preview.** Clicking 👁 swaps the `EditorContent` inside `.a4Page` for a read-only `dangerouslySetInnerHTML` render of `fillTemplate(html, buildPreviewVars(html, variableDefs, previewBools))` — the *same* `.a4Page` box, the *same* margins (`margins.top/bottom/left/right` inline styles), the *same* ProseMirror-authored inline typography, so the preview lays out exactly like the editor minus the markers. The dashed ↧ page-break divider (`.a4Page [data-page-break] { border-top: 2px dashed #999; margin: 1cm 0 }`, editor-only styling that never reaches the Puppeteer renderer) is suppressed in preview via `.previewContent [data-page-break] { border-top: none; margin: 0 }` — it's an editor affordance that prints nothing, and leaving its dashed line and 2 cm margin in would misrepresent where content actually breaks across pages.
+
+- `usedConditionals(html, defs)` (in `templatePreview.ts`) returns the conditionals *this* template actually references — the permanent boolean vars (`CONDITIONAL_KEYS`, derived from `VARIABLE_GROUPS` entries with `kind: "if"`) plus any custom slot configured as `type: "bool"` — in that order. The preview bar renders one checkbox per key (label from `CONDITIONAL_LABELS` or the slot's configured `variableDefs[key].label`), defaulting **on** (`defaultBools`) so the preview opens showing the fuller document. Toggling a box re-renders both branches live.
+- `buildPreviewVars(html, defs, bools)` builds the full variable map the preview fills with: `MOCK_TEXT` supplies realistic, roughly realistically-**long** Czech sample values for every non-boolean permanent variable (e.g. `firstName: "Jana"`, `address: "Vinohradská 1511/230, 100 00 Praha 10"`, `salary: "35 000 Kč"`) — a blank `{{fullName}}`-style variable would collapse to nothing, making the line shorter than it will ever really be and any tab-alignment check against it a lie. Conditionals resolve to `"ano"`/`""` from the checkbox state; custom `text`/`date`/`number` slots get a per-type sample from `MOCK_CUSTOM_BY_TYPE` (a slot the template uses but never configured falls back to `text` sample data).
+- The 👁 button and preview bar are visible to anyone who can open the template editor (gated the same as the rest of the page, `contractTemplates.manage` for edit mode); the preview itself needs no extra permission.
+
+**Náhled PDF — byte-accurate check.** A second button in the preview bar (`handlePdfPreview`) fills the *current* editor content the same way, then `POST`s `{ html: filled, margins }` to `POST /api/contracts/render-pdf` — the exact same Puppeteer endpoint (`functions/src/services/pdfRenderer.ts`, see "Server-side Puppeteer PDF rendering" above) that renders real, signed contracts — and opens the returned PDF blob in a new tab. The in-editor preview above uses the browser's own layout engine and can only *approximate* where a tab stop or page break lands; this is the byte-accurate version. Gated on `canPreviewPdf = can("contracts.generate")` — the endpoint's own permission — so a template editor without `contracts.generate` still gets the in-editor 👁 preview, just not this button. **No new permission key was introduced**; this reuses the existing `contracts.generate` check.
 
 ---
 
