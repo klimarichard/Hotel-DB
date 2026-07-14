@@ -322,6 +322,26 @@ Stránka **Šablony smluv** obsahuje editor ve stylu Wordu (TipTap): formátová
 
 > 📷 *(Místo pro snímek obrazovky: editor šablon)*
 
+#### Podmínkové proměnné
+
+Kromě proměnných, které se do smlouvy jen vypíšou (jméno, mzda, datum…), nabízí panel proměnných i **podmínkové proměnné**. Ty žádný text nevypisují – rozhodují jen o tom, jestli se určitý odstavec ve smlouvě **objeví, nebo neobjeví**. V seznamu proměnných je poznáte podle popisku **„(pro {{#if}})“**.
+
+Dnes jsou k dispozici tyto podmínkové proměnné:
+
+- **Je Čech** – vyplní se automaticky podle národnosti na kartě zaměstnance.
+- **Má trvalý pobyt**
+- **Má zkušební dobu**
+- **Má datum ukončení**
+- **Je muž** – novinka. Vyplní se automaticky podle **pohlaví** na kartě zaměstnance. Dřív se u některých šablon muselo pohlaví zaškrtávat ručně jako vlastní proměnná; teď se přebírá přímo z evidence a nikdo už to nemusí hlídat.
+
+Klepnutím na tlačítko podmínkové proměnné v panelu se na místo kurzoru vloží dvojice značek. Mezi ně napíšete odstavec, který se má zobrazit **jen tehdy, když je podmínka splněná** – např. `{{#if isCzech}}zde napíšete text pro Čechy{{/if}}`.
+
+**Opačná podmínka.** Pro odstavec, který se má zobrazit naopak – **když podmínka splněná není** – stačí ve vloženém textu přepsat `#if` na `#unless` a na konci bloku `/if` na `/unless` (obě značky vždy přepisujte společně). Například pro cizince tedy napíšete `{{#unless isCzech}}zde napíšete text pro cizince{{/unless}}`.
+
+> 📝 Dřív existovala pro každou podmínku i opačná proměnná (např. „Je cizinec", „Nemá zkušební dobu"). Tyto opačné proměnné byly odstraněny, protože totéž teď spolehlivěji zajistí `{{#unless}}` – šablony tak mají méně proměnných a nehrozí, že by se kladná a záporná verze časem rozešly. Odstraněna byla i proměnná „Celé jméno" – místo ní použijte proměnné **Jméno** a **Příjmení** vedle sebe (`{{firstName}} {{lastName}}`). Existující šablony už aplikace sama převedla na nový zápis, nic tedy není třeba ručně opravovat.
+
+> ⚠️ Zůstane-li v šabloně odkaz na proměnnou, která už neexistuje (např. starší „Je cizinec"), aplikace na to **neupozorní žádnou chybou**. Podmínka se potichu vyhodnotí, jako by splněná nebyla, a celý odstavec ze smlouvy beze stopy zmizí. Proto při úpravě starších šablon vždy používejte jen proměnné aktuálně nabízené v panelu.
+
 #### Vlastní proměnné
 
 Kromě předdefinovaných proměnných (jméno, mzda, datum…) má každá šablona navíc **10 volných slotů** – `{{var1}}` až `{{var10}}` – jejichž **význam a typ si určíte sami**, zvlášť pro každou šablonu.
