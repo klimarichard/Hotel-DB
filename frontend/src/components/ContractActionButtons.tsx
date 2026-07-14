@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useAuth } from "@/hooks/useAuth";
 import ConfirmModal from "./ConfirmModal";
 import Button from "./Button";
@@ -126,9 +127,27 @@ export default function ContractActionButtons({
 
   // Signed-upload mode picker. "contract" uploads the file as-is; "split" cuts
   // the scan into the contract + the Prohlášení poplatníka.
+  //
+  // The menu is PORTALLED to <body> and positioned fixed, rather than absolutely
+  // inside this component. The employment-history session card sets
+  // `overflow: hidden` (it clips its children to its rounded corners), so an
+  // absolutely-positioned menu was cut off whenever the card was shorter than the
+  // menu - i.e. exactly on the one- and two-row sessions. Escaping to <body> makes
+  // the menu immune to ANY ancestor's overflow / transform / stacking context,
+  // instead of trading a dropdown bug for a border-radius bug.
   const [signMenuOpen, setSignMenuOpen] = useState(false);
+  const [signMenuPos, setSignMenuPos] = useState<{ top: number; right: number } | null>(null);
+  const signBtnRef = useRef<HTMLButtonElement | null>(null);
   const signMenuRef = useRef<HTMLDivElement | null>(null);
   const uploadModeRef = useRef<"contract" | "split">("contract");
+
+  /** Anchor the fixed menu under the button, right-aligned with it. */
+  function openSignMenu() {
+    const r = signBtnRef.current?.getBoundingClientRect();
+    if (!r) return;
+    setSignMenuPos({ top: r.bottom + 4, right: window.innerWidth - r.right });
+    setSignMenuOpen(true);
+  }
 
   // Split dialog, opened once the picked file has been read and (if it is a
   // scan) shrunk. We keep the PROCESSED bytes so the split and the upload both
@@ -146,10 +165,23 @@ export default function ContractActionButtons({
   useEffect(() => {
     if (!signMenuOpen) return;
     function onDocClick(e: MouseEvent) {
-      if (!signMenuRef.current?.contains(e.target as Node)) setSignMenuOpen(false);
+      const t = e.target as Node;
+      // The menu is portalled, so it is NOT inside the button's wrapper – both
+      // have to be checked or clicking a menu item would close the menu first.
+      if (signMenuRef.current?.contains(t) || signBtnRef.current?.contains(t)) return;
+      setSignMenuOpen(false);
     }
+    // A fixed-position menu doesn't travel with the page, so it would detach from
+    // its button on scroll. Close instead of trying to keep it glued.
+    const close = () => setSignMenuOpen(false);
     document.addEventListener("mousedown", onDocClick);
-    return () => document.removeEventListener("mousedown", onDocClick);
+    window.addEventListener("scroll", close, true); // capture: catches scrolling containers too
+    window.addEventListener("resize", close);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
   }, [signMenuOpen]);
 
   async function handlePreview(kind: "unsigned" | "signed") {
@@ -465,10 +497,11 @@ export default function ContractActionButtons({
       )}
 
       {canSign && !hasSigned && (
-        <div ref={signMenuRef} className={styles.signWrap}>
+        <div className={styles.signWrap}>
           <button
             data-tour="emp-contract-sign"
             type="button"
+            ref={signBtnRef}
             className={styles.uploadBtn}
             disabled={busy !== null}
             onClick={() => {
@@ -479,7 +512,8 @@ export default function ContractActionButtons({
                 fileInputRef.current?.click();
                 return;
               }
-              setSignMenuOpen((v) => !v);
+              if (signMenuOpen) setSignMenuOpen(false);
+              else openSignMenu();
             }}
           >
             {busy === "preparing"
@@ -488,32 +522,38 @@ export default function ContractActionButtons({
                 ? "Nahrávám…"
                 : `Nahrát podepsanou smlouvu${canUploadDocuments ? " ▾" : ""}`}
           </button>
-          {signMenuOpen && (
-            <div className={styles.signMenu}>
-              <button
-                type="button"
-                className={styles.signMenuItem}
-                onClick={() => {
-                  uploadModeRef.current = "contract";
-                  setSignMenuOpen(false);
-                  fileInputRef.current?.click();
-                }}
+          {signMenuOpen && signMenuPos &&
+            createPortal(
+              <div
+                ref={signMenuRef}
+                className={styles.signMenu}
+                style={{ top: signMenuPos.top, right: signMenuPos.right }}
               >
-                Smlouva
-              </button>
-              <button
-                type="button"
-                className={styles.signMenuItem}
-                onClick={() => {
-                  uploadModeRef.current = "split";
-                  setSignMenuOpen(false);
-                  fileInputRef.current?.click();
-                }}
-              >
-                Smlouva + prohlášení
-              </button>
-            </div>
-          )}
+                <button
+                  type="button"
+                  className={styles.signMenuItem}
+                  onClick={() => {
+                    uploadModeRef.current = "contract";
+                    setSignMenuOpen(false);
+                    fileInputRef.current?.click();
+                  }}
+                >
+                  Smlouva
+                </button>
+                <button
+                  type="button"
+                  className={styles.signMenuItem}
+                  onClick={() => {
+                    uploadModeRef.current = "split";
+                    setSignMenuOpen(false);
+                    fileInputRef.current?.click();
+                  }}
+                >
+                  Smlouva + prohlášení
+                </button>
+              </div>,
+              document.body
+            )}
           <input
             type="file"
             accept="application/pdf"
