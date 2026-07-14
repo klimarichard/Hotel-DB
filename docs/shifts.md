@@ -108,7 +108,11 @@ A "Požadovaná změna" column was added to three review surfaces, all via `form
 
 Free-claim rows render "—" in this column (they have no `requestedChange`).
 
-#### Other notes
+#### Live employee-name resolution (v4.6.0)
+
+`planEmployees` rows and the `requestedChange.swapWithName` denormalization are both write-time snapshots that a later display-name edit (or a plan created before the display-name feature existed) never reaches. `GET /plans/:planId`, `GET /plans/:planId/employees`, `GET /changeRequests/pending`, and `GET /plans/:planId/shiftChangeRequests` now re-resolve names against the live employee record on every read (the last two via a `withLiveSwapNames` wrapper for the swap partner's name specifically) instead of trusting the stored snapshot. Full pattern and the shared helper (`functions/src/services/employeeNames.ts`) are documented in [Data Model — Live employee-name resolution](data-model.md#live-employee-name-resolution--read-time-never-a-backfill-v460).
+
+### Other notes
 - `ShiftChangeRequestsContext` mirrors `ShiftOverridesContext`; fetches `GET /shifts/changeRequests/pending-count`.
 - **Pending-count `orderBy` requirement (v3.5.1):** both count endpoints (`/overrides/pending-count`, `/changeRequests/pending-count`) must include `.orderBy("requestedAt","desc")`. Without it, a bare collection-group equality query is not served by the `(status, requestedAt)` composite index on real Firestore and throws `FAILED_PRECONDITION`; the badge contexts swallow it silently, leaving counts at 0. Full explanation in [Upozornění hub](other-features-and-ui.md#upozornění-hub).
 - `alwaysReadOnlySections` prop on `ShiftGrid` locks specified sections. Employees get `["vedoucí"]`.

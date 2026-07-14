@@ -27,6 +27,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "4.6.0",
+    date: "2026-07-14",
+    changes: [
+      "Karta zaměstnance: samostatné dokumenty se generují na záložce Další dokumenty a zobrazují se rovnou v seznamu; Prohlášení poplatníka najdete v Historii pracovního poměru.",
+      "Podepsanou smlouvu lze nahrát jako „Smlouva + prohlášení“ – sken se automaticky rozdělí. Velká PDF se při nahrávání zmenší.",
+      "Zobrazované jméno zaměstnance se nyní používá všude v aplikaci.",
+    ],
+  },
+  {
     version: "4.5.0",
     date: "2026-07-13",
     changes: [
