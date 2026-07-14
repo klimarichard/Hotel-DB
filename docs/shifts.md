@@ -27,11 +27,29 @@ Implementation notes for the Phase 5 Shift Planner: the shift expression parser,
 
 ### MOD badge + shift counts
 - `showModCounts` prop (admin/director): shows `MOD: N (X PD, Y V+S)` below vedoucí name. PD = Mon–Fri non-holiday; V+S = weekend or holiday (counted once).
-- MOD letter per manager is per-plan: stored in `shiftPlans/{id}.modPersons` (letter → employeeId). Falls back to static `MOD_PERSONS` name match.
+- MOD letter per manager is per-plan: stored **only** on `shiftPlans/{id}.modPersons` (letter → employeeId) — this is the single source of truth. There is no other data source and no fallback.
 - Editable badge: click → inline text input (1 char, any A–Z not taken by another manager in the plan). `PATCH /shifts/plans/:planId/mod-persons` batch-renames all `modRow` entries for the old letter. The handler wraps the read + modPersons-map update + modRow renames in a **`runTransaction`** (v3.2.1) so concurrent letter reassignments cannot clobber each other's map entries.
 - `VALID_MOD_CODE = /^[A-Z]$/` in `shifts.ts`.
 - Badge only shown for `vedoucí` section (not recepce/portýři).
 - Name cell layout: `[nameLines: name + MOD count] [badge] [edit/delete actions on hover]`.
+
+#### `MOD_PERSONS` removal (v4.7.1)
+
+Before v4.7.1, `frontend/src/lib/shiftConstants.ts` also exported `MOD_PERSONS` — a hardcoded table of six real employees' **names** keyed by letter (e.g. `V → "Viktor Vondra"`). Each of four call sites string-matched the plan roster against that table at render time to guess who held which letter, with the per-plan `modPersons` map (above) layered on top as an override. Nothing about the *static* assignment was ever persisted. This caused three bugs, now fixed:
+
+1. The four reimplementations of the match had drifted: the CSV export (`ShiftPlannerPage.tsx`) compared names surname-first (`"${lastName} ${firstName}"`) against a table stored first-name-first, so its static pass never matched anything — MOD letters were silently missing from every CSV export.
+2. That masked a second bug in the same export: it seeded overrides by `employeeId` first, then let the static (name) pass run for anyone not yet assigned — so reassigning a letter left the *originally-named* person holding it too, i.e. two employees sharing one letter.
+3. Matching on the name at all is brittle: since v4.6.0 plan rows carry the **live** employee name ([Data Model — live name resolution](data-model.md#live-employee-name-resolution--read-time-never-a-backfill-v460)), so correcting a typo in someone's legal name would silently drop their MOD letter.
+
+**Fix:** `MOD_PERSONS` is deleted outright — no employee names remain in `shiftConstants.ts` or anywhere else in the MOD code. A single shared helper, `frontend/src/lib/modPersons.ts`, is now the only place that reads `modPersons`:
+- `modLettersByEmployeeId(modPersons)` → `Map<employeeId, letter>`
+- `modEmployeeIdForLetter(modPersons, letter)` → `employeeId | undefined`
+
+`ShiftGrid.tsx`, `ShiftPlannerPage.tsx` (both the PDF/print path and the CSV export), and `OverviewPage.tsx` all call these helpers instead of their own copy of the match — there is exactly one implementation now, keyed by the stable `employeeId` rather than a name string.
+
+**`copy-employees` now carries MOD letters** (`POST /shifts/plans/:planId/copy-employees` in `functions/src/routes/shifts.ts`): copying the roster into a new month also merges the source plan's `modPersons` into the target's, but only for letters whose holder (`employeeId`) was actually copied onto the new plan, and only where neither the letter nor the employee is already taken on the target (an assignment made directly on the target always wins — a letter and an employee may each hold at most one of the other). Before v4.7.1 this copy step was unnecessary because the hardcoded table silently "re-supplied" the same six letters every month regardless of what was stored; removing the table without this step would have left every newly-copied month with no MOD assignments at all.
+
+**Migration note (general pattern, not just MOD):** because the letter used to be *derived at render time* from `MOD_PERSONS` and never actually written to `modPersons`, every plan's `modPersons` map was `{}` in Firestore even though the UI appeared to show assignments. Deleting the constant without first writing down the derived state would have blanked every MOD badge in production. A one-off backfill populated `modPersons` on all (six, at the time) existing plans before this code shipped. This is safe to run **before** deploy specifically because the pre-v4.7.1 code already preferred a stored `modPersons` entry over the static name match — so a backfilled plan renders identically under old and new code, and the rollout has no moment where the two are inconsistent. The general lesson: when a constant that *drives* rendered state is being removed, the state it was silently deriving must be captured as real, persisted data first — and if the existing code already prefers stored data over the derived fallback, the backfill can safely land ahead of the code that stops falling back.
 
 ### Shift change requests (v3.6.0 — structured picker + auto-apply)
 

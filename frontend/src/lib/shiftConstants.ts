@@ -152,7 +152,7 @@ export function getCellColor(parsed: ParseResult, dark = false): { bg: string; t
 
 // ─── MOD (Manager on Duty) ──────────────────────────────────────────────────
 
-// MOD_PERSONS (a hardcoded letter → employee-NAME table) was removed in v4.8.0.
+// MOD_PERSONS (a hardcoded letter → employee-NAME table) was removed in v4.7.1.
 // Employee names do not belong in the source, and matching a plan roster against
 // them by string was brittle: it broke on a legal-name correction, and the four
 // call sites that reimplemented the match had drifted apart. MOD letters now live
