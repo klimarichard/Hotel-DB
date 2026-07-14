@@ -213,7 +213,7 @@ export default function VacationPage() {
     }
     setSubmitting(true);
     try {
-      const result = await api.post<{ id: string; firstName: string; lastName: string }>(
+      const result = await api.post<{ id: string; firstName: string; lastName: string; displayName?: string }>(
         "/vacation",
         filingForOther ? { startDate, endDate, reason, employeeId: targetEmployeeId } : { startDate, endDate, reason },
       );
@@ -229,6 +229,7 @@ export default function VacationPage() {
           employeeId: employeeId!,
           firstName: result.firstName,
           lastName: result.lastName,
+          displayName: result.displayName,
           uid: user!.uid,
           startDate,
           endDate,

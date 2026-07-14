@@ -11,6 +11,7 @@ import {
   getUserName,
   StoredChange,
 } from "../services/employeeChangeRequests";
+import { resolveEmployeeNameParts, preferLive } from "../services/employeeNames";
 
 /**
  * Admin/director review of employee self-service edit requests, mounted at
@@ -43,31 +44,26 @@ employeeChangeRequestsRouter.get("/pending", async (_req: AuthRequest, res) => {
     .where("status", "==", "pending")
     .get();
 
-  // Denormalise the employee name for display (small N — only pending rows).
-  const empCache = new Map<string, { firstName: string; lastName: string }>();
-  const rows = [];
-  for (const d of snap.docs) {
-    const data = d.data() as Record<string, unknown>;
+  // Resolve the employee name for display. Live (never the write-time snapshot
+  // on the request) so a rename or a newly-set display name shows up at once —
+  // and batched into a single getAll rather than a per-row read.
+  const docs = snap.docs.map((d) => ({ id: d.id, data: d.data() as Record<string, unknown> }));
+  const live = await resolveEmployeeNameParts(docs.map((d) => d.data.employeeId as string));
+
+  const rows = docs.map(({ id, data }) => {
     const empId = data.employeeId as string;
-    if (!empCache.has(empId)) {
-      const e = await db().collection("employees").doc(empId).get();
-      const ed = (e.data() as Record<string, unknown>) ?? {};
-      empCache.set(empId, {
-        firstName: (ed.firstName as string) ?? "",
-        lastName: (ed.lastName as string) ?? "",
-      });
-    }
-    const emp = empCache.get(empId)!;
-    rows.push({
-      id: d.id,
+    const name = preferLive(live, empId, data);
+    return {
+      id,
       employeeId: empId,
-      employeeFirstName: emp.firstName,
-      employeeLastName: emp.lastName,
+      employeeFirstName: name.firstName,
+      employeeLastName: name.lastName,
+      employeeDisplayName: name.displayName,
       requestedByName: data.requestedByName ?? "",
       requestedAt: data.requestedAt,
       changes: ((data.changes as StoredChange[]) ?? []).map(redactChangeForResponse),
-    });
-  }
+    };
+  });
   rows.sort((a, b) => msOf(a.requestedAt) - msOf(b.requestedAt));
   res.json(rows);
 });

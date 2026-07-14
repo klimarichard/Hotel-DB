@@ -6,6 +6,7 @@ import { requirePermission } from "../auth/permissions";
 import { applyVacationXsToPlans, removeVacationXsFromPlans, findShiftCollisions } from "./shifts";
 import { getManagementEmployeeIds } from "./employees";
 import { ctxFromReq, logCreate, logUpdate, logDelete } from "../services/auditLog";
+import { resolveEmployeeNameParts, preferLive } from "../services/employeeNames";
 
 export const vacationRouter = Router();
 const db = () => admin.firestore();
@@ -127,20 +128,33 @@ vacationRouter.get("/approved-upcoming", requireAuth, async (_req, res) => {
     getManagementEmployeeIds(),
   ]);
 
-  const rows = vacSnap.docs
+  const visible = vacSnap.docs
     .map((d) => d.data() as Record<string, unknown>)
     .filter((v) => ((v.endDate as string) ?? "") >= todayYMD)
     .filter((v) => {
       const eid = (v.employeeId as string) ?? "";
       return eid !== "" && !mgmtIds.has(eid);
+    });
+
+  // The name on the request is a write-time SNAPSHOT and is never rewritten, so
+  // a later rename (or a first-ever displayName) would never reach this list.
+  // Re-resolve against the live employee record; the snapshot only survives as
+  // the fallback for employees that no longer exist.
+  const live = await resolveEmployeeNameParts(visible.map((v) => v.employeeId as string));
+
+  const rows = visible
+    .map((v) => {
+      const employeeId = (v.employeeId as string) ?? "";
+      const name = preferLive(live, employeeId, v);
+      return {
+        employeeId,
+        firstName: name.firstName,
+        lastName: name.lastName,
+        displayName: name.displayName,
+        startDate: (v.startDate as string) ?? "",
+        endDate: (v.endDate as string) ?? "",
+      };
     })
-    .map((v) => ({
-      employeeId: (v.employeeId as string) ?? "",
-      firstName: (v.firstName as string) ?? "",
-      lastName: (v.lastName as string) ?? "",
-      startDate: (v.startDate as string) ?? "",
-      endDate: (v.endDate as string) ?? "",
-    }))
     .sort((a, b) => a.startDate.localeCompare(b.startDate));
 
   res.json(rows);
@@ -218,7 +232,19 @@ vacationRouter.get("/", requireAuth, async (req: AuthRequest, res) => {
   };
   const items: Record<string, unknown>[] = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
   items.sort((a, b) => tsMs(b.requestedAt) - tsMs(a.requestedAt));
-  res.json(items);
+
+  // The firstName/lastName stored on the request are a write-time SNAPSHOT that
+  // nothing ever rewrites (and legacy requests carry no displayName at all), so
+  // renaming an employee — or giving them a display name — would never show up
+  // here. Re-resolve from the live employee record and fall back to the snapshot
+  // only for employees that have since been deleted.
+  const live = await resolveEmployeeNameParts(items.map((v) => v.employeeId as string));
+  const enriched = items.map((v) => ({
+    ...v,
+    ...preferLive(live, v.employeeId as string, v),
+  }));
+
+  res.json(enriched);
 });
 
 // ─── POST /vacation ───────────────────────────────────────────────────────────
@@ -280,6 +306,10 @@ vacationRouter.post("/", requireAuth, requirePermission("vacation.request.self",
   const empData = empDoc.data() as Record<string, unknown>;
   const firstName = (empData.firstName as string) ?? "";
   const lastName = (empData.lastName as string) ?? "";
+  // Snapshot the display name too. Reads re-resolve this from the live record,
+  // so the snapshot only matters once the employee is deleted — but then it has
+  // to be the RIGHT name, not just the legal one.
+  const displayName = (empData.displayName as string) ?? "";
 
   // Hard-block if any non-X shift already exists in the requested date range.
   // This collision query needs a composite index on real Firestore; if it
@@ -303,6 +333,7 @@ vacationRouter.post("/", requireAuth, requirePermission("vacation.request.self",
     employeeId,
     firstName,
     lastName,
+    displayName,
     uid: ownerUid,
     startDate,
     endDate,
@@ -321,7 +352,7 @@ vacationRouter.post("/", requireAuth, requirePermission("vacation.request.self",
     summary: { startDate, endDate, reason, status: "pending" },
   });
 
-  res.status(201).json({ id: ref.id, firstName, lastName });
+  res.status(201).json({ id: ref.id, firstName, lastName, displayName });
 });
 
 // ─── PATCH /vacation/:id ──────────────────────────────────────────────────────

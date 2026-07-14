@@ -103,6 +103,47 @@ export async function resolveEmployeeDisplays(
 }
 
 /**
+ * Batch-resolve auth uid → linked employeeId (users/{uid}.employeeId). Uids with
+ * no user record, or no linked employee, are absent from the map.
+ */
+export async function resolveEmployeeIdsByUid(
+  uids: readonly string[]
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const uniq = [...new Set(uids.filter((u): u is string => typeof u === "string" && u !== ""))];
+  if (uniq.length === 0) return out;
+  const snaps = await db().getAll(...uniq.map((u) => db().collection("users").doc(u)));
+  for (const s of snaps) {
+    if (!s.exists) continue;
+    const empId = (s.data() as { employeeId?: unknown }).employeeId;
+    if (typeof empId === "string" && empId !== "") out.set(s.id, empId);
+  }
+  return out;
+}
+
+/**
+ * Batch-resolve auth uid → the LIVE reception display name of the linked employee.
+ * Uids whose account or employee record is gone are absent from the map, so callers
+ * keep their stored snapshot (the only surviving record of who that person was).
+ *
+ * Used by the surfaces that stamp a signer/actor uid and a name side by side —
+ * handover signatures and the derived handover warnings — so the name is a live
+ * lookup rather than a string frozen years ago.
+ */
+export async function resolveDisplayNamesByUid(
+  uids: readonly string[]
+): Promise<Map<string, string>> {
+  const empByUid = await resolveEmployeeIdsByUid(uids);
+  const displays = await resolveEmployeeDisplays([...empByUid.values()]);
+  const out = new Map<string, string>();
+  for (const [uid, empId] of empByUid) {
+    const name = displays.get(empId)?.name;
+    if (name) out.set(uid, name);
+  }
+  return out;
+}
+
+/**
  * Everyone on `dateStr`'s month shift plan (all planEmployees roster rows, deduped
  * by employeeId), sorted by Czech collation. Falls back to reception-position
  * employees when that month has no plan. Never throws on missing data.

@@ -10,6 +10,12 @@ import { parseShiftExpression, HOTEL_CODES, isPureNumericExpression, sanitizeTyp
 import { snapshotShifts, deleteCollection, autoFillManagerRShifts } from "../services/planTransitions";
 import { createOrUpdatePayrollPeriod } from "../services/payrollCalculator";
 import {
+  EmployeeNameParts,
+  nameParts,
+  preferLive,
+  resolveEmployeeNameParts,
+} from "../services/employeeNames";
+import {
   ctxFromReq,
   logCreate,
   logUpdate,
@@ -489,21 +495,29 @@ shiftsRouter.get(
       .filter((d) => currentEmployeeIds.has(d.data().employeeId as string))
       .map((d) => ({ id: d.id, ...d.data() }));
 
-    // Enrich planEmployees with contractType from global employee docs
+    // Enrich planEmployees with contractType from global employee docs, and
+    // re-resolve the NAME against the live employee record: the roster row
+    // snapshots firstName/lastName/displayName when the person is added and is
+    // never rewritten, so a plan created before the display-name feature carries
+    // no displayName at all and a later rename never reaches it. The snapshot
+    // survives only as the fallback for employees that no longer exist.
     const rawEmployees = employeesSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Record<string, unknown> & { id: string; employeeId: string }));
     const employeeIds = rawEmployees.map((e) => e.employeeId as string);
     const empDocs = await Promise.all(
       employeeIds.map((id) => db().collection("employees").doc(id).get())
     );
     const contractTypeMap = new Map<string, string>();
+    const liveNames = new Map<string, EmployeeNameParts>();
     empDocs.forEach((d) => {
       if (d.exists) {
         const data = d.data() as Record<string, unknown>;
         contractTypeMap.set(d.id, (data.currentContractType as string) ?? "");
+        liveNames.set(d.id, nameParts(data));
       }
     });
     const employees = rawEmployees.map((e) => ({
       ...e,
+      ...preferLive(liveNames, e.employeeId, e),
       contractType: contractTypeMap.get(e.employeeId) ?? null,
     }));
 
@@ -745,7 +759,11 @@ shiftsRouter.get(
       .collection("planEmployees")
       .orderBy("displayOrder", "asc")
       .get();
-    res.json(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    // Same snapshot-staleness fix as GET /plans/:planId — the stored name is a
+    // write-time freeze, so the live employee record wins on read.
+    const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Record<string, unknown> & { id: string; employeeId?: string }));
+    const liveNames = await resolveEmployeeNameParts(rows.map((r) => r.employeeId));
+    res.json(rows.map((r) => ({ ...r, ...preferLive(liveNames, r.employeeId, r) })));
   }
 );
 
@@ -1942,6 +1960,34 @@ shiftsRouter.delete(
 
 // ─── Shift Change Requests (published plans) ────────────────────────────────
 
+/**
+ * A swap request denormalizes the partner's name into
+ * `requestedChange.swapWithName` next to their id. That string is frozen at
+ * submit time exactly like the roster snapshot, so re-derive it from the live
+ * employee on read (display name when set, else "Jméno Příjmení") and keep the
+ * stored value only as the fallback for a since-deleted partner.
+ */
+async function withLiveSwapNames<T extends Record<string, unknown>>(rows: T[]): Promise<T[]> {
+  const swapId = (row: Record<string, unknown>): string => {
+    const rc = row.requestedChange as Record<string, unknown> | undefined;
+    return typeof rc?.swapWithEmployeeId === "string" ? rc.swapWithEmployeeId : "";
+  };
+  const live = await resolveEmployeeNameParts(rows.map(swapId));
+  if (live.size === 0) return rows;
+  return rows.map((row) => {
+    const parts = live.get(swapId(row));
+    if (!parts) return row;
+    const rc = row.requestedChange as Record<string, unknown>;
+    return {
+      ...row,
+      requestedChange: {
+        ...rc,
+        swapWithName: parts.displayName || `${parts.firstName} ${parts.lastName}`.trim(),
+      },
+    };
+  });
+}
+
 // GET /shifts/changeRequests/pending-count — total pending change requests for nav badge
 shiftsRouter.get(
   "/changeRequests/pending-count",
@@ -1999,7 +2045,7 @@ shiftsRouter.get(
         };
       })
     );
-    res.json(out);
+    res.json(await withLiveSwapNames(out));
   }
 );
 
@@ -2026,7 +2072,7 @@ shiftsRouter.get(
     }
 
     const snap = await query.get();
-    res.json(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    res.json(await withLiveSwapNames(snap.docs.map((d) => ({ id: d.id, ...d.data() }))));
   }
 );
 

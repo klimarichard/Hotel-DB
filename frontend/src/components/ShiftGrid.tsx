@@ -353,7 +353,7 @@ export default function ShiftGrid({
       const letter = effectiveLetterByEmployeeId.get(emp.employeeId);
       if (letter && !names[letter]) {
         codes.push(letter);
-        names[letter] = `${emp.firstName} ${emp.lastName}`;
+        names[letter] = employeeDisplayName(emp);
       }
     }
     codes.sort();

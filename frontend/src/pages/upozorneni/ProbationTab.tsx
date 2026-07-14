@@ -14,6 +14,8 @@ interface ProbationAlert {
   employeeId: string;
   employeeFirstName: string;
   employeeLastName: string;
+  /** Absent on alerts written before display names existed – falls back to the legal name. */
+  employeeDisplayName?: string;
   probationStartDate: string;
   probationEndDate: string;
   probationPeriodRaw: string;
@@ -63,7 +65,11 @@ function ProbationTable({ alerts, actionLabel, onAction, muted }: ProbationTable
             >
               <td>
                 <Link to={`/zamestnanci/${alert.employeeId}`} className={styles.empLink}>
-                  {employeeDisplayName({ firstName: alert.employeeFirstName, lastName: alert.employeeLastName })}
+                  {employeeDisplayName({
+                    displayName: alert.employeeDisplayName,
+                    firstName: alert.employeeFirstName,
+                    lastName: alert.employeeLastName,
+                  })}
                 </Link>
               </td>
               <td data-label="Začátek">{formatDateCZ(alert.probationStartDate)}</td>
