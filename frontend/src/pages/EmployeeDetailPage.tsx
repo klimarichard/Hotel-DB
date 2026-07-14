@@ -10,6 +10,7 @@ import { employeeDisplayName } from "@/lib/employeeName";
 import { formatPhoneDisplay } from "@/lib/phoneFormat";
 import GenerateContractModal from "@/components/GenerateContractModal";
 import Button from "@/components/Button";
+import IconButton from "@/components/IconButton";
 import EmploymentSessionCard from "@/components/EmploymentSession";
 import AdhocContractsSection from "@/components/AdhocContractsSection";
 import OtherDocumentsTab from "@/components/OtherDocumentsTab";
@@ -1292,6 +1293,7 @@ export default function EmployeeDetailPage() {
   const canManageEmployment = can("employment.manage");
   const canGenerateContracts = can("contracts.generate");
   const canExportQuestionnaire = can("employees.view.all") || can("employees.view.nonManagement");
+  const canExportTaxDeclaration = can("employment.manage") || can("documents.view");
 
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [employment, setEmployment] = useState<EmploymentRow[]>([]);
@@ -1365,6 +1367,11 @@ export default function EmployeeDetailPage() {
   } | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [questionnaireLoading, setQuestionnaireLoading] = useState(false);
+  // "Prohlášení poplatníka" export – lives on the employment-history tab next to
+  // "+ Nástup" (it is part of the onboarding paperwork, not a stored document).
+  const [taxLoading, setTaxLoading] = useState(false);
+  const [periodOpen, setPeriodOpen] = useState(false);
+  const [periodValue, setPeriodValue] = useState("");
 
   // Open the filled "Osobní dotazník zaměstnance" PDF in a new tab. Generated
   // server-side (it embeds decrypted sensitive fields and audits the export),
@@ -1392,6 +1399,36 @@ export default function EmployeeDetailPage() {
       });
     } finally {
       setQuestionnaireLoading(false);
+    }
+  }
+
+  // Open the filled "Prohlášení poplatníka" PDF in a new tab. Same shape as the
+  // dotazník above (server-side fill + audit, nothing is persisted); the
+  // "zdaňovací období" (e.g. "2026" or "od září 2026") comes from the dialog.
+  async function handleGenerateTaxDeclaration() {
+    if (!user || !id || taxLoading) return;
+    const period = periodValue.trim();
+    setPeriodOpen(false);
+    setTaxLoading(true);
+    try {
+      const token = await user.getIdToken();
+      const reqUrl = `/api/employees/${id}/tax-declaration-pdf${period ? `?period=${encodeURIComponent(period)}` : ""}`;
+      const resp = await fetch(reqUrl, { headers: { Authorization: `Bearer ${token}` } });
+      if (!resp.ok) throw new Error();
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank", "noopener,noreferrer");
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch {
+      setConfirmModal({
+        title: "Chyba",
+        message: "Nepodařilo se vygenerovat prohlášení poplatníka.",
+        confirmLabel: "OK",
+        showCancel: false,
+        onConfirm: () => setConfirmModal(null),
+      });
+    } finally {
+      setTaxLoading(false);
     }
   }
 
@@ -1785,7 +1822,7 @@ export default function EmployeeDetailPage() {
         <>
           <div className={styles.historyHeader}>
             <span className={styles.historyTitle}>Historie pracovního poměru</span>
-            {(canManageEmployment || canGenerateContracts) && (
+            {(canManageEmployment || canExportTaxDeclaration) && (
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 {canManageEmployment && (
                   <Button
@@ -1797,41 +1834,16 @@ export default function EmployeeDetailPage() {
                     + Nástup
                   </Button>
                 )}
-                {canGenerateContracts && (
-                <div ref={adhocDropdownRef} style={{ position: "relative" }}>
+                {canExportTaxDeclaration && (
                   <Button
+                    data-tour="emp-doc-tax-declaration"
                     variant="secondary"
                     size="sm"
-                    onClick={() => setAdhocDropdownOpen((v) => !v)}
+                    onClick={() => { setPeriodValue(String(new Date().getFullYear())); setPeriodOpen(true); }}
+                    disabled={taxLoading}
                   >
-                    + Adhoc dokument ▾
+                    {taxLoading ? "Generuji…" : "Prohlášení poplatníka"}
                   </Button>
-                  {adhocDropdownOpen && (
-                    <div className={styles.generateDropdownMenu}>
-                      {[
-                        ...STANDALONE_TYPES.filter(
-                          (t) => !inactiveStandaloneIds.includes(t)
-                        ).map((t) => ({ id: t, label: CONTRACT_TYPE_LABELS[t] })),
-                        ...customStandalone.map((t) => ({ id: t.id, label: t.name })),
-                      ].map((entry) => (
-                        <button
-                          key={entry.id}
-                          className={styles.generateDropdownItem}
-                          onClick={() => {
-                            const today = clock.today();
-                            setSigningDatePrompt(entry.id);
-                            setSigningDateDraft(today);
-                            setRequestedAtDraft(today);
-                            setValidFromDraft(today);
-                            setAdhocDropdownOpen(false);
-                          }}
-                        >
-                          {entry.label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
                 )}
               </div>
             )}
@@ -1914,23 +1926,6 @@ export default function EmployeeDetailPage() {
             ))
           )}
 
-          <AdhocContractsSection
-            contracts={contracts.filter((c) => !c.employmentRowId)}
-            customTemplates={customStandalone}
-            employeeId={id!}
-            onContractsChanged={refetchContracts}
-            onGenerate={(c) =>
-              setGenerateModal({
-                kind: "adhoc",
-                contractId: c.id,
-                contractType: c.type as SmlouvaContractType,
-                signingDate: c.signingDate ?? "",
-                requestedAt: c.requestedAt,
-                validFrom: c.validFrom,
-              })
-            }
-          />
-
           {newEntryMode && (
             <AddEntryModal
               employeeId={id!}
@@ -1979,108 +1974,210 @@ export default function EmployeeDetailPage() {
             />
           )}
 
-          {signingDatePrompt && (() => {
-            const isMultisport = signingDatePrompt === "multisport";
-            const promptLabel =
-              CONTRACT_TYPE_LABELS[signingDatePrompt] ??
-              customStandalone.find((t) => t.id === signingDatePrompt)?.name ??
-              signingDatePrompt;
-            const dateInputStyle: React.CSSProperties = {
-              width: "100%",
-              padding: "8px 10px",
-              fontSize: "0.875rem",
-              border: "1px solid var(--color-border)",
-              borderRadius: "6px",
-              background: "var(--color-surface)",
-              color: "var(--color-text)",
-            };
-            const labelStyle: React.CSSProperties = {
-              display: "block",
-              fontSize: "0.8125rem",
-              fontWeight: 500,
-              color: "var(--color-text-secondary)",
-              marginBottom: "4px",
-            };
-            const fieldStyle: React.CSSProperties = { marginBottom: "12px" };
-            const canContinue =
-              !!signingDateDraft && (!isMultisport || (!!requestedAtDraft && !!validFromDraft));
-            return (
-              <div className={modalStyles.overlay}>
-                <div className={modalStyles.modal}>
-                  <div className={modalStyles.header}>
-                    <h2 className={modalStyles.title}>{promptLabel}</h2>
-                  </div>
-                  <div className={modalStyles.body}>
-                    <div style={fieldStyle}>
-                      <label style={labelStyle}>Datum podpisu</label>
-                      <input
-                        type="date"
-                        value={signingDateDraft}
-                        onChange={(e) => setSigningDateDraft(e.target.value)}
-                        autoFocus
-                        style={dateInputStyle}
-                      />
-                    </div>
-                    {isMultisport && (
-                      <>
-                        <div style={fieldStyle}>
-                          <label style={labelStyle}>Datum žádosti</label>
-                          <input
-                            type="date"
-                            value={requestedAtDraft}
-                            onChange={(e) => setRequestedAtDraft(e.target.value)}
-                            style={dateInputStyle}
-                          />
-                        </div>
-                        <div style={{ ...fieldStyle, marginBottom: 0 }}>
-                          <label style={labelStyle}>Platnost od</label>
-                          <input
-                            type="date"
-                            value={validFromDraft}
-                            onChange={(e) => setValidFromDraft(e.target.value)}
-                            style={dateInputStyle}
-                          />
-                        </div>
-                      </>
-                    )}
-                    {isMultisport && isDateAfter(signingDateDraft, validFromDraft) && (
-                      <div className={styles.modalWarning} style={{ marginTop: "12px" }}>
-                        Upozornění: datum podpisu je pozdější než datum platnosti
-                        ({formatDateCZ(validFromDraft)}). Zkontrolujte prosím správnost.
-                      </div>
-                    )}
-                  </div>
-                  <div className={modalStyles.footer}>
-                    <Button variant="secondary" onClick={() => setSigningDatePrompt(null)}>
-                      Zrušit
-                    </Button>
-                    <Button
-                      variant="primary"
-                      disabled={!canContinue}
-                      onClick={() => {
-                        const t = signingDatePrompt;
-                        const sd = signingDateDraft;
-                        const ra = isMultisport ? requestedAtDraft : undefined;
-                        const vf = isMultisport ? validFromDraft : undefined;
-                        setSigningDatePrompt(null);
-                        // Row-first: create the ad-hoc document row now; the PDF
-                        // is generated later from the row (see addAdhocRow / #6).
-                        addAdhocRow(t, sd, ra, vf);
-                      }}
-                    >
-                      Přidat
-                    </Button>
-                  </div>
+          {periodOpen && (
+            <div className={modalStyles.overlay}>
+              <div className={modalStyles.modal}>
+                <div className={modalStyles.header}>
+                  <h2 className={modalStyles.title}>Prohlášení poplatníka</h2>
+                  <IconButton aria-label="Zavřít" onClick={() => setPeriodOpen(false)} disabled={taxLoading}>✕</IconButton>
+                </div>
+                <div className={modalStyles.body}>
+                  <label style={{ display: "block", fontSize: "0.8125rem", fontWeight: 500, color: "var(--color-text-secondary)", marginBottom: "4px" }}>
+                    Zdaňovací období
+                  </label>
+                  <input
+                    type="text"
+                    value={periodValue}
+                    onChange={(e) => setPeriodValue(e.target.value)}
+                    placeholder="např. 2026 nebo od září 2026"
+                    autoFocus
+                    disabled={taxLoading}
+                    style={{
+                      width: "100%",
+                      padding: "8px 10px",
+                      fontSize: "0.875rem",
+                      border: "1px solid var(--color-border)",
+                      borderRadius: "6px",
+                      background: "var(--color-surface)",
+                      color: "var(--color-text)",
+                    }}
+                  />
+                </div>
+                <div className={modalStyles.footer}>
+                  <Button variant="secondary" onClick={() => setPeriodOpen(false)} disabled={taxLoading}>
+                    Zrušit
+                  </Button>
+                  <Button variant="primary" onClick={handleGenerateTaxDeclaration} disabled={taxLoading || !periodValue.trim()}>
+                    {taxLoading ? "Generuji…" : "Generovat"}
+                  </Button>
                 </div>
               </div>
-            );
-          })()}
+            </div>
+          )}
         </>
       )}
 
       {page === "other-docs" && (
-        <OtherDocumentsTab employeeId={id!} />
+        <>
+          <OtherDocumentsTab
+            employeeId={id!}
+            toolbarSlot={
+              canGenerateContracts ? (
+                <div ref={adhocDropdownRef} style={{ position: "relative" }}>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setAdhocDropdownOpen((v) => !v)}
+                  >
+                    + Generovat dokument ▾
+                  </Button>
+                  {adhocDropdownOpen && (
+                    <div className={styles.generateDropdownMenu}>
+                      {[
+                        ...STANDALONE_TYPES.filter(
+                          (t) => !inactiveStandaloneIds.includes(t)
+                        ).map((t) => ({ id: t, label: CONTRACT_TYPE_LABELS[t] })),
+                        ...customStandalone.map((t) => ({ id: t.id, label: t.name })),
+                      ].map((entry) => (
+                        <button
+                          key={entry.id}
+                          className={styles.generateDropdownItem}
+                          onClick={() => {
+                            const today = clock.today();
+                            setSigningDatePrompt(entry.id);
+                            setSigningDateDraft(today);
+                            setRequestedAtDraft(today);
+                            setValidFromDraft(today);
+                            setAdhocDropdownOpen(false);
+                          }}
+                        >
+                          {entry.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : null
+            }
+          />
+
+          <AdhocContractsSection
+            contracts={contracts.filter((c) => !c.employmentRowId)}
+            customTemplates={customStandalone}
+            employeeId={id!}
+            onContractsChanged={refetchContracts}
+            onGenerate={(c) =>
+              setGenerateModal({
+                kind: "adhoc",
+                contractId: c.id,
+                contractType: c.type as SmlouvaContractType,
+                signingDate: c.signingDate ?? "",
+                requestedAt: c.requestedAt,
+                validFrom: c.validFrom,
+              })
+            }
+          />
+        </>
       )}
+
+      {/* Ad-hoc signing-date prompt. Page level (not inside the Další dokumenty
+          block) so it sits next to the GenerateContractModal it feeds. */}
+      {signingDatePrompt && (() => {
+        const isMultisport = signingDatePrompt === "multisport";
+        const promptLabel =
+          CONTRACT_TYPE_LABELS[signingDatePrompt] ??
+          customStandalone.find((t) => t.id === signingDatePrompt)?.name ??
+          signingDatePrompt;
+        const dateInputStyle: React.CSSProperties = {
+          width: "100%",
+          padding: "8px 10px",
+          fontSize: "0.875rem",
+          border: "1px solid var(--color-border)",
+          borderRadius: "6px",
+          background: "var(--color-surface)",
+          color: "var(--color-text)",
+        };
+        const labelStyle: React.CSSProperties = {
+          display: "block",
+          fontSize: "0.8125rem",
+          fontWeight: 500,
+          color: "var(--color-text-secondary)",
+          marginBottom: "4px",
+        };
+        const fieldStyle: React.CSSProperties = { marginBottom: "12px" };
+        const canContinue =
+          !!signingDateDraft && (!isMultisport || (!!requestedAtDraft && !!validFromDraft));
+        return (
+          <div className={modalStyles.overlay}>
+            <div className={modalStyles.modal}>
+              <div className={modalStyles.header}>
+                <h2 className={modalStyles.title}>{promptLabel}</h2>
+              </div>
+              <div className={modalStyles.body}>
+                <div style={fieldStyle}>
+                  <label style={labelStyle}>Datum podpisu</label>
+                  <input
+                    type="date"
+                    value={signingDateDraft}
+                    onChange={(e) => setSigningDateDraft(e.target.value)}
+                    autoFocus
+                    style={dateInputStyle}
+                  />
+                </div>
+                {isMultisport && (
+                  <>
+                    <div style={fieldStyle}>
+                      <label style={labelStyle}>Datum žádosti</label>
+                      <input
+                        type="date"
+                        value={requestedAtDraft}
+                        onChange={(e) => setRequestedAtDraft(e.target.value)}
+                        style={dateInputStyle}
+                      />
+                    </div>
+                    <div style={{ ...fieldStyle, marginBottom: 0 }}>
+                      <label style={labelStyle}>Platnost od</label>
+                      <input
+                        type="date"
+                        value={validFromDraft}
+                        onChange={(e) => setValidFromDraft(e.target.value)}
+                        style={dateInputStyle}
+                      />
+                    </div>
+                  </>
+                )}
+                {isMultisport && isDateAfter(signingDateDraft, validFromDraft) && (
+                  <div className={styles.modalWarning} style={{ marginTop: "12px" }}>
+                    Upozornění: datum podpisu je pozdější než datum platnosti
+                    ({formatDateCZ(validFromDraft)}). Zkontrolujte prosím správnost.
+                  </div>
+                )}
+              </div>
+              <div className={modalStyles.footer}>
+                <Button variant="secondary" onClick={() => setSigningDatePrompt(null)}>
+                  Zrušit
+                </Button>
+                <Button
+                  variant="primary"
+                  disabled={!canContinue}
+                  onClick={() => {
+                    const t = signingDatePrompt;
+                    const sd = signingDateDraft;
+                    const ra = isMultisport ? requestedAtDraft : undefined;
+                    const vf = isMultisport ? validFromDraft : undefined;
+                    setSigningDatePrompt(null);
+                    // Row-first: create the ad-hoc document row now; the PDF
+                    // is generated later from the row (see addAdhocRow / #6).
+                    addAdhocRow(t, sd, ra, vf);
+                  }}
+                >
+                  Přidat
+                </Button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {page === "detail" && (
       <>
