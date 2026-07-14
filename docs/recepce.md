@@ -364,6 +364,8 @@ off.
   `resolveEffectivePermissions` per candidate user — this endpoint evaluates
   effective permissions for a set of *other* users, not the caller).
 
+**Live signature-name resolution (v4.6.0).** The above covers the *pool offered before signing*; once a protocol **is** signed, the `predal`/`prevzal` stamp freezes `displayName` at that moment and is never rewritten — so a protokol signed before the display-name feature (or before a rename) kept showing the signer's old/legal name forever, even though the sign-dialog pool itself was already live. `GET /:hotel/handovers` (`withLiveSignerNames` in `handovers.ts`) and the derived `handoverWarnings` (`handoverWarnings.ts`) now re-resolve the stamp's `uid` → live display name on every read, via two new helpers in `recepceEmployees.ts`: `resolveEmployeeIdsByUid` (batch `users/{uid}.employeeId`) and `resolveDisplayNamesByUid` (composes that with `resolveEmployeeDisplays`). Only the display **label** is re-resolved — the signature's legal substance (`uid`, the proven `email`, and `at`) is the historical record and is never rewritten; the protokol still attests to the same person, just under the name they currently go by. See [Data Model — Live employee-name resolution](data-model.md#live-employee-name-resolution--read-time-never-a-backfill-v460) for the app-wide pattern this generalises.
+
 ### Freeze on signature
 
 Once **either** `predal` or `prevzal` is set, the protocol's **content is

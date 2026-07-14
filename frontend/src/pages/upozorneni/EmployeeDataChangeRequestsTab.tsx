@@ -24,6 +24,7 @@ interface PendingRequest {
   employeeId: string;
   employeeFirstName: string;
   employeeLastName: string;
+  employeeDisplayName?: string;
   requestedByName: string;
   requestedAt: { seconds?: number; _seconds?: number } | null;
   changes: PendingChange[];
@@ -104,7 +105,11 @@ export default function EmployeeDataChangeRequestsTab() {
         <div className={card.requestCard} key={req.id}>
           <div className={card.reqHeader}>
             <Link to={`/zamestnanci/${req.employeeId}`} className={styles.empLink}>
-              {employeeDisplayName({ firstName: req.employeeFirstName, lastName: req.employeeLastName })}
+              {employeeDisplayName({
+                displayName: req.employeeDisplayName,
+                firstName: req.employeeFirstName,
+                lastName: req.employeeLastName,
+              })}
             </Link>
             <span className={card.reqMeta}>
               {req.requestedByName ? `${req.requestedByName} · ` : ""}

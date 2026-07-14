@@ -191,14 +191,24 @@ export const APP_TOUR_STEPS: TourStep[] = [
   { permission: "employment.view", anchor: "emp-tab-history", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Historie pracovního poměru", body: "Zde vidíte historii pracovního poměru zaměstnance.", placement: "bottom" },
   { permission: "employment.manage", anchor: "emp-employment-add", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Správa pracovního poměru", body: "Můžete spravovat pracovní poměr zaměstnance (nástup, dodatky, ukončení).", placement: "bottom" },
   { permission: "employment.manage", addedInVersion: 9, anchor: "emp-employment-rodicovska", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Rodičovská dovolená", body: "U pracovního poměru můžete zaznamenat období rodičovské dovolené (začátek a konec). Jde o informativní záznam - zobrazí se jako barevný pruh u daného pracovního poměru a po dobu jejího trvání i jako odznak v seznamu zaměstnanců.", placement: "bottom" },
+  // v15: this button MOVED here from the Další dokumenty tab. addedInVersion is
+  // bumped 7 → 15 on purpose: it re-enters the "Co je nového" delta so existing
+  // users are told where it went, instead of silently losing a button they use.
+  // title/body = first-timer copy (full tour); deltaTitle/deltaBody = the "it
+  // moved" framing, which only means anything to someone who knew the old layout.
+  { permission: ["employment.manage", "documents.view"], addedInVersion: 15, anchor: "emp-doc-tax-declaration", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Prohlášení poplatníka", body: "Tlačítkem Prohlášení poplatníka vygenerujete vyplněné prohlášení poplatníka daně (PDF) - nejprve zadáte zdaňovací období.", deltaTitle: "Prohlášení poplatníka je nyní zde", deltaBody: "Tlačítko Prohlášení poplatníka se přesunulo ze záložky Další dokumenty sem, k tlačítku + Nástup – patří totiž k nástupním dokumentům. Funguje stejně jako dřív: vygenerujete jím vyplněné prohlášení poplatníka daně (PDF), nejprve zadáte zdaňovací období.", placement: "bottom" },
   // Contracts ordered: generate → view → edit → delete → sign (per user verdict 2026-06-09).
   { permission: "contracts.generate", anchor: "emp-contract-generate", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Generování smlouvy", body: "Z šablony vygenerujete smlouvu nebo dodatek pro zaměstnance.", placement: "left" },
   { permission: "contracts.view", anchor: "emp-contract-view", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Zobrazení smluv", body: "Vygenerované smlouvy a dodatky lze zobrazit a stáhnout.", placement: "left" },
   { permission: "contracts.edit", anchor: "emp-contract-edit", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Úprava smlouvy", body: "Údaje v tomto záznamu můžete upravit. Pokud už jste měli vygenerovanou smlouvu s původními údaji, aplikace vám umožní ji generovat znovu s pozměněnými údaji.", placement: "left" },
   { permission: "contracts.delete", anchor: "emp-contract-delete", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Smazání smlouvy", body: "Tlačítkem Smazat smlouvu odstraníte vygenerovanou smlouvu (aplikace se zeptá na potvrzení).", placement: "left" },
-  { permission: "contracts.sign", anchor: "emp-contract-sign", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Podepsaná smlouva", body: "Tlačítkem Nahrát podepsanou smlouvu označíte smlouvu jako podepsanou a nahrajete naskenovanou podepsanou verzi.", placement: "left" },
+  // v15: the upload button gained a two-option menu (Smlouva / Smlouva + prohlášení).
+  // Re-entered into the delta so existing users learn the scan can be split.
+  { permission: "contracts.sign", addedInVersion: 15, anchor: "emp-contract-sign", route: DEMO_EMP, reveal: ["emp-tab-history"], title: "Podepsaná smlouva", body: "Tlačítkem Nahrát podepsanou smlouvu nahrajete naskenovanou podepsanou verzi. Vyberete si ze dvou možností: „Smlouva“ nahraje celý soubor jako smlouvu, „Smlouva + prohlášení“ naskenovaný soubor rozdělí – první strany uloží jako smlouvu a zbylé strany jako prohlášení poplatníka do Dalších dokumentů. Aplikace se zeptá, kolik stran na začátku skenu tvoří smlouvu. Velké skeny se automaticky zmenší.", deltaTitle: "Podepsaná smlouva – nově i s prohlášením", deltaBody: "Tlačítkem Nahrát podepsanou smlouvu nahrajete naskenovanou podepsanou verzi. Nově si vyberete ze dvou možností: „Smlouva“ nahraje celý soubor jako smlouvu (jako dosud), „Smlouva + prohlášení“ naskenovaný soubor rozdělí – první strany uloží jako smlouvu a zbylé strany jako prohlášení poplatníka do Dalších dokumentů. Aplikace se zeptá, kolik stran na začátku skenu tvoří smlouvu. Velké skeny se automaticky zmenší.", placement: "left" },
   { permission: "documents.view", anchor: "emp-tab-docs", route: DEMO_EMP, reveal: ["emp-tab-docs"], title: "Další dokumenty", body: "Na záložce Další dokumenty vidíte nahrané dokumenty zaměstnance.", placement: "left" },
-  { permission: ["employment.manage", "documents.view"], addedInVersion: 7, anchor: "emp-doc-tax-declaration", route: DEMO_EMP, reveal: ["emp-tab-docs"], title: "Prohlášení poplatníka", body: "Tlačítkem Prohlášení poplatníka vygenerujete vyplněné prohlášení poplatníka daně (PDF) - nejprve zadáte zdaňovací období.", placement: "bottom" },
+  // v15: "+ Adhoc dokument" MOVED here from Historie pracovního poměru and was renamed;
+  // the separate "Ad hoc smlouvy" card is gone, its rows are now in this one list.
+  { permission: "contracts.generate", addedInVersion: 15, anchor: "emp-doc-generate", route: DEMO_EMP, reveal: ["emp-tab-docs"], title: "Generování dokumentu", body: "Tlačítkem + Generovat dokument vytvoříte samostatný dokument (např. Multisport nebo Hmotnou odpovědnost). Objeví se pak v seznamu níže, spolu s nahranými dokumenty.", deltaTitle: "+ Generovat dokument (dříve + Adhoc dokument)", deltaBody: "Tlačítko + Adhoc dokument se přesunulo ze záložky Historie pracovního poměru sem a jmenuje se nyní + Generovat dokument. Vytvoříte jím samostatný dokument (např. Multisport nebo Hmotnou odpovědnost). Samostatná sekce Ad hoc smlouvy zmizela – tyto dokumenty teď najdete rovnou v seznamu níže, spolu s nahranými dokumenty. V Historii pracovního poměru tak zůstává jen samotná historie.", placement: "bottom" },
   { permission: "documents.upload", anchor: "emp-doc-upload", route: DEMO_EMP, reveal: ["emp-tab-docs"], title: "Nahrání dokumentu", body: "Tlačítkem Nahrát dokument přidáte k zaměstnanci další dokument.", placement: "bottom" },
   { permission: "documents.delete", anchor: "emp-doc-delete", route: DEMO_EMP, reveal: ["emp-tab-docs"], title: "Smazání dokumentu", body: "Tlačítkem Smazat odstraníte nahraný dokument (aplikace se zeptá na potvrzení).", placement: "left" },
 
@@ -283,7 +293,7 @@ export const appTour: TourDefinition = {
   // Highest step `addedInVersion` in the list. Bump it (and stamp the new steps'
   // `addedInVersion`) whenever you add steps for a new feature – returning users
   // then see ONLY those steps; first-time users still get the whole tour.
-  version: 14,
+  version: 15,
   label: "Prohlídka aplikace",
   steps: APP_TOUR_STEPS,
 };

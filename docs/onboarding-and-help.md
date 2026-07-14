@@ -39,6 +39,8 @@ interface TourStep {
   excludeIfPermission?: Permission | Permission[];
   hideInProd?: boolean;
   addedInVersion?: number;       // tour version this step was introduced in (drives "what's new" delta)
+  deltaTitle?: string;           // title override used ONLY in delta ("Co je nového") mode
+  deltaBody?: string;            // body override used ONLY in delta mode
   section?: string;              // section label (e.g. "Zaměstnanci"); set on first step of group only
   requiresEmployee?: boolean;    // hide when the user has no linked employee record
   scrollBlock?: ScrollLogicalPosition; // how the anchor is scrolled into view; defaults to "center"
@@ -57,6 +59,8 @@ There is a **single master list** covering every permission in the catalogue. Th
 **`section?: string`** — section label this step belongs to (e.g. `"Zaměstnanci"`, `"Nastavení"`). Set it only on the **first step of each section** in the master list. `buildAppTour` resolves it onto every following step by carry-forward **before** permission filtering, so a step retains its section even when its group's lead step is filtered out for the current user. Drives the "Předchozí/Další sekce" jump buttons in the overlay.
 
 **`requiresEmployee?: boolean`** — when `true`, the step is dropped when the user has no linked employee record (`employeeId` is absent on the auth token). Used for steps that spotlight a control that only renders for employee-linked users — e.g. the "Moje směny" overview tile, which never appears for an admin account with no employee record. Without this gate the step would spotlight a missing anchor and time out to a centered fallback card.
+
+**`deltaTitle?: string` / `deltaBody?: string`** (v4.6.0) — copy overrides applied **only** in delta ("Co je nového") mode. A step that announces a control that *moved* has to speak with two voices: to a returning user it's news ("Prohlášení poplatníka je nyní zde – přesunulo se ze záložky Další dokumenty"), but to a first-time user that framing is meaningless — they never saw the old placement. `title`/`body` stay written for someone meeting the control for the first time (what the full tour and the Nápověda page always show); `buildAppTour` substitutes `deltaTitle`/`deltaBody` for `title`/`body` only when building a delta tour (`opts.sinceVersion` set) and only for steps that set them. Omit both for an ordinary new feature, where the same copy reads correctly either way. A step whose control **moved** typically also needs its `addedInVersion` bumped to the new version even though the underlying feature is old — that's what re-enters it into the delta so existing users are told where the control went, instead of silently losing something they used to rely on (see the Prohlášení poplatníka and contract-upload-menu moves in `docs/employees.md` / `docs/contracts.md` for worked examples, `appTour.version` 14 → 15).
 
 **`scrollBlock?: ScrollLogicalPosition`** — controls the `block` argument passed to `scrollIntoView({ block })` when the overlay scrolls the anchor into view. Defaults to `"center"`. Set to `"start"` for tall elements (e.g. the employees table) so the user lands at the top of the element rather than its middle.
 
@@ -150,14 +154,14 @@ When `anchor` is `null` (welcome, outro, or fallback) the overlay dims the full 
 
 ## Tour version & "what's new" delta
 
-`appTour.version` (currently **13** — the Lobby bar/Terminál steps) is the highest `addedInVersion` value present in the step list. It lives in `frontend/src/lib/tours/appTour.ts`:
+`appTour.version` (currently **15** — the Employee-detail restructure + signed-contract split, v4.6.0) is the highest `addedInVersion` value present in the step list. It lives in `frontend/src/lib/tours/appTour.ts`:
 
 ```ts
 export const appTour: TourDefinition = {
   id: "app",
   // Highest step `addedInVersion` in the list. Bump it (and stamp the new steps'
   // `addedInVersion`) whenever you add steps for a new feature.
-  version: 13,
+  version: 15,
   ...
 };
 ```
@@ -174,7 +178,7 @@ If a user's permissions don't include any of the new steps, the delta is empty a
 **`toursSeen` Firestore field:**
 
 ```
-users/{uid}.toursSeen = { "app": 13 }   // tourId → last seen version
+users/{uid}.toursSeen = { "app": 15 }   // tourId → last seen version
 ```
 
 The `PUT /api/auth/me/tours` body is `{ tourId, version }` and uses `merge: true` so other tour entries are preserved.
@@ -212,7 +216,7 @@ Sections are used only for the overlay's "Předchozí/Další sekce" navigation 
 The backend stores one Firestore field on the user document:
 
 ```
-users/{uid}.toursSeen = { "app": 13 }   // tourId → last seen version
+users/{uid}.toursSeen = { "app": 15 }   // tourId → last seen version
 ```
 
 Two endpoints in `functions/src/routes/auth.ts`:

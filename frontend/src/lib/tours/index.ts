@@ -103,7 +103,21 @@ export function buildAppTour(
   // lead with the "what's new" card (only when there's something new to show).
   if (opts.sinceVersion !== undefined) {
     const since = opts.sinceVersion;
-    const fresh = steps.filter((step) => (step.addedInVersion ?? 0) > since);
+    const fresh = steps
+      .filter((step) => (step.addedInVersion ?? 0) > since)
+      // Steps that announce a MOVED control read differently to someone who knew
+      // the old layout ("… je nyní zde") than to a first-timer, for whom that
+      // framing is meaningless. Swap in the delta copy here; the full tour keeps
+      // the first-timer wording. See TourStep.deltaTitle / deltaBody.
+      .map((step) =>
+        step.deltaTitle === undefined && step.deltaBody === undefined
+          ? step
+          : {
+              ...step,
+              title: step.deltaTitle ?? step.title,
+              body: step.deltaBody ?? step.body,
+            }
+      );
     steps = fresh.length > 0 ? [WHATS_NEW_INTRO, ...fresh] : [];
   }
 

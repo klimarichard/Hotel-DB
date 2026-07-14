@@ -290,8 +290,13 @@ const isAdmin = (req: AuthRequest): boolean => (req.permissions ?? new Set<strin
 
 /**
  * Resolve the display name to snapshot into a signature: linked employee's
- * first+last name → the user's `name` → the email. Never throws (a missing user
- * must not block a signature).
+ * reception display name → the user's `name` → the email. Never throws (a missing
+ * user must not block a signature).
+ *
+ * The employee name goes through `recepceDisplayName`, so a person who goes by a
+ * custom `displayName` signs under it. Composing firstName+lastName here (as this
+ * did) ignored `displayName` and stamped the legal name onto every protokol —
+ * the one Recepce surface that still did.
  */
 async function resolveDisplayName(uid: string, fallbackEmail: string): Promise<string> {
   try {
@@ -302,8 +307,7 @@ async function resolveDisplayName(uid: string, fallbackEmail: string): Promise<s
       if (employeeId) {
         const empDoc = await db().collection("employees").doc(employeeId).get();
         if (empDoc.exists) {
-          const emp = empDoc.data() as Record<string, unknown>;
-          const full = `${(emp.firstName as string) ?? ""} ${(emp.lastName as string) ?? ""}`.trim();
+          const full = recepceDisplayName(empDoc.data() as Parameters<typeof recepceDisplayName>[0]);
           if (full !== "") return full;
         }
       }
@@ -314,6 +318,81 @@ async function resolveDisplayName(uid: string, fallbackEmail: string): Promise<s
     // never block a signature on a missing/broken user record
   }
   return fallbackEmail;
+}
+
+/** A stored signature stamp, or null when the slot is empty / malformed. */
+function asStamp(v: unknown): StampedSignature | null {
+  if (!v || typeof v !== "object") return null;
+  const uid = (v as { uid?: unknown }).uid;
+  return typeof uid === "string" && uid !== "" ? (v as StampedSignature) : null;
+}
+
+/**
+ * Live-resolve the signer names on protocol docs about to be returned.
+ *
+ * A stamp freezes `displayName` at signing time and is never rewritten, so every
+ * protokol signed before this fix carries the signer's LEGAL name even though
+ * they go by a display name. The stamp does keep the signer's `uid`, so the label
+ * is fully re-derivable (uid → users/{uid}.employeeId → live employee), and that
+ * is what the rest of Recepce already does: names are display concerns resolved
+ * live, snapshots are only a fallback for records that no longer exist.
+ *
+ * Only the LABEL is re-resolved. The signature's legal substance — who signed
+ * (`uid`), the credential they proved (`email`) and when (`at`) — is the historical
+ * record and stays exactly as stamped; Firestore is never rewritten here. So the
+ * protokol still attests to the same person, just under the name they actually go by.
+ *
+ * Docs with no signatures cost zero extra reads.
+ */
+async function withLiveSignerNames(docs: Record<string, unknown>[]): Promise<Record<string, unknown>[]> {
+  const uids = [
+    ...new Set(
+      docs.flatMap((d) => [asStamp(d.predal)?.uid, asStamp(d.prevzal)?.uid]).filter((u): u is string => !!u)
+    ),
+  ];
+  if (uids.length === 0) return docs;
+
+  const userSnaps = await db().getAll(...uids.map((u) => db().collection("users").doc(u)));
+  const empByUid = new Map<string, string>();
+  for (const s of userSnaps) {
+    const empId = s.exists ? (s.data() as { employeeId?: unknown }).employeeId : undefined;
+    if (typeof empId === "string" && empId !== "") empByUid.set(s.id, empId);
+  }
+  const displays = await resolveEmployeeDisplays([...empByUid.values()]);
+
+  // Live name, or undefined when the signer's account/employee record is gone —
+  // then the stamped string stays, it's the only record of who they were.
+  const liveName = (v: unknown): string | undefined => {
+    const stamp = asStamp(v);
+    const empId = stamp ? empByUid.get(stamp.uid) : undefined;
+    return (empId ? displays.get(empId)?.name : undefined) || undefined;
+  };
+
+  return docs.map((d) => {
+    const predal = liveName(d.predal);
+    const prevzal = liveName(d.prevzal);
+    if (!predal && !prevzal) return d;
+    return {
+      ...d,
+      ...(predal ? { predal: { ...(d.predal as object), displayName: predal } } : {}),
+      ...(prevzal ? { prevzal: { ...(d.prevzal as object), displayName: prevzal } } : {}),
+    };
+  });
+}
+
+/** Single-doc form of {@link withLiveSignerNames}. */
+async function withLiveSignerName(doc: Record<string, unknown>): Promise<Record<string, unknown>> {
+  return (await withLiveSignerNames([doc]))[0];
+}
+
+/**
+ * The name to record on a derived handover warning. The stamp's own `displayName`
+ * may be a stale legal name (see withLiveSignerNames), and the warning docs are
+ * snapshots that only get rewritten on a re-sign — so resolve the signer live at
+ * write time instead of copying the stamp's string forward.
+ */
+async function warningActorName(stamp: StampedSignature): Promise<string> {
+  return await resolveDisplayName(stamp.uid, stamp.displayName || stamp.email || "");
 }
 
 // ─── Global sm rates (settings/sm) ───────────────────────────────────────────
@@ -377,7 +456,7 @@ handoversRouter.get(
       .orderBy("shiftDate", "desc")
       .get();
 
-    res.json(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    res.json(await withLiveSignerNames(snap.docs.map((d) => ({ id: d.id, ...d.data() }))));
   }
 );
 
@@ -563,7 +642,7 @@ handoversRouter.get(
       res.status(404).json({ error: "Předání nenalezeno." });
       return;
     }
-    res.json({ id: doc.id, ...doc.data() });
+    res.json(await withLiveSignerName({ id: doc.id, ...doc.data() }));
   }
 );
 
@@ -792,7 +871,7 @@ handoversRouter.put(
     // Return the persisted document (read-back in the SAME invocation is reliable,
     // unlike a separate client GET) so the client can update its state directly.
     const saved = await ref.get();
-    res.json({ id, ...saved.data() });
+    res.json(await withLiveSignerName({ id, ...saved.data() }));
   }
 );
 
@@ -851,9 +930,9 @@ async function syncChainWarning(hotel: HotelSlug, id: string): Promise<void> {
       shiftDate: doc.shiftDate,
       shiftType: doc.shiftType,
       actorUid: doc.predal.uid,
-      actorName: doc.predal.displayName,
+      actorName: await warningActorName(doc.predal),
       expectedUid: prevPrevzal.uid,
-      expectedName: prevPrevzal.displayName,
+      expectedName: await warningActorName(prevPrevzal),
       createdAt: FieldValue.serverTimestamp(),
       read: false,
       readAt: null,
@@ -921,7 +1000,7 @@ async function syncLateWarning(hotel: HotelSlug, id: string): Promise<void> {
     shiftDate: doc.shiftDate,
     shiftType: doc.shiftType,
     actorUid: doc.prevzal.uid,
-    actorName: doc.prevzal.displayName,
+    actorName: await warningActorName(doc.prevzal),
     prevzalAt: at,
     prevzalLabel,
     cutoffLabel,
@@ -1017,7 +1096,7 @@ function stampHandler(slot: SignatureSlot) {
     await resyncChainAfter(hotel, before, slot);
 
     const saved = await ref.get();
-    res.json({ id, ...saved.data() });
+    res.json(await withLiveSignerName({ id, ...saved.data() }));
   };
 }
 
@@ -1087,7 +1166,7 @@ function revertHandler(slot: SignatureSlot) {
     await resyncChainAfter(hotel, before, slot);
 
     const saved = await ref.get();
-    res.json({ id, ...saved.data() });
+    res.json(await withLiveSignerName({ id, ...saved.data() }));
   };
 }
 
@@ -1164,7 +1243,7 @@ handoversRouter.post(
       after: { smCounts: newCounts, smTrezor: newTrezor },
     });
     const saved = await ref.get();
-    res.json({ id: req.params.id, ...saved.data() });
+    res.json(await withLiveSignerName({ id: req.params.id, ...saved.data() }));
   }
 );
 
@@ -1193,7 +1272,7 @@ handoversRouter.post(
       after: { smTrezor: 0 },
     });
     const saved = await ref.get();
-    res.json({ id: req.params.id, ...saved.data() });
+    res.json(await withLiveSignerName({ id: req.params.id, ...saved.data() }));
   }
 );
 
@@ -1224,7 +1303,7 @@ handoversRouter.post(
       after: { wata: next },
     });
     const saved = await ref.get();
-    res.json({ id: req.params.id, ...saved.data() });
+    res.json(await withLiveSignerName({ id: req.params.id, ...saved.data() }));
   }
 );
 

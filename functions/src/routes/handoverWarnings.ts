@@ -3,6 +3,7 @@ import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireAuth, AuthRequest } from "../middleware/auth";
 import { requirePermission } from "../auth/permissions";
+import { resolveDisplayNamesByUid } from "../services/recepceEmployees";
 
 /**
  * Předávací protokol warnings — the admin/director review surface for the shift
@@ -21,13 +22,39 @@ const db = () => admin.firestore();
 const COL = "handoverWarnings";
 
 // GET /api/handover-warnings — newest first. Admin/director review surface.
+//
+// `actorName` / `expectedName` are snapshots taken when the warning was generated
+// and are never rewritten, so warnings raised before the display-name fix carry the
+// signer's LEGAL name. Both docs also store the signer's uid, so the label is fully
+// re-derivable — resolve it live here (stored string stays the fallback for signers
+// whose account or employee record is gone). Nothing is written back; this mirrors
+// withLiveSignerNames() on the protokol itself.
 handoverWarningsRouter.get(
   "/",
   requireAuth,
   requirePermission("changeRequests.review"),
   async (_req: AuthRequest, res) => {
     const snap = await db().collection(COL).orderBy("createdAt", "desc").limit(500).get();
-    res.json(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Record<string, unknown>);
+
+    const uidOf = (v: unknown): string | undefined =>
+      typeof v === "string" && v !== "" ? v : undefined;
+    const uids = docs
+      .flatMap((d) => [uidOf(d.actorUid), uidOf(d.expectedUid)])
+      .filter((u): u is string => !!u);
+
+    const live = await resolveDisplayNamesByUid(uids);
+    res.json(
+      docs.map((d) => {
+        const actor = uidOf(d.actorUid) ? live.get(d.actorUid as string) : undefined;
+        const expected = uidOf(d.expectedUid) ? live.get(d.expectedUid as string) : undefined;
+        return {
+          ...d,
+          ...(actor ? { actorName: actor } : {}),
+          ...(expected ? { expectedName: expected } : {}),
+        };
+      })
+    );
   }
 );
 

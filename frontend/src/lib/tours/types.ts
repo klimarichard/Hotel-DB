@@ -61,6 +61,24 @@ export interface TourStep {
    */
   addedInVersion?: number;
   /**
+   * Copy overrides used ONLY in delta ("Co je nového") mode, i.e. for a returning
+   * user who already saw an earlier version.
+   *
+   * A step that announces a MOVED control has to speak with two voices. To a
+   * returning user it is news ("Prohlášení poplatníka je nyní zde - přesunulo se
+   * ze záložky Další dokumenty"). To a first-time user that same sentence is
+   * nonsense: nyní as opposed to what? They have never seen the old placement.
+   *
+   * So `title`/`body` stay written for someone meeting the control for the FIRST
+   * time (they are what the full tour and the Nápověda page show), and
+   * `deltaTitle`/`deltaBody` carry the "this moved / this is new" framing that
+   * only makes sense to someone who knew the previous layout. buildAppTour
+   * substitutes them when `sinceVersion` is set. Omit both for an ordinary new
+   * feature, where the same copy reads correctly either way.
+   */
+  deltaTitle?: string;
+  deltaBody?: string;
+  /**
    * Section label this step belongs to (e.g. "Zaměstnanci", "Mzdy"). Set it only
    * on the FIRST step of each section in the master list; buildAppTour resolves it
    * onto every following step by carry-forward (BEFORE permission filtering, so it

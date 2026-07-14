@@ -298,6 +298,8 @@ The distinction matters because the employment-row `status` field can lag the de
 
 **Audit log** — probation-alert writes are system-generated (scheduled refresh + on-employment-edit cascade) and intentionally NOT in the audit log. The triggering employment row create/edit is already audited, which is the user-meaningful event.
 
+**Live employee-name resolution (v4.6.0)** — `alerts`/`probationAlerts` docs and `employeeChangeRequests` docs all snapshot the employee's name when generated/submitted and are only rewritten when the underlying deadline changes (or never, for change requests). The **Doklady** and **Zkušební doba** tabs (`GET /alerts`, the probation alerts GET — both via a `withLiveEmployeeNames` wrapper) and **Žádosti o úpravu údajů** (`GET /employee-change-requests/pending`) now re-resolve the name against the live employee record before responding, so a display-name edit or a first-ever `displayName` reaches alerts raised before the feature existed. See [Data Model — Live employee-name resolution](data-model.md#live-employee-name-resolution--read-time-never-a-backfill-v460).
+
 ---
 
 ## Async error forwarding (never-hang)

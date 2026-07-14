@@ -3,10 +3,43 @@ import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireAuth, AuthRequest } from "../middleware/auth";
 import { requirePermission } from "../auth/permissions";
+import { resolveEmployeeNameParts } from "../services/employeeNames";
 
 export const alertsRouter = Router();
 
 const db = () => admin.firestore();
+
+/**
+ * Overwrite each alert's denormalized employee name with the LIVE one.
+ *
+ * Alert docs snapshot employeeFirstName / employeeLastName / employeeDisplayName
+ * when the alert is generated, and are only rewritten when the underlying deadline
+ * changes (the daily job preserves them otherwise). Without this, a display-name
+ * edit would not reach the Upozornění tabs until the next refresh, and alerts
+ * raised before the display-name feature would keep showing the legal name forever.
+ *
+ * Both collections key on `employeeId`, so the name is fully re-derivable. One
+ * batched getAll; the stored snapshot survives for deleted employees. Response only —
+ * nothing is written back.
+ */
+async function withLiveEmployeeNames(
+  docs: Record<string, unknown>[]
+): Promise<Record<string, unknown>[]> {
+  const live = await resolveEmployeeNameParts(
+    docs.map((d) => (typeof d.employeeId === "string" ? d.employeeId : undefined))
+  );
+  if (live.size === 0) return docs;
+  return docs.map((d) => {
+    const parts = typeof d.employeeId === "string" ? live.get(d.employeeId) : undefined;
+    if (!parts) return d;
+    return {
+      ...d,
+      employeeFirstName: parts.firstName,
+      employeeLastName: parts.lastName,
+      employeeDisplayName: parts.displayName,
+    };
+  });
+}
 
 /**
  * Set (or clear) the shared read-state on a batch of alert docs in one
@@ -56,7 +89,7 @@ alertsRouter.get(
       .collection("alerts")
       .orderBy("daysUntilExpiry", "asc")
       .get();
-    res.json(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    res.json(await withLiveEmployeeNames(snap.docs.map((d) => ({ id: d.id, ...d.data() }))));
   }
 );
 
@@ -73,7 +106,7 @@ alertsRouter.get(
       .collection("probationAlerts")
       .orderBy("daysUntilEnd", "asc")
       .get();
-    res.json(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    res.json(await withLiveEmployeeNames(snap.docs.map((d) => ({ id: d.id, ...d.data() }))));
   }
 );
 

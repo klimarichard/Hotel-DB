@@ -21,6 +21,7 @@ import * as admin from "firebase-admin";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { randomUUID } from "crypto";
 import { multisportPriceForMonth, multisportStartNotes, readMultisport } from "./multisport";
+import { nameParts } from "./employeeNames";
 
 const db = () => admin.firestore();
 
@@ -921,11 +922,16 @@ export async function createOrUpdatePayrollPeriod(
 
     const contractType = currentContractType || eff?.contractType || (planEmp.contractType as string) || "";
     const jobTitle = eff?.jobTitle || (planEmp.jobTitle as string) || "";
+    // Name from the LIVE employee doc, never from planEmp: the roster snapshot is
+    // frozen when the person is added to the plan, so a later displayName edit
+    // never reached the entry (and pre-feature rosters have no displayName key at
+    // all). planEmp stays the fallback for an employee deleted since.
+    const names = rootSnap.exists ? nameParts(rootSnap.data()) : nameParts(planEmp);
     const employee = {
       employeeId,
-      firstName: planEmp.firstName as string ?? "",
-      lastName: planEmp.lastName as string ?? "",
-      displayName: planEmp.displayName as string ?? "",
+      firstName: names.firstName,
+      lastName: names.lastName,
+      displayName: names.displayName,
       contractType,
       salary: eff?.salary ?? null,
       hourlyRate: resolveHourlyRate(contractType, jobTitle, eff?.hourlyRate, positionRates, eff?.positionChanged ?? false),
@@ -1070,11 +1076,14 @@ export async function recomputeEntryForEmployee(
 
   const contractType = currentContractType || eff?.contractType || (planEmp.contractType as string) || "";
   const jobTitle = eff?.jobTitle || (planEmp.jobTitle as string) || "";
+  // Live employee doc wins over the frozen planEmp roster snapshot — see the
+  // orchestrator above.
+  const names = rootSnap.exists ? nameParts(rootSnap.data()) : nameParts(planEmp);
   const employee = {
     employeeId,
-    firstName: (planEmp.firstName as string) ?? "",
-    lastName: (planEmp.lastName as string) ?? "",
-    displayName: (planEmp.displayName as string) ?? "",
+    firstName: names.firstName,
+    lastName: names.lastName,
+    displayName: names.displayName,
     contractType,
     salary: eff?.salary ?? null,
     hourlyRate: resolveHourlyRate(contractType, jobTitle, eff?.hourlyRate, positionRates),

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { formatDateCZ } from "../lib/dateFormat";
-import { employeeSurnameFirst } from "../lib/employeeName";
+import { employeeDisplayName, employeeSurnameFirst } from "../lib/employeeName";
 import { getCellColor, parseShiftExpression } from "../lib/shiftConstants";
 import { useTheme } from "../context/ThemeContext";
 import type { PlanEmployee } from "../pages/ShiftPlannerPage";
@@ -106,10 +106,14 @@ export default function ShiftChangeRequestModal({
     }
     if (sel.kind === "swap") {
       const emp = swapCandidates.find((e) => e.employeeId === sel.employeeId);
+      // The dropdown lists people surname-first (scanning a roster), but this
+      // name is PERSISTED and later rendered in the request list, so it stores
+      // the display name. The backend re-resolves it from swapWithEmployeeId on
+      // read anyway; this value only survives as the deleted-employee fallback.
       return {
         action: "swap",
         swapWithEmployeeId: sel.employeeId,
-        swapWithName: emp ? employeeSurnameFirst(emp) : undefined,
+        swapWithName: emp ? employeeDisplayName(emp) : undefined,
       };
     }
     if (other.trim()) return { action: "other" };

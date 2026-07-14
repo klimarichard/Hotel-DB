@@ -14,6 +14,8 @@ interface Alert {
   employeeId: string;
   employeeFirstName: string;
   employeeLastName: string;
+  /** Absent on alerts written before display names existed – falls back to the legal name. */
+  employeeDisplayName?: string;
   fieldLabel: string;
   expiryDate: string;
   daysUntilExpiry: number;
@@ -61,7 +63,11 @@ function AlertTable({ alerts, actionLabel, onAction, muted }: AlertTableProps) {
             >
               <td>
                 <Link to={`/zamestnanci/${alert.employeeId}`} className={styles.empLink}>
-                  {employeeDisplayName({ firstName: alert.employeeFirstName, lastName: alert.employeeLastName })}
+                  {employeeDisplayName({
+                    displayName: alert.employeeDisplayName,
+                    firstName: alert.employeeFirstName,
+                    lastName: alert.employeeLastName,
+                  })}
                 </Link>
               </td>
               <td data-label="Doklad">{alert.fieldLabel}</td>

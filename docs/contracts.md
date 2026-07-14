@@ -309,10 +309,10 @@ Ad-hoc / standalone documents (the *Adhoc smlouvy* section on the Employee detai
 
 - **Persisted fields** — `POST /api/employees/:id/contracts` (and `PATCH .../:contractId`) now whitelist `signingDate`, plus Multisport's `requestedAt` / `validFrom`. These are stored on the contract doc so the row can show the signing date and a later generation can fill the template. All additive — existing contracts without `signingDate` fall back to displaying `generatedAt`.
 - **Row creation** — `EmployeeDetailPage.addAdhocRow()` POSTs `{ type, status: "unsigned", displayName, signingDate, requestedAt?, validFrom? }` with **no** `pdfBase64`, so the record materialises PDF-less. The prompt button changed from "Pokračovat" to "Přidat".
-- **Generate later** — `AdhocContractsSection` passes an `onGenerate(contract)` that opens `GenerateContractModal` with `existingContractId` + the stored `signingDate`/`requestedAt`/`validFrom`. `ContractActionButtons` now shows **Generovat smlouvu** whenever an editable row has no unsigned and no signed PDF (previously only when `contract` was null), so an ad-hoc row that exists but hasn't been generated gets the button.
+- **Generate later** — the parent (`OtherDocumentsTab` since v4.6.0; formerly `AdhocContractsSection`) passes an `onGenerate(contract)` that opens `GenerateContractModal` with `existingContractId` + the stored `signingDate`/`requestedAt`/`validFrom`. `ContractActionButtons` now shows **Generovat smlouvu** whenever an editable row has no unsigned and no signed PDF (previously only when `contract` was null), so an ad-hoc row that exists but hasn't been generated gets the button.
 - **Attach to existing record** — generating against an `existingContractId` does NOT create a new record. `GenerateContractModal.handleGenerate` calls the new `useContractGeneration.attachUnsignedPdf()` →
   - `POST /api/employees/:employeeId/contracts/:contractId/unsigned-pdf` — accepts `{ pdfBase64 }`, writes `contracts/{employeeId}/{contractId}.pdf` via the Admin SDK, and updates the existing doc with `unsignedStoragePath` + a fresh `generatedAt`/`generatedBy`. The row's `signingDate` / `displayName` are preserved. Mirrors the existing `signed-pdf` endpoint; admin/director/hr only, audit-logged via `logUpdate`.
-- **Display** — `AdhocContractsSection` renders `formatDateCZ(c.signingDate)` when present (title "Datum podpisu"), falling back to `formatTimestampCZ(c.generatedAt)` for legacy rows. Employment-row contract generation is unchanged (still creates the record at generation time).
+- **Display** — the ad-hoc row renders `formatDateCZ(c.signingDate)` when present (title "Datum podpisu"), falling back to `formatTimestampCZ(c.generatedAt)` for legacy rows. Employment-row contract generation is unchanged (still creates the record at generation time). (**v4.6.0:** `AdhocContractsSection` itself is deleted; this display logic now lives in `OtherDocumentsTab` — see the section below.)
 
 ### Custom per-template variables (2026-07-13)
 Ten free slots — `{{var1}}` … `{{var10}}` — that a template can use for values the employee record simply doesn't hold (a penalty amount, a training date, a one-off clause). Unlike every other variable in `VARIABLE_GROUPS`, a slot's meaning is **not global**: each template configures the slots it uses itself, so `{{var1}}` can be "Výše pokuty" in one template and "Datum školení" in another. Values are typed in at generation time and are **never persisted** — a fresh document, a blank slate, every time (contrast with the standalone signing-date prompt, which *does* persist onto the contract doc).
@@ -346,3 +346,52 @@ Both buttons close the modal so the author lands in the editor with the caret in
 **Validation is on submit, not on open.** The "Generovat PDF" button stays **enabled** even while custom slots are empty. Pressing it calls `handleGenerate`, which — when `missingCustom.length > 0` — sets `triedGenerate` and returns *instead of* generating; the red "Vyplňte všechny vlastní proměnné:" box (listing the missing slots by label) is rendered only under `triedGenerate && missingCustom.length > 0`, so it first appears after that press. Rationale: a disabled button plus a red error box the moment the dialog opens flags a mistake the user has not made yet. The list re-evaluates on every keystroke afterwards, so it shrinks as fields are filled. (`disabled` on the button is now only about the template/company still loading, or the template being inactive.)
 
 **Backend validation — `functions/src/routes/contractTemplates.ts`.** `PUT /:id` accepts an optional `variableDefs` field and rejects the write (400) via `isValidVariableDefs` when it isn't a plain object whose entries are all: a known key (`var1`..`var10` only), an object with a `type` in `{text, date, number, bool}`, and a `label` string ≤ 60 chars. Omitting `variableDefs` from a `PUT` leaves the stored config untouched (`ref.set(payload, { merge: true })` only writes the field when present) — older templates saved before this feature are unaffected.
+
+---
+
+## Signed-contract split + client-side PDF compression (v4.6.0)
+
+Staff sign a printed contract by hand and send back **one scan** whose leading page(s) are the contract and whose trailing page(s) are the "Prohlášení poplatníka daně". Those two documents belong in two different places (the contract record vs. the employee's Další dokumenty), and the scan itself is often large enough to hit the upload body-size cap. This feature does both jobs — split and shrink — entirely **client-side**, and adds one backend endpoint that files both halves atomically.
+
+### Two-option upload menu
+
+`ContractActionButtons`'s **"Nahrát podepsanou smlouvu"** button is now a menu with two entries (only shown when the caller also holds `documents.upload` — without it the button falls back to the original single-click "whole file as the contract" behaviour, since there's nowhere to file a Prohlášení):
+
+- **"Smlouva"** — unchanged behaviour: the whole file becomes the signed contract (via `POST .../signed-pdf`, after compression).
+- **"Smlouva + prohlášení"** — reads the file, rejects a single-page PDF ("není co rozdělit"), then opens a dialog showing the **real page count** and asking how many leading pages are the contract (default 1, max `pageCount - 1`). The 3-page layout used in earlier internal drafts of this feature is **not assumed** — a 2-page contract in a 4-page scan is a real case, and silently filing page 2 under the Prohlášení would be a quiet, hard-to-notice mistake. The dialog also collects a name for the declaration document (defaults to `"Prohlášení poplatníka <year>"`).
+
+### Client-side compression + split — `frontend/src/lib/pdfCompress.ts`
+
+`compressScannedPdf(file)` shrinks a scanned PDF by re-encoding each page as a JPEG, and is run before *either* upload path (whole-file or split):
+
+- **Why client-side at all:** the scans staff upload are one big raster per page, and the file size is almost entirely that raster. `pdf-lib` (which the backend already uses for merges/splits) copies embedded image streams through **untouched** — it cannot re-encode them, so it can't shrink a scan. Re-encoding needs a rasteriser, and the browser already is one: `pdf.js` renders a page to `<canvas>`, which is then read back out as a JPEG. Doing this in the browser also means the **already-small** file is what crosses the wire, staying well under the backend's 10 MB `express.json` body cap instead of dying on an opaque body-parser 413.
+- **Why it's conditional:** rasterising destroys a real text layer (selectable text, or the AcroForm fields of a generated Prohlášení). `compressScannedPdf` counts extractable characters across every page via `pdf.js`'s `getTextContent()`; above `TEXT_LAYER_THRESHOLD = 200` chars the document is treated as digitally generated and returned **untouched**. The re-encoded result is also discarded (original returned) whenever it comes out **no smaller**, or if anything throws — shrinking is an optimisation, never a reason to fail an upload or lose the document.
+- **Render parameters:** `TARGET_DPI = 150` (the usual archival floor for scanned paper — still crisp and printable, roughly a quarter of the pixels of a 300 DPI scan) and `JPEG_QUALITY = 0.72` (keeps handwriting and stamps legible while cutting most of the bulk). Colour is **preserved**, never converted to grayscale, because signatures are usually blue ink and that's worth keeping.
+- **Two landmines documented in the file itself:**
+  - `pdf.js` **detaches** the `ArrayBuffer` it's handed (takes ownership of the ArrayBuffer's memory) — the code hands it a `.slice()` **copy**, so the original bytes survive for the "return untouched" fallback paths. Skipping the copy would silently upload an empty file on any fallback.
+  - JPEG has no alpha channel. A scanned page is transparent where nothing was drawn; without painting the canvas white first, those areas render **black** in the JPEG output.
+- **`getPageCount(bytes)`** — `pdf-lib`-based, used to drive the split dialog's page-count display and bounds.
+- **`splitPdf(bytes, splitAfterPage)`** — cuts the (already-compressed) bytes into `{ first, second }` via `pdf-lib`'s `copyPages`; both halves are then base64-encoded (`bytesToBase64`, chunked to avoid the `String.fromCharCode(...)` argument-count blowup on multi-MB files) and POSTed together.
+- Both `pdfjs-dist` and `pdf-lib` are imported **dynamically** inside the functions that need them (not at module top level) — `pdfjs-dist` alone is ~1 MB, and dynamic import keeps it out of the main bundle for the large share of users who never upload a signed contract; Vite gives it its own chunk.
+
+### Explicit over-size message
+
+`MAX_UPLOAD_BYTES = 7 * 1024 * 1024` (7 MB raw) in `ContractActionButtons.tsx` mirrors the backend's 10 MB JSON body cap adjusted for base64's ~4/3 inflation. Compression always runs first, so this only trips on originals that don't shrink enough; the message names the actual vs. max size and suggests re-scanning at lower quality, replacing what used to be an opaque body-parser 413. A real-world test scan shrank to roughly 60% of its original size while staying readable.
+
+### `frontend/src/lib/czechPlural.ts`
+
+Small helper for Czech's three-form noun agreement after a numeral (`1` → nominative singular, `2`–`4` → nominative plural, `0`/`5+` → genitive plural — note the rule keys off the whole number, so 11–14 still take the genitive plural, e.g. "11 stran"). Used by the split dialog's "Dokument má N stran(u)" copy (`pagesAccusative(n)`) and page-range labels (`pageWord(n)`).
+
+### Backend — `POST /api/employees/:employeeId/contracts/:contractId/signed-pdf-with-declaration`
+
+Body: `{ contractPdfBase64, declarationPdfBase64, declarationName }`.
+
+- **Permission:** `contracts.sign` is the route-level gate; an explicit in-handler check additionally requires `documents.upload` (403 otherwise) since the endpoint also creates an `otherDocuments` record. **No new permission key** — both already exist.
+- **Storage:** the contract half is written to `contracts/{employeeId}/{contractId}_signed.pdf` (same path `.../signed-pdf` uses), the declaration half to `other-documents/{employeeId}/{docId}.pdf` (same convention as [`POST /:id/other-documents`](employees.md#další-dokumenty-tab-2026-05-29)) — the `otherDocuments` doc id is reserved up front so the storage path can reference it.
+- **Atomicity:** the contract-doc update (`status: "signed"`, `signedStoragePath`, `signedAt`, `signedUploadedBy`) and the new `otherDocuments` doc are committed in **one Firestore batch** — a partial failure here would otherwise leave a contract marked signed with its declaration silently missing, which is worse than the whole call failing outright. The two Storage `bucket.file().save()` calls run in parallel via `Promise.all` before the batch commits; an orphaned Storage blob from a failure at that stage is inert (nothing points at it yet), which is the safer failure mode.
+- **Audit:** both writes are logged — `logUpdate` for the contract (`employees/contracts`) and `logCreate` for the declaration (`employees/otherDocuments`).
+- Response: `{ ok: true, signedStoragePath, declarationDocId }`.
+
+### Tour delta copy
+
+The `emp-contract-sign` tour step (Historie tab) and the relocated `emp-doc-tax-declaration` / `emp-doc-generate` steps (see [Employees — Employee detail restructure](employees.md#employee-detail-restructure--ad-hoc-documents-move-to-další-dokumenty-v460)) carry `deltaTitle`/`deltaBody` overrides for the "Co je nového" mini-tour, explaining the new upload menu to returning users while first-timers see neutral copy. `appTour.version` 14 → 15.
