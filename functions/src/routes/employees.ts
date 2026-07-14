@@ -20,6 +20,7 @@ import * as clock from "../services/clock";
 import { fillQuestionnairePdf, fillProhlaseniPdf } from "../services/formPdf";
 import { formatNationality } from "../services/nationalities";
 import { normalizeContactAddresses } from "../services/addressFormat";
+import { resolveEmployeeNameParts } from "../services/employeeNames";
 import { randomUUID } from "crypto";
 import {
   anyPeriodActiveOn,
@@ -1535,6 +1536,21 @@ export async function updateDocumentAlerts(
   const today = clock.now();
   today.setHours(0, 0, 0, 0);
 
+  // The alert doc is a name SNAPSHOT that nothing rewrites between refreshes, so
+  // it has to carry the custom display name too — otherwise the Upozornění tab
+  // can only ever render the legal name. Resolved here rather than added to the
+  // signature: every call site already passes firstName/lastName from a record
+  // it holds, and none of them would have it to hand. Lazy + memoised, so it
+  // costs one read only when an alert is actually written.
+  let cachedDisplayName: string | null = null;
+  const displayNameOf = async (): Promise<string> => {
+    if (cachedDisplayName === null) {
+      const live = await resolveEmployeeNameParts([employeeId]);
+      cachedDisplayName = live.get(employeeId)?.displayName ?? "";
+    }
+    return cachedDisplayName;
+  };
+
   for (const { field, label } of EXPIRY_FIELDS) {
     const docId = `${employeeId}_${field}`;
     const value = body[field] as string | undefined;
@@ -1568,6 +1584,7 @@ export async function updateDocumentAlerts(
         employeeId,
         employeeFirstName: firstName,
         employeeLastName: lastName,
+        employeeDisplayName: await displayNameOf(),
         field,
         fieldLabel: label,
         expiryDate: value,

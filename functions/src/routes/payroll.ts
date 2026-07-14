@@ -5,6 +5,7 @@ import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { requireAuth, AuthRequest } from "../middleware/auth";
 import { requirePermission } from "../auth/permissions";
 import { createOrUpdatePayrollPeriod, getMultisportPrice, recomputeEntryForEmployee } from "../services/payrollCalculator";
+import { nameParts, preferLive, resolveEmployeeNameParts } from "../services/employeeNames";
 import { ctxFromReq, logCreate, logUpdate, logDelete, writeAudit } from "../services/auditLog";
 import * as clock from "../services/clock";
 
@@ -599,10 +600,11 @@ payrollRouter.get(
         const threshold = minWageThresholdServer(eff.contractType, minWage, eff.hoursPerWeek);
         if (threshold == null) return null; // DPP not checked
         if (eff.salary == null || !Number.isFinite(eff.salary) || eff.salary >= threshold) return null;
-        const e = empDoc.data() as Record<string, unknown>;
+        // Display context — honour displayName like the rest of the UI.
+        const n = nameParts(empDoc.data());
         return {
           employeeId: empDoc.id,
-          name: `${e.firstName ?? ""} ${e.lastName ?? ""}`.trim() || empDoc.id,
+          name: n.displayName || `${n.firstName} ${n.lastName}`.trim() || empDoc.id,
           contractType: eff.contractType,
           hoursPerWeek: eff.hoursPerWeek,
           salary: eff.salary,
@@ -654,6 +656,27 @@ async function hydrateMultisport(
   );
 }
 
+/**
+ * Re-resolve each entry's name against the LIVE employee record. The stored name
+ * was copied from the shift plan's planEmployees snapshot, which is frozen at
+ * roster-add time — so renaming an employee (or giving them a displayName) never
+ * reached existing entries, and a recalc could not fix it either because it read
+ * the same stale roster. Fixed on READ so LOCKED periods display correctly too:
+ * we never write this back, the stored snapshot stays untouched and remains the
+ * fallback for employees that have since been deleted.
+ */
+async function hydrateNames(
+  entries: Record<string, unknown>[]
+): Promise<Record<string, unknown>[]> {
+  const ids = entries.map((e) => (e.employeeId as string | undefined) ?? (e.id as string));
+  const live = await resolveEmployeeNameParts(ids);
+  return entries.map((e) => {
+    const id = (e.employeeId as string | undefined) ?? (e.id as string);
+    const { firstName, lastName, displayName } = preferLive(live, id, e);
+    return { ...e, firstName, lastName, displayName };
+  });
+}
+
 payrollRouter.get(
   "/periods/:id",
   requireAuth,
@@ -670,12 +693,14 @@ payrollRouter.get(
     }
     const periodData = periodSnap.data() as Record<string, unknown>;
     const rawEntries = entriesSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    const entries = await hydrateMultisport(
-      rawEntries,
-      periodData.year as number,
-      periodData.month as number,
-      (periodData.multisportBasePrice as number | undefined) ?? 470,
-      periodData.locked === true
+    const entries = await hydrateNames(
+      await hydrateMultisport(
+        rawEntries,
+        periodData.year as number,
+        periodData.month as number,
+        (periodData.multisportBasePrice as number | undefined) ?? 470,
+        periodData.locked === true
+      )
     );
     res.json({ id: periodSnap.id, ...periodData, entries });
   }
@@ -704,12 +729,14 @@ payrollRouter.get(
     const periodData = snap.docs[0].data() as Record<string, unknown>;
     const entriesSnap = await periodRef.collection("entries").get();
     const rawEntries = entriesSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    const entries = await hydrateMultisport(
-      rawEntries,
-      year,
-      month,
-      (periodData.multisportBasePrice as number | undefined) ?? 470,
-      periodData.locked === true
+    const entries = await hydrateNames(
+      await hydrateMultisport(
+        rawEntries,
+        year,
+        month,
+        (periodData.multisportBasePrice as number | undefined) ?? 470,
+        periodData.locked === true
+      )
     );
     res.json({ id: snap.docs[0].id, ...periodData, entries });
   }

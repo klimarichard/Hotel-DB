@@ -100,6 +100,8 @@ interface EmploymentInput {
 interface EmployeeInput {
   firstName?: string;
   lastName?: string;
+  /** Custom "Zobrazované jméno", when set — snapshotted alongside the legal name. */
+  displayName?: string;
 }
 
 /**
@@ -164,6 +166,10 @@ export async function updateProbationAlertForEmploymentRow(
     employeeId,
     employeeFirstName: employee.firstName ?? "",
     employeeLastName: employee.lastName ?? "",
+    // The name on an alert is a snapshot: nothing rewrites it between refreshes,
+    // so it must carry the display name as well — otherwise the Upozornění tabs
+    // can only ever render the legal name. Reads re-resolve it live on top.
+    employeeDisplayName: employee.displayName ?? "",
     employmentRowId: row.rowId,
     probationStartDate: row.startDate,
     probationEndDate: endDate,
@@ -303,7 +309,11 @@ export async function refreshProbationAlertsForEmployee(employeeId: string): Pro
       empData.status === "terminated" || (!!flags && (flags.terminated || flags.hasSalaryDodatek));
     await updateProbationAlertForEmploymentRow(
       employeeId,
-      { firstName: empData.firstName as string, lastName: empData.lastName as string },
+      {
+        firstName: empData.firstName as string,
+        lastName: empData.lastName as string,
+        displayName: (empData.displayName as string) ?? "",
+      },
       {
         rowId: row.id,
         startDate: row.data.startDate as string | null,

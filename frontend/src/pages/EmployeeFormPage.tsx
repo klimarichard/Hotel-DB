@@ -6,6 +6,7 @@ import ConfirmModal from "@/components/ConfirmModal";
 import PhoneFormatModal from "@/components/PhoneFormatModal";
 import { needsPhoneFormatPrompt } from "@/lib/phoneFormat";
 import { NATIONALITIES, nationalityName } from "@/lib/nationalities";
+import { employeeDisplayName } from "@/lib/employeeName";
 import { isCzechNationality } from "@/lib/contractVariables";
 import * as clock from "@/lib/clock";
 import styles from "./EmployeeFormPage.module.css";
@@ -212,7 +213,10 @@ export default function EmployeeFormPage() {
       const p = { ...emptyPersonal, ...emp, birthNumber: "" } as PersonalForm;
       setPersonal(p);
       setNatQuery(emp.nationality ? natLabel(emp.nationality as string) : "");
-      setEmployeeName(`${emp.lastName ?? ""} ${emp.firstName ?? ""}`.trim());
+      // Breadcrumb + "Upravit – …" title. Uses the display name so it matches the
+      // detail page it links back to (whose hero shows the display name); the
+      // surname-first legal form stays in the Zaměstnanci list and the pickers.
+      setEmployeeName(employeeDisplayName(emp as Parameters<typeof employeeDisplayName>[0]));
       setContact({ ...emptyContact, ...(cont ?? {}) } as ContactForm);
       initialPhone.current = ((cont?.phone as string) ?? "").trim();
       // Sensitive fields start blank in edit mode (blank = keep existing encrypted value)
