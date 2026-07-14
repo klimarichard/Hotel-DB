@@ -3,7 +3,8 @@ import type { CSSProperties } from "react";
 import { api, ApiError } from "../lib/api";
 import * as clock from "../lib/clock";
 import { useAuth } from "../hooks/useAuth";
-import { parseShiftExpression, getCellColor, SECTIONS, SECTION_LABELS, getCzechHolidays, MOD_PERSONS, sortSectionEmployees, isPureNumericExpression } from "../lib/shiftConstants";
+import { parseShiftExpression, getCellColor, SECTIONS, SECTION_LABELS, getCzechHolidays, sortSectionEmployees, isPureNumericExpression } from "../lib/shiftConstants";
+import { modLettersByEmployeeId } from "../lib/modPersons";
 import { employeeDisplayName } from "../lib/employeeName";
 import { escapeHtml } from "../lib/escapeHtml";
 import ShiftGrid from "../components/ShiftGrid";
@@ -786,26 +787,8 @@ export default function ShiftPlannerPage() {
       html += `<th style="${cs.header}">\u03a3</th>`;
       html += "</tr>";
 
-      // ── MOD letter per employee (same logic as ShiftGrid) ──
-      const modLetterByEmpId = new Map<string, string>();
-      // Seed from static name-based mapping
-      for (const emp of plan.employees) {
-        const fullName = `${emp.firstName} ${emp.lastName}`;
-        for (const [letter, name] of Object.entries(MOD_PERSONS)) {
-          if (name === fullName) modLetterByEmpId.set(emp.employeeId, letter);
-        }
-      }
-      // Apply per-plan overrides
-      const modPersons = plan.modPersons ?? {};
-      const overriddenLetters = new Set(Object.keys(modPersons));
-      if (overriddenLetters.size > 0) {
-        for (const [empId, letter] of [...modLetterByEmpId.entries()]) {
-          if (overriddenLetters.has(letter)) modLetterByEmpId.delete(empId);
-        }
-        for (const [letter, empId] of Object.entries(modPersons)) {
-          modLetterByEmpId.set(empId, letter);
-        }
-      }
+      // MOD letter per employee - shared with the grid and the CSV export.
+      const modLetterByEmpId = modLettersByEmployeeId(plan.modPersons);
 
       // Section rows
       for (const section of SECTIONS) {
@@ -929,17 +912,11 @@ export default function ShiftPlannerPage() {
     const modMap = new Map<string, string>();
     for (const m of plan.modShifts) modMap.set(m.date, m.code);
 
-    // Resolve MOD letter for a vedoucí employee
-    const modPersonsMap = new Map(Object.entries(plan.modPersons ?? {}));
-    const effectiveModPersons = new Map<string, string>(); // employeeId → letter
-    for (const [letter, empId] of modPersonsMap) effectiveModPersons.set(empId, letter);
-    for (const [letter, fullName] of Object.entries(MOD_PERSONS)) {
-      const emp = plan.employees.find(
-        (e) => e.section === "vedoucí" && !effectiveModPersons.has(e.employeeId) &&
-          `${e.lastName} ${e.firstName}` === fullName
-      );
-      if (emp) effectiveModPersons.set(emp.employeeId, letter);
-    }
+    // MOD letter per employee. Was a second, divergent copy of the grid's logic:
+    // it compared surname-first against a first-name-first table (so it never
+    // matched), and its static pass could hand an already-reassigned letter to a
+    // second employee. Both gone - one helper, keyed by employeeId.
+    const effectiveModPersons = modLettersByEmployeeId(plan.modPersons);
 
     const escape = (v: string) => `"${v.replace(/"/g, '""')}"`;
     const rows: string[] = [];
