@@ -79,6 +79,11 @@
   color: var(--color-text-subtle);
 }
 
+/* Nárok — derived sum of Loňská + Letošní, read-only, lightly emphasized. */
+.derived {
+  font-weight: 600;
+}
+
 .remaining {
   font-weight: 700;
 }
