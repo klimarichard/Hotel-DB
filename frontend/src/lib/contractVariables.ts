@@ -138,6 +138,10 @@ export const COMPARABLE_VARS: { key: string; label: string; type: ComparableType
   { key: "salary", label: "Plat", type: "number" },
   { key: "agreedReward", label: "Odměna DPP", type: "number" },
   { key: "hoursPerWeek", label: "Počet hodin týdně", type: "number" },
+  // Dodatek-derived (populated on "změna smlouvy" contracts).
+  { key: "newEndDate", label: "Nový konec smlouvy", type: "date" },
+  { key: "newSalary", label: "Nová mzda", type: "number" },
+  { key: "newHoursPerWeek", label: "Nový počet hodin týdně", type: "number" },
 ];
 const COMPARABLE_BY_KEY = new Map(COMPARABLE_VARS.map((v) => [v.key, v]));
 
@@ -303,7 +307,6 @@ export const VARIABLE_GROUPS: { group: string; vars: VariableDef[] }[] = [
       { key: "endDate", label: "Datum ukončení" },
       { key: "workLocation", label: "Místo výkonu práce" },
       { key: "hoursPerWeek", label: "Počet hodin týdně (PPP)" },
-      { key: "isHalfTime", label: "Je poloviční úvazek – 20 h/týdně (pro {{#if}} / {{#unless}})", kind: "if" },
       { key: "probationPeriod", label: "Zkušební doba" },
       { key: "signingDate", label: "Datum podpisu" },
       { key: "originalSigningDate", label: "Datum podpisu původní smlouvy" },
@@ -489,10 +492,6 @@ export function resolveVariables(
     agreedWorkScope: str(employee.agreedWorkScope),
     agreedReward: str(employee.agreedReward),
     hoursPerWeek: str(employee.hoursPerWeek),
-    // True only for a standard half-time PPP (exactly 20 h/week). Lets the PPP
-    // template say "poloviční pracovní úvazek" for 20 h and "zkrácený poloviční
-    // úvazek" for any other part-time amount, via {{#if}} / {{#unless}}.
-    isHalfTime: Number(employee.hoursPerWeek) === 20 ? "ano" : "",
     ...(() => {
       const changes = employee.dodatekChanges ?? [];
       const findValue = (kind: string) =>
@@ -560,6 +559,10 @@ export function resolveComparableRaw(
   const d = clock.now();
   const p = (x: number) => String(x).padStart(2, "0");
   const todayIso = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  // Dodatek "changes[]" carry the new values on a "změna smlouvy" contract;
+  // resolve them the same way resolveVariables does, but keep them raw/typed.
+  const changes = employee.dodatekChanges ?? [];
+  const changeVal = (kind: string) => changes.find((c) => c.changeKind === kind)?.value ?? "";
   return {
     startDate: toIsoDate(employee.startDate),
     endDate: toIsoDate(employee.endDate),
@@ -573,6 +576,9 @@ export function resolveComparableRaw(
     salary: toNumber(employee.salary),
     agreedReward: toNumber(employee.agreedReward),
     hoursPerWeek: toNumber(employee.hoursPerWeek),
+    newEndDate: toIsoDate(changeVal("délka smlouvy")),
+    newSalary: toNumber(changeVal("mzda")),
+    newHoursPerWeek: toNumber(changeVal("počet hodin")),
   };
 }
 

@@ -79,9 +79,10 @@ const MOCK_CUSTOM_BY_TYPE: Record<string, string> = {
 /**
  * Raw, typed stand-ins for the comparable variables, used to evaluate a
  * `condition` custom slot in the preview. Mirror the MOCK_TEXT samples above but
- * as ISO dates / plain numbers (what evalCondition compares on).
+ * as ISO dates / plain numbers (what evalCondition compares on). Exported so the
+ * preview panel can seed its editable operand fields from the same values.
  */
-const MOCK_RAW: Record<string, string | number | null> = {
+export const PREVIEW_RAW_DEFAULTS: Record<string, string | number> = {
   startDate: "2026-08-01",
   endDate: "2027-07-31",
   signingDate: "2026-07-14",
@@ -94,6 +95,9 @@ const MOCK_RAW: Record<string, string | number | null> = {
   salary: 35000,
   agreedReward: 180,
   hoursPerWeek: 40,
+  newEndDate: "2027-12-31",
+  newSalary: 38000,
+  newHoursPerWeek: 20,
 };
 
 /** Every permanent variable declared as a conditional ({{#if}} / {{#unless}}). */
@@ -140,9 +144,13 @@ export function usedConditionals(html: string, defs: CustomVarDefs): string[] {
 export function buildPreviewVars(
   html: string,
   defs: CustomVarDefs,
-  bools: Record<string, boolean>
+  bools: Record<string, boolean>,
+  // Editable operand values from the preview panel, layered over the defaults so
+  // the user can drive a condition's comparison and watch it flip.
+  rawOverrides: Record<string, string | number> = {}
 ): Record<string, string> {
   const vars: Record<string, string> = { ...MOCK_TEXT };
+  const raw = { ...PREVIEW_RAW_DEFAULTS, ...rawOverrides };
 
   for (const key of CONDITIONAL_KEYS) vars[key] = bools[key] ? "ano" : "";
 
@@ -160,8 +168,8 @@ export function buildPreviewVars(
       continue;
     }
     if (type === "condition") {
-      // Computed from the comparison against the raw sample values.
-      vars[key] = evalCondition(def?.condition, MOCK_RAW) ? "ano" : "";
+      // Computed from the comparison against the (editable) raw sample values.
+      vars[key] = evalCondition(def?.condition, raw) ? "ano" : "";
       continue;
     }
     const d = def?.default;
@@ -172,6 +180,24 @@ export function buildPreviewVars(
   }
 
   return vars;
+}
+
+/**
+ * Comparable-variable keys that the template's `condition` slots compare on
+ * (left operand + any variable right operand), in slot order. These are the
+ * operands the preview panel offers as editable fields so the user can drive a
+ * condition and watch which branch it keeps.
+ */
+export function usedConditionOperands(html: string, defs: CustomVarDefs): string[] {
+  const keys = new Set<string>();
+  for (const key of referencedKeys(html)) {
+    if (!isCustomVarKey(key)) continue;
+    const def = defs[key];
+    if (def?.type !== "condition" || !def.condition) continue;
+    keys.add(def.condition.leftKey);
+    if (def.condition.right.kind === "var") keys.add(def.condition.right.key);
+  }
+  return [...keys];
 }
 
 /** Conditionals start ON, so the preview opens showing the fuller document. */
