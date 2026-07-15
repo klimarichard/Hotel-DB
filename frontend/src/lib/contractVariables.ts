@@ -97,13 +97,64 @@ export const CUSTOM_VAR_KEYS: string[] = Array.from(
 
 const CUSTOM_VAR_KEY_SET = new Set(CUSTOM_VAR_KEYS);
 
-export type CustomVarType = "text" | "date" | "number" | "bool";
+export type CustomVarType = "text" | "date" | "number" | "bool" | "condition";
 
 export const CUSTOM_VAR_TYPE_LABELS: Record<CustomVarType, string> = {
   text: "Text",
   date: "Datum",
   number: "Číslo",
   bool: "Ano/Ne",
+  condition: "Podmínka",
+};
+
+// ── Derived conditions (a "condition" custom slot) ───────────────────────────
+// A condition slot has no typed value; it is COMPUTED from a comparison of two
+// operands and resolves to "ano" / "" like a bool, so it drives {{#if key}} /
+// {{#unless key}}. Operands are a comparable built-in variable, or a literal of
+// the same type. Comparison is on RAW typed values (ISO dates chronologically,
+// numbers numerically) – never the formatted display strings.
+export type CompareOp = "lt" | "lte" | "gt" | "gte" | "eq" | "neq" | "empty" | "notEmpty";
+export const COMPARE_OP_LABELS: Record<CompareOp, string> = {
+  lt: "<",
+  lte: "≤",
+  gt: ">",
+  gte: "≥",
+  eq: "=",
+  neq: "≠",
+  empty: "je prázdné",
+  notEmpty: "není prázdné",
+};
+/** Operators that test the left operand alone (no right operand needed). */
+export const UNARY_OPS: CompareOp[] = ["empty", "notEmpty"];
+
+export type ComparableType = "date" | "number";
+/** Built-in variables that may take part in a comparison, with their raw type. */
+export const COMPARABLE_VARS: { key: string; label: string; type: ComparableType }[] = [
+  { key: "startDate", label: "Datum nástupu", type: "date" },
+  { key: "endDate", label: "Datum ukončení", type: "date" },
+  { key: "signingDate", label: "Datum podpisu", type: "date" },
+  { key: "originalSigningDate", label: "Datum podpisu původní smlouvy", type: "date" },
+  { key: "birthDate", label: "Datum narození", type: "date" },
+  { key: "dodatekEffectiveDate", label: "Platnost dodatku", type: "date" },
+  { key: "requestedAt", label: "Datum žádosti", type: "date" },
+  { key: "validFrom", label: "Platnost od", type: "date" },
+  { key: "today", label: "Dnešní datum", type: "date" },
+  { key: "salary", label: "Plat", type: "number" },
+  { key: "agreedReward", label: "Odměna DPP", type: "number" },
+  { key: "hoursPerWeek", label: "Počet hodin týdně", type: "number" },
+  // Dodatek-derived (populated on "změna smlouvy" contracts).
+  { key: "newEndDate", label: "Nový konec smlouvy", type: "date" },
+  { key: "newSalary", label: "Nová mzda", type: "number" },
+  { key: "newHoursPerWeek", label: "Nový počet hodin týdně", type: "number" },
+  { key: "oldSalary", label: "Předchozí mzda", type: "number" },
+];
+const COMPARABLE_BY_KEY = new Map(COMPARABLE_VARS.map((v) => [v.key, v]));
+
+/** A comparison definition on a "condition" slot. */
+export type CustomVarCondition = {
+  leftKey: string;
+  op: CompareOp;
+  right: { kind: "var"; key: string } | { kind: "literal"; value: string };
 };
 
 /**
@@ -122,6 +173,8 @@ export interface CustomVarDef {
   label: string;
   type: CustomVarType;
   default?: CustomVarDefault;
+  /** Only for type "condition": the comparison that computes this slot. */
+  condition?: CustomVarCondition;
 }
 
 /** Slot key → its configuration on a given template. Stored on contractTemplates/{id}. */
@@ -220,7 +273,9 @@ export function missingCustomVars(
 ): string[] {
   return usedCustomVars(html).filter((key) => {
     const type = defs[key]?.type ?? "text";
-    if (type === "bool") return false;
+    // bool + condition are never "missing": one is a checkbox, the other is
+    // computed from a comparison – neither is typed in at generation.
+    if (type === "bool" || type === "condition") return false;
     return !(rawValues[key] ?? "").trim();
   });
 }
@@ -257,7 +312,6 @@ export const VARIABLE_GROUPS: { group: string; vars: VariableDef[] }[] = [
       { key: "endDate", label: "Datum ukončení" },
       { key: "workLocation", label: "Místo výkonu práce" },
       { key: "hoursPerWeek", label: "Počet hodin týdně (PPP)" },
-      { key: "isHalfTime", label: "Je poloviční úvazek – 20 h/týdně (pro {{#if}} / {{#unless}})", kind: "if" },
       { key: "probationPeriod", label: "Zkušební doba" },
       { key: "signingDate", label: "Datum podpisu" },
       { key: "originalSigningDate", label: "Datum podpisu původní smlouvy" },
@@ -272,7 +326,6 @@ export const VARIABLE_GROUPS: { group: string; vars: VariableDef[] }[] = [
     vars: [
       { key: "dodatekEffectiveDate", label: "Platnost dodatku" },
       { key: "newSalary", label: "Nová mzda" },
-      { key: "salaryChangeVerb", label: "Sloveso změny mzdy (zvyšuje/mění)" },
       { key: "isDodatekMzda", label: "Je dodatek o mzdě (pro {{#if}})", kind: "if" },
       { key: "newJobTitle", label: "Nová pozice" },
       { key: "isDodatekPozice", label: "Je dodatek o pozici (pro {{#if}})", kind: "if" },
@@ -346,8 +399,9 @@ export interface EmployeeData {
   // dodatekEffectiveDate is raw ISO; resolveVariables formats it.
   dodatekEffectiveDate?: string;
   dodatekChanges?: { changeKind: string; value: string }[];
-  // Salary in force immediately before this dodatek – used to compute
-  // salaryChangeVerb ("zvyšuje" if newSalary > oldSalary, else "mění").
+  // Salary in force immediately before this dodatek – exposed as the comparable
+  // "Předchozí mzda" (oldSalary) so a derived condition can pick the change verb
+  // itself, e.g. {{#if newSalary > oldSalary}}zvyšuje{{/if}}.
   oldSalary?: string | number;
   // Multisport-specific dates – collected by the standalone-contract
   // signing-date prompt. Raw ISO; resolveVariables formats them.
@@ -443,24 +497,12 @@ export function resolveVariables(
     agreedWorkScope: str(employee.agreedWorkScope),
     agreedReward: str(employee.agreedReward),
     hoursPerWeek: str(employee.hoursPerWeek),
-    // True only for a standard half-time PPP (exactly 20 h/week). Lets the PPP
-    // template say "poloviční pracovní úvazek" for 20 h and "zkrácený poloviční
-    // úvazek" for any other part-time amount, via {{#if}} / {{#unless}}.
-    isHalfTime: Number(employee.hoursPerWeek) === 20 ? "ano" : "",
     ...(() => {
       const changes = employee.dodatekChanges ?? [];
       const findValue = (kind: string) =>
         changes.find((c) => c.changeKind === kind)?.value ?? "";
       const has = (kind: string) => changes.some((c) => c.changeKind === kind);
       const newSalaryStr = findValue("mzda");
-      const newSalaryNum = Number(newSalaryStr);
-      const oldSalaryNum = Number(employee.oldSalary);
-      const salaryChangeVerb =
-        Number.isFinite(newSalaryNum) && Number.isFinite(oldSalaryNum)
-          ? newSalaryNum > oldSalaryNum
-            ? "zvyšuje"
-            : "mění"
-          : "";
       return {
         dodatekEffectiveDate: formatDateCZ(employee.dodatekEffectiveDate),
         newSalary: formatSalaryCZ(newSalaryStr),
@@ -468,7 +510,6 @@ export function resolveVariables(
         newWorkScope: str(findValue("úvazek")),
         newHoursPerWeek: str(findValue("počet hodin")),
         newEndDate: formatDateCZ(findValue("délka smlouvy")),
-        salaryChangeVerb,
         isDodatekMzda: has("mzda") ? "ano" : "",
         isDodatekPozice: has("pracovní pozice") ? "ano" : "",
         isDodatekUvazek: has("úvazek") ? "ano" : "",
@@ -488,6 +529,114 @@ export function resolveVariables(
   };
 
   return vars;
+}
+
+/** Coerce a value to an ISO YYYY-MM-DD string, or null if it isn't one. */
+function toIsoDate(v: unknown): string | null {
+  const s = typeof v === "string" ? v.trim() : "";
+  return /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(0, 10) : null;
+}
+/** Coerce a value to a finite number, or null. */
+function toNumber(v: unknown): number | null {
+  if (v === undefined || v === null || v === "") return null;
+  const n = typeof v === "number" ? v : Number(String(v).replace(",", "."));
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Raw, typed values for the comparable built-in variables (COMPARABLE_VARS),
+ * used to evaluate derived conditions. Dates stay ISO YYYY-MM-DD, numbers stay
+ * numbers, missing values are null. Kept parallel to resolveVariables but
+ * UNFORMATTED — comparing the formatted display strings would be meaningless.
+ */
+export function resolveComparableRaw(
+  employee: EmployeeData
+): Record<string, string | number | null> {
+  const d = clock.now();
+  const p = (x: number) => String(x).padStart(2, "0");
+  const todayIso = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  // Dodatek "changes[]" carry the new values on a "změna smlouvy" contract;
+  // resolve them the same way resolveVariables does, but keep them raw/typed.
+  const changes = employee.dodatekChanges ?? [];
+  const changeVal = (kind: string) => changes.find((c) => c.changeKind === kind)?.value ?? "";
+  return {
+    startDate: toIsoDate(employee.startDate),
+    endDate: toIsoDate(employee.endDate),
+    signingDate: toIsoDate(employee.signingDate),
+    originalSigningDate: toIsoDate(employee.originalSigningDate),
+    birthDate: toIsoDate(employee.birthDate),
+    dodatekEffectiveDate: toIsoDate(employee.dodatekEffectiveDate),
+    requestedAt: toIsoDate(employee.requestedAt),
+    validFrom: toIsoDate(employee.validFrom),
+    today: todayIso,
+    salary: toNumber(employee.salary),
+    agreedReward: toNumber(employee.agreedReward),
+    hoursPerWeek: toNumber(employee.hoursPerWeek),
+    newEndDate: toIsoDate(changeVal("délka smlouvy")),
+    newSalary: toNumber(changeVal("mzda")),
+    newHoursPerWeek: toNumber(changeVal("počet hodin")),
+    oldSalary: toNumber(employee.oldSalary),
+  };
+}
+
+/**
+ * Evaluate a derived condition against raw comparable values. Returns false
+ * (block hidden) when the definition is incomplete or either operand is missing
+ * / unparseable — a safe default that never invents a value on a contract. Dates
+ * compare chronologically (ISO strings), numbers numerically. The unary
+ * `empty` / `notEmpty` operators test only whether the left operand has a value
+ * (null / undefined / "" = empty; a real 0 is NOT empty).
+ */
+export function evalCondition(
+  cond: CustomVarCondition | undefined,
+  raw: Record<string, string | number | null>
+): boolean {
+  if (!cond) return false;
+  const leftMeta = COMPARABLE_BY_KEY.get(cond.leftKey);
+  if (!leftMeta) return false;
+
+  if (cond.op === "empty" || cond.op === "notEmpty") {
+    const v = raw[cond.leftKey];
+    const isEmpty = v === null || v === undefined || v === "";
+    return cond.op === "empty" ? isEmpty : !isEmpty;
+  }
+
+  const left = leftMeta.type === "number" ? toNumber(raw[cond.leftKey]) : toIsoDate(raw[cond.leftKey]);
+  let right: string | number | null;
+  if (cond.right.kind === "var") {
+    right = leftMeta.type === "number" ? toNumber(raw[cond.right.key]) : toIsoDate(raw[cond.right.key]);
+  } else {
+    right = leftMeta.type === "number" ? toNumber(cond.right.value) : toIsoDate(cond.right.value);
+  }
+  if (left === null || right === null) return false;
+  const cmp = left < right ? -1 : left > right ? 1 : 0;
+  switch (cond.op) {
+    case "lt": return cmp < 0;
+    case "lte": return cmp <= 0;
+    case "gt": return cmp > 0;
+    case "gte": return cmp >= 0;
+    case "eq": return cmp === 0;
+    case "neq": return cmp !== 0;
+    default: return false;
+  }
+}
+
+/**
+ * Compute the "ano" / "" values for every `condition`-type custom slot the
+ * template uses, given raw comparable values. Merge these into the vars map
+ * before fillTemplate so `{{#if var1}}` / `{{#unless var1}}` resolve.
+ */
+export function resolveConditionVars(
+  html: string,
+  defs: CustomVarDefs,
+  raw: Record<string, string | number | null>
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const key of usedCustomVars(html)) {
+    const def = defs[key];
+    if (def?.type === "condition") out[key] = evalCondition(def.condition, raw) ? "ano" : "";
+  }
+  return out;
 }
 
 // One token: an opener ({{#if x}} / {{#unless x}}) or a closer ({{/if}} / {{/unless}}).

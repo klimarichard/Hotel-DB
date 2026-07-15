@@ -18,6 +18,7 @@ import {
   VARIABLE_GROUPS,
   isCustomVarKey,
   formatCustomValue,
+  evalCondition,
   type CustomVarDefs,
 } from "./contractVariables";
 
@@ -33,7 +34,10 @@ const MOCK_TEXT: Record<string, string> = {
   currentJobTitle: "recepční",
   // Pracovní podmínky
   contractType: "HPP",
-  salary: "35 000 Kč",
+  // Salary is the bare number (formatSalaryCZ → dot thousands-separators, no
+  // "Kč"); the ",- Kč" suffix lives in the template text, so the sample must
+  // match that or the preview misleads (looked like the variable carried "Kč").
+  salary: "35.000",
   startDate: "1. 8. 2026",
   endDate: "31. 7. 2027",
   workLocation: "Praha",
@@ -42,11 +46,11 @@ const MOCK_TEXT: Record<string, string> = {
   signingDate: "14. 7. 2026",
   originalSigningDate: "1. 8. 2025",
   agreedWorkScope: "úklid pokojů",
-  agreedReward: "180 Kč / hod.",
+  // Bare number too (resolveVariables emits the raw value); unit goes in text.
+  agreedReward: "180",
   // Dodatky
   dodatekEffectiveDate: "1. 9. 2026",
-  newSalary: "38 000 Kč",
-  salaryChangeVerb: "zvyšuje",
+  newSalary: "38.000",
   newJobTitle: "vedoucí recepce",
   newWorkScope: "0,5",
   newHoursPerWeek: "20",
@@ -69,6 +73,31 @@ const MOCK_CUSTOM_BY_TYPE: Record<string, string> = {
   text: "ukázkový text",
   date: "1. 8. 2026",
   number: "1 500",
+};
+
+/**
+ * Raw, typed stand-ins for the comparable variables, used to evaluate a
+ * `condition` custom slot in the preview. Mirror the MOCK_TEXT samples above but
+ * as ISO dates / plain numbers (what evalCondition compares on). Exported so the
+ * preview panel can seed its editable operand fields from the same values.
+ */
+export const PREVIEW_RAW_DEFAULTS: Record<string, string | number> = {
+  startDate: "2026-08-01",
+  endDate: "2027-07-31",
+  signingDate: "2026-07-14",
+  originalSigningDate: "2025-08-01",
+  birthDate: "1992-03-14",
+  dodatekEffectiveDate: "2026-09-01",
+  requestedAt: "2026-07-14",
+  validFrom: "2026-08-01",
+  today: "2026-07-14",
+  salary: 35000,
+  agreedReward: 180,
+  hoursPerWeek: 40,
+  newEndDate: "2027-12-31",
+  newSalary: 38000,
+  newHoursPerWeek: 20,
+  oldSalary: 35000,
 };
 
 /** Every permanent variable declared as a conditional ({{#if}} / {{#unless}}). */
@@ -115,9 +144,13 @@ export function usedConditionals(html: string, defs: CustomVarDefs): string[] {
 export function buildPreviewVars(
   html: string,
   defs: CustomVarDefs,
-  bools: Record<string, boolean>
+  bools: Record<string, boolean>,
+  // Editable operand values from the preview panel, layered over the defaults so
+  // the user can drive a condition's comparison and watch it flip.
+  rawOverrides: Record<string, string | number> = {}
 ): Record<string, string> {
   const vars: Record<string, string> = { ...MOCK_TEXT };
+  const raw = { ...PREVIEW_RAW_DEFAULTS, ...rawOverrides };
 
   for (const key of CONDITIONAL_KEYS) vars[key] = bools[key] ? "ano" : "";
 
@@ -134,6 +167,11 @@ export function buildPreviewVars(
       vars[key] = bools[key] ? "ano" : "";
       continue;
     }
+    if (type === "condition") {
+      // Computed from the comparison against the (editable) raw sample values.
+      vars[key] = evalCondition(def?.condition, raw) ? "ano" : "";
+      continue;
+    }
     const d = def?.default;
     let dv = "";
     if (d?.kind === "fixedVar") dv = vars[d.key] ?? "";
@@ -142,6 +180,24 @@ export function buildPreviewVars(
   }
 
   return vars;
+}
+
+/**
+ * Comparable-variable keys that the template's `condition` slots compare on
+ * (left operand + any variable right operand), in slot order. These are the
+ * operands the preview panel offers as editable fields so the user can drive a
+ * condition and watch which branch it keeps.
+ */
+export function usedConditionOperands(html: string, defs: CustomVarDefs): string[] {
+  const keys = new Set<string>();
+  for (const key of referencedKeys(html)) {
+    if (!isCustomVarKey(key)) continue;
+    const def = defs[key];
+    if (def?.type !== "condition" || !def.condition) continue;
+    keys.add(def.condition.leftKey);
+    if (def.condition.right.kind === "var") keys.add(def.condition.right.key);
+  }
+  return [...keys];
 }
 
 /** Conditionals start ON, so the preview opens showing the fuller document. */

@@ -184,9 +184,32 @@ function isValidMargins(m: unknown): m is Margins {
 const CUSTOM_VAR_KEYS = new Set(
   Array.from({ length: 10 }, (_, i) => `var${i + 1}`)
 );
-const CUSTOM_VAR_TYPES = new Set(["text", "date", "number", "bool"]);
+const CUSTOM_VAR_TYPES = new Set(["text", "date", "number", "bool", "condition"]);
+const COMPARE_OPS = new Set(["lt", "lte", "gt", "gte", "eq", "neq", "empty", "notEmpty"]);
+// Unary operators test the left operand alone — no right operand required.
+const UNARY_COMPARE_OPS = new Set(["empty", "notEmpty"]);
 const CUSTOM_VAR_LABEL_MAX = 60;
 const CUSTOM_VAR_DEFAULT_MAX = 200;
+
+/**
+ * Optional derived-condition definition (only meaningful on a "condition" slot):
+ * a comparison { leftKey, op, right?: {kind:"var",key} | {kind:"literal",value} }.
+ * The comparable-variable catalogue lives on the frontend, so keys are only
+ * length-checked here. `empty` / `notEmpty` need no right operand.
+ */
+function isValidCondition(v: unknown): boolean {
+  if (v === undefined) return true;
+  if (!v || typeof v !== "object" || Array.isArray(v)) return false;
+  const c = v as Record<string, unknown>;
+  if (typeof c.leftKey !== "string" || !c.leftKey || c.leftKey.length > CUSTOM_VAR_LABEL_MAX) return false;
+  if (typeof c.op !== "string" || !COMPARE_OPS.has(c.op)) return false;
+  if (UNARY_COMPARE_OPS.has(c.op)) return true;
+  if (!c.right || typeof c.right !== "object") return false;
+  const r = c.right as Record<string, unknown>;
+  if (r.kind === "var") return typeof r.key === "string" && !!r.key && r.key.length <= CUSTOM_VAR_LABEL_MAX;
+  if (r.kind === "literal") return typeof r.value === "string" && r.value.length <= CUSTOM_VAR_DEFAULT_MAX;
+  return false;
+}
 
 /**
  * Optional per-slot default value. Either a literal (raw string) or a reference
@@ -217,7 +240,8 @@ function isValidVariableDefs(v: unknown): boolean {
       d.label.length <= CUSTOM_VAR_LABEL_MAX &&
       typeof d.type === "string" &&
       CUSTOM_VAR_TYPES.has(d.type) &&
-      isValidCustomDefault(d.default)
+      isValidCustomDefault(d.default) &&
+      isValidCondition(d.condition)
     );
   });
 }
