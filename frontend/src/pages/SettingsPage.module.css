@@ -623,6 +623,18 @@
   flex: 0 0 auto;
 }
 
+/* All four "+ Přidat …" buttons share one width so they line up when the
+   collapsed section headers stack vertically (their labels differ in length). */
+.seznamyAction button {
+  min-width: 13rem;
+}
+
+@media (max-width: 559.98px), (orientation: landscape) and (max-height: 480px) {
+  .seznamyAction button {
+    min-width: 0;
+  }
+}
+
 .seznamyBody {
   padding: 1rem;
 }
