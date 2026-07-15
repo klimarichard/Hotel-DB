@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef, useReducer } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, useReducer, Fragment } from "react";
 import Button from "@/components/Button";
 import { useEditor, EditorContent } from "@tiptap/react";
 import { Extension, Node, mergeAttributes } from "@tiptap/core";
@@ -429,6 +429,7 @@ import {
   fillTemplate,
   type CustomVarDefs,
   type CustomVarType,
+  type CustomVarDefault,
 } from "@/lib/contractVariables";
 import {
   buildPreviewVars,
@@ -1897,15 +1898,56 @@ export default function ContractTemplatesPage() {
         // undone) but flagged, so the list can't quietly rot.
         const orphaned = Object.keys(variableDefs).filter((k) => !used.includes(k));
 
-        const setDef = (key: string, patch: Partial<{ label: string; type: CustomVarType }>) => {
-          setVariableDefs((prev) => ({
-            ...prev,
-            [key]: {
-              label: patch.label ?? prev[key]?.label ?? "",
-              type: patch.type ?? prev[key]?.type ?? "text",
-            },
-          }));
+        const setDef = (
+          key: string,
+          patch: Partial<{ label: string; type: CustomVarType; default: CustomVarDefault | undefined }>
+        ) => {
+          setVariableDefs((prev) => {
+            const prevDef = prev[key];
+            // Changing the type can invalidate an existing default (a literal date
+            // for a now-number slot, or a fixed var of the wrong kind), so drop it.
+            const typeChanged = patch.type !== undefined && patch.type !== prevDef?.type;
+            const nextDefault =
+              "default" in patch ? patch.default : typeChanged ? undefined : prevDef?.default;
+            return {
+              ...prev,
+              [key]: {
+                label: patch.label ?? prevDef?.label ?? "",
+                type: patch.type ?? prevDef?.type ?? "text",
+                // Omit when absent so we never persist `default: undefined`.
+                ...(nextDefault ? { default: nextDefault } : {}),
+              },
+            };
+          });
           setIsDirty(true);
+        };
+
+        // Built-in variables offered as a default source, split by kind so a
+        // bool slot only lists the {{#if}} booleans and other slots list the rest.
+        const fixedVarOptions = (type: CustomVarType) => {
+          const wantIf = type === "bool";
+          return VARIABLE_GROUPS.flatMap((g) => g.vars).filter((v) => (v.kind === "if") === wantIf);
+        };
+        // Render the literal-value input matching a slot's type.
+        const renderLiteralDefault = (key: string, type: CustomVarType, value: string) => {
+          const set = (v: string) => setDef(key, { default: { kind: "literal", value: v } });
+          if (type === "bool") {
+            return (
+              <select style={fieldStyle} value={value} onChange={(e) => set(e.target.value)}>
+                <option value="">Ne</option>
+                <option value="true">Ano</option>
+              </select>
+            );
+          }
+          return (
+            <input
+              type={type === "date" ? "date" : type === "number" ? "number" : "text"}
+              style={fieldStyle}
+              value={value}
+              placeholder="Výchozí hodnota"
+              onChange={(e) => set(e.target.value)}
+            />
+          );
         };
 
         const hintStyle = {
@@ -1958,8 +2000,14 @@ export default function ContractTemplatesPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {used.map((key) => (
-                        <tr key={key}>
+                      {used.map((key) => {
+                        const def = variableDefs[key];
+                        const type = def?.type ?? "text";
+                        const dflt = def?.default;
+                        const source = dflt?.kind ?? "none";
+                        return (
+                        <Fragment key={key}>
+                        <tr>
                           <td style={{ padding: "3px 6px 3px 0", whiteSpace: "nowrap" }}>
                             <code style={{ fontSize: "0.75rem" }}>{`{{${key}}}`}</code>
                           </td>
@@ -2025,7 +2073,53 @@ export default function ContractTemplatesPage() {
                             )}
                           </td>
                         </tr>
-                      ))}
+                        {/* Default value: pre-filled (editable) at generation. A
+                            fixed value matching the slot's type, or one of the
+                            built-in variables. */}
+                        <tr>
+                          <td colSpan={4} style={{ padding: "0 0 10px 0" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", paddingLeft: 12, borderLeft: "2px solid var(--color-border)" }}>
+                              <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>
+                                Výchozí hodnota:
+                              </span>
+                              <select
+                                style={{ ...fieldStyle, width: "auto" }}
+                                value={source}
+                                onChange={(e) => {
+                                  const s = e.target.value;
+                                  if (s === "literal") setDef(key, { default: { kind: "literal", value: "" } });
+                                  else if (s === "fixedVar") {
+                                    const opts = fixedVarOptions(type);
+                                    setDef(key, { default: { kind: "fixedVar", key: opts[0]?.key ?? "" } });
+                                  } else setDef(key, { default: undefined });
+                                }}
+                              >
+                                <option value="none">Žádná</option>
+                                <option value="literal">Pevná hodnota</option>
+                                <option value="fixedVar">Z proměnné</option>
+                              </select>
+                              {source === "literal" && (
+                                <div style={{ flex: "1 1 160px", minWidth: 120 }}>
+                                  {renderLiteralDefault(key, type, dflt?.kind === "literal" ? dflt.value : "")}
+                                </div>
+                              )}
+                              {source === "fixedVar" && (
+                                <select
+                                  style={{ ...fieldStyle, width: "auto", flex: "1 1 160px" }}
+                                  value={dflt?.kind === "fixedVar" ? dflt.key : ""}
+                                  onChange={(e) => setDef(key, { default: { kind: "fixedVar", key: e.target.value } })}
+                                >
+                                  {fixedVarOptions(type).map((v) => (
+                                    <option key={v.key} value={v.key}>{v.label}</option>
+                                  ))}
+                                </select>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                        </Fragment>
+                        );
+                      })}
                     </tbody>
                   </table>
                 )}

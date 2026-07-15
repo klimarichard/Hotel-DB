@@ -15,6 +15,14 @@ export interface ContractMeta {
    * underlying row is later edited.
    */
   displayName?: string;
+  /**
+   * Ad-hoc one-step flow: the signing date (and, for Multisport, the request /
+   * validity dates) to persist onto the new contract record, created together
+   * with the PDF in a single call. ISO YYYY-MM-DD.
+   */
+  signingDate?: string;
+  requestedAt?: string;
+  validFrom?: string;
 }
 
 export interface PageMargins {
@@ -83,6 +91,9 @@ export function useContractGeneration() {
     if (meta.notes) body.notes = meta.notes;
     if (meta.rowSnapshot) body.rowSnapshot = meta.rowSnapshot;
     if (meta.displayName) body.displayName = meta.displayName;
+    if (meta.signingDate) body.signingDate = meta.signingDate;
+    if (meta.requestedAt) body.requestedAt = meta.requestedAt;
+    if (meta.validFrom) body.validFrom = meta.validFrom;
 
     const resp = await fetch(`/api/employees/${employeeId}/contracts`, {
       method: "POST",
