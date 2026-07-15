@@ -2,6 +2,8 @@
 
 Implementation notes for the vacation request and approval feature (Phase 6). Covers the `vacationRequests` collection, the pendingEdit edit workflow, shift-collision handling, and how approved vacations surface to employees and admins.
 
+> **Not the vacation-hour balance.** This page covers vacation *requests* (day-off applications and their approval). The separate per-employee, per-year **vacation-hour ledger** (nárok/čerpáno/zůstatek, fed from payroll locks) lives on the employee detail page and is documented in [Employees — Vacation-hour ledger](employees.md#vacation-hour-ledger-v490). The two features don't write to each other: approving a request here does not touch the ledger.
+
 ## Phase 6 — Vacation
 - `vacationRequests` is a top-level collection (not a sub-collection).
 - **pendingEdit pattern**: approved vacation edits store `pendingEdit: { startDate, endDate, reason }` on the doc; original dates stay until admin approves/rejects.

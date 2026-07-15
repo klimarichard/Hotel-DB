@@ -7,6 +7,7 @@ import { requirePermission } from "../auth/permissions";
 import { createOrUpdatePayrollPeriod, getMultisportPrice, recomputeEntryForEmployee } from "../services/payrollCalculator";
 import { nameParts, preferLive, resolveEmployeeNameParts } from "../services/employeeNames";
 import { ctxFromReq, logCreate, logUpdate, logDelete, writeAudit } from "../services/auditLog";
+import { upsertLedgerMonth } from "../services/vacationLedger";
 import * as clock from "../services/clock";
 
 export const payrollRouter = Router();
@@ -745,6 +746,49 @@ payrollRouter.get(
 // ─── PATCH /payroll/periods/:id ───────────────────────────────────────────────
 // Lock/unlock a payroll period (admin only). Locked periods are read-only.
 
+/**
+ * On a period lock, mirror each entry's vacation hours into the per-employee
+ * vacation ledger for the period's month. The effective figure follows the same
+ * precedence the UI shows: manual override → Nemoc auto-override → computed
+ * `vacationHours` (reading the raw field alone would misreport anyone with a
+ * sick-leave cascade). Idempotent: `upsertLedgerMonth` overwrites months[month],
+ * so re-locking or a lock→unlock→lock cycle can't double-count. Best-effort — a
+ * failure here must not block the lock itself. Returns the number of entries fed.
+ */
+async function feedVacationLedgerOnLock(
+  periodRef: admin.firestore.DocumentReference,
+  year: number,
+  month: number,
+  uid: string | null
+): Promise<number> {
+  const entriesSnap = await periodRef.collection("entries").get();
+  let n = 0;
+  for (const d of entriesSnap.docs) {
+    const e = d.data() as {
+      employeeId?: string;
+      vacationHours?: number;
+      overrides?: Record<string, number>;
+      autoOverrides?: Record<string, number>;
+    };
+    const employeeId = e.employeeId ?? d.id;
+    const eff =
+      e.overrides?.vacationHours ??
+      e.autoOverrides?.vacationHours ??
+      e.vacationHours ??
+      0;
+    await upsertLedgerMonth({
+      employeeId,
+      year,
+      month,
+      hours: eff,
+      source: "payroll-lock",
+      updatedBy: uid,
+    });
+    n++;
+  }
+  return n;
+}
+
 payrollRouter.patch(
   "/periods/:id",
   requireAuth,
@@ -780,6 +824,32 @@ payrollRouter.patch(
       before: { locked: before.locked ?? false },
       after: { locked },
     });
+
+    // Feed the vacation ledger only on a genuine unlocked→locked transition, so a
+    // repeated lock (the handler doesn't reject re-locks) doesn't re-run needlessly.
+    const wasLocked = before.locked === true;
+    if (locked && !wasLocked) {
+      const year = Number(before.year);
+      const month = Number(before.month);
+      if (Number.isInteger(year) && Number.isInteger(month)) {
+        try {
+          const n = await feedVacationLedgerOnLock(periodRef, year, month, req.uid ?? null);
+          await writeAudit(ctxFromReq(req), {
+            action: "update",
+            collection: "employees/vacationLedger",
+            resourceId: req.params.id,
+            event: "vacation.ledger.fromPayrollLock",
+            year,
+            month,
+            extra: { source: "payroll-lock", employees: n },
+          });
+        } catch (err) {
+          // Ledger feed is idempotent and re-runnable (unlock→lock) — never fail the lock.
+          console.error("[payroll lock] vacation ledger feed failed:", err);
+        }
+      }
+    }
+
     res.json({ ok: true, locked });
   }
 );

@@ -56,6 +56,7 @@ export const PERMISSION_CATALOG = [
       { key: "employees.delete", label: "Smazat zaměstnance" },
       { key: "employees.export", label: "Exportovat seznam (CSV)" },
       { key: "employees.export.sensitive", label: "Export včetně citlivých údajů" },
+      { key: "employees.vacationBalance.manage", label: "Upravit zůstatek dovolené (po měsících)" },
     ],
   },
   {
@@ -305,6 +306,7 @@ export const BUILTIN_TYPE_PERMISSIONS: Record<BuiltinTypeId, Permission[]> = {
     "nav.alerts.view", "nav.contractTemplates.view", "nav.audit.view",
     "employees.view.all", "employees.create", "employees.edit", "employees.delete",
     "employees.export", "employees.export.sensitive",
+    "employees.vacationBalance.manage",
     "sensitive.reveal",
     "employment.view", "employment.manage",
     "contracts.view", "contracts.generate", "contracts.edit", "contracts.delete", "contracts.sign",

@@ -11,6 +11,7 @@ import { formatPhoneDisplay } from "@/lib/phoneFormat";
 import GenerateContractModal from "@/components/GenerateContractModal";
 import Button from "@/components/Button";
 import IconButton from "@/components/IconButton";
+import VacationLedgerSection from "@/components/VacationLedgerSection";
 import EmploymentSessionCard from "@/components/EmploymentSession";
 import OtherDocumentsTab from "@/components/OtherDocumentsTab";
 import MultisportEditor from "@/components/MultisportEditor";
@@ -1291,6 +1292,7 @@ export default function EmployeeDetailPage() {
   const canDeleteEmployee = can("employees.delete");
   const canManageEmployment = can("employment.manage");
   const canGenerateContracts = can("contracts.generate");
+  const canManageVacationBalance = can("employees.vacationBalance.manage");
   const canExportQuestionnaire = can("employees.view.all") || can("employees.view.nonManagement");
   const canExportTaxDeclaration = can("employment.manage") || can("documents.view");
 
@@ -2172,6 +2174,15 @@ export default function EmployeeDetailPage() {
           </>
         )}
       </Section>
+
+      {/* ── Dovolená (zůstatek hodin) ─────────────────────────────────────────── */}
+      {id && (
+        <Section title="Dovolená" sectionKey="vacation" expanded={expanded.has("vacation")} onToggle={toggle}>
+          {expanded.has("vacation") ? (
+            <VacationLedgerSection employeeId={id} canManage={canManageVacationBalance} />
+          ) : null}
+        </Section>
+      )}
 
       {can("nav.audit.view") && id && (
         <Section title="Historie změn" sectionKey="audit" expanded={expanded.has("audit")} onToggle={toggle}>
