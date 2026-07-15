@@ -33,6 +33,7 @@ import {
   ledgerRef,
   sumConsumed,
   remainingHours,
+  entitlementHours,
   upsertLedgerMonth,
   setLedgerAnnual,
   type LedgerMonth,
@@ -1380,15 +1381,19 @@ employeesRouter.get(
     }
     const data = snap.data() as Record<string, unknown>;
     const months = (data.months as Record<string, LedgerMonth>) ?? {};
-    const entitlementHours = (data.entitlementHours as number | null) ?? null;
+    const priorYearHours = (data.priorYearHours as number | null) ?? null;
+    const currentYearHours = (data.currentYearHours as number | null) ?? null;
     const paidOutHours = (data.paidOutHours as number | null) ?? null;
     res.json({
       year,
-      entitlementHours,
+      priorYearHours,
+      currentYearHours,
+      // Nárok — derived from the two parts, never stored (see vacationLedger.ts).
+      entitlementHours: entitlementHours(priorYearHours, currentYearHours),
       paidOutHours,
       months,
       consumedHours: sumConsumed(months),
-      remainingHours: remainingHours({ entitlementHours, paidOutHours, months }),
+      remainingHours: remainingHours({ priorYearHours, currentYearHours, paidOutHours, months }),
       updatedAt: data.updatedAt ?? null,
       updatedBy: data.updatedBy ?? null,
     });
@@ -1399,8 +1404,10 @@ employeesRouter.get(
  * PATCH /api/employees/:id/vacation-ledger/:year
  * Hand-edit one figure of the ledger (source tagged "manual"). Exactly one of:
  *   { month: 1..12, hours: number|null }   → set/clear that month's čerpáno
- *   { entitlementHours: number|null }       → annual nárok
+ *   { priorYearHours: number|null }         → Loňská (carried-over entitlement)
+ *   { currentYearHours: number|null }       → Letošní (this year's entitlement)
  *   { paidOutHours: number|null }           → proplaceno
+ * Nárok is derived from priorYearHours + currentYearHours and is NOT settable.
  * `hours === null` clears the field. Gated by employees.vacationBalance.manage.
  */
 employeesRouter.patch(
@@ -1414,10 +1421,12 @@ employeesRouter.patch(
     }
     const body = req.body as Record<string, unknown>;
 
-    // Validate an optional hours value: null (clear) or a finite number ≥ 0.
-    const readHours = (v: unknown): number | null | undefined => {
+    // Validate an optional hours value: null (clear) or a finite number. Counts
+    // (čerpáno per month, proplaceno) must be ≥ 0; the entitlement components
+    // (Loňská/Letošní) may be negative — a carried-over deficit is legitimate.
+    const readHours = (v: unknown, allowNegative = false): number | null | undefined => {
       if (v === null) return null;
-      if (typeof v === "number" && Number.isFinite(v) && v >= 0) return v;
+      if (typeof v === "number" && Number.isFinite(v) && (allowNegative || v >= 0)) return v;
       return undefined; // signals "invalid"
     };
 
@@ -1446,9 +1455,19 @@ employeesRouter.patch(
         updatedBy: req.uid ?? null,
       });
       after = { [`months.${month}`]: hours };
-    } else if ("entitlementHours" in body || "paidOutHours" in body) {
-      const field = "entitlementHours" in body ? "entitlementHours" : "paidOutHours";
-      const hours = readHours(body[field]);
+    } else if (
+      "priorYearHours" in body ||
+      "currentYearHours" in body ||
+      "paidOutHours" in body
+    ) {
+      const field =
+        "priorYearHours" in body
+          ? "priorYearHours"
+          : "currentYearHours" in body
+            ? "currentYearHours"
+            : "paidOutHours";
+      // Loňská/Letošní may be negative; proplaceno must be ≥ 0.
+      const hours = readHours(body[field], field !== "paidOutHours");
       if (hours === undefined) {
         res.status(400).json({ error: "Neplatná hodnota hodin." });
         return;
@@ -1462,7 +1481,9 @@ employeesRouter.patch(
       });
       after = { [field]: hours };
     } else {
-      res.status(400).json({ error: "Chybí pole ke změně (month/entitlementHours/paidOutHours)." });
+      res.status(400).json({
+        error: "Chybí pole ke změně (month/priorYearHours/currentYearHours/paidOutHours).",
+      });
       return;
     }
 

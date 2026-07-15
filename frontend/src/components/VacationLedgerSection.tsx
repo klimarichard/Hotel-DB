@@ -25,7 +25,9 @@ interface LedgerMonth {
 
 interface Ledger {
   year: number;
-  entitlementHours: number | null;
+  priorYearHours: number | null;   // Loňská (editable)
+  currentYearHours: number | null; // Letošní (editable)
+  entitlementHours: number | null; // Nárok = prior + current (derived server-side)
   paidOutHours: number | null;
   months: Record<string, LedgerMonth>;
   consumedHours: number;
@@ -40,7 +42,10 @@ function fmtH(n: number | null | undefined): string {
   return `${String(n).replace(".", ",")} h`;
 }
 
-type EditTarget = { kind: "month"; month: number } | { kind: "entitlementHours" };
+type EditTarget =
+  | { kind: "month"; month: number }
+  | { kind: "priorYearHours" }
+  | { kind: "currentYearHours" };
 
 export default function VacationLedgerSection({
   employeeId,
@@ -78,19 +83,29 @@ export default function VacationLedgerSection({
   async function save() {
     if (!edit) return;
     const raw = draft.trim().replace(",", ".");
+    // Loňská/Letošní may be negative (carried-over deficit); months must be ≥ 0.
+    const allowNegative = edit.kind === "priorYearHours" || edit.kind === "currentYearHours";
     let hours: number | null;
     if (raw === "") {
       hours = null; // clear
     } else {
       const n = Number(raw);
-      if (!Number.isFinite(n) || n < 0) {
-        setErrModal("Zadejte nezáporné číslo (počet hodin), nebo nechte prázdné pro smazání.");
+      if (!Number.isFinite(n) || (!allowNegative && n < 0)) {
+        setErrModal(
+          allowNegative
+            ? "Zadejte číslo (počet hodin), nebo nechte prázdné pro smazání."
+            : "Zadejte nezáporné číslo (počet hodin), nebo nechte prázdné pro smazání."
+        );
         return;
       }
       hours = n;
     }
     const body =
-      edit.kind === "month" ? { month: edit.month, hours } : { entitlementHours: hours };
+      edit.kind === "month"
+        ? { month: edit.month, hours }
+        : edit.kind === "priorYearHours"
+          ? { priorYearHours: hours }
+          : { currentYearHours: hours };
     setSaving(true);
     try {
       await api.patch(`/employees/${employeeId}/vacation-ledger/${year}`, body);
@@ -107,6 +122,8 @@ export default function VacationLedgerSection({
     }
   }
 
+  const prior = ledger?.priorYearHours ?? null;
+  const current = ledger?.currentYearHours ?? null;
   const entitlement = ledger?.entitlementHours ?? null;
   const consumed = ledger?.consumedHours ?? 0;
   const remaining = ledger?.remainingHours ?? null;
@@ -151,21 +168,39 @@ export default function VacationLedgerSection({
         <div className={styles.loading}>Načítám…</div>
       ) : (
         <>
-          {/* Nárok / Čerpáno / Zůstatek */}
+          {/* Loňská + Letošní (editable) / Nárok (=součet, jen ke čtení) / Čerpáno / Zůstatek */}
           <div className={styles.summary}>
             <span className={styles.sumItem}>
-              <span className={styles.sumLabel}>Nárok</span>
-              {edit?.kind === "entitlementHours" ? (
+              <span className={styles.sumLabel}>Loňská</span>
+              {edit?.kind === "priorYearHours" ? (
                 editInput
               ) : (
                 <span
                   className={canManage ? styles.editable : undefined}
-                  onDoubleClick={() => startEdit({ kind: "entitlementHours" }, entitlement)}
+                  onDoubleClick={() => startEdit({ kind: "priorYearHours" }, prior)}
                   title={canManage ? "Dvojklik pro úpravu" : undefined}
                 >
-                  {fmtH(entitlement)}
+                  {fmtH(prior)}
                 </span>
               )}
+            </span>
+            <span className={styles.sumItem}>
+              <span className={styles.sumLabel}>Letošní</span>
+              {edit?.kind === "currentYearHours" ? (
+                editInput
+              ) : (
+                <span
+                  className={canManage ? styles.editable : undefined}
+                  onDoubleClick={() => startEdit({ kind: "currentYearHours" }, current)}
+                  title={canManage ? "Dvojklik pro úpravu" : undefined}
+                >
+                  {fmtH(current)}
+                </span>
+              )}
+            </span>
+            <span className={styles.sumItem}>
+              <span className={styles.sumLabel}>Nárok</span>
+              <span className={styles.derived} title="Loňská + Letošní">{fmtH(entitlement)}</span>
             </span>
             <span className={styles.sumItem}>
               <span className={styles.sumLabel}>Čerpáno</span>
