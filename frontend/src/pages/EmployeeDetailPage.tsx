@@ -28,7 +28,7 @@ import { buildContractName } from "@/lib/contractNaming";
 import {
   groupBySession,
   mapContractsToRows,
-  expectedContractTypesForRow,
+  terminationContractType,
   uvazekToContractType,
 } from "@/lib/employmentSessions";
 import { minWageThreshold, formatCzk } from "@/lib/minWage";
@@ -1813,7 +1813,23 @@ export default function EmployeeDetailPage() {
           {employment.length === 0 ? (
             <p className={styles.loading} style={{ padding: "1rem 0" }}>Žádné záznamy.</p>
           ) : (
-            [...groupBySession(employment)].reverse().map((session, idx) => (
+            [...groupBySession(employment)].reverse().map((session, idx) => {
+              // The contract template a row generates. Nástup → by contract type;
+              // Ukončení → probation-aware (DPP first, then in-probation, else
+              // regular) via terminationContractType; Dodatek → zmena_smlouvy.
+              // Shared by the generate action, the row's default type, and the
+              // display name so all three agree.
+              const pickType = (row: EmploymentRow): SmlouvaContractType => {
+                if (row.changeType === "nástup") {
+                  if (row.contractType === "HPP") return "nastup_hpp";
+                  if (row.contractType === "PPP") return "nastup_ppp";
+                  if (row.contractType === "DPP") return "nastup_dpp";
+                  return "";
+                }
+                if (row.changeType === "ukončení") return terminationContractType(session);
+                return "zmena_smlouvy";
+              };
+              return (
               <EmploymentSessionCard
                 key={session.nastup.id}
                 session={session}
@@ -1825,23 +1841,10 @@ export default function EmployeeDetailPage() {
                 defaultExpanded={idx === 0 || id === "tour-demo"}
                 companies={Object.fromEntries(companies.map((c) => [c.id, companyLabel(c)]))}
                 employeeId={id!}
-                resolveDefaultType={(row) => {
-                  if (row.changeType === "nástup") {
-                    if (row.contractType === "HPP") return "nastup_hpp";
-                    if (row.contractType === "PPP") return "nastup_ppp";
-                    if (row.contractType === "DPP") return "nastup_dpp";
-                    return "";
-                  }
-                  if (row.changeType === "ukončení") {
-                    return session.effective.contractType === "DPP"
-                      ? "ukonceni_dpp"
-                      : "ukonceni_hpp_ppp";
-                  }
-                  return "zmena_smlouvy";
-                }}
+                resolveDefaultType={pickType}
                 resolveDisplayName={(row) =>
                   buildContractName(
-                    expectedContractTypesForRow(row)[0] ?? "",
+                    pickType(row),
                     {
                       contractType: row.contractType,
                       startDate: row.startDate,
@@ -1852,13 +1855,13 @@ export default function EmployeeDetailPage() {
                 }
                 resolveRowSnapshot={(row) => buildRowSnapshot(row)}
                 onGenerate={(row) => {
-                  const types = expectedContractTypesForRow(row);
-                  if (types.length > 0) {
+                  const type = pickType(row);
+                  if (type) {
                     setGenerateModal({
                       kind: "row",
                       row,
                       parent: session.nastup,
-                      contractType: types[0] as SmlouvaContractType,
+                      contractType: type,
                     });
                   }
                 }}
@@ -1884,7 +1887,8 @@ export default function EmployeeDetailPage() {
                 }
                 onContractsChanged={refetchContracts}
               />
-            ))
+              );
+            })
           )}
 
           {newEntryMode && (
