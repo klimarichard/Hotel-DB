@@ -78,15 +78,23 @@ function addCalendarDays(start: string, n: number): string {
 /**
  * Compute the probation end-date string from a startDate (YYYY-MM-DD) and
  * a parsed duration. Calendar-correct for months and weeks.
+ *
+ * Returns the LAST day the employee is still in probation (inclusive). Probation
+ * covers the half-open range [start, start + duration), so the last day is
+ * `start + duration − 1 day` — e.g. a 2-month probation from 2026-07-15 runs
+ * through 2026-09-14. This matches the frontend termination-contract rule
+ * (`endDate < start + N months` → still in probation), so the alert's "Konec
+ * zkušební doby" and the auto-selected "Ukončení ve zkušební době" template agree
+ * on the same last day.
  */
 export function computeProbationEndDate(startDate: string, parsed: ParsedDuration): string {
   switch (parsed.unit) {
     case "month":
-      return addCalendarMonths(startDate, parsed.count);
+      return addCalendarDays(addCalendarMonths(startDate, parsed.count), -1);
     case "week":
-      return addCalendarDays(startDate, parsed.count * 7);
+      return addCalendarDays(startDate, parsed.count * 7 - 1);
     case "day":
-      return addCalendarDays(startDate, parsed.count);
+      return addCalendarDays(startDate, parsed.count - 1);
   }
 }
 
