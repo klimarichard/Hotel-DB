@@ -27,6 +27,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "4.9.1",
+    date: "2026-07-15",
+    changes: [
+      "Detail zaměstnance – Dovolená: roční nárok se nově zadává jako dvě samostatné hodnoty, Loňská a Letošní; pole Nárok je jejich automatický součet a nelze ho upravit ručně.",
+    ],
+  },
+  {
     version: "4.9.0",
     date: "2026-07-15",
     changes: [
