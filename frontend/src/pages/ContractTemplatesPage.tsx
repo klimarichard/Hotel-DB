@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef, useReducer, Fragment } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, useReducer } from "react";
 import Button from "@/components/Button";
 import { useEditor, EditorContent } from "@tiptap/react";
 import { Extension, Node, mergeAttributes } from "@tiptap/core";
@@ -1967,7 +1967,7 @@ export default function ContractTemplatesPage() {
 
         return (
           <div className={modalStyles.overlay}>
-            <div className={modalStyles.modal}>
+            <div className={modalStyles.modal} style={{ width: "min(880px, 96vw)", maxWidth: "96vw" }}>
               <div className={modalStyles.header}>
                 <h2 className={modalStyles.title}>Vlastní proměnné</h2>
               </div>
@@ -1979,9 +1979,9 @@ export default function ContractTemplatesPage() {
                   v jiné šabloně jiný význam. Uloží se spolu se šablonou.
                 </p>
                 <p style={hintStyle}>
-                  U typu <strong>Ano/Ne</strong> můžete tlačítky ve sloupci Odstavec
-                  vložit odstavec, který se zobrazí jen když je zaškrtnuto
-                  („Když Ano“), nebo naopak jen když zaškrtnuto není („Když Ne“).
+                  <strong>Výchozí hodnota</strong> se předvyplní (a lze ji upravit)
+                  při generování dokumentu a zobrazí se i v náhledu. Může to být
+                  pevná hodnota, nebo některá ze zabudovaných proměnných (např. Jméno).
                 </p>
 
                 {used.length === 0 ? (
@@ -1995,8 +1995,8 @@ export default function ContractTemplatesPage() {
                       <tr>
                         <th style={{ textAlign: "left", fontSize: "0.75rem", color: "var(--color-text-muted)", padding: "0 6px 4px 0" }}>Proměnná</th>
                         <th style={{ textAlign: "left", fontSize: "0.75rem", color: "var(--color-text-muted)", padding: "0 6px 4px 0" }}>Název (co se zobrazí)</th>
-                        <th style={{ textAlign: "left", fontSize: "0.75rem", color: "var(--color-text-muted)", padding: "0 6px 4px 0" }}>Typ</th>
-                        <th style={{ textAlign: "left", fontSize: "0.75rem", color: "var(--color-text-muted)", padding: "0 0 4px 0" }}>Odstavec</th>
+                        <th style={{ textAlign: "left", fontSize: "0.75rem", color: "var(--color-text-muted)", padding: "0 10px 4px 0" }}>Typ</th>
+                        <th style={{ textAlign: "left", fontSize: "0.75rem", color: "var(--color-text-muted)", padding: "0 0 4px 0" }}>Výchozí hodnota</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -2006,118 +2006,71 @@ export default function ContractTemplatesPage() {
                         const dflt = def?.default;
                         const source = dflt?.kind ?? "none";
                         return (
-                        <Fragment key={key}>
-                        <tr>
-                          <td style={{ padding: "3px 6px 3px 0", whiteSpace: "nowrap" }}>
-                            <code style={{ fontSize: "0.75rem" }}>{`{{${key}}}`}</code>
-                          </td>
-                          <td style={{ padding: "3px 6px 3px 0" }}>
-                            <input
-                              type="text"
-                              style={fieldStyle}
-                              value={variableDefs[key]?.label ?? ""}
-                              placeholder="např. Výše pokuty"
-                              maxLength={60}
-                              onChange={(e) => setDef(key, { label: e.target.value })}
-                            />
-                          </td>
-                          <td style={{ padding: "3px 6px 3px 0" }}>
-                            <select
-                              style={fieldStyle}
-                              value={variableDefs[key]?.type ?? "text"}
-                              onChange={(e) =>
-                                setDef(key, { type: e.target.value as CustomVarType })
-                              }
-                            >
-                              {(Object.keys(CUSTOM_VAR_TYPE_LABELS) as CustomVarType[]).map(
-                                (t) => (
-                                  <option key={t} value={t}>
-                                    {CUSTOM_VAR_TYPE_LABELS[t]}
-                                  </option>
-                                )
-                              )}
-                            </select>
-                          </td>
-                          <td style={{ padding: "3px 0", whiteSpace: "nowrap" }}>
-                            {/* An Ano/Ne slot is the one that can drive a whole
-                                paragraph: #if shows it when ticked, #unless when
-                                not. Offer both, so the pair is discoverable. */}
-                            {(variableDefs[key]?.type ?? "text") === "bool" ? (
-                              <>
-                                <button
-                                  className={styles.varBtn}
-                                  style={{ marginRight: 4 }}
-                                  title={`{{#if ${key}}}…{{/if}} – odstavec se zobrazí, když je zaškrtnuto Ano`}
-                                  onClick={() => {
-                                    insertVariable(key, "if");
-                                    setCustomVarsOpen(false);
-                                  }}
-                                >
-                                  Když Ano
-                                </button>
-                                <button
-                                  className={styles.varBtn}
-                                  title={`{{#unless ${key}}}…{{/unless}} – odstavec se zobrazí, když NENÍ zaškrtnuto`}
-                                  onClick={() => {
-                                    insertVariable(key, "unless");
-                                    setCustomVarsOpen(false);
-                                  }}
-                                >
-                                  Když Ne
-                                </button>
-                              </>
-                            ) : (
-                              <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
-                                –
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                        {/* Default value: pre-filled (editable) at generation. A
-                            fixed value matching the slot's type, or one of the
-                            built-in variables. */}
-                        <tr>
-                          <td colSpan={4} style={{ padding: "0 0 10px 0" }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", paddingLeft: 12, borderLeft: "2px solid var(--color-border)" }}>
-                              <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>
-                                Výchozí hodnota:
-                              </span>
+                          <tr key={key}>
+                            <td style={{ padding: "3px 10px 3px 0", whiteSpace: "nowrap" }}>
+                              <code style={{ fontSize: "0.75rem" }}>{`{{${key}}}`}</code>
+                            </td>
+                            <td style={{ padding: "3px 10px 3px 0" }}>
+                              <input
+                                type="text"
+                                style={fieldStyle}
+                                value={def?.label ?? ""}
+                                placeholder="např. Výše pokuty"
+                                maxLength={60}
+                                onChange={(e) => setDef(key, { label: e.target.value })}
+                              />
+                            </td>
+                            <td style={{ padding: "3px 10px 3px 0", whiteSpace: "nowrap" }}>
                               <select
                                 style={{ ...fieldStyle, width: "auto" }}
-                                value={source}
-                                onChange={(e) => {
-                                  const s = e.target.value;
-                                  if (s === "literal") setDef(key, { default: { kind: "literal", value: "" } });
-                                  else if (s === "fixedVar") {
-                                    const opts = fixedVarOptions(type);
-                                    setDef(key, { default: { kind: "fixedVar", key: opts[0]?.key ?? "" } });
-                                  } else setDef(key, { default: undefined });
-                                }}
+                                value={type}
+                                onChange={(e) => setDef(key, { type: e.target.value as CustomVarType })}
                               >
-                                <option value="none">Žádná</option>
-                                <option value="literal">Pevná hodnota</option>
-                                <option value="fixedVar">Z proměnné</option>
+                                {(Object.keys(CUSTOM_VAR_TYPE_LABELS) as CustomVarType[]).map((t) => (
+                                  <option key={t} value={t}>{CUSTOM_VAR_TYPE_LABELS[t]}</option>
+                                ))}
                               </select>
-                              {source === "literal" && (
-                                <div style={{ flex: "1 1 160px", minWidth: 120 }}>
-                                  {renderLiteralDefault(key, type, dflt?.kind === "literal" ? dflt.value : "")}
-                                </div>
-                              )}
-                              {source === "fixedVar" && (
+                            </td>
+                            {/* Default value: pre-filled (editable) at generation
+                                and shown in the preview. A fixed value matching the
+                                slot's type, or one of the built-in variables. */}
+                            <td style={{ padding: "3px 0" }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                                 <select
-                                  style={{ ...fieldStyle, width: "auto", flex: "1 1 160px" }}
-                                  value={dflt?.kind === "fixedVar" ? dflt.key : ""}
-                                  onChange={(e) => setDef(key, { default: { kind: "fixedVar", key: e.target.value } })}
+                                  style={{ ...fieldStyle, width: "auto", flex: "0 0 auto" }}
+                                  value={source}
+                                  onChange={(e) => {
+                                    const s = e.target.value;
+                                    if (s === "literal") setDef(key, { default: { kind: "literal", value: "" } });
+                                    else if (s === "fixedVar") {
+                                      const opts = fixedVarOptions(type);
+                                      setDef(key, { default: { kind: "fixedVar", key: opts[0]?.key ?? "" } });
+                                    } else setDef(key, { default: undefined });
+                                  }}
                                 >
-                                  {fixedVarOptions(type).map((v) => (
-                                    <option key={v.key} value={v.key}>{v.label}</option>
-                                  ))}
+                                  <option value="none">Žádná</option>
+                                  <option value="literal">Pevná hodnota</option>
+                                  <option value="fixedVar">Z proměnné</option>
                                 </select>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                        </Fragment>
+                                {source === "literal" && (
+                                  <div style={{ flex: "1 1 auto", minWidth: 0 }}>
+                                    {renderLiteralDefault(key, type, dflt?.kind === "literal" ? dflt.value : "")}
+                                  </div>
+                                )}
+                                {source === "fixedVar" && (
+                                  <select
+                                    style={{ ...fieldStyle, width: "auto", flex: "1 1 auto", minWidth: 0 }}
+                                    value={dflt?.kind === "fixedVar" ? dflt.key : ""}
+                                    onChange={(e) => setDef(key, { default: { kind: "fixedVar", key: e.target.value } })}
+                                  >
+                                    {fixedVarOptions(type).map((v) => (
+                                      <option key={v.key} value={v.key}>{v.label}</option>
+                                    ))}
+                                  </select>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
                         );
                       })}
                     </tbody>
