@@ -439,6 +439,8 @@ import {
   buildPreviewVars,
   defaultBools,
   usedConditionals,
+  usedConditionOperands,
+  PREVIEW_RAW_DEFAULTS,
   CONDITIONAL_LABELS,
 } from "@/lib/templatePreview";
 import { formatTimestampCZ } from "@/lib/dateFormat";
@@ -589,6 +591,10 @@ export default function ContractTemplatesPage() {
   // renders the document as it will actually print, with sample data.
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewBools, setPreviewBools] = useState<Record<string, boolean>>({});
+  // Editable operand values for derived conditions in the preview (ISO date /
+  // number strings), keyed by comparable-variable key. Seeded from the sample
+  // defaults; lets the user drive a condition and watch which branch it keeps.
+  const [previewRaw, setPreviewRaw] = useState<Record<string, string>>({});
   const [pdfPreviewLoading, setPdfPreviewLoading] = useState(false);
   // The PDF preview goes through the same endpoint that generates real contracts,
   // which is gated on contracts.generate. A template editor without it still gets
@@ -681,19 +687,37 @@ export default function ContractTemplatesPage() {
     return usedConditionals(editor.getHTML(), variableDefs);
   }, [previewOpen, editor, variableDefs, editorDoc]);
 
+  /** Comparable operands the template's derived conditions compare on – shown as
+   *  editable fields so the user can drive each condition in the preview. */
+  const previewOperands = useMemo(() => {
+    if (!previewOpen || !editor) return [];
+    const keys = usedConditionOperands(editor.getHTML(), variableDefs);
+    return keys
+      .map((k) => COMPARABLE_VARS.find((v) => v.key === k))
+      .filter((v): v is (typeof COMPARABLE_VARS)[number] => !!v);
+  }, [previewOpen, editor, variableDefs, editorDoc]);
+
   /** The document as it will print: variables filled, conditionals resolved. */
   const previewHtml = useMemo(() => {
     if (!previewOpen || !editor) return "";
     const html = editor.getHTML();
-    return fillTemplate(html, buildPreviewVars(html, variableDefs, previewBools));
-  }, [previewOpen, editor, variableDefs, previewBools, editorDoc]);
+    return fillTemplate(html, buildPreviewVars(html, variableDefs, previewBools, previewRaw));
+  }, [previewOpen, editor, variableDefs, previewBools, previewRaw, editorDoc]);
 
   function openPreview() {
     if (!editor) return;
-    const keys = usedConditionals(editor.getHTML(), variableDefs);
+    const html = editor.getHTML();
+    const keys = usedConditionals(html, variableDefs);
     // Seed any conditional we don't have state for yet, keeping the ones already
     // flipped this session.
     setPreviewBools((prev) => ({ ...defaultBools(keys), ...prev }));
+    // Seed condition operands from the sample defaults (keep any already edited).
+    const opKeys = usedConditionOperands(html, variableDefs);
+    setPreviewRaw((prev) => {
+      const next = { ...prev };
+      for (const k of opKeys) if (!(k in next)) next[k] = String(PREVIEW_RAW_DEFAULTS[k] ?? "");
+      return next;
+    });
     setPreviewOpen(true);
   }
 
@@ -708,7 +732,7 @@ export default function ContractTemplatesPage() {
     setPdfPreviewLoading(true);
     try {
       const html = editor.getHTML();
-      const filled = fillTemplate(html, buildPreviewVars(html, variableDefs, previewBools));
+      const filled = fillTemplate(html, buildPreviewVars(html, variableDefs, previewBools, previewRaw));
       const token = await user.getIdToken();
       const resp = await fetch("/api/contracts/render-pdf", {
         method: "POST",
@@ -1778,7 +1802,7 @@ export default function ContractTemplatesPage() {
           {previewOpen && (
             <div className={styles.previewBar}>
               <span className={styles.previewBarTitle}>Náhled s ukázkovými daty</span>
-              {previewConditionals.length === 0 ? (
+              {previewConditionals.length === 0 && previewOperands.length === 0 ? (
                 <span className={styles.previewBarHint}>
                   Tato šablona nepoužívá žádné podmínkové proměnné.
                 </span>
@@ -1796,6 +1820,32 @@ export default function ContractTemplatesPage() {
                   </label>
                 ))
               )}
+              {/* Editable operand values so a derived condition can be driven in
+                  the preview (e.g. push a date past a cutoff and watch it flip). */}
+              {previewOperands.map((op) => (
+                <label
+                  key={op.key}
+                  className={styles.previewToggle}
+                  title="Hodnota pro vyhodnocení podmínky v náhledu"
+                >
+                  {op.label}:
+                  <input
+                    type={op.type === "date" ? "date" : "number"}
+                    value={previewRaw[op.key] ?? ""}
+                    onChange={(e) => setPreviewRaw((p) => ({ ...p, [op.key]: e.target.value }))}
+                    style={{
+                      marginLeft: 4,
+                      padding: "2px 4px",
+                      fontSize: "0.8125rem",
+                      border: "1px solid var(--color-border)",
+                      borderRadius: 4,
+                      background: "var(--color-surface)",
+                      color: "var(--color-text)",
+                      width: op.type === "date" ? 130 : 80,
+                    }}
+                  />
+                </label>
+              ))}
               {canPreviewPdf && (
                 <button
                   type="button"
