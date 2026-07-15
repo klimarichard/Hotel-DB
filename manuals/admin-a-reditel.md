@@ -346,6 +346,7 @@ Stránka **Šablony smluv** obsahuje editor ve stylu Wordu (TipTap): formátová
 V panelu nástrojů editoru najdete tlačítko **👁 Náhled**. Přepne dokument do zobrazení s **ukázkovými daty** – proměnné (jméno, mzda, datum…) se vyplní smyšlenými hodnotami a podmíněné odstavce se vyhodnotí, takže v textu už nejsou vidět značky jako `{{firstName}}` nebo `{{#if isCzech}}`. Teprve v tomto zobrazení jde spolehlivě posoudit, jak budou v hotové smlouvě vypadat zarovnané tabulátory a zalomení řádků a stránek.
 
 - Nad náhledem se objeví lišta se **zaškrtávátky** – jedno pro každou podmínkovou proměnnou, kterou daná šablona používá (např. *Je Čech*, *Je muž*, *Má zkušební dobu*). Zaškrtáváním a odškrtáváním si zobrazíte obě varianty textu, tedy i tu, která by se jinak ukázala jen některým zaměstnancům.
+- Používá-li šablona vlastní proměnnou typu **Podmínka** (viz [Vlastní proměnné](#vlastní-proměnné) níže), objeví se ve stejné liště navíc **pole s hodnotami**, ze kterých se daná podmínka počítá (např. *Datum podpisu* a *Datum nástupu*). Přepsáním hodnoty rovnou uvidíte, který ze dvou odstavců se v takovém případě do smlouvy propíše.
 - Tlačítko **Náhled PDF** vygeneruje dokument úplně stejným způsobem, jakým vzniká skutečná smlouva, a otevře ho jako PDF. Náhled přímo v editoru je jen přibližný – vykresluje ho prohlížeč – zatímco náhled PDF je přesný. Chcete-li si na jistotu ověřit zarovnání tabulátorů a zalomení stránek, použijte právě **Náhled PDF**.
 - Náhled slouží jen ke čtení – nic v šabloně neupravuje. Úpravy proveďte v běžném režimu editoru a znovu uložte tlačítkem **Uložit**.
 
@@ -393,8 +394,8 @@ Kromě předdefinovaných proměnných (jméno, mzda, datum…) má každá šab
 2. Kliknutím na některé z nich (např. **var1**) jej vložíte do textu šablony na místo kurzoru – stejně jako u ostatních proměnných.
 3. Tlačítkem **⚙ Nastavit…** otevřete okno se seznamem vlastních proměnných, které jsou v šabloně skutečně použité. U každé vyplníte:
    - **Název** – text, který se zobrazí při vyplňování hodnoty během generování dokumentu (např. „Výše pokuty").
-   - **Typ** – **Text**, **Datum**, **Číslo**, nebo **Ano/Ne**.
-   - **Výchozí hodnota** – nepovinné. Určíte, čím se má pole při generování dokumentu **předvyplnit**, výběrem jednoho ze tří zdrojů:
+   - **Typ** – **Text**, **Datum**, **Číslo**, **Ano/Ne**, nebo **Podmínka** (viz [Podmínka – odvozená proměnná](#podmínka--odvozená-proměnná) níže).
+   - **Výchozí hodnota** – nepovinné. Platí jen pro typy **Text**, **Datum**, **Číslo** a **Ano/Ne** – u typu **Podmínka** se místo ní nastavuje porovnání (viz dále). Určíte, čím se má pole při generování dokumentu **předvyplnit**, výběrem jednoho ze tří zdrojů:
      - **Žádná** – pole zůstane prázdné (výchozí stav, jako dosud).
      - **Pevná hodnota** – napíšete konkrétní text, který se má předvyplňovat pokaždé (např. „Praha").
      - **Z proměnné** – vyberete některou ze zabudovaných proměnných šablony (např. **Jméno**), jejíž aktuální hodnota zaměstnance se do pole automaticky doplní.
@@ -438,6 +439,34 @@ Proměnná typu **Ano/Ne** umí řídit, **který z dvojice odstavců se do smlo
 Při generování pak stačí políčko zaškrtnout, nebo nechat prázdné – do hotového PDF se propíše **vždy právě jeden** z těch dvou odstavců, ten druhý zmizí beze stopy. Jedna šablona tak pokryje obě situace a nemusíte mít dvě téměř stejné šablony.
 
 > 💡 **Tip:** oba bloky nemusíte používat v páru – klidně vložte jen `{{#if var1}} … {{/if}}` (odstavec, který se za určitých okolností přidá), nebo jen `{{#unless var1}} … {{/unless}}`.
+
+#### Podmínka – odvozená proměnná
+
+Proměnná typu **Podmínka** funguje jako **Ano/Ne**, ale hodnotu nezadává ten, kdo dokument generuje – aplikace si ji sama **dopočítá porovnáním dvou hodnot** podle pravidla, které jednou nastavíte v šabloně. Hodí se všude tam, kde to, jestli se má odstavec zobrazit, závisí na vztahu mezi dvěma údaji zaměstnance (např. jestli je jedno datum dřív než druhé, nebo jestli je nová mzda vyšší než ta předchozí) – nemusíte se pak spoléhat na to, že si to člověk generující smlouvu správně vybere ručně.
+
+**Nastavení porovnání**
+
+1. V okně **⚙ Nastavit…** zvolte u dané proměnné jako **Typ** hodnotu **Podmínka**. Místo pole „Výchozí hodnota" se objeví **řádek pro sestavení porovnání**.
+2. V prvním rozbalovacím poli vyberete **levou proměnnou** – nabízí se zabudované proměnné s datem (Datum nástupu, Datum podpisu, Datum ukončení, Platnost dodatku, Nový konec smlouvy…) a s číslem (Plat, Nová mzda, Předchozí mzda, Počet hodin týdně…).
+3. Ve druhém poli vyberete **operátor**: **<** (menší), **≤** (menší nebo rovno), **>** (větší), **≥** (větší nebo rovno), **=** (rovná se), **≠** (nerovná se), nebo jeden ze dvou operátorů bez pravé strany – **„je prázdné"** a **„není prázdné"**.
+4. Pokud operátor pravou stranu potřebuje, vyberete ještě, čím se má levá proměnná porovnávat:
+   - **Proměnná** – jiná zabudovaná proměnná stejného druhu (datum s datem, číslo s číslem).
+   - **Hodnota** – pevné datum nebo číslo, které napíšete ručně.
+5. Nastavení uložíte společně se šablonou tlačítkem **Uložit**, stejně jako u ostatních proměnných.
+
+Výsledná hodnota (Ano/Ne) se v textu šablony používá **úplně stejně** jako u proměnné typu Ano/Ne – v blocích `{{#if var1}}…{{/if}}` / `{{#unless var1}}…{{/unless}}` (viz předchozí kapitola).
+
+**Příklady**
+
+- **„Datum podpisu < Datum nástupu"** – odstavec platný jen tehdy, když se smlouva podepisuje dřív, než zaměstnanec nastoupí.
+- **„Nová mzda > Předchozí mzda"** – rozhodne, jestli se má do dodatku vypsat, že se mzda zvyšuje, nebo že se jen mění.
+- **„Nový konec smlouvy je prázdné"** – vyhodnotí se jako Ano, pokud dodatek nemá vyplněné nové datum ukončení, tedy jde o smlouvu na dobu neurčitou.
+
+> 📝 Proměnná typu Podmínka se při generování dokumentu **nikde nevyplňuje ručně** a nepočítá se ani do červeného seznamu nevyplněných polí – hodnotu si aplikace vždy dopočítá sama z aktuálních údajů zaměstnance.
+
+> 💡 V **👁 Náhledu** šablony (viz [Náhled šablony](#náhled-šablony) výše) se u každé použité proměnné typu Podmínka zobrazí pole s hodnotami, ze kterých se počítá – jejich přepsáním hned uvidíte, který ze dvou odstavců se použije, aniž byste museli generovat zkušební dokument.
+
+> 📝 Dřív existovaly pro podobné případy pevné zabudované proměnné (např. pro poloviční úvazek nebo pro rozlišení, zda mzda roste nebo klesá). Tyto pevné proměnné byly odstraněny – stejné chování si teď nastavíte sami jako vlastní proměnnou typu **Podmínka**, s libovolným porovnáním podle potřeby dané šablony.
 
 ---
 
