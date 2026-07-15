@@ -186,6 +186,25 @@ const CUSTOM_VAR_KEYS = new Set(
 );
 const CUSTOM_VAR_TYPES = new Set(["text", "date", "number", "bool"]);
 const CUSTOM_VAR_LABEL_MAX = 60;
+const CUSTOM_VAR_DEFAULT_MAX = 200;
+
+/**
+ * Optional per-slot default value. Either a literal (raw string) or a reference
+ * to a built-in fixed variable by key. Absent = no default. The fixed-variable
+ * catalogue lives only on the frontend, so the key is only length-checked here.
+ */
+function isValidCustomDefault(v: unknown): boolean {
+  if (v === undefined) return true;
+  if (!v || typeof v !== "object" || Array.isArray(v)) return false;
+  const d = v as Record<string, unknown>;
+  if (d.kind === "literal") {
+    return typeof d.value === "string" && d.value.length <= CUSTOM_VAR_DEFAULT_MAX;
+  }
+  if (d.kind === "fixedVar") {
+    return typeof d.key === "string" && d.key.length > 0 && d.key.length <= CUSTOM_VAR_LABEL_MAX;
+  }
+  return false;
+}
 
 function isValidVariableDefs(v: unknown): boolean {
   if (!v || typeof v !== "object" || Array.isArray(v)) return false;
@@ -197,7 +216,8 @@ function isValidVariableDefs(v: unknown): boolean {
       typeof d.label === "string" &&
       d.label.length <= CUSTOM_VAR_LABEL_MAX &&
       typeof d.type === "string" &&
-      CUSTOM_VAR_TYPES.has(d.type)
+      CUSTOM_VAR_TYPES.has(d.type) &&
+      isValidCustomDefault(d.default)
     );
   });
 }
