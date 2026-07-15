@@ -9,8 +9,15 @@ import TourOverlay from "@/components/TourOverlay";
 interface OnboardingContextValue {
   activeTour: TourDefinition | null;
   stepIndex: number;
-  /** Start (or replay) the permission-filtered tour, ignoring the seen flag. */
-  startTour: () => void;
+  /**
+   * Start (or replay) the permission-filtered tour, ignoring the seen flag.
+   * Pass `atStep` to jump straight to a step index (used by the Nápověda page's
+   * clickable step list). When `atStep` is given the tour is built with the same
+   * default context `buildAppTour(can)` that the Nápověda list uses, so the index
+   * is guaranteed to line up; the no-arg call keeps the real viewport/employee
+   * context for the full replay.
+   */
+  startTour: (atStep?: number) => void;
   next: () => void;
   prev: () => void;
   /** Jump directly to a step index (clamped). Used by the section-jump buttons. */
@@ -111,11 +118,22 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   );
 
   // Manual replay (from Nápověda) – ALWAYS the full tour filtered to this user's
-  // permissions, regardless of what they've already seen.
-  const startTour = useCallback(() => {
-    setStepIndex(0);
-    setActiveTour(buildAppTour(can, { hasEmployee: !!employeeId, isPhone: isPhoneViewport() }));
-  }, [can, employeeId]);
+  // permissions, regardless of what they've already seen. `atStep` jumps directly
+  // to a step (Nápověda's clickable list): it rebuilds with the SAME no-context
+  // `buildAppTour(can)` call the Nápověda page uses to derive its indices, so the
+  // index always resolves to the intended step. Setting stepIndex + activeTour in
+  // one pass means the overlay mounts already on the target step (no flash of 0).
+  const startTour = useCallback(
+    (atStep?: number) => {
+      const tour =
+        atStep === undefined
+          ? buildAppTour(can, { hasEmployee: !!employeeId, isPhone: isPhoneViewport() })
+          : buildAppTour(can);
+      setStepIndex(atStep === undefined ? 0 : Math.max(0, Math.min(atStep, tour.steps.length - 1)));
+      setActiveTour(tour);
+    },
+    [can, employeeId]
+  );
 
   // Auto-start once per session, after the landing redirect resolves to a real
   // page. Gated on `loading` so it never fires before /auth/me resolves (see
