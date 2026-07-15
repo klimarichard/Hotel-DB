@@ -6,7 +6,9 @@ This document describes the Firestore data model (top-level collections, sub-col
 
 **Top-level collections:** `employees`, `users`, `roleTypes`, `companies`, `jobPositions`, `departments`, `educationLevels`, `alerts`, `notifications`, `shiftPlans`, `vacationRequests`, `payrollPeriods`, `auditLog`, `hotels`, `handoverWarnings`, `settings`
 
-**Sub-collections under `employees/{id}`:** `documents`, `contact`, `employment`, `benefits`, `contracts`
+**Sub-collections under `employees/{id}`:** `documents`, `contact`, `employment`, `benefits`, `contracts`, `otherDocuments`, `vacationLedger`
+
+`vacationLedger/{year}` is the per-employee, per-calendar-year vacation-hour balance (nárok/čerpáno/zůstatek in hours, month-indexed, sourced from an AVENSIO seed / payroll locks / manual edits) — see [Employees — Vacation-hour ledger](employees.md#vacation-hour-ledger-v490). Not to be confused with the top-level `vacationRequests` collection (day-off applications, see [Vacation](vacation.md)).
 
 **Sub-collections under `hotels/{hotelSlug}`** (Recepce; `hotelSlug` ∈ `ambiance`, `superior`, `amigo-alqush`, `ankora` — see [Recepce](recepce.md)):
 
