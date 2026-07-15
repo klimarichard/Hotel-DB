@@ -6,6 +6,11 @@
   align-items: flex-start;
 }
 
+/* Table stretches to the section width even though other rows hug the left. */
+.wrap > .tableScroll {
+  align-self: stretch;
+}
+
 .loading {
   padding: 0.5rem 0;
   color: var(--color-text-muted);
@@ -84,13 +89,16 @@
 
 /* Two-row month table */
 .tableScroll {
+  width: 100%;
   max-width: 100%;
   overflow-x: auto;
 }
 
 .monthTable {
+  width: 100%;
   border-collapse: collapse;
   font-size: 0.85rem;
+  table-layout: fixed;
 }
 
 .monthHead,
@@ -98,7 +106,7 @@
   border: 1px solid var(--color-border-subtle);
   text-align: center;
   min-width: 2.4rem;
-  padding: 0.3rem 0.4rem;
+  padding: 0.35rem 0.4rem;
 }
 
 .monthHeadRow .monthHead {
@@ -109,6 +117,18 @@
 }
 
 .monthCell {
+  color: var(--color-text-heading);
+}
+
+/* CELKEM — derived total column, slightly wider + emphasized. */
+.totalHead,
+.totalCell {
+  width: 4.5rem;
+  border-left: 2px solid var(--color-border-strong);
+}
+
+.totalCell {
+  font-weight: 700;
   color: var(--color-text-heading);
 }
 
