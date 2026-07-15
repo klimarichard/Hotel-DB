@@ -1330,6 +1330,8 @@ export default function EmployeeDetailPage() {
         contractType: SmlouvaContractType;
       }
     | {
+        // Ad-hoc row-first: attach a PDF to an EXISTING PDF-less record (created
+        // by the old two-step flow; such rows may still exist).
         kind: "adhoc";
         contractId: string;
         contractType: SmlouvaContractType;
@@ -1337,16 +1339,16 @@ export default function EmployeeDetailPage() {
         requestedAt?: string;
         validFrom?: string;
       }
+    | {
+        // Ad-hoc one-step: pick a template, then the modal collects the signing
+        // date + variables and creates the record WITH the PDF in one go.
+        kind: "adhoc-new";
+        contractType: SmlouvaContractType;
+      }
     | null
   >(null);
-  // Adhoc-dropdown state – listing built-in standalone types + custom ones,
-  // and the small signing-date prompt that appears between dropdown click
-  // and GenerateContractModal opening.
+  // Adhoc-dropdown state – listing built-in standalone types + custom ones.
   const [adhocDropdownOpen, setAdhocDropdownOpen] = useState(false);
-  const [signingDatePrompt, setSigningDatePrompt] = useState<SmlouvaContractType | null>(null);
-  const [signingDateDraft, setSigningDateDraft] = useState<string>("");
-  const [requestedAtDraft, setRequestedAtDraft] = useState<string>("");
-  const [validFromDraft, setValidFromDraft] = useState<string>("");
   const [customStandalone, setCustomStandalone] = useState<{ id: string; name: string }[]>([]);
   // Ids of built-in standalone templates (multisport / hmotná odpovědnost) that
   // have been deactivated – filtered out of the "+ Adhoc dokument" picker so you
@@ -1505,46 +1507,6 @@ export default function EmployeeDetailPage() {
     }
   }
 
-  /**
-   * Create an ad-hoc document ROW (no PDF). Mirrors how employment-history
-   * entries work: add the row first, generate the contract later. The
-   * signing date (and Multisport request/validity dates) are persisted so
-   * the row displays the signing date and a later "Generovat" can fill the
-   * template. See TODO_BIG #6.
-   */
-  async function addAdhocRow(
-    type: SmlouvaContractType,
-    signingDate: string,
-    requestedAt?: string,
-    validFrom?: string
-  ) {
-    if (!id || !employee) return;
-    const displayName = buildContractName(
-      type,
-      undefined,
-      `${employee.firstName ?? ""} ${employee.lastName ?? ""}`.trim(),
-      customStandalone.find((t) => t.id === type)?.name
-    );
-    try {
-      await api.post(`/employees/${id}/contracts`, {
-        type,
-        status: "unsigned",
-        displayName,
-        signingDate,
-        ...(requestedAt ? { requestedAt } : {}),
-        ...(validFrom ? { validFrom } : {}),
-      });
-      await refetchContracts();
-    } catch {
-      setConfirmModal({
-        title: "Chyba",
-        message: "Nepodařilo se přidat dokument.",
-        confirmLabel: "OK",
-        showCancel: false,
-        onConfirm: () => setConfirmModal(null),
-      });
-    }
-  }
 
   /**
    * Delete an employment row. The backend cascades to the whole session
@@ -2055,11 +2017,13 @@ export default function EmployeeDetailPage() {
                           key={entry.id}
                           className={styles.generateDropdownItem}
                           onClick={() => {
-                            const today = clock.today();
-                            setSigningDatePrompt(entry.id);
-                            setSigningDateDraft(today);
-                            setRequestedAtDraft(today);
-                            setValidFromDraft(today);
+                            // One-step: open the generate modal directly; it
+                            // collects the signing date + variables and creates
+                            // the record with the PDF in a single call.
+                            setGenerateModal({
+                              kind: "adhoc-new",
+                              contractType: entry.id as SmlouvaContractType,
+                            });
                             setAdhocDropdownOpen(false);
                           }}
                         >
@@ -2074,104 +2038,6 @@ export default function EmployeeDetailPage() {
           />
       )}
 
-      {/* Ad-hoc signing-date prompt. Page level (not inside the Další dokumenty
-          block) so it sits next to the GenerateContractModal it feeds. */}
-      {signingDatePrompt && (() => {
-        const isMultisport = signingDatePrompt === "multisport";
-        const promptLabel =
-          CONTRACT_TYPE_LABELS[signingDatePrompt] ??
-          customStandalone.find((t) => t.id === signingDatePrompt)?.name ??
-          signingDatePrompt;
-        const dateInputStyle: React.CSSProperties = {
-          width: "100%",
-          padding: "8px 10px",
-          fontSize: "0.875rem",
-          border: "1px solid var(--color-border)",
-          borderRadius: "6px",
-          background: "var(--color-surface)",
-          color: "var(--color-text)",
-        };
-        const labelStyle: React.CSSProperties = {
-          display: "block",
-          fontSize: "0.8125rem",
-          fontWeight: 500,
-          color: "var(--color-text-secondary)",
-          marginBottom: "4px",
-        };
-        const fieldStyle: React.CSSProperties = { marginBottom: "12px" };
-        const canContinue =
-          !!signingDateDraft && (!isMultisport || (!!requestedAtDraft && !!validFromDraft));
-        return (
-          <div className={modalStyles.overlay}>
-            <div className={modalStyles.modal}>
-              <div className={modalStyles.header}>
-                <h2 className={modalStyles.title}>{promptLabel}</h2>
-              </div>
-              <div className={modalStyles.body}>
-                <div style={fieldStyle}>
-                  <label style={labelStyle}>Datum podpisu</label>
-                  <input
-                    type="date"
-                    value={signingDateDraft}
-                    onChange={(e) => setSigningDateDraft(e.target.value)}
-                    autoFocus
-                    style={dateInputStyle}
-                  />
-                </div>
-                {isMultisport && (
-                  <>
-                    <div style={fieldStyle}>
-                      <label style={labelStyle}>Datum žádosti</label>
-                      <input
-                        type="date"
-                        value={requestedAtDraft}
-                        onChange={(e) => setRequestedAtDraft(e.target.value)}
-                        style={dateInputStyle}
-                      />
-                    </div>
-                    <div style={{ ...fieldStyle, marginBottom: 0 }}>
-                      <label style={labelStyle}>Platnost od</label>
-                      <input
-                        type="date"
-                        value={validFromDraft}
-                        onChange={(e) => setValidFromDraft(e.target.value)}
-                        style={dateInputStyle}
-                      />
-                    </div>
-                  </>
-                )}
-                {isMultisport && isDateAfter(signingDateDraft, validFromDraft) && (
-                  <div className={styles.modalWarning} style={{ marginTop: "12px" }}>
-                    Upozornění: datum podpisu je pozdější než datum platnosti
-                    ({formatDateCZ(validFromDraft)}). Zkontrolujte prosím správnost.
-                  </div>
-                )}
-              </div>
-              <div className={modalStyles.footer}>
-                <Button variant="secondary" onClick={() => setSigningDatePrompt(null)}>
-                  Zrušit
-                </Button>
-                <Button
-                  variant="primary"
-                  disabled={!canContinue}
-                  onClick={() => {
-                    const t = signingDatePrompt;
-                    const sd = signingDateDraft;
-                    const ra = isMultisport ? requestedAtDraft : undefined;
-                    const vf = isMultisport ? validFromDraft : undefined;
-                    setSigningDatePrompt(null);
-                    // Row-first: create the ad-hoc document row now; the PDF
-                    // is generated later from the row (see addAdhocRow / #6).
-                    addAdhocRow(t, sd, ra, vf);
-                  }}
-                >
-                  Přidat
-                </Button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
 
       {page === "detail" && (
       <>
@@ -2406,6 +2272,41 @@ export default function EmployeeDetailPage() {
             signingDate: generateModal.signingDate,
             requestedAt: generateModal.requestedAt,
             validFrom: generateModal.validFrom,
+          }}
+          displayName={buildContractName(
+            generateModal.contractType,
+            undefined,
+            `${employee.firstName ?? ""} ${employee.lastName ?? ""}`.trim(),
+            customStandalone.find((t) => t.id === generateModal.contractType)?.name
+          )}
+          onClose={() => setGenerateModal(null)}
+          onGenerated={() => {
+            setGenerateModal(null);
+            refetchContracts();
+          }}
+        />
+      )}
+
+      {generateModal?.kind === "adhoc-new" && (
+        <GenerateContractModal
+          employeeId={id!}
+          contractType={generateModal.contractType}
+          companyId={employee.currentCompanyId ?? null}
+          collectSigningDate
+          initialSigningDate={clock.today()}
+          employeeData={{
+            id: employee.id,
+            firstName: employee.firstName,
+            lastName: employee.lastName,
+            currentJobTitle: employee.currentJobTitle,
+            currentCompanyId: employee.currentCompanyId ?? undefined,
+            address: contact?.contactAddress || contact?.permanentAddress,
+            birthDate: employee.dateOfBirth ?? undefined,
+            nationality: employee.nationality,
+            gender: employee.gender,
+            passportNumber: documents?.passportNumber,
+            visaNumber: documents?.visaNumber,
+            visaType: documents?.visaType,
           }}
           displayName={buildContractName(
             generateModal.contractType,
