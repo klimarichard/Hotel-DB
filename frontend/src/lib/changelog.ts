@@ -27,6 +27,16 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "4.8.2",
+    date: "2026-07-15",
+    changes: [
+      "Šablony smluv: u vlastních proměnných lze nastavit výchozí hodnotu – pevnou, nebo převzatou ze zabudované proměnné. Předvyplní se při generování a zobrazí se i v náhledu.",
+      "Generování dokumentu (Další dokumenty) je nyní jednokrokové: datum podpisu i hodnoty proměnných zadáte rovnou a dokument se vytvoří najednou (bez mezikroku s prázdným řádkem).",
+      "Ukončení pracovního poměru: při generování se automaticky zvolí správná šablona – DPP, ve zkušební době, nebo běžné ukončení HPP/PPP.",
+      "Upozornění na konec zkušební doby nově ukazuje poslední den zkušební doby.",
+    ],
+  },
+  {
     version: "4.8.1",
     date: "2026-07-15",
     changes: [

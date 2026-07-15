@@ -179,7 +179,7 @@ Na této záložce tak zůstává jen samotná historie pracovního poměru – 
 Záložka **Další dokumenty** zobrazuje jeden společný seznam všech dokumentů zaměstnance, které nejsou součástí historie pracovního poměru – nahrané PDF soubory (skeny, přílohy) i samostatně generované dokumenty (Multisport, Hmotná odpovědnost, vlastní šablony). Seznam je řazený od **nejnovějšího** záznamu.
 
 - Tlačítkem **Nahrát dokument** zadáte **název dokumentu** a vyberete **PDF soubor** (max. 15 MB).
-- Tlačítkem **+ Generovat dokument** založíte nový samostatný dokument: z nabídky vyberete jeho typ (např. **Multisport**, **Hmotná odpovědnost**, nebo vlastní šablonu), zadáte **datum podpisu** a potvrdíte tlačítkem **Přidat**. V seznamu se objeví nový řádek (zatím bez PDF, zobrazuje zadané datum podpisu) – samotné PDF vygenerujete dodatečně tlačítkem **Generovat smlouvu** u tohoto řádku, stejně jako u záznamů pracovního poměru.
+- Tlačítkem **+ Generovat dokument** založíte nový samostatný dokument napřímo, na jeden krok: z nabídky vyberete jeho typ (např. **Multisport**, **Hmotná odpovědnost**, nebo vlastní šablonu), zadáte **datum podpisu**, vyplníte hodnoty proměnných (má-li šablona vlastní proměnné) a potvrdíte tlačítkem **Generovat**. Dokument i jeho PDF se vytvoří rovnou najednou – v seznamu se ihned objeví hotový řádek i s vygenerovaným PDF, není třeba nic dodatečně dogenerovávat.
 - U každého dokumentu v seznamu lze soubor **Zobrazit**, **Stáhnout** nebo **Smazat**; u generovaných dokumentů (Multisport apod.) najdete stejná tlačítka jako u smluv v historii pracovního poměru.
 - Nahrávat a mazat mohou administrátor, ředitel a personalista; FOM a účetní dokumenty pouze prohlížejí. Tlačítko **+ Generovat dokument** vidí jen uživatelé s oprávněním smlouvy generovat.
 
@@ -302,6 +302,7 @@ Měsíční mzdové podklady.
 Smlouvy se generují z **Historie pracovního poměru** (Nástup, Dodatek, Ukončení) nebo jako samostatné dokumenty (Hmotná odpovědnost, Multisport).
 
 - **Vygenerovat** smlouvu z řádku historie → vytvoří se PDF podle šablony.
+- **Automatický výběr šablony u Ukončení:** generujete-li dokument z řádku **Ukončení**, aplikace sama vybere odpovídající šablonu – u smlouvy DPP šablonu pro ukončení DPP, u ukončení ve zkušební době šablonu **„Ukončení ve zkušební době"** (pozná se podle toho, že datum ukončení spadá do zkušební doby zaměstnance) a v ostatních případech běžnou šablonu **„Ukončení HPP/PPP"**. Šablonu tedy není potřeba vybírat ručně.
 - **Úprava údajů před vygenerováním:** v okně generování je přehled **Hodnoty proměnných** se všemi údaji, které se do smlouvy doplní (jméno, mzda, data…). Kteroukoli hodnotu můžete pro tuto konkrétní smlouvu **ručně přepsat** — využijete to např. u **zpětně datované** smlouvy. Upravené pole se zvýrazní; vrátíte jej na automatickou hodnotu tlačítkem **Vrátit**, všechny úpravy najednou zrušíte tlačítkem **Vrátit vše na automatické**. **Úpravy se nikam neukládají** — ovlivní pouze tento vygenerovaný dokument, nikoli evidenční údaje zaměstnance.
 - Vygenerovanou smlouvu lze **zobrazit** (otevře se v nové záložce) a **stáhnout** pod čitelným názvem.
 - Tlačítko **Nahrát podepsanou smlouvu ▾** nabízí dvě volby:
@@ -375,9 +376,15 @@ Kromě předdefinovaných proměnných (jméno, mzda, datum…) má každá šab
 3. Tlačítkem **⚙ Nastavit…** otevřete okno se seznamem vlastních proměnných, které jsou v šabloně skutečně použité. U každé vyplníte:
    - **Název** – text, který se zobrazí při vyplňování hodnoty během generování dokumentu (např. „Výše pokuty").
    - **Typ** – **Text**, **Datum**, **Číslo**, nebo **Ano/Ne**.
+   - **Výchozí hodnota** – nepovinné. Určíte, čím se má pole při generování dokumentu **předvyplnit**, výběrem jednoho ze tří zdrojů:
+     - **Žádná** – pole zůstane prázdné (výchozí stav, jako dosud).
+     - **Pevná hodnota** – napíšete konkrétní text, který se má předvyplňovat pokaždé (např. „Praha").
+     - **Z proměnné** – vyberete některou ze zabudovaných proměnných šablony (např. **Jméno**), jejíž aktuální hodnota zaměstnance se do pole automaticky doplní.
 4. Okno zavřete a nastavení uložíte společně se šablonou tlačítkem **Uložit**.
 
 > 📝 Název a typ platí **jen pro tuto jednu šablonu**. Stejná proměnná (např. `{{var1}}`) tak může v jedné šabloně znamenat „Výše pokuty" a v jiné „Datum školení" – aplikace si to pamatuje odděleně pro každou šablonu.
+
+> 📝 **Výchozí hodnota** je jen návrh k předvyplnění – při generování dokumentu i tak jde pole ručně upravit nebo přepsat. Předvyplněnou hodnotu uvidíte i v **👁 Náhledu** šablony, takže si předem ověříte, jak bude pole vypadat vyplněné.
 
 **Upozornění „Bez nastavení"**
 
@@ -400,21 +407,19 @@ Když proměnnou do textu vložíte, ale zapomenete jí dát **Název** a **Typ*
 
 **Dva odstavce podle Ano/Ne (nejužitečnější trik)**
 
-Proměnná typu **Ano/Ne** umí řídit, **který z dvojice odstavců se do smlouvy dostane**. V okně **⚙ Nastavit…** má každá proměnná typu **Ano/Ne** ve sloupci **Odstavec** dvě tlačítka:
+Proměnná typu **Ano/Ne** umí řídit, **který z dvojice odstavců se do smlouvy dostane**. Do textu šablony napíšete podmíněné bloky přímo pomocí značek (místo `var1` použijte označení své proměnné a blok vždy uzavřete):
 
-- **Když Ano** – vloží do textu blok, který se ve smlouvě objeví **jen tehdy**, když políčko při generování **zaškrtnete**.
-- **Když Ne** – vloží blok, který se objeví **jen tehdy**, když políčko **nezaškrtnete**.
-
-Po klepnutí na tlačítko se okno zavře a kurzor stojí uvnitř nově vloženého bloku – rovnou tam napíšete text odstavce.
+- `{{#if var1}} … {{/if}}` – text uvnitř se ve smlouvě objeví **jen tehdy**, když políčko při generování **zaškrtnete**.
+- `{{#unless var1}} … {{/unless}}` – text uvnitř se objeví **jen tehdy**, když políčko **nezaškrtnete**.
 
 **Příklad.** Proměnná `var1` typu **Ano/Ne** s názvem „Zaměstnanec souhlasí se srážkou ze mzdy":
 
-1. Klepněte na **Když Ano** a dovnitř bloku napište: *„Zaměstnanec souhlasí se srážkou ze mzdy ve výši uvedené v čl. III."*
-2. Znovu otevřete **⚙ Nastavit…**, klepněte na **Když Ne** a dovnitř napište: *„Zaměstnanec se srážkou ze mzdy nesouhlasí; částka bude uhrazena samostatně."*
+1. Do textu napište: `{{#if var1}}Zaměstnanec souhlasí se srážkou ze mzdy ve výši uvedené v čl. III.{{/if}}`
+2. A hned za to: `{{#unless var1}}Zaměstnanec se srážkou ze mzdy nesouhlasí; částka bude uhrazena samostatně.{{/unless}}`
 
 Při generování pak stačí políčko zaškrtnout, nebo nechat prázdné – do hotového PDF se propíše **vždy právě jeden** z těch dvou odstavců, ten druhý zmizí beze stopy. Jedna šablona tak pokryje obě situace a nemusíte mít dvě téměř stejné šablony.
 
-> 💡 **Tip:** oba bloky nemusíte používat v páru – klidně vložte jen **Když Ano** (odstavec, který se za určitých okolností přidá), nebo jen **Když Ne**.
+> 💡 **Tip:** oba bloky nemusíte používat v páru – klidně vložte jen `{{#if var1}} … {{/if}}` (odstavec, který se za určitých okolností přidá), nebo jen `{{#unless var1}} … {{/unless}}`.
 
 ---
 
@@ -432,6 +437,8 @@ Záložky:
 > 📷 *(Místo pro snímek obrazovky: Upozornění)*
 
 > 📝 Upozornění na **Doklady** a **Zkušební dobu** se nevytvářejí pro zaměstnance se statusem **Ukončení** (ukončený pracovní poměr). Zaměstnanci v záložce **Před nástupem** (budoucí nástup) upozornění dostávají normálně.
+
+> 📝 Upozornění na **Zkušební dobu** nyní zobrazuje skutečný **poslední den zkušební doby** (dřív bylo datum posunuté o jeden den dopředu).
 
 Přečtené položky lze odbavit; stav přečtení je společný pro všechny administrátory a ředitele.
 
