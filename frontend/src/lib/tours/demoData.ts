@@ -340,6 +340,25 @@ const educationLevels: unknown[] = [
   { code: "T", name: "Vysokoškolské vzdělání" },
 ];
 
+// ─── Seznamy catalogues for the /zamestnanci/tour-demo detail page ────────────
+// The real employee-detail page validates the demo employee's CURRENT company /
+// department / position / education against the live lists and shows a
+// "neplatné údaje – už nejsou v číselníku" banner on any mismatch. These demo
+// lists mirror detailEmployee's `current*` / `education` values exactly (company
+// matched by id; department & position by name; education by the "code - name"
+// label), so on the demo route the referenced entries always exist and the
+// banner never fires. `Junior recepční` is included for the history session.
+const demoCompanies: unknown[] = [
+  { id: "HPM", abbreviation: "HPM", name: "Hotel Property Management s.r.o.", address: "", ic: "", dic: "", fileNo: "" },
+];
+const demoDepartments: unknown[] = [
+  { id: "demo-dep-recepce", name: "Recepce" },
+];
+const demoJobPositions: unknown[] = [
+  { id: "demo-pos-recepcni", name: "Recepční", departmentId: "demo-dep-recepce" },
+  { id: "demo-pos-junior-recepcni", name: "Junior recepční", departmentId: "demo-dep-recepce" },
+];
+
 // ─── Payroll-demo fixtures (`/mzdy` via /napoveda/ukazka-mzdy[-prazdne]) ───────
 
 /** Epoch-seconds Firestore-style timestamp for a Y-M-D (UTC, deterministic). */
@@ -1046,6 +1065,33 @@ function activeScenario(): TourScenario | null {
   }
 }
 
+/** The employee-detail demo route: the REAL detail page fed by the sentinel
+ * fixture (see DEMO_EMP_ID). Unlike the /napoveda/ukazka-* demos it has no
+ * TourDemoRoute wrapper / active scenario, so endpoint interception for it keys
+ * off this exact pathname. */
+const DEMO_EMP_ROUTE = "/zamestnanci/tour-demo";
+function onDemoDetailRoute(): boolean {
+  return typeof window !== "undefined" && window.location.pathname === DEMO_EMP_ROUTE;
+}
+
+/** Seznamy list endpoints the detail-demo page validates the demo employee
+ * against (company / department / position / education). */
+const DEMO_CATALOG_PATHS = new Set([
+  "/companies",
+  "/departments",
+  "/jobPositions",
+  "/educationLevels",
+]);
+function demoCatalogFixture(clean: string): unknown {
+  switch (clean) {
+    case "/companies": return demoCompanies;
+    case "/departments": return demoDepartments;
+    case "/jobPositions": return demoJobPositions;
+    case "/educationLevels": return educationLevels;
+    default: return [];
+  }
+}
+
 /**
  * Decide whether the guided-tour demo should serve a mock for this request.
  *
@@ -1070,6 +1116,19 @@ export function getDemoResponse(
     if (!isGet) return { hit: true, value: {} };
     const subpath = clean.slice(sentinelBase.length); // "" or "/employment" etc.
     return { hit: true, value: detailFixture(subpath) };
+  }
+
+  // ── Seznamy catalogues for the detail sentinel page ──
+  // The employee-detail page (route /zamestnanci/tour-demo, sentinel id) loads
+  // the live company/department/position/education lists and validates the demo
+  // employee against them. There's no active scenario on that route, so serve
+  // matching demo catalogues here — otherwise these hit the real backend and, if
+  // the tenant renamed/removed the demo's values, the page shows the "neplatné
+  // údaje v číselníku" banner. Gated on the exact detail-demo pathname so real
+  // pages that fetch the same endpoints are never intercepted.
+  if (onDemoDetailRoute() && DEMO_CATALOG_PATHS.has(clean)) {
+    if (!isGet) return { hit: true, value: {} };
+    return { hit: true, value: demoCatalogFixture(clean) };
   }
 
   // ── Audit history ──
