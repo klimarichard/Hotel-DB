@@ -30,25 +30,23 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
     version: "4.9.1",
     date: "2026-07-15",
     changes: [
-      "Detail zaměstnance – Dovolená: roční nárok se nově zadává jako dvě samostatné hodnoty, Loňská a Letošní; pole Nárok je jejich automatický součet a nelze ho upravit ručně.",
+      "Detail zaměstnance – Dovolená: roční nárok se nově zadává jako dvě samostatné hodnoty, Loňská a Letošní.",
     ],
   },
   {
     version: "4.9.0",
     date: "2026-07-15",
     changes: [
-      "Detail zaměstnance: nová sekce Dovolená s přehledem nároku, čerpání po měsících a zůstatku dovolené (v hodinách), s možností přepínat mezi roky.",
-      "Čerpání dovolené se po uzamčení mzdového období automaticky promítne do přehledu; jednotlivé hodnoty lze podle oprávnění také ručně upravit.",
+      "Detail zaměstnance: nová sekce Dovolená s přehledem nároku, čerpání po měsících a zůstatku dovolené (v hodinách).",
     ],
   },
   {
     version: "4.8.2",
     date: "2026-07-15",
     changes: [
-      "Šablony smluv: u vlastních proměnných lze nastavit výchozí hodnotu – pevnou, nebo převzatou ze zabudované proměnné. Předvyplní se při generování a zobrazí se i v náhledu.",
-      "Generování dokumentu (Další dokumenty) je nyní jednokrokové: datum podpisu i hodnoty proměnných zadáte rovnou a dokument se vytvoří najednou (bez mezikroku s prázdným řádkem).",
-      "Ukončení pracovního poměru: při generování se automaticky zvolí správná šablona – DPP, ve zkušební době, nebo běžné ukončení HPP/PPP.",
-      "Upozornění na konec zkušební doby nově ukazuje poslední den zkušební doby.",
+      "Šablony smluv: u vlastních proměnných lze nastavit výchozí hodnotu.",
+      "Generování dokumentů je nyní bez mezikroku s prázdným řádkem.",
+      "Ukončení pracovního poměru: při generování se automaticky zvolí správná šablona.",
     ],
   },
   {
