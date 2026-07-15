@@ -187,6 +187,7 @@ export default function VacationLedgerSection({
                   {Array.from({ length: 12 }, (_, i) => (
                     <th key={i + 1} className={styles.monthHead}>{i + 1}</th>
                   ))}
+                  <th className={`${styles.monthHead} ${styles.totalHead}`}>CELKEM</th>
                 </tr>
                 <tr>
                   {Array.from({ length: 12 }, (_, i) => {
@@ -217,6 +218,9 @@ export default function VacationLedgerSection({
                       </td>
                     );
                   })}
+                  <td className={`${styles.monthCell} ${styles.totalCell}`}>
+                    {String(consumed).replace(".", ",")}
+                  </td>
                 </tr>
               </tbody>
             </table>
