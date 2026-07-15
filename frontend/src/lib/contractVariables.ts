@@ -97,13 +97,55 @@ export const CUSTOM_VAR_KEYS: string[] = Array.from(
 
 const CUSTOM_VAR_KEY_SET = new Set(CUSTOM_VAR_KEYS);
 
-export type CustomVarType = "text" | "date" | "number" | "bool";
+export type CustomVarType = "text" | "date" | "number" | "bool" | "condition";
 
 export const CUSTOM_VAR_TYPE_LABELS: Record<CustomVarType, string> = {
   text: "Text",
   date: "Datum",
   number: "Číslo",
   bool: "Ano/Ne",
+  condition: "Podmínka",
+};
+
+// ── Derived conditions (a "condition" custom slot) ───────────────────────────
+// A condition slot has no typed value; it is COMPUTED from a comparison of two
+// operands and resolves to "ano" / "" like a bool, so it drives {{#if key}} /
+// {{#unless key}}. Operands are a comparable built-in variable, or a literal of
+// the same type. Comparison is on RAW typed values (ISO dates chronologically,
+// numbers numerically) – never the formatted display strings.
+export type CompareOp = "lt" | "lte" | "gt" | "gte" | "eq" | "neq";
+export const COMPARE_OP_LABELS: Record<CompareOp, string> = {
+  lt: "<",
+  lte: "≤",
+  gt: ">",
+  gte: "≥",
+  eq: "=",
+  neq: "≠",
+};
+
+export type ComparableType = "date" | "number";
+/** Built-in variables that may take part in a comparison, with their raw type. */
+export const COMPARABLE_VARS: { key: string; label: string; type: ComparableType }[] = [
+  { key: "startDate", label: "Datum nástupu", type: "date" },
+  { key: "endDate", label: "Datum ukončení", type: "date" },
+  { key: "signingDate", label: "Datum podpisu", type: "date" },
+  { key: "originalSigningDate", label: "Datum podpisu původní smlouvy", type: "date" },
+  { key: "birthDate", label: "Datum narození", type: "date" },
+  { key: "dodatekEffectiveDate", label: "Platnost dodatku", type: "date" },
+  { key: "requestedAt", label: "Datum žádosti", type: "date" },
+  { key: "validFrom", label: "Platnost od", type: "date" },
+  { key: "today", label: "Dnešní datum", type: "date" },
+  { key: "salary", label: "Plat", type: "number" },
+  { key: "agreedReward", label: "Odměna DPP", type: "number" },
+  { key: "hoursPerWeek", label: "Počet hodin týdně", type: "number" },
+];
+const COMPARABLE_BY_KEY = new Map(COMPARABLE_VARS.map((v) => [v.key, v]));
+
+/** A comparison definition on a "condition" slot. */
+export type CustomVarCondition = {
+  leftKey: string;
+  op: CompareOp;
+  right: { kind: "var"; key: string } | { kind: "literal"; value: string };
 };
 
 /**
@@ -122,6 +164,8 @@ export interface CustomVarDef {
   label: string;
   type: CustomVarType;
   default?: CustomVarDefault;
+  /** Only for type "condition": the comparison that computes this slot. */
+  condition?: CustomVarCondition;
 }
 
 /** Slot key → its configuration on a given template. Stored on contractTemplates/{id}. */
@@ -220,7 +264,9 @@ export function missingCustomVars(
 ): string[] {
   return usedCustomVars(html).filter((key) => {
     const type = defs[key]?.type ?? "text";
-    if (type === "bool") return false;
+    // bool + condition are never "missing": one is a checkbox, the other is
+    // computed from a comparison – neither is typed in at generation.
+    if (type === "bool" || type === "condition") return false;
     return !(rawValues[key] ?? "").trim();
   });
 }
@@ -488,6 +534,96 @@ export function resolveVariables(
   };
 
   return vars;
+}
+
+/** Coerce a value to an ISO YYYY-MM-DD string, or null if it isn't one. */
+function toIsoDate(v: unknown): string | null {
+  const s = typeof v === "string" ? v.trim() : "";
+  return /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(0, 10) : null;
+}
+/** Coerce a value to a finite number, or null. */
+function toNumber(v: unknown): number | null {
+  if (v === undefined || v === null || v === "") return null;
+  const n = typeof v === "number" ? v : Number(String(v).replace(",", "."));
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Raw, typed values for the comparable built-in variables (COMPARABLE_VARS),
+ * used to evaluate derived conditions. Dates stay ISO YYYY-MM-DD, numbers stay
+ * numbers, missing values are null. Kept parallel to resolveVariables but
+ * UNFORMATTED — comparing the formatted display strings would be meaningless.
+ */
+export function resolveComparableRaw(
+  employee: EmployeeData
+): Record<string, string | number | null> {
+  const d = clock.now();
+  const p = (x: number) => String(x).padStart(2, "0");
+  const todayIso = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  return {
+    startDate: toIsoDate(employee.startDate),
+    endDate: toIsoDate(employee.endDate),
+    signingDate: toIsoDate(employee.signingDate),
+    originalSigningDate: toIsoDate(employee.originalSigningDate),
+    birthDate: toIsoDate(employee.birthDate),
+    dodatekEffectiveDate: toIsoDate(employee.dodatekEffectiveDate),
+    requestedAt: toIsoDate(employee.requestedAt),
+    validFrom: toIsoDate(employee.validFrom),
+    today: todayIso,
+    salary: toNumber(employee.salary),
+    agreedReward: toNumber(employee.agreedReward),
+    hoursPerWeek: toNumber(employee.hoursPerWeek),
+  };
+}
+
+/**
+ * Evaluate a derived condition against raw comparable values. Returns false
+ * (block hidden) when the definition is incomplete or either operand is missing
+ * / unparseable — a safe default that never invents a value on a contract. Dates
+ * compare chronologically (ISO strings), numbers numerically.
+ */
+export function evalCondition(
+  cond: CustomVarCondition | undefined,
+  raw: Record<string, string | number | null>
+): boolean {
+  if (!cond) return false;
+  const leftMeta = COMPARABLE_BY_KEY.get(cond.leftKey);
+  if (!leftMeta) return false;
+  const left = leftMeta.type === "number" ? toNumber(raw[cond.leftKey]) : toIsoDate(raw[cond.leftKey]);
+  let right: string | number | null;
+  if (cond.right.kind === "var") {
+    right = leftMeta.type === "number" ? toNumber(raw[cond.right.key]) : toIsoDate(raw[cond.right.key]);
+  } else {
+    right = leftMeta.type === "number" ? toNumber(cond.right.value) : toIsoDate(cond.right.value);
+  }
+  if (left === null || right === null) return false;
+  const cmp = left < right ? -1 : left > right ? 1 : 0;
+  switch (cond.op) {
+    case "lt": return cmp < 0;
+    case "lte": return cmp <= 0;
+    case "gt": return cmp > 0;
+    case "gte": return cmp >= 0;
+    case "eq": return cmp === 0;
+    case "neq": return cmp !== 0;
+  }
+}
+
+/**
+ * Compute the "ano" / "" values for every `condition`-type custom slot the
+ * template uses, given raw comparable values. Merge these into the vars map
+ * before fillTemplate so `{{#if var1}}` / `{{#unless var1}}` resolve.
+ */
+export function resolveConditionVars(
+  html: string,
+  defs: CustomVarDefs,
+  raw: Record<string, string | number | null>
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const key of usedCustomVars(html)) {
+    const def = defs[key];
+    if (def?.type === "condition") out[key] = evalCondition(def.condition, raw) ? "ano" : "";
+  }
+  return out;
 }
 
 // One token: an opener ({{#if x}} / {{#unless x}}) or a closer ({{/if}} / {{/unless}}).
