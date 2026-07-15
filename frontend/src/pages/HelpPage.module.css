@@ -73,14 +73,64 @@
   flex-direction: column;
 }
 
+/*
+ * Each item is a full-width button: clicking it launches the guided tour at
+ * that exact step (navigates to the related page + spotlights the control).
+ * Reset the native button chrome so it reads as a plain list row, then add a
+ * hover/focus affordance and a ▸ marker that hints it's actionable.
+ */
 .item {
-  padding: 0.85rem 0;
+  display: grid;
+  grid-template-columns: 1.1rem 1fr;
+  column-gap: 0.5rem;
+  align-items: baseline;
+  width: 100%;
+  margin: 0;
+  padding: 0.85rem 0.6rem;
+  border: none;
   border-top: 1px solid var(--color-border, #e5e7eb);
+  border-radius: 8px;
+  background: none;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.item:hover {
+  background: var(--color-primary-soft, rgba(37, 99, 235, 0.08));
+}
+
+.item:focus-visible {
+  outline: 2px solid var(--color-primary, #2563eb);
+  outline-offset: 2px;
 }
 
 .item:first-child {
   border-top: none;
-  padding-top: 0;
+}
+
+/* ▸ affordance – dim by default, brightens with the row on hover/focus. It sits
+ * in column 1 spanning every row; the title + paragraph occupy column 2. */
+.itemGo {
+  grid-column: 1;
+  grid-row: 1 / -1;
+  color: var(--color-text-muted, #9ca3af);
+  font-size: 0.8rem;
+  line-height: 1.5;
+  transition: color 0.12s ease, transform 0.12s ease;
+}
+
+.item .itemTitle,
+.item .para {
+  grid-column: 2;
+}
+
+.item:hover .itemGo,
+.item:focus-visible .itemGo {
+  color: var(--color-primary, #2563eb);
+  transform: translateX(2px);
 }
 
 .itemTitle {

@@ -374,6 +374,7 @@
   );
   box-sizing: border-box;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+  color: #000;
 }
 
 /*
@@ -388,12 +389,17 @@
   margin: 1cm 0;
 }
 
+/*
+ * In dark mode the paper itself stays white with black text (the contract is
+ * printed on white paper, so the editor is kept WYSIWYG). Only the 12 mm
+ * "desk gap" between stacked pages is darkened to blend with the dark desk
+ * behind it; the box-shadow is deepened for contrast on the dark background.
+ */
 [data-theme="dark"] .a4Page {
-  background-color: #1e1e1e;
   background-image: repeating-linear-gradient(
     to bottom,
-    #1e1e1e    0,
-    #1e1e1e    297mm,
+    #fff       0,
+    #fff       297mm,
     #2a2a2a    297mm,
     #2a2a2a    309mm
   );
@@ -407,10 +413,6 @@
   font-size: 11pt;
   line-height: 1.6;
   color: #000;
-}
-
-[data-theme="dark"] .editorContent {
-  color: #e5e5e5;
 }
 
 .editorContent p {

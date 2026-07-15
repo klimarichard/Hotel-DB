@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, type Dispatch, type SetStateAction, type MouseEvent } from "react";
+import { useState, useEffect, useCallback, type Dispatch, type SetStateAction, type MouseEvent, type ReactNode } from "react";
 import { Navigate } from "react-router-dom";
 import { sendPasswordResetEmail } from "firebase/auth";
 import { auth } from "@/lib/firebase";
@@ -79,6 +79,44 @@ function SalaryCell({ value, suffix = "Kč" }: { value: number | null | undefine
   );
 }
 
+/**
+ * A titled, collapsible card used to group the "Seznamy" tab's four lists
+ * (companies / departments / positions / education) under one tab. The header
+ * (title toggle + optional `action` button) stays visible when collapsed; the
+ * body UNMOUNTS on collapse, so any create/edit modal belonging to a section is
+ * rendered at the page's top level (not inside `children`) to survive collapse.
+ */
+function CollapsibleSection({
+  title,
+  action,
+  defaultOpen = true,
+  children,
+}: {
+  title: string;
+  action?: ReactNode;
+  defaultOpen?: boolean;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <section className={styles.seznamySection}>
+      <div className={styles.seznamySectionHeader}>
+        <button
+          type="button"
+          className={styles.seznamyToggle}
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+        >
+          <span className={styles.seznamyChevron} data-open={open || undefined} aria-hidden="true">▾</span>
+          <span className={styles.seznamyTitle}>{title}</span>
+        </button>
+        {action && <div className={styles.seznamyAction}>{action}</div>}
+      </div>
+      {open && <div className={styles.seznamyBody}>{children}</div>}
+    </section>
+  );
+}
+
 interface EmployeeSummary {
   id: string;
   firstName: string;
@@ -147,17 +185,27 @@ const DEFAULT_COMPANY_IDS = ["HPM", "STP"];
 
 const emptyForm = { name: "", email: "", password: "", roleType: "employee", employeeId: "" };
 
-type SettingsTab = "users" | "companies" | "departments" | "jobPositions" | "education" | "payroll" | "menu" | "userTypes" | "jobs";
+type SettingsTab = "users" | "seznamy" | "payroll" | "menu" | "userTypes" | "jobs";
+
+// The four list managers (companies / departments / positions / education) live
+// together under the single "Seznamy" tab, each as a collapsible section gated by
+// its own permission. This is the set of permissions that grants access to that
+// tab (having ANY one shows it).
+const SEZNAMY_PERMS: Permission[] = [
+  "settings.companies.manage",
+  "settings.departments.manage",
+  "settings.jobPositions.manage",
+  "settings.educationLevels.manage",
+];
 
 // Each tab and the permission that gates it. Order is the display order; the
-// default tab resolves to the first one the user can actually access.
+// default tab resolves to the first one the user can actually access. The
+// "seznamy" tab is special-cased (see `canManageSeznamy`) since it's gated by a
+// set of permissions rather than a single one; its `perm` here is nominal.
 const SETTINGS_TABS: { id: SettingsTab; perm: Permission }[] = [
   { id: "users", perm: "users.view" },
   { id: "userTypes", perm: "userTypes.manage" },
-  { id: "companies", perm: "settings.companies.manage" },
-  { id: "departments", perm: "settings.departments.manage" },
-  { id: "jobPositions", perm: "settings.jobPositions.manage" },
-  { id: "education", perm: "settings.educationLevels.manage" },
+  { id: "seznamy", perm: "settings.companies.manage" },
   { id: "payroll", perm: "settings.payroll.manage" },
   { id: "menu", perm: "settings.menuOrder.manage" },
   { id: "jobs", perm: "system.triggers" },
@@ -165,6 +213,10 @@ const SETTINGS_TABS: { id: SettingsTab; perm: Permission }[] = [
 
 export default function SettingsPage() {
   const { can, loading: authLoading } = useAuth();
+
+  // The "Seznamy" tab is visible to anyone who can manage at least one of its
+  // four lists; each section inside is then gated by its own permission.
+  const canManageSeznamy = SEZNAMY_PERMS.some((p) => can(p));
 
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -222,7 +274,7 @@ export default function SettingsPage() {
   // Default to the first tab the user can actually access, so a user without
   // users.view doesn't land on a blank/forbidden Users tab.
   const [settingsTab, setSettingsTab] = useState<SettingsTab>(
-    () => SETTINGS_TABS.find((t) => can(t.perm))?.id ?? "users"
+    () => SETTINGS_TABS.find((t) => (t.id === "seznamy" ? canManageSeznamy : can(t.perm)))?.id ?? "users"
   );
 
   // Departments
@@ -955,26 +1007,8 @@ export default function SettingsPage() {
             + Přidat uživatele
           </Button>
         )}
-        {settingsTab === "jobPositions" && can("settings.jobPositions.manage") && (
-          <Button data-tour="settings-add-position" variant="primary" onClick={openCreatePosition} disabled={departments.length === 0}>
-            + Přidat pozici
-          </Button>
-        )}
-        {settingsTab === "departments" && can("settings.departments.manage") && (
-          <Button data-tour="settings-add-department" variant="primary" onClick={() => { setDepNewName(""); setDepError(null); setShowDepCreate(true); }}>
-            + Přidat oddělení
-          </Button>
-        )}
-        {settingsTab === "education" && can("settings.educationLevels.manage") && (
-          <Button data-tour="settings-add-education" variant="primary" onClick={() => { setEduNewName(""); setEduError(null); setShowEduCreate(true); }}>
-            + Přidat vzdělání
-          </Button>
-        )}
-        {settingsTab === "companies" && can("settings.companies.manage") && (
-          <Button data-tour="settings-add-company" variant="primary" onClick={() => { setCompanyError(null); setCompanyCreateForm({ abbreviation: "", name: "", address: "", ic: "", dic: "", fileNo: "" }); setCompanyCreateOpen(true); }}>
-            + Přidat společnost
-          </Button>
-        )}
+        {/* The Seznamy sections each carry their own "+ Přidat" button in their
+            collapsible header, so nothing extra is needed here for that tab. */}
       </div>
 
       <div className={styles.tabs}>
@@ -984,17 +1018,8 @@ export default function SettingsPage() {
         {can("userTypes.manage") && (
           <button data-tour="settings-tab-userTypes" className={settingsTab === "userTypes" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("userTypes")}>Uživatelské typy</button>
         )}
-        {can("settings.companies.manage") && (
-          <button data-tour="settings-tab-companies" className={settingsTab === "companies" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("companies")}>Společnosti</button>
-        )}
-        {can("settings.departments.manage") && (
-          <button data-tour="settings-tab-departments" className={settingsTab === "departments" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("departments")}>Oddělení</button>
-        )}
-        {can("settings.jobPositions.manage") && (
-          <button data-tour="settings-tab-jobPositions" className={settingsTab === "jobPositions" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("jobPositions")}>Pracovní pozice</button>
-        )}
-        {can("settings.educationLevels.manage") && (
-          <button data-tour="settings-tab-education" className={settingsTab === "education" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("education")}>Vzdělání</button>
+        {canManageSeznamy && (
+          <button data-tour="settings-tab-seznamy" className={settingsTab === "seznamy" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("seznamy")}>Seznamy</button>
         )}
         {can("settings.payroll.manage") && (
           <button data-tour="settings-tab-payroll" className={settingsTab === "payroll" ? styles.tabActive : styles.tabBtn} onClick={() => setSettingsTab("payroll")}>Mzdy</button>
@@ -1282,8 +1307,17 @@ export default function SettingsPage() {
         </>
       )}
 
-      {settingsTab === "companies" && can("settings.companies.manage") && (
-        <>
+      {settingsTab === "seznamy" && (
+        <div className={styles.seznamyTab}>
+          {can("settings.companies.manage") && (
+            <CollapsibleSection
+              title="Společnosti"
+              action={
+                <Button data-tour="settings-add-company" variant="primary" onClick={() => { setCompanyError(null); setCompanyCreateForm({ abbreviation: "", name: "", address: "", ic: "", dic: "", fileNo: "" }); setCompanyCreateOpen(true); }}>
+                  + Přidat společnost
+                </Button>
+              }
+            >
           {companyError && <p className={styles.errorState}>{companyError}</p>}
           <div className={styles.companyList}>
           {Object.values(companyForms).map((c) => {
@@ -1355,46 +1389,18 @@ export default function SettingsPage() {
             );
           })}
           </div>
-          {companyCreateOpen && (
-            <div className={styles.modal}>
-              <div className={styles.modalBox}>
-                <h2 className={styles.modalTitle}>Nová společnost</h2>
-                <div className={styles.field}>
-                  <label className={styles.label}>Zkratka</label>
-                  <input className={styles.input} value={companyCreateForm.abbreviation} onChange={(e) => setCompanyCreateForm({ ...companyCreateForm, abbreviation: e.target.value })} autoFocus />
-                </div>
-                <div className={styles.field}>
-                  <label className={styles.label}>Název</label>
-                  <input className={styles.input} value={companyCreateForm.name} onChange={(e) => setCompanyCreateForm({ ...companyCreateForm, name: e.target.value })} />
-                </div>
-                <div className={styles.field}>
-                  <label className={styles.label}>Adresa</label>
-                  <input className={styles.input} value={companyCreateForm.address} onChange={(e) => setCompanyCreateForm({ ...companyCreateForm, address: e.target.value })} />
-                </div>
-                <div className={styles.field}>
-                  <label className={styles.label}>IČO</label>
-                  <input className={styles.input} value={companyCreateForm.ic} onChange={(e) => setCompanyCreateForm({ ...companyCreateForm, ic: e.target.value })} />
-                </div>
-                <div className={styles.field}>
-                  <label className={styles.label}>DIČ</label>
-                  <input className={styles.input} value={companyCreateForm.dic} onChange={(e) => setCompanyCreateForm({ ...companyCreateForm, dic: e.target.value })} />
-                </div>
-                <div className={styles.field}>
-                  <label className={styles.label}>Spisová značka</label>
-                  <input className={styles.input} value={companyCreateForm.fileNo} onChange={(e) => setCompanyCreateForm({ ...companyCreateForm, fileNo: e.target.value })} placeholder="např. C 12345 vedená u MS v Praze" />
-                </div>
-                <div className={styles.formActions}>
-                  <Button variant="secondary" onClick={() => setCompanyCreateOpen(false)}>Zrušit</Button>
-                  <Button variant="primary" onClick={handleCreateCompany}>Vytvořit</Button>
-                </div>
-              </div>
-            </div>
+          </CollapsibleSection>
           )}
-        </>
-      )}
 
-      {settingsTab === "departments" && can("settings.departments.manage") && (
-        <>
+          {can("settings.departments.manage") && (
+            <CollapsibleSection
+              title="Oddělení"
+              action={
+                <Button data-tour="settings-add-department" variant="primary" onClick={() => { setDepNewName(""); setDepError(null); setShowDepCreate(true); }}>
+                  + Přidat oddělení
+                </Button>
+              }
+            >
           {depError && <p className={styles.errorState}>{depError}</p>}
           <div className={styles.tableScroll}>
           <table className={styles.table}>
@@ -1443,166 +1449,18 @@ export default function SettingsPage() {
             </tbody>
           </table>
           </div>
-          {showDepCreate && (
-            <div className={styles.modal}>
-              <div className={styles.modalBox}>
-                <h2 className={styles.modalTitle}>Nové oddělení</h2>
-                <div className={styles.field}>
-                  <label className={styles.label}>Název</label>
-                  <input
-                    className={styles.input}
-                    value={depNewName}
-                    onChange={(e) => setDepNewName(e.target.value)}
-                    autoFocus
-                    onKeyDown={(e) => { if (e.key === "Enter") handleCreateDepartment(); }}
-                  />
-                </div>
-                {depError && <p className={styles.formError}>{depError}</p>}
-                <div className={styles.formActions}>
-                  <Button variant="secondary" onClick={() => { setShowDepCreate(false); setDepNewName(""); }}>
-                    Zrušit
-                  </Button>
-                  <Button variant="primary" onClick={handleCreateDepartment} disabled={!depNewName.trim()}>
-                    Uložit
-                  </Button>
-                </div>
-              </div>
-            </div>
+          </CollapsibleSection>
           )}
-        </>
-      )}
 
-      {settingsTab === "jobPositions" && can("settings.jobPositions.manage") && (
-        <>
-          {showPosCreate && (
-            <div className={styles.modal}>
-              <div className={styles.modalBox}>
-                <h2 className={styles.modalTitle}>{posEditId ? "Upravit pozici" : "Nová pozice"}</h2>
-                <div className={styles.field}>
-                  <label className={styles.label}>Název</label>
-                  <input
-                    className={styles.input}
-                    value={posForm.name}
-                    onChange={(e) => setPosForm({ ...posForm, name: e.target.value })}
-                    autoFocus
-                  />
-                </div>
-                <div className={styles.field}>
-                  <label className={styles.label}>Oddělení</label>
-                  <select
-                    className={styles.input}
-                    value={posForm.departmentId}
-                    onChange={(e) => setPosForm({ ...posForm, departmentId: e.target.value })}
-                  >
-                    <option value="">– vyberte –</option>
-                    {[...departments]
-                      .sort((a, b) => a.name.localeCompare(b.name, "cs"))
-                      .map((d) => (
-                        <option key={d.id} value={d.id}>{d.name}</option>
-                      ))}
-                  </select>
-                </div>
-                <div className={styles.field}>
-                  <label className={styles.label}>Výchozí mzda (Kč)</label>
-                  <input
-                    className={styles.input}
-                    type="number"
-                    value={posForm.defaultSalary}
-                    onChange={(e) => setPosForm({ ...posForm, defaultSalary: e.target.value })}
-                  />
-                </div>
-                <div className={styles.field}>
-                  <label className={styles.label}>Hodinová sazba pro NAVÍC (Kč/hod, nepovinné)</label>
-                  <input
-                    className={styles.input}
-                    type="number"
-                    value={posForm.hourlyRate}
-                    onChange={(e) => setPosForm({ ...posForm, hourlyRate: e.target.value })}
-                    placeholder="–"
-                  />
-                </div>
-                <div className={styles.field}>
-                  <label className={styles.label}>Náhrady - oblečení (Kč/hod, nepovinné)</label>
-                  <input
-                    className={styles.input}
-                    type="number"
-                    value={posForm.clothingAllowance}
-                    onChange={(e) => setPosForm({ ...posForm, clothingAllowance: e.target.value })}
-                    placeholder="–"
-                  />
-                </div>
-                <div className={styles.field}>
-                  <label className={styles.label}>Náhrady - HO (Kč/hod, nepovinné)</label>
-                  <input
-                    className={styles.input}
-                    type="number"
-                    value={posForm.homeOfficeAllowance}
-                    onChange={(e) => setPosForm({ ...posForm, homeOfficeAllowance: e.target.value })}
-                    placeholder="–"
-                  />
-                </div>
-                <div className={styles.formActions}>
-                  <Button variant="secondary" onClick={() => { setShowPosCreate(false); setPosEditId(null); }}>Zrušit</Button>
-                  <Button variant="primary" onClick={() => handleSavePosition(false)}>Uložit</Button>
-                </div>
-              </div>
-            </div>
-          )}
-          {posCascade && (
-            <div className={styles.modal}>
-              <div className={styles.modalBox} style={{ maxWidth: "640px" }}>
-                <h2 className={styles.modalTitle}>Změna hodinové sazby</h2>
-                <p style={{ margin: "0 0 0.75rem", fontSize: "0.875rem" }}>
-                  Hodinová sazba pozice se mění z{" "}
-                  <strong>{posCascade.fieldChange.hourlyRate.from ?? "–"}</strong>{" "}
-                  na <strong>{posCascade.fieldChange.hourlyRate.to ?? "–"}</strong> Kč/hod.
-                  Tato změna se promítne do aktivních pracovních záznamů následujících zaměstnanců:
-                </p>
-                <div style={{ maxHeight: "240px", overflowY: "auto", marginBottom: "0.75rem", border: "1px solid #e5e7eb", borderRadius: "4px" }}>
-                  <table className={styles.table} style={{ margin: 0 }}>
-                    <thead>
-                      <tr>
-                        <th>Zaměstnanec</th>
-                        <th>Aktuální sazba</th>
-                        <th>Upozornění</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {posCascade.affectedEmployees.map((e) => (
-                        <tr key={e.id}>
-                          <td>{employeeSurnameFirst(e)}</td>
-                          <td>{e.currentHourlyRate ?? "–"}</td>
-                          <td>
-                            {e.isManualOverride && (
-                              <span style={{ display: "inline-block", padding: "0 6px", background: "#fef3c7", color: "#92400e", borderRadius: "3px", fontSize: "0.75rem", fontWeight: 600 }}>
-                                ručně upraveno
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                {posCascade.affectedUnlockedPayrolls.length > 0 && (
-                  <div style={{ padding: "0.5rem 0.75rem", background: "#fef9c3", border: "1px solid #fde047", borderRadius: "4px", marginBottom: "0.75rem", fontSize: "0.8125rem", color: "#713f12" }}>
-                    <strong>Pozor:</strong> Tato změna ovlivní následující neuzamčené mzdové období(a). Po uložení spusťte v daném období „Přepočítat":
-                    <ul style={{ margin: "0.25rem 0 0", paddingLeft: "1.25rem" }}>
-                      {posCascade.affectedUnlockedPayrolls.map((p) => (
-                        <li key={p.id}>{String(p.month).padStart(2, "0")}/{p.year}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                <div className={styles.formActions}>
-                  <Button variant="secondary" disabled={posCascadeSaving} onClick={() => setPosCascade(null)}>Zrušit</Button>
-                  <Button variant="primary" disabled={posCascadeSaving} onClick={handleConfirmPosCascade}>
-                    {posCascadeSaving ? "Ukládám…" : "Potvrdit a přepsat"}
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
+          {can("settings.jobPositions.manage") && (
+            <CollapsibleSection
+              title="Pracovní pozice"
+              action={
+                <Button data-tour="settings-add-position" variant="primary" onClick={openCreatePosition} disabled={departments.length === 0}>
+                  + Přidat pozici
+                </Button>
+              }
+            >
           <div className={styles.tableScroll}>
           <table className={`${styles.table} ${styles.foldTable}`}>
             <thead>
@@ -1649,11 +1507,18 @@ export default function SettingsPage() {
             </tbody>
           </table>
           </div>
-        </>
-      )}
+          </CollapsibleSection>
+          )}
 
-      {settingsTab === "education" && can("settings.educationLevels.manage") && (
-        <>
+          {can("settings.educationLevels.manage") && (
+            <CollapsibleSection
+              title="Vzdělání"
+              action={
+                <Button data-tour="settings-add-education" variant="primary" onClick={() => { setEduNewName(""); setEduError(null); setShowEduCreate(true); }}>
+                  + Přidat vzdělání
+                </Button>
+              }
+            >
           {eduError && <p className={styles.errorState}>{eduError}</p>}
           <div className={styles.tableScroll}>
           <table className={`${styles.table} ${styles.foldTable}`}>
@@ -1718,41 +1583,237 @@ export default function SettingsPage() {
             </tbody>
           </table>
           </div>
-          {showEduCreate && (
-            <div className={styles.modal}>
-              <div className={styles.modalBox}>
-                <h2 className={styles.modalTitle}>Nové vzdělání</h2>
-                <div className={styles.field}>
-                  <label className={styles.label}>Kód</label>
-                  <input
-                    className={styles.input}
-                    value={eduNewCode}
-                    onChange={(e) => setEduNewCode(e.target.value)}
-                    autoFocus
-                  />
-                </div>
-                <div className={styles.field}>
-                  <label className={styles.label}>Název</label>
-                  <input
-                    className={styles.input}
-                    value={eduNewName}
-                    onChange={(e) => setEduNewName(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter") handleCreateEducation(); }}
-                  />
-                </div>
-                {eduError && <p className={styles.formError}>{eduError}</p>}
-                <div className={styles.formActions}>
-                  <Button variant="secondary" onClick={() => { setShowEduCreate(false); setEduNewName(""); setEduNewCode(""); }}>
-                    Zrušit
-                  </Button>
-                  <Button variant="primary" onClick={handleCreateEducation} disabled={!eduNewName.trim() || !eduNewCode.trim()}>
-                    Uložit
-                  </Button>
-                </div>
-              </div>
-            </div>
+          </CollapsibleSection>
           )}
-        </>
+        </div>
+      )}
+
+      {/* Create / edit modals for the Seznamy sections. Rendered at the page's
+          top level (not inside their CollapsibleSection) so they still show when
+          that section is collapsed — a collapsed section unmounts its body. */}
+      {companyCreateOpen && (
+        <div className={styles.modal}>
+          <div className={styles.modalBox}>
+            <h2 className={styles.modalTitle}>Nová společnost</h2>
+            <div className={styles.field}>
+              <label className={styles.label}>Zkratka</label>
+              <input className={styles.input} value={companyCreateForm.abbreviation} onChange={(e) => setCompanyCreateForm({ ...companyCreateForm, abbreviation: e.target.value })} autoFocus />
+            </div>
+            <div className={styles.field}>
+              <label className={styles.label}>Název</label>
+              <input className={styles.input} value={companyCreateForm.name} onChange={(e) => setCompanyCreateForm({ ...companyCreateForm, name: e.target.value })} />
+            </div>
+            <div className={styles.field}>
+              <label className={styles.label}>Adresa</label>
+              <input className={styles.input} value={companyCreateForm.address} onChange={(e) => setCompanyCreateForm({ ...companyCreateForm, address: e.target.value })} />
+            </div>
+            <div className={styles.field}>
+              <label className={styles.label}>IČO</label>
+              <input className={styles.input} value={companyCreateForm.ic} onChange={(e) => setCompanyCreateForm({ ...companyCreateForm, ic: e.target.value })} />
+            </div>
+            <div className={styles.field}>
+              <label className={styles.label}>DIČ</label>
+              <input className={styles.input} value={companyCreateForm.dic} onChange={(e) => setCompanyCreateForm({ ...companyCreateForm, dic: e.target.value })} />
+            </div>
+            <div className={styles.field}>
+              <label className={styles.label}>Spisová značka</label>
+              <input className={styles.input} value={companyCreateForm.fileNo} onChange={(e) => setCompanyCreateForm({ ...companyCreateForm, fileNo: e.target.value })} placeholder="např. C 12345 vedená u MS v Praze" />
+            </div>
+            <div className={styles.formActions}>
+              <Button variant="secondary" onClick={() => setCompanyCreateOpen(false)}>Zrušit</Button>
+              <Button variant="primary" onClick={handleCreateCompany}>Vytvořit</Button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showDepCreate && (
+        <div className={styles.modal}>
+          <div className={styles.modalBox}>
+            <h2 className={styles.modalTitle}>Nové oddělení</h2>
+            <div className={styles.field}>
+              <label className={styles.label}>Název</label>
+              <input
+                className={styles.input}
+                value={depNewName}
+                onChange={(e) => setDepNewName(e.target.value)}
+                autoFocus
+                onKeyDown={(e) => { if (e.key === "Enter") handleCreateDepartment(); }}
+              />
+            </div>
+            {depError && <p className={styles.formError}>{depError}</p>}
+            <div className={styles.formActions}>
+              <Button variant="secondary" onClick={() => { setShowDepCreate(false); setDepNewName(""); }}>
+                Zrušit
+              </Button>
+              <Button variant="primary" onClick={handleCreateDepartment} disabled={!depNewName.trim()}>
+                Uložit
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showPosCreate && (
+        <div className={styles.modal}>
+          <div className={styles.modalBox}>
+            <h2 className={styles.modalTitle}>{posEditId ? "Upravit pozici" : "Nová pozice"}</h2>
+            <div className={styles.field}>
+              <label className={styles.label}>Název</label>
+              <input
+                className={styles.input}
+                value={posForm.name}
+                onChange={(e) => setPosForm({ ...posForm, name: e.target.value })}
+                autoFocus
+              />
+            </div>
+            <div className={styles.field}>
+              <label className={styles.label}>Oddělení</label>
+              <select
+                className={styles.input}
+                value={posForm.departmentId}
+                onChange={(e) => setPosForm({ ...posForm, departmentId: e.target.value })}
+              >
+                <option value="">– vyberte –</option>
+                {[...departments]
+                  .sort((a, b) => a.name.localeCompare(b.name, "cs"))
+                  .map((d) => (
+                    <option key={d.id} value={d.id}>{d.name}</option>
+                  ))}
+              </select>
+            </div>
+            <div className={styles.field}>
+              <label className={styles.label}>Výchozí mzda (Kč)</label>
+              <input
+                className={styles.input}
+                type="number"
+                value={posForm.defaultSalary}
+                onChange={(e) => setPosForm({ ...posForm, defaultSalary: e.target.value })}
+              />
+            </div>
+            <div className={styles.field}>
+              <label className={styles.label}>Hodinová sazba pro NAVÍC (Kč/hod, nepovinné)</label>
+              <input
+                className={styles.input}
+                type="number"
+                value={posForm.hourlyRate}
+                onChange={(e) => setPosForm({ ...posForm, hourlyRate: e.target.value })}
+                placeholder="–"
+              />
+            </div>
+            <div className={styles.field}>
+              <label className={styles.label}>Náhrady - oblečení (Kč/hod, nepovinné)</label>
+              <input
+                className={styles.input}
+                type="number"
+                value={posForm.clothingAllowance}
+                onChange={(e) => setPosForm({ ...posForm, clothingAllowance: e.target.value })}
+                placeholder="–"
+              />
+            </div>
+            <div className={styles.field}>
+              <label className={styles.label}>Náhrady - HO (Kč/hod, nepovinné)</label>
+              <input
+                className={styles.input}
+                type="number"
+                value={posForm.homeOfficeAllowance}
+                onChange={(e) => setPosForm({ ...posForm, homeOfficeAllowance: e.target.value })}
+                placeholder="–"
+              />
+            </div>
+            <div className={styles.formActions}>
+              <Button variant="secondary" onClick={() => { setShowPosCreate(false); setPosEditId(null); }}>Zrušit</Button>
+              <Button variant="primary" onClick={() => handleSavePosition(false)}>Uložit</Button>
+            </div>
+          </div>
+        </div>
+      )}
+      {posCascade && (
+        <div className={styles.modal}>
+          <div className={styles.modalBox} style={{ maxWidth: "640px" }}>
+            <h2 className={styles.modalTitle}>Změna hodinové sazby</h2>
+            <p style={{ margin: "0 0 0.75rem", fontSize: "0.875rem" }}>
+              Hodinová sazba pozice se mění z{" "}
+              <strong>{posCascade.fieldChange.hourlyRate.from ?? "–"}</strong>{" "}
+              na <strong>{posCascade.fieldChange.hourlyRate.to ?? "–"}</strong> Kč/hod.
+              Tato změna se promítne do aktivních pracovních záznamů následujících zaměstnanců:
+            </p>
+            <div style={{ maxHeight: "240px", overflowY: "auto", marginBottom: "0.75rem", border: "1px solid #e5e7eb", borderRadius: "4px" }}>
+              <table className={styles.table} style={{ margin: 0 }}>
+                <thead>
+                  <tr>
+                    <th>Zaměstnanec</th>
+                    <th>Aktuální sazba</th>
+                    <th>Upozornění</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {posCascade.affectedEmployees.map((e) => (
+                    <tr key={e.id}>
+                      <td>{employeeSurnameFirst(e)}</td>
+                      <td>{e.currentHourlyRate ?? "–"}</td>
+                      <td>
+                        {e.isManualOverride && (
+                          <span style={{ display: "inline-block", padding: "0 6px", background: "#fef3c7", color: "#92400e", borderRadius: "3px", fontSize: "0.75rem", fontWeight: 600 }}>
+                            ručně upraveno
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {posCascade.affectedUnlockedPayrolls.length > 0 && (
+              <div style={{ padding: "0.5rem 0.75rem", background: "#fef9c3", border: "1px solid #fde047", borderRadius: "4px", marginBottom: "0.75rem", fontSize: "0.8125rem", color: "#713f12" }}>
+                <strong>Pozor:</strong> Tato změna ovlivní následující neuzamčené mzdové období(a). Po uložení spusťte v daném období „Přepočítat":
+                <ul style={{ margin: "0.25rem 0 0", paddingLeft: "1.25rem" }}>
+                  {posCascade.affectedUnlockedPayrolls.map((p) => (
+                    <li key={p.id}>{String(p.month).padStart(2, "0")}/{p.year}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <div className={styles.formActions}>
+              <Button variant="secondary" disabled={posCascadeSaving} onClick={() => setPosCascade(null)}>Zrušit</Button>
+              <Button variant="primary" disabled={posCascadeSaving} onClick={handleConfirmPosCascade}>
+                {posCascadeSaving ? "Ukládám…" : "Potvrdit a přepsat"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showEduCreate && (
+        <div className={styles.modal}>
+          <div className={styles.modalBox}>
+            <h2 className={styles.modalTitle}>Nové vzdělání</h2>
+            <div className={styles.field}>
+              <label className={styles.label}>Kód</label>
+              <input
+                className={styles.input}
+                value={eduNewCode}
+                onChange={(e) => setEduNewCode(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <div className={styles.field}>
+              <label className={styles.label}>Název</label>
+              <input
+                className={styles.input}
+                value={eduNewName}
+                onChange={(e) => setEduNewName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleCreateEducation(); }}
+              />
+            </div>
+            {eduError && <p className={styles.formError}>{eduError}</p>}
+            <div className={styles.formActions}>
+              <Button variant="secondary" onClick={() => { setShowEduCreate(false); setEduNewName(""); setEduNewCode(""); }}>
+                Zrušit
+              </Button>
+              <Button variant="primary" onClick={handleCreateEducation} disabled={!eduNewName.trim() || !eduNewCode.trim()}>
+                Uložit
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
 
       {settingsTab === "payroll" && can("settings.payroll.manage") && (

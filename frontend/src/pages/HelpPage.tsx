@@ -47,16 +47,22 @@ export default function HelpPage() {
   // order). Welcome / outro steps (no permission) are intro material, not a
   // capability, so they're excluded from the reference list.
   const groups = useMemo(() => {
-    const steps = buildAppTour(can).steps.filter((s) => s.permission);
+    // Build the tour with NO context (default) so each item's `index` lines up
+    // with the array `startTour(index)` rebuilds via the same `buildAppTour(can)`
+    // call – that's what lets a clicked item jump to the exact step. The index is
+    // the step's position in the FULL built list (welcome/outro included), then we
+    // drop the permission-less intro steps for display only.
+    const allSteps = buildAppTour(can).steps;
     const order = PERMISSION_CATALOG.map((g) => g.group);
-    const byGroup = new Map<string, { title: string; body: string }[]>();
-    for (const step of steps) {
+    const byGroup = new Map<string, { title: string; body: string; index: number }[]>();
+    allSteps.forEach((step, index) => {
+      if (!step.permission) return; // welcome / outro – intro material, not a capability
       // A step may carry an array of permissions (merged variants); group by the first.
       const permKey = Array.isArray(step.permission) ? step.permission[0] : step.permission;
       const group = GROUP_BY_PERMISSION[permKey as string] ?? "Ostatní";
       if (!byGroup.has(group)) byGroup.set(group, []);
-      byGroup.get(group)!.push({ title: step.title, body: step.body });
-    }
+      byGroup.get(group)!.push({ title: step.title, body: step.body, index });
+    });
     return order
       .filter((g) => byGroup.has(g))
       .map((g) => ({ title: g, items: byGroup.get(g)! }));
@@ -121,10 +127,19 @@ export default function HelpPage() {
               )}
               <div className={styles.items}>
                 {section.items.map((item, j) => (
-                  <div key={j} className={styles.item}>
+                  <button
+                    key={j}
+                    type="button"
+                    className={styles.item}
+                    onClick={() => startTour(item.index)}
+                    title="Zobrazit v průvodci"
+                  >
+                    <span className={styles.itemGo} aria-hidden="true">
+                      ▸
+                    </span>
                     <h3 className={styles.itemTitle}>{item.title}</h3>
                     <p className={styles.para}>{item.body}</p>
-                  </div>
+                  </button>
                 ))}
               </div>
             </section>
