@@ -14,6 +14,8 @@ import {
   formatCustomValue,
   customDefaultRaw,
   isFixedVarPassthrough,
+  resolveComparableRaw,
+  evalCondition,
   missingCustomVars,
   isCustomVarKey,
   CUSTOM_VAR_TYPE_LABELS,
@@ -138,17 +140,23 @@ export default function GenerateContractModal({
     : employeeData;
   const autoVars = resolveVariables(effectiveEmployeeData, companyData);
 
-  // Custom slots this template uses, and the values they resolve to. A slot
+  // Custom slots this template uses, and the values they resolve to. A
+  // `condition` slot is COMPUTED from its comparison (raw typed values). A slot
   // whose default references a fixed variable passes its already-formatted value
-  // through untouched (see isFixedVarPassthrough); everything else is formatted.
+  // through untouched (isFixedVarPassthrough); everything else is formatted.
   const customKeys = template ? usedCustomVars(template) : [];
+  const rawComparable = resolveComparableRaw(effectiveEmployeeData);
   const customVars: Record<string, string> = {};
   for (const key of customKeys) {
     const def = variableDefs[key];
     const type = def?.type ?? "text";
-    customVars[key] = isFixedVarPassthrough(def)
-      ? (customRaw[key] ?? "")
-      : formatCustomValue(type, customRaw[key] ?? "");
+    if (type === "condition") {
+      customVars[key] = evalCondition(def?.condition, rawComparable) ? "ano" : "";
+    } else if (isFixedVarPassthrough(def)) {
+      customVars[key] = customRaw[key] ?? "";
+    } else {
+      customVars[key] = formatCustomValue(type, customRaw[key] ?? "");
+    }
   }
 
   // Pre-fill the custom-slot inputs from their configured defaults, once the
@@ -446,7 +454,14 @@ export default function GenerateContractModal({
                                 </td>
                                 <td className={styles.varVal}>
                                   <div className={styles.varValRow}>
-                                    {type === "bool" ? (
+                                    {type === "condition" ? (
+                                      // Computed from a comparison — read-only, shown
+                                      // so the user sees which branch will apply.
+                                      <span className={styles.varInput} style={{ border: 0, display: "flex", alignItems: "center", gap: 6 }}>
+                                        {customVars[key] ? "Ano" : "Ne"}
+                                        <span className={styles.varTableHint}>(vypočteno z podmínky)</span>
+                                      </span>
+                                    ) : type === "bool" ? (
                                       <label className={styles.varInput} style={{ border: 0, display: "flex", alignItems: "center", gap: 6 }}>
                                         <input
                                           type="checkbox"

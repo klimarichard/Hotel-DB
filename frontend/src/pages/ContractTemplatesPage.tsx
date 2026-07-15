@@ -427,9 +427,13 @@ import {
   CUSTOM_VAR_TYPE_LABELS,
   usedCustomVars,
   fillTemplate,
+  COMPARABLE_VARS,
+  COMPARE_OP_LABELS,
   type CustomVarDefs,
   type CustomVarType,
   type CustomVarDefault,
+  type CompareOp,
+  type CustomVarCondition,
 } from "@/lib/contractVariables";
 import {
   buildPreviewVars,
@@ -1900,26 +1904,122 @@ export default function ContractTemplatesPage() {
 
         const setDef = (
           key: string,
-          patch: Partial<{ label: string; type: CustomVarType; default: CustomVarDefault | undefined }>
+          patch: Partial<{
+            label: string;
+            type: CustomVarType;
+            default: CustomVarDefault | undefined;
+            condition: CustomVarCondition | undefined;
+          }>
         ) => {
           setVariableDefs((prev) => {
             const prevDef = prev[key];
-            // Changing the type can invalidate an existing default (a literal date
-            // for a now-number slot, or a fixed var of the wrong kind), so drop it.
+            // Changing the type can invalidate an existing default/condition (a
+            // literal date for a now-number slot, a condition on a text slot), so
+            // drop both unless the same patch re-supplies them.
             const typeChanged = patch.type !== undefined && patch.type !== prevDef?.type;
             const nextDefault =
               "default" in patch ? patch.default : typeChanged ? undefined : prevDef?.default;
+            const nextCondition =
+              "condition" in patch ? patch.condition : typeChanged ? undefined : prevDef?.condition;
             return {
               ...prev,
               [key]: {
                 label: patch.label ?? prevDef?.label ?? "",
                 type: patch.type ?? prevDef?.type ?? "text",
-                // Omit when absent so we never persist `default: undefined`.
+                // Omit when absent so we never persist `default/condition: undefined`.
                 ...(nextDefault ? { default: nextDefault } : {}),
+                ...(nextCondition ? { condition: nextCondition } : {}),
               },
             };
           });
           setIsDirty(true);
+        };
+
+        // Comparable variables of a given raw type (date / number), for the
+        // condition builder's operand dropdowns.
+        const comparableOf = (t: "date" | "number") => COMPARABLE_VARS.filter((v) => v.type === t);
+        const leftType = (cond: CustomVarCondition | undefined) =>
+          COMPARABLE_VARS.find((v) => v.key === cond?.leftKey)?.type ?? "date";
+        // A starter condition when a slot is switched to type "condition".
+        const starterCondition = (): CustomVarCondition => ({
+          leftKey: COMPARABLE_VARS[0].key,
+          op: "lt",
+          right: { kind: "literal", value: "" },
+        });
+        // Render the comparison builder for a "condition" slot.
+        const renderConditionBuilder = (key: string, cond: CustomVarCondition | undefined) => {
+          const c = cond ?? starterCondition();
+          const lt = leftType(c);
+          const setCond = (next: CustomVarCondition) => setDef(key, { condition: next });
+          const opt = (v: { key: string; label: string }) => (
+            <option key={v.key} value={v.key}>{v.label}</option>
+          );
+          return (
+            <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+              <select
+                style={{ ...fieldStyle, width: "auto", flex: "1 1 130px", minWidth: 0 }}
+                value={c.leftKey}
+                onChange={(e) => {
+                  const newLeft = e.target.value;
+                  const newType = COMPARABLE_VARS.find((v) => v.key === newLeft)?.type ?? "date";
+                  // Keep the right operand only if it stays type-compatible; a now
+                  // mismatched variable operand resets to an empty literal.
+                  const rightVarKey = c.right.kind === "var" ? c.right.key : null;
+                  const rightStillOk =
+                    rightVarKey === null ||
+                    COMPARABLE_VARS.find((v) => v.key === rightVarKey)?.type === newType;
+                  setCond({
+                    leftKey: newLeft,
+                    op: c.op,
+                    right: rightStillOk ? c.right : { kind: "literal", value: "" },
+                  });
+                }}
+              >
+                {COMPARABLE_VARS.map(opt)}
+              </select>
+              <select
+                style={{ ...fieldStyle, width: "auto", flex: "0 0 auto" }}
+                value={c.op}
+                onChange={(e) => setCond({ ...c, op: e.target.value as CompareOp })}
+              >
+                {(Object.keys(COMPARE_OP_LABELS) as CompareOp[]).map((op) => (
+                  <option key={op} value={op}>{COMPARE_OP_LABELS[op]}</option>
+                ))}
+              </select>
+              <select
+                style={{ ...fieldStyle, width: "auto", flex: "0 0 auto" }}
+                value={c.right.kind}
+                onChange={(e) => {
+                  const kind = e.target.value as "var" | "literal";
+                  if (kind === "var") {
+                    const first = comparableOf(lt).find((v) => v.key !== c.leftKey) ?? comparableOf(lt)[0];
+                    setCond({ ...c, right: { kind: "var", key: first?.key ?? "" } });
+                  } else {
+                    setCond({ ...c, right: { kind: "literal", value: "" } });
+                  }
+                }}
+              >
+                <option value="literal">Hodnota</option>
+                <option value="var">Proměnná</option>
+              </select>
+              {c.right.kind === "var" ? (
+                <select
+                  style={{ ...fieldStyle, width: "auto", flex: "1 1 130px", minWidth: 0 }}
+                  value={c.right.key}
+                  onChange={(e) => setCond({ ...c, right: { kind: "var", key: e.target.value } })}
+                >
+                  {comparableOf(lt).filter((v) => v.key !== c.leftKey).map(opt)}
+                </select>
+              ) : (
+                <input
+                  type={lt === "date" ? "date" : "number"}
+                  style={{ ...fieldStyle, width: "auto", flex: "1 1 110px", minWidth: 0 }}
+                  value={c.right.value}
+                  onChange={(e) => setCond({ ...c, right: { kind: "literal", value: e.target.value } })}
+                />
+              )}
+            </div>
+          );
         };
 
         // Built-in variables offered as a default source, split by kind so a
@@ -1983,6 +2083,13 @@ export default function ContractTemplatesPage() {
                   při generování dokumentu a zobrazí se i v náhledu. Může to být
                   pevná hodnota, nebo některá ze zabudovaných proměnných (např. Jméno).
                 </p>
+                <p style={hintStyle}>
+                  Typ <strong>Podmínka</strong> proměnnou nevyplňujete – její hodnota
+                  (Ano/Ne) se <strong>vypočítá</strong> z porovnání dvou hodnot
+                  (např. <em>Datum podpisu &lt; Datum nástupu</em>). Používá se stejně
+                  jako Ano/Ne v blocích <code>{"{{#if var1}}…{{/if}}"}</code> /{" "}
+                  <code>{"{{#unless var1}}…{{/unless}}"}</code>.
+                </p>
 
                 {used.length === 0 ? (
                   <p style={hintStyle}>
@@ -1996,7 +2103,7 @@ export default function ContractTemplatesPage() {
                         <th style={{ textAlign: "left", fontSize: "0.75rem", color: "var(--color-text-muted)", padding: "0 6px 4px 0" }}>Proměnná</th>
                         <th style={{ textAlign: "left", fontSize: "0.75rem", color: "var(--color-text-muted)", padding: "0 6px 4px 0" }}>Název (co se zobrazí)</th>
                         <th style={{ textAlign: "left", fontSize: "0.75rem", color: "var(--color-text-muted)", padding: "0 10px 4px 0" }}>Typ</th>
-                        <th style={{ textAlign: "left", fontSize: "0.75rem", color: "var(--color-text-muted)", padding: "0 0 4px 0" }}>Výchozí hodnota</th>
+                        <th style={{ textAlign: "left", fontSize: "0.75rem", color: "var(--color-text-muted)", padding: "0 0 4px 0" }}>Výchozí hodnota / podmínka</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -2024,51 +2131,59 @@ export default function ContractTemplatesPage() {
                               <select
                                 style={{ ...fieldStyle, width: "auto" }}
                                 value={type}
-                                onChange={(e) => setDef(key, { type: e.target.value as CustomVarType })}
+                                onChange={(e) => {
+                                  const t = e.target.value as CustomVarType;
+                                  setDef(key, t === "condition" ? { type: t, condition: starterCondition() } : { type: t });
+                                }}
                               >
                                 {(Object.keys(CUSTOM_VAR_TYPE_LABELS) as CustomVarType[]).map((t) => (
                                   <option key={t} value={t}>{CUSTOM_VAR_TYPE_LABELS[t]}</option>
                                 ))}
                               </select>
                             </td>
-                            {/* Default value: pre-filled (editable) at generation
-                                and shown in the preview. A fixed value matching the
-                                slot's type, or one of the built-in variables. */}
+                            {/* A "condition" slot shows the comparison builder;
+                                every other type shows its default-value control
+                                (pre-filled + editable at generation, shown in the
+                                preview). */}
                             <td style={{ padding: "3px 0" }}>
-                              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                <select
-                                  style={{ ...fieldStyle, width: "auto", flex: "0 0 auto" }}
-                                  value={source}
-                                  onChange={(e) => {
-                                    const s = e.target.value;
-                                    if (s === "literal") setDef(key, { default: { kind: "literal", value: "" } });
-                                    else if (s === "fixedVar") {
-                                      const opts = fixedVarOptions(type);
-                                      setDef(key, { default: { kind: "fixedVar", key: opts[0]?.key ?? "" } });
-                                    } else setDef(key, { default: undefined });
-                                  }}
-                                >
-                                  <option value="none">Žádná</option>
-                                  <option value="literal">Pevná hodnota</option>
-                                  <option value="fixedVar">Z proměnné</option>
-                                </select>
-                                {source === "literal" && (
-                                  <div style={{ flex: "1 1 auto", minWidth: 0 }}>
-                                    {renderLiteralDefault(key, type, dflt?.kind === "literal" ? dflt.value : "")}
-                                  </div>
-                                )}
-                                {source === "fixedVar" && (
+                              {type === "condition" ? (
+                                renderConditionBuilder(key, def?.condition)
+                              ) : (
+                                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                                   <select
-                                    style={{ ...fieldStyle, width: "auto", flex: "1 1 auto", minWidth: 0 }}
-                                    value={dflt?.kind === "fixedVar" ? dflt.key : ""}
-                                    onChange={(e) => setDef(key, { default: { kind: "fixedVar", key: e.target.value } })}
+                                    style={{ ...fieldStyle, width: "auto", flex: "0 0 auto" }}
+                                    value={source}
+                                    onChange={(e) => {
+                                      const s = e.target.value;
+                                      if (s === "literal") setDef(key, { default: { kind: "literal", value: "" } });
+                                      else if (s === "fixedVar") {
+                                        const opts = fixedVarOptions(type);
+                                        setDef(key, { default: { kind: "fixedVar", key: opts[0]?.key ?? "" } });
+                                      } else setDef(key, { default: undefined });
+                                    }}
                                   >
-                                    {fixedVarOptions(type).map((v) => (
-                                      <option key={v.key} value={v.key}>{v.label}</option>
-                                    ))}
+                                    <option value="none">Žádná</option>
+                                    <option value="literal">Pevná hodnota</option>
+                                    <option value="fixedVar">Z proměnné</option>
                                   </select>
-                                )}
-                              </div>
+                                  {source === "literal" && (
+                                    <div style={{ flex: "1 1 auto", minWidth: 0 }}>
+                                      {renderLiteralDefault(key, type, dflt?.kind === "literal" ? dflt.value : "")}
+                                    </div>
+                                  )}
+                                  {source === "fixedVar" && (
+                                    <select
+                                      style={{ ...fieldStyle, width: "auto", flex: "1 1 auto", minWidth: 0 }}
+                                      value={dflt?.kind === "fixedVar" ? dflt.key : ""}
+                                      onChange={(e) => setDef(key, { default: { kind: "fixedVar", key: e.target.value } })}
+                                    >
+                                      {fixedVarOptions(type).map((v) => (
+                                        <option key={v.key} value={v.key}>{v.label}</option>
+                                      ))}
+                                    </select>
+                                  )}
+                                </div>
+                              )}
                             </td>
                           </tr>
                         );

@@ -18,6 +18,7 @@ import {
   VARIABLE_GROUPS,
   isCustomVarKey,
   formatCustomValue,
+  evalCondition,
   type CustomVarDefs,
 } from "./contractVariables";
 
@@ -33,7 +34,10 @@ const MOCK_TEXT: Record<string, string> = {
   currentJobTitle: "recepční",
   // Pracovní podmínky
   contractType: "HPP",
-  salary: "35 000 Kč",
+  // Salary is the bare number (formatSalaryCZ → dot thousands-separators, no
+  // "Kč"); the ",- Kč" suffix lives in the template text, so the sample must
+  // match that or the preview misleads (looked like the variable carried "Kč").
+  salary: "35.000",
   startDate: "1. 8. 2026",
   endDate: "31. 7. 2027",
   workLocation: "Praha",
@@ -42,10 +46,11 @@ const MOCK_TEXT: Record<string, string> = {
   signingDate: "14. 7. 2026",
   originalSigningDate: "1. 8. 2025",
   agreedWorkScope: "úklid pokojů",
-  agreedReward: "180 Kč / hod.",
+  // Bare number too (resolveVariables emits the raw value); unit goes in text.
+  agreedReward: "180",
   // Dodatky
   dodatekEffectiveDate: "1. 9. 2026",
-  newSalary: "38 000 Kč",
+  newSalary: "38.000",
   salaryChangeVerb: "zvyšuje",
   newJobTitle: "vedoucí recepce",
   newWorkScope: "0,5",
@@ -69,6 +74,26 @@ const MOCK_CUSTOM_BY_TYPE: Record<string, string> = {
   text: "ukázkový text",
   date: "1. 8. 2026",
   number: "1 500",
+};
+
+/**
+ * Raw, typed stand-ins for the comparable variables, used to evaluate a
+ * `condition` custom slot in the preview. Mirror the MOCK_TEXT samples above but
+ * as ISO dates / plain numbers (what evalCondition compares on).
+ */
+const MOCK_RAW: Record<string, string | number | null> = {
+  startDate: "2026-08-01",
+  endDate: "2027-07-31",
+  signingDate: "2026-07-14",
+  originalSigningDate: "2025-08-01",
+  birthDate: "1992-03-14",
+  dodatekEffectiveDate: "2026-09-01",
+  requestedAt: "2026-07-14",
+  validFrom: "2026-08-01",
+  today: "2026-07-14",
+  salary: 35000,
+  agreedReward: 180,
+  hoursPerWeek: 40,
 };
 
 /** Every permanent variable declared as a conditional ({{#if}} / {{#unless}}). */
@@ -132,6 +157,11 @@ export function buildPreviewVars(
     const type = def?.type ?? "text";
     if (type === "bool") {
       vars[key] = bools[key] ? "ano" : "";
+      continue;
+    }
+    if (type === "condition") {
+      // Computed from the comparison against the raw sample values.
+      vars[key] = evalCondition(def?.condition, MOCK_RAW) ? "ano" : "";
       continue;
     }
     const d = def?.default;
