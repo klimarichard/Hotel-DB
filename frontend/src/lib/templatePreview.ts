@@ -51,7 +51,6 @@ const MOCK_TEXT: Record<string, string> = {
   // Dodatky
   dodatekEffectiveDate: "1. 9. 2026",
   newSalary: "38.000",
-  salaryChangeVerb: "zvyšuje",
   newJobTitle: "vedoucí recepce",
   newWorkScope: "0,5",
   newHoursPerWeek: "20",
@@ -98,6 +97,7 @@ export const PREVIEW_RAW_DEFAULTS: Record<string, string | number> = {
   newEndDate: "2027-12-31",
   newSalary: 38000,
   newHoursPerWeek: 20,
+  oldSalary: 35000,
 };
 
 /** Every permanent variable declared as a conditional ({{#if}} / {{#unless}}). */

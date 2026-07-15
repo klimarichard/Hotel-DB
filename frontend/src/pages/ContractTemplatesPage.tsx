@@ -2000,6 +2000,8 @@ export default function ContractTemplatesPage() {
         const renderConditionBuilder = (key: string, cond: CustomVarCondition | undefined) => {
           const c = cond ?? starterCondition();
           const lt = leftType(c);
+          // Unary operators (je prázdné / není prázdné) compare nothing on the right.
+          const needsRight = c.op !== "empty" && c.op !== "notEmpty";
           const setCond = (next: CustomVarCondition) => setDef(key, { condition: next });
           const opt = (v: { key: string; label: string }) => (
             <option key={v.key} value={v.key}>{v.label}</option>
@@ -2036,37 +2038,41 @@ export default function ContractTemplatesPage() {
                   <option key={op} value={op}>{COMPARE_OP_LABELS[op]}</option>
                 ))}
               </select>
-              <select
-                style={{ ...fieldStyle, width: "auto", flex: "0 0 auto" }}
-                value={c.right.kind}
-                onChange={(e) => {
-                  const kind = e.target.value as "var" | "literal";
-                  if (kind === "var") {
-                    const first = comparableOf(lt).find((v) => v.key !== c.leftKey) ?? comparableOf(lt)[0];
-                    setCond({ ...c, right: { kind: "var", key: first?.key ?? "" } });
-                  } else {
-                    setCond({ ...c, right: { kind: "literal", value: "" } });
-                  }
-                }}
-              >
-                <option value="literal">Hodnota</option>
-                <option value="var">Proměnná</option>
-              </select>
-              {c.right.kind === "var" ? (
-                <select
-                  style={{ ...fieldStyle, width: "auto", flex: "1 1 130px", minWidth: 0 }}
-                  value={c.right.key}
-                  onChange={(e) => setCond({ ...c, right: { kind: "var", key: e.target.value } })}
-                >
-                  {comparableOf(lt).filter((v) => v.key !== c.leftKey).map(opt)}
-                </select>
-              ) : (
-                <input
-                  type={lt === "date" ? "date" : "number"}
-                  style={{ ...fieldStyle, width: "auto", flex: "1 1 110px", minWidth: 0 }}
-                  value={c.right.value}
-                  onChange={(e) => setCond({ ...c, right: { kind: "literal", value: e.target.value } })}
-                />
+              {needsRight && (
+                <>
+                  <select
+                    style={{ ...fieldStyle, width: "auto", flex: "0 0 auto" }}
+                    value={c.right.kind}
+                    onChange={(e) => {
+                      const kind = e.target.value as "var" | "literal";
+                      if (kind === "var") {
+                        const first = comparableOf(lt).find((v) => v.key !== c.leftKey) ?? comparableOf(lt)[0];
+                        setCond({ ...c, right: { kind: "var", key: first?.key ?? "" } });
+                      } else {
+                        setCond({ ...c, right: { kind: "literal", value: "" } });
+                      }
+                    }}
+                  >
+                    <option value="literal">Hodnota</option>
+                    <option value="var">Proměnná</option>
+                  </select>
+                  {c.right.kind === "var" ? (
+                    <select
+                      style={{ ...fieldStyle, width: "auto", flex: "1 1 130px", minWidth: 0 }}
+                      value={c.right.key}
+                      onChange={(e) => setCond({ ...c, right: { kind: "var", key: e.target.value } })}
+                    >
+                      {comparableOf(lt).filter((v) => v.key !== c.leftKey).map(opt)}
+                    </select>
+                  ) : (
+                    <input
+                      type={lt === "date" ? "date" : "number"}
+                      style={{ ...fieldStyle, width: "auto", flex: "1 1 110px", minWidth: 0 }}
+                      value={c.right.value}
+                      onChange={(e) => setCond({ ...c, right: { kind: "literal", value: e.target.value } })}
+                    />
+                  )}
+                </>
               )}
             </div>
           );

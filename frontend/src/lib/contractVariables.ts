@@ -113,7 +113,7 @@ export const CUSTOM_VAR_TYPE_LABELS: Record<CustomVarType, string> = {
 // {{#unless key}}. Operands are a comparable built-in variable, or a literal of
 // the same type. Comparison is on RAW typed values (ISO dates chronologically,
 // numbers numerically) – never the formatted display strings.
-export type CompareOp = "lt" | "lte" | "gt" | "gte" | "eq" | "neq";
+export type CompareOp = "lt" | "lte" | "gt" | "gte" | "eq" | "neq" | "empty" | "notEmpty";
 export const COMPARE_OP_LABELS: Record<CompareOp, string> = {
   lt: "<",
   lte: "≤",
@@ -121,7 +121,11 @@ export const COMPARE_OP_LABELS: Record<CompareOp, string> = {
   gte: "≥",
   eq: "=",
   neq: "≠",
+  empty: "je prázdné",
+  notEmpty: "není prázdné",
 };
+/** Operators that test the left operand alone (no right operand needed). */
+export const UNARY_OPS: CompareOp[] = ["empty", "notEmpty"];
 
 export type ComparableType = "date" | "number";
 /** Built-in variables that may take part in a comparison, with their raw type. */
@@ -142,6 +146,7 @@ export const COMPARABLE_VARS: { key: string; label: string; type: ComparableType
   { key: "newEndDate", label: "Nový konec smlouvy", type: "date" },
   { key: "newSalary", label: "Nová mzda", type: "number" },
   { key: "newHoursPerWeek", label: "Nový počet hodin týdně", type: "number" },
+  { key: "oldSalary", label: "Předchozí mzda", type: "number" },
 ];
 const COMPARABLE_BY_KEY = new Map(COMPARABLE_VARS.map((v) => [v.key, v]));
 
@@ -321,7 +326,6 @@ export const VARIABLE_GROUPS: { group: string; vars: VariableDef[] }[] = [
     vars: [
       { key: "dodatekEffectiveDate", label: "Platnost dodatku" },
       { key: "newSalary", label: "Nová mzda" },
-      { key: "salaryChangeVerb", label: "Sloveso změny mzdy (zvyšuje/mění)" },
       { key: "isDodatekMzda", label: "Je dodatek o mzdě (pro {{#if}})", kind: "if" },
       { key: "newJobTitle", label: "Nová pozice" },
       { key: "isDodatekPozice", label: "Je dodatek o pozici (pro {{#if}})", kind: "if" },
@@ -395,8 +399,9 @@ export interface EmployeeData {
   // dodatekEffectiveDate is raw ISO; resolveVariables formats it.
   dodatekEffectiveDate?: string;
   dodatekChanges?: { changeKind: string; value: string }[];
-  // Salary in force immediately before this dodatek – used to compute
-  // salaryChangeVerb ("zvyšuje" if newSalary > oldSalary, else "mění").
+  // Salary in force immediately before this dodatek – exposed as the comparable
+  // "Předchozí mzda" (oldSalary) so a derived condition can pick the change verb
+  // itself, e.g. {{#if newSalary > oldSalary}}zvyšuje{{/if}}.
   oldSalary?: string | number;
   // Multisport-specific dates – collected by the standalone-contract
   // signing-date prompt. Raw ISO; resolveVariables formats them.
@@ -498,14 +503,6 @@ export function resolveVariables(
         changes.find((c) => c.changeKind === kind)?.value ?? "";
       const has = (kind: string) => changes.some((c) => c.changeKind === kind);
       const newSalaryStr = findValue("mzda");
-      const newSalaryNum = Number(newSalaryStr);
-      const oldSalaryNum = Number(employee.oldSalary);
-      const salaryChangeVerb =
-        Number.isFinite(newSalaryNum) && Number.isFinite(oldSalaryNum)
-          ? newSalaryNum > oldSalaryNum
-            ? "zvyšuje"
-            : "mění"
-          : "";
       return {
         dodatekEffectiveDate: formatDateCZ(employee.dodatekEffectiveDate),
         newSalary: formatSalaryCZ(newSalaryStr),
@@ -513,7 +510,6 @@ export function resolveVariables(
         newWorkScope: str(findValue("úvazek")),
         newHoursPerWeek: str(findValue("počet hodin")),
         newEndDate: formatDateCZ(findValue("délka smlouvy")),
-        salaryChangeVerb,
         isDodatekMzda: has("mzda") ? "ano" : "",
         isDodatekPozice: has("pracovní pozice") ? "ano" : "",
         isDodatekUvazek: has("úvazek") ? "ano" : "",
@@ -579,6 +575,7 @@ export function resolveComparableRaw(
     newEndDate: toIsoDate(changeVal("délka smlouvy")),
     newSalary: toNumber(changeVal("mzda")),
     newHoursPerWeek: toNumber(changeVal("počet hodin")),
+    oldSalary: toNumber(employee.oldSalary),
   };
 }
 
@@ -586,7 +583,9 @@ export function resolveComparableRaw(
  * Evaluate a derived condition against raw comparable values. Returns false
  * (block hidden) when the definition is incomplete or either operand is missing
  * / unparseable — a safe default that never invents a value on a contract. Dates
- * compare chronologically (ISO strings), numbers numerically.
+ * compare chronologically (ISO strings), numbers numerically. The unary
+ * `empty` / `notEmpty` operators test only whether the left operand has a value
+ * (null / undefined / "" = empty; a real 0 is NOT empty).
  */
 export function evalCondition(
   cond: CustomVarCondition | undefined,
@@ -595,6 +594,13 @@ export function evalCondition(
   if (!cond) return false;
   const leftMeta = COMPARABLE_BY_KEY.get(cond.leftKey);
   if (!leftMeta) return false;
+
+  if (cond.op === "empty" || cond.op === "notEmpty") {
+    const v = raw[cond.leftKey];
+    const isEmpty = v === null || v === undefined || v === "";
+    return cond.op === "empty" ? isEmpty : !isEmpty;
+  }
+
   const left = leftMeta.type === "number" ? toNumber(raw[cond.leftKey]) : toIsoDate(raw[cond.leftKey]);
   let right: string | number | null;
   if (cond.right.kind === "var") {
@@ -611,6 +617,7 @@ export function evalCondition(
     case "gte": return cmp >= 0;
     case "eq": return cmp === 0;
     case "neq": return cmp !== 0;
+    default: return false;
   }
 }
 
