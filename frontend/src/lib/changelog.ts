@@ -27,6 +27,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "4.9.0",
+    date: "2026-07-15",
+    changes: [
+      "Detail zaměstnance: nová sekce Dovolená s přehledem nároku, čerpání po měsících a zůstatku dovolené (v hodinách), s možností přepínat mezi roky.",
+      "Čerpání dovolené se po uzamčení mzdového období automaticky promítne do přehledu; jednotlivé hodnoty lze podle oprávnění také ručně upravit.",
+    ],
+  },
+  {
     version: "4.8.2",
     date: "2026-07-15",
     changes: [

@@ -660,3 +660,110 @@ GET /api/payroll/min-wage-check?minimumWage=<number>
 - Only ACTIVE employees and active (started, not yet ended) contracts are checked.
 - Results sorted by `salary` ascending (most under-threshold first).
 - Defined in `functions/src/routes/payroll.ts`.
+
+---
+
+## Vacation-hour ledger (v4.9.0)
+
+A per-employee, per-calendar-year running **balance** of vacation hours — nárok (entitlement), čerpáno (consumed, by month) and zůstatek (remaining). This is **distinct from vacation requests** (`vacationRequests`, the approval workflow documented in [Vacation (Dovolená)](vacation.md)): the ledger is a bookkeeping total fed from payroll, not a request/approval trail. A vacation *request* being approved does not itself write to the ledger — the ledger's "čerpáno" figures come from the payroll period, not from requests (see "Payroll-lock feed" below).
+
+All figures are in **HOURS** — the same unit the payroll engine computes (`vacationHours`) and the AVENSIO payroll-system export uses, so there is no day↔hour conversion anywhere in this feature.
+
+### Data model
+
+`employees/{employeeId}/vacationLedger/{year}` (doc id is the year as a string, e.g. `"2026"`):
+
+```ts
+{
+  year: number,
+  priorYearHours: number | null,     // Loňská — carried over from last year (MAY be negative: a deficit)
+  currentYearHours: number | null,   // Letošní — this year's entitlement (+ dodat)
+  paidOutHours: number | null,       // proplaceno (paid out instead of taken)
+  months: {
+    "1".."12": {
+      hours: number,
+      source: "avensio-seed" | "payroll-lock" | "manual",
+      updatedAt: Timestamp,
+      updatedBy: string | null,      // uid, or null for the AVENSIO seed script
+    }
+  },
+  updatedAt: Timestamp,
+  updatedBy: string | null,
+}
+```
+
+**Nárok (total entitlement) is DERIVED, never stored**: `priorYearHours + currentYearHours` (`null` only when both parts are unset; otherwise the unset part counts as 0). The pre-split model stored a single `entitlementHours` — that field is **deprecated**, ignored on read, and deleted by the seed. **Remaining hours are likewise DERIVED on read, never stored**: `nárok − Σ months[*].hours − paidOutHours` (`null` when nárok is unset). See `functions/src/services/vacationLedger.ts` (`entitlementHours()`, `remainingHours()`) — deriving both means the balance can never drift out of sync with its inputs after a backfill or correction.
+
+Every monthly cell carries a `source` tag so the origin of a figure stays visible in the UI and never needs to be reverse-engineered:
+- **`"avensio-seed"`** — the one-time historical import (see "Seed" below).
+- **`"payroll-lock"`** — written automatically when a payroll period is locked (see "Payroll-lock feed" below).
+- **`"manual"`** — hand-edited on the employee detail page.
+
+### Service — `functions/src/services/vacationLedger.ts`
+
+- `ledgerRef(employeeId, year)` — the doc reference.
+- `upsertLedgerMonth({ employeeId, year, month, hours, source, updatedBy })` — **idempotent by (employee, year, month)**: a deep-merge `set(..., { merge: true })` overwrites only `months.{month}`, leaving every other month and the entitlement/paidOut fields untouched. Re-locking a payroll period, or an unlock→lock cycle, overwrites the same slot instead of accumulating a duplicate. `hours === null` deletes that month's field (`FieldValue.delete()`).
+- `setLedgerAnnual({ employeeId, year, field, hours, updatedBy })` — sets one annual field (`priorYearHours` / `currentYearHours` / `paidOutHours`, not per-month). `hours === null` clears it.
+- `entitlementHours(prior, current)` — the derived Nárok (see above).
+- `sumConsumed(months)` / `remainingHours(ledger)` — the shared pure math, used identically by the read endpoint and (client-side, reimplemented) by the frontend summary line.
+
+### Endpoints — `functions/src/routes/employees.ts`
+
+```
+GET /api/employees/:id/vacation-ledger?year=YYYY
+```
+Gated `employees.view.all` OR `employees.view.nonManagement` — the same read gate as the rest of the employee detail record. Returns `null` when the ledger has never been written for that year, otherwise the stored doc plus the two derived fields `consumedHours` and `remainingHours`.
+
+```
+PATCH /api/employees/:id/vacation-ledger/:year
+```
+Gated by the dedicated `employees.vacationBalance.manage` permission (below) — reading and editing the balance are separate grants. Body is exactly one of:
+- `{ month: 1..12, hours: number | null }` — set/clear that month's čerpáno.
+- `{ priorYearHours: number | null }` — Loňská (may be negative).
+- `{ currentYearHours: number | null }` — Letošní (may be negative).
+- `{ paidOutHours: number | null }` — annual proplaceno (≥ 0). *(Backend endpoint and service support this field; the `VacationLedgerSection` frontend does not expose an edit control for it — only Loňská, Letošní and the monthly cells are editable in the UI. Nárok is read-only, being the derived sum.)*
+
+Counts (monthly čerpáno, proplaceno) must be ≥ 0; the entitlement components (Loňská/Letošní) may be negative.
+
+`hours === null` clears the field. Every write is tagged `source: "manual"` and audit-logged (`logUpdate`, collection `"employees/vacationLedger"`, `subResourceId` = the year).
+
+### Payroll-lock feed — `functions/src/routes/payroll.ts`
+
+`PATCH /payroll/periods/:id` (the lock/unlock toggle, gated `payroll.lock`) mirrors vacation hours into the ledger **only on a genuine `unlocked → locked` transition** — a repeated lock (the handler doesn't reject re-locking an already-locked period) does not re-run the feed.
+
+`feedVacationLedgerOnLock(periodRef, year, month, uid)` walks every entry in the period and writes `upsertLedgerMonth(..., source: "payroll-lock")` with the entry's **effective** vacation hours:
+
+```ts
+const eff = e.overrides?.vacationHours
+  ?? e.autoOverrides?.vacationHours
+  ?? e.vacationHours
+  ?? 0;
+```
+
+This is deliberately the **same override precedence the payroll UI displays** (manual override, then the Nemoc/sick-leave auto-override, then the raw computed value) — reading `vacationHours` alone would misreport anyone whose sick-leave cascade adjusted their vacation hours for the period. Payroll-computation detail for that cascade lives only in the local `payroll.md`, not here.
+
+The feed is **best-effort**: it runs inside a `try/catch` and a failure is logged to the server console but never blocks or rolls back the lock itself, because a payroll period must be lockable even if the ledger write has a transient problem. A separate `writeAudit` entry (`event: "vacation.ledger.fromPayrollLock"`, `extra: { source: "payroll-lock", employees: n }`) records how many entries were fed.
+
+### Permission — `employees.vacationBalance.manage`
+
+- Backend catalogue: `functions/src/auth/permissions.ts`, "Zaměstnanci" group, label *"Upravit zůstatek dovolené (po měsících)"*; granted to the `director` builtin type.
+- Frontend catalogue: `frontend/src/lib/permissions/catalog.ts`, under the Zaměstnanci page group → new subsection **"Dovolená – zůstatek"** (a single level-1 item — there's no separate "view" key; reading the ledger piggybacks on the existing `employees.view.*` gate the employee detail page already requires).
+- `admin` covers it implicitly via `system.admin`; any other role/type needs the key granted explicitly in Nastavení → Uživatelské typy.
+
+### Frontend — `VacationLedgerSection.tsx`
+
+`frontend/src/components/VacationLedgerSection.tsx`, mounted as a collapsible **"Dovolená"** section on the employee detail page's **Detail** tab (`EmployeeDetailPage.tsx`, between Benefity and Historie změn), default-collapsed like every other section on that tab. It fetches lazily — the API call only fires once the section is expanded.
+
+- **Year switcher** (`‹ year ›`), floored at `FIRST_YEAR = 2026` (the earliest year seeded from AVENSIO) — the "previous year" arrow disables below it.
+- **Summary line**: Loňská + Letošní (each editable via double-click when `canManage`) / Nárok (= Loňská + Letošní, derived read-only) / Čerpáno (derived, read-only) / Zůstatek (derived, read-only, rendered in a warning colour when negative). Loňská/Letošní accept negative values; the monthly cells do not.
+- **Two-row month table**, columns 1–12 plus a **CELKEM** total column (= Čerpáno). Each month cell is double-click-to-edit when `canManage`; a cell whose `source === "manual"` is visually flagged (background + `*`) using the **same "manual override" convention as Payroll's on-screen entry rows** — a deliberate reuse of an existing visual language rather than inventing a new one.
+- Editing is inline (double-click → text input → blur/Enter saves, Escape cancels); an empty input clears the value (`hours: null`). Errors surface through `ConfirmModal` (`showCancel={false}`, title "Chyba") per the no-native-dialogs rule.
+- `canManage` is passed down from `EmployeeDetailPage`'s `canManageVacationBalance = can("employees.vacationBalance.manage")`; without it the section is still visible (read-only) to anyone who can open the employee detail page at all.
+
+### Seed — one-time AVENSIO H1-2026 import
+
+A one-time historical backfill, **scoped to the 32 employees present in the July/August 2026 shift rosters** (not the full employee base) — everyone else's ledger starts empty and fills in going forward purely from the payroll-lock feed. Mechanism (script is gitignored/local-only, not shipped in the repo — treat this as a description of the mechanism, not a canonical path):
+- Reads a reviewed JSON mapping (AVENSIO export → `{ employeeId, priorYearHours, currentYearHours, paidOutHours, months: { "1".."6": hours } }` per employee) and writes each `employees/{id}/vacationLedger/2026` doc, tagging every seeded month `source: "avensio-seed"`.
+- **Additive and idempotent**: uses `set({ merge: true })`, so it only ever touches the fields it carries (Loňská, Letošní, paidOut, months 1–6) and never clears months a later payroll lock adds (7+); it also `FieldValue.delete()`s the deprecated pre-split `entitlementHours`.
+- **Prod-only, dry-run by default**: refuses to run if emulator env vars are set, requires `--commit` to actually write, and skips (reporting) any `employeeId` not found in prod `employees/`.
+- Only imports Jan–Jun 2026 (H1) — the rest of the year is expected to be fed live by payroll locks as each month closes.
