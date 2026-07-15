@@ -319,3 +319,60 @@ export function expectedContractTypesForRow(row: EmploymentRow): ContractType[] 
   }
   return CHANGE_TYPE_TO_CONTRACTS[row.changeType] ?? [];
 }
+
+/**
+ * Whole-month probation length parsed from a free-form Czech string
+ * ("2 měsíce", "3", …). Probation is always agreed in months, so a bare number
+ * is read as months; anything using weeks/days or otherwise unparseable returns
+ * null (no in-probation detection → the regular termination template). Mirrors
+ * the accent-insensitive parsing of the server-side probation-alert service.
+ */
+function parseProbationMonths(input: string | undefined | null): number | null {
+  if (!input) return null;
+  const ascii = input.trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  const m = ascii.match(/^(\d+)\s*([a-z]*)/);
+  if (!m) return null;
+  const n = parseInt(m[1], 10);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  const unit = m[2];
+  return unit === "" || /^(mesic|mesice|mesicu|m)$/.test(unit) ? n : null;
+}
+
+/** Add N calendar months to a YYYY-MM-DD string (local time, no TZ shift). */
+function addCalendarMonths(start: string, n: number): string {
+  const [y, m, d] = start.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  date.setMonth(date.getMonth() + n);
+  const yy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return `${yy}-${mm}-${dd}`;
+}
+
+/**
+ * The termination contract template to generate for a (terminated) session,
+ * per the business rules:
+ *   1) DPP contract           → ukonceni_dpp   (checked first – DPP wins)
+ *   2) ended within probation → ukonceni_zkusebni
+ *   3) otherwise              → ukonceni_hpp_ppp
+ *
+ * "Within probation": probation runs in whole months from the Nástup start and
+ * covers the half-open range [start, start + N months). So a 2-month probation
+ * from 2026-07-15 runs through 2026-09-14 inclusive, and a termination whose
+ * date is on or before that last day (`endDate < start + N months`) is still in
+ * probation. Falls back to ukonceni_hpp_ppp when probation is absent/unparseable
+ * or the dates are missing.
+ *
+ * The termination date is the session's effective end date (the Ukončení row's
+ * date, see computeEffectiveState).
+ */
+export function terminationContractType(session: EmploymentSession): ContractType {
+  if (session.effective.contractType === "DPP") return "ukonceni_dpp";
+  const start = session.nastup.startDate;
+  const endDate = session.effective.endDate;
+  const months = parseProbationMonths(session.nastup.probationPeriod);
+  if (start && endDate && months && endDate < addCalendarMonths(start, months)) {
+    return "ukonceni_zkusebni";
+  }
+  return "ukonceni_hpp_ppp";
+}
