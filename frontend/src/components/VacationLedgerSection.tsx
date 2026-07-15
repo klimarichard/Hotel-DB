@@ -1,16 +1,19 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import Button from "./Button";
 import ConfirmModal from "./ConfirmModal";
 import styles from "./VacationLedgerSection.module.css";
 
 /**
- * Read/edit view of an employee's vacation-hour ledger for one calendar year.
- * All figures are in HOURS (the unit AVENSIO + the payroll engine use). Editing
- * is gated by the caller (`canManage` ← employees.vacationBalance.manage); when
- * false the whole card is read-only. Remaining is derived server-side and shown
- * emphasized (red when negative). Each month cell is tagged with its origin:
- *   A = AVENSIO seed · M = ze mzdy (payroll lock) · R = ruční úprava.
+ * Read/edit view of an employee's vacation-hour ledger, one calendar year at a
+ * time (‹ year › switcher, like Payroll/Směny). All figures are in HOURS. The
+ * summary line shows Nárok (entitlement, editable), Čerpáno (derived) and
+ * Zůstatek (derived; red when negative). Below it a compact two-row table lists
+ * the hours taken in each month 1–12.
+ *
+ * Editing is gated by the caller (`canManage` ← employees.vacationBalance.manage).
+ * A manually-edited month value (source "manual") is marked exactly like a manual
+ * override in Payroll (warning background + "*"); AVENSIO-seeded and payroll-fed
+ * values render plain. Editing = double-click; empty input clears the value.
  */
 
 type LedgerSource = "avensio-seed" | "payroll-lock" | "manual";
@@ -29,37 +32,24 @@ interface Ledger {
   remainingHours: number | null;
 }
 
-const MONTHS_CZ = [
-  "Leden", "Únor", "Březen", "Duben", "Květen", "Červen",
-  "Červenec", "Srpen", "Září", "Říjen", "Listopad", "Prosinec",
-];
+const FIRST_YEAR = 2026; // earliest year we hold data for (AVENSIO H1 seed)
 
-const SOURCE_TAG: Record<LedgerSource, { letter: string; title: string }> = {
-  "avensio-seed": { letter: "A", title: "Načteno z AVENSIO (počáteční import)" },
-  "payroll-lock": { letter: "M", title: "Doplněno automaticky uzamčením mezd" },
-  manual: { letter: "R", title: "Ruční úprava" },
-};
-
-/** Format an hour figure: drop trailing .0, keep decimals like 157,4. */
+/** Format an hour figure: drop trailing .0, Czech decimal comma. */
 function fmtH(n: number | null | undefined): string {
   if (n == null) return "–";
   return `${String(n).replace(".", ",")} h`;
 }
 
-type EditTarget =
-  | { kind: "month"; month: number }
-  | { kind: "entitlementHours" }
-  | { kind: "paidOutHours" };
+type EditTarget = { kind: "month"; month: number } | { kind: "entitlementHours" };
 
 export default function VacationLedgerSection({
   employeeId,
   canManage,
-  year = 2026,
 }: {
   employeeId: string;
   canManage: boolean;
-  year?: number;
 }) {
+  const [year, setYear] = useState(FIRST_YEAR);
   const [ledger, setLedger] = useState<Ledger | null | undefined>(undefined); // undefined = loading
   const [edit, setEdit] = useState<EditTarget | null>(null);
   const [draft, setDraft] = useState("");
@@ -68,6 +58,8 @@ export default function VacationLedgerSection({
 
   useEffect(() => {
     let alive = true;
+    setLedger(undefined);
+    setEdit(null);
     api
       .get<Ledger | null>(`/employees/${employeeId}/vacation-ledger?year=${year}`)
       .then((l) => alive && setLedger(l))
@@ -85,11 +77,10 @@ export default function VacationLedgerSection({
 
   async function save() {
     if (!edit) return;
-    // Empty string clears the value (→ null). Otherwise parse a non-negative number.
     const raw = draft.trim().replace(",", ".");
     let hours: number | null;
     if (raw === "") {
-      hours = null;
+      hours = null; // clear
     } else {
       const n = Number(raw);
       if (!Number.isFinite(n) || n < 0) {
@@ -99,15 +90,11 @@ export default function VacationLedgerSection({
       hours = n;
     }
     const body =
-      edit.kind === "month"
-        ? { month: edit.month, hours }
-        : edit.kind === "entitlementHours"
-          ? { entitlementHours: hours }
-          : { paidOutHours: hours };
+      edit.kind === "month" ? { month: edit.month, hours } : { entitlementHours: hours };
     setSaving(true);
     try {
       await api.patch(`/employees/${employeeId}/vacation-ledger/${year}`, body);
-      // Refetch so derived consumed/remaining stay authoritative (single source of math).
+      // Refetch so derived čerpáno/zůstatek stay authoritative (single source of math).
       const fresh = await api.get<Ledger | null>(
         `/employees/${employeeId}/vacation-ledger?year=${year}`
       );
@@ -120,133 +107,122 @@ export default function VacationLedgerSection({
     }
   }
 
-  if (ledger === undefined) {
-    return <div className={styles.loading}>Načítám…</div>;
-  }
-
   const entitlement = ledger?.entitlementHours ?? null;
-  const paidOut = ledger?.paidOutHours ?? null;
   const consumed = ledger?.consumedHours ?? 0;
   const remaining = ledger?.remainingHours ?? null;
   const months = ledger?.months ?? {};
 
   const editInput = (
-    <span className={styles.editor}>
-      <input
-        className={styles.input}
-        type="text"
-        inputMode="decimal"
-        value={draft}
-        autoFocus
-        disabled={saving}
-        onChange={(e) => setDraft(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") void save();
-          if (e.key === "Escape") setEdit(null);
-        }}
-        placeholder="prázdné = smazat"
-      />
-      <Button size="sm" onClick={() => void save()} disabled={saving}>
-        Uložit
-      </Button>
-      <Button size="sm" variant="secondary" onClick={() => setEdit(null)} disabled={saving}>
-        Zrušit
-      </Button>
-    </span>
+    <input
+      className={styles.input}
+      type="text"
+      inputMode="decimal"
+      value={draft}
+      autoFocus
+      disabled={saving}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => void save()}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") { e.preventDefault(); void save(); }
+        if (e.key === "Escape") { e.preventDefault(); setEdit(null); }
+      }}
+    />
   );
 
   return (
     <div className={styles.wrap}>
-      {ledger === null && (
-        <p className={styles.empty}>
-          Pro rok {year} zatím nejsou u tohoto zaměstnance žádné údaje o dovolené.
-          {canManage ? " Můžete je zadat níže." : ""}
-        </p>
-      )}
-
-      {/* Souhrn */}
-      <div className={styles.summary}>
-        <div className={styles.summaryItem}>
-          <span className={styles.summaryLabel}>Nárok (rok {year})</span>
-          {edit?.kind === "entitlementHours" ? (
-            editInput
-          ) : (
-            <span
-              className={canManage ? styles.editable : undefined}
-              onClick={() => startEdit({ kind: "entitlementHours" }, entitlement)}
-              title={canManage ? "Kliknutím upravit" : undefined}
-            >
-              {fmtH(entitlement)}
-            </span>
-          )}
-        </div>
-
-        <div className={styles.summaryItem}>
-          <span className={styles.summaryLabel}>Čerpáno</span>
-          <span>{fmtH(consumed)}</span>
-        </div>
-
-        <div className={styles.summaryItem}>
-          <span className={styles.summaryLabel}>Proplaceno</span>
-          {edit?.kind === "paidOutHours" ? (
-            editInput
-          ) : (
-            <span
-              className={canManage ? styles.editable : undefined}
-              onClick={() => startEdit({ kind: "paidOutHours" }, paidOut)}
-              title={canManage ? "Kliknutím upravit" : undefined}
-            >
-              {fmtH(paidOut)}
-            </span>
-          )}
-        </div>
-
-        <div className={styles.summaryItem}>
-          <span className={styles.summaryLabel}>Zůstatek</span>
-          <span
-            className={`${styles.remaining} ${remaining != null && remaining < 0 ? styles.negative : ""}`}
-          >
-            {fmtH(remaining)}
-          </span>
-        </div>
+      {/* ‹ rok › */}
+      <div className={styles.yearNav}>
+        <button
+          className={styles.navBtn}
+          onClick={() => setYear((y) => y - 1)}
+          disabled={year <= FIRST_YEAR}
+          title="Předchozí rok"
+        >
+          ‹
+        </button>
+        <span className={styles.yearLabel}>{year}</span>
+        <button className={styles.navBtn} onClick={() => setYear((y) => y + 1)} title="Další rok">
+          ›
+        </button>
       </div>
 
-      {/* Měsíční čerpání */}
-      <div className={styles.monthsLabel}>Čerpání po měsících</div>
-      <div className={styles.grid}>
-        {MONTHS_CZ.map((name, i) => {
-          const month = i + 1;
-          const cell = months[String(month)];
-          const isEditing = edit?.kind === "month" && edit.month === month;
-          return (
-            <div key={month} className={styles.cell}>
-              <span className={styles.cellMonth}>{name}</span>
-              {isEditing ? (
+      {ledger === undefined ? (
+        <div className={styles.loading}>Načítám…</div>
+      ) : (
+        <>
+          {/* Nárok / Čerpáno / Zůstatek */}
+          <div className={styles.summary}>
+            <span className={styles.sumItem}>
+              <span className={styles.sumLabel}>Nárok</span>
+              {edit?.kind === "entitlementHours" ? (
                 editInput
               ) : (
                 <span
                   className={canManage ? styles.editable : undefined}
-                  onClick={() => startEdit({ kind: "month", month }, cell?.hours)}
-                  title={canManage ? "Kliknutím upravit" : undefined}
+                  onDoubleClick={() => startEdit({ kind: "entitlementHours" }, entitlement)}
+                  title={canManage ? "Dvojklik pro úpravu" : undefined}
                 >
-                  <span className={styles.cellHours}>{cell ? fmtH(cell.hours) : "–"}</span>
-                  {cell && (
-                    <span className={styles.tag} title={SOURCE_TAG[cell.source]?.title}>
-                      {SOURCE_TAG[cell.source]?.letter ?? "?"}
-                    </span>
-                  )}
+                  {fmtH(entitlement)}
                 </span>
               )}
-            </div>
-          );
-        })}
-      </div>
+            </span>
+            <span className={styles.sumItem}>
+              <span className={styles.sumLabel}>Čerpáno</span>
+              <span>{fmtH(consumed)}</span>
+            </span>
+            <span className={styles.sumItem}>
+              <span className={styles.sumLabel}>Zůstatek</span>
+              <span className={`${styles.remaining} ${remaining != null && remaining < 0 ? styles.negative : ""}`}>
+                {fmtH(remaining)}
+              </span>
+            </span>
+          </div>
 
-      <div className={styles.legend}>
-        <span title={SOURCE_TAG["avensio-seed"].title}><b>A</b> = AVENSIO</span>
-        <span title={SOURCE_TAG["payroll-lock"].title}><b>M</b> = ze mzdy</span>
-        <span title={SOURCE_TAG.manual.title}><b>R</b> = ruční úprava</span>
-      </div>
+          {/* Two-row month table */}
+          <div className={styles.tableScroll}>
+            <table className={styles.monthTable}>
+              <tbody>
+                <tr className={styles.monthHeadRow}>
+                  {Array.from({ length: 12 }, (_, i) => (
+                    <th key={i + 1} className={styles.monthHead}>{i + 1}</th>
+                  ))}
+                </tr>
+                <tr>
+                  {Array.from({ length: 12 }, (_, i) => {
+                    const month = i + 1;
+                    const cell = months[String(month)];
+                    const isManual = cell?.source === "manual";
+                    const isEditing = edit?.kind === "month" && edit.month === month;
+                    return (
+                      <td key={month} className={styles.monthCell}>
+                        {isEditing ? (
+                          editInput
+                        ) : (
+                          <span
+                            className={[
+                              canManage ? styles.editable : "",
+                              isManual ? styles.overridden : "",
+                            ].join(" ").trim()}
+                            onDoubleClick={() => startEdit({ kind: "month", month }, cell?.hours)}
+                            title={
+                              isManual
+                                ? `Ručně upraveno${canManage ? " · dvojklik upraví" : ""}`
+                                : canManage ? "Dvojklik pro úpravu" : undefined
+                            }
+                          >
+                            {cell ? String(cell.hours).replace(".", ",") : "–"}
+                          </span>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
 
       {errModal && (
         <ConfirmModal
