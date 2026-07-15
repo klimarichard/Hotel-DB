@@ -96,6 +96,12 @@
   overflow: hidden;
 }
 
+/* Space the stacked sections (Datum podpisu / Vlastní proměnné / Hodnoty
+   proměnných) apart instead of butting them together. */
+.varTable:not(:last-child) {
+  margin-bottom: 16px;
+}
+
 .varTableHead {
   display: flex;
   align-items: center;
