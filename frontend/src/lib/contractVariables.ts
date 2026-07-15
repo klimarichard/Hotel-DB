@@ -257,6 +257,7 @@ export const VARIABLE_GROUPS: { group: string; vars: VariableDef[] }[] = [
       { key: "endDate", label: "Datum ukončení" },
       { key: "workLocation", label: "Místo výkonu práce" },
       { key: "hoursPerWeek", label: "Počet hodin týdně (PPP)" },
+      { key: "is20Hours", label: "Je poloviční úvazek – 20 h/týdně (pro {{#if}} / {{#unless}})", kind: "if" },
       { key: "probationPeriod", label: "Zkušební doba" },
       { key: "signingDate", label: "Datum podpisu" },
       { key: "originalSigningDate", label: "Datum podpisu původní smlouvy" },
@@ -442,6 +443,10 @@ export function resolveVariables(
     agreedWorkScope: str(employee.agreedWorkScope),
     agreedReward: str(employee.agreedReward),
     hoursPerWeek: str(employee.hoursPerWeek),
+    // True only for a standard half-time PPP (exactly 20 h/week). Lets the PPP
+    // template say "poloviční pracovní úvazek" for 20 h and "zkrácený poloviční
+    // úvazek" for any other part-time amount, via {{#if}} / {{#unless}}.
+    is20Hours: Number(employee.hoursPerWeek) === 20 ? "ano" : "",
     ...(() => {
       const changes = employee.dodatekChanges ?? [];
       const findValue = (kind: string) =>
