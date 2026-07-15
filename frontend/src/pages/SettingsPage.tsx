@@ -89,7 +89,7 @@ function SalaryCell({ value, suffix = "Kč" }: { value: number | null | undefine
 function CollapsibleSection({
   title,
   action,
-  defaultOpen = true,
+  defaultOpen = false,
   children,
 }: {
   title: string;
