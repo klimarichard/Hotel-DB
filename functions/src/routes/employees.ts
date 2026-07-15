@@ -29,6 +29,14 @@ import {
   type MultisportPeriod,
   type MultisportCompanion,
 } from "../services/multisport";
+import {
+  ledgerRef,
+  sumConsumed,
+  remainingHours,
+  upsertLedgerMonth,
+  setLedgerAnnual,
+  type LedgerMonth,
+} from "../services/vacationLedger";
 
 export const employeesRouter = Router();
 
@@ -1346,6 +1354,128 @@ employeesRouter.get(
       .get();
     const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     res.json(rows);
+  }
+);
+
+/**
+ * GET /api/employees/:id/vacation-ledger?year=2026
+ * Read-only vacation-hour ledger for one employee + year. Reading is part of the
+ * employee record (same gate as the other detail sub-reads); editing needs the
+ * dedicated employees.vacationBalance.manage permission (PATCH below). Returns
+ * null when the ledger has never been written for that year.
+ */
+employeesRouter.get(
+  "/:id/vacation-ledger",
+  requirePermission("employees.view.all", "employees.view.nonManagement"),
+  async (req: AuthRequest, res) => {
+    const year = parseInt(String(req.query.year ?? ""), 10);
+    if (!Number.isInteger(year) || year < 2000 || year > 2100) {
+      res.status(400).json({ error: "Neplatný rok." });
+      return;
+    }
+    const snap = await ledgerRef(req.params.id, year).get();
+    if (!snap.exists) {
+      res.json(null);
+      return;
+    }
+    const data = snap.data() as Record<string, unknown>;
+    const months = (data.months as Record<string, LedgerMonth>) ?? {};
+    const entitlementHours = (data.entitlementHours as number | null) ?? null;
+    const paidOutHours = (data.paidOutHours as number | null) ?? null;
+    res.json({
+      year,
+      entitlementHours,
+      paidOutHours,
+      months,
+      consumedHours: sumConsumed(months),
+      remainingHours: remainingHours({ entitlementHours, paidOutHours, months }),
+      updatedAt: data.updatedAt ?? null,
+      updatedBy: data.updatedBy ?? null,
+    });
+  }
+);
+
+/**
+ * PATCH /api/employees/:id/vacation-ledger/:year
+ * Hand-edit one figure of the ledger (source tagged "manual"). Exactly one of:
+ *   { month: 1..12, hours: number|null }   → set/clear that month's čerpáno
+ *   { entitlementHours: number|null }       → annual nárok
+ *   { paidOutHours: number|null }           → proplaceno
+ * `hours === null` clears the field. Gated by employees.vacationBalance.manage.
+ */
+employeesRouter.patch(
+  "/:id/vacation-ledger/:year",
+  requirePermission("employees.vacationBalance.manage"),
+  async (req: AuthRequest, res) => {
+    const year = parseInt(req.params.year, 10);
+    if (!Number.isInteger(year) || year < 2000 || year > 2100) {
+      res.status(400).json({ error: "Neplatný rok." });
+      return;
+    }
+    const body = req.body as Record<string, unknown>;
+
+    // Validate an optional hours value: null (clear) or a finite number ≥ 0.
+    const readHours = (v: unknown): number | null | undefined => {
+      if (v === null) return null;
+      if (typeof v === "number" && Number.isFinite(v) && v >= 0) return v;
+      return undefined; // signals "invalid"
+    };
+
+    const ref = ledgerRef(req.params.id, year);
+    const beforeSnap = await ref.get();
+    const before = beforeSnap.exists ? (beforeSnap.data() as Record<string, unknown>) : {};
+
+    let after: Record<string, unknown>;
+    if ("month" in body) {
+      const month = Number(body.month);
+      if (!Number.isInteger(month) || month < 1 || month > 12) {
+        res.status(400).json({ error: "Neplatný měsíc (1–12)." });
+        return;
+      }
+      const hours = readHours(body.hours);
+      if (hours === undefined) {
+        res.status(400).json({ error: "Neplatná hodnota hodin." });
+        return;
+      }
+      await upsertLedgerMonth({
+        employeeId: req.params.id,
+        year,
+        month,
+        hours,
+        source: "manual",
+        updatedBy: req.uid ?? null,
+      });
+      after = { [`months.${month}`]: hours };
+    } else if ("entitlementHours" in body || "paidOutHours" in body) {
+      const field = "entitlementHours" in body ? "entitlementHours" : "paidOutHours";
+      const hours = readHours(body[field]);
+      if (hours === undefined) {
+        res.status(400).json({ error: "Neplatná hodnota hodin." });
+        return;
+      }
+      await setLedgerAnnual({
+        employeeId: req.params.id,
+        year,
+        field,
+        hours,
+        updatedBy: req.uid ?? null,
+      });
+      after = { [field]: hours };
+    } else {
+      res.status(400).json({ error: "Chybí pole ke změně (month/entitlementHours/paidOutHours)." });
+      return;
+    }
+
+    await logUpdate(ctxFromReq(req), {
+      collection: "employees/vacationLedger",
+      resourceId: req.params.id,
+      subResourceId: String(year),
+      employeeId: req.params.id,
+      before,
+      after: { ...before, ...after },
+      year,
+    });
+    res.json({ success: true });
   }
 );
 

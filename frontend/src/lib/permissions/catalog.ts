@@ -214,6 +214,12 @@ export const PERMISSION_SECTIONS = [
           { key: "documents.delete", label: "Smazat dokument", level: 2 },
         ],
       },
+      {
+        title: "Dovolená – zůstatek",
+        items: [
+          { key: "employees.vacationBalance.manage", label: "Upravit zůstatek dovolené (po měsících)", level: 1 },
+        ],
+      },
     ],
   },
   {
