@@ -13,8 +13,8 @@ The application UI is in **Czech**. This README and the developer documentation 
 - **Payroll** — monthly computation from the published shift plan, manual adjustments, notes, period locking, and PDF export.
 - **Dashboard, alerts & audit** — a per-role dashboard (Přehled), an alerts hub (Upozornění), and a complete change log (Log změn).
 - **Recepce** — a permission-driven front-desk hub per hotel (Ambiance, Superior, Amigo & Alqush, Ankora): a shift handover protocol (cash counting, accounts, notes, signature-based handover), a walk-in sales log, and a taxi-ride log with commission tracking and a shared route price list.
-- **Onboarding tour & help** — a guided first-login tour (auto-starts once, fully replayable from Nápověda) that spotlights controls based on each user's permissions; section-jump navigation lets users skip ahead or back a whole page at a time; returning users who have already completed the tour see only a short "Co je nového" card for newly-added features rather than the full tour again; a searchable Nápověda reference page; all permission-driven with no per-role duplicates.
-- **Administration** — companies, job positions, departments, education levels, payroll settings, user management, per-role menu ordering, and manual job triggers (Settings → Úlohy).
+- **Onboarding tour & help** — a guided first-login tour (auto-starts once, fully replayable from Nápověda) that spotlights controls based on each user's permissions; section-jump navigation lets users skip ahead or back a whole page at a time; returning users who have already completed the tour see only a short "Co je nového" card for newly-added features rather than the full tour again; a searchable Nápověda reference page whose step list is directly clickable, jumping the tour straight to that step; all permission-driven with no per-role duplicates.
+- **Administration** — companies, job positions, departments, and education levels (grouped as collapsible sections under a single Settings → Seznamy tab), payroll settings, user management, per-role menu ordering, and manual job triggers (Settings → Úlohy).
 
 Granular permission-based access control gates every screen, route, and API endpoint.
 
@@ -260,6 +260,8 @@ Uživatelé s oprávněním **„Spravovat návody"** (typicky administrátor ne
 ### Průvodce aplikací
 
 I Recepci (Předávací protokol, Walkiny i Taxi) pokrývá úvodní **Prohlídka aplikace** — interaktivní průvodce, který se spustí automaticky při prvním přihlášení a je kdykoli znovu dostupný tlačítkem **„? Nápověda"** vlevo dole. Zobrazuje jen kroky odpovídající vašim oprávněním, takže uvidíte pouze ty části Recepce, ke kterým máte přístup.
+
+> 💡 Na stránce **Nápověda** je i seznam všech kroků prohlídky. Kliknutím na kterýkoli krok v seznamu se prohlídka spustí rovnou od něj — aplikace sama přejde na odpovídající místo a příslušný prvek zvýrazní, takže se k dané části nemusíte proklikávat od začátku.
 
 ### Verze aplikace a přehled změn
 

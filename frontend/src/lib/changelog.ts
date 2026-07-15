@@ -27,6 +27,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "4.8.1",
+    date: "2026-07-15",
+    changes: [
+      "Nastavení: společnosti, oddělení, pracovní pozice a vzdělání jsou nyní sdružené na jedné záložce „Seznamy“ v rozbalovacích sekcích.",
+      "Nápověda: kliknutím na položku spustíte prohlídku přímo u příslušného kroku.",
+    ],
+  },
+  {
     version: "4.8.0",
     date: "2026-07-14",
     changes: [
