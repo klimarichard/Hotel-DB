@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Button from "./Button";
 import IconButton from "./IconButton";
 import {
@@ -12,11 +12,20 @@ import {
   getMissingVariables,
   usedCustomVars,
   formatCustomValue,
+  customDefaultRaw,
+  isFixedVarPassthrough,
   missingCustomVars,
   isCustomVarKey,
   CUSTOM_VAR_TYPE_LABELS,
   type CustomVarDefs,
 } from "@/lib/contractVariables";
+import { formatDateCZ } from "@/lib/dateFormat";
+
+/** True when ISO date `a` is strictly after ISO date `b` (both YYYY-MM-DD). */
+function isDateAfter(a: string | undefined, b: string | undefined): boolean {
+  if (!a || !b) return false;
+  return a > b;
+}
 import { useContractGeneration, DEFAULT_MARGINS, type PageMargins } from "@/hooks/useContractGeneration";
 import { useAuth } from "@/hooks/useAuth";
 import styles from "./GenerateContractModal.module.css";
@@ -52,6 +61,16 @@ interface Props {
    * record's signingDate / displayName are preserved.
    */
   existingContractId?: string;
+  /**
+   * One-step ad-hoc flow: collect the signing date (and, for Multisport, the
+   * request/validity dates) INSIDE this modal, then create the contract record
+   * together with the PDF in a single call. Used instead of the old "enter
+   * signing date → empty row → generate" two-step. Ignored when
+   * `existingContractId` is set.
+   */
+  collectSigningDate?: boolean;
+  /** Seed value (ISO) for the in-modal signing date when collecting it. */
+  initialSigningDate?: string;
   onClose: () => void;
   onGenerated: (contractId: string) => void;
 }
@@ -67,6 +86,8 @@ export default function GenerateContractModal({
   rowSnapshot,
   displayName,
   existingContractId,
+  collectSigningDate = false,
+  initialSigningDate = "",
   onClose,
   onGenerated,
 }: Props) {
@@ -96,15 +117,65 @@ export default function GenerateContractModal({
   // as an error the user hasn't made yet.
   const [triedGenerate, setTriedGenerate] = useState(false);
 
-  const autoVars = resolveVariables(employeeData, companyData);
+  // One-step ad-hoc flow: signing date (+ Multisport request/validity dates)
+  // collected here instead of a separate prompt. Ignored when attaching to an
+  // existing record (that record already carries its signing date).
+  const collectDates = collectSigningDate && !existingContractId;
+  const isMultisport = contractType === "multisport";
+  const [signingDate, setSigningDate] = useState(initialSigningDate);
+  const [requestedAt, setRequestedAt] = useState(initialSigningDate);
+  const [validFrom, setValidFrom] = useState(initialSigningDate);
 
-  // Custom slots this template uses, and the values they resolve to.
+  // When collecting dates in-modal, feed them into the variable resolver so the
+  // {{signingDate}} / {{requestedAt}} / {{validFrom}} tokens track the inputs.
+  const effectiveEmployeeData: EmployeeData = collectDates
+    ? {
+        ...employeeData,
+        signingDate,
+        requestedAt: isMultisport ? requestedAt : employeeData.requestedAt,
+        validFrom: isMultisport ? validFrom : employeeData.validFrom,
+      }
+    : employeeData;
+  const autoVars = resolveVariables(effectiveEmployeeData, companyData);
+
+  // Custom slots this template uses, and the values they resolve to. A slot
+  // whose default references a fixed variable passes its already-formatted value
+  // through untouched (see isFixedVarPassthrough); everything else is formatted.
   const customKeys = template ? usedCustomVars(template) : [];
   const customVars: Record<string, string> = {};
   for (const key of customKeys) {
-    const type = variableDefs[key]?.type ?? "text";
-    customVars[key] = formatCustomValue(type, customRaw[key] ?? "");
+    const def = variableDefs[key];
+    const type = def?.type ?? "text";
+    customVars[key] = isFixedVarPassthrough(def)
+      ? (customRaw[key] ?? "")
+      : formatCustomValue(type, customRaw[key] ?? "");
   }
+
+  // Pre-fill the custom-slot inputs from their configured defaults, once the
+  // template + company data (needed to resolve fixed-variable defaults) are in.
+  // Only seeds slots the user hasn't touched; runs once.
+  const prefilledRef = useRef(false);
+  useEffect(() => {
+    if (prefilledRef.current || loadingTemplate || loadingCompany || !template) return;
+    const keys = usedCustomVars(template);
+    const seed: Record<string, string> = {};
+    for (const key of keys) {
+      const init = customDefaultRaw(variableDefs[key], autoVars);
+      if (init) seed[key] = init;
+    }
+    if (Object.keys(seed).length > 0) {
+      setCustomRaw((prev) => {
+        const next = { ...prev };
+        for (const [k, v] of Object.entries(seed)) if (!(k in next)) next[k] = v;
+        return next;
+      });
+    }
+    prefilledRef.current = true;
+  }, [loadingTemplate, loadingCompany, template, variableDefs, autoVars]);
+
+  // Signing date is complete enough to generate (only relevant when collecting).
+  const signingReady =
+    !collectDates || (!!signingDate && (!isMultisport || (!!requestedAt && !!validFrom)));
 
   // Working copy: automatic values, manual edits, then the custom slots.
   const vars = { ...autoVars, ...editedVars, ...customVars };
@@ -182,8 +253,8 @@ export default function GenerateContractModal({
   async function handleGenerate() {
     if (!template) return;
     // Validate on submit, not on open: the button stays live so pressing it is
-    // what surfaces the list of what's still missing.
-    if (missingCustom.length > 0) {
+    // what surfaces the list of what's still missing (custom vars + signing date).
+    if (missingCustom.length > 0 || !signingReady) {
       setTriedGenerate(true);
       return;
     }
@@ -204,6 +275,15 @@ export default function GenerateContractModal({
           employmentRowId,
           rowSnapshot,
           displayName,
+          // One-step ad-hoc flow: persist the in-modal signing date onto the new
+          // record together with the PDF (no empty intermediate row).
+          ...(collectDates
+            ? {
+                signingDate,
+                requestedAt: isMultisport ? requestedAt : undefined,
+                validFrom: isMultisport ? validFrom : undefined,
+              }
+            : {}),
         });
       }
       setStep("done");
@@ -244,6 +324,77 @@ export default function GenerateContractModal({
                 </p>
               ) : (
                 <>
+                  {collectDates && (
+                    <div className={styles.varTable}>
+                      <div className={styles.varTableHead}>
+                        <p className={styles.varTableTitle}>
+                          {isMultisport ? "Datum podpisu a platnosti" : "Datum podpisu"}
+                        </p>
+                      </div>
+                      <table>
+                        <tbody>
+                          <tr>
+                            <td className={styles.varKey}>Datum podpisu</td>
+                            <td className={styles.varVal}>
+                              <div className={styles.varValRow}>
+                                <input
+                                  type="date"
+                                  className={styles.varInput}
+                                  value={signingDate}
+                                  autoFocus
+                                  onChange={(e) => setSigningDate(e.target.value)}
+                                />
+                              </div>
+                            </td>
+                          </tr>
+                          {isMultisport && (
+                            <>
+                              <tr>
+                                <td className={styles.varKey}>Datum žádosti</td>
+                                <td className={styles.varVal}>
+                                  <div className={styles.varValRow}>
+                                    <input
+                                      type="date"
+                                      className={styles.varInput}
+                                      value={requestedAt}
+                                      onChange={(e) => setRequestedAt(e.target.value)}
+                                    />
+                                  </div>
+                                </td>
+                              </tr>
+                              <tr>
+                                <td className={styles.varKey}>Platnost od</td>
+                                <td className={styles.varVal}>
+                                  <div className={styles.varValRow}>
+                                    <input
+                                      type="date"
+                                      className={styles.varInput}
+                                      value={validFrom}
+                                      onChange={(e) => setValidFrom(e.target.value)}
+                                    />
+                                  </div>
+                                </td>
+                              </tr>
+                            </>
+                          )}
+                        </tbody>
+                      </table>
+                      {isMultisport && isDateAfter(signingDate, validFrom) && (
+                        <div className={styles.missingBox}>
+                          Upozornění: datum podpisu je pozdější než datum platnosti
+                          ({formatDateCZ(validFrom)}). Zkontrolujte prosím správnost.
+                        </div>
+                      )}
+                      {triedGenerate && !signingReady && (
+                        <div className={styles.missingBox}>
+                          <strong>
+                            Vyplňte datum podpisu{isMultisport ? " a data platnosti" : ""}.
+                          </strong>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {missing.length > 0 && (
                     <div className={styles.missingBox}>
                       <strong>Chybějící údaje:</strong>
@@ -306,12 +457,18 @@ export default function GenerateContractModal({
                                       </label>
                                     ) : (
                                       <input
+                                        // A fixed-variable default resolves to an
+                                        // already-formatted string, so its field is
+                                        // a plain text box (a date/number widget
+                                        // can't hold "1. 1. 2024" / "42 000 Kč").
                                         type={
-                                          type === "date"
-                                            ? "date"
-                                            : type === "number"
-                                              ? "number"
-                                              : "text"
+                                          isFixedVarPassthrough(def)
+                                            ? "text"
+                                            : type === "date"
+                                              ? "date"
+                                              : type === "number"
+                                                ? "number"
+                                                : "text"
                                         }
                                         className={styles.varInput}
                                         value={raw}

@@ -106,10 +106,22 @@ export const CUSTOM_VAR_TYPE_LABELS: Record<CustomVarType, string> = {
   bool: "Ano/Ne",
 };
 
+/**
+ * A default value for a custom slot, pre-filled (editable) in the generate
+ * dialog. Either a fixed LITERAL (stored in the slot's raw form: text/number as
+ * typed, date as ISO, bool as "true"/"") or a reference to a built-in FIXED
+ * variable (e.g. firstName), resolved from the employee/company data at
+ * generation time. Absent = no default.
+ */
+export type CustomVarDefault =
+  | { kind: "literal"; value: string }
+  | { kind: "fixedVar"; key: string };
+
 /** A template's configuration of one slot. */
 export interface CustomVarDef {
   label: string;
   type: CustomVarType;
+  default?: CustomVarDefault;
 }
 
 /** Slot key → its configuration on a given template. Stored on contractTemplates/{id}. */
@@ -163,6 +175,39 @@ export function formatCustomValue(type: CustomVarType, raw: string): string {
 }
 
 /**
+ * Whether a slot's value should pass through UNFORMATTED at fill time. True only
+ * for a non-bool slot whose default references a fixed variable: the resolved
+ * fixed value is already a final formatted string (a date reads "1. 1. 2024",
+ * not ISO), so re-running formatCustomValue over it would corrupt it. Everything
+ * else (literals, bool) is formatted normally.
+ */
+export function isFixedVarPassthrough(def: CustomVarDef | undefined): boolean {
+  return def?.default?.kind === "fixedVar" && (def?.type ?? "text") !== "bool";
+}
+
+/**
+ * The raw value to pre-fill a custom slot's generate-dialog input from its
+ * configured default, given the resolved fixed-variable values. Returns null
+ * when the slot has no default.
+ *  - literal → the stored raw value (ISO date / digits / text / "true"|"").
+ *  - fixedVar (bool slot) → the resolved value mapped back to the checkbox raw
+ *    form ("true"/"") so the checkbox reflects it.
+ *  - fixedVar (other slot) → the resolved built-in value as-is (passthrough; see
+ *    isFixedVarPassthrough).
+ */
+export function customDefaultRaw(
+  def: CustomVarDef | undefined,
+  fixedValues: Record<string, string>
+): string | null {
+  const d = def?.default;
+  if (!d) return null;
+  if (d.kind === "literal") return d.value;
+  const resolved = fixedValues[d.key] ?? "";
+  if ((def?.type ?? "text") === "bool") return resolved ? "true" : "";
+  return resolved;
+}
+
+/**
  * Custom slots whose value the user still has to supply before a document may be
  * generated. `bool` is never "missing": unchecked is a legitimate answer, not an
  * omission — treating it as missing would make an unticked box block generation
@@ -212,6 +257,7 @@ export const VARIABLE_GROUPS: { group: string; vars: VariableDef[] }[] = [
       { key: "endDate", label: "Datum ukončení" },
       { key: "workLocation", label: "Místo výkonu práce" },
       { key: "hoursPerWeek", label: "Počet hodin týdně (PPP)" },
+      { key: "isHalfTime", label: "Je poloviční úvazek – 20 h/týdně (pro {{#if}} / {{#unless}})", kind: "if" },
       { key: "probationPeriod", label: "Zkušební doba" },
       { key: "signingDate", label: "Datum podpisu" },
       { key: "originalSigningDate", label: "Datum podpisu původní smlouvy" },
@@ -397,6 +443,10 @@ export function resolveVariables(
     agreedWorkScope: str(employee.agreedWorkScope),
     agreedReward: str(employee.agreedReward),
     hoursPerWeek: str(employee.hoursPerWeek),
+    // True only for a standard half-time PPP (exactly 20 h/week). Lets the PPP
+    // template say "poloviční pracovní úvazek" for 20 h and "zkrácený poloviční
+    // úvazek" for any other part-time amount, via {{#if}} / {{#unless}}.
+    isHalfTime: Number(employee.hoursPerWeek) === 20 ? "ano" : "",
     ...(() => {
       const changes = employee.dodatekChanges ?? [];
       const findValue = (kind: string) =>

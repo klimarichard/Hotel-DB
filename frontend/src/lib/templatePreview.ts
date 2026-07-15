@@ -17,6 +17,7 @@
 import {
   VARIABLE_GROUPS,
   isCustomVarKey,
+  formatCustomValue,
   type CustomVarDefs,
 } from "./contractVariables";
 
@@ -120,17 +121,24 @@ export function buildPreviewVars(
 
   for (const key of CONDITIONAL_KEYS) vars[key] = bools[key] ? "ano" : "";
 
-  // Custom slots: a bool follows its checkbox, anything else gets sample text of
-  // its type. A slot the template uses but never configured falls back to text.
+  // Custom slots: a bool follows its checkbox. For the rest, prefer the slot's
+  // configured DEFAULT (so the preview matches what generation will pre-fill) –
+  // a literal, or a built-in variable resolved from the sample values already in
+  // `vars`. Only when there's no meaningful default do we fall back to realistic
+  // mock text (a blank slot would collapse the line and lie about the layout).
   for (const key of referencedKeys(html)) {
     if (!isCustomVarKey(key)) continue;
-    const type = defs[key]?.type ?? "text";
-    vars[key] =
-      type === "bool"
-        ? bools[key]
-          ? "ano"
-          : ""
-        : MOCK_CUSTOM_BY_TYPE[type] ?? MOCK_CUSTOM_BY_TYPE.text;
+    const def = defs[key];
+    const type = def?.type ?? "text";
+    if (type === "bool") {
+      vars[key] = bools[key] ? "ano" : "";
+      continue;
+    }
+    const d = def?.default;
+    let dv = "";
+    if (d?.kind === "fixedVar") dv = vars[d.key] ?? "";
+    else if (d?.kind === "literal") dv = formatCustomValue(type, d.value);
+    vars[key] = dv || MOCK_CUSTOM_BY_TYPE[type] || MOCK_CUSTOM_BY_TYPE.text;
   }
 
   return vars;
