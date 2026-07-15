@@ -202,7 +202,7 @@ The master step list is organised into **13 active sections** defined in the `SE
 | Mzdy | Payroll table, create, edit, recalculate, hard-recalculate, lock, delete, export, notes |
 | Upozornění | Nav-item step (Upozornění) + alerts tabs, mark-read, manual refresh |
 | Log změn | Nav-item step only (standalone single-step section — the audit log page has no further walkthrough steps) |
-| Nastavení | Users tab, add/edit/assign-type/per-user-perms; user types tab; all číselník tabs (companies, departments, positions, education, payroll settings, menu order); system triggers; test clock; superadmin card |
+| Nastavení | Users tab, add/edit/assign-type/per-user-perms; user types tab; the Seznamy tab (companies, departments, positions, education — one collapsible section each, since v4.8.1, see `docs/other-features-and-ui.md`); payroll settings; menu order; system triggers; test clock; superadmin card |
 | Závěr | Outro card pointing to the Nápověda button |
 
 Sections are used only for the overlay's "Předchozí/Další sekce" navigation — they have no effect on filtering or persistence.
@@ -249,6 +249,12 @@ Any request to `/employees/tour-demo` or `/employees/tour-demo/...` is **always 
 - Benefits with an active Multisport period + companion → MultisportEditor renders fully.
 - Sensitive fields (`birthNumber`, `idCardNumber`, `insuranceNumber`, `bankAccount`) set to the mask constant → reveal eyes render.
 - One pending `OtherDocument` → view/download/delete buttons render.
+
+**Seznamy catalogue interception (v4.8.1).** The real employee-detail page validates the demo employee's *current* company/department/position/education against the live Seznamy lists (`companies`, `departments`, `jobPositions`, `educationLevels`) and shows a "neplatné údaje v číselníku" banner on any mismatch. Since the demo employee's `current*` fields don't correspond to any real Firestore document, `getDemoResponse` also intercepts those four catalogue endpoints — but **only** while the demo detail route is mounted:
+
+- `onDemoDetailRoute()` checks `window.location.pathname === "/zamestnanci/tour-demo"` directly (this route has no `<TourDemoRoute>` wrapper/scenario flag, unlike the `/napoveda/ukazka-*` routes, so interception keys off the pathname itself).
+- `DEMO_CATALOG_PATHS` = `{"/companies", "/departments", "/jobPositions", "/educationLevels"}`; `demoCatalogFixture(path)` returns the matching fixture — `demoCompanies` / `demoDepartments` / `demoJobPositions` (new fixtures whose ids/names mirror `detailEmployee`'s `current*` values exactly: company matched by id, department & position by name) plus the existing `educationLevels` fixture (already shared with the Můj profil self-edit demo, matched by "code - name" label). `Junior recepční` is included in `demoJobPositions` for the history session that references it.
+- Outside the demo detail route (e.g. the real `/zamestnanci/:id` page, or the Seznamy tab itself) these four paths pass through to the real backend as normal — the interception is scoped to the one sentinel route.
 
 ### Scenario-keyed fixtures
 
@@ -312,11 +318,25 @@ The self-page calls `/me/*` endpoints that are not id-scoped. These are intercep
 
 It displays the same content as the tour, without the overlay:
 
-1. Calls `buildAppTour(can)` and filters out the welcome/outro steps (no `permission`).
+1. Calls `buildAppTour(can)` (no `ctx`/`opts` — the default no-context build) and filters out the welcome/outro steps (no `permission`), but keeps track of each surviving item's **index in the full built array** (welcome/outro included), not its position in the filtered/grouped display list.
 2. Groups remaining steps by their permission's catalog group (using `PERMISSION_CATALOG` from `frontend/src/lib/permissions/catalog.ts`) preserving catalog order.
 3. Renders each group as a `<section>` with an optional screenshot from `helpImages.ts`.
 4. A full-text search (diacritic-insensitive) filters the already-permission-filtered list — search results can never include content the user cannot access.
-5. The **"Spustit prohlídku"** button calls `startTour()` from `OnboardingContext`, replaying the guided tour from step 1.
+5. The **"Spustit prohlídku"** button calls `startTour()` (no argument) from `OnboardingContext`, replaying the full guided tour from step 1.
+6. **Clickable steps (v4.8.1)** — every listed item is itself a button. Clicking it calls `startTour(item.index)`, launching the overlay directly **at that step** instead of from the beginning.
+
+### Jumping the overlay to a specific step
+
+`OnboardingContext`'s `startTour` gained an optional `atStep?: number` parameter:
+
+```ts
+startTour: (atStep?: number) => void;
+```
+
+- **No argument** (`startTour()`, "Spustit prohlídku"): builds the tour with the real viewport/employee context — `buildAppTour(can, { hasEmployee: !!employeeId, isPhone: isPhoneViewport() })` — for a full, environment-aware replay, and starts at `stepIndex = 0`.
+- **With `atStep`** (clicked from Nápověda): rebuilds the tour with the **same no-context call HelpPage used to compute the index** — `buildAppTour(can)` — so the array position the click captured is guaranteed to still line up with the step it points at. `stepIndex` is set to `atStep` (clamped to the valid range) and `activeTour` is set in the same pass, so the overlay mounts already on the target step with no flash of step 0.
+
+Because the two code paths intentionally build the tour differently (context-aware vs. no-context), `atStep`-driven jumps do not reflect phone-layout anchor overrides (`mobileAnchor`/`mobileBody`) the way a normal auto-started or replayed tour does — this is an accepted trade-off for keeping the Nápověda index stable.
 
 The "? Nápověda" button in the sidebar footer links to `/napoveda`.
 

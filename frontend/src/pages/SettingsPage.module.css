@@ -559,3 +559,82 @@
     transform: rotate(180deg);
   }
 }
+
+/* ── Seznamy tab: collapsible sections (companies / departments / positions /
+   education grouped under one tab). ─────────────────────────────────────── */
+.seznamyTab {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.seznamySection {
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface, transparent);
+  overflow: hidden;
+}
+
+.seznamySectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.4rem 0.5rem 0.4rem 0.25rem;
+  background: var(--color-surface-muted, rgba(0, 0, 0, 0.02));
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* The whole title row is the collapse toggle – full-width, reset button chrome. */
+.seznamyToggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+  min-width: 0;
+  padding: 0.4rem 0.5rem;
+  border: none;
+  background: none;
+  font: inherit;
+  text-align: left;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.seznamyTitle {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+/* Chevron points down when open, right when collapsed. */
+.seznamyChevron {
+  display: inline-block;
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+  transform: rotate(-90deg);
+  transition: transform 0.18s ease;
+}
+
+.seznamyChevron[data-open] {
+  transform: rotate(0deg);
+}
+
+.seznamyAction {
+  flex: 0 0 auto;
+}
+
+/* All four "+ Přidat …" buttons share one width so they line up when the
+   collapsed section headers stack vertically (their labels differ in length). */
+.seznamyAction button {
+  min-width: 13rem;
+}
+
+@media (max-width: 559.98px), (orientation: landscape) and (max-height: 480px) {
+  .seznamyAction button {
+    min-width: 0;
+  }
+}
+
+.seznamyBody {
+  padding: 1rem;
+}

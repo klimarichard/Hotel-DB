@@ -522,10 +522,11 @@ Pokud vás zajímají pouze změny týkající se jednoho zaměstnance, nemusít
 
 **Tato stránka je dostupná pouze administrátorovi — ředitel ji nevidí.** Stránka je členěná do záložek:
 
-- **Společnosti** — přidání, úprava a odebrání společností (název, zkratka, IČO, DIČ…).
-- **Pracovní pozice** — katalog pozic včetně **hodinové sazby**, výchozí mzdy a příspěvků. Změna hodinové sazby se může promítnout do aktivních pracovních poměrů (s potvrzením).
-- **Oddělení** — katalog oddělení.
-- **Vzdělání** — stupně vzdělání pro výběr u zaměstnance.
+- **Seznamy** — jedna záložka se čtyřmi **rozbalovacími sekcemi** (ve výchozím stavu sbalené — kliknutím na hlavičku sekci rozbalíte). Každá sekce má ve své hlavičce vlastní tlačítko **„+ Přidat …"** a zobrazí se jen tomu, kdo má odpovídající oprávnění:
+  - **Společnosti** — přidání, úprava a odebrání společností (název, zkratka, IČO, DIČ…).
+  - **Pracovní pozice** — katalog pozic včetně **hodinové sazby**, výchozí mzdy a příspěvků. Změna hodinové sazby se může promítnout do aktivních pracovních poměrů (s potvrzením).
+  - **Oddělení** — katalog oddělení.
+  - **Vzdělání** — stupně vzdělání pro výběr u zaměstnance.
 - **Mzdy** — sazba stravenky, maximální měsíční odměna DPP, **minimální mzda** a **základní cena Multisport** (výchozí 470 Kč/měsíc). U jednotlivých polí se zobrazuje jen vysvětlující text, nikoli již dřívější údaj *„Výchozí hodnota: …"*. Při uložení změny **minimální mzdy** systém automaticky zkontroluje všechny aktuálně platné smlouvy a zobrazí seznam zaměstnanců, jejichž mzda novou hodnotou nesplňuje — uložit přesto lze a dotčené smlouvy pak aktualizujete individuálně.
 - **Menu** — pořadí položek v levém menu pro jednotlivé **typy uživatelů**.
 - **Uživatelé** — vytváření a správa uživatelských účtů: vytvoření (i bez hesla s odkazem pro reset), úprava jména/e-mailu, volba **typu uživatele** (sloupec *Typ*), **úprava oprávnění** (viz níže), **deaktivace — ihned nebo naplánovaná na datum a čas** (viz níže) — a reaktivace, reset hesla, propojení účtu se zaměstnancem. Neaktivní účty jsou dole; při vytvoření účtu se stejným e-mailem jako neaktivní účet se nabídne jeho reaktivace.
