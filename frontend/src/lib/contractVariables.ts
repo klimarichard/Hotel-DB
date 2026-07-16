@@ -495,7 +495,7 @@ export function resolveVariables(
     hasProbation: hasProbation ? "ano" : "",
     hasEndDate: hasEndDate ? "ano" : "",
     agreedWorkScope: str(employee.agreedWorkScope),
-    agreedReward: str(employee.agreedReward),
+    agreedReward: formatSalaryCZ(employee.agreedReward),
     hoursPerWeek: str(employee.hoursPerWeek),
     ...(() => {
       const changes = employee.dodatekChanges ?? [];
