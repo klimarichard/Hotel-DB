@@ -897,6 +897,33 @@ employeesRouter.get(
   }
 );
 
+/**
+ * GET /api/employees/questionnaire-blank
+ * The Dotazník with nothing filled in, to print and complete by hand.
+ *
+ * Same asset and the same fill+flatten path as /:id/questionnaire-pdf, just with
+ * no data — so the blank sheet is by construction identical to the filled one
+ * and can never drift from it. Flattened rather than served raw so it prints as
+ * static lines instead of interactive form widgets.
+ *
+ * Carries NO personal data, so unlike the per-employee variant it needs neither
+ * the employees.view.* gate nor an audit-log entry: there is nothing revealed to
+ * record. Gated only by seeing the Zaměstnanci page, which is where the button
+ * lives.
+ *
+ * MUST stay above "/:id" below — Express matches in declaration order, and "/:id"
+ * would otherwise swallow this as id="questionnaire-blank" (this is why "/export"
+ * sits up here too).
+ */
+employeesRouter.get(
+  "/questionnaire-blank",
+  requirePermission("nav.employees.view"),
+  async (_req: AuthRequest, res) => {
+    const pdf = await fillQuestionnairePdf({}, "Dotazník");
+    sendPdfInline(res, pdf, "Dotazník");
+  }
+);
+
 // ─── GET ONE ─────────────────────────────────────────────────────────────────
 
 /**
