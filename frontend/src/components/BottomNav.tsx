@@ -224,9 +224,18 @@ export default function BottomNav({
           onKeyDown={(e) => {
             if (e.key === "Escape") setMoreOpen(false);
           }}
+          // Backdrop click closes – a DELIBERATE exception to the project's
+          // "modals dismiss only via explicit buttons" rule (see CLAUDE.md).
+          // That rule exists because a stray backdrop click threw away
+          // half-edited FORMS. This sheet is pure navigation: links, a theme
+          // toggle and logout, no draft state, so there is nothing to lose and
+          // tapping away is what a menu is expected to do.
+          // `e.target === e.currentTarget` keeps it to the backdrop itself, so
+          // clicks bubbling out of the sheet don't close it.
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setMoreOpen(false);
+          }}
         >
-          {/* No backdrop onClick – project rule: overlays dismiss only via the
-              explicit close button or by selecting an item. */}
           <div className={styles.sheet}>
             <div className={styles.sheetHeader}>
               <span className={styles.sheetTitle}>Více</span>
