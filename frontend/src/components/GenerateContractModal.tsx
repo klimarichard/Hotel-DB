@@ -439,6 +439,17 @@ export default function GenerateContractModal({
                               <tr key={key}>
                                 <td className={styles.varKey}>
                                   {label}
+                                  {/* Optional slots ("Nepovinná" on the
+                                      template) may be left blank, so say which
+                                      ones – otherwise the only way to find out is
+                                      to try generating. bool/condition are never
+                                      typed in, so the hint would be noise there. */}
+                                  {def?.optional && type !== "bool" && type !== "condition" && (
+                                    <>
+                                      {" "}
+                                      <span className={styles.varTableHint}>(nepovinné)</span>
+                                    </>
+                                  )}
                                   {/* Slot used in the template but never given a
                                       name/type: say so plainly instead of showing
                                       a bare "var1" that means nothing here. */}

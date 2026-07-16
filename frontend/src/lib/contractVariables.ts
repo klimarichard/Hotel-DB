@@ -175,6 +175,16 @@ export interface CustomVarDef {
   default?: CustomVarDefault;
   /** Only for type "condition": the comparison that computes this slot. */
   condition?: CustomVarCondition;
+  /**
+   * "Nepovinná" — the slot may be left blank at generation instead of blocking
+   * it, for templates where only some of several offered fields apply.
+   * An unfilled optional slot renders as an empty string. Absent = required
+   * (the previous behaviour, so existing templates are unaffected).
+   *
+   * Meaningless for "bool" / "condition", which never block generation anyway;
+   * the editor hides the checkbox for those rather than storing a no-op flag.
+   */
+  optional?: boolean;
 }
 
 /** Slot key → its configuration on a given template. Stored on contractTemplates/{id}. */
@@ -264,7 +274,8 @@ export function customDefaultRaw(
  * Custom slots whose value the user still has to supply before a document may be
  * generated. `bool` is never "missing": unchecked is a legitimate answer, not an
  * omission — treating it as missing would make an unticked box block generation
- * forever.
+ * forever. A slot marked `optional` ("Nepovinná") is likewise never
+ * missing: blank is an allowed answer there by the template's own configuration.
  */
 export function missingCustomVars(
   html: string,
@@ -272,10 +283,13 @@ export function missingCustomVars(
   rawValues: Record<string, string>
 ): string[] {
   return usedCustomVars(html).filter((key) => {
-    const type = defs[key]?.type ?? "text";
+    const def = defs[key];
+    const type = def?.type ?? "text";
     // bool + condition are never "missing": one is a checkbox, the other is
     // computed from a comparison – neither is typed in at generation.
     if (type === "bool" || type === "condition") return false;
+    // Explicitly allowed to stay blank – see CustomVarDef.optional.
+    if (def?.optional) return false;
     return !(rawValues[key] ?? "").trim();
   });
 }

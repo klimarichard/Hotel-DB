@@ -241,7 +241,10 @@ function isValidVariableDefs(v: unknown): boolean {
       typeof d.type === "string" &&
       CUSTOM_VAR_TYPES.has(d.type) &&
       isValidCustomDefault(d.default) &&
-      isValidCondition(d.condition)
+      isValidCondition(d.condition) &&
+      // "Nepovinná" – absent means required, so only a real boolean is
+      // accepted; a truthy string would silently make a slot optional.
+      (d.optional === undefined || typeof d.optional === "boolean")
     );
   });
 }
@@ -272,7 +275,7 @@ contractTemplatesRouter.put(
     if (variableDefs !== undefined && !isValidVariableDefs(variableDefs)) {
       res.status(400).json({
         error:
-          "variableDefs musí být objekt {var1..var10: {label, type}}, kde type je text|date|number|bool.",
+          "variableDefs musí být objekt {var1..var10: {label, type, optional?}}, kde type je text|date|number|bool a optional je true|false.",
       });
       return;
     }
