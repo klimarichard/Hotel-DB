@@ -419,9 +419,17 @@ The `--bottom-nav-height` CSS token (`56px`) is defined in `index.css` `:root`. 
 **"Více" sheet** (`styles.sheetOverlay` / `styles.sheet`):
 - Slides up from the bottom (`align-items: flex-end`). Max height `80dvh`, scrollable item list.
 - Header with "Více" title and a ✕ close button; sheet footer with theme toggle, Nápověda, Odhlásit, `<TimeOverrideControl>` (renders only in emulator/staging), and the version string (gated by `system.version.view`; **display-only on mobile** — the clickable changelog is desktop-only, so `BottomNav` never renders it as a button).
-- Dismisses via the ✕ button, selecting a list item, or Escape key. **Not on backdrop click** — consistent with the project modal-dismissal rule. The overlay `<div>` has no `onClick` handler.
+- Dismisses via the ✕ button, selecting a list item, Escape key, **or a backdrop click (v4.11.0)**.
 - Body scroll is locked (`document.body.style.overflow = "hidden"`) while the sheet is open; restored (to whatever the previous value was) on close/unmount.
 - Footer utilities are passed to `BottomNav` as plain values and handlers (`theme`, `onToggleTheme`, `onLogout`, `versionLabel`, `timeControl`) rather than reusing the dark sidebar JSX — this lets the sheet render them against the themed `--color-surface` background instead of the always-dark sidebar palette.
+
+#### Backdrop-click dismissal — a deliberate exception to the modal rule (v4.11.0)
+
+The project-wide rule is that modals close **only** via explicit buttons, never a backdrop click (see the top-level modal-dismissal convention) — a stray click was throwing away half-edited forms. The "Více" sheet is the one approved exception: `onClick={(e) => { if (e.target === e.currentTarget) setMoreOpen(false); }}` on `styles.sheetOverlay` closes it when the click lands on the overlay itself (not a bubbled click from inside the sheet). This is safe specifically because the sheet holds **no form state** — it's navigation links, a theme toggle and logout, nothing a user can half-fill and lose. Do not copy this pattern onto a modal that has editable fields; it stays the one deliberate carve-out, not a precedent.
+
+#### Dark-mode footer divider fix (v4.11.0)
+
+`.sheetFooter`'s top border (separating the nav links from Odhlásit/theme/etc.) used `--color-border-subtle`, which in dark mode resolves to `#1e293b` — the exact same hex as `--color-surface`, the sheet's own background, so the divider was invisible. Now `--color-border-strong`, which is legible against the surface in both themes. Fixed in `BottomNav.module.css`.
 
 **Badge dots** — a small red dot (`styles.dot`, 8 px, `--color-danger` fill) floats top-right of the icon when `badgeFor(id) > 0`. The bottom bar uses a dot (not a count) because there is no room for a number in a compact tab slot. The "Više" sheet does display numeric badge counts next to each item label (`styles.sheetBadge`).
 

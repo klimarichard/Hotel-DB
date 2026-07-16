@@ -65,6 +65,11 @@ Měsíční plán směn (recepce, portýři, manažeři). Vidíte **publikovaný
 
 > 📷 *(Místo pro snímek obrazovky: měsíční plán směn)*
 
+### Termíny plánu
+
+- **Plán, který ještě nemáte otevřený:** pokud administrátor nebo ředitel už naplánoval, kdy se plán pro daný měsíc otevře, uvidíte místo hlášky o neexistujícím plánu zprávu **„Vyškrtávání od [datum a čas] (za …)"** – ukazuje přesně, kdy vyškrtávání (zadávání volna) začne, a kolik do té doby zbývá.
+- **Přesné datum a čas u termínů:** uvidíte-li u plánu termín automatického přechodu (otevření, uzavření nebo zveřejnění), zobrazuje se vedle odpočtu (např. „za 3h 12m") i konkrétní **datum a čas** – termíny totiž sami neupravujete.
+
 ### Zadávání volna (X)
 
 V **otevřeném** plánu můžete sami zadávat a mazat **pouze „X" (volno)** na svém vlastním řádku.
@@ -141,7 +146,7 @@ Vlastní karta zaměstnance.
 Aplikaci můžete používat i v mobilním prohlížeči — rozložení se na malé obrazovce automaticky přizpůsobí:
 
 - **Spodní lišta místo bočního menu:** boční menu vlevo se na telefonu skryje a nahradí ho **lišta se záložkami u spodního okraje obrazovky**. Obsahuje vaše nejpoužívanější sekce (Přehled, Směny, Dovolená, Profil) a navíc záložku **„Více"**.
-- **Záložka „Více":** klepnutím na **Více** se zespodu vysune panel, kde najdete tlačítka pro **přepnutí světlého/tmavého režimu**, **Nápovědu** a **Odhlášení** (na telefonu nejsou u jména jako na počítači, ale právě zde). Panel zavřete křížkem **✕**.
+- **Záložka „Více":** klepnutím na **Více** se zespodu vysune panel, kde najdete tlačítka pro **přepnutí světlého/tmavého režimu**, **Nápovědu** a **Odhlášení** (na telefonu nejsou u jména jako na počítači, ale právě zde). Panel zavřete křížkem **✕**, nebo klepnutím **kamkoli mimo něj**. Oddělovací čára nad položkou **„Odhlásit"** je nyní zřetelně vidět i v tmavém režimu.
 - **Karty místo širokých tabulek:** přehledy, které jsou na počítači v široké tabulce (např. **Moje žádosti** v Směnách a Dovolené nebo dlaždice **Dnes/Zítra** na Přehledu), se na telefonu zobrazují jako **karty pod sebou** — nemusíte se tak posouvat do stran.
 - **Plán směn přes celou obrazovku:** tabulka směn se na telefonu zobrazuje přes celou obrazovku a při posouvání se horní lišta automaticky skryje, abyste viděli co nejvíce plánu. Legenda pod tabulkou je na telefonu skrytá.
 
