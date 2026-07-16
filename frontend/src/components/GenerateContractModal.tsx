@@ -439,7 +439,7 @@ export default function GenerateContractModal({
                               <tr key={key}>
                                 <td className={styles.varKey}>
                                   {label}
-                                  {/* Optional slots ("Může být prázdná" on the
+                                  {/* Optional slots ("Nepovinná" on the
                                       template) may be left blank, so say which
                                       ones – otherwise the only way to find out is
                                       to try generating. bool/condition are never

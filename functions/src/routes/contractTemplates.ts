@@ -242,7 +242,7 @@ function isValidVariableDefs(v: unknown): boolean {
       CUSTOM_VAR_TYPES.has(d.type) &&
       isValidCustomDefault(d.default) &&
       isValidCondition(d.condition) &&
-      // "Může být prázdná" – absent means required, so only a real boolean is
+      // "Nepovinná" – absent means required, so only a real boolean is
       // accepted; a truthy string would silently make a slot optional.
       (d.optional === undefined || typeof d.optional === "boolean")
     );

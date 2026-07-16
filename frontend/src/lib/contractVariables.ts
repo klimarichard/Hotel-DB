@@ -176,8 +176,8 @@ export interface CustomVarDef {
   /** Only for type "condition": the comparison that computes this slot. */
   condition?: CustomVarCondition;
   /**
-   * "Může být prázdná" — the slot may be left blank at generation instead of
-   * blocking it, for templates where only some of several offered fields apply.
+   * "Nepovinná" — the slot may be left blank at generation instead of blocking
+   * it, for templates where only some of several offered fields apply.
    * An unfilled optional slot renders as an empty string. Absent = required
    * (the previous behaviour, so existing templates are unaffected).
    *
@@ -274,7 +274,7 @@ export function customDefaultRaw(
  * Custom slots whose value the user still has to supply before a document may be
  * generated. `bool` is never "missing": unchecked is a legitimate answer, not an
  * omission — treating it as missing would make an unticked box block generation
- * forever. A slot marked `optional` ("Může být prázdná") is likewise never
+ * forever. A slot marked `optional` ("Nepovinná") is likewise never
  * missing: blank is an allowed answer there by the template's own configuration.
  */
 export function missingCustomVars(
