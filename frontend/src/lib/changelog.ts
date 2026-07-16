@@ -27,6 +27,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "4.10.3",
+    date: "2026-07-16",
+    changes: [
+      "Šablony smluv: vlastní proměnnou lze označit jako „Nepovinná“ – při generování ji pak není nutné vyplnit.",
+      "Oprava: dodatek o změně délky smlouvy měl v názvu souboru datum místo „doba určitá“ / „doba neurčitá“.",
+    ],
+  },
+  {
     version: "4.10.2",
     date: "2026-07-16",
     changes: [
