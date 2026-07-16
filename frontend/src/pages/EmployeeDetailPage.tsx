@@ -28,6 +28,7 @@ import { nationalityName } from "@/lib/nationalities";
 import { buildContractName } from "@/lib/contractNaming";
 import {
   groupBySession,
+  hasOpenRodicovska,
   mapContractsToRows,
   terminationContractType,
   uvazekToContractType,
@@ -1299,6 +1300,11 @@ export default function EmployeeDetailPage() {
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [employment, setEmployment] = useState<EmploymentRow[]>([]);
   const [contracts, setContracts] = useState<ContractRecord[]>([]);
+  // Only one Rodičovská may be in play at a time. Computed here, across ALL
+  // rows, rather than inside a session card: an employee with two concurrent
+  // jobs renders a card per session, and one open Rodičovská must disable the
+  // button on every one of them. The server enforces the same rule.
+  const rodicovskaBlocked = hasOpenRodicovska(employment, clock.today());
   const [contact, setContact] = useState<ContactData | null>(null);
   const [documents, setDocuments] = useState<DocumentsData | null>(null);
   const [additional, setAdditional] = useState<AdditionalData | null>(null);
@@ -1881,6 +1887,7 @@ export default function EmployeeDetailPage() {
                     parentRowId: session.nastup.id,
                   })
                 }
+                rodicovskaBlocked={rodicovskaBlocked}
                 onTerminate={() =>
                   setNewEntryMode({
                     lockedChangeType: "ukončení",
