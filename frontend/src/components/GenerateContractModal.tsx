@@ -22,6 +22,7 @@ import {
   type CustomVarDefs,
 } from "@/lib/contractVariables";
 import { formatDateCZ } from "@/lib/dateFormat";
+import { isWeekendOrHoliday } from "@/lib/workingDays";
 
 /** True when ISO date `a` is strictly after ISO date `b` (both YYYY-MM-DD). */
 function isDateAfter(a: string | undefined, b: string | undefined): boolean {
@@ -391,6 +392,15 @@ export default function GenerateContractModal({
                         <div className={styles.missingBox}>
                           Upozornění: datum podpisu je pozdější než datum platnosti
                           ({formatDateCZ(validFrom)}). Zkontrolujte prosím správnost.
+                        </div>
+                      )}
+                      {/* Applies to EVERY document with a signing date, unlike the
+                          Multisport-only note above (a plain document has no
+                          validity date to compare against). Both can show at once
+                          – they are different objections to the same date. */}
+                      {isWeekendOrHoliday(signingDate) && (
+                        <div className={styles.missingBox}>
+                          Datum podpisu připadá na víkend nebo svátek.
                         </div>
                       )}
                       {triedGenerate && !signingReady && (
