@@ -25,8 +25,12 @@ function changeLabel(change: { changeKind: string; value: string }): string {
     case "úvazek":
       return "změna úvazku";
     case "délka smlouvy":
-      // Value is "doba určitá" or "doba neurčitá" – use it directly.
-      return change.value || "změna délky smlouvy";
+      // The value is an ISO end date, never a label, so it must NOT be used
+      // directly – that put a raw "2027-12-31" in the filename. A date means the
+      // dodatek sets a fixed end (doba určitá); an empty value means it drops the
+      // end date (doba neurčitá), the convention the edit form states outright
+      // ("Prázdné datum = změna na dobu neurčitou").
+      return change.value ? "doba určitá" : "doba neurčitá";
     case "počet hodin":
       return "změna úvazku";
     default:
