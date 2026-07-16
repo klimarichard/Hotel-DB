@@ -1959,6 +1959,7 @@ export default function ContractTemplatesPage() {
             type: CustomVarType;
             default: CustomVarDefault | undefined;
             condition: CustomVarCondition | undefined;
+            optional: boolean;
           }>
         ) => {
           setVariableDefs((prev) => {
@@ -1971,14 +1972,21 @@ export default function ContractTemplatesPage() {
               "default" in patch ? patch.default : typeChanged ? undefined : prevDef?.default;
             const nextCondition =
               "condition" in patch ? patch.condition : typeChanged ? undefined : prevDef?.condition;
+            // Unlike default/condition, `optional` survives a type change: a plain
+            // boolean can't become invalid for the new type, only inapplicable
+            // (bool/condition ignore it), so the author's intent is kept if they
+            // switch back.
+            const nextOptional = "optional" in patch ? patch.optional : prevDef?.optional;
             return {
               ...prev,
               [key]: {
                 label: patch.label ?? prevDef?.label ?? "",
                 type: patch.type ?? prevDef?.type ?? "text",
-                // Omit when absent so we never persist `default/condition: undefined`.
+                // Omit when absent so we never persist `default/condition: undefined`
+                // (or a no-op `optional: false`).
                 ...(nextDefault ? { default: nextDefault } : {}),
                 ...(nextCondition ? { condition: nextCondition } : {}),
+                ...(nextOptional ? { optional: true } : {}),
               },
             };
           });
@@ -2140,6 +2148,13 @@ export default function ContractTemplatesPage() {
                   pevná hodnota, nebo některá ze zabudovaných proměnných (např. Jméno).
                 </p>
                 <p style={hintStyle}>
+                  <strong>Může být prázdná</strong> označuje nepovinnou proměnnou –
+                  při generování ji lze nechat nevyplněnou a v dokumentu se pak
+                  nevypíše nic. Bez zaškrtnutí je vyplnění povinné a generování
+                  bez hodnoty neproběhne. Typy Ano/Ne a Podmínka vyplnění nevyžadují
+                  nikdy.
+                </p>
+                <p style={hintStyle}>
                   Typ <strong>Podmínka</strong> proměnnou nevyplňujete – její hodnota
                   (Ano/Ne) se <strong>vypočítá</strong> z porovnání dvou hodnot
                   (např. <em>Datum podpisu &lt; Datum nástupu</em>). Používá se stejně
@@ -2159,6 +2174,7 @@ export default function ContractTemplatesPage() {
                         <th style={{ textAlign: "left", fontSize: "0.75rem", color: "var(--color-text-muted)", padding: "0 6px 4px 0" }}>Proměnná</th>
                         <th style={{ textAlign: "left", fontSize: "0.75rem", color: "var(--color-text-muted)", padding: "0 6px 4px 0" }}>Název (co se zobrazí)</th>
                         <th style={{ textAlign: "left", fontSize: "0.75rem", color: "var(--color-text-muted)", padding: "0 10px 4px 0" }}>Typ</th>
+                        <th style={{ textAlign: "center", fontSize: "0.75rem", color: "var(--color-text-muted)", padding: "0 10px 4px 0", whiteSpace: "nowrap" }}>Může být prázdná</th>
                         <th style={{ textAlign: "left", fontSize: "0.75rem", color: "var(--color-text-muted)", padding: "0 0 4px 0" }}>Výchozí hodnota / podmínka</th>
                       </tr>
                     </thead>
@@ -2196,6 +2212,23 @@ export default function ContractTemplatesPage() {
                                   <option key={t} value={t}>{CUSTOM_VAR_TYPE_LABELS[t]}</option>
                                 ))}
                               </select>
+                            </td>
+                            {/* "Může být prázdná" only applies to slots that are
+                                typed in at generation. bool + condition never
+                                block it anyway (see missingCustomVars), so they
+                                show a dash rather than a checkbox that does
+                                nothing. */}
+                            <td style={{ padding: "3px 10px 3px 0", textAlign: "center" }}>
+                              {type === "bool" || type === "condition" ? (
+                                <span style={{ color: "var(--color-text-muted)" }}>–</span>
+                              ) : (
+                                <input
+                                  type="checkbox"
+                                  checked={!!def?.optional}
+                                  aria-label={`Proměnná ${def?.label || key} může být prázdná`}
+                                  onChange={(e) => setDef(key, { optional: e.target.checked })}
+                                />
+                              )}
                             </td>
                             {/* A "condition" slot shows the comparison builder;
                                 every other type shows its default-value control
