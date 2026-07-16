@@ -33,6 +33,7 @@ import {
   terminationContractType,
   uvazekToContractType,
 } from "@/lib/employmentSessions";
+import { isWeekendOrHoliday } from "@/lib/workingDays";
 import { minWageThreshold, formatCzk } from "@/lib/minWage";
 import modalStyles from "@/components/ConfirmModal.module.css";
 import styles from "./EmployeeDetailPage.module.css";
@@ -799,6 +800,18 @@ function AddEntryModal({
       </div>
     </div>
   );
+  // Signing on a Saturday/Sunday/public holiday is usually a slip too. Kept as a
+  // SEPARATE note from the one above rather than merged: the two say different
+  // things and can both be true (a Sunday that is also after the start date), in
+  // which case the user should see both reasons, not an arbitrary winner.
+  const showSigningWeekendWarning = isWeekendOrHoliday(form.signingDate);
+  const signingWeekendNote = (
+    <div className={styles.modalFieldFull}>
+      <div className={styles.modalWarning}>
+        Datum podpisu připadá na víkend nebo svátek.
+      </div>
+    </div>
+  );
 
   /**
    * Minimum-wage check (#2) – returns a warning message when the salary being
@@ -1098,6 +1111,7 @@ function AddEntryModal({
                       </select>
                     </div>
                     {showSigningAfterStartWarning && signingAfterStartNote}
+                    {showSigningWeekendWarning && signingWeekendNote}
                   </div>
                 )}
 
@@ -1150,6 +1164,7 @@ function AddEntryModal({
                       </select>
                     </div>
                     {showSigningAfterStartWarning && signingAfterStartNote}
+                    {showSigningWeekendWarning && signingWeekendNote}
                   </div>
                 )}
               </>
@@ -1170,6 +1185,7 @@ function AddEntryModal({
                   </div>
                 )}
                 {showSigningAfterStartWarning && signingAfterStartNote}
+                {showSigningWeekendWarning && signingWeekendNote}
               </div>
             )}
 
@@ -1189,6 +1205,7 @@ function AddEntryModal({
                     </div>
                   )}
                   {showSigningAfterStartWarning && signingAfterStartNote}
+                  {showSigningWeekendWarning && signingWeekendNote}
                 </div>
 
                 <div style={{ marginTop: "0.875rem" }}>
