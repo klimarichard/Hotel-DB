@@ -46,8 +46,10 @@ const MOCK_TEXT: Record<string, string> = {
   signingDate: "14. 7. 2026",
   originalSigningDate: "1. 8. 2025",
   agreedWorkScope: "úklid pokojů",
-  // Bare number too (resolveVariables emits the raw value); unit goes in text.
-  agreedReward: "180",
+  // Bare number too (formatSalaryCZ, same as salary); the unit goes in the text.
+  // Auto-compute rounds the total DPP reward up to a whole multiple of 10.000,
+  // so a realistic sample always shows the thousands separator.
+  agreedReward: "120.000",
   // Dodatky
   dodatekEffectiveDate: "1. 9. 2026",
   newSalary: "38.000",
@@ -92,7 +94,7 @@ export const PREVIEW_RAW_DEFAULTS: Record<string, string | number> = {
   validFrom: "2026-08-01",
   today: "2026-07-14",
   salary: 35000,
-  agreedReward: 180,
+  agreedReward: 120000,
   hoursPerWeek: 40,
   newEndDate: "2027-12-31",
   newSalary: 38000,
