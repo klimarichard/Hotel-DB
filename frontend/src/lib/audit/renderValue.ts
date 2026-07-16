@@ -107,7 +107,14 @@ function renderChanges(v: unknown): string {
     .map((c) => {
       const o = isObj(c) ? c : {};
       const kind = typeof o.changeKind === "string" ? o.changeKind : "";
-      return `${CHANGE_KIND_LABELS[kind] ?? kind ?? "Změna"}: ${formatAuditValue(o.value)}`;
+      // An empty "délka smlouvy" value is the change itself – the dodatek drops
+      // the fixed end date – not a missing value, so it must not fall through to
+      // formatAuditValue's "–". Mirrors EmploymentRowItem.renderChangeValue.
+      const value =
+        kind === "délka smlouvy" && isNullish(o.value)
+          ? "doba neurčitá"
+          : formatAuditValue(o.value);
+      return `${CHANGE_KIND_LABELS[kind] ?? kind ?? "Změna"}: ${value}`;
     })
     .join("; ");
 }

@@ -78,13 +78,17 @@ const CHANGE_KIND_LABEL: Record<string, string> = {
 };
 
 function renderChangeValue(kind: string, value: string): React.ReactNode {
+  // "délka smlouvy" is checked BEFORE the generic empty guard: an empty value
+  // here is not a missing value, it IS the change – the dodatek clears the fixed
+  // end date, which the edit form spells out ("Prázdné datum = změna na dobu
+  // neurčitou") and the backend reads the same way (`ch.value || null`).
+  if (kind === "délka smlouvy") {
+    return value ? formatDateCZ(value) || value : "doba neurčitá";
+  }
   if (!value) return "–";
   if (kind === "mzda") {
     const n = Number(value);
     if (Number.isFinite(n)) return <StopTap><SalaryReveal value={n} /></StopTap>;
-  }
-  if (kind === "délka smlouvy") {
-    return formatDateCZ(value) || value;
   }
   return value;
 }
