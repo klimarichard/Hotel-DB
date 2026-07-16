@@ -28,10 +28,12 @@ import { nationalityName } from "@/lib/nationalities";
 import { buildContractName } from "@/lib/contractNaming";
 import {
   groupBySession,
+  hasOpenRodicovska,
   mapContractsToRows,
   terminationContractType,
   uvazekToContractType,
 } from "@/lib/employmentSessions";
+import { isWeekendOrHoliday } from "@/lib/workingDays";
 import { minWageThreshold, formatCzk } from "@/lib/minWage";
 import modalStyles from "@/components/ConfirmModal.module.css";
 import styles from "./EmployeeDetailPage.module.css";
@@ -798,6 +800,18 @@ function AddEntryModal({
       </div>
     </div>
   );
+  // Signing on a Saturday/Sunday/public holiday is usually a slip too. Kept as a
+  // SEPARATE note from the one above rather than merged: the two say different
+  // things and can both be true (a Sunday that is also after the start date), in
+  // which case the user should see both reasons, not an arbitrary winner.
+  const showSigningWeekendWarning = isWeekendOrHoliday(form.signingDate);
+  const signingWeekendNote = (
+    <div className={styles.modalFieldFull}>
+      <div className={styles.modalWarning}>
+        Datum podpisu připadá na víkend nebo svátek.
+      </div>
+    </div>
+  );
 
   /**
    * Minimum-wage check (#2) – returns a warning message when the salary being
@@ -1097,6 +1111,7 @@ function AddEntryModal({
                       </select>
                     </div>
                     {showSigningAfterStartWarning && signingAfterStartNote}
+                    {showSigningWeekendWarning && signingWeekendNote}
                   </div>
                 )}
 
@@ -1149,6 +1164,7 @@ function AddEntryModal({
                       </select>
                     </div>
                     {showSigningAfterStartWarning && signingAfterStartNote}
+                    {showSigningWeekendWarning && signingWeekendNote}
                   </div>
                 )}
               </>
@@ -1169,6 +1185,7 @@ function AddEntryModal({
                   </div>
                 )}
                 {showSigningAfterStartWarning && signingAfterStartNote}
+                {showSigningWeekendWarning && signingWeekendNote}
               </div>
             )}
 
@@ -1188,6 +1205,7 @@ function AddEntryModal({
                     </div>
                   )}
                   {showSigningAfterStartWarning && signingAfterStartNote}
+                  {showSigningWeekendWarning && signingWeekendNote}
                 </div>
 
                 <div style={{ marginTop: "0.875rem" }}>
@@ -1299,6 +1317,11 @@ export default function EmployeeDetailPage() {
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [employment, setEmployment] = useState<EmploymentRow[]>([]);
   const [contracts, setContracts] = useState<ContractRecord[]>([]);
+  // Only one Rodičovská may be in play at a time. Computed here, across ALL
+  // rows, rather than inside a session card: an employee with two concurrent
+  // jobs renders a card per session, and one open Rodičovská must disable the
+  // button on every one of them. The server enforces the same rule.
+  const rodicovskaBlocked = hasOpenRodicovska(employment, clock.today());
   const [contact, setContact] = useState<ContactData | null>(null);
   const [documents, setDocuments] = useState<DocumentsData | null>(null);
   const [additional, setAdditional] = useState<AdditionalData | null>(null);
@@ -1881,6 +1904,7 @@ export default function EmployeeDetailPage() {
                     parentRowId: session.nastup.id,
                   })
                 }
+                rodicovskaBlocked={rodicovskaBlocked}
                 onTerminate={() =>
                   setNewEntryMode({
                     lockedChangeType: "ukončení",

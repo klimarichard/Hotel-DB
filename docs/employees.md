@@ -15,7 +15,7 @@ Developer documentation for the employee module: the core employee record and fo
 - **CSV export** (admin + director): "Exportovat CSV" button on `EmployeesPage` opens `ExportEmployeesModal`. Users pick which of 36 seed-compatible columns to include, filter by status / company / contract type / nationality / job title, and name the output file (defaults to `zamestnanci_YYYY-MM-DD.csv`; `sanitizeFilename()` strips Windows-illegal characters and appends `.csv` on blur and at submit). Backend endpoint `GET /api/employees/export` merges each employee with their `contact`, `documents`, `benefits`, and latest `employment` sub-docs in parallel, redacting the five encrypted fields (`birthNumber`, `idCardNumber`, `insuranceNumber`, `bankAccount`, `idCardExpiry`) by default. Opting in via `?includeSensitive=true` decrypts them and writes ONE `auditLog/` entry per export (action `"export"`), not one per field per employee. **The sensitive opt-in is permission-gated server-side:** `?includeSensitive=true` requires `employees.export.sensitive` (separate from the `employees.export` gate on the route); the handler returns 403 without it. The frontend already hides the toggle for callers lacking the permission, but the backend is the real gate — a direct API call (or a custom type granted plain `employees.export` only) can't dump plaintext PII. CSV assembly lives client-side in `frontend/src/lib/csvExport.ts` — semicolon-delimited, CRLF, UTF-8 BOM, dates `"DD. MM. YYYY"`, booleans `"ANO"`/empty, salary with space thousands separator. Column order mirrors `scripts/seeds/employees.csv` so a full-column export is round-trip compatible with the seed loader. **Excel text-literal escape:** columns flagged `forceText` (`idCardNumber`, `passportNumber`, `visaNumber`, `birthNumber`, `insuranceNumber`, `bankAccount`, `phone`) emit as `="value"` so Excel preserves leading zeros on visa numbers, keeps `+420` phone prefixes, and doesn't interpret `/` in bank accounts as division. Future: the `accountant` role is in the plan for this allow list but not yet in `UserRole`; a TODO at `functions/src/routes/employees.ts` tags the handler.
 - Shift plan export: "Exportovat ▾" button opens a PDF/CSV dropdown. CSV is semicolon-delimited UTF-8 BOM, one row per employee (name, rawInput per day, monthly shift count), section separator rows, MOD row after vedoucí. All employees included regardless of active flag. Filename: `smeny_{year}_{month}.csv`.
 - Shift plan page: month nav and plan bar are individually sticky (`position: sticky`) within `.main`; ShiftGrid thead sticks within the wrapper (`overflow-y: auto`, bounded `max-height`). Layout `.shell` uses `height: 100vh` so `.main` is the real scroll container.
-- Czech date formatting: `frontend/src/lib/dateFormat.ts` — `formatDateCZ(iso)`, `formatTimestampCZ(ts)`, `formatDatetimeCZ(ts)`.
+- Czech date formatting: `frontend/src/lib/dateFormat.ts` — `formatDateCZ(iso)`, `formatTimestampCZ(ts)`, `formatDatetimeCZ(ts)`, and (v4.11.0) `formatIsoDatetimeCZ(iso)` — formats a plain ISO date-**time** string (no trailing `Z`/offset ⇒ parsed as local time) as `"DD. MM. YYYY HH:MM"`, for fields that are written straight from `<input type="datetime-local">` rather than a Firestore Timestamp — e.g. the shift plan's `openedAt`/`closedAt`/`publishedAt` deadlines (see [Shifts](shifts.md)).
 - Gendered marital status: `frontend/src/lib/genderDisplay.ts` — `displayGendered(value, gender)`. Values are stored combined ("ženatý/vdaná") and resolved on read; passing a `null`/unknown gender returns the combined form unchanged. The per-employee root flag **`genderNeutralDisplay`** (boolean) opts an employee out of resolution everywhere they're displayed — see "Per-employee neutral gender display" below.
 
 ---
@@ -107,6 +107,14 @@ Endpoints in `employees.ts` decrypt the sensitive fields they embed (rodné čí
 - `GET /:id/tax-declaration-pdf?period=…` — gated `employment.manage` OR `documents.view`. The free-text **zdaňovací období** (e.g. `2026` or `od září 2026`) is entered in a dialog; `adresa bydliště` is Czech employees' trvalá address, foreigners' resolved kontaktní address.
 
 UI: a **"Dotazník"** button in the employee hero (`EmployeeDetailPage`) and a **"Prohlášení poplatníka"** button, each streaming the audited blob with the auth token and opening it in a new tab. **v4.6.0:** the Prohlášení button moved from the Další-dokumenty toolbar to the Historie pracovního poměru toolbar, next to `+ Nástup` — see [Employee detail restructure](#employee-detail-restructure--ad-hoc-documents-move-to-další-dokumenty-v460).
+
+#### Blank Dotazník — print-and-fill-by-hand sheet (v4.11.0)
+
+`GET /api/employees/questionnaire-blank` returns the "Osobní dotazník zaměstnance" with **nothing filled in**, for someone to print and complete on paper. It calls the same `fillQuestionnairePdf({}, "Dotazník")` fill/flatten path as the per-employee endpoint above with an empty data object — so the blank sheet is, by construction, the identical asset and can never drift from the filled one.
+
+- **Gate.** `requirePermission("nav.employees.view")` only — **not** `employees.view.all`/`employees.view.nonManagement` like `/:id/questionnaire-pdf`, and **no audit-log entry** is written. A blank form carries no personal data, so there is nothing to protect and nothing to reveal.
+- **Route order matters.** Declared **above** `GET /:id` in `employees.ts` — Express matches routes in declaration order, so a lower position would have `/:id` swallow the literal path as `id="questionnaire-blank"`. Same reason `/export` is declared up there too.
+- **Frontend** — a **"Prázdný dotazník"** button on `EmployeesPage.tsx` (`handleBlankQuestionnaire`), beside "Exportovat CSV" — distinct from the plain **"Dotazník"** button on the employee *detail* page, which is the filled, audited, permission-gated one. It fetches the PDF as a blob and opens it in a new tab (`window.open(url, "_blank", "noopener,noreferrer")`); the browser's own PDF viewer offers printing from there. Deliberately **not** `window.print()` — the app's other print buttons print a hidden HTML block rendered on the *current* page, which has no way to target a PDF that was opened in a different tab. Opening the real form asset also means the printed sheet can't visually drift from an HTML lookalike.
 
 ### Salary formatting in templates
 `{{salary}}` and `{{newSalary}}` template variables now resolve with Czech thousands-dots: `39000` → `"39.000"`. The literal `,- Kč` tail stays in the template HTML (`nastup_hpp`/`nastup_ppp`/`zmena_smlouvy`), so the helper emits only the formatted integer. Implemented via `formatSalaryCZ()` in `frontend/src/lib/contractVariables.ts`.
@@ -456,6 +464,17 @@ Two new root-level fields on `employees/{id}` hold the next-or-current parental-
 
 No migration required — `parentalLeaveFrom` / `parentalLeaveTo` backfill automatically on the next nightly `refreshEmployeeEffective` sweep or a manual `POST /api/employees/trigger-effective-refresh`.
 
+### Only one Rodičovská at a time (v4.11.0)
+
+An employee may hold at most one **in-play** Rodičovská row. "In play" is framed as *"has it ended?"*, not *"has it started?"* — a row is blocking whenever `!endDate || endDate >= today`, which deliberately also blocks stacking a **future-dated** Rodičovská on top of a running or another future one (two future ones would overlap the same way once both arrive).
+
+- **Shared predicate — `hasOpenRodicovska(rows, today, exceptRowId?)`** in `frontend/src/lib/employmentSessions.ts`. Takes raw employment rows, not sessions, because the limit is per **employee**, not per session: an employee with two concurrent jobs renders one session card each, and an open Rodičovská on either must disable the button on both.
+- **Frontend (advisory only)** — `EmployeeDetailPage.tsx` computes `rodicovskaBlocked = hasOpenRodicovska(employment, clock.today())` once, across **every** row on the page (not inside a single session card), for exactly the two-concurrent-jobs reason above. The **"+ Rodičovská"** button is **disabled, not hidden**, with a hover title explaining why — so a user with the permission can still see the action exists and why it's currently unavailable.
+- **Backend (the real enforcement)** — `functions/src/routes/employees.ts` mirrors the same predicate in two places, both returning **409** with the Czech message *"Zaměstnanec už má rodičovskou dovolenou, která neskončila. Souběžně může probíhat jen jedna."*:
+  - `POST /:id/employment` when the new row's `changeType === "rodičovská"`.
+  - `PATCH /:id/employment/:rowId` when editing an **existing** Rodičovská row. This second guard matters for a case the create-time check can't catch: **clearing the `endDate` of a long-finished Rodičovská reopens it** (turns it back into an in-play row), and if another Rodičovská is already open the employee would then have two. The check only runs when the edit leaves the row itself open/unfinished (`!nextEnd || nextEnd >= today`), and excludes the row being edited from the "other open" scan.
+- Keep the frontend predicate and both backend guards in step if this rule ever changes — the frontend copy is a hint only; the backend is what actually prevents the invalid state.
+
 ### Data-safety design
 
 Every existing consumer of employment rows (salary fold in `computeEffectiveState`, probation alerts, payroll calculator, CSV export, Dotazník PDF, Prohlášení PDF) either ignores unknown `changeType` values (silent drop via the orphan path) or explicitly skips `changeType !== "rodičovská"` when picking the "latest employment row". This means:
@@ -767,3 +786,29 @@ A one-time historical backfill, **scoped to the 32 employees present in the July
 - **Additive and idempotent**: uses `set({ merge: true })`, so it only ever touches the fields it carries (Loňská, Letošní, paidOut, months 1–6) and never clears months a later payroll lock adds (7+); it also `FieldValue.delete()`s the deprecated pre-split `entitlementHours`.
 - **Prod-only, dry-run by default**: refuses to run if emulator env vars are set, requires `--commit` to actually write, and skips (reporting) any `employeeId` not found in prod `employees/`.
 - Only imports Jan–Jun 2026 (H1) — the rest of the year is expected to be fed live by payroll locks as each month closes.
+
+---
+
+## Signing-date advisory warning — weekend / public holiday (v4.11.0)
+
+A non-blocking note appears wherever a "Datum podpisu" (signing date) is entered, when that date falls on a Saturday, Sunday, or Czech public holiday — usually a data-entry slip (someone signs paperwork retroactively and picks the wrong day). It **never blocks** saving or generating, exactly like the pre-existing "signed after it takes effect" warning it can appear alongside.
+
+### `frontend/src/lib/workingDays.ts`
+
+New shared module — the single place that answers "is this date a non-working day?":
+
+```ts
+isWeekend(iso)          // Saturday/Sunday, from an ISO YYYY-MM-DD
+isCzechHoliday(iso)     // Czech public holiday
+isWeekendOrHoliday(iso) // either of the above; false for empty/unparseable input
+```
+
+- **Does not redefine the holiday list.** It reuses `getCzechHolidays` from `frontend/src/lib/shiftConstants.ts` — the app's single source of truth for Czech holidays (fixed dates + Easter-derived Good Friday/Easter Monday), already used to shade the shift grid. Adding a holiday there automatically flows into this warning too.
+- **Local-time date construction.** Builds the test date with `new Date(y, m-1, d)`, never `new Date(iso)` — parsing a date-only ISO string with the latter reads as UTC, which in UTC+2 resolves to the previous day and can report the wrong weekday (the same date-arithmetic pitfall noted project-wide).
+- Empty/unparseable input returns `false` — an absent signing date isn't this warning's problem; the field's own required-check covers that.
+
+### Call sites
+
+- **`EmployeeDetailPage.tsx`** — all four `AddEntryModal` variants (Nástup, Dodatek, Ukončení, Rodičovská) that collect a signing date show `isWeekendOrHoliday(form.signingDate)` as a separate warning box from the existing "datum podpisu je pozdější než datum platnosti" note. **Both can be true at once** (a Sunday that's also after the start date) and are kept as two distinct notes rather than merged, so the user sees every reason at once instead of an arbitrary single message winning.
+- **`GenerateContractModal.tsx`** — the same check on the in-modal `signingDate` field (the one-step ad-hoc document generation flow — see [Contracts & Templates](contracts.md#one-step-ad-hoc-document-generation-v482)), alongside its own Multisport-only "signed after platnost" note.
+- Text is identical everywhere: *"Datum podpisu připadá na víkend nebo svátek."* The holiday list itself is never restated in the message.

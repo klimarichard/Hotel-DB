@@ -897,6 +897,33 @@ employeesRouter.get(
   }
 );
 
+/**
+ * GET /api/employees/questionnaire-blank
+ * The Dotazník with nothing filled in, to print and complete by hand.
+ *
+ * Same asset and the same fill+flatten path as /:id/questionnaire-pdf, just with
+ * no data — so the blank sheet is by construction identical to the filled one
+ * and can never drift from it. Flattened rather than served raw so it prints as
+ * static lines instead of interactive form widgets.
+ *
+ * Carries NO personal data, so unlike the per-employee variant it needs neither
+ * the employees.view.* gate nor an audit-log entry: there is nothing revealed to
+ * record. Gated only by seeing the Zaměstnanci page, which is where the button
+ * lives.
+ *
+ * MUST stay above "/:id" below — Express matches in declaration order, and "/:id"
+ * would otherwise swallow this as id="questionnaire-blank" (this is why "/export"
+ * sits up here too).
+ */
+employeesRouter.get(
+  "/questionnaire-blank",
+  requirePermission("nav.employees.view"),
+  async (_req: AuthRequest, res) => {
+    const pdf = await fillQuestionnairePdf({}, "Dotazník");
+    sendPdfInline(res, pdf, "Dotazník");
+  }
+);
+
 // ─── GET ONE ─────────────────────────────────────────────────────────────────
 
 /**
@@ -1576,6 +1603,28 @@ employeesRouter.post(
         res.status(400).json({ error: "Rodičovská vyžaduje datum začátku." });
         return;
       }
+      // Only ONE Rodičovská may be in play at a time. "In play" = not yet
+      // finished (no end date, or an end date that hasn't passed), which also
+      // rules out stacking a FUTURE-dated one on top of a running or another
+      // future one — they would overlap just the same.
+      // The UI disables the button for this, but that is only a hint: this is
+      // the enforcement, since employment rows drive payroll and status.
+      // Mirrors hasOpenRodicovska() in frontend/src/lib/employmentSessions.ts.
+      const today = clock.today();
+      const existing = await empRef.collection("employment").get();
+      const openRodicovska = existing.docs.some((d) => {
+        const r = d.data() as Record<string, unknown>;
+        if (r.changeType !== "rodičovská") return false;
+        const end = (r.endDate as string | null) ?? null;
+        return !end || end >= today;
+      });
+      if (openRodicovska) {
+        res.status(409).json({
+          error:
+            "Zaměstnanec už má rodičovskou dovolenou, která neskončila. Souběžně může probíhat jen jedna.",
+        });
+        return;
+      }
       // The end date is unknown when parental leave begins — it may be filled in
       // later via an edit. Normalise a blank endDate to null (open-ended).
       if (!body.endDate) body.endDate = null;
@@ -2220,6 +2269,30 @@ employeesRouter.patch(
         "workLocation", "probationPeriod", "status",
       ]) {
         delete body[k];
+      }
+      // The one-at-a-time rule again, because an EDIT can breach it just as a
+      // create can: clearing the end date of a long-finished Rodičovská reopens
+      // it, and if another is already open the employee then has two. Only
+      // checked when this edit leaves the row open/unfinished; itself excluded.
+      const nextEnd =
+        "endDate" in body ? ((body.endDate as string | null) || null) : ((before.endDate as string | null) ?? null);
+      const today = clock.today();
+      if (!nextEnd || nextEnd >= today) {
+        const existing = await empRef.collection("employment").get();
+        const otherOpen = existing.docs.some((d) => {
+          if (d.id === req.params.rowId) return false;
+          const r = d.data() as Record<string, unknown>;
+          if (r.changeType !== "rodičovská") return false;
+          const end = (r.endDate as string | null) ?? null;
+          return !end || end >= today;
+        });
+        if (otherOpen) {
+          res.status(409).json({
+            error:
+              "Zaměstnanec už má rodičovskou dovolenou, která neskončila. Souběžně může probíhat jen jedna.",
+          });
+          return;
+        }
       }
     }
     await rowRef.update({ ...body, updatedAt: now });

@@ -174,12 +174,17 @@
   line-height: 1;
 }
 
+/* Divides the nav links from the account actions (Odhlásit etc.), so it has to
+   read as a real break between two groups.
+   NOT --color-border-subtle: in dark mode that token is #1e293b, the exact hex
+   of --color-surface above, so the line was invisible against the sheet's own
+   background. --color-border-strong is legible in both themes. */
 .sheetFooter {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
   padding: 1rem 1.25rem;
-  border-top: 1px solid var(--color-border-subtle);
+  border-top: 1px solid var(--color-border-strong);
 }
 
 .footerBtn {

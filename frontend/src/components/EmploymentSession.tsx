@@ -38,6 +38,13 @@ interface Props {
   onAddDodatek: () => void;
   /** Open the dialog to add a parental-leave (RODIČOVSKÁ) period to this session. */
   onAddRodicovska: () => void;
+  /**
+   * The employee already has a Rodičovská that hasn't ended (running or
+   * future-dated), so no second one may start. Computed by the PAGE across ALL
+   * sessions, not here: the limit is per employee, and a card can only see its
+   * own session. Disables "+ Rodičovská" on every card, with a reason on hover.
+   */
+  rodicovskaBlocked?: boolean;
   onTerminate: () => void;
   onContractsChanged: () => void;
   /**
@@ -69,6 +76,7 @@ export default function EmploymentSessionCard({
   onDeleteRow,
   onAddDodatek,
   onAddRodicovska,
+  rodicovskaBlocked,
   onTerminate,
   onContractsChanged,
   onSelfDownload,
@@ -149,7 +157,23 @@ export default function EmploymentSessionCard({
             {!session.terminated && (
               <>
                 <Button variant="secondary" size="sm" onClick={onAddDodatek}>+ Dodatek</Button>
-                <Button variant="secondary" size="sm" data-tour="emp-employment-rodicovska" onClick={onAddRodicovska}>+ Rodičovská</Button>
+                {/* Disabled, not hidden: a vanished button reads as a bug or a
+                    missing permission, whereas a greyed one with a reason on
+                    hover explains itself. */}
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  data-tour="emp-employment-rodicovska"
+                  onClick={onAddRodicovska}
+                  disabled={rodicovskaBlocked}
+                  title={
+                    rodicovskaBlocked
+                      ? "Zaměstnanec už má rodičovskou dovolenou, která neskončila. Souběžně může probíhat jen jedna."
+                      : undefined
+                  }
+                >
+                  + Rodičovská
+                </Button>
               </>
             )}
             <Button variant="secondary" size="sm" onClick={onTerminate}>Ukončit smlouvu</Button>

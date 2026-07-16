@@ -86,6 +86,7 @@ Měsíční plán směn (recepce, portýři, Management). Plán je rozčleněn d
 Plán prochází stavy **Vytvořený → Otevřený → Uzavřený → Publikovaný** (jednosměrně). Přechody mohou být automatické podle nastavených termínů, nebo je spouští administrátor/ředitel.
 
 - **Vidíte plán ve všech stavech** a v **otevřeném** plánu můžete vyplňovat směny. Plán ale **neposouváte dál** — vytvoření plánu, přechody mezi stavy, nastavení termínů a kopírování zaměstnanců z předchozího plánu provádí pouze administrátor nebo ředitel.
+- **Termín přechodu vidíte i jako přesné datum a čas:** u již nastaveného termínu (Otevření, Uzavření nebo Publikování) se vedle odpočtu (např. „za 3h 12m") zobrazuje i konkrétní **datum a čas**, kdy k přechodu dojde – protože termíny sami neupravujete, nestačí vám vidět jen odpočet.
 - Plán ve stavu *Vytvořený* zaměstnanci nevidí; objeví se až po otevření.
 - **Automatické vyplnění „R" při publikování:** v okamžiku, kdy administrátor/ředitel plán **publikuje**, aplikace automaticky doplní **„R"** (denní směna vedoucího) do každého pracovního dne (Po–Pá), který ve vašem řádku ještě zůstal prázdný. Dny označené **„X"** (volno) a dny s jiným vyplněným kódem se nemění. Státní svátky jsou přeskočeny. Díky tomu nemusíte ručně doplňovat „R" za každý zbývající pracovní den — systém to zajistí při publikování.
 
@@ -143,7 +144,7 @@ Vlastní karta zaměstnance.
 Aplikaci můžete používat i v mobilním prohlížeči — rozložení se na malé obrazovce automaticky přizpůsobí:
 
 - **Spodní lišta místo bočního menu:** boční menu vlevo se na telefonu skryje a nahradí ho **lišta se záložkami u spodního okraje obrazovky**. Obsahuje vaše nejpoužívanější sekce (Přehled, Směny, Dovolená, Profil) a navíc záložku **„Více"**.
-- **Záložka „Více":** klepnutím na **Více** se zespodu vysune panel, kde najdete tlačítka pro **přepnutí světlého/tmavého režimu**, **Nápovědu** a **Odhlášení** (na telefonu nejsou u jména jako na počítači, ale právě zde). Panel zavřete křížkem **✕**.
+- **Záložka „Více":** klepnutím na **Více** se zespodu vysune panel, kde najdete tlačítka pro **přepnutí světlého/tmavého režimu**, **Nápovědu** a **Odhlášení** (na telefonu nejsou u jména jako na počítači, ale právě zde). Panel zavřete křížkem **✕**, nebo klepnutím **kamkoli mimo něj**. Oddělovací čára nad položkou **„Odhlásit"** je nyní zřetelně vidět i v tmavém režimu.
 - **Karty místo širokých tabulek:** přehledy, které jsou na počítači v široké tabulce (např. **Moje žádosti** v Dovolené nebo dlaždice **Dnes/Zítra** na Přehledu), se na telefonu zobrazují jako **karty pod sebou** — nemusíte se tak posouvat do stran.
 - **Plán směn přes celou obrazovku:** tabulka směn se na telefonu zobrazuje přes celou obrazovku a při posouvání se horní lišta automaticky skryje, abyste viděli co nejvíce plánu. Legenda pod tabulkou je na telefonu skrytá.
 

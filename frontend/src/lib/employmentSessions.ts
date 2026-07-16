@@ -99,6 +99,37 @@ export interface EmploymentSession {
 }
 
 /**
+ * Whether the employee already has a Rodičovská that rules out starting
+ * another one. Only ONE may be in play at a time.
+ *
+ * "In play" = not yet finished: no end date (open-ended), or an end date that
+ * hasn't passed. That deliberately covers a FUTURE-dated Rodičovská as well as
+ * a currently-running one — two future ones would overlap just as badly, so the
+ * test is "has it ended?", not "has it started?". A Rodičovská that ended before
+ * today never blocks.
+ *
+ * Takes raw rows, not sessions: the limit is per EMPLOYEE, not per session. An
+ * employee with two concurrent jobs renders one session card each, and a
+ * Rodičovská on either must block the button on both.
+ *
+ * Mirrors the backend guard in functions/src/routes/employees.ts — keep the two
+ * in step; the frontend copy only disables the button, the backend one is the
+ * real enforcement.
+ */
+export function hasOpenRodicovska(
+  rows: EmploymentRow[],
+  today: string,
+  exceptRowId?: string
+): boolean {
+  return rows.some(
+    (r) =>
+      r.changeType === "rodičovská" &&
+      r.id !== exceptRowId &&
+      (!r.endDate || r.endDate >= today)
+  );
+}
+
+/**
  * Group employment rows into sessions. Walks rows in startDate-asc order;
  * each `nástup` opens a new session, `změna smlouvy` rows append to the
  * current session, and `ukončení` closes it. Returns sessions in their

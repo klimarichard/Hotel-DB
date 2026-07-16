@@ -6,6 +6,7 @@ import { useAuth } from "../hooks/useAuth";
 import { parseShiftExpression, getCellColor, SECTIONS, SECTION_LABELS, getCzechHolidays, sortSectionEmployees, isPureNumericExpression } from "../lib/shiftConstants";
 import { modLettersByEmployeeId } from "../lib/modPersons";
 import { employeeDisplayName } from "../lib/employeeName";
+import { formatIsoDatetimeCZ } from "../lib/dateFormat";
 import { escapeHtml } from "../lib/escapeHtml";
 import ShiftGrid from "../components/ShiftGrid";
 import AddEmployeeToPlanModal from "../components/AddEmployeeToPlanModal";
@@ -206,6 +207,10 @@ export default function ShiftPlannerPage() {
   } | null>(null);
   const [plansList, setPlansList] = useState<PlanListItem[]>([]);
   const [copyFromId, setCopyFromId] = useState("");
+  // Scheduled opening of a plan this user cannot see yet (still "created").
+  // Without it the month reads "Plán pro tento měsíc neexistuje", which is
+  // untrue — the plan exists and already has an automatic opening scheduled.
+  const [upcomingOpenAt, setUpcomingOpenAt] = useState<string | null>(null);
 
   const [exporting, setExporting] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
@@ -241,6 +246,16 @@ export default function ShiftPlannerPage() {
   // checks: cells.edit = {admin,director,manager}; plan.transition = {admin,director}.
   const canEdit = can("shifts.cells.edit");
   const canPublish = can("shifts.plan.transition");
+  // NB: distinct from canEdit above — that one is shifts.cells.edit (grid cells).
+  // This gates the deadline controls, i.e. who may SET an automatic transition.
+  const canEditDeadlines = can("shifts.plan.edit");
+  // The absolute moment a deadline fires. Only for users who can't edit it:
+  // an editor reads it off their datetime-local input, but everyone else saw
+  // just "(za 3h 12m)" with no idea WHICH DAY that lands on.
+  const deadlineWhen = (iso: string | null) =>
+    iso && !canEditDeadlines ? (
+      <span className={styles.deadlineWhen}>{formatIsoDatetimeCZ(iso)}</span>
+    ) : null;
   // Self-service worker (built-in "employee"): edits only own X, no full cell edit.
   const selfServiceOnly = can("shifts.cells.editOwnX") && !can("shifts.cells.edit");
   // "Moje žádosti" is for users who can submit their own requests (change /
@@ -306,6 +321,7 @@ export default function ShiftPlannerPage() {
       setLoading(true);
       setError(null);
       setPlan(null);
+      setUpcomingOpenAt(null);
     }
 
     api
@@ -317,9 +333,21 @@ export default function ShiftPlannerPage() {
         );
         if (!match) {
           seenUpdatedRef.current = null;
+          // No VISIBLE plan – but a "created" one may exist and simply be hidden
+          // from this user until it opens. Ask for its scheduled opening so the
+          // month can say when it lands instead of claiming it doesn't exist.
+          // Failure is silent: this is a nicety, not something to error the page
+          // over, and it stays null so the original wording shows.
+          api
+            .get<{ openedAt: string | null }>(
+              `/shifts/plans-upcoming?year=${selectedYear}&month=${selectedMonth}`
+            )
+            .then((r) => setUpcomingOpenAt(r.openedAt))
+            .catch(() => {});
           if (!silent) setLoading(false);
           return;
         }
+        setUpcomingOpenAt(null);
         seenUpdatedRef.current = tsMillis(match.updatedAt);
         return api.get<PlanDetail>(`/shifts/plans/${match.id}`).then((detail) => {
           setPlan({ ...detail, modShifts: detail.modShifts ?? [] });
@@ -1326,6 +1354,14 @@ export default function ShiftPlannerPage() {
           <div ref={planBarRef} className={`${styles.planBar}${chromeHidden ? ` ${styles.chromeHidden}` : ""}`} style={{ position: "sticky", top: headerHeight, zIndex: 10, background: "var(--color-bg)", paddingBottom: "0.5rem", maxHeight: isPhone ? (planBarHeight || undefined) : undefined }}>
             {plan ? (
               <StatusBadge status={plan.status} />
+            ) : upcomingOpenAt ? (
+              // The plan exists but is still "created", so this user can't open
+              // it yet. Announce when it opens rather than deny it exists, in the
+              // terms that matter to them: opening the plan is when vyškrtávání
+              // starts. Absolute moment + countdown, mirroring the deadline bar.
+              <span className={styles.planPending}>
+                Vyškrtávání od {formatIsoDatetimeCZ(upcomingOpenAt)} ({deadlineCountdown(upcomingOpenAt)})
+              </span>
             ) : (
               <span className={styles.noPlan}>Plán pro tento měsíc neexistuje</span>
             )}
@@ -1600,6 +1636,7 @@ export default function ShiftPlannerPage() {
                   )}
                   {plan.openedAt && (
                     <>
+                      {deadlineWhen(plan.openedAt)}
                       <span className={styles.deadlineCountdown}>
                         ({deadlineCountdown(plan.openedAt)})
                       </span>
@@ -1641,6 +1678,7 @@ export default function ShiftPlannerPage() {
                   )}
                   {plan.closedAt && (
                     <>
+                      {deadlineWhen(plan.closedAt)}
                       <span className={styles.deadlineCountdown}>
                         ({deadlineCountdown(plan.closedAt)})
                       </span>
@@ -1683,6 +1721,7 @@ export default function ShiftPlannerPage() {
                   )}
                   {plan.publishedAt && (
                     <>
+                      {deadlineWhen(plan.publishedAt)}
                       <span className={styles.deadlineCountdown}>
                         ({deadlineCountdown(plan.publishedAt)})
                       </span>

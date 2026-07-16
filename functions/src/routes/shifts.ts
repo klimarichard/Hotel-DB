@@ -407,6 +407,52 @@ shiftsRouter.get(
   }
 );
 
+// GET /shifts/plans-upcoming?year&month — when a plan for that month exists but
+// is still "created", report ONLY its scheduled opening time.
+//
+// Why a separate route rather than relaxing the filters above: a self-service
+// viewer is deliberately blind to "created" plans in BOTH `GET /plans` (which
+// drops them) and `GET /plans/:planId` (which 404s them), because an unopened
+// plan is a draft roster nobody should read yet. Those two must keep hiding it.
+// But such a viewer then sees "Plán pro tento měsíc neexistuje", which is a lie
+// when the plan exists and is already scheduled to open. This route closes that
+// gap while exposing exactly one field — the timestamp — and never the roster.
+//
+// Path is "/plans-upcoming", not "/plans/upcoming": a nested path would be
+// captured by "/plans/:planId" as planId="upcoming" depending on route order.
+shiftsRouter.get(
+  "/plans-upcoming",
+  requireAuth,
+  requirePermission("shifts.view.all", "shifts.view.self"),
+  async (req: AuthRequest, res) => {
+    const year = Number(req.query.year);
+    const month = Number(req.query.month);
+    if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) {
+      res.status(400).json({ error: "year a month jsou povinné (month 1–12)." });
+      return;
+    }
+    const snap = await db()
+      .collection("shiftPlans")
+      .where("year", "==", year)
+      .where("month", "==", month)
+      .limit(1)
+      .get();
+    if (snap.empty) {
+      res.json({ openedAt: null });
+      return;
+    }
+    const data = snap.docs[0].data();
+    // Only a plan still awaiting its automatic opening is announced. An already
+    // opened/closed/published plan is visible through the normal routes, and a
+    // "created" plan with no openedAt has nothing to announce.
+    if (data.status !== "created") {
+      res.json({ openedAt: null });
+      return;
+    }
+    res.json({ openedAt: (data.openedAt as string | null) ?? null });
+  }
+);
+
 // POST /shifts/plans — create a plan
 shiftsRouter.post(
   "/plans",

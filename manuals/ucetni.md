@@ -67,6 +67,7 @@ Evidence všech zaměstnanců — **vše jen pro čtení**. Záložky **Aktivní
 - Vedle odznaku HPP/PPP/DPP může být u jména zaměstnance zobrazen zelený odznak **„V zácviku"** — ten signalizuje, že zaměstnanec je aktuálně v období zácviku. Odznak zmizí automaticky po uplynutí nastaveného data konce zácviku.
 - Zaměstnanec aktuálně na rodičovské dovolené má ve sloupcích **Pozice** a **Oddělení** zobrazený odznak **„Rodičovská"** — zobrazuje se jen po dobu trvání zadaného období a poté automaticky zmizí. Pracuje-li takový zaměstnanec zároveň na druhý úvazek (souběžná smlouva), zobrazují se u jeho jména **oba odznaky smlouvy** (např. HPP i DPP) a ve sloupcích Pozice/Oddělení text **„RODIČOVSKÁ / [aktuální pozice]"**.
 - Tlačítko **Exportovat CSV** otevře dialog, kde vyberete sloupce a filtry a stáhnete data do tabulky.
+- Tlačítko **Prázdný dotazník** (vedle Exportovat CSV) otevře v nové záložce prohlížeče prázdný **Osobní dotazník** (PDF) bez údajů jakéhokoli konkrétního zaměstnance – vytisknete ho (Ctrl+P nebo tiskovou ikonou v prohlížeči PDF) a vyplníte ručně. Na rozdíl od dotazníku na detailu konkrétního zaměstnance neobsahuje žádné osobní údaje, a jeho otevření se proto **nezaznamenává do Logu změn**.
 
 #### Sloupce tabulky
 
