@@ -93,6 +93,16 @@
   font-size: 0.875rem;
 }
 
+/* A plan that exists but is still unopened, so this user can't see it yet.
+   Deliberately NOT .noPlan's subtle grey: this one carries real information
+   (the month IS covered, and when it opens), so it should read as a statement
+   rather than an absence. */
+.planPending {
+  color: var(--color-warning-text);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
 /* ── Status badges ────────────────────────────────────────────────────── */
 
 .badge {
@@ -218,6 +228,16 @@
 
 .deadlineCountdown {
   font-size: 0.75rem;
+  color: var(--color-warning-text);
+  white-space: nowrap;
+}
+
+/* The absolute moment of a deadline, shown to users who have no
+   datetime-local input to read it off (i.e. cannot edit the plan). Carries the
+   weight the countdown beside it lacks, since it is the actual information. */
+.deadlineWhen {
+  font-size: 0.8125rem;
+  font-weight: 600;
   color: var(--color-warning-text);
   white-space: nowrap;
 }
