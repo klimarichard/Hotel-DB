@@ -7,6 +7,7 @@ import { nationalityName } from "@/lib/nationalities";
 import { formatDateCZ } from "@/lib/dateFormat";
 import * as clock from "@/lib/clock";
 import Button from "@/components/Button";
+import ConfirmModal from "@/components/ConfirmModal";
 import ExportEmployeesModal from "@/components/ExportEmployeesModal";
 import styles from "./EmployeesPage.module.css";
 
@@ -135,7 +136,9 @@ function sortValue(e: Employee, key: SortKey): string {
 }
 
 export default function EmployeesPage() {
-  const { can } = useAuth();
+  const { can, user } = useAuth();
+  const [blankQuestionnaireLoading, setBlankQuestionnaireLoading] = useState(false);
+  const [errorModal, setErrorModal] = useState<string | null>(null);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -145,6 +148,37 @@ export default function EmployeesPage() {
   // Default sort: surname A→Z (matches the previous hard-coded order).
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  /**
+   * Open the EMPTY Dotazník in a new tab, to print and fill in by hand.
+   *
+   * Opens the PDF rather than calling window.print(): the app's other print
+   * buttons print a hidden HTML block on the current page, which cannot target a
+   * PDF in another tab. The browser's own PDF viewer offers printing, and this
+   * way the sheet stays the real form asset instead of an HTML lookalike that
+   * would drift from it. Same shape as the per-employee dotazník on the detail
+   * page (fetch → blob → new tab), minus the audit log — a blank form reveals
+   * nothing to record.
+   */
+  async function handleBlankQuestionnaire() {
+    if (!user || blankQuestionnaireLoading) return;
+    setBlankQuestionnaireLoading(true);
+    try {
+      const token = await user.getIdToken();
+      const resp = await fetch("/api/employees/questionnaire-blank", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!resp.ok) throw new Error();
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank", "noopener,noreferrer");
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch {
+      setErrorModal("Nepodařilo se otevřít prázdný dotazník.");
+    } finally {
+      setBlankQuestionnaireLoading(false);
+    }
+  }
 
   // Click a header: same column toggles direction; a new column starts at asc.
   const toggleSort = (key: SortKey) => {
@@ -211,6 +245,16 @@ export default function EmployeesPage() {
               Exportovat CSV
             </Button>
           )}
+          {/* Ungated beyond reaching this page: the sheet is blank, so there is
+              no employee data to protect (unlike the filled Dotazník on the
+              detail page, which needs employees.view.*). */}
+          <Button
+            variant="secondary"
+            onClick={handleBlankQuestionnaire}
+            disabled={blankQuestionnaireLoading}
+          >
+            {blankQuestionnaireLoading ? "Otevírám…" : "Prázdný dotazník"}
+          </Button>
           {can("employees.create") && (
             <Link to="/zamestnanci/novy" className={styles.addBtn} data-tour="emp-create">
               + Přidat zaměstnance
@@ -220,6 +264,16 @@ export default function EmployeesPage() {
       </div>
 
       {showExport && <ExportEmployeesModal onClose={() => setShowExport(false)} />}
+      {errorModal && (
+        <ConfirmModal
+          title="Chyba"
+          message={errorModal}
+          confirmLabel="OK"
+          showCancel={false}
+          onConfirm={() => setErrorModal(null)}
+          onCancel={() => setErrorModal(null)}
+        />
+      )}
 
       <div className={styles.filters} data-tour="emp-filters">
         <input
