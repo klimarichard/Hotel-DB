@@ -27,6 +27,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "4.10.2",
+    date: "2026-07-16",
+    changes: [
+      "Oprava: u dodatku na dobu neurčitou se v historii zaměstnance místo délky smlouvy zobrazovala pomlčka.",
+    ],
+  },
+  {
     version: "4.10.1",
     date: "2026-07-16",
     changes: [
