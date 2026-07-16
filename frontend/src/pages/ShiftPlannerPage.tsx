@@ -1356,9 +1356,11 @@ export default function ShiftPlannerPage() {
               <StatusBadge status={plan.status} />
             ) : upcomingOpenAt ? (
               // The plan exists but is still "created", so this user can't open
-              // it yet – announce when it will open rather than deny it exists.
+              // it yet. Announce when it opens rather than deny it exists, in the
+              // terms that matter to them: opening the plan is when vyškrtávání
+              // starts. Absolute moment + countdown, mirroring the deadline bar.
               <span className={styles.planPending}>
-                Plán se připravuje – otevře se {formatIsoDatetimeCZ(upcomingOpenAt)}
+                Vyškrtávání od {formatIsoDatetimeCZ(upcomingOpenAt)} ({deadlineCountdown(upcomingOpenAt)})
               </span>
             ) : (
               <span className={styles.noPlan}>Plán pro tento měsíc neexistuje</span>
