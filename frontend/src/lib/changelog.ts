@@ -27,6 +27,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "4.10.1",
+    date: "2026-07-16",
+    changes: [
+      "Oprava: odměna DPP se v generovaných dokumentech zobrazovala bez tečky mezi tisíci.",
+    ],
+  },
+  {
     version: "4.10.0",
     date: "2026-07-15",
     changes: [
