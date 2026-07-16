@@ -27,6 +27,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "4.11.0",
+    date: "2026-07-16",
+    changes: [
+      "Zaměstnanci: Generování prázdného dotazníku. Rodičovská dovolená může zároveň běžet pouze jedna.",
+      "Směny: Zobrazení začátku vyškrtávání u budoucích měsíců.",
+      "Na mobilu: Drobná grafická vylepšení.",
+    ],
+  },
+  {
     version: "4.10.3",
     date: "2026-07-16",
     changes: [
