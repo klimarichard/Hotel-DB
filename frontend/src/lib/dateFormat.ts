@@ -44,6 +44,30 @@ export function formatTimestampCZ(ts: FirestoreTimestamp): string {
 }
 
 /**
+ * Format an ISO date-TIME string as "DD. MM. YYYY HH:MM" (no seconds).
+ *
+ * For values that are plain ISO strings rather than Firestore Timestamps — e.g.
+ * the shift plan's openedAt/closedAt/publishedAt deadlines, which are written
+ * straight from an <input type="datetime-local"> as "YYYY-MM-DDTHH:mm".
+ *
+ * Unlike formatDateCZ (which splits the string precisely to dodge timezone
+ * shifts on date-only values), a date-time carries a real clock time, so it is
+ * parsed: an ISO date-time WITHOUT a trailing "Z"/offset is defined to be local
+ * time, which is exactly how these deadlines are entered and compared
+ * (see deadlineCountdown in ShiftPlannerPage). Seconds are dropped — deadlines
+ * are set to the minute and the extra digits are noise.
+ */
+export function formatIsoDatetimeCZ(iso: string | null | undefined): string {
+  if (!iso) return "–";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return String(iso); // don't invent a date
+  return (
+    `${pad(d.getDate())}. ${pad(d.getMonth() + 1)}. ${d.getFullYear()} ` +
+    `${pad(d.getHours())}:${pad(d.getMinutes())}`
+  );
+}
+
+/**
  * Format a Firestore Timestamp as "DD. MM. YYYY HH:MM:SS".
  * Used for request panels where the precise time is meaningful for ordering.
  */
