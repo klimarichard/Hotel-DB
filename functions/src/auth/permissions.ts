@@ -78,6 +78,11 @@ export const PERMISSION_CATALOG = [
     items: [
       { key: "contracts.view", label: "Zobrazit / stáhnout smlouvy" },
       { key: "contracts.generate", label: "Generovat smlouvu" },
+      // Display-only, like system.version.view: gates whether "Hromadné generování"
+      // shows on Zaměstnanci. Inert server-side and necessarily so — a batch is
+      // just N ordinary single-document calls, indistinguishable from clicking
+      // Generovat N times, so there is nothing extra for the server to gate.
+      { key: "contracts.generate.bulk", label: "Hromadné generování" },
       { key: "contracts.edit", label: "Upravit smlouvu" },
       { key: "contracts.delete", label: "Smazat smlouvu" },
       { key: "contracts.sign", label: "Označit/nahrát podepsanou" },
