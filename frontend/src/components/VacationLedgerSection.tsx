@@ -48,10 +48,17 @@ type EditTarget =
   | { kind: "currentYearHours" };
 
 export default function VacationLedgerSection({
-  employeeId,
+  basePath,
   canManage,
 }: {
-  employeeId: string;
+  /**
+   * Ledger endpoint WITHOUT the year: `/employees/{id}/vacation-ledger` on the
+   * detail page, `/me/employee/vacation-ledger` on Můj profil. The self route is
+   * a separate endpoint because the admin one is gated on permissions a plain
+   * employee lacks, and it trusts the id in the path; the self one resolves the
+   * employee from the auth token. Both return the same shape (readLedger).
+   */
+  basePath: string;
   canManage: boolean;
 }) {
   const [year, setYear] = useState(FIRST_YEAR);
@@ -66,13 +73,13 @@ export default function VacationLedgerSection({
     setLedger(undefined);
     setEdit(null);
     api
-      .get<Ledger | null>(`/employees/${employeeId}/vacation-ledger?year=${year}`)
+      .get<Ledger | null>(`${basePath}?year=${year}`)
       .then((l) => alive && setLedger(l))
       .catch(() => alive && setLedger(null));
     return () => {
       alive = false;
     };
-  }, [employeeId, year]);
+  }, [basePath, year]);
 
   function startEdit(target: EditTarget, current: number | null | undefined) {
     if (!canManage) return;
@@ -108,11 +115,11 @@ export default function VacationLedgerSection({
           : { currentYearHours: hours };
     setSaving(true);
     try {
-      await api.patch(`/employees/${employeeId}/vacation-ledger/${year}`, body);
+      // Only reachable with canManage (startEdit hard-returns otherwise), i.e.
+      // only from the admin basePath — the self route has no PATCH counterpart.
+      await api.patch(`${basePath}/${year}`, body);
       // Refetch so derived čerpáno/zůstatek stay authoritative (single source of math).
-      const fresh = await api.get<Ledger | null>(
-        `/employees/${employeeId}/vacation-ledger?year=${year}`
-      );
+      const fresh = await api.get<Ledger | null>(`${basePath}?year=${year}`);
       setLedger(fresh);
       setEdit(null);
     } catch (e) {
