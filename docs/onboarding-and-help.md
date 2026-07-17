@@ -308,7 +308,7 @@ Demo routes that need the scenario flag are wrapped in `<TourDemoRoute scenario=
 
 ### `/me/*` endpoints (Můj profil demo)
 
-The self-page calls `/me/*` endpoints that are not id-scoped. These are intercepted only while `activeScenario() === "self"` (the `/napoveda/ukazka-profil` route is mounted). The `SELF_PATHS` set in `demoData.ts` lists every path this demo handles; any path not in the set passes through normally.
+The self-page calls `/me/*` endpoints that are not id-scoped. These are intercepted only while `activeScenario() === "self"` (the `/napoveda/ukazka-profil` route is mounted). The `SELF_PATHS` set in `demoData.ts` lists the paths with a named fixture; the interception itself is broader — any `/me/…` path is caught while the self scenario is active (`SELF_PATHS.has(clean) || clean.startsWith("/me/")`), so an unmatched `/me/*` path never falls through to the real backend, it just resolves to `{}` instead of a fixture. That fallback renders safely for components that null-coalesce (`… ?? {}`), but shows every figure as a dash — which is why a new fixture (`selfVacationLedger`, v4.12.1, backing `GET /me/employee/vacation-ledger`) was added alongside the read-only "Dovolená" section on Můj profil rather than relying on the `{}` fallback.
 
 ---
 
