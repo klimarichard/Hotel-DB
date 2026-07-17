@@ -2,7 +2,12 @@ import { Router, Response, NextFunction } from "express";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireAuth, AuthRequest } from "../middleware/auth";
-import { requirePermission, hasPermission, getManagementTypeIds } from "../auth/permissions";
+import {
+  requirePermission,
+  hasPermission,
+  getManagementTypeIds,
+  roleTypeFromUserDoc,
+} from "../auth/permissions";
 import { encryptFields, redactFields, decrypt, decryptFields, REDACTION_MASK } from "../services/encryption";
 import {
   ctxFromReq,
@@ -698,7 +703,10 @@ export async function getManagementEmployeeIds(): Promise<Set<string>> {
   const ids = new Set<string>();
   for (const d of snap.docs) {
     const u = d.data() as Record<string, unknown>;
-    const typeId = (u.roleType as string) || "";
+    // Legacy docs carry only `role`; reading `roleType` alone would resolve them
+    // to no type, quietly leaving a management employee OUT of this set — i.e.
+    // their record would stop being hidden from non-management viewers.
+    const typeId = roleTypeFromUserDoc(u) ?? "";
     const empId = u.employeeId;
     if (typeId && mgmtTypes.has(typeId) && typeof empId === "string" && empId) ids.add(empId);
   }

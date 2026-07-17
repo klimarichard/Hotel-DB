@@ -5,6 +5,7 @@ import { requireAuth, AuthRequest } from "../middleware/auth";
 import {
   requirePermission,
   clearRoleTypeCache,
+  roleTypeFromUserDoc,
   sanitizePermissionList,
   ROLE_TYPES_COLLECTION,
 } from "../auth/permissions";
@@ -213,7 +214,9 @@ roleTypesRouter.delete(
     const usersSnap = await db().collection("users").get();
     const assigned = usersSnap.docs.filter((d) => {
       const u = d.data() as Record<string, unknown>;
-      return ((u.roleType as string) || "") === id;
+      // Legacy docs carry `role` instead of `roleType`; missing them here would
+      // let a type be deleted while users still hold it.
+      return (roleTypeFromUserDoc(u) ?? "") === id;
     });
     if (assigned.length > 0) {
       res.status(409).json({
