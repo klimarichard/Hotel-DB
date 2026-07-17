@@ -181,7 +181,7 @@ export const APP_TOUR_STEPS: TourStep[] = [
   // needs contracts.generate + nav.contractTemplates.view. Granting the bulk child
   // pulls its parent in via the matrix hierarchy, and the rare holder who lacks the
   // template-read key simply gets this step centered (TourOverlay's no-anchor path).
-  { permission: "contracts.generate.bulk", anchor: "emp-bulk-generate", route: "/zamestnanci", title: "Hromadné generování", body: "Tlačítkem Hromadné generování vytvoříte stejný dokument pro více zaměstnanců najednou. Vyberete šablonu, vyfiltrujete zaměstnance a zaškrtnete ty, kterých se dokument týká. Každý dostane dokument do své sekce Další dokumenty a zároveň se otevře jeden sloučený dokument pro tisk.", placement: "bottom" },
+  { permission: "contracts.generate.bulk", addedInVersion: 16, anchor: "emp-bulk-generate", route: "/zamestnanci", title: "Hromadné generování", body: "Tlačítkem Hromadné generování vytvoříte stejný dokument pro více zaměstnanců najednou. Vyberete šablonu, vyfiltrujete zaměstnance a zaškrtnete ty, kterých se dokument týká. Každý dostane dokument do své sekce Další dokumenty a zároveň se otevře jeden sloučený dokument pro tisk.", placement: "bottom" },
   { permission: "employees.create", anchor: "emp-create", route: "/zamestnanci", title: "Vytvoření zaměstnance", body: "Tlačítkem Přidat zaměstnance založíte novou kartu.", placement: "bottom" },
 
   // ── Zaměstnanec – karta: REAL detail page fed by mock data (/zamestnanci/tour-demo) ──
@@ -298,7 +298,7 @@ export const appTour: TourDefinition = {
   // Highest step `addedInVersion` in the list. Bump it (and stamp the new steps'
   // `addedInVersion`) whenever you add steps for a new feature – returning users
   // then see ONLY those steps; first-time users still get the whole tour.
-  version: 15,
+  version: 16,
   label: "Prohlídka aplikace",
   steps: APP_TOUR_STEPS,
 };

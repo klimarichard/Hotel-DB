@@ -559,3 +559,77 @@ This bit the `isForeigner` → `{{#unless isCzech}}` migration directly: live te
 3. Only then migrate anything that depends on a key the old code didn't have.
 
 Skipping straight to step 2 (or reordering) risks a live contract quietly rendering the wrong branch — with no exception, no 500, nothing in the logs to flag it.
+
+---
+
+## Bulk standalone document generation — "Hromadné generování" (v4.12.0)
+
+A **"Hromadné generování"** button next to "Exportovat CSV" on the Zaměstnanci list (`EmployeesPage.tsx`, `data-tour="emp-bulk-generate"`) opens `frontend/src/components/BulkGenerateModal.tsx`: generate the **same standalone document** (a built-in standalone type or a custom `kind:"standalone"` template) for many employees in one run. Flow: pick a template → filter the roster by stav/oddělení/pozice → tick/untick the resulting people → fill any shared custom-variable values once → **Generovat**. Each selected employee ends up with their own *Další dokumenty* entry, generated exactly as a single ad-hoc generation would (same `POST /employees/:id/contracts` call, same stored PDF); additionally, **one merged PDF opens in a new tab for printing** — it is never uploaded or stored anywhere.
+
+### The architectural decision — client-orchestrated, no bulk endpoint
+
+`handleGenerate` loops over the selected employees **client-side** and fires the *existing* single-document generation call once per person — there is no new "generate for N employeeIds" backend route. This is deliberate for three independent, load-bearing reasons, not just convenience:
+
+1. **The 60-second Puppeteer budget.** Contract PDFs render server-side via a per-request headless-Chromium call (`functions/src/index.ts`, the `api` function's `runWith({ timeoutSeconds: 60 })` — see "Server-side Puppeteer PDF rendering" above). A single "generate 50 documents" call would blow that budget outright; N separate calls each get their own 60 s.
+2. **Security — the per-id access guard only inspects one path segment.** `enforceEmpAccess` (see [Auth — Row-level scope](auth-and-permissions.md#row-level-scope)) reads the first segment of `req.path` under the `employees` router to decide whether the target employee is a management record hidden from a non-management-scoped caller. A hypothetical bulk endpoint taking `{ employeeIds: [...] }` in its body would never pass any single id through that check, so a non-management viewer could name a management employee's id directly inside the array and generate their document. Routing through `/employees/:id`, `/:id/contact`, `/:id/documents`, and `/:id/employment` — one id at a time — inherits the existing per-id scoping for free; the roster picker itself reads `GET /employees`, which is already filtered for the caller.
+3. **The 10 MB JSON body cap is per-request.** `express.json({ limit: "10mb" })` is fine for one base64-encoded PDF; a bulk endpoint accumulating dozens of them in one request/response would blow it.
+
+Two further consequences of doing this client-side, both intentional:
+- **Renders run sequentially, never concurrently.** The `api` Cloud Function runs on a 1 GB instance with a module-level Chromium singleton (~500 MB resident — see `pdfRenderer.ts`). Firing N renders in parallel risks OOM-ing that instance for *every* user hitting it at the time, not just this batch, so `handleGenerate`'s `for` loop awaits each employee before starting the next.
+- **The batch is non-atomic with no rollback.** N independent writes with no transaction across them; a failure partway through leaves every already-generated employee with a real, stored document. The run therefore never aborts on a single failure — each employee's `Outcome` (`{ employeeId, name, ok, error? }`) is recorded and the "Nepodařilo se vygenerovat pro: …" list at the end names exactly who needs a retry.
+
+### Template picker — built-ins carry no `kind` field
+
+The picker unions `STANDALONE_TYPES` (the two built-in standalone types, `hmotna_odpovednost` / `multisport`) with `GET /contractTemplates` entries where `kind === "standalone"`. Filtering on `kind` alone would **silently drop the two built-ins** — their template docs have no `kind` field at all (only custom templates do; see "Custom standalone contract templates" above) — so the union is explicit, not a single filter. Inactive templates (`active === false`) are excluded from both halves.
+
+### Shared vs. per-employee custom-variable slots
+
+When the chosen template has custom `{{varN}}` slots, the setup screen splits them into two groups (`sharedKeys` / `perEmployeeKeys` in `BulkGenerateModal.tsx`):
+
+- **Shared** — a plain `text`/`date`/`number`/`bool` slot with no `fixedVar` default: typed in once and applied to every selected employee.
+- **Per-employee, shown read-only** ("Vyplní se automaticky u každého zaměstnance") — a `condition` slot (its Ano/Ne is computed from *this* employee's comparable data, via the same `evalCondition(def.condition, resolveComparableRaw(data))` the single-generate flow uses) and any slot whose configured `default.kind === "fixedVar"` (it resolves to *this* employee's value, e.g. `{{firstName}}`). Neither is a value one operator could type once for a whole batch, so both are computed inside the per-employee loop and merely listed in the setup table so it's clear they're handled, not forgotten.
+
+Employment tokens (`{{startDate}}`, `{{endDate}}`, `{{contractType}}`, `{{salary}}`, …) are resolved per employee via `resolveStandaloneEmployment()` — see the next section — the same helper the single ad-hoc-generation flow now uses.
+
+### Merged print PDF — client-side, never stored
+
+`frontend/src/lib/pdfMerge.ts` (new) concatenates the batch's generated PDF blobs into one document with `pdf-lib`'s `PDFDocument.create()` + `copyPages()`, purely in the browser — the merge never crosses the wire, so it costs nothing against the 10 MB body cap and needs no new endpoint. `pdf-lib` is dynamically imported, matching `lib/pdfCompress.ts`'s precedent, so it stays out of the main bundle for the majority of users who never run a batch. `merged.setTitle(title)` is called before `save()`: the result is opened via a `blob:` URL (`openPdfBlob()`, mirroring the generate-and-open idiom already used for the blank Dotazník/Prohlášení PDFs), and a blob-URL open **ignores `Content-Disposition`** — `setTitle` is the only thing that gives the browser tab (and its save-as suggestion) a real name instead of a random blob id. The merge is safe here specifically because every input PDF is Puppeteer-rendered and carries a real text layer — `pdf-lib` cannot re-encode image streams (the reason `pdfCompress.ts` rasterises scans via `pdf.js` instead), and a scanned upload must never be run through this path.
+
+### Permission — `contracts.generate.bulk`
+
+New key **`contracts.generate.bulk`** ("Hromadné generování", level 3, nested under `contracts.generate` in both `frontend/src/lib/permissions/catalog.ts` and `functions/src/auth/permissions.ts`). It is **display-only / inert server-side by necessity**, not by omission: a batch is N ordinary calls to the same single-document generation endpoint the "Generovat" button already uses, indistinguishable server-side from an operator clicking that button N times by hand — there is nothing extra for `requirePermission` to gate on the backend. Documented and reasoned about the same way as `system.version.view` (see [Auth — Hierarchical permission matrix](auth-and-permissions.md#hierarchical-permission-matrix-frontend-v220)): the key exists purely to control whether the button renders.
+
+The button gates on **all three** of `contracts.generate.bulk` + `contracts.generate` + `nav.contractTemplates.view` — the last one is a separate key from `contracts.generate` (it gates *reading* a template's HTML via `GET /contractTemplates/:id`), and without it every row of the batch would fail on the template fetch. The `emp-bulk-generate` onboarding-tour step is gated on `contracts.generate.bulk` alone (tour steps support OR across a permission array, not AND; granting the bulk child pulls its `contracts.generate` parent in via the matrix's dependency hierarchy, and a caller who somehow holds the bulk key but lacks `nav.contractTemplates.view` just gets the step centered with no anchor).
+
+---
+
+## Standalone documents now resolve employment variables (v4.12.0)
+
+New exported `resolveStandaloneEmployment(rows)` in `frontend/src/lib/employmentSessions.ts`, used by `EmployeeDetailPage`'s two standalone-generation branches (`generateModal.kind === "adhoc"` and `"adhoc-new"`) and by `BulkGenerateModal.loadEmployeeData()`.
+
+**The gap it closes.** Standalone templates (Multisport, Hmotná odpovědnost, custom standalone templates) are tied to no employment row, so every employment token — `{{startDate}}`, `{{endDate}}`, `{{contractType}}`, `{{salary}}`, `{{hoursPerWeek}}`, … — used to render empty on these documents. `resolveStandaloneEmployment` picks the employee's currently **running** contract and folds its `effective` state + `nastup` fields into the same shape `resolveVariables()` expects (`contractType`, `startDate`, `endDate`, `salary`, `agreedReward`, `hoursPerWeek`, `workLocation`, `probationPeriod`, `agreedWorkScope`).
+
+**The selection rule** (agreed 2026-07-17):
+- **No running contract** → `null` — every employment token stays blank, same as before this feature.
+- **Exactly one running** → that one.
+- **Several running, and exactly one of their sessions carries a currently-RUNNING rodičovská** → that one (the on-leave contract).
+- **Several running, otherwise** → `null` — ambiguous; a blank token beats a guessed one.
+
+**This deliberately inverts the concurrent-contract tie-break** behind the employee's `current*` root fields (`computeEffectiveRootFields`, see [Employees — Concurrent contracts](employees.md#concurrent-contracts--simplified-model-v350-22)), which prefers the **latest active session** (the second job worked during leave) and *excludes* the on-leave contract from `current*`. For a standalone document the on-leave contract is the one that actually matters — it's the contract Multisport/Hmotná odpovědnost is really about — so `{{startDate}}` on one of these documents can legitimately disagree with the "current contract" the Zaměstnanci list shows for a concurrent-contract employee. This is intended, not a bug.
+
+**Two traps recorded in the source, both worth knowing before touching this function:**
+- **(a) "Running" is tested on `effective.endDate`, not `session.terminated`.** `session.terminated` is `true` for *any* Ukončení row on the session, including a future-dated one — so an employee whose notice is already filed for next month would wrongly count as "not running" today, even though they're still actively working. `effective.endDate` (which `computeEffectiveState` already folds an Ukončení's date into) is the correct signal: it's the *last active day*, so the test is `!effective.endDate || effective.endDate >= today`, matching the backend's own date-based rule.
+- **(b) Rodičovská "running-ness" needs both a start AND an end check — not `hasOpenRodicovska`.** `hasOpenRodicovska` (used elsewhere to disable the "+ Rodičovská" button while one is already open) deliberately **omits** the start-date check, because its job is to also block stacking a *future-dated* leave on top of an existing one. Reusing it here would let a future leave — technically "open" but not yet begun — win the tie-break and pick the wrong contract. The local `rodicovskaRunning(r, today)` helper checks both: `r.startDate <= today && (!r.endDate || r.endDate >= today)`.
+
+---
+
+## Contract-split dropdown is employment-history only (v4.12.0)
+
+`frontend/src/components/ContractActionButtons.tsx`'s **"Nahrát podepsanou smlouvu ▾"** dropdown (offering **Smlouva** vs. **Smlouva + prohlášení** — see "Signed-contract split + client-side PDF compression" above) previously rendered identically whether the button sat on an employment-history row or on a Další dokumenty (ad-hoc/standalone) entry. A "Prohlášení poplatníka daně" is the taxpayer's declaration, an onboarding artefact that belongs to an *employment contract* — it is meaningless attached to an ad-hoc document like Multisport or a custom template, so offering the split there was a trap waiting to file a declaration nobody meant to create.
+
+**Fix:** the split option is now shown only when the component is rendering for an employment-history row. `canSplitUpload = canUploadDocuments && !!employmentRowId` is derived from the existing `employmentRowId` prop (already optional — absent means ad-hoc/standalone, per its doc comment) rather than a new prop threaded through both call sites, specifically so the two call sites (Historie tab vs. Další dokumenty) can never disagree about which mode they're in.
+
+- **Employment-history row** (`employmentRowId` set): button reads **"Nahrát podepsanou smlouvu ▾"** and opens the two-item menu, unchanged.
+- **Ad-hoc / standalone document** (`employmentRowId` absent): button reads **"Nahrát podepsaný dokument"**, single click straight to the file picker, no dropdown — matches the pre-split single-file upload behaviour.
+
+**Backend unchanged.** `POST .../signed-pdf-with-declaration` never enforced this distinction server-side — it will happily file a declaration against any contract id it's given. This is purely a UI affordance to stop an operator from being *offered* a meaningless choice; it is not a new backend guard.
