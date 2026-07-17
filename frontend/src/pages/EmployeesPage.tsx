@@ -9,6 +9,7 @@ import * as clock from "@/lib/clock";
 import Button from "@/components/Button";
 import ConfirmModal from "@/components/ConfirmModal";
 import ExportEmployeesModal from "@/components/ExportEmployeesModal";
+import BulkGenerateModal from "@/components/BulkGenerateModal";
 import styles from "./EmployeesPage.module.css";
 
 interface Employee {
@@ -145,6 +146,7 @@ export default function EmployeesPage() {
   const [statusFilter, setStatusFilter] = useState<"active" | "before-start" | "terminated">("active");
   const [search, setSearch] = useState("");
   const [showExport, setShowExport] = useState(false);
+  const [showBulkGenerate, setShowBulkGenerate] = useState(false);
   // Default sort: surname A→Z (matches the previous hard-coded order).
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
@@ -245,6 +247,21 @@ export default function EmployeesPage() {
               Exportovat CSV
             </Button>
           )}
+          {/* Needs all three: the button's own display gate, the right to render
+              a document, AND the right to read a template's HTML — that last one
+              is a separate key (nav.contractTemplates.view) without which every
+              row of the batch would fail on the template fetch. */}
+          {can("contracts.generate.bulk") &&
+            can("contracts.generate") &&
+            can("nav.contractTemplates.view") && (
+              <Button
+                variant="secondary"
+                data-tour="emp-bulk-generate"
+                onClick={() => setShowBulkGenerate(true)}
+              >
+                Hromadné generování
+              </Button>
+            )}
           {/* Ungated beyond reaching this page: the sheet is blank, so there is
               no employee data to protect (unlike the filled Dotazník on the
               detail page, which needs employees.view.*). */}
@@ -264,6 +281,12 @@ export default function EmployeesPage() {
       </div>
 
       {showExport && <ExportEmployeesModal onClose={() => setShowExport(false)} />}
+      {/* Selects over the roster the page already holds — GET /employees has
+          already dropped management records for a non-management viewer, so the
+          picker inherits that scoping and needs no fetch of its own. */}
+      {showBulkGenerate && (
+        <BulkGenerateModal employees={employees} onClose={() => setShowBulkGenerate(false)} />
+      )}
       {errorModal && (
         <ConfirmModal
           title="Chyba"
