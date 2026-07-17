@@ -118,6 +118,12 @@ export default function ContractActionButtons({
   // The "Smlouva + prohlášení" mode files the trailing pages into the employee's
   // Další dokumenty, so it needs the upload permission on top of contracts.sign.
   const canUploadDocuments = can("documents.upload");
+  // A Prohlášení poplatníka is an onboarding artefact of an employment contract;
+  // ad-hoc / standalone documents never carry one, so the split mode – and the
+  // menu offering it – exist only in the employment-history context. Derived from
+  // employmentRowId rather than taking a prop, so the two call sites cannot
+  // contradict it.
+  const canSplitUpload = canUploadDocuments && !!employmentRowId;
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [busy, setBusy] = useState<
@@ -505,9 +511,9 @@ export default function ContractActionButtons({
             className={styles.uploadBtn}
             disabled={busy !== null}
             onClick={() => {
-              // Without documents.upload there is nowhere to file a Prohlášení,
-              // so skip the menu entirely and keep the original one-click flow.
-              if (!canUploadDocuments) {
+              // With no Prohlášení to file – no documents.upload permission, or
+              // not an employment row – skip the menu and keep the one-click flow.
+              if (!canSplitUpload) {
                 uploadModeRef.current = "contract";
                 fileInputRef.current?.click();
                 return;
@@ -520,7 +526,9 @@ export default function ContractActionButtons({
               ? "Zpracovávám…"
               : busy === "uploading"
                 ? "Nahrávám…"
-                : `Nahrát podepsanou smlouvu${canUploadDocuments ? " ▾" : ""}`}
+                : employmentRowId
+                  ? `Nahrát podepsanou smlouvu${canSplitUpload ? " ▾" : ""}`
+                  : "Nahrát podepsaný dokument"}
           </button>
           {signMenuOpen && signMenuPos &&
             createPortal(
