@@ -275,6 +275,10 @@ export const PERMISSION_CATALOG = [
     group: "Vlastní profil",
     items: [
       { key: "self.profile.requestEdit", label: "Navrhnout úpravu vlastního profilu" },
+      // Gates the read-only Dovolená section on Můj profil, enforced on
+      // GET /me/employee/vacation-ledger. NOT in BASE_SELF — nobody holds it
+      // until an admin grants it to a type.
+      { key: "vacation.balance.view.self", label: "Zobrazit vlastní zůstatek dovolené" },
     ],
   },
 ] as const;

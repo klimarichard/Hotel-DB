@@ -156,17 +156,20 @@ selfServiceRouter.get("/employee/contracts/:contractId/download", async (req: Au
  * vacation-hour ledger for one year (nárok / čerpáno / zůstatek), READ-ONLY.
  * Shown on Můj profil.
  *
- * No extra permission, matching the rest of Můj profil — reaching the page at all
- * needs nav.profile.view, and a linked employee can only ever see its own ledger
- * (the employeeId is resolved from the token, never the URL). The admin route
- * cannot be reused here: it is gated on employees.view.all /
- * employees.view.nonManagement, which a plain employee does not hold, and it
- * trusts the id in the path.
+ * Gated on vacation.balance.view.self, which nobody holds by default (it is
+ * deliberately absent from BASE_SELF) — an admin grants it per user type. The
+ * frontend hides the section without it, but that is only cosmetic; this gate is
+ * the real one. Same shape as `sensitive.reveal.self` on /employee/reveal below.
+ *
+ * A linked employee can only ever see its own ledger — the employeeId is
+ * resolved from the token, never the URL. The admin route cannot be reused here:
+ * it is gated on employees.view.all / employees.view.nonManagement, which a plain
+ * employee does not hold, and it trusts the id in the path.
  *
  * There is deliberately NO self PATCH counterpart — editing stays behind
  * employees.vacationBalance.manage on the admin route.
  */
-selfServiceRouter.get("/employee/vacation-ledger", async (req: AuthRequest, res) => {
+selfServiceRouter.get("/employee/vacation-ledger", requirePermission("vacation.balance.view.self"), async (req: AuthRequest, res) => {
   const year = parseInt(String(req.query.year ?? ""), 10);
   if (!Number.isInteger(year) || year < 2000 || year > 2100) {
     res.status(400).json({ error: "Neplatný rok." });

@@ -100,6 +100,7 @@ export default function EmployeeSelfPage() {
   const { alerts: docAlerts } = useSelfDocAlertsContext();
   const canRequestEdit = can("self.profile.requestEdit");
   const canRevealSelf = can("sensitive.reveal.self");
+  const canViewOwnVacation = can("vacation.balance.view.self");
   const [loading, setLoading] = useState(true);
   const [emp, setEmp] = useState<EmployeeRoot | null>(null);
   const [contact, setContact] = useState<SubDoc>(null);
@@ -636,11 +637,14 @@ export default function EmployeeSelfPage() {
           {/* Same component the detail page uses, with canManage={false}: every
               editing affordance is already behind that flag. Reads the self-scoped
               endpoint — the admin one is gated on permissions an employee lacks.
-              Ungated like this page's other sections; nav.profile.view is the gate. */}
-          <div className={styles.section}>
-            <div className={styles.sectionTitle}>Dovolená</div>
-            <VacationLedgerSection basePath="/me/employee/vacation-ledger" canManage={false} />
-          </div>
+              The backend enforces the same permission on that endpoint; this is
+              only the show-gate. */}
+          {canViewOwnVacation && (
+            <div className={styles.section}>
+              <div className={styles.sectionTitle}>Dovolená</div>
+              <VacationLedgerSection basePath="/me/employee/vacation-ledger" canManage={false} />
+            </div>
+          )}
         </>
       )}
 
