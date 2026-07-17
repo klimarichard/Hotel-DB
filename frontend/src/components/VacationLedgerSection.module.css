@@ -17,6 +17,13 @@
   font-size: 0.9rem;
 }
 
+/* No ledger for the selected year. */
+.empty {
+  padding: 0.5rem 0;
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+}
+
 /* ‹ rok › — same idiom as Payroll/Směny month nav, scaled for a section. */
 .yearNav {
   display: flex;

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import * as clock from "@/lib/clock";
 import ConfirmModal from "./ConfirmModal";
 import styles from "./VacationLedgerSection.module.css";
 
@@ -34,7 +35,12 @@ interface Ledger {
   remainingHours: number | null;
 }
 
-const FIRST_YEAR = 2026; // earliest year we hold data for (AVENSIO H1 seed)
+/**
+ * Earliest year the switcher offers. NOT a claim that data exists that far back
+ * — a year with no ledger simply shows the empty state, which is what lets
+ * earlier years be back-filled later without touching this.
+ */
+const MIN_YEAR = 2022;
 
 /** Format an hour figure: drop trailing .0, Czech decimal comma. */
 function fmtH(n: number | null | undefined): string {
@@ -61,7 +67,11 @@ export default function VacationLedgerSection({
   basePath: string;
   canManage: boolean;
 }) {
-  const [year, setYear] = useState(FIRST_YEAR);
+  // Via clock, not `new Date()`, so the non-prod test clock moves the year too.
+  // Also the ceiling: the ledger is fed by payroll locks, so a future year holds
+  // nothing to look at.
+  const currentYear = Number(clock.today().slice(0, 4));
+  const [year, setYear] = useState(currentYear);
   const [ledger, setLedger] = useState<Ledger | null | undefined>(undefined); // undefined = loading
   const [edit, setEdit] = useState<EditTarget | null>(null);
   const [draft, setDraft] = useState("");
@@ -160,13 +170,18 @@ export default function VacationLedgerSection({
         <button
           className={styles.navBtn}
           onClick={() => setYear((y) => y - 1)}
-          disabled={year <= FIRST_YEAR}
+          disabled={year <= MIN_YEAR}
           title="Předchozí rok"
         >
           ‹
         </button>
         <span className={styles.yearLabel}>{year}</span>
-        <button className={styles.navBtn} onClick={() => setYear((y) => y + 1)} title="Další rok">
+        <button
+          className={styles.navBtn}
+          onClick={() => setYear((y) => y + 1)}
+          disabled={year >= currentYear}
+          title="Další rok"
+        >
           ›
         </button>
       </div>
@@ -175,6 +190,20 @@ export default function VacationLedgerSection({
         <div className={styles.loading}>Načítám…</div>
       ) : (
         <>
+          {/* No ledger for this year. A manager still gets the grid below —
+              double-clicking a dash is the ONLY way a year's record is created,
+              so hiding it would make a fresh year impossible to fill. There is
+              nothing for a reader to do with a row of dashes, so they get the
+              message alone. */}
+          {ledger === null && (
+            <div className={styles.empty}>
+              {canManage
+                ? `Pro rok ${year} nejsou žádné údaje – zadejte je dvojklikem níže.`
+                : `Pro rok ${year} nejsou k dispozici žádné údaje.`}
+            </div>
+          )}
+          {(ledger !== null || canManage) && (
+            <>
           {/* Loňská + Letošní (editable) / Nárok (=součet, jen ke čtení) / Čerpáno / Zůstatek */}
           <div className={styles.summary}>
             <span className={styles.sumItem}>
@@ -266,7 +295,9 @@ export default function VacationLedgerSection({
                 </tr>
               </tbody>
             </table>
-          </div>
+              </div>
+            </>
+          )}
         </>
       )}
 
