@@ -30,7 +30,7 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
     version: "4.11.1",
     date: "2026-07-17",
     changes: [
-      "Recepční účty se nyní nemůžou sami odhlásit.",
+      "Recepční účty se nyní nemůžou samy odhlásit.",
     ],
   },
   {
