@@ -250,11 +250,14 @@ export const PERMISSION_CATALOG = [
     items: [
       // Umbrella gate for the "Systém" matrix section (frontend hierarchy master).
       // Inert server-side — no requirePermission checks it; it only organises the
-      // three system rights below in the in-app permission matrix.
+      // system rights below in the in-app permission matrix.
       { key: "system.access", label: "Přístup k systémovým funkcím" },
       { key: "system.admin", label: "Superadmin (vše)" },
       { key: "system.timeOverride", label: "Testovací hodiny (mimo produkci)" },
       { key: "system.triggers", label: "Ruční spuštění naplánovaných úloh" },
+      // Who may release a noSelfLogout account (shared terminal) by entering
+      // their own password. Enforced on POST /auth/logout-authorize.
+      { key: "system.logout.authorize", label: "Autorizovat odhlášení" },
       // Display-only: gates whether the app version ("vX.Y.Z") shows in the
       // sidebar footer. Inert server-side (no requirePermission checks it).
       { key: "system.version.view", label: "Zobrazit verzi aplikace" },
@@ -413,6 +416,17 @@ export interface RoleTypeData {
    * not to the generic account. See services/recepceActor.ts.
    */
   sharedTerminal: boolean;
+  /**
+   * Whether holders are barred from logging themselves out — a superior must
+   * authorize with their own password (POST /auth/logout-authorize). A UX guard
+   * for shared terminals, not a security boundary: sign-out is client-side, so
+   * devtools can always end the session. See routes/auth.ts.
+   *
+   * Note: routes/auth.ts reads this flag LIVE rather than through this cached
+   * map, so /auth/me and the authorizer list can never disagree mid-TTL. Prefer
+   * a live read for any new consumer that gates logout.
+   */
+  noSelfLogout: boolean;
 }
 
 /** Built-in management classification — the fallback when a roleTypes doc is
@@ -431,12 +445,18 @@ async function loadRoleTypes(): Promise<Map<string, RoleTypeData> | null> {
     const snap = await admin.firestore().collection(ROLE_TYPES_COLLECTION).get();
     const map = new Map<string, RoleTypeData>();
     for (const d of snap.docs) {
-      const data = d.data() as { permissions?: unknown; management?: unknown; sharedTerminal?: unknown };
+      const data = d.data() as {
+        permissions?: unknown;
+        management?: unknown;
+        sharedTerminal?: unknown;
+        noSelfLogout?: unknown;
+      };
       if (Array.isArray(data.permissions)) {
         map.set(d.id, {
           permissions: data.permissions.filter((p): p is string => typeof p === "string"),
           management: data.management === true,
           sharedTerminal: data.sharedTerminal === true,
+          noSelfLogout: data.noSelfLogout === true,
         });
       }
     }

@@ -30,6 +30,13 @@ interface AuthState {
    * shift actions, so the request is attributed to the real person, not the account.
    */
   sharedTerminal: boolean;
+  /**
+   * True when the user's type may not sign itself out (shared terminals). The
+   * "Odhlásit" button then opens the authorization modal, where a superior
+   * approves with their own password. Fails open: if /auth/me is unreachable
+   * this stays false, so a blip never strands anyone on a terminal.
+   */
+  noSelfLogout: boolean;
   /** Effective permission set from /auth/me (resolved server-side from role). */
   permissions: ReadonlySet<string>;
   loading: boolean;
@@ -56,6 +63,7 @@ export function useAuth(): AuthValue {
     roleTypeName: null,
     recepceDefaultHotel: null,
     sharedTerminal: false,
+    noSelfLogout: false,
     permissions: EMPTY_PERMS,
     loading: true,
   });
@@ -65,8 +73,8 @@ export function useAuth(): AuthValue {
       if (user) {
         const tokenResult = await user.getIdTokenResult();
         const profile = await api
-          .get<{ employeeId: string | null; name?: string | null; permissions?: string[]; roleTypeName?: string | null; roleType?: string | null; recepceDefaultHotel?: string | null; sharedTerminal?: boolean }>("/auth/me")
-          .catch(() => ({ employeeId: null, name: null, permissions: [] as string[], roleTypeName: null, roleType: null, recepceDefaultHotel: null, sharedTerminal: false }));
+          .get<{ employeeId: string | null; name?: string | null; permissions?: string[]; roleTypeName?: string | null; roleType?: string | null; recepceDefaultHotel?: string | null; sharedTerminal?: boolean; noSelfLogout?: boolean }>("/auth/me")
+          .catch(() => ({ employeeId: null, name: null, permissions: [] as string[], roleTypeName: null, roleType: null, recepceDefaultHotel: null, sharedTerminal: false, noSelfLogout: false }));
         setState({
           user,
           role: (tokenResult.claims.role as UserRole) ?? null,
@@ -76,11 +84,12 @@ export function useAuth(): AuthValue {
           roleTypeName: profile.roleTypeName ?? null,
           recepceDefaultHotel: profile.recepceDefaultHotel ?? null,
           sharedTerminal: profile.sharedTerminal === true,
+          noSelfLogout: profile.noSelfLogout === true,
           permissions: new Set(profile.permissions ?? []),
           loading: false,
         });
       } else {
-        setState({ user: null, role: null, roleType: null, employeeId: null, name: null, roleTypeName: null, recepceDefaultHotel: null, sharedTerminal: false, permissions: EMPTY_PERMS, loading: false });
+        setState({ user: null, role: null, roleType: null, employeeId: null, name: null, roleTypeName: null, recepceDefaultHotel: null, sharedTerminal: false, noSelfLogout: false, permissions: EMPTY_PERMS, loading: false });
       }
     });
   }, []);

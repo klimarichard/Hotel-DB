@@ -11,12 +11,14 @@ import { useSelfDocAlertsContext } from "@/context/SelfDocAlertsContext";
 import { useVacationContext } from "@/context/VacationContext";
 import { useHandoverWarningsContext } from "@/context/HandoverWarningsContext";
 import { useTheme } from "@/context/ThemeContext";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
+import { verifyCredential } from "@/lib/secondaryAuth";
 import { resolveOrderByPermission } from "@/lib/menuItems";
 import TimeOverrideBanner from "@/components/TimeOverrideBanner";
 import TimeOverrideControl from "@/components/TimeOverrideControl";
 import BottomNav from "@/components/BottomNav";
 import ChangelogModal from "@/components/ChangelogModal";
+import SignModal, { type Signer } from "@/components/SignModal";
 import logoMark from "@/assets/logo.svg";
 import styles from "./Layout.module.css";
 
@@ -45,8 +47,18 @@ const MoonIcon = () => (
   </svg>
 );
 
+/** Firebase auth/* codes mean a bad password; ApiError carries the server's
+ *  Czech message (e.g. the authorizer lacks system.logout.authorize). */
+function logoutAuthErrorMessage(err: unknown): string {
+  if (err instanceof ApiError) return err.message || "Odhlášení se nezdařilo.";
+  const code = (err as { code?: string })?.code;
+  if (typeof code === "string" && code.startsWith("auth/")) return "Neplatné jméno nebo heslo.";
+  if (err instanceof Error && err.message) return err.message;
+  return "Ověření se nezdařilo.";
+}
+
 export default function Layout() {
-  const { user, role, name, roleTypeName, can } = useAuth();
+  const { user, role, name, roleTypeName, noSelfLogout, can } = useAuth();
   const { unreadCount, unreadProbationCount, refresh: refreshAlerts } = useAlertsContext();
   const { pendingCount: pendingOverrideCount, refresh: refreshOverrides } = useShiftOverridesContext();
   const { pendingCount: pendingChangeRequestCount, refresh: refreshChangeRequests } = useShiftChangeRequestsContext();
@@ -105,6 +117,13 @@ export default function Layout() {
   const canViewVersion = can("system.version.view");
   const canChangelog = canViewVersion && can("system.version.changelog");
 
+  // Shared-terminal logout authorization (types flagged noSelfLogout). The list
+  // is fetched when the modal opens, not on mount — most users never open it.
+  const [logoutAuthOpen, setLogoutAuthOpen] = useState(false);
+  const [authorizers, setAuthorizers] = useState<Signer[]>([]);
+  const [logoutBusy, setLogoutBusy] = useState(false);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
+
   useEffect(() => {
     if (!user) return;
     api
@@ -125,8 +144,39 @@ export default function Layout() {
   }
 
   async function handleLogout() {
+    // Shared terminals (noSelfLogout) may not sign themselves out — a superior
+    // authorizes with their own password. Purely a UX guard: sign-out is
+    // client-side, so this deters mistakes, it does not secure the session.
+    if (noSelfLogout) {
+      setLogoutError(null);
+      setLogoutAuthOpen(true);
+      api
+        .get<Signer[]>("/auth/logout-authorizers")
+        .then(setAuthorizers)
+        .catch(() => setAuthorizers([]));
+      return;
+    }
     await signOut(auth);
     navigate("/login");
+  }
+
+  /** Authorizer picked a name + typed their password: verify it on the secondary
+   *  app (never touching this session), let the server confirm the permission and
+   *  record who authorized, then sign the terminal out. */
+  async function handleLogoutAuthorize(signer: Signer, password: string) {
+    setLogoutBusy(true);
+    setLogoutError(null);
+    try {
+      const cred = await verifyCredential(signer.email, password);
+      await api.post("/auth/logout-authorize", { idToken: cred.idToken });
+      setLogoutAuthOpen(false);
+      await signOut(auth);
+      navigate("/login");
+    } catch (err) {
+      setLogoutError(logoutAuthErrorMessage(err));
+    } finally {
+      setLogoutBusy(false);
+    }
   }
 
   return (
@@ -234,6 +284,21 @@ export default function Layout() {
         userRole={roleTypeName ?? role}
       />
       {changelogOpen && <ChangelogModal onClose={() => setChangelogOpen(false)} />}
+      {logoutAuthOpen && (
+        <SignModal
+          title="Autorizovat odhlášení"
+          note="Sdílený terminál nelze odhlásit. Pro přihlášení ke svému osobnímu účtu, prosím, použijte své zařízení nebo anonymní režim prohlížení."
+          confirmLabel="Odhlásit"
+          signers={authorizers}
+          busy={logoutBusy}
+          errorText={logoutError}
+          onSubmit={handleLogoutAuthorize}
+          onCancel={() => {
+            setLogoutAuthOpen(false);
+            setLogoutError(null);
+          }}
+        />
+      )}
     </div>
   );
 }

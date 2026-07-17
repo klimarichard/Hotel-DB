@@ -67,6 +67,7 @@ roleTypesRouter.get(
           permissions: Array.isArray(data.permissions) ? data.permissions : [],
           management: data.management === true,
           sharedTerminal: data.sharedTerminal === true,
+          noSelfLogout: data.noSelfLogout === true,
           system: data.system === true,
         };
       })
@@ -85,6 +86,7 @@ roleTypesRouter.post(
       permissions?: unknown;
       management?: unknown;
       sharedTerminal?: unknown;
+      noSelfLogout?: unknown;
       cloneFrom?: string;
     };
     const name = typeof body.name === "string" ? body.name.trim() : "";
@@ -97,6 +99,7 @@ roleTypesRouter.post(
     let permissions = sanitizePerms(body.permissions);
     let management = body.management === true;
     let sharedTerminal = body.sharedTerminal === true;
+    let noSelfLogout = body.noSelfLogout === true;
     if (body.cloneFrom && !Array.isArray(body.permissions)) {
       const src = await db().collection(ROLE_TYPES_COLLECTION).doc(body.cloneFrom).get();
       if (src.exists) {
@@ -104,6 +107,7 @@ roleTypesRouter.post(
         permissions = sanitizePerms(sd.permissions);
         if (body.management === undefined) management = sd.management === true;
         if (body.sharedTerminal === undefined) sharedTerminal = sd.sharedTerminal === true;
+        if (body.noSelfLogout === undefined) noSelfLogout = sd.noSelfLogout === true;
       }
     }
 
@@ -113,6 +117,7 @@ roleTypesRouter.post(
       permissions,
       management,
       sharedTerminal,
+      noSelfLogout,
       system: false,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
@@ -122,7 +127,7 @@ roleTypesRouter.post(
     await logCreate(ctxFromReq(req), {
       collection: ROLE_TYPES_COLLECTION,
       resourceId: id,
-      summary: { name, permissions: permissions.length, management, sharedTerminal, clonedFrom: body.cloneFrom ?? null },
+      summary: { name, permissions: permissions.length, management, sharedTerminal, noSelfLogout, clonedFrom: body.cloneFrom ?? null },
     });
     res.status(201).json({ id });
   }
@@ -150,6 +155,7 @@ roleTypesRouter.patch(
       permissions?: unknown;
       management?: unknown;
       sharedTerminal?: unknown;
+      noSelfLogout?: unknown;
     };
     const patch: Record<string, unknown> = {
       updatedAt: FieldValue.serverTimestamp(),
@@ -159,17 +165,26 @@ roleTypesRouter.patch(
     if ("permissions" in body) patch.permissions = sanitizePerms(body.permissions);
     if ("management" in body) patch.management = body.management === true;
     if ("sharedTerminal" in body) patch.sharedTerminal = body.sharedTerminal === true;
+    if ("noSelfLogout" in body) patch.noSelfLogout = body.noSelfLogout === true;
 
     await ref.update(patch);
     clearRoleTypeCache();
     await logUpdate(ctxFromReq(req), {
       collection: ROLE_TYPES_COLLECTION,
       resourceId: req.params.id,
-      before: { name: cur.name, permissions: (cur.permissions as unknown[])?.length ?? 0, management: cur.management === true },
+      before: {
+        name: cur.name,
+        permissions: (cur.permissions as unknown[])?.length ?? 0,
+        management: cur.management === true,
+        sharedTerminal: cur.sharedTerminal === true,
+        noSelfLogout: cur.noSelfLogout === true,
+      },
       after: {
         name: patch.name ?? cur.name,
         permissions: Array.isArray(patch.permissions) ? patch.permissions.length : (cur.permissions as unknown[])?.length ?? 0,
         management: "management" in patch ? patch.management : cur.management === true,
+        sharedTerminal: "sharedTerminal" in patch ? patch.sharedTerminal : cur.sharedTerminal === true,
+        noSelfLogout: "noSelfLogout" in patch ? patch.noSelfLogout : cur.noSelfLogout === true,
       },
     });
     res.json({ ok: true });
