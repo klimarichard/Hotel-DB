@@ -10,6 +10,7 @@ import {
 } from "../auth/permissions";
 import { ctxFromReq, logCreate, logUpdate } from "../services/auditLog";
 import { isHotelSlug, hotelViewPerm, type HotelSlug } from "../services/hotels";
+import { resolveEmployeeDisplays } from "../services/recepceEmployees";
 import * as clock from "../services/clock";
 import { deactivateUserCore } from "../services/userDeactivation";
 
@@ -649,14 +650,144 @@ authRouter.get("/me", requireAuth, async (req: AuthRequest, res) => {
   // Shared-terminal flag drives the "who is really requesting?" picker on the
   // shift planner (Recepce etc. share one login). Read from the same roleType doc.
   let sharedTerminal = false;
+  // No-self-logout flag: the sidebar/mobile "Odhlásit" opens the authorization
+  // modal instead of signing out. Same doc read as sharedTerminal above.
+  let noSelfLogout = false;
   if (typeId) {
     const t = await admin.firestore().collection(ROLE_TYPES_COLLECTION).doc(typeId).get();
     const td = t.exists ? (t.data() as Record<string, unknown>) : null;
     roleTypeName = td ? ((td.name as string) ?? typeId) : typeId;
     sharedTerminal = td?.sharedTerminal === true;
+    noSelfLogout = td?.noSelfLogout === true;
   }
-  res.json({ uid: doc.id, ...data, permissions, roleTypeName, sharedTerminal });
+  res.json({ uid: doc.id, ...data, permissions, roleTypeName, sharedTerminal, noSelfLogout });
 });
+
+// ─── No-self-logout release (shared terminals) ────────────────────────────────
+// Accounts whose type carries `noSelfLogout` cannot sign themselves out; a
+// superior authorizes by picking their own name and typing their password. The
+// client verifies that password on a SEPARATE Firebase app (lib/secondaryAuth.ts)
+// so the primary session is never disturbed, and posts the resulting idToken
+// here. We re-verify it server-side and evaluate the AUTHORIZER's permissions
+// from the decoded token's claims — never the logged-in terminal account's.
+//
+// This is a UX guard, not a security boundary: sign-out is client-side, so
+// devtools can always end the session regardless. The endpoint exists to prove
+// authorization happened and to record who granted it.
+
+/**
+ * GET /api/auth/logout-authorizers
+ * The pool of people who may release this terminal: everyone holding
+ * `system.logout.authorize` (or `system.admin`). Returns `[{ uid, name, email,
+ * label }]` — the exact shape SignModal's `Signer` expects. `email` is the real
+ * login, which is what the password check runs against.
+ */
+authRouter.get("/logout-authorizers", requireAuth, async (_req: AuthRequest, res) => {
+  const usersSnap = await admin.firestore().collection("users").get();
+  const included: Array<{ uid: string; name: string; email: string; employeeId: string | null }> = [];
+  const seenEmp = new Set<string>();
+  for (const d of usersSnap.docs) {
+    const u = d.data() as {
+      name?: unknown;
+      email?: unknown;
+      employeeId?: unknown;
+      active?: unknown;
+      roleType?: unknown;
+      extraPermissions?: unknown;
+      revokedPermissions?: unknown;
+    };
+    if (u.active === false) continue;
+    const name = typeof u.name === "string" ? u.name : "";
+    const email = typeof u.email === "string" ? u.email : "";
+    // Authorizing re-verifies the password, so an authorizer needs a real email.
+    if (email.trim() === "") continue;
+    const perms = await resolveEffectivePermissions({
+      roleType: typeof u.roleType === "string" ? u.roleType : undefined,
+      extra: Array.isArray(u.extraPermissions) ? (u.extraPermissions as string[]) : [],
+      revoked: Array.isArray(u.revokedPermissions) ? (u.revokedPermissions as string[]) : [],
+    });
+    if (!perms.has("system.admin") && !perms.has("system.logout.authorize")) continue;
+    const empId = typeof u.employeeId === "string" ? u.employeeId : null;
+    if (empId) {
+      if (seenEmp.has(empId)) continue;
+      seenEmp.add(empId);
+    }
+    included.push({ uid: d.id, name, email, employeeId: empId });
+  }
+
+  // LIVE employee-name labels (displayName || "First Last"), surname-first sort —
+  // same convention as the handover signer pickers.
+  const displays = await resolveEmployeeDisplays(included.map((e) => e.employeeId ?? ""));
+  const out = included.map((e) => {
+    const disp = e.employeeId ? displays.get(e.employeeId) : undefined;
+    const label = disp?.name || e.name;
+    const sortKey = disp?.sortKey || label.toLowerCase();
+    return { uid: e.uid, name: e.name, email: e.email, label, sortKey };
+  });
+  out.sort((a, b) => a.sortKey.localeCompare(b.sortKey, "cs"));
+  res.json(out.map(({ sortKey, ...s }) => s));
+});
+
+/**
+ * POST /api/auth/logout-authorize   body: { idToken }
+ * Verifies the authorizer's password-proven idToken and confirms they hold
+ * `system.logout.authorize` (or `system.admin`). On success the client signs the
+ * terminal out. Every authorization is recorded to auditLog/ — the entry is
+ * attributed to the terminal account (ctxFromReq) and names the authorizer.
+ */
+authRouter.post("/logout-authorize", requireAuth, async (req: AuthRequest, res) => {
+  const body = req.body as { idToken?: unknown };
+  if (typeof body.idToken !== "string" || body.idToken.trim() === "") {
+    res.status(400).json({ error: "Chybí ověření." });
+    return;
+  }
+  let decoded;
+  try {
+    decoded = await admin.auth().verifyIdToken(body.idToken);
+  } catch {
+    res.status(401).json({ error: "Neplatné jméno nebo heslo." });
+    return;
+  }
+  // Permissions of the password-proven identity, from ITS claims — independent
+  // of the shared account that is making this request.
+  const perms = await resolveEffectivePermissions({
+    roleType: typeof decoded.roleType === "string" ? decoded.roleType : undefined,
+    extra: Array.isArray(decoded.extraPermissions) ? (decoded.extraPermissions as string[]) : [],
+    revoked: Array.isArray(decoded.revokedPermissions) ? (decoded.revokedPermissions as string[]) : [],
+  });
+  if (!perms.has("system.admin") && !perms.has("system.logout.authorize")) {
+    res.status(403).json({ error: "Tento uživatel nemá oprávnění autorizovat odhlášení." });
+    return;
+  }
+
+  const authorizer = await resolveLogoutAuthorizerName(decoded.uid, decoded.email ?? "");
+  await logUpdate(ctxFromReq(req), {
+    collection: "users",
+    resourceId: req.uid!,
+    before: { logoutAuthorizedBy: null },
+    after: { logoutAuthorizedBy: authorizer },
+  });
+  res.json({ ok: true, authorizedBy: authorizer });
+});
+
+/** Authorizer's display name for the audit entry: live employee name, else the
+ *  users/ record name, else the login email. */
+async function resolveLogoutAuthorizerName(uid: string, fallbackEmail: string): Promise<string> {
+  try {
+    const u = await admin.firestore().collection("users").doc(uid).get();
+    const ud = u.exists ? (u.data() as { name?: unknown; employeeId?: unknown }) : null;
+    const empId = typeof ud?.employeeId === "string" ? ud.employeeId : null;
+    if (empId) {
+      const displays = await resolveEmployeeDisplays([empId]);
+      const disp = displays.get(empId);
+      if (disp?.name) return disp.name;
+    }
+    if (typeof ud?.name === "string" && ud.name.trim()) return ud.name;
+  } catch {
+    /* fall through to the email */
+  }
+  return fallbackEmail;
+}
 
 /**
  * GET /api/auth/me/theme
