@@ -320,9 +320,15 @@ off.
   longer manufactures `${name}@hotel.local` from a display name. (Doing so was the
   v4.2.6 bug — no account logs in with a `@hotel.local` address, so every sign
   attempt hit a non-existent user and surfaced as "invalid password".)
-- `SignModal.tsx` — a shared credential-prompt component (name dropdown + password
+- **`frontend/src/components/SignModal.tsx`** — a shared credential-prompt component (name dropdown + password
   field) used for Předat, Převzít, and self/manage-unsign. Closes only via its
-  buttons (✕/Zrušit), never backdrop click, per the project modal rule.
+  buttons (✕/Zrušit), never backdrop click, per the project modal rule. Lives
+  under `components/` (moved from `pages/recepce/` in v4.11.1) because it
+  gained a second, non-Recepce consumer: `Layout.tsx`'s no-self-logout release
+  flow (see [Authentication, Roles & Permissions → No-self-logout
+  release](auth-and-permissions.md#no-self-logout-release-noselflogout--systemlogoutauthorize-v4111)).
+  That consumer also added an optional `note` prop (explanatory text rendered
+  above the picker) — Recepce's own calls don't set it.
 - The frontend POSTs `{ idToken }` to `POST /handovers/:hotel/:id/predal` or
   `.../prevzal` (sign) or `.../predal/revert` / `.../prevzal/revert` (unsign).
   The backend independently `admin.auth().verifyIdToken(idToken)`s it — the
