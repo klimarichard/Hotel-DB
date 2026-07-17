@@ -36,12 +36,9 @@ import {
 } from "../services/multisport";
 import {
   ledgerRef,
-  sumConsumed,
-  remainingHours,
-  entitlementHours,
+  readLedger,
   upsertLedgerMonth,
   setLedgerAnnual,
-  type LedgerMonth,
 } from "../services/vacationLedger";
 
 export const employeesRouter = Router();
@@ -1409,29 +1406,9 @@ employeesRouter.get(
       res.status(400).json({ error: "Neplatný rok." });
       return;
     }
-    const snap = await ledgerRef(req.params.id, year).get();
-    if (!snap.exists) {
-      res.json(null);
-      return;
-    }
-    const data = snap.data() as Record<string, unknown>;
-    const months = (data.months as Record<string, LedgerMonth>) ?? {};
-    const priorYearHours = (data.priorYearHours as number | null) ?? null;
-    const currentYearHours = (data.currentYearHours as number | null) ?? null;
-    const paidOutHours = (data.paidOutHours as number | null) ?? null;
-    res.json({
-      year,
-      priorYearHours,
-      currentYearHours,
-      // Nárok — derived from the two parts, never stored (see vacationLedger.ts).
-      entitlementHours: entitlementHours(priorYearHours, currentYearHours),
-      paidOutHours,
-      months,
-      consumedHours: sumConsumed(months),
-      remainingHours: remainingHours({ priorYearHours, currentYearHours, paidOutHours, months }),
-      updatedAt: data.updatedAt ?? null,
-      updatedBy: data.updatedBy ?? null,
-    });
+    // Shared with the self-scoped mirror in routes/selfService.ts so the two
+    // read endpoints return byte-identical shapes — one component renders both.
+    res.json(await readLedger(req.params.id, year));
   }
 );
 

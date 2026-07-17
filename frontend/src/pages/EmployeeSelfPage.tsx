@@ -13,6 +13,7 @@ import { isCzechNationality } from "@/lib/contractVariables";
 import { groupBySession, mapContractsToRows, type ContractRecord } from "@/lib/employmentSessions";
 import EmploymentSessionCard from "@/components/EmploymentSession";
 import DocumentExpiryBar from "@/components/DocumentExpiryBar";
+import VacationLedgerSection from "@/components/VacationLedgerSection";
 import { useSelfDocAlertsContext } from "@/context/SelfDocAlertsContext";
 import {
   SELF_EDIT_FIELDS,
@@ -629,6 +630,16 @@ export default function EmployeeSelfPage() {
                   ))}
               </div>
             )}
+          </div>
+
+          {/* ── Dovolená (zůstatek hodin) ── */}
+          {/* Same component the detail page uses, with canManage={false}: every
+              editing affordance is already behind that flag. Reads the self-scoped
+              endpoint — the admin one is gated on permissions an employee lacks.
+              Ungated like this page's other sections; nav.profile.view is the gate. */}
+          <div className={styles.section}>
+            <div className={styles.sectionTitle}>Dovolená</div>
+            <VacationLedgerSection basePath="/me/employee/vacation-ledger" canManage={false} />
           </div>
         </>
       )}
