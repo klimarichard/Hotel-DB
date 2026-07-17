@@ -294,6 +294,10 @@ export const PERMISSION_SECTIONS = [
           { key: "nav.profile.view", label: "Zobrazit Můj profil", level: 0 },
           { key: "sensitive.reveal.self", label: "Odhalit vlastní citlivé údaje", level: 1 },
           { key: "self.profile.requestEdit", label: "Navrhnout úpravu vlastního profilu", level: 1 },
+          // Read-only Dovolená section on Můj profil. Enforced on
+          // GET /me/employee/vacation-ledger, not display-only. Granted to
+          // nobody by default (deliberately absent from BASE_SELF).
+          { key: "vacation.balance.view.self", label: "Zobrazit vlastní zůstatek dovolené", level: 1 },
         ],
       },
     ],

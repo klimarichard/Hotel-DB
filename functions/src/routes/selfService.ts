@@ -12,6 +12,7 @@ import {
   redactChangeForResponse,
   StoredChange,
 } from "../services/employeeChangeRequests";
+import { readLedger } from "../services/vacationLedger";
 
 /**
  * Self-service endpoints, mounted at `/me`. Any authenticated user that is
@@ -147,6 +148,39 @@ selfServiceRouter.get("/employee/contracts/:contractId/download", async (req: Au
       else res.end();
     })
     .pipe(res);
+});
+
+/**
+ * GET /me/employee/vacation-ledger?year=2026
+ * Self-scoped mirror of GET /employees/:id/vacation-ledger: the caller's own
+ * vacation-hour ledger for one year (nárok / čerpáno / zůstatek), READ-ONLY.
+ * Shown on Můj profil.
+ *
+ * Gated on vacation.balance.view.self, which nobody holds by default (it is
+ * deliberately absent from BASE_SELF) — an admin grants it per user type. The
+ * frontend hides the section without it, but that is only cosmetic; this gate is
+ * the real one. Same shape as `sensitive.reveal.self` on /employee/reveal below.
+ *
+ * A linked employee can only ever see its own ledger — the employeeId is
+ * resolved from the token, never the URL. The admin route cannot be reused here:
+ * it is gated on employees.view.all / employees.view.nonManagement, which a plain
+ * employee does not hold, and it trusts the id in the path.
+ *
+ * There is deliberately NO self PATCH counterpart — editing stays behind
+ * employees.vacationBalance.manage on the admin route.
+ */
+selfServiceRouter.get("/employee/vacation-ledger", requirePermission("vacation.balance.view.self"), async (req: AuthRequest, res) => {
+  const year = parseInt(String(req.query.year ?? ""), 10);
+  if (!Number.isInteger(year) || year < 2000 || year > 2100) {
+    res.status(400).json({ error: "Neplatný rok." });
+    return;
+  }
+  const empId = await getCallerEmployeeId(req.uid!);
+  if (!empId) {
+    res.json(null);
+    return;
+  }
+  res.json(await readLedger(empId, year));
 });
 
 /**

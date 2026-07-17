@@ -2204,7 +2204,10 @@ export default function EmployeeDetailPage() {
       {id && (
         <Section title="Dovolená" sectionKey="vacation" expanded={expanded.has("vacation")} onToggle={toggle}>
           {expanded.has("vacation") ? (
-            <VacationLedgerSection employeeId={id} canManage={canManageVacationBalance} />
+            <VacationLedgerSection
+              basePath={`/employees/${id}/vacation-ledger`}
+              canManage={canManageVacationBalance}
+            />
           ) : null}
         </Section>
       )}

@@ -286,6 +286,29 @@ const selfEmployee: unknown = {
   currentContractType: "HPP",
 };
 
+// Self vacation ledger (read-only "Dovolená" section on Můj profil). Shape mirrors
+// readLedger() — Nárok/Čerpáno/Zůstatek are derived server-side, so they are
+// stated here rather than computed: 40 + 160 = 200 nárok, 96 čerpáno, 104 zůstatek.
+// Without this the section still renders (months falls back to {}), but every
+// figure would be a dash on the tour's profile page.
+const selfVacationLedger: unknown = {
+  year: 2026,
+  priorYearHours: 40,
+  currentYearHours: 160,
+  entitlementHours: 200,
+  paidOutHours: null,
+  months: {
+    "1": { hours: 8, source: "payroll-lock" },
+    "2": { hours: 0, source: "payroll-lock" },
+    "3": { hours: 16, source: "payroll-lock" },
+    "4": { hours: 0, source: "payroll-lock" },
+    "5": { hours: 40, source: "payroll-lock" },
+    "6": { hours: 32, source: "payroll-lock" },
+  },
+  consumedHours: 96,
+  remainingHours: 104,
+};
+
 // Self contact SubDoc – same fields the self-page reads via SELF_EDIT_FIELDS.
 const selfContact: unknown = {
   phone: "+420 777 123 456",
@@ -1009,6 +1032,8 @@ function selfFixture(path: string): unknown {
       return selfBenefits;
     case "/me/employee/employment":
       return selfEmployment;
+    case "/me/employee/vacation-ledger":
+      return selfVacationLedger;
     case "/me/change-requests":
       return selfChangeRequests;
     case "/me/employee/reveal":

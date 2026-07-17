@@ -93,6 +93,42 @@ export function remainingHours(
 }
 
 /**
+ * One employee's ledger for one year, in the shape BOTH read endpoints return:
+ * the admin `GET /employees/:id/vacation-ledger` and the self-scoped
+ * `GET /me/employee/vacation-ledger`. Shared so the two can never drift — the
+ * frontend renders both through the same component, so a difference in shape
+ * would break one of them silently.
+ *
+ * Nárok / čerpáno / zůstatek are derived here and never stored, so they can't
+ * disagree with their parts. Returns null when the ledger has never been written
+ * for that year.
+ */
+export async function readLedger(
+  employeeId: string,
+  year: number
+): Promise<Record<string, unknown> | null> {
+  const snap = await ledgerRef(employeeId, year).get();
+  if (!snap.exists) return null;
+  const data = snap.data() as Record<string, unknown>;
+  const months = (data.months as Record<string, LedgerMonth>) ?? {};
+  const priorYearHours = (data.priorYearHours as number | null) ?? null;
+  const currentYearHours = (data.currentYearHours as number | null) ?? null;
+  const paidOutHours = (data.paidOutHours as number | null) ?? null;
+  return {
+    year,
+    priorYearHours,
+    currentYearHours,
+    entitlementHours: entitlementHours(priorYearHours, currentYearHours),
+    paidOutHours,
+    months,
+    consumedHours: sumConsumed(months),
+    remainingHours: remainingHours({ priorYearHours, currentYearHours, paidOutHours, months }),
+    updatedAt: data.updatedAt ?? null,
+    updatedBy: data.updatedBy ?? null,
+  };
+}
+
+/**
  * Upsert a single month's vacation hours. Idempotent by (employee, year, month):
  * a deep-merge write overwrites only `months.{month}`, leaving every other month
  * — and entitlement/paidOut — untouched. So re-locking a payroll period, or a
