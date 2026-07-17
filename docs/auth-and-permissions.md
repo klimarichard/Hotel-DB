@@ -29,9 +29,10 @@ The frontend catalogue is a tree: **section → subsection → item**, where eac
 
 - **`frontend/src/lib/permissions/hierarchy.ts`** (pure, unit-tested) drives the UI affordance: `computeEnabled` (a child checkbox is clickable only when its parent is checked), `resolveToggle` (unchecking a parent cascades its descendants off; checking a mutually-exclusive item clears its siblings), and `normalize` (**repair-upward** — on save, a child whose parent is missing gains the missing ancestors rather than being dropped, since a parent is an enabling prerequisite; mutual-exclusion conflicts resolve keep-first).
 - **`frontend/src/components/permissions/PermissionMatrix.tsx`** is the shared renderer used by both editors; mutually-exclusive items render as **radio-style** controls. The hierarchy is a **frontend-only** affordance — the backend never sees it and remains the real gate (a flat-array membership check). `ALL_PERMISSIONS`, the `Permission` union, and a flat `PERMISSION_CATALOG` (group = section title) are still derived from `PERMISSION_SECTIONS` for back-compat (e.g. the Nápověda HelpPage).
-- The **Systém** section's master is `system.access` ("Přístup k systémovým funkcím") — an umbrella key that is **inert server-side** (no `requirePermission` checks it); it only organises the system rights in the matrix (`system.admin`, `system.triggers`, `system.timeOverride`, `system.version.view`, and `system.version.changelog` nested under it).
+- The **Systém** section's master is `system.access` ("Přístup k systémovým funkcím") — an umbrella key that is **inert server-side** (no `requirePermission` checks it); it only organises the system rights in the matrix (`system.admin`, `system.triggers`, `system.timeOverride`, `system.logout.authorize`, `system.version.view`, and `system.version.changelog` nested under it).
 - **`system.version.view`** ("Zobrazit verzi aplikace") gates a small `vX.Y.Z` line at the bottom of the sidebar footer (`Layout.tsx`, below the test-clock control). Display-only and **inert server-side** (no `requirePermission` checks it). Admin-only by default (conferred via `system.admin`); no other built-in type holds it, but it is freely grantable per-user/type. The version string is baked into the bundle at build time — `vite.config.ts` reads `package.json` and exposes it as the `__APP_VERSION__` define (typed in `src/vite-env.d.ts`); there is no runtime API call.
 - **`system.version.changelog`** ("Zobrazit změny verzí") is nested under `system.version.view` (level 2 — you must be able to see the version to be granted this). When held, the version text becomes **clickable** (desktop sidebar only — on mobile the version stays display-only) and opens `ChangelogModal` — a read-only list of release notes from `frontend/src/lib/changelog.ts` (curated Czech summaries, newest first). Without it the version renders as plain, non-clickable text. Also display-only + inert server-side; admin-only by default, grantable per-user/type. **Add a changelog entry to `lib/changelog.ts` at each promotion** (alongside the version bump).
+- **`system.logout.authorize`** ("Autorizovat odhlášení", v4.11.1) gates who may release a `noSelfLogout` account (a shared terminal, see "User types" below) by entering their own password — enforced on `POST /api/auth/logout-authorize`. Unlike the other `system.*` keys above it is **not** display-only: it is a real server-side gate, and it is deliberately **grantable** (not in `NON_GRANTABLE_PERMISSIONS`) so a director can delegate "who can release the front desk" without handing out `system.admin`. No built-in type holds it by default; `system.admin` always satisfies it. See "No-self-logout release" below for the full mechanism.
 
 The special `system.admin` permission **expands to ALL permissions** and cannot be revoked. It is also **non-grantable through the RBAC editors**: `sanitizePermissionList` (in `permissions.ts`, backed by `NON_GRANTABLE_PERMISSIONS`) strips `system.admin` from every grant path — a user type's `permissions` array (create + edit) and a per-user `extraPermissions` grant. The **only** way to confer superadmin is to assign the protected built-in `admin` type itself. This stops a delegated user-manager (a custom type holding `userTypes.manage` or `users.permissions.manage` but not `system.admin`) from editing `system.admin` onto its own type / its own user and self-escalating.
 
@@ -126,6 +127,7 @@ roleTypes/{id} = {
   permissions: string[],    // permission keys this type grants
   management: boolean,      // holders count as "management" for record scoping
   sharedTerminal: boolean,  // shared front-desk login — see below
+  noSelfLogout: boolean,    // can't sign self out — see "No-self-logout release" below
   system: boolean           // protected built-in (only `admin`)
 }
 ```
@@ -145,6 +147,76 @@ Five built-ins are seeded: `admin`, `director`, `manager`, `employee`, `accounta
   to `false` for every type, including all five built-ins, so this is a no-op
   until an admin opts a type in. Full mechanism: [Recepce — Shared-terminal
   write attribution](recepce.md#shared-terminal-write-attribution).
+- **`noSelfLogout: true`** (v4.11.1) marks a type as **barred from signing itself
+  out** — a superior must authorize the release with their own password. Also a
+  shared-terminal concern, but orthogonal to `sharedTerminal`: a type can carry
+  either flag independently (a type can be `sharedTerminal` without
+  `noSelfLogout`, or vice versa). Edited via the "Nemůže se odhlásit sám"
+  checkbox in Nastavení → Uživatelské typy, next to "Sdílený terminál". Defaults
+  to `false` for every type, including all five built-ins. Full mechanism: "No-self-logout
+  release" below.
+
+### No-self-logout release (`noSelfLogout` / `system.logout.authorize`, v4.11.1)
+
+An account whose type carries `noSelfLogout` can't sign itself out from the
+sidebar/mobile "Odhlásit" — `Layout.handleLogout` intercepts the click and opens
+the shared `SignModal` (`frontend/src/components/SignModal.tsx` — moved here
+from `pages/recepce/` so `Layout.tsx` could reach it without a components→pages
+dependency inversion; it also gained an optional `note` prop for the
+explanatory text shown above the picker) instead of calling `signOut(auth)`.
+The picker lists everyone holding `system.logout.authorize` (or `system.admin`);
+picking a name and entering their password:
+
+1. Verifies the password on the **secondary** Firebase app
+   (`lib/secondaryAuth.ts` — the same instance Recepce's Předat/Převzít reuses,
+   see [Recepce — Virtual signature](recepce.md#virtual-signature-předat--převzít--revert)),
+   so the terminal's own logged-in session is never disturbed.
+2. `POST /api/auth/logout-authorize` with `{ idToken }` — the backend
+   `verifyIdToken`s it and resolves the **authorizer's** permissions from the
+   decoded token's own claims (never the terminal account's), requires
+   `system.logout.authorize` or `system.admin`, then audit-logs an `update` on
+   `users/{terminalUid}` (`logoutAuthorizedBy: null → <authorizer's display name>`).
+3. Only then does the client call `signOut(auth)` on the terminal's own session.
+
+`GET /api/auth/logout-authorizers` returns the `[{uid,name,email,label}]` pool
+(the exact `Signer[]` shape `SignModal` expects), fetched lazily when the modal
+opens. It is itself restricted to callers whose own type is `noSelfLogout`
+(403 otherwise) — otherwise every authenticated user could enumerate every
+admin's name paired with their login email.
+
+**This is explicitly a UX guard, not a security boundary.** Sign-out is a
+client-side `signOut(auth)` call; anyone with devtools access to the terminal
+can end the session regardless of this flow. The endpoint's purpose is to
+deter an accidental/unauthorized logout on a shared machine and to record who
+authorized it, not to make logout actually unreachable.
+
+Two invariants matter more than the happy path and must not regress:
+
+- **The flag is read LIVE, never through the cached `loadRoleTypes()` map.**
+  That map has a 60 s TTL **per Cloud Functions instance**, and
+  `clearRoleTypeCache()` only clears the instance that served the write — so a
+  cached gate could answer `false` while `GET /auth/me` (which always reads the
+  `roleTypes` doc directly) answers `true`. That skew would open the
+  authorization modal to an **empty authorizer list** — a terminal nobody can
+  release until the TTL lapses. Both `GET /auth/me` and
+  `readNoSelfLogoutLive()` in `functions/src/routes/auth.ts` read the doc
+  live for this reason. A cached `isNoSelfLogoutType` helper was written and
+  then **deliberately deleted** during implementation as a footgun — do not
+  re-add a cached accessor for this flag.
+- **Every failure path fails OPEN.** `readNoSelfLogoutLive()` and `useAuth`'s
+  `/auth/me` `.catch` both default `noSelfLogout` to `false` on any read
+  error. A fail-closed default would strand a normal user mid-logout on a
+  Firestore blip. Any new consumer of this flag must default the same way.
+
+No new `AuditAction` was introduced for this — the authorization is logged as
+an ordinary `logUpdate` on collection `users`, field `logoutAuthorizedBy`
+(Czech label added in `frontend/src/lib/audit/fields.misc.ts`). As an
+incidental fix in the same change, `roleTypes` previously had **no** audit
+field-label map at all (its fields rendered via the raw-key English fallback);
+one now exists (`name`, `permissions`, `management`, `sharedTerminal`,
+`noSelfLogout`, `clonedFrom`), so `sharedTerminal` flips — previously silently
+un-logged with a readable label — now render correctly alongside
+`noSelfLogout` in the audit log.
 
 ### Per-user assignment & overrides
 
@@ -240,7 +312,9 @@ When adding a new UI section, check whether it is a subset of something a higher
 | `PATCH /api/auth/users/:uid/employee` | Link or unlink an employee record to a user | `users.linkEmployee`; body `{ employeeId: string \| null }` |
 | `PATCH /api/auth/users/:uid` | Edit a user's name/email and/or their **Recepce default hotel** | `users.manage`; body `{ name?, email?, recepceDefaultHotel? }` — `recepceDefaultHotel` is absent-vs-`null` sensitive (absent = leave alone, `null` = clear); a non-null value is validated against the **target** user's own effective permissions (`resolveEffectivePermissions`), 400 if they can't see that hotel; audit-logged |
 | `GET /api/auth/users` | List all users | `users.view`; each entry includes `roleTypeName` and `employeeName` (see below) |
-| `GET /api/auth/me` | Returns the resolved `permissions` array (plus the user profile, including `roleTypeName` and **`sharedTerminal`** — whether the caller's type is a shared terminal, read from the roleType doc; drives the shift-request "who is really requesting?" picker) | authenticated |
+| `GET /api/auth/me` | Returns the resolved `permissions` array (plus the user profile, including `roleTypeName`, **`sharedTerminal`** — whether the caller's type is a shared terminal, read from the roleType doc; drives the shift-request "who is really requesting?" picker — and **`noSelfLogout`** — whether the caller's type can't sign itself out; read live from the same roleType doc, never cached, see "No-self-logout release" above) | authenticated |
+| `GET /api/auth/logout-authorizers` | Pool of accounts eligible to authorize a release (`system.logout.authorize` or `system.admin` holders), as `[{uid,name,email,label}]` | `noSelfLogout`-type callers only (403 for everyone else); flag read live |
+| `POST /api/auth/logout-authorize` | Body `{ idToken }`; verifies the password-proven token, requires `system.logout.authorize`/`system.admin` on the **authorizer**, audit-logs `logoutAuthorizedBy` on the terminal's `users/{uid}` | `requireAuth` + in-handler check against the decoded token's own claims (not the caller's) |
 | `GET/PUT /api/auth/me/recepce-default` | The caller's own Recepce default hotel (`{ hotel: HotelSlug \| null }`) | `requireAuth` only, **no permission key** (self-service, same precedent as `/me/theme`); `PUT` validates the slug against the **caller's own** permissions, 403 otherwise; not audit-logged. See [Recepce — Per-user default hotel](recepce.md#per-user-default-hotel--usersuidrecepcedefaulthotel) |
 
 **Seeding** — `scripts/seed-role-types.js` seeds the six built-ins (additive; the resolver falls back to the built-ins if unseeded).
