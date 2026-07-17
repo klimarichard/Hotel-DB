@@ -199,8 +199,9 @@ Na této záložce tak zůstává jen samotná historie pracovního poměru – 
 
 Záložka **Další dokumenty** zobrazuje jeden společný seznam všech dokumentů zaměstnance, které nejsou součástí historie pracovního poměru – nahrané PDF soubory (skeny, přílohy) i samostatně generované dokumenty (Multisport, Hmotná odpovědnost, vlastní šablony). Seznam je řazený od **nejnovějšího** záznamu.
 
-- Tlačítkem **Nahrát dokument** zadáte **název dokumentu** a vyberete **PDF soubor** (max. 15 MB).
+- Tlačítkem **Nahrát podepsaný dokument** rovnou otevřete výběr souboru – zadáte **název dokumentu** a vyberete **PDF soubor** (max. 15 MB). Na rozdíl od nahrávání smlouvy v Historii pracovního poměru zde není nabídka *Smlouva* / *Smlouva + prohlášení* – rozdělení naskenovaného dokumentu na smlouvu a prohlášení poplatníka patří jen ke smlouvám v historii pracovního poměru, protože prohlášení poplatníka patří vždy k pracovnímu poměru, ne k samostatnému dokumentu, jako je třeba Multisport.
 - Tlačítkem **+ Generovat dokument** založíte nový samostatný dokument napřímo, na jeden krok: z nabídky vyberete jeho typ (např. **Multisport**, **Hmotná odpovědnost**, nebo vlastní šablonu), zadáte **datum podpisu**, vyplníte hodnoty proměnných (má-li šablona vlastní proměnné) a potvrdíte tlačítkem **Generovat**. Dokument i jeho PDF se vytvoří rovnou najednou – v seznamu se ihned objeví hotový řádek i s vygenerovaným PDF, není třeba nic dodatečně dogenerovávat. Připadne-li zadané **datum podpisu** na víkend nebo český státní svátek, zobrazí se varování *„Datum podpisu připadá na víkend nebo svátek."* – jen upozornění, generování neblokuje.
+- **Doplnění údajů ze smlouvy:** proměnné vázané na pracovní poměr (např. datum nástupu, datum ukončení, typ smlouvy, mzda) se u samostatných dokumentů doplní z **aktuálně běžícího pracovního poměru** zaměstnance – dřív tato pole zůstávala prázdná. Má-li zaměstnanec souběžně **dva pracovní poměry**, použije se ten, který je právě na **rodičovské dovolené**. Nemá-li žádný pracovní poměr právě běžet, nebo běží-li dva souběžně a ani jeden není na rodičovské, zůstanou tato pole prázdná jako dosud.
 - U každého dokumentu v seznamu lze soubor **Zobrazit**, **Stáhnout** nebo **Smazat**; u generovaných dokumentů (Multisport apod.) najdete stejná tlačítka jako u smluv v historii pracovního poměru.
 - Nahrávat a mazat mohou administrátor, ředitel a personalista; FOM a účetní dokumenty pouze prohlížejí. Tlačítko **+ Generovat dokument** vidí jen uživatelé s oprávněním smlouvy generovat.
 
@@ -209,6 +210,26 @@ Záložka **Další dokumenty** zobrazuje jeden společný seznam všech dokumen
 ### Export CSV
 
 Tlačítkem **Exportovat CSV** v seznamu zaměstnanců otevřete dialog, ve kterém vyberete sloupce a filtry a stáhnete data do tabulky. Export může zahrnovat i citlivé údaje; každý takový export se zaznamenává do Logu změn.
+
+### Hromadné generování
+
+Tlačítko **Hromadné generování** (vedle **Exportovat CSV**) vygeneruje stejný dokument najednou pro víc zaměstnanců, místo aby se muselo generovat u každého zvlášť.
+
+1. Klikněte na tlačítko – otevře se okno.
+2. **Šablona** – vyberte, co se má generovat. Nabízejí se jen **samostatné šablony** (Hmotná odpovědnost, Multisport, případně vlastní šablony) – dokumenty vázané na konkrétní řádek historie pracovního poměru (Nástup, Ukončení, Dodatek) hromadně vygenerovat nejde, protože u každého zaměstnance by bylo potřeba vybrat jiný řádek.
+3. **Datum podpisu** – datum, které se použije u všech vygenerovaných dokumentů.
+4. Filtry **Stav**, **Oddělení** a **Pozice** zúží seznam zaměstnanců, mezi kterými vybíráte.
+5. Vyhovující zaměstnanci se zobrazí jako **zaškrtávací seznam** – zaškrtnete nebo odškrtnete jednotlivce, případně použijete **Vybrat vše** / **Zrušit výběr**. Tlačítko pro spuštění generování ukazuje aktuální počet vybraných, např. **„Generovat (12)"**.
+6. **Vlastní proměnné** – má-li šablona vlastní proměnné, vyplníte je **jednou** a stejná hodnota se použije pro všechny vybrané zaměstnance. Dva druhy proměnných se ale u každého zaměstnance doplní **automaticky samy** a zobrazí se needitovatelné, s poznámkou **„Vyplní se automaticky u každého zaměstnance"**: proměnné typu **Podmínka** (viz [Podmínka – odvozená proměnná](#podmínka--odvozená-proměnná)) a proměnné, jejichž výchozí hodnota je nastavená jako **„Z proměnné"**.
+7. Klepnutím na tlačítko **Generovat (…)** spustíte generování. Probíhá **postupně, jeden zaměstnanec po druhém**, s ukazatelem průběhu – okno do dokončení nezavírejte.
+
+Po dokončení má **každý zaměstnanec** vygenerovaný dokument ve své záložce **Další dokumenty**, úplně stejně jako při generování jednotlivě, a navíc se v nové záložce prohlížeče otevře **jeden sloučený dokument** se všemi vygenerovanými dokumenty za sebou, připravený k tisku. Sloučený dokument slouží **jen k tisku** – nikam se neukládá.
+
+Nepodaří-li se dokument vygenerovat u některého zaměstnance, generování u ostatních pokračuje dál; na konci se zobrazí seznam jmen, u kterých generování selhalo, aby šlo pro ně akci zopakovat.
+
+> 📝 Tlačítko vidí jen uživatelé s oprávněním **„Hromadné generování"** (v matici oprávnění pod položkou *Generovat smlouvu*) – ti navíc musí mít i oprávnění dokumenty generovat a číst Šablony smluv.
+
+> 📷 *(Místo pro snímek obrazovky: okno Hromadné generování se seznamem zaškrtnutých zaměstnanců a ukazatelem průběhu)*
 
 ---
 
@@ -342,6 +363,8 @@ Stránka **Šablony smluv** obsahuje editor ve stylu Wordu (TipTap): formátová
 
 - **+ Nová šablona** vytvoří vlastní samostatnou šablonu.
 - Změny se ukládají tlačítkem *Uložit*.
+
+> 📝 U **samostatných šablon** (Multisport, Hmotná odpovědnost, vlastní šablony) se proměnné vázané na pracovní poměr (datum nástupu, datum ukončení, typ smlouvy, mzda…) doplňují z aktuálně běžícího pracovního poměru zaměstnance – podrobnosti viz [Doplnění údajů ze smlouvy](#další-dokumenty) u záložky Další dokumenty.
 
 > 📷 *(Místo pro snímek obrazovky: editor šablon)*
 

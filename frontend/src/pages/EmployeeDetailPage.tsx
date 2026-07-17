@@ -30,6 +30,7 @@ import {
   groupBySession,
   hasOpenRodicovska,
   mapContractsToRows,
+  resolveStandaloneEmployment,
   terminationContractType,
   uvazekToContractType,
 } from "@/lib/employmentSessions";
@@ -2296,6 +2297,10 @@ export default function EmployeeDetailPage() {
           existingContractId={generateModal.contractId}
           companyId={employee.currentCompanyId ?? null}
           employeeData={{
+            // A standalone document is tied to no employment row, so its
+            // employment tokens ({{startDate}}, {{contractType}}, …) would render
+            // empty. Resolve them from the running contract instead.
+            ...resolveStandaloneEmployment(employment),
             id: employee.id,
             firstName: employee.firstName,
             lastName: employee.lastName,
@@ -2334,6 +2339,9 @@ export default function EmployeeDetailPage() {
           collectSigningDate
           initialSigningDate={clock.today()}
           employeeData={{
+            // See the adhoc branch above – employment tokens come from the
+            // running contract, since a standalone doc has no row of its own.
+            ...resolveStandaloneEmployment(employment),
             id: employee.id,
             firstName: employee.firstName,
             lastName: employee.lastName,

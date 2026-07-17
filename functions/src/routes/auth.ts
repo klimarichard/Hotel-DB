@@ -5,6 +5,7 @@ import { requireAuth, AuthRequest } from "../middleware/auth";
 import {
   requirePermission,
   resolveEffectivePermissions,
+  roleTypeFromUserDoc,
   sanitizePermissionList,
   ROLE_TYPES_COLLECTION,
 } from "../auth/permissions";
@@ -62,7 +63,7 @@ const sanitizePerms = sanitizePermissionList;
 /** Does this user's stored config resolve to the superadmin permission? */
 async function userIsAdmin(u: Record<string, unknown>): Promise<boolean> {
   const set = await resolveEffectivePermissions({
-    roleType: typeof u.roleType === "string" ? u.roleType : undefined,
+    roleType: roleTypeFromUserDoc(u),
     extra: Array.isArray(u.extraPermissions) ? (u.extraPermissions as string[]) : [],
     revoked: Array.isArray(u.revokedPermissions) ? (u.revokedPermissions as string[]) : [],
   });
@@ -448,7 +449,7 @@ authRouter.get("/users", requireAuth, requirePermission("users.view"), async (_r
   }
   const users = snapshot.docs.map((doc) => {
     const data = doc.data() as Record<string, unknown>;
-    const typeId = (data.roleType as string) || (data.role as string) || "";
+    const typeId = roleTypeFromUserDoc(data) ?? "";
     const employeeId = (data.employeeId as string) || null;
     // Emit the pending-deactivation instant as a clean ISO string (the raw
     // Firestore Timestamp serialises to an awkward {_seconds,_nanoseconds}).
@@ -645,7 +646,10 @@ authRouter.get("/me", requireAuth, async (req: AuthRequest, res) => {
   // Resolve the user's type display name for the sidebar label.
   // Best-effort — null if the type doc is gone.
   const data = doc.data() as Record<string, unknown>;
-  const typeId = (data.roleType as string) || "";
+  // The token claim is authoritative and always carries roleType; the doc field
+  // is only a mirror, and legacy docs have `role` instead. Prefer the claim, and
+  // fall back through both doc generations.
+  const typeId = req.roleType || roleTypeFromUserDoc(data) || "";
   let roleTypeName: string | null = null;
   // Shared-terminal flag drives the "who is really requesting?" picker on the
   // shift planner (Recepce etc. share one login). Read from the same roleType doc.
@@ -727,7 +731,7 @@ authRouter.get("/logout-authorizers", requireAuth, async (req: AuthRequest, res)
     // Authorizing re-verifies the password, so an authorizer needs a real email.
     if (email.trim() === "") continue;
     const perms = await resolveEffectivePermissions({
-      roleType: typeof u.roleType === "string" ? u.roleType : undefined,
+      roleType: roleTypeFromUserDoc(u),
       extra: Array.isArray(u.extraPermissions) ? (u.extraPermissions as string[]) : [],
       revoked: Array.isArray(u.revokedPermissions) ? (u.revokedPermissions as string[]) : [],
     });

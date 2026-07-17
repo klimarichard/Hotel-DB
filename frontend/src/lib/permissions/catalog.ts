@@ -201,6 +201,8 @@ export const PERMISSION_SECTIONS = [
         items: [
           { key: "contracts.view", label: "Zobrazit/stáhnout smlouvy", level: 1 },
           { key: "contracts.generate", label: "Generovat smlouvu", level: 2 },
+          // Display-only child of contracts.generate – see the backend catalog.
+          { key: "contracts.generate.bulk", label: "Hromadné generování", level: 3 },
           { key: "contracts.edit", label: "Upravit smlouvu", level: 2 },
           { key: "contracts.delete", label: "Smazat smlouvu", level: 2 },
           { key: "contracts.sign", label: "Nahrát podepsanou smlouvu", level: 2 },

@@ -2,7 +2,7 @@ import { Router, Response, NextFunction } from "express";
 import * as admin from "firebase-admin";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { requireAuth, AuthRequest } from "../middleware/auth";
-import { resolveEffectivePermissions } from "../auth/permissions";
+import { resolveEffectivePermissions, roleTypeFromUserDoc } from "../auth/permissions";
 import { ctxFromReq, logCreate, logUpdate, logDelete, writeAudit } from "../services/auditLog";
 import {
   isHotelSlug,
@@ -601,7 +601,7 @@ handoversRouter.get(
       let ok = d.id === signerUid; // the signer may always self-unsign
       if (!ok) {
         const perms = await resolveEffectivePermissions({
-          roleType: typeof u.roleType === "string" ? u.roleType : undefined,
+          roleType: roleTypeFromUserDoc(u),
           extra: Array.isArray(u.extraPermissions) ? (u.extraPermissions as string[]) : [],
           revoked: Array.isArray(u.revokedPermissions) ? (u.revokedPermissions as string[]) : [],
         });
