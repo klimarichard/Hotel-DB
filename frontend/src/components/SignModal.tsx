@@ -1,6 +1,6 @@
-import { useState, FormEvent } from "react";
-import Button from "@/components/Button";
-import IconButton from "@/components/IconButton";
+import { useState, FormEvent, ReactNode } from "react";
+import Button from "./Button";
+import IconButton from "./IconButton";
 import styles from "./SignModal.module.css";
 
 export interface Signer {
@@ -18,6 +18,8 @@ interface Props {
   /** Optional line under the title (e.g. whose signature is being removed). */
   subtitle?: string;
   confirmLabel: string;
+  /** Optional explanatory note above the picker (e.g. why this prompt appeared). */
+  note?: ReactNode;
   signers: readonly Signer[];
   /** Pre-select this signer (e.g. the stamp owner when self-unsigning). */
   defaultSignerUid?: string;
@@ -28,15 +30,22 @@ interface Props {
 }
 
 /**
- * Credential prompt shared by Předat / Převzít / Un-sign: pick a name from the
- * dropdown (the pool of people who may sign) and enter that person's password.
- * The parent verifies it on a secondary Firebase app so the live session is
- * untouched. Closes only via its buttons (never backdrop click).
+ * Credential prompt: pick a name from the dropdown (the pool of people who may
+ * act) and enter that person's password. The parent verifies it on a secondary
+ * Firebase app so the live session is untouched, then posts the resulting
+ * idToken for the server to re-verify. Closes only via its buttons (never
+ * backdrop click).
+ *
+ * Shared by the Recepce protokol signatures (Předat / Převzít / Un-sign) and the
+ * shared-terminal logout authorization in Layout. Deliberately knows nothing
+ * about either: it takes `signers` and reports back via `onSubmit`, and every
+ * caller does its own verification.
  */
 export default function SignModal({
   title,
   subtitle,
   confirmLabel,
+  note,
   signers,
   defaultSignerUid,
   busy = false,
@@ -67,6 +76,7 @@ export default function SignModal({
         </div>
         <form onSubmit={handleSubmit}>
           <div className={styles.body}>
+            {note && <div className={styles.note}>{note}</div>}
             <label className={styles.label}>
               Jméno
               <select

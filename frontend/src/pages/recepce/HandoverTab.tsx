@@ -7,7 +7,7 @@ import IconButton from "@/components/IconButton";
 import ConfirmModal from "@/components/ConfirmModal";
 import type { Hotel } from "@/lib/hotels";
 import { verifyCredential } from "@/lib/secondaryAuth";
-import SignModal, { type Signer } from "./SignModal";
+import SignModal, { type Signer } from "@/components/SignModal";
 import styles from "./HandoverTab.module.css";
 
 type ShiftType = "den" | "noc";

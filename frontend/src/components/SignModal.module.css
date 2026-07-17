@@ -74,6 +74,17 @@
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 25%, transparent);
 }
 
+/* Informational note above the picker – same box shape as .error, neutral tone. */
+.note {
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--color-text-secondary);
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 25%, transparent);
+  border-radius: 6px;
+  padding: 0.6rem 0.7rem;
+}
+
 .error {
   font-size: 0.8125rem;
   color: var(--color-danger, #dc2626);
