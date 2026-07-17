@@ -150,6 +150,8 @@ export interface RoleType {
   management: boolean;
   /** Shared front-desk login: Recepce writes are attributed to the person on shift. */
   sharedTerminal: boolean;
+  /** Cannot self-logout: a superior must authorize with their password. */
+  noSelfLogout: boolean;
   system: boolean;
 }
 
@@ -165,11 +167,18 @@ export const roleTypesApi = {
     permissions?: string[];
     management?: boolean;
     sharedTerminal?: boolean;
+    noSelfLogout?: boolean;
     cloneFrom?: string;
   }) => api.post<{ id: string }>("/role-types", body),
   update: (
     id: string,
-    body: { name?: string; permissions?: string[]; management?: boolean; sharedTerminal?: boolean }
+    body: {
+      name?: string;
+      permissions?: string[];
+      management?: boolean;
+      sharedTerminal?: boolean;
+      noSelfLogout?: boolean;
+    }
   ) => api.patch<{ ok: boolean }>(`/role-types/${id}`, body),
   remove: (id: string) => api.delete<{ ok: boolean }>(`/role-types/${id}`),
 };

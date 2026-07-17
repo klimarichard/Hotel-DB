@@ -107,6 +107,8 @@ const users: FieldLabelMap = {
   active: "Aktivní účet",
   employeeId: "Propojený zaměstnanec",
   theme: "Motiv vzhledu",
+  // Shared terminal released by a superior (POST /auth/logout-authorize).
+  logoutAuthorizedBy: "Odhlášení autorizoval",
   createdAt: "Vytvořeno",
   updatedAt: "Upraveno",
   lastLogin: "Poslední přihlášení",
@@ -161,6 +163,18 @@ const settings: FieldLabelMap = {
   updatedBy: "Upravil",
 };
 
+// ── Typy uživatelů (functions/src/routes/roleTypes.ts) ──
+const roleTypes: FieldLabelMap = {
+  name: "Název typu",
+  permissions: "Počet oprávnění",
+  management: "Vedení",
+  sharedTerminal: "Sdílený terminál",
+  noSelfLogout: "Nemůže se odhlásit sám",
+  clonedFrom: "Zkopírováno z typu",
+  updatedAt: "Upraveno",
+  updatedBy: "Upravil",
+};
+
 // ── Upozornění – doklady (functions/src/routes/employees.ts updateDocumentAlerts;
 //    docs live in the `alerts` collection) ──
 const alerts: FieldLabelMap = {
@@ -209,6 +223,7 @@ export const MISC_FIELDS: Record<string, FieldLabelMap> = {
   jobPositions,
   departments,
   educationLevels,
+  roleTypes,
   settings,
   alerts,
   documentAlerts,

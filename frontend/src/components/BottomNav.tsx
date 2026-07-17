@@ -291,7 +291,13 @@ export default function BottomNav({
               <button
                 type="button"
                 className={`${styles.footerBtn} ${styles.footerLogout}`}
-                onClick={onLogout}
+                onClick={() => {
+                  // Close the sheet first: for a no-self-logout account onLogout
+                  // opens the authorization modal, and the sheet shares its
+                  // z-index (1000) — leaving it up would stack over the prompt.
+                  setMoreOpen(false);
+                  onLogout();
+                }}
               >
                 Odhlásit
               </button>

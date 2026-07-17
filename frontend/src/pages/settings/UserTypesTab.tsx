@@ -10,6 +10,7 @@ interface Draft {
   name: string;
   management: boolean;
   sharedTerminal: boolean;
+  noSelfLogout: boolean;
   perms: Set<string>;
 }
 
@@ -67,6 +68,7 @@ export default function UserTypesTab() {
       name: selected.name,
       management: selected.management,
       sharedTerminal: selected.sharedTerminal === true,
+      noSelfLogout: selected.noSelfLogout === true,
       perms: new Set(selected.permissions),
     };
     setDraft({ ...d, perms: new Set(d.perms) });
@@ -79,6 +81,7 @@ export default function UserTypesTab() {
       draft.name !== original.name ||
       draft.management !== original.management ||
       draft.sharedTerminal !== original.sharedTerminal ||
+      draft.noSelfLogout !== original.noSelfLogout ||
       !setsEqual(draft.perms, original.perms)
     );
   }, [draft, original]);
@@ -101,6 +104,7 @@ export default function UserTypesTab() {
         permissions: [...normalize(draft.perms)],
         management: draft.management,
         sharedTerminal: draft.sharedTerminal,
+        noSelfLogout: draft.noSelfLogout,
       });
       setSaveMsg("Uloženo");
       await reload(selected.id);
@@ -117,7 +121,9 @@ export default function UserTypesTab() {
     if (!name) return;
     try {
       const res = await roleTypesApi.create(
-        cloneFrom ? { name, cloneFrom } : { name, permissions: [], management: false, sharedTerminal: false }
+        cloneFrom
+          ? { name, cloneFrom }
+          : { name, permissions: [], management: false, sharedTerminal: false, noSelfLogout: false }
       );
       setCreating(false);
       setNewName("");
@@ -240,6 +246,16 @@ export default function UserTypesTab() {
                 Sdílený terminál – zápisy v Recepci se přiřadí tomu, kdo podepsal „Převzal“ na protokolu předchozí
                 směny, ne tomuto společnému účtu.
               </span>
+            </label>
+
+            <label className={styles.mgmtRow}>
+              <input
+                type="checkbox"
+                checked={draft.noSelfLogout}
+                disabled={isSystem}
+                onChange={(e) => setDraft((p) => (p ? { ...p, noSelfLogout: e.target.checked } : p))}
+              />
+              <span>Nemůže se odhlásit sám – odhlášení musí potvrdit nadřízený heslem.</span>
             </label>
 
             <PermissionMatrix
