@@ -421,6 +421,10 @@ export interface RoleTypeData {
    * authorize with their own password (POST /auth/logout-authorize). A UX guard
    * for shared terminals, not a security boundary: sign-out is client-side, so
    * devtools can always end the session. See routes/auth.ts.
+   *
+   * Note: routes/auth.ts reads this flag LIVE rather than through this cached
+   * map, so /auth/me and the authorizer list can never disagree mid-TTL. Prefer
+   * a live read for any new consumer that gates logout.
    */
   noSelfLogout: boolean;
 }
@@ -501,18 +505,6 @@ export async function isSharedTerminalType(roleType: string | undefined): Promis
   if (!roleType) return false;
   const map = await loadRoleTypes();
   return map?.get(roleType)?.sharedTerminal === true;
-}
-
-/**
- * Is this user type barred from self-logout? Fails open exactly like
- * isSharedTerminalType: never true for the built-in types, so an unseeded or
- * unreachable roleTypes collection leaves logout working normally rather than
- * stranding everyone on a terminal they cannot leave.
- */
-export async function isNoSelfLogoutType(roleType: string | undefined): Promise<boolean> {
-  if (!roleType) return false;
-  const map = await loadRoleTypes();
-  return map?.get(roleType)?.noSelfLogout === true;
 }
 
 export interface EffectivePermissionInput {

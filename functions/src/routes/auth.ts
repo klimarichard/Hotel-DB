@@ -675,14 +675,39 @@ authRouter.get("/me", requireAuth, async (req: AuthRequest, res) => {
 // devtools can always end the session regardless. The endpoint exists to prove
 // authorization happened and to record who granted it.
 
+/** Live `noSelfLogout` read for a user type — same uncached doc read /auth/me
+ *  makes, so the two can never disagree. Fails open (false) on a read error:
+ *  a Firestore blip must not strand anyone on a terminal. */
+async function readNoSelfLogoutLive(roleType: string | undefined): Promise<boolean> {
+  if (!roleType) return false;
+  try {
+    const t = await admin.firestore().collection(ROLE_TYPES_COLLECTION).doc(roleType).get();
+    return t.exists && (t.data() as Record<string, unknown>).noSelfLogout === true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * GET /api/auth/logout-authorizers
  * The pool of people who may release this terminal: everyone holding
  * `system.logout.authorize` (or `system.admin`). Returns `[{ uid, name, email,
  * label }]` — the exact shape SignModal's `Signer` expects. `email` is the real
  * login, which is what the password check runs against.
+ *
+ * Restricted to accounts that actually need it (types flagged noSelfLogout), so
+ * the response — real names paired with login emails — is not enumerable by every
+ * authenticated user.
  */
-authRouter.get("/logout-authorizers", requireAuth, async (_req: AuthRequest, res) => {
+authRouter.get("/logout-authorizers", requireAuth, async (req: AuthRequest, res) => {
+  // Read the flag LIVE, exactly as /auth/me does. The cached accessor would
+  // disagree with /auth/me for up to the roleTypes cache TTL after an admin
+  // toggles the flag (clearRoleTypeCache only clears the instance that served
+  // the write), and that skew would open the modal to an empty authorizer list.
+  if (!(await readNoSelfLogoutLive(req.roleType))) {
+    res.status(403).json({ error: "Tento účet se odhlašuje bez autorizace." });
+    return;
+  }
   const usersSnap = await admin.firestore().collection("users").get();
   const included: Array<{ uid: string; name: string; email: string; employeeId: string | null }> = [];
   const seenEmp = new Set<string>();
