@@ -1,4 +1,4 @@
-import { ContractType, CHANGE_TYPE_TO_CONTRACTS } from "./contractVariables";
+import { ContractType, CHANGE_TYPE_TO_CONTRACTS, type EmployeeData } from "./contractVariables";
 import * as clock from "./clock";
 
 export interface ChangeRow {
@@ -406,4 +406,80 @@ export function terminationContractType(session: EmploymentSession): ContractTyp
     return "ukonceni_zkusebni";
   }
   return "ukonceni_hpp_ppp";
+}
+
+/**
+ * Is a rodičovská row RUNNING today? Started and not yet ended; an open-ended
+ * row (no endDate) is ongoing. Mirrors the backend's `rodActive`.
+ *
+ * NOT the same test as `hasOpenRodicovska` above: that one deliberately omits
+ * the start check, because it must also block stacking a FUTURE-dated leave. A
+ * future leave is "open" but is not running, so using it here would pick a
+ * contract whose leave has not begun.
+ */
+function rodicovskaRunning(r: EmploymentRow, today: string): boolean {
+  if (r.startDate > today) return false;
+  return !r.endDate || r.endDate >= today;
+}
+
+/**
+ * The employment fields a STANDALONE document should show, resolved from the
+ * employee's currently running contract.
+ *
+ * Standalone templates (Hmotná odpovědnost, Multisport, custom ones) are not
+ * tied to an employment row, so every employment token — {{startDate}},
+ * {{endDate}}, {{contractType}}, {{salary}} … — would otherwise render empty.
+ *
+ * The rule (agreed 2026-07-17):
+ *  - no running contract                  → null (all tokens stay blank)
+ *  - exactly one running                  → that one
+ *  - several running, exactly one of whose sessions has a RUNNING rodičovská
+ *                                         → that one
+ *  - several running, otherwise           → null (ambiguous; blank beats a guess)
+ *
+ * Note this deliberately INVERTS the concurrent-contract tie-break used for the
+ * employee's `current*` root fields, which prefer the latest active session (the
+ * second job worked during leave) and exclude the on-leave contract. For these
+ * documents the on-leave contract is the one that matters, so {{startDate}} can
+ * legitimately disagree with the "current contract" shown on the Zaměstnanci list.
+ */
+export function resolveStandaloneEmployment(
+  rows: EmploymentRow[]
+): Partial<EmployeeData> | null {
+  const today = clock.today();
+  // "Running today" = started, and not ended as of today.
+  //
+  // Deliberately NOT `!session.terminated`: that flag is true for ANY Ukončení
+  // row, including a future-dated one, so an employee whose notice is already
+  // filed for next month would count as not running — while they are in fact
+  // still working today. computeEffectiveState already folds an Ukončení's date
+  // into effective.endDate, so testing the date covers both that and a
+  // fixed-term contract that simply ran out. An endDate is the LAST active day,
+  // hence `>= today`. Matches the backend's date-based rule.
+  const running = groupBySession(rows).filter((s) => {
+    if (s.nastup.startDate > today) return false;
+    return !s.effective.endDate || s.effective.endDate >= today;
+  });
+  if (running.length === 0) return null;
+
+  let chosen = running[0];
+  if (running.length > 1) {
+    const onLeave = running.filter((s) => s.rodicovska.some((r) => rodicovskaRunning(r, today)));
+    if (onLeave.length !== 1) return null;
+    chosen = onLeave[0];
+  }
+
+  const { effective, nastup } = chosen;
+  return {
+    contractType: effective.contractType,
+    startDate: effective.startDate,
+    endDate: effective.endDate ?? undefined,
+    salary: effective.salary ?? undefined,
+    agreedReward: effective.agreedReward ?? undefined,
+    hoursPerWeek: effective.hoursPerWeek ?? undefined,
+    // Not folded by Dodatky – read from the Nástup row.
+    workLocation: nastup.workLocation,
+    probationPeriod: nastup.probationPeriod,
+    agreedWorkScope: nastup.agreedWorkScope,
+  };
 }

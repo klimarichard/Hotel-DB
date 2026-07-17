@@ -4,6 +4,7 @@ import IconButton from "./IconButton";
 import { api } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { employeeDisplayName, employeeSurnameFirst } from "@/lib/employeeName";
+import { resolveStandaloneEmployment, type EmploymentRow } from "@/lib/employmentSessions";
 import { useContractGeneration, DEFAULT_MARGINS, type PageMargins } from "@/hooks/useContractGeneration";
 import { buildContractName } from "@/lib/contractNaming";
 import { mergePdfBlobs, openPdfBlob } from "@/lib/pdfMerge";
@@ -275,15 +276,19 @@ export default function BulkGenerateModal({ employees, onClose }: Props) {
   /** Assemble one employee's variable inputs from the endpoints that already
    *  exist. Going per-id keeps the router's management scoping in force. */
   async function loadEmployeeData(id: string): Promise<{ data: EmployeeData; companyId: string | null }> {
-    const [root, contact, documents] = await Promise.all([
+    const [root, contact, documents, employment] = await Promise.all([
       api.get<Record<string, unknown>>(`/employees/${id}`),
       api.get<Record<string, unknown> | null>(`/employees/${id}/contact`).catch(() => null),
       api.get<Record<string, unknown> | null>(`/employees/${id}/documents`).catch(() => null),
+      api.get<EmploymentRow[]>(`/employees/${id}/employment`).catch(() => [] as EmploymentRow[]),
     ]);
     const companyId = (root.currentCompanyId as string) ?? null;
     return {
       companyId,
       data: {
+        // Employment tokens ({{startDate}}, {{contractType}}, …) resolved from the
+        // running contract – a standalone document is tied to no employment row.
+        ...resolveStandaloneEmployment(employment),
         id: root.id as string,
         firstName: root.firstName as string,
         lastName: root.lastName as string,
