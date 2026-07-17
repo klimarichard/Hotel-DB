@@ -512,6 +512,29 @@ export async function isSharedTerminalType(roleType: string | undefined): Promis
   return map?.get(roleType)?.sharedTerminal === true;
 }
 
+/**
+ * The user-type id recorded on a `users/{uid}` doc.
+ *
+ * The `users` collection holds two generations of documents: newer ones carry
+ * `roleType`, while legacy ones (pre-RBAC-overhaul) carry only the older `role`.
+ * The auth CUSTOM CLAIM always has `roleType`, which is why a legacy account
+ * works perfectly when IT logs in — requireAuth reads its token, not its doc.
+ * But code that inspects OTHER users can only read their doc, and reading
+ * `roleType` alone yields undefined there → an empty permission set → the user
+ * silently vanishes from authorizer/signer lists and, worse, from
+ * getManagementEmployeeIds (so their record stops being hidden).
+ *
+ * Always resolve another user's type through this helper. Both generations of
+ * the field hold the same id space for the built-ins (admin/director/manager/
+ * employee/accountant), so the fallback is exact; a `role` with no matching
+ * type doc (e.g. the legacy "hr") resolves to no permissions exactly as before.
+ */
+export function roleTypeFromUserDoc(u: { roleType?: unknown; role?: unknown }): string | undefined {
+  if (typeof u.roleType === "string" && u.roleType) return u.roleType;
+  if (typeof u.role === "string" && u.role) return u.role;
+  return undefined;
+}
+
 export interface EffectivePermissionInput {
   /** Configurable user-type id (from the roleType claim). */
   roleType?: string;
