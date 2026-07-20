@@ -36,20 +36,19 @@ Granular permission-based access control gates every screen, route, and API endp
 
 > Typy uživatelů jsou konfigurovatelná data — administrátor je spravuje v Nastavení → Uživatelské typy. Výše uvedené jsou výchozí vestavěné typy; lze přidávat vlastní (např. „Revenue & Rezervace“).
 
-## User manuals (Czech)
+## Uživatelská dokumentace (Czech)
 
-Per-role manuals — each covers **only** what that role can do in the app. (These may later be surfaced as in-app help.)
+Uživatelská dokumentace **není v souborech** — žije přímo v aplikaci:
 
-- [Administrátor a ředitel](manuals/admin-a-reditel.md)
-- [FOM (vedoucí)](manuals/vedouci.md)
-- [Zaměstnanec](manuals/zamestnanec.md)
-- [Účetní](manuals/ucetni.md)
+- **Nápověda** (`/napoveda`) — popis jednotlivých obrazovek a ovládacích prvků. Každé téma zároveň spouští průvodce aplikací na odpovídajícím kroku. Zobrazuje se podle oprávnění, takže každý uživatel vidí právě to, k čemu má přístup.
+- **[Provozní pravidla](docs/business-rules.md)** — netriviální pravidla chování: číselné limity, podmínky nároku, co spustí schválení, co se přenáší dál a co je nevratné. Tedy to, co z rozhraní nelze vyčíst.
+- Kapitoly **Recepce**, **Návody** a **Průvodce aplikací** níže v tomto souboru.
 
-> When a new role is added, add a matching manual under `manuals/`.
+> ⚠️ Příručky pro jednotlivé role (`manuals/`) byly **vyřazeny 2026-07-20** a nenahrazujte je novými. Po přechodu na konfigurovatelná oprávnění (v2.2.0) přestala jedna příručka na roli dávat smysl: administrátor může vytvořit libovolný uživatelský typ a přidělit mu kteroukoli kombinaci oprávnění, takže na otázku „kterou příručku mám číst?" neexistovala odpověď. Nové uživatelské téma proto přidejte jako krok průvodce v `frontend/src/lib/tours/appTour.ts` (objeví se v Nápovědě sám), nebo jako pravidlo v `docs/business-rules.md`.
 
 ## Recepce (uživatelská příručka)
 
-Přístup do sekce **Recepce** není vázaný na jednu konkrétní roli — řídí se výhradně **oprávněními**, která administrátor přidělí uživatelskému typu nebo jednotlivému uživateli (Nastavení → Uživatelské typy). Recepci proto může mít otevřenou recepční, FOM i ředitel, podle toho, co jim bylo přiděleno. Z toho důvodu je popsána přímo zde, a ne v jedné z příruček výše.
+Přístup do sekce **Recepce** není vázaný na jednu konkrétní roli — řídí se výhradně **oprávněními**, která administrátor přidělí uživatelskému typu nebo jednotlivému uživateli (Nastavení → Uživatelské typy). Recepci proto může mít otevřenou recepční, FOM i ředitel, podle toho, co jim bylo přiděleno. Protože je celá sekce takto rozkročená přes čtyři hotely a řadu oprávnění, je popsána souvisle zde, a ne po jednotlivých krocích v Nápovědě.
 
 > 📷 *(Místo pro snímek obrazovky: hub Recepce s lištou hotelů a záložkami)*
 
@@ -282,5 +281,4 @@ Architecture, data model, per-feature implementation notes, and deployment are i
 frontend/    React + TypeScript app (Vite)
 functions/   Firebase Cloud Functions (Express API)
 docs/        Developer documentation (indexed by DOCUMENTATION.md)
-manuals/     Czech per-role user manuals
 ```
