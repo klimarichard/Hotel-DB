@@ -46,7 +46,6 @@ export default function TabulkyPage() {
               aria-selected={selectedTab?.id === t.id}
               className={selectedTab?.id === t.id ? styles.tabActive : styles.tabBtn}
               onClick={() => navigate(`/tabulky/${t.id}`)}
-              data-tour={`tabulky-tab-${t.id}`}
             >
               {t.label}
             </button>
