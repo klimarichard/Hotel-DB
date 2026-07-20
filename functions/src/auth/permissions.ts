@@ -36,6 +36,7 @@ export const PERMISSION_CATALOG = [
       { key: "nav.shifts.view", label: "Zobrazit Směny" },
       { key: "nav.vacation.view", label: "Zobrazit Dovolenou" },
       { key: "nav.recepce.view", label: "Zobrazit Recepci" },
+      { key: "nav.tabulky.view", label: "Zobrazit Tabulky" },
       { key: "nav.employees.view", label: "Zobrazit Zaměstnance" },
       { key: "nav.payroll.view", label: "Zobrazit Mzdy" },
       { key: "nav.alerts.view", label: "Zobrazit Upozornění" },
@@ -199,6 +200,12 @@ export const PERMISSION_CATALOG = [
       { key: "recepce.ankora.walkiny.manage", label: "Ankora — Spravovat walkiny" },
       { key: "recepce.ankora.taxi.view", label: "Ankora — Taxi" },
       { key: "recepce.ankora.taxi.manage", label: "Ankora — Spravovat taxi" },
+    ],
+  },
+  {
+    group: "Tabulky",
+    items: [
+      { key: "tabulky.smenarna.view", label: "Směnárna + ČNB" },
     ],
   },
   {

@@ -62,6 +62,7 @@ const SECTIONS = {
   shifts: "Směny",
   vacation: "Dovolená",
   recepce: "Recepce",
+  tabulky: "Tabulky",
   // Zaměstnanci spans the list + the employee card (no separate "Karta" section).
   employees: "Zaměstnanci",
   profile: "Můj profil",
@@ -173,6 +174,12 @@ export const APP_TOUR_STEPS: TourStep[] = [
 
   // ── Zaměstnanci – seznam (/zamestnanci) ──────────────────────────────────────
   // Merged: view.all (vedení incl.) + view.nonManagement collapse into one step.
+  // ── Tabulky ──────────────────────────────────────────────────────────────────
+  // One step only, on the menu entry. Deliberately no steps inside the tab: the
+  // calculator's own on-screen hints carry the detail, so tour steps there would
+  // duplicate them and go stale independently.
+  { section: SECTIONS.tabulky, permission: "nav.tabulky.view", addedInVersion: 17, anchor: "nav-tabulky", mobileAnchor: "bottomnav-more", title: "Tabulky", body: "V této sekci jsou různé pomocné výpočtové tabulky.", placement: "right" },
+
   { section: SECTIONS.employees, permission: "nav.employees.view", anchor: "nav-zamestnanci", mobileAnchor: "bottomnav-more", title: "Zaměstnanci", body: "Sekce Zaměstnanci obsahuje karty zaměstnanců s údaji, doklady, smlouvami a historií pracovního poměru.", mobileBody: "Sekce Zaměstnanci obsahuje karty zaměstnanců s údaji, doklady, smlouvami a historií. Na telefonu ji otevřete přes záložku Více ve spodní liště.", placement: "right" },
   { permission: ["employees.view.all", "employees.view.nonManagement"], anchor: "emp-list", scrollBlock: "start", route: "/zamestnanci", title: "Seznam zaměstnanců", body: "Zde vidíte seznam zaměstnanců. Kliknutím na jméno otevřete zaměstnaneckou kartu.", placement: "bottom" },
   { permission: ["employees.view.all", "employees.view.nonManagement"], anchor: "emp-filters", route: "/zamestnanci", title: "Vyhledávání a filtr", body: "Ve vyhledávacím poli můžete hledat zaměstnance podle jména (i za svobodna), pracovní pozice nebo národnosti. Vyhledávání funguje napříč všemi záložkami. Přepínačem záložek zvolíte, jakou kategorii zaměstnanců zobrazit.", placement: "bottom" },
@@ -298,7 +305,7 @@ export const appTour: TourDefinition = {
   // Highest step `addedInVersion` in the list. Bump it (and stamp the new steps'
   // `addedInVersion`) whenever you add steps for a new feature – returning users
   // then see ONLY those steps; first-time users still get the whole tour.
-  version: 16,
+  version: 17,
   label: "Prohlídka aplikace",
   steps: APP_TOUR_STEPS,
 };

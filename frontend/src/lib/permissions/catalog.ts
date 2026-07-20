@@ -169,6 +169,17 @@ export const PERMISSION_SECTIONS = [
     ],
   },
   {
+    title: "Tabulky",
+    subsections: [
+      {
+        items: [
+          { key: "nav.tabulky.view", label: "Zobrazit Tabulky", level: 0 },
+          { key: "tabulky.smenarna.view", label: "Směnárna + ČNB", level: 1 },
+        ],
+      },
+    ],
+  },
+  {
     title: "Zaměstnanci",
     subsections: [
       {

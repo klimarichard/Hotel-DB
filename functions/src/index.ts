@@ -40,6 +40,7 @@ import { taxiRouter } from "./routes/taxi";
 import { lobbyBarRouter } from "./routes/lobbyBar";
 import { guidesRouter } from "./routes/guides";
 import { terminalRouter } from "./routes/terminal";
+import { exchangeRouter } from "./routes/exchange";
 import * as clock from "./services/clock";
 import { requireAuth, AuthRequest } from "./middleware/auth";
 import { requirePermission } from "./auth/permissions";
@@ -51,6 +52,7 @@ import { updateDocumentAlerts, EXPIRY_FIELDS } from "./routes/employees";
 import { refreshAllProbationAlerts } from "./services/probationAlerts";
 import { runScheduledDeactivations } from "./services/userDeactivation";
 import { sweepRecepceRetention } from "./services/recepceRetention";
+import { sweepSmenarnaSnapshots as sweepSmenarnaRetention } from "./services/smenarnaRetention";
 
 // All functions run in europe-west3 to co-locate with the Firestore
 // database — avoids cross-region latency on every read/write.
@@ -136,6 +138,7 @@ app.use("/taxi", taxiRouter);
 app.use("/lobby-bar", lobbyBarRouter);
 app.use("/guides", guidesRouter);
 app.use("/terminal", terminalRouter);
+app.use("/exchange", exchangeRouter);
 
 // Health check
 app.get("/health", (_req, res) => {
@@ -388,6 +391,18 @@ export const sweepRecepceHistory = onSchedule(
     console.log(
       `[sweepRecepceHistory] cutoff ${res.cutoffISO}: deleted ${res.auditDeleted} audit + ${res.historyDeleted} history`
     );
+  }
+);
+
+// Daily, alongside the Recepce sweep: Směnárna snapshots older than 6 months.
+// Deliberately a separate function rather than folded into sweepRecepceHistory —
+// renaming a deployed scheduled function leaves the old one orphaned in GCP.
+export const sweepSmenarnaSnapshots = onSchedule(
+  { schedule: "15 0 * * *", timeZone: "Europe/Prague" },
+  async () => {
+    await clock.refresh(true);
+    const res = await sweepSmenarnaRetention();
+    console.log(`[sweepSmenarnaSnapshots] cutoff ${res.cutoffISO}: deleted ${res.deleted}`);
   }
 );
 

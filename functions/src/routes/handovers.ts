@@ -128,8 +128,11 @@ function finiteOr(raw: unknown, fallback: number): number {
 
 const SM_SETTINGS_REF = () => db().collection("settings").doc("sm");
 
-/** The three GLOBAL sm rates (settings/sm). Absent doc → [0,0,0]. */
-async function readSmRates(): Promise<[number, number, number]> {
+/** The three GLOBAL sm rates (settings/sm). Absent doc → [0,0,0].
+ *  Exported for the Tabulky → Směnárna calculator, which prefills "kurz NÁŠ"
+ *  from the same three numbers but is gated on tabulky.smenarna.view rather
+ *  than nav.recepce.view — see routes/exchange.ts. */
+export async function readSmRates(): Promise<[number, number, number]> {
   const snap = await SM_SETTINGS_REF().get();
   const raw = snap.exists ? (snap.data() as { rates?: unknown }).rates : undefined;
   return sanitizeTriple(raw);

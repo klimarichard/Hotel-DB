@@ -209,6 +209,82 @@ U PPP určuje **týdenní úvazek** výši nároku na dovolenou – ta se počí
 
 ---
 
+## Tabulky – Směnárna + ČNB
+
+### Stránka se vždy otevře prázdná; uchová se jen to, co uložíte
+
+Směnárna se **nikdy neukládá sama**. Otevře se vždy prázdná se čtyřmi výchozími řádky a rozepsaný výpočet je po obnovení stránky pryč. Chcete-li si výpočet nechat, uložte ho tlačítkem **Uložit**.
+
+Uloží se **celý stav tabulky** – řádky i jejich názvy, obě tabulky bankovek, částky v měnách, oba kurzy i řádek směnárna. Ze seznamu v sekci **Historie** se pak dá kdykoli **načíst zpět**.
+
+**Načtení uložených dat přepíše vše, co máte právě rozepsané, a nelze ho vrátit zpět.** Máte-li něco vyplněné, aplikace se před načtením zeptá.
+
+> ⚙️ Automatika + 🔒 Server. Zdroj: `frontend/src/pages/tabulky/SmenarnaTab.tsx` – `saveSnapshot()`, `applySnapshot()`; `functions/src/routes/exchange.ts` – `/snapshots`.
+
+### Uložená data jsou společná a mažou se po 6 měsících
+
+Uložená data **nejsou soukromá**: každý, kdo má oprávnění Směnárna + ČNB, vidí v Historii záznamy všech ostatních a může je také **smazat**. U každého záznamu je vidět datum, čas a jméno toho, kdo ho uložil.
+
+Záznamy starší než **6 měsíců** aplikace **sama maže** (denní úloha). Nejde o účetní doklad – nic jiného se na uložená data neodkazuje a jejich smazáním nezmizí žádná provozní data.
+
+> ⚙️ Automatika + 🔒 Server. Zdroj: `functions/src/services/smenarnaRetention.ts` (hranice 6 měsíců na `RETENTION_MONTHS`), plánovaná úloha `sweepSmenarnaSnapshots` v `functions/src/index.ts`.
+
+### Do Recepce se z této tabulky nikdy nic nezapíše
+
+Jediná vazba na Recepci je **čtení** tří kurzů z řádku „sm", kterými se předvyplní řádek **kurz u nás**. Kurz zde můžete přepsat, ale změna platí jen pro tento výpočet – **do Recepce se nikdy nic nezapíše**, a naopak úprava v Recepci nemůže změnit nic v této tabulce ani v uložených datech.
+
+> 🔒 Server. Zdroj: `functions/src/routes/exchange.ts` – kurzy jsou dostupné jen přes `GET /exchange/rates`, žádná zapisovací cesta neexistuje.
+
+### Bankovky 5000 se použijí jen do počtu, který už máte
+
+V tabulce **Ideální složení** se rozkládá každá částka na bankovky a mince od největší po nejmenší. **Bankovky 5000 jsou ale omezené**: použije se jich nejvýše tolik, kolik jich zadáte v řádku **směnárna** (tedy kolik jich skutečně máte). Nezadáte-li žádnou, tabulka si o 5000 nikdy neřekne a chová se jako původní excelová verze.
+
+Je-li 5000 méně než by se jich vešlo, dostanou je **největší částky jako první**. Není to kvůli počtu bankovek – ten se ušetří stejně, ať 5000 padne kamkoli – ale proto, že malé částky (typicky rozdíly v řádu stokorun) do sebe 5000 nevejdou vůbec, a při postupu shora dolů by tak zbytečně zůstaly nevyužité.
+
+> ⚙️ Automatika. Zdroj: `frontend/src/lib/denominations.ts` – `decompose()` (strop na 5000) a `decomposeAll()` (rozdělení od největší částky).
+
+### Upozornění se objeví jen při nedostatku peněz, ne při jiném složení
+
+Řádky **směnárna** (co jste dostali) a **potřebuji** (co je potřeba na všechny hromádky) se porovnávají **jen v celkové částce**. Rozdíl v jednotlivých nominálech není chyba – větší bankovku lze rozměnit. Upozornění se proto objeví pouze tehdy, když je ze směnárny **celkem méně peněz**, než je potřeba.
+
+> 🖥️ Jen rozhraní. Zdroj: `frontend/src/pages/tabulky/SmenarnaTab.tsx` – proměnná `shortfall`.
+
+### Chybějící kurz vadí jen u měny, kterou jste zadali
+
+Nemít vyplněný kurz je běžné – ne v každé směně se mění všechny měny. Upozornění se proto objeví **jen když je u dané měny zadaná částka a zároveň chybí kurz**. V takovém případě by se měna počítala jako nula a rozdíl (marže) by vyšel vyšší, než ve skutečnosti je.
+
+> 🖥️ Jen rozhraní. Zdroj: `frontend/src/pages/tabulky/SmenarnaTab.tsx` – proměnná `missingRates`.
+
+### Výměna bankovek nemusí sedět sama o sobě – dorovnává ji směnárna
+
+Částka v PŘEDKLÁDÁM se **nemusí** rovnat částce v POŽADUJI. Chybějící část dorovnají koruny získané ve směnárně. Ve sloupci **ze směnárny** v tabulce PŘEDKLÁDÁM se u každého řádku ukáže, kolik z POŽADUJI předložené bankovky nepokryjí.
+
+Kolik ze směnárny zbude, ukazuje sloupec **zbývá ze směnárny**:
+
+> zbývá ze směnárny = CELKEM směnárna − (POŽADUJI − PŘEDKLÁDÁM)
+
+Předložíte-li naopak víc, než požadujete, přebytek se ke směnárně **přičte** (rozdíl je záporný).
+
+**Červeně se řádek označí jen tehdy, když je „zbývá ze směnárny" záporné** – tedy když ani předložené bankovky, ani peníze ze směnárny nestačí na to, co požadujete. Nerovnost sama o sobě chyba není. Kontrola probíhá u každého řádku zvlášť i za celek.
+
+**Sloupec CELKEM směnárna zůstává nedotčený** (hrubý výnos ze směnárny), aby řádek dál dával smysl: CELKEM směnárna − CELKEM u nás = ROZDÍL. Dorovnání se promítá pouze do sloupce „zbývá ze směnárny".
+
+> 🖥️ Jen rozhraní. Zdroj: `frontend/src/pages/tabulky/SmenarnaTab.tsx` – `gap`, `fromExchange`, `zbyva`, `rowsShort`. Odpovídá sloupci H původního sešitu (`=F−(POŽADUJI−PŘEDKLÁDÁM)`).
+
+### Změny nominálů: co vrátit a co si vyžádat
+
+Vedle tabulky složení je seznam **Změny nominálů** – rozdíl mezi tím, co směnárna dala, a tím, co je potřeba. **Kladné číslo** znamená vyžádat si tolik kusů navíc, **záporné** tolik kusů vrátit. Seznam je vždy nejkratší možný: obě strany jsou dané, takže rozdíl u každého nominálu je jediná možná odpověď, není co optimalizovat.
+
+> ⚙️ Automatika. Zdroj: `frontend/src/pages/tabulky/SmenarnaTab.tsx` – `denomChanges`.
+
+### Stránka Tabulky se na telefonu nezobrazuje
+
+Tabulky jsou široké a na telefonu se nedají rozumně vyplňovat, proto se položka **Tabulky** ve spodní liště mobilu **vůbec nenabízí** (stejně jako Šablony smluv). Otevřete-li adresu přímo, stránka se zobrazí, ale počítá se s prací na počítači.
+
+> 🖥️ Jen rozhraní. Zdroj: `frontend/src/lib/menuItems.ts` – `hideOnMobile: true`.
+
+---
+
 ## Vyřazená pravidla
 
 Pravidla, která dřívější dokumentace uváděla, ale která **v současném kódu neplatí**. Ponechána zde, aby se nevrátila zpět.
