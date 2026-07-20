@@ -209,6 +209,44 @@ U PPP určuje **týdenní úvazek** výši nároku na dovolenou – ta se počí
 
 ---
 
+## Tabulky – Směnárna + ČNB
+
+### Tabulka nic neukládá a do Recepce nikdy nezapisuje
+
+Směnárna je **pomocná kalkulačka**. Zadané hodnoty nikam neukládá – po obnovení stránky, zavření záložky nebo přechodu jinam jsou pryč. Neexistuje žádné tlačítko Uložit, protože není co uložit.
+
+Jediná vazba na ostatní data je **čtení** tří kurzů z řádku „sm" v Recepci, kterými se předvyplní řádek **kurz u nás**. Kurz zde můžete přepsat, ale změna platí jen pro tento výpočet – **do Recepce se nikdy nic nezapíše**, a naopak úprava v Recepci nemůže změnit nic v této tabulce.
+
+> 🖥️ Jen rozhraní (žádný zápis neexistuje). Zdroj: `frontend/src/pages/tabulky/SmenarnaTab.tsx` (stav pouze v komponentě), čtení kurzů `functions/src/routes/exchange.ts` – jen `GET`.
+
+### Bankovky 5000 se použijí jen do počtu, který už máte
+
+V tabulce **Ideální složení** se rozkládá každá částka na bankovky a mince od největší po nejmenší. **Bankovky 5000 jsou ale omezené**: použije se jich nejvýše tolik, kolik jich zadáte v řádku **směnárna** (tedy kolik jich skutečně máte). Nezadáte-li žádnou, tabulka si o 5000 nikdy neřekne a chová se jako původní excelová verze.
+
+Je-li 5000 méně než by se jich vešlo, dostanou je **největší částky jako první**. Není to kvůli počtu bankovek – ten se ušetří stejně, ať 5000 padne kamkoli – ale proto, že malé částky (typicky rozdíly v řádu stokorun) do sebe 5000 nevejdou vůbec, a při postupu shora dolů by tak zbytečně zůstaly nevyužité.
+
+> ⚙️ Automatika. Zdroj: `frontend/src/lib/denominations.ts` – `decompose()` (strop na 5000) a `decomposeAll()` (rozdělení od největší částky).
+
+### Upozornění se objeví jen při nedostatku peněz, ne při jiném složení
+
+Řádky **směnárna** (co jste dostali) a **potřebuji** (co je potřeba na všechny hromádky) se porovnávají **jen v celkové částce**. Rozdíl v jednotlivých nominálech není chyba – větší bankovku lze rozměnit. Upozornění se proto objeví pouze tehdy, když je ze směnárny **celkem méně peněz**, než je potřeba.
+
+> 🖥️ Jen rozhraní. Zdroj: `frontend/src/pages/tabulky/SmenarnaTab.tsx` – proměnná `shortfall`.
+
+### Chybějící kurz vadí jen u měny, kterou jste zadali
+
+Nemít vyplněný kurz je běžné – ne v každé směně se mění všechny měny. Upozornění se proto objeví **jen když je u dané měny zadaná částka a zároveň chybí kurz**. V takovém případě by se měna počítala jako nula a rozdíl (marže) by vyšel vyšší, než ve skutečnosti je.
+
+> 🖥️ Jen rozhraní. Zdroj: `frontend/src/pages/tabulky/SmenarnaTab.tsx` – proměnná `missingRates`.
+
+### Výměna bankovek se kontroluje po řádcích i celkově
+
+V tabulce **Výměna bankovek** se musí částka v PŘEDKLÁDÁM rovnat částce v POŽADUJI – a to **u každého řádku zvlášť**, nejen v součtu. Tabulka Kontrola zvýrazní řádek, který nesedí; upozorní i na situaci, kdy celkový součet sedí, ale jednotlivé řádky se navzájem vyrovnávají.
+
+> 🖥️ Jen rozhraní. Zdroj: `frontend/src/pages/tabulky/SmenarnaTab.tsx` – proměnné `balance` a `rowsOutOfBalance`.
+
+---
+
 ## Vyřazená pravidla
 
 Pravidla, která dřívější dokumentace uváděla, ale která **v současném kódu neplatí**. Ponechána zde, aby se nevrátila zpět.
