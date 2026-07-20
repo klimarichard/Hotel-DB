@@ -211,27 +211,27 @@ U PPP určuje **týdenní úvazek** výši nároku na dovolenou – ta se počí
 
 ## Tabulky – Směnárna + ČNB
 
-### Stránka se vždy otevře prázdná; uchová se jen to, co uložíte jako snímek
+### Stránka se vždy otevře prázdná; uchová se jen to, co uložíte
 
-Směnárna se **nikdy neukládá sama**. Otevře se vždy prázdná se čtyřmi výchozími řádky a rozepsaný výpočet je po obnovení stránky pryč. Chcete-li si výpočet nechat, uložte ho tlačítkem **Uložit snímek**.
+Směnárna se **nikdy neukládá sama**. Otevře se vždy prázdná se čtyřmi výchozími řádky a rozepsaný výpočet je po obnovení stránky pryč. Chcete-li si výpočet nechat, uložte ho tlačítkem **Uložit**.
 
-Snímek zachytí **celý stav tabulky** – řádky i jejich názvy, obě tabulky bankovek, částky v měnách, oba kurzy i řádek směnárna. Ze seznamu se pak dá kdykoli **načíst zpět**.
+Uloží se **celý stav tabulky** – řádky i jejich názvy, obě tabulky bankovek, částky v měnách, oba kurzy i řádek směnárna. Ze seznamu v sekci **Historie** se pak dá kdykoli **načíst zpět**.
 
-**Načtení snímku přepíše vše, co máte právě rozepsané, a nelze ho vrátit zpět.** Máte-li něco vyplněné, aplikace se před načtením zeptá.
+**Načtení uložených dat přepíše vše, co máte právě rozepsané, a nelze ho vrátit zpět.** Máte-li něco vyplněné, aplikace se před načtením zeptá.
 
 > ⚙️ Automatika + 🔒 Server. Zdroj: `frontend/src/pages/tabulky/SmenarnaTab.tsx` – `saveSnapshot()`, `applySnapshot()`; `functions/src/routes/exchange.ts` – `/snapshots`.
 
-### Snímky jsou společné a mažou se po 6 měsících
+### Uložená data jsou společná a mažou se po 6 měsících
 
-Snímky **nejsou soukromé**: každý, kdo má oprávnění Směnárna + ČNB, vidí snímky všech ostatních a může je také **smazat**. U každého snímku je vidět datum, čas a jméno toho, kdo ho uložil.
+Uložená data **nejsou soukromá**: každý, kdo má oprávnění Směnárna + ČNB, vidí v Historii záznamy všech ostatních a může je také **smazat**. U každého záznamu je vidět datum, čas a jméno toho, kdo ho uložil.
 
-Snímky starší než **6 měsíců** aplikace **sama maže** (denní úloha). Nejde o účetní doklad – nic jiného se na snímek neodkazuje a jeho smazáním nezmizí žádná provozní data.
+Záznamy starší než **6 měsíců** aplikace **sama maže** (denní úloha). Nejde o účetní doklad – nic jiného se na uložená data neodkazuje a jejich smazáním nezmizí žádná provozní data.
 
 > ⚙️ Automatika + 🔒 Server. Zdroj: `functions/src/services/smenarnaRetention.ts` (hranice 6 měsíců na `RETENTION_MONTHS`), plánovaná úloha `sweepSmenarnaSnapshots` v `functions/src/index.ts`.
 
 ### Do Recepce se z této tabulky nikdy nic nezapíše
 
-Jediná vazba na Recepci je **čtení** tří kurzů z řádku „sm", kterými se předvyplní řádek **kurz u nás**. Kurz zde můžete přepsat, ale změna platí jen pro tento výpočet – **do Recepce se nikdy nic nezapíše**, a naopak úprava v Recepci nemůže změnit nic v této tabulce ani v uložených snímcích.
+Jediná vazba na Recepci je **čtení** tří kurzů z řádku „sm", kterými se předvyplní řádek **kurz u nás**. Kurz zde můžete přepsat, ale změna platí jen pro tento výpočet – **do Recepce se nikdy nic nezapíše**, a naopak úprava v Recepci nemůže změnit nic v této tabulce ani v uložených datech.
 
 > 🔒 Server. Zdroj: `functions/src/routes/exchange.ts` – kurzy jsou dostupné jen přes `GET /exchange/rates`, žádná zapisovací cesta neexistuje.
 

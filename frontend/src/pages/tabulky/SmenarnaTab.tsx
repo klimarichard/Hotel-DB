@@ -259,7 +259,7 @@ export default function SmenarnaTab() {
       const r = await api.get<{ snapshots: SnapshotMeta[] }>("/exchange/snapshots");
       setSnapshots(r.snapshots ?? []);
     } catch {
-      setNotice("Seznam snímků se nepodařilo načíst.");
+      setNotice("Seznam uložených dat se nepodařilo načíst.");
     } finally {
       setSnapsLoading(false);
     }
@@ -277,10 +277,10 @@ export default function SmenarnaTab() {
       await api.post("/exchange/snapshots", {
         data: { rows, predkladam, pozaduji, amounts, ourRates, cnbRates, smenarnaCounts },
       });
-      setNotice("Snímek uložen.");
+      setNotice("Data uložena.");
       if (snapsOpen) await refreshSnapshots();
     } catch {
-      setNotice("Snímek se nepodařilo uložit.");
+      setNotice("Data se nepodařilo uložit.");
     } finally {
       setSaving(false);
     }
@@ -293,7 +293,7 @@ export default function SmenarnaTab() {
       const r = await api.get<{ data: SnapshotPayload | null }>(`/exchange/snapshots/${id}`);
       const d = r.data;
       if (!d) {
-        setNotice("Snímek je prázdný.");
+        setNotice("Uložená data jsou prázdná.");
         return;
       }
       setRows(d.rows?.length ? d.rows : defaultRows());
@@ -312,7 +312,7 @@ export default function SmenarnaTab() {
       setSnapsOpen(false);
       setNotice(null);
     } catch {
-      setNotice("Snímek se nepodařilo načíst.");
+      setNotice("Data se nepodařilo načíst.");
     }
   }
 
@@ -322,8 +322,8 @@ export default function SmenarnaTab() {
       return;
     }
     setConfirm({
-      title: "Načíst snímek?",
-      message: `Načtením snímku z ${formatIsoDatetimeCZ(s.createdAt)} se nahradí vše, co máte teď v tabulce. Tuto akci nelze vrátit zpět.`,
+      title: "Načíst data?",
+      message: `Načtením dat z ${formatIsoDatetimeCZ(s.createdAt)} se nahradí vše, co máte teď v tabulce. Tuto akci nelze vrátit zpět.`,
       confirmLabel: "Načíst",
       danger: true,
       onConfirm: () => applySnapshot(s.id),
@@ -332,8 +332,8 @@ export default function SmenarnaTab() {
 
   function requestDelete(s: SnapshotMeta) {
     setConfirm({
-      title: "Smazat snímek?",
-      message: `Snímek z ${formatIsoDatetimeCZ(s.createdAt)} bude trvale odstraněn.`,
+      title: "Smazat data?",
+      message: `Data z ${formatIsoDatetimeCZ(s.createdAt)} budou trvale odstraněna.`,
       confirmLabel: "Smazat",
       danger: true,
       onConfirm: async () => {
@@ -341,7 +341,7 @@ export default function SmenarnaTab() {
           await api.delete(`/exchange/snapshots/${s.id}`);
           await refreshSnapshots();
         } catch {
-          setNotice("Snímek se nepodařilo smazat.");
+          setNotice("Data se nepodařilo smazat.");
         }
       },
     });
@@ -386,9 +386,9 @@ export default function SmenarnaTab() {
   return (
     <div className={styles.wrap}>
       <p className={styles.intro}>
-        Pomocná tabulka. Stránka se vždy otevře <strong>prázdná</strong>; co neuložíte jako
-        <strong> snímek</strong>, je po obnovení stránky pryč. Kurz „u nás" se předvyplní podle
-        hodnot z Recepce, ale můžete ho přepsat; zápis do Recepce se nikdy neprovádí.
+        Pomocná tabulka. Stránka se vždy otevře <strong>prázdná</strong>. Pokud data neuložíte,
+        při obnovení stránky budou ztracena. Kurz „u nás" se předvyplní podle hodnot z Recepce,
+        ale můžete ho přepsat; zápis do Recepce se nikdy neprovádí.
       </p>
 
       {/* ── Snapshots ────────────────────────────────────────────────────── */}
@@ -420,7 +420,7 @@ export default function SmenarnaTab() {
                     type="button"
                     className={styles.snapLoad}
                     onClick={() => requestLoad(s)}
-                    title="Načíst tento snímek"
+                    title="Načíst tato data"
                   >
                     <span className={styles.snapDate}>{formatIsoDatetimeCZ(s.createdAt)}</span>
                     {s.createdByName && (
@@ -431,8 +431,8 @@ export default function SmenarnaTab() {
                     type="button"
                     className={styles.rowRemove}
                     onClick={() => requestDelete(s)}
-                    aria-label="Smazat snímek"
-                    title="Smazat snímek"
+                    aria-label="Smazat data"
+                    title="Smazat data"
                   >
                     ✕
                   </button>
