@@ -35,15 +35,9 @@
   color: var(--color-text-heading);
 }
 
-.hint,
 .hintInline {
   font-size: 0.75rem;
   color: var(--color-text-muted);
-}
-
-.hint {
-  margin: 0;
-  line-height: 1.45;
 }
 
 /* ── Row editor ───────────────────────────────────────────────────────────── */

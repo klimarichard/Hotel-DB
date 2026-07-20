@@ -518,11 +518,6 @@ export default function SmenarnaTab() {
       {/* ── Block 4: the note mix to request ─────────────────────────────── */}
       <section className={styles.section}>
         <h2 className={styles.h2}>Ideální složení</h2>
-        <p className={styles.hint}>
-          Každý řádek potřebuje dvě samostatné hromádky – peníze hosta a rozdíl. Řádek
-          <strong> potřebuji</strong> je složení, které si vyžádáte ve směnárně. Bankovky 5000
-          se použijí jen do počtu, který zadáte v řádku <strong>směnárna</strong>.
-        </p>
         <div className={styles.denomLayout}>
         <div className={styles.tableScroll}>
           <table className={styles.grid}>
