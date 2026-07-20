@@ -1,17 +1,26 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../../lib/api";
 import Button from "../../components/Button";
+import ConfirmModal from "../../components/ConfirmModal";
+import { formatIsoDatetimeCZ } from "../../lib/dateFormat";
 import { CZK_DENOMS, decomposeAll, denomTotal, sumCounts } from "../../lib/denominations";
 import styles from "./SmenarnaTab.module.css";
 
 /**
  * Tabulky → Směnárna + ČNB.
  *
- * An AD HOC CALCULATOR. It persists nothing: no Firestore document, no write
- * endpoint, no autosave. Values live in component state and are gone on reload.
- * Its only contact with stored data is a READ of the three global sm rates to
- * prefill "kurz NÁŠ" — it can never affect a Předávací protokol, and a protokol
- * edit can never affect it.
+ * A CALCULATOR WITH NO AUTOSAVE. Working state lives in component state and is
+ * gone on reload; the page always opens blank. The one way anything is kept is
+ * an explicit SNAPSHOT (smenarnaSnapshots/{id}), saved on demand and recalled
+ * on demand — never restored automatically, so Směnárna never greets you with
+ * stale numbers from someone else's run.
+ *
+ * Snapshots are SHARED: everyone holding tabulky.smenarna.view sees and may
+ * delete all of them. They are swept after 6 months.
+ *
+ * Apart from snapshots, its only contact with stored data is a READ of the three
+ * global sm rates to prefill "kurz NÁŠ" — it can never affect a Předávací
+ * protokol, and a protokol edit can never affect it.
  *
  * Four blocks:
  *   1+2. PŘEDKLÁDÁM / POŽADUJI — a CZK note swap. It need NOT balance on its
@@ -46,6 +55,32 @@ interface Row {
 
 /** Sparse per-denomination counts: zero is deleted, never stored. */
 type Counts = Record<string, number>;
+
+/** A saved snapshot as the list shows it — no payload, just what to label it. */
+interface SnapshotMeta {
+  id: string;
+  createdAt: string | null;
+  createdByName: string;
+}
+
+/** The full calculator state a snapshot carries. */
+interface SnapshotPayload {
+  rows?: Row[];
+  predkladam?: Record<string, Counts>;
+  pozaduji?: Record<string, Counts>;
+  amounts?: Record<string, Triple>;
+  ourRates?: Triple;
+  cnbRates?: Triple;
+  smenarnaCounts?: Counts;
+}
+
+interface ConfirmState {
+  title: string;
+  message: string;
+  confirmLabel: string;
+  danger?: boolean;
+  onConfirm: () => void | Promise<void>;
+}
 
 /** Rows the page starts with. Editable and removable like any other — these are
  *  a starting point, not a fixed list. */
@@ -202,6 +237,116 @@ export default function SmenarnaTab() {
     [rows, amounts, ourRates, cnbRates]
   );
 
+  // ── Snapshots ─────────────────────────────────────────────────────────────
+  // The page still starts blank every time; a snapshot is recalled explicitly,
+  // never restored automatically, so opening Směnárna never shows stale numbers.
+  const [snapshots, setSnapshots] = useState<SnapshotMeta[]>([]);
+  const [snapsOpen, setSnapsOpen] = useState(false);
+  const [snapsLoading, setSnapsLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [confirm, setConfirm] = useState<ConfirmState | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const hasInput =
+    Object.keys(predkladam).length > 0 ||
+    Object.keys(pozaduji).length > 0 ||
+    Object.keys(amounts).length > 0 ||
+    Object.keys(smenarnaCounts).length > 0;
+
+  async function refreshSnapshots() {
+    setSnapsLoading(true);
+    try {
+      const r = await api.get<{ snapshots: SnapshotMeta[] }>("/exchange/snapshots");
+      setSnapshots(r.snapshots ?? []);
+    } catch {
+      setNotice("Seznam snímků se nepodařilo načíst.");
+    } finally {
+      setSnapsLoading(false);
+    }
+  }
+
+  function toggleSnapshots() {
+    const next = !snapsOpen;
+    setSnapsOpen(next);
+    if (next) refreshSnapshots();
+  }
+
+  async function saveSnapshot() {
+    setSaving(true);
+    try {
+      await api.post("/exchange/snapshots", {
+        data: { rows, predkladam, pozaduji, amounts, ourRates, cnbRates, smenarnaCounts },
+      });
+      setNotice("Snímek uložen.");
+      if (snapsOpen) await refreshSnapshots();
+    } catch {
+      setNotice("Snímek se nepodařilo uložit.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  /** Replace all state from a snapshot. Guarded because it discards whatever is
+   *  on screen, and the page has no undo. */
+  async function applySnapshot(id: string) {
+    try {
+      const r = await api.get<{ data: SnapshotPayload | null }>(`/exchange/snapshots/${id}`);
+      const d = r.data;
+      if (!d) {
+        setNotice("Snímek je prázdný.");
+        return;
+      }
+      setRows(d.rows?.length ? d.rows : defaultRows());
+      setPredkladam(d.predkladam ?? {});
+      setPozaduji(d.pozaduji ?? {});
+      setAmounts(d.amounts ?? {});
+      setOurRates(d.ourRates ?? emptyTriple());
+      setCnbRates(d.cnbRates ?? emptyTriple());
+      setSmenarnaCounts(d.smenarnaCounts ?? {});
+      // Keep rowSeq ahead of any id restored from the snapshot, so a later
+      // "Přidat řádek" cannot collide with a loaded row's id.
+      d.rows?.forEach((r2) => {
+        const n = Number(String(r2.id).replace(/^r/, ""));
+        if (Number.isFinite(n) && n > rowSeq) rowSeq = n;
+      });
+      setSnapsOpen(false);
+      setNotice(null);
+    } catch {
+      setNotice("Snímek se nepodařilo načíst.");
+    }
+  }
+
+  function requestLoad(s: SnapshotMeta) {
+    if (!hasInput) {
+      applySnapshot(s.id);
+      return;
+    }
+    setConfirm({
+      title: "Načíst snímek?",
+      message: `Načtením snímku z ${formatIsoDatetimeCZ(s.createdAt)} se nahradí vše, co máte teď v tabulce. Tuto akci nelze vrátit zpět.`,
+      confirmLabel: "Načíst",
+      danger: true,
+      onConfirm: () => applySnapshot(s.id),
+    });
+  }
+
+  function requestDelete(s: SnapshotMeta) {
+    setConfirm({
+      title: "Smazat snímek?",
+      message: `Snímek z ${formatIsoDatetimeCZ(s.createdAt)} bude trvale odstraněn.`,
+      confirmLabel: "Smazat",
+      danger: true,
+      onConfirm: async () => {
+        try {
+          await api.delete(`/exchange/snapshots/${s.id}`);
+          await refreshSnapshots();
+        } catch {
+          setNotice("Snímek se nepodařilo smazat.");
+        }
+      },
+    });
+  }
+
   // ── Block 4 — the note mix to request ─────────────────────────────────────
   // One pile per row per purpose: the guest money at our rate, and the margin.
   const piles = useMemo(
@@ -241,10 +386,62 @@ export default function SmenarnaTab() {
   return (
     <div className={styles.wrap}>
       <p className={styles.intro}>
-        Pomocná tabulka. <strong>Nic se neukládá</strong> – po zavření nebo obnovení stránky
-        jsou hodnoty pryč. Kurz „u nás" se předvyplní podle hodnot z Recepce, ale můžete ho
-        přepsat; zápis do Recepce se nikdy neprovádí.
+        Pomocná tabulka. Stránka se vždy otevře <strong>prázdná</strong>; co neuložíte jako
+        <strong> snímek</strong>, je po obnovení stránky pryč. Kurz „u nás" se předvyplní podle
+        hodnot z Recepce, ale můžete ho přepsat; zápis do Recepce se nikdy neprovádí.
       </p>
+
+      {/* ── Snapshots ────────────────────────────────────────────────────── */}
+      <section className={styles.section}>
+        <div className={styles.sectionHead}>
+          <h2 className={styles.h2}>Snímky</h2>
+          <div className={styles.snapActions}>
+            <Button variant="secondary" size="sm" onClick={toggleSnapshots}>
+              {snapsOpen ? "Skrýt snímky" : "Načíst snímek"}
+            </Button>
+            <Button variant="primary" size="sm" onClick={saveSnapshot} disabled={saving}>
+              {saving ? "Ukládám…" : "Uložit snímek"}
+            </Button>
+          </div>
+        </div>
+
+        {notice && <p className={styles.notice}>{notice}</p>}
+
+        {snapsOpen && (
+          <div className={styles.snapList}>
+            {snapsLoading ? (
+              <p className={styles.snapEmpty}>Načítám…</p>
+            ) : snapshots.length === 0 ? (
+              <p className={styles.snapEmpty}>Zatím nejsou uložené žádné snímky.</p>
+            ) : (
+              snapshots.map((s) => (
+                <div key={s.id} className={styles.snapItem}>
+                  <button
+                    type="button"
+                    className={styles.snapLoad}
+                    onClick={() => requestLoad(s)}
+                    title="Načíst tento snímek"
+                  >
+                    <span className={styles.snapDate}>{formatIsoDatetimeCZ(s.createdAt)}</span>
+                    {s.createdByName && (
+                      <span className={styles.snapAuthor}>{s.createdByName}</span>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.rowRemove}
+                    onClick={() => requestDelete(s)}
+                    aria-label="Smazat snímek"
+                    title="Smazat snímek"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+      </section>
 
       {/* ── Rows ─────────────────────────────────────────────────────────── */}
       <section className={styles.section}>
@@ -627,6 +824,21 @@ export default function SmenarnaTab() {
           </p>
         )}
       </section>
+
+      {confirm && (
+        <ConfirmModal
+          title={confirm.title}
+          message={confirm.message}
+          confirmLabel={confirm.confirmLabel}
+          danger={confirm.danger}
+          onConfirm={() => {
+            const run = confirm.onConfirm;
+            setConfirm(null);
+            void run();
+          }}
+          onCancel={() => setConfirm(null)}
+        />
+      )}
     </div>
   );
 }
