@@ -27,6 +27,20 @@ Implementation notes for the Phase 5 Shift Planner: the shift expression parser,
 
 ## Shift Planner — Additional Notes
 
+### Previous-month gap badge (v4.13.0)
+
+A read-only badge over the **1st-of-month cell** of every employee row, shown **only** when `plan.status === "closed"` and only to holders of `shifts.counterTable.view`. It says how that employee's **previous** month ended: negative = they were working into the month end (`|n|` consecutive worked days, so `-2` = worked the last two), positive = they were off (`n` consecutive non-worked days before the 1st), `"N/A"` = unknown.
+
+- **`GET /shifts/prev-month-gap?year&month`** (`shifts.ts`) — `year`/`month` are the **current** plan's; the server derives the previous month itself. Returns `{ available: boolean, values: Record<employeeId, number | null> }`. `available:false` (no previous plan, or one that never reached `closed`/`published`) and a `null` value both render as `N/A`. Gated on `shifts.counterTable.view` — the first non-display use of that key, which until now only toggled the occupancy table. Route named `/prev-month-gap`, **not** nested under `/plans/…`, for the same `/plans/:planId` capture reason as `/plans-upcoming`.
+- **Returns ~30 integers, not a plan.** Deriving this client-side would mean fetching the whole previous `PlanDetail` (roster + ~900 cell docs) to extract one number per employee.
+- **Mirrors the snapshot substitution** of `GET /plans/:planId`: a viewer without `shifts.view.all` reading a `closed` previous plan is aggregated from `shiftsSnapshot`, not live `shifts`. Without this the badge is a side channel disclosing post-close edits that viewer cannot see in the grid.
+- **"Worked" = a real shift only.** `NON_WORK_CODES = {X, R, HO}`; a cell counts when **any** segment is outside that set (so composites like `DA+2` count). This is deliberately **neither** existing convention: not `status === "assigned"` (counts R and HO) nor the grid's `hoursComputed > 6` "Směny" column (counts R). `R` is auto-filled at publication (see `planTransitions.autoFillManagerRShifts`), so counting it would change the number between a plan being closed and published.
+- **`prevMonthGap(workedDates, year, month)` and `isWorkedCell(rawInput)` are exported** from `shifts.ts` for testing. The walk starts at the last day, takes its kind (worked/not) as the run's kind, and counts back; it terminates because a `null` is returned up-front when there are zero worked days.
+- **The vedoucí rule is presentation, not data.** Management rows render **only** the negative case and are otherwise **blank** (not `N/A`) — with `R` excluded, a positive number for them would mostly measure desk time. This lives in `ShiftPlannerPage.tsx`'s `prevMonthGapFor` prop, not the endpoint, because the section that matters is the one in the **current** month's roster, which the endpoint never sees.
+- **Rendering:** `ShiftGrid.tsx` `prevMonthGapFor?: (emp) => string | null`, badge emitted in the `<td>` at `colIdx === 0` — *not* inside `ShiftCell`, which is `overflow: hidden` and already owns its top-right corner for the `typeTag` badge. `.cell` gained `position: relative` (it had none); `.prevGapBadge` sits top-left and uses `var(--color-*)` tokens, so it is theme-correct without the light/dark branch the inline `typeTag` badge carries.
+- **No cross-month logic existed to reuse.** Both the 6-in-a-row rule (`consecutiveXRun`) and the X-limit walk only the current plan's own `shifts` subcollection, so their runs silently truncate at the 1st. This is the first server-side read that spans a month boundary.
+- User-facing rule (Czech, incl. every `N/A` case): [`business-rules.md`](business-rules.md) → "Ukazatel u 1. dne měsíce".
+
 ### MOD badge + shift counts
 - `showModCounts` prop (admin/director): shows `MOD: N (X PD, Y V+S)` below vedoucí name. PD = Mon–Fri non-holiday; V+S = weekend or holiday (counted once).
 - MOD letter per manager is per-plan: stored **only** on `shiftPlans/{id}.modPersons` (letter → employeeId) — this is the single source of truth. There is no other data source and no fallback.
