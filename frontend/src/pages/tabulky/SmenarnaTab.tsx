@@ -394,13 +394,13 @@ export default function SmenarnaTab() {
       {/* ── Snapshots ────────────────────────────────────────────────────── */}
       <section className={styles.section}>
         <div className={styles.sectionHead}>
-          <h2 className={styles.h2}>Snímky</h2>
+          <h2 className={styles.h2}>Historie</h2>
           <div className={styles.snapActions}>
             <Button variant="secondary" size="sm" onClick={toggleSnapshots}>
-              {snapsOpen ? "Skrýt snímky" : "Načíst snímek"}
+              {snapsOpen ? "Skrýt historii" : "Zobrazit historii"}
             </Button>
             <Button variant="primary" size="sm" onClick={saveSnapshot} disabled={saving}>
-              {saving ? "Ukládám…" : "Uložit snímek"}
+              {saving ? "Ukládám…" : "Uložit"}
             </Button>
           </div>
         </div>
@@ -412,7 +412,7 @@ export default function SmenarnaTab() {
             {snapsLoading ? (
               <p className={styles.snapEmpty}>Načítám…</p>
             ) : snapshots.length === 0 ? (
-              <p className={styles.snapEmpty}>Zatím nejsou uložené žádné snímky.</p>
+              <p className={styles.snapEmpty}>Zatím nejsou uloženy žádné vyplněné tabulky.</p>
             ) : (
               snapshots.map((s) => (
                 <div key={s.id} className={styles.snapItem}>
