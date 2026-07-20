@@ -47,8 +47,13 @@ interface Row {
 /** Sparse per-denomination counts: zero is deleted, never stored. */
 type Counts = Record<string, number>;
 
+/** Rows the page starts with. Editable and removable like any other — these are
+ *  a starting point, not a fixed list. */
+const DEFAULT_ROW_LABELS = ["AMBI", "SUP", "A&A", "ANKORA"] as const;
+
 let rowSeq = 0;
-const newRow = (): Row => ({ id: `r${++rowSeq}`, label: "" });
+const newRow = (label = ""): Row => ({ id: `r${++rowSeq}`, label });
+const defaultRows = (): Row[] => DEFAULT_ROW_LABELS.map((l) => newRow(l));
 
 const emptyTriple = (): Triple => [0, 0, 0];
 
@@ -69,7 +74,7 @@ function czk(n: number): string {
 }
 
 export default function SmenarnaTab() {
-  const [rows, setRows] = useState<Row[]>(() => [newRow()]);
+  const [rows, setRows] = useState<Row[]>(defaultRows);
 
   // Block 1+2 — CZK note swap, per row.
   const [predkladam, setPredkladam] = useState<Record<string, Counts>>({});
