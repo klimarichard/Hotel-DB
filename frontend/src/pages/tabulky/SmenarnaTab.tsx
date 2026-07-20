@@ -208,7 +208,7 @@ export default function SmenarnaTab() {
       <section className={styles.section}>
         <div className={styles.sectionHead}>
           <h2 className={styles.h2}>Řádky</h2>
-          <Button variant="secondary" size="sm" onClick={addRow} data-tour="smenarna-add-row">
+          <Button variant="secondary" size="sm" onClick={addRow}>
             + Přidat řádek
           </Button>
         </div>
@@ -239,7 +239,7 @@ export default function SmenarnaTab() {
       </section>
 
       {/* ── Blocks 1 + 2: the CZK note swap ──────────────────────────────── */}
-      <section className={styles.section} data-tour="smenarna-swap">
+      <section className={styles.section}>
         <h2 className={styles.h2}>Výměna bankovek</h2>
         {(
           [
@@ -336,7 +336,7 @@ export default function SmenarnaTab() {
       </section>
 
       {/* ── Block 3: currency exchange ───────────────────────────────────── */}
-      <section className={styles.section} data-tour="smenarna-exchange">
+      <section className={styles.section}>
         <h2 className={styles.h2}>Směnárna</h2>
         <div className={styles.tableScroll}>
           <table className={styles.grid}>
@@ -462,7 +462,7 @@ export default function SmenarnaTab() {
       </section>
 
       {/* ── Block 4: the note mix to request ─────────────────────────────── */}
-      <section className={styles.section} data-tour="smenarna-denoms">
+      <section className={styles.section}>
         <h2 className={styles.h2}>Ideální složení</h2>
         <p className={styles.hint}>
           Každý řádek potřebuje dvě samostatné hromádky – peníze hosta a rozdíl. Řádek
