@@ -239,11 +239,33 @@ Nemít vyplněný kurz je běžné – ne v každé směně se mění všechny m
 
 > 🖥️ Jen rozhraní. Zdroj: `frontend/src/pages/tabulky/SmenarnaTab.tsx` – proměnná `missingRates`.
 
-### Výměna bankovek se kontroluje po řádcích i celkově
+### Výměna bankovek nemusí sedět sama o sobě – dorovnává ji směnárna
 
-V tabulce **Výměna bankovek** se musí částka v PŘEDKLÁDÁM rovnat částce v POŽADUJI – a to **u každého řádku zvlášť**, nejen v součtu. Tabulka Kontrola zvýrazní řádek, který nesedí; upozorní i na situaci, kdy celkový součet sedí, ale jednotlivé řádky se navzájem vyrovnávají.
+Částka v PŘEDKLÁDÁM se **nemusí** rovnat částce v POŽADUJI. Chybějící část dorovnají koruny získané ve směnárně. Ve sloupci **ze směnárny** v tabulce PŘEDKLÁDÁM se u každého řádku ukáže, kolik z POŽADUJI předložené bankovky nepokryjí.
 
-> 🖥️ Jen rozhraní. Zdroj: `frontend/src/pages/tabulky/SmenarnaTab.tsx` – proměnné `balance` a `rowsOutOfBalance`.
+Kolik ze směnárny zbude, ukazuje sloupec **zbývá ze směnárny**:
+
+> zbývá ze směnárny = CELKEM směnárna − (POŽADUJI − PŘEDKLÁDÁM)
+
+Předložíte-li naopak víc, než požadujete, přebytek se ke směnárně **přičte** (rozdíl je záporný).
+
+**Červeně se řádek označí jen tehdy, když je „zbývá ze směnárny" záporné** – tedy když ani předložené bankovky, ani peníze ze směnárny nestačí na to, co požadujete. Nerovnost sama o sobě chyba není. Kontrola probíhá u každého řádku zvlášť i za celek.
+
+**Sloupec CELKEM směnárna zůstává nedotčený** (hrubý výnos ze směnárny), aby řádek dál dával smysl: CELKEM směnárna − CELKEM u nás = ROZDÍL. Dorovnání se promítá pouze do sloupce „zbývá ze směnárny".
+
+> 🖥️ Jen rozhraní. Zdroj: `frontend/src/pages/tabulky/SmenarnaTab.tsx` – `gap`, `fromExchange`, `zbyva`, `rowsShort`. Odpovídá sloupci H původního sešitu (`=F−(POŽADUJI−PŘEDKLÁDÁM)`).
+
+### Změny nominálů: co vrátit a co si vyžádat
+
+Vedle tabulky složení je seznam **Změny nominálů** – rozdíl mezi tím, co směnárna dala, a tím, co je potřeba. **Kladné číslo** znamená vyžádat si tolik kusů navíc, **záporné** tolik kusů vrátit. Seznam je vždy nejkratší možný: obě strany jsou dané, takže rozdíl u každého nominálu je jediná možná odpověď, není co optimalizovat.
+
+> ⚙️ Automatika. Zdroj: `frontend/src/pages/tabulky/SmenarnaTab.tsx` – `denomChanges`.
+
+### Stránka Tabulky se na telefonu nezobrazuje
+
+Tabulky jsou široké a na telefonu se nedají rozumně vyplňovat, proto se položka **Tabulky** ve spodní liště mobilu **vůbec nenabízí** (stejně jako Šablony smluv). Otevřete-li adresu přímo, stránka se zobrazí, ale počítá se s prací na počítači.
+
+> 🖥️ Jen rozhraní. Zdroj: `frontend/src/lib/menuItems.ts` – `hideOnMobile: true`.
 
 ---
 

@@ -35,15 +35,9 @@
   color: var(--color-text-heading);
 }
 
-.hint,
 .hintInline {
   font-size: 0.75rem;
   color: var(--color-text-muted);
-}
-
-.hint {
-  margin: 0;
-  line-height: 1.45;
 }
 
 /* ── Row editor ───────────────────────────────────────────────────────────── */
@@ -215,6 +209,92 @@
   border-right: none;
   height: 0.5rem;
   background: transparent;
+}
+
+/* ── Block 4: denominations + the change list beside it ───────────────────── */
+
+.denomLayout {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  /* The wide table keeps its own scroll; the panel stays put beside it and
+     wraps underneath only when there is genuinely no room. */
+  flex-wrap: wrap;
+}
+
+.denomLayout > .tableScroll {
+  flex: 1 1 32rem;
+  min-width: 0;
+}
+
+.changesPanel {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.changesTable {
+  border-collapse: collapse;
+  font-size: 0.75rem;
+}
+
+.changesTable th,
+.changesTable td {
+  border: 1px solid var(--color-border);
+  padding: 2px 8px;
+  text-align: center;
+}
+
+.changesTable thead th {
+  background: var(--color-surface-3);
+  color: var(--color-text-heading);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.changesDenom {
+  background: var(--color-surface-2);
+  font-weight: 600;
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.changePlus,
+.changeMinus {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  min-width: 3rem;
+}
+
+.changePlus {
+  color: var(--color-success-text, #166534);
+}
+
+.changeMinus {
+  color: var(--color-danger-text);
+}
+
+.changesEmpty {
+  color: var(--color-text-muted);
+  font-weight: 400;
+  white-space: nowrap;
+  padding: 6px 8px !important;
+}
+
+.changesHint {
+  margin: 0;
+  font-size: 0.6875rem;
+  color: var(--color-text-muted);
+  max-width: 11rem;
+  line-height: 1.35;
+}
+
+.badCell {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  background: var(--color-danger-bg);
+  color: var(--color-danger-text);
 }
 
 .badRow td,

@@ -14,11 +14,18 @@ import styles from "./SmenarnaTab.module.css";
  * edit can never affect it.
  *
  * Four blocks:
- *   1+2. PŘEDKLÁDÁM / POŽADUJI — a CZK note swap. The two must balance, per row
- *        and in total; the check is net-new (the Excel had none).
- *   3.   SMĚNÁRNA — foreign currency at two rates, and the margin between them.
+ *   1+2. PŘEDKLÁDÁM / POŽADUJI — a CZK note swap. It need NOT balance on its
+ *        own: a shortfall is funded from the CZK the exchange office hands
+ *        over. Only a row the exchange money cannot cover is an error.
+ *   3.   SMĚNÁRNA — foreign currency at two rates, the margin between them, and
+ *        "zbývá ze směnárny" = CELKEM směnárna − (POŽADUJI − PŘEDKLÁDÁM). That
+ *        last one is the original spreadsheet's H column, restored verbatim; it
+ *        is what drives the red state, and it is negative exactly when the swap
+ *        cannot be funded. CELKEM směnárna stays RAW so the row still
+ *        reconciles: směnárna − u nás = rozdíl.
  *   4.   Denomination breakdown — the note mix to request from the exchange
- *        office so every pile can be formed physically.
+ *        office so every pile can be formed physically, plus the note-by-note
+ *        changes needed to get from what they gave to what is needed.
  */
 
 /** rates[0..2] are € / $ / £ BY POSITION — settings/sm stores no currency names
@@ -127,33 +134,51 @@ export default function SmenarnaTab() {
       rows.map((row, i) => {
         const give = denomTotal(predkladam[row.id] ?? {});
         const want = denomTotal(pozaduji[row.id] ?? {});
-        return { id: row.id, label: rowLabel(row, i), give, want, diff: give - want };
+        const amt = amounts[row.id] ?? emptyTriple();
+        const smenarna = amt.reduce((s, a, k) => s + a * cnbRates[k], 0);
+        const uNas = amt.reduce((s, a, k) => s + a * ourRates[k], 0);
+        // The note swap need not balance on its own: a shortfall is topped up
+        // from the CZK the exchange office hands over. `gap` > 0 means POŽADUJI
+        // exceeds PŘEDKLÁDÁM and that much must come from the exchange; `gap` < 0
+        // means surplus notes were presented, which ADDS to what remains.
+        const gap = want - give;
+        return {
+          id: row.id,
+          label: rowLabel(row, i),
+          give,
+          want,
+          gap,
+          /** Shown in the PŘEDKLÁDÁM table: how much of POŽADUJI the swap itself
+           *  cannot cover. Zero when the row balances or has surplus. */
+          fromExchange: Math.max(0, gap),
+          amt,
+          smenarna,
+          uNas,
+          rozdil: smenarna - uNas,
+          /** Excel's H column: CELKEM směnárna − (POŽADUJI − PŘEDKLÁDÁM).
+           *  Negative means the exchange money cannot cover the shortfall —
+           *  that, and only that, is the red case. */
+          zbyva: smenarna - gap,
+        };
       }),
-    [rows, predkladam, pozaduji]
+    [rows, predkladam, pozaduji, amounts, ourRates, cnbRates]
   );
   const giveTotal = balance.reduce((s, b) => s + b.give, 0);
   const wantTotal = balance.reduce((s, b) => s + b.want, 0);
   const swapTouched = giveTotal > 0 || wantTotal > 0;
-  const rowsOutOfBalance = balance.filter((b) => b.diff !== 0 && (b.give > 0 || b.want > 0));
+  /** Rows where even the exchange money leaves POŽADUJI unfunded. */
+  const rowsShort = balance.filter((b) => b.zbyva < 0 && (b.give > 0 || b.want > 0));
 
   // ── Block 3 — per-row exchange totals ─────────────────────────────────────
-  const exchange = useMemo(
-    () =>
-      rows.map((row, i) => {
-        const amt = amounts[row.id] ?? emptyTriple();
-        const smenarna = amt.reduce((s, a, k) => s + a * cnbRates[k], 0);
-        const uNas = amt.reduce((s, a, k) => s + a * ourRates[k], 0);
-        return { id: row.id, label: rowLabel(row, i), amt, smenarna, uNas, rozdil: smenarna - uNas };
-      }),
-    [rows, amounts, ourRates, cnbRates]
-  );
+  const exchange = balance;
   const exTotals = exchange.reduce(
     (acc, e) => ({
       smenarna: acc.smenarna + e.smenarna,
       uNas: acc.uNas + e.uNas,
       rozdil: acc.rozdil + e.rozdil,
+      zbyva: acc.zbyva + e.zbyva,
     }),
-    { smenarna: 0, uNas: 0, rozdil: 0 }
+    { smenarna: 0, uNas: 0, rozdil: 0, zbyva: 0 }
   );
 
   // A blank rate is normal — not every run has every currency. It is only a
@@ -188,6 +213,18 @@ export default function SmenarnaTab() {
     [piles, pool5000]
   );
   const needCounts = useMemo(() => sumCounts(decomposed), [decomposed]);
+  // Note-by-note changes to get from what the exchange office gave to what the
+  // piles need. Both sides are fixed multisets, so the per-denomination delta IS
+  // the minimal description — there is nothing to optimise. Positive = ask for
+  // that many more, negative = hand that many back.
+  const denomChanges = useMemo(
+    () =>
+      CZK_DENOMS.map((d) => ({
+        denom: d,
+        delta: (needCounts[d] ?? 0) - (smenarnaCounts[d] ?? 0),
+      })).filter((c) => c.delta !== 0),
+    [needCounts, smenarnaCounts]
+  );
   const needTotal = denomTotal(needCounts);
   const gotTotal = denomTotal(smenarnaCounts);
   // Only a SHORTFALL matters: a per-denomination mismatch is absorbed by breaking
@@ -243,8 +280,8 @@ export default function SmenarnaTab() {
         <h2 className={styles.h2}>Výměna bankovek</h2>
         {(
           [
-            { title: "PŘEDKLÁDÁM", state: predkladam, set: setPredkladam },
-            { title: "POŽADUJI", state: pozaduji, set: setPozaduji },
+            { title: "PŘEDKLÁDÁM", state: predkladam, set: setPredkladam, showFromExchange: true },
+            { title: "POŽADUJI", state: pozaduji, set: setPozaduji, showFromExchange: false },
           ] as const
         ).map((block) => (
           <div key={block.title} className={styles.tableScroll}>
@@ -256,6 +293,11 @@ export default function SmenarnaTab() {
                     <th key={d}>{d}</th>
                   ))}
                   <th className={styles.totalHead}>CELKEM</th>
+                  {block.showFromExchange && (
+                    <th className={styles.totalHead} title="Kolik z POŽADUJI nepokryjí předložené bankovky a musí přijít ze směnárny">
+                      ze směnárny
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -283,6 +325,11 @@ export default function SmenarnaTab() {
                         </td>
                       ))}
                       <td className={styles.totalCell}>{czk(denomTotal(counts))}</td>
+                      {block.showFromExchange && (
+                        <td className={styles.totalCell}>
+                          {balance[i].fromExchange > 0 ? czk(balance[i].fromExchange) : ""}
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
@@ -291,7 +338,9 @@ export default function SmenarnaTab() {
           </div>
         ))}
 
-        {/* Balance check – per row AND in total. */}
+        {/* Balance check – per row AND in total. A row need NOT balance on its
+            own: the shortfall is funded from the exchange money. Only a row the
+            exchange cannot cover (zbývá < 0) is an error. */}
         <div className={styles.tableScroll}>
           <table className={styles.checkTable}>
             <thead>
@@ -299,38 +348,38 @@ export default function SmenarnaTab() {
                 <th className={styles.rowHead}>Kontrola</th>
                 <th>Předkládám</th>
                 <th>Požaduji</th>
-                <th>Rozdíl</th>
+                <th>Ze směnárny</th>
+                <th>Zbývá ze směnárny</th>
               </tr>
             </thead>
             <tbody>
               {balance.map((b) => (
-                <tr key={b.id} className={b.diff !== 0 ? styles.badRow : undefined}>
+                <tr key={b.id} className={b.zbyva < 0 ? styles.badRow : undefined}>
                   <th className={styles.rowHead}>{b.label}</th>
                   <td>{czk(b.give)}</td>
                   <td>{czk(b.want)}</td>
-                  <td>{b.diff === 0 ? "0" : czk(b.diff)}</td>
+                  <td>{b.fromExchange > 0 ? czk(b.fromExchange) : "0"}</td>
+                  <td>{czk(b.zbyva)}</td>
                 </tr>
               ))}
-              <tr className={giveTotal !== wantTotal ? styles.badRow : styles.totalRow}>
+              <tr className={exTotals.zbyva < 0 ? styles.badRow : styles.totalRow}>
                 <th className={styles.rowHead}>CELKEM</th>
                 <td>{czk(giveTotal)}</td>
                 <td>{czk(wantTotal)}</td>
-                <td>{giveTotal === wantTotal ? "0" : czk(giveTotal - wantTotal)}</td>
+                <td>{czk(balance.reduce((s, b) => s + b.fromExchange, 0))}</td>
+                <td>{czk(exTotals.zbyva)}</td>
               </tr>
             </tbody>
           </table>
         </div>
 
-        {swapTouched && giveTotal !== wantTotal && (
+        {swapTouched && rowsShort.length > 0 && (
           <p className={styles.warn}>
-            Součty se neshodují – předkládáte {czk(giveTotal)} Kč, ale požadujete{" "}
-            {czk(wantTotal)} Kč (rozdíl {czk(Math.abs(giveTotal - wantTotal))} Kč).
-          </p>
-        )}
-        {swapTouched && giveTotal === wantTotal && rowsOutOfBalance.length > 0 && (
-          <p className={styles.warn}>
-            Celkem sedí, ale jednotlivé řádky ne:{" "}
-            {rowsOutOfBalance.map((b) => `${b.label} (${czk(b.diff)} Kč)`).join(", ")}.
+            Nedostatek peněz:{" "}
+            {rowsShort
+              .map((b) => `${b.label} (chybí ${czk(Math.abs(b.zbyva))} Kč)`)
+              .join(", ")}
+            . Předložené bankovky ani peníze ze směnárny nestačí na to, co požadujete.
           </p>
         )}
       </section>
@@ -351,6 +400,9 @@ export default function SmenarnaTab() {
                 <th className={styles.totalHead}>CELKEM směnárna</th>
                 <th className={styles.totalHead}>CELKEM u nás</th>
                 <th className={styles.totalHead}>ROZDÍL</th>
+                <th className={styles.totalHead} title="CELKEM směnárna minus to, co ze směnárny pokrývá výměnu bankovek">
+                  zbývá ze směnárny
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -378,7 +430,7 @@ export default function SmenarnaTab() {
                     />
                   </td>
                 ))}
-                <td colSpan={3} className={styles.mutedCell}>
+                <td colSpan={4} className={styles.mutedCell}>
                   předvyplněno z Recepce, lze přepsat
                 </td>
               </tr>
@@ -403,12 +455,12 @@ export default function SmenarnaTab() {
                     />
                   </td>
                 ))}
-                <td colSpan={3} className={styles.mutedCell}>
+                <td colSpan={4} className={styles.mutedCell}>
                   zadejte ručně
                 </td>
               </tr>
               <tr className={styles.spacerRow}>
-                <td colSpan={7} />
+                <td colSpan={8} />
               </tr>
               {exchange.map((e, i) => (
                 <tr key={e.id}>
@@ -435,6 +487,7 @@ export default function SmenarnaTab() {
                   <td className={styles.totalCell}>{czk(e.smenarna)}</td>
                   <td className={styles.totalCell}>{czk(e.uNas)}</td>
                   <td className={styles.totalCell}>{czk(e.rozdil)}</td>
+                  <td className={e.zbyva < 0 ? styles.badCell : styles.totalCell}>{czk(e.zbyva)}</td>
                 </tr>
               ))}
               <tr className={styles.totalRow}>
@@ -443,6 +496,7 @@ export default function SmenarnaTab() {
                 <td className={styles.totalCell}>{czk(exTotals.smenarna)}</td>
                 <td className={styles.totalCell}>{czk(exTotals.uNas)}</td>
                 <td className={styles.totalCell}>{czk(exTotals.rozdil)}</td>
+                <td className={exTotals.zbyva < 0 ? styles.badCell : styles.totalCell}>{czk(exTotals.zbyva)}</td>
               </tr>
             </tbody>
           </table>
@@ -464,11 +518,7 @@ export default function SmenarnaTab() {
       {/* ── Block 4: the note mix to request ─────────────────────────────── */}
       <section className={styles.section}>
         <h2 className={styles.h2}>Ideální složení</h2>
-        <p className={styles.hint}>
-          Každý řádek potřebuje dvě samostatné hromádky – peníze hosta a rozdíl. Řádek
-          <strong> potřebuji</strong> je složení, které si vyžádáte ve směnárně. Bankovky 5000
-          se použijí jen do počtu, který zadáte v řádku <strong>směnárna</strong>.
-        </p>
+        <div className={styles.denomLayout}>
         <div className={styles.tableScroll}>
           <table className={styles.grid}>
             <thead>
@@ -528,6 +578,41 @@ export default function SmenarnaTab() {
               ))}
             </tbody>
           </table>
+        </div>
+
+        {/* Note-by-note changes from what they gave to what the piles need. */}
+        <div className={styles.changesPanel}>
+          <table className={styles.changesTable}>
+            <thead>
+              <tr>
+                <th colSpan={2}>Změny nominálů</th>
+              </tr>
+            </thead>
+            <tbody>
+              {denomChanges.length === 0 ? (
+                <tr>
+                  <td colSpan={2} className={styles.changesEmpty}>
+                    {gotTotal === 0 ? "Zadejte řádek směnárna" : "Složení sedí"}
+                  </td>
+                </tr>
+              ) : (
+                denomChanges.map((c) => (
+                  <tr key={c.denom}>
+                    <th className={styles.changesDenom}>{c.denom}</th>
+                    <td className={c.delta > 0 ? styles.changePlus : styles.changeMinus}>
+                      {c.delta > 0 ? `+${c.delta}` : c.delta}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+          {denomChanges.length > 0 && (
+            <p className={styles.changesHint}>
+              Kladné = vyžádat navíc, záporné = vrátit.
+            </p>
+          )}
+        </div>
         </div>
 
         {shortfall > 0 && (
