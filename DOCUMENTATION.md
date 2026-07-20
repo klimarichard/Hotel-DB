@@ -2,7 +2,7 @@
 
 Master index of the developer / implementation documentation for the **HPM Intranet** (formerly "Hotel HR App") — a cloud HR platform for Special Tours Prague (STP) / Hotel Property Management (HPM).
 
-Looking for how to *use* the app? See the per-role Czech user manuals in **[`manuals/`](manuals/)** (also linked from the [README](README.md)).
+Looking for how to *use* the app? User-facing documentation lives in the app itself — the **Nápověda** page (`/napoveda`), which renders one topic per permission from the guided tour. The cross-cutting behavioural rules are in **[`docs/business-rules.md`](docs/business-rules.md)**, and the Czech Recepce / Návody / Průvodce chapters are in the [README](README.md). The per-role `manuals/` directory was retired 2026-07-20; do not re-create it.
 
 ## Technology stack
 
