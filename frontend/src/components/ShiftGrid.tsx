@@ -44,11 +44,31 @@ interface Props {
   onClaimFreeShift?: (date: string, code: string, hotel: string) => void;
   /** Admin/director toggles whether a day has a DPA free row. */
   onToggleDpaDay?: (date: string, enabled: boolean) => void;
+  /** Badge over the 1st-of-month cell: how the employee's PREVIOUS month ended.
+   *  Negative = worked into the month end, positive = free days before it,
+   *  "N/A" = unknown. Return null to render nothing (management rows, and every
+   *  row when the plan is not closed). See prevMonthGapFor in ShiftPlannerPage. */
+  prevMonthGapFor?: (emp: PlanEmployee) => string | null;
   alwaysReadOnlySections?: string[];
   currentEmployeeId?: string | null;
   /** Reports whether the grid's internal scroll is at the top. Used on mobile to
    *  collapse the page chrome (month nav + plan bar) for a full-screen grid. */
   onAtTopChange?: (atTop: boolean) => void;
+}
+
+/** Czech day count: 1 den, 2–4 dny, 5+ dní. */
+function czDays(n: number): string {
+  if (n === 1) return "1 den";
+  if (n >= 2 && n <= 4) return `${n} dny`;
+  return `${n} dní`;
+}
+
+/** Tooltip for the previous-month gap badge. */
+function prevGapTitle(value: string): string {
+  if (value === "N/A") return "nelze určit";
+  const n = Number(value);
+  if (n < 0) return `odpracováno ${czDays(-n)} v řadě do konce měsíce`;
+  return `${czDays(n)} bez směny před 1. dnem měsíce`;
 }
 
 // Volné směny rows. DPQ/NPQ/NPA are standing daily requirements (auto:true);
@@ -112,6 +132,7 @@ export default function ShiftGrid({
   freeShiftDpaDays,
   onClaimFreeShift,
   onToggleDpaDay,
+  prevMonthGapFor,
   alwaysReadOnlySections = [],
   currentEmployeeId,
   onAtTopChange,
@@ -558,11 +579,24 @@ export default function ShiftGrid({
                         focusedCell !== null &&
                         focusedCell.row === rowIdx &&
                         focusedCell.col === colIdx;
+                      // Previous-month gap badge, 1st column only. Rendered in the
+                      // <td> rather than inside ShiftCell: ShiftCell is
+                      // overflow:hidden and already owns its top-right corner for
+                      // the typeTag badge.
+                      const prevGap = colIdx === 0 && prevMonthGapFor ? prevMonthGapFor(emp) : null;
                       return (
                         <td
                           key={dateStr}
                           className={`${styles.cell} ${dayClass(d)}`}
                         >
+                          {prevGap !== null && (
+                            <span
+                              className={styles.prevGapBadge}
+                              title={`Předchozí měsíc: ${prevGapTitle(prevGap)}`}
+                            >
+                              {prevGap}
+                            </span>
+                          )}
                           <ShiftCell
                             rawInput={shiftDoc?.rawInput ?? ""}
                             hoursComputed={shiftDoc?.hoursComputed ?? 0}

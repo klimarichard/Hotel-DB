@@ -453,6 +453,134 @@ shiftsRouter.get(
   }
 );
 
+// ─── Previous-month gap (badge on the 1st column of a closed plan) ───────────
+//
+// For each employee in the PREVIOUS month's plan, how their month ended:
+//   negative  →  they were working into the month end; |n| = consecutive worked
+//                days counted back from the last day (so -2 = worked the last 2)
+//   positive  →  they were off at the month end; n = consecutive non-worked days
+//                counted back from the last day (so 2 = last 2 days free)
+//   null      →  N/A: absent from that plan, or worked no real shift all month
+//
+// "Worked" means a REAL shift only — X (own free day AND auto-applied vacation),
+// R (manager admin day) and HO (home office) are all non-work here. That is
+// deliberately NOT the `status === "assigned"` classification (which counts R and
+// HO) nor the grid's `hoursComputed > 6` convention (which counts R): this badge
+// answers "were they physically on shift", and R in particular is auto-filled at
+// publication, so counting it would make the number change under the reader.
+//
+// The vedoucí-only rule (positive numbers are never shown for management) is a
+// PRESENTATION rule and lives in the frontend — the section that matters is the
+// one in the CURRENT month's roster, which this endpoint does not see.
+//
+// Path is "/prev-month-gap", deliberately not nested under "/plans/…", which
+// "/plans/:planId" would capture depending on route order (same reason as
+// "/plans-upcoming" above).
+const NON_WORK_CODES = new Set(["X", "R", "HO"]);
+
+/** A cell counts as worked when at least one segment is a real shift. */
+export function isWorkedCell(rawInput: string): boolean {
+  const parsed = parseShiftExpression(rawInput ?? "");
+  if (!parsed.isValid || parsed.segments.length === 0) return false;
+  return parsed.segments.some((s) => !NON_WORK_CODES.has(s.code));
+}
+
+/**
+ * The gap number for one employee. `workedDates` holds the YYYY-MM-DD of every
+ * day they were on a real shift that month. Exported for tests.
+ */
+export function prevMonthGap(
+  workedDates: Set<string>,
+  year: number,
+  month: number
+): number | null {
+  if (workedDates.size === 0) return null;
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const dateAt = (day: number): string =>
+    `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  // Walk back from the last day over one uniform run. The run's kind is decided
+  // by the last day itself; it always terminates because there is a worked day.
+  const endedWorking = workedDates.has(dateAt(daysInMonth));
+  let run = 0;
+  for (let day = daysInMonth; day >= 1; day--) {
+    if (workedDates.has(dateAt(day)) !== endedWorking) break;
+    run++;
+  }
+  return endedWorking ? -run : run;
+}
+
+shiftsRouter.get(
+  "/prev-month-gap",
+  requireAuth,
+  requirePermission("shifts.counterTable.view"),
+  async (req: AuthRequest, res) => {
+    const year = Number(req.query.year);
+    const month = Number(req.query.month);
+    if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) {
+      res.status(400).json({ error: "year a month jsou povinné (month 1–12)." });
+      return;
+    }
+
+    const prevYear = month === 1 ? year - 1 : year;
+    const prevMonth = month === 1 ? 12 : month - 1;
+
+    const planSnap = await db()
+      .collection("shiftPlans")
+      .where("year", "==", prevYear)
+      .where("month", "==", prevMonth)
+      .limit(1)
+      .get();
+
+    // No previous plan, or one that never reached closed → the badge has nothing
+    // trustworthy to say. `created`/`opened` plans are still being edited.
+    if (planSnap.empty) {
+      res.json({ available: false, values: {} });
+      return;
+    }
+    const planDoc = planSnap.docs[0];
+    const planData = planDoc.data();
+    if (planData.status !== "closed" && planData.status !== "published") {
+      res.json({ available: false, values: {} });
+      return;
+    }
+
+    const planRef = planDoc.ref;
+    const [employeesSnap, shiftsSnap] = await Promise.all([
+      planRef.collection("planEmployees").get(),
+      planRef.collection("shifts").get(),
+    ]);
+
+    // Mirror GET /plans/:planId — a self-service viewer reads a closed plan's
+    // frozen snapshot, never the live cells. Without this the badge would be a
+    // side channel disclosing post-close edits they cannot see in the grid.
+    const seesAllPlans = req.permissions?.has("shifts.view.all") ?? false;
+    let cellDocs = shiftsSnap.docs;
+    if (planData.status === "closed" && !seesAllPlans) {
+      cellDocs = (await planRef.collection("shiftsSnapshot").get()).docs;
+    }
+
+    const worked = new Map<string, Set<string>>();
+    for (const d of cellDocs) {
+      const cell = d.data() as { employeeId?: string; date?: string; rawInput?: string };
+      if (!cell.employeeId || !cell.date) continue;
+      if (!isWorkedCell(cell.rawInput ?? "")) continue;
+      let set = worked.get(cell.employeeId);
+      if (!set) worked.set(cell.employeeId, (set = new Set<string>()));
+      set.add(cell.date);
+    }
+
+    const values: Record<string, number | null> = {};
+    for (const d of employeesSnap.docs) {
+      const employeeId = (d.data() as { employeeId?: string }).employeeId;
+      if (!employeeId) continue;
+      // Absent from `worked` = in the plan but never actually on shift → N/A.
+      values[employeeId] = prevMonthGap(worked.get(employeeId) ?? new Set(), prevYear, prevMonth);
+    }
+
+    res.json({ available: true, values });
+  }
+);
+
 // POST /shifts/plans — create a plan
 shiftsRouter.post(
   "/plans",

@@ -110,6 +110,24 @@ Při přechodu plánu do stavu **Publikovaný** aplikace sama doplní kód **R**
 
 > ⚙️ Automatika, 🔒 Server. Zdroj: `functions/src/services/planTransitions.ts:84-146`, volané z `:212`; sekce `:90-97`, obsazenost `:100-106`, dny v týdnu `:113`, svátky `:109,116`.
 
+### Ukazatel u 1. dne měsíce: jak zaměstnanci skončil předchozí měsíc
+
+V plánu ve stavu **Uzavřený** se u prvního dne měsíce zobrazuje u každého řádku malé číslo. Popisuje, jak dotyčnému skončil **předchozí** měsíc:
+
+- **záporné číslo** – do konce měsíce sloužil; číslo udává, kolik dní v řadě odsloužil (**−2** = sloužil poslední dva dny měsíce),
+- **kladné číslo** – na konci měsíce nesloužil; číslo udává, kolik dní v řadě před 1. dnem neměl směnu (**2** = poslední dva dny měl volno),
+- **N/A** – nelze určit.
+
+Za odslouženou se počítá **jen skutečná směna** – recepce, portýři, zaučení, nebo ručně zadaný počet hodin. **X** (vlastní volno i dovolená), **R** (den vedoucího) a **HO** (home office) se za službu **nepovažují**. U „R" je to podstatné: doplňuje se automaticky až při publikaci plánu (viz pravidlo výše), takže kdyby se počítalo, číslo by se změnilo samo od sebe mezi uzavřením a publikací.
+
+**N/A** znamená, že plán předchozího měsíce neexistuje nebo se nikdy nedostal do stavu Uzavřený, že zaměstnanec v tomto plánu vůbec nebyl (typicky nový nástup), nebo že za celý měsíc neodsloužil ani jednu skutečnou směnu.
+
+U sekce **Vedoucí** se číslo zobrazuje **pouze** v záporném případě, tedy jen když do konce měsíce skutečně sloužili. Ve všech ostatních případech zůstává pole **prázdné** – ne N/A. Kladný údaj by u nich měřil hlavně dny strávené na „R", což o odpočinku nevypovídá.
+
+Ukazatel je pouze informativní: nic neblokuje, do ničeho se nepočítá a v jiných stavech plánu se nezobrazuje vůbec. Vyžaduje oprávnění **Zobrazit tabulku obsazenosti**.
+
+> ⚙️ Automatika (počítá server). Zdroj: `functions/src/routes/shifts.ts:513` (endpoint `GET /shifts/prev-month-gap`), výpočet `prevMonthGap()` na `:492`, definice „skutečné směny" `:479-482`; pravidlo pro Vedoucí `frontend/src/pages/ShiftPlannerPage.tsx:1861`, stav plánu `:385`.
+
 ---
 
 ## Dovolená

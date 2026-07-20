@@ -220,6 +220,26 @@
   border-bottom: 1px solid var(--color-border);
   border-right: 1px solid var(--color-border);
   vertical-align: middle;
+  /* Positioning context for .prevGapBadge. ShiftCell cannot host it: it is
+     overflow:hidden and its top-right corner belongs to the typeTag badge. */
+  position: relative;
+}
+
+/* Previous-month gap badge – 1st-of-month column, closed plans only. Sits in the
+   top-left corner so it never collides with ShiftCell's top-right typeTag. */
+.prevGapBadge {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  font-size: 0.5rem;
+  font-weight: 700;
+  line-height: 1;
+  padding: 1px 2px 1px 1px;
+  pointer-events: none;
+  border-bottom-right-radius: 3px;
+  color: var(--color-text-secondary);
+  background: var(--color-surface);
 }
 
 .totalCell {
