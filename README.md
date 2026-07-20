@@ -99,7 +99,7 @@ Předávací protokol eviduje hotovost, účty a poznámky pro jednu konkrétní
 - Uživatelé s oprávněním **Spravovat protokol** mohou řádek navíc **uzamknout** ikonou zámku — uzamčený řádek pak nejde upravit ani smazat nikým jiným, dokud jej stejný uživatel znovu neodemkne.
 - **Uzamčené účty se řadí nad všechny nezamčené** (pod třemi speciálními řádky) a oddělují se od nich vodorovnou čárou, aby byly dobře vidět.
 - Nad běžnými účty jsou natrvalo tři speciální řádky:
-  - **sm** — hodnota se počítá automaticky z počtu kusů zadaných po kliknutí na řádek; sazby nastavují uživatelé s oprávněním **Spravovat sm**.
+  - **sm** — hodnota se počítá automaticky z počtu kusů zadaných po kliknutí na řádek; sazby nastavují uživatelé s oprávněním **Spravovat sm**. Na tento řádek lze kliknout **i u podepsaného protokolu** — okno se pak otevře jen ke čtení, aby si nastupující směna mohla zadané počty zkontrolovat (viz „Předání směny" níže).
   - **sm trezor** — částka převedená z „sm" do trezoru; vynulovat ji (po fyzickém odvedení hotovosti) mohou uživatelé s oprávněním **Spravovat sm**. Ostatním se řádek zobrazí, jen má-li nenulovou hodnotu.
   - **wata** — ruční přičtení nebo odečtení částky; upravují jej uživatelé s oprávněním **Spravovat protokol**. Ostatním se řádek zobrazí, jen má-li nenulovou hodnotu.
 - Řádek **CELKEM** na konci sečte všechny účty včetně sm, sm trezor a wata.
@@ -116,6 +116,7 @@ Předávací protokol eviduje hotovost, účty a poznámky pro jednu konkrétní
 - Jakmile je protokol vyplněný, směnu **předáte** podpisem: klikněte na **Předat** u pole *Předal*, v okně vyberte své **jméno** a zadejte **heslo** — tím potvrdíte, že podpis provádíte skutečně vy. Po potvrzení se u pole *Předal* zobrazí vaše jméno a čas podpisu.
 - Kolega přebírající směnu obdobně klikne na **Převzít** u pole *Převzal* a potvrdí svým jménem a heslem.
 - **Jakmile je protokol podepsaný alespoň jednou stranou** (Předal nebo Převzal), **obsah se uzamkne** a dál jej nelze upravovat — výjimkou je administrátor. Krok **Zpět/Vpřed** (viz níže) je po podpisu zamčený pro úplně všechny, administrátora nevyjímaje.
+- Řádek **sm** zůstává klikatelný i po podpisu — okno se otevře **pouze ke čtení** (počty i sazby jsou vidět, ale nelze je změnit) a zavře se tlačítkem **Zavřít**. Nastupující směna si tak může ověřit, z čeho se výsledná částka „sm" počítá. Řádky **sm trezor** a **wata** po podpisu klikatelné nejsou — jejich částka je celá vidět přímo v tabulce.
 - Podpis lze odebrat kliknutím na ikonu koše u jména — smí to udělat sám podepsaný, nebo uživatel s oprávněním **Spravovat protokol**/administrátor. Podpis *Předal* lze odebrat, jen dokud není podepsáno *Převzal*.
 
 > ⚠️ Po podpisu obsah protokolu (hotovost, účty, poznámky) neupravujte, nejste-li administrátor — podepsaná verze má zůstat finální záznam o směně.
