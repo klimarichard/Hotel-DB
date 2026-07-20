@@ -259,6 +259,20 @@ content PUT:
    themselves are `recepce.sm.manage`-only (`PUT /handovers/sm/rates`).
    `GET /handovers/sm/rates` is open to anyone who can see Recepce
    (`nav.recepce.view`) since the row's CZK value needs it to render.
+
+   **Post-signature read access (v4.12.3).** Unlike the other two rows, the sm
+   label's clickability is gated on `!!loaded` alone, *not* on `canEdit`. The row
+   renders only the dot product; the counts and rates that produce it exist
+   nowhere else in the UI, so gating the button on the freeze blocked the
+   incoming shift from *reading* how the total was reached — not just from
+   writing. The freeze moved inside `SmModal` as a `readOnly` prop (`!canEdit`):
+   count inputs stay disabled, rate badges fall through to their static `<span>`
+   branch, the `recepce.sm.manage` transfer panel is hidden outright (a pure
+   mutation with nothing to read), and the footer collapses to a single "Zavřít".
+   `readOnly` is folded into `ratesChanged` at its definition, so a read-only
+   render can never produce a truthy `ratesChanged` and smuggle a global-rates
+   PUT through. Admins keep full edit access (`canEdit` retains its admin
+   override, so `readOnly` is false for them).
 2. **`sm trezor`** — an accumulated scalar. `POST /:hotel/:id/sm-transfer`
    (body `{ transfer: [t1,t2,t3] }`, `recepce.sm.manage`) MOVEs: subtracts the
    (clamped-to-available) transfer amounts from `smCounts`, adds their CZK dot

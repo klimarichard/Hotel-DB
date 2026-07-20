@@ -27,6 +27,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "4.12.3",
+    date: "2026-07-20",
+    changes: [
+      "Recepce: Kontrola hodnot „sm“ je možná i v podepsaném protokolu.",
+    ],
+  },
+  {
     version: "4.12.2",
     date: "2026-07-17",
     changes: [
