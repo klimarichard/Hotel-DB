@@ -1,0 +1,236 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+}
+
+.intro {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 0.6rem 0.8rem;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.sectionHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.h2 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--color-text-heading);
+}
+
+.hint,
+.hintInline {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.hint {
+  margin: 0;
+  line-height: 1.45;
+}
+
+/* ── Row editor ───────────────────────────────────────────────────────────── */
+
+.rowList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.rowItem {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.rowInput {
+  width: 10rem;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.8125rem;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.rowRemove {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 0.75rem;
+  line-height: 1;
+  padding: 0.3rem;
+  color: var(--color-text-muted);
+  border-radius: 4px;
+}
+
+.rowRemove:hover {
+  color: var(--color-danger);
+  background: var(--color-surface-3);
+}
+
+/* ── Tables ───────────────────────────────────────────────────────────────── */
+
+/* Wide tables scroll inside their own container so the page never scrolls
+   horizontally. */
+.tableScroll {
+  overflow-x: auto;
+}
+
+.grid,
+.checkTable {
+  border-collapse: collapse;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.grid th,
+.grid td,
+.checkTable th,
+.checkTable td {
+  border: 1px solid var(--color-border);
+  padding: 2px 4px;
+  text-align: center;
+}
+
+.grid thead th,
+.checkTable thead th {
+  background: var(--color-surface-3);
+  font-weight: 700;
+  color: var(--color-text-heading);
+}
+
+.rowHead,
+.rowHeadSmall {
+  text-align: left !important;
+  font-weight: 600;
+  background: var(--color-surface-2);
+  color: var(--color-text-heading);
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  min-width: 8rem;
+}
+
+.rowHeadSmall {
+  font-weight: 500;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: baseline;
+}
+
+.pileAmount {
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
+  font-weight: 600;
+}
+
+.totalHead {
+  min-width: 6rem;
+}
+
+.cellInput {
+  width: 3.1rem;
+  padding: 2px;
+  font-size: 0.75rem;
+  text-align: center;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.cellInput:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  background: var(--color-surface);
+}
+
+/* Hide the number spinners – they steal width in a 3rem cell. */
+.cellInput::-webkit-outer-spin-button,
+.cellInput::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.cellInput[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.totalCell,
+.derivedCell {
+  font-variant-numeric: tabular-nums;
+}
+
+.totalCell {
+  font-weight: 700;
+  background: var(--color-surface-2);
+}
+
+.derivedCell {
+  color: var(--color-text-secondary);
+}
+
+.mutedCell {
+  font-size: 0.6875rem;
+  color: var(--color-text-muted);
+  text-align: left !important;
+  font-style: italic;
+}
+
+.curCode {
+  font-weight: 500;
+  color: var(--color-text-muted);
+  font-size: 0.6875rem;
+}
+
+.totalRow td,
+.totalRow th {
+  background: var(--color-surface-3);
+  font-weight: 700;
+}
+
+.spacerRow td {
+  border-left: none;
+  border-right: none;
+  height: 0.5rem;
+  background: transparent;
+}
+
+.badRow td,
+.badRow th {
+  background: var(--color-danger-bg);
+  color: var(--color-danger-text);
+  font-weight: 700;
+}
+
+.warn {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-danger-text);
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger-border);
+  border-radius: 6px;
+  padding: 0.5rem 0.7rem;
+}

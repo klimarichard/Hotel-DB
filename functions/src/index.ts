@@ -40,6 +40,7 @@ import { taxiRouter } from "./routes/taxi";
 import { lobbyBarRouter } from "./routes/lobbyBar";
 import { guidesRouter } from "./routes/guides";
 import { terminalRouter } from "./routes/terminal";
+import { exchangeRouter } from "./routes/exchange";
 import * as clock from "./services/clock";
 import { requireAuth, AuthRequest } from "./middleware/auth";
 import { requirePermission } from "./auth/permissions";
@@ -136,6 +137,7 @@ app.use("/taxi", taxiRouter);
 app.use("/lobby-bar", lobbyBarRouter);
 app.use("/guides", guidesRouter);
 app.use("/terminal", terminalRouter);
+app.use("/exchange", exchangeRouter);
 
 // Health check
 app.get("/health", (_req, res) => {

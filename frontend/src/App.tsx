@@ -16,6 +16,7 @@ import ContractTemplatesPage from "@/pages/ContractTemplatesPage";
 import ShiftPlannerPage from "@/pages/ShiftPlannerPage";
 import VacationPage from "@/pages/VacationPage";
 import RecepcePage from "@/pages/RecepcePage";
+import TabulkyPage from "@/pages/TabulkyPage";
 import RecepceSummaryPage from "@/pages/RecepceSummaryPage";
 import RecepceSummaryAdminPage from "@/pages/RecepceSummaryAdminPage";
 import RecepceDemoPage from "@/pages/RecepceDemoPage";
@@ -120,6 +121,9 @@ export default function App() {
         <Route path="recepce" element={<RequirePermission allow={["nav.recepce.view"]} mobileAllow="recepce.mobile.view"><RecepcePage /></RequirePermission>} />
         <Route path="recepce/:hotel" element={<RequirePermission allow={["nav.recepce.view"]} mobileAllow="recepce.mobile.view"><RecepcePage /></RequirePermission>} />
         <Route path="recepce/:hotel/:tab" element={<RequirePermission allow={["nav.recepce.view"]} mobileAllow="recepce.mobile.view"><RecepcePage /></RequirePermission>} />
+        {/* Tabulky – one Route per URL arity, same as Recepce above. */}
+        <Route path="tabulky" element={<RequirePermission allow={["nav.tabulky.view"]}><TabulkyPage /></RequirePermission>} />
+        <Route path="tabulky/:tab" element={<RequirePermission allow={["nav.tabulky.view"]}><TabulkyPage /></RequirePermission>} />
         {/* Unlisted (no sidebar entry) – reachable only by typing the address.
             Still gated by recepce.summary.view; obscurity is not the gate.
             `/4d/admin` sets the pass-key (kept off the Settings page so no tab

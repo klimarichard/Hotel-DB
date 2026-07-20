@@ -62,6 +62,7 @@ const SECTIONS = {
   shifts: "Směny",
   vacation: "Dovolená",
   recepce: "Recepce",
+  tabulky: "Tabulky",
   // Zaměstnanci spans the list + the employee card (no separate "Karta" section).
   employees: "Zaměstnanci",
   profile: "Můj profil",
@@ -173,6 +174,16 @@ export const APP_TOUR_STEPS: TourStep[] = [
 
   // ── Zaměstnanci – seznam (/zamestnanci) ──────────────────────────────────────
   // Merged: view.all (vedení incl.) + view.nonManagement collapse into one step.
+  // ── Tabulky → Směnárna + ČNB (v4.14.0) ───────────────────────────────────────
+  // The tab body steps are desktop-only: the calculator is a set of wide tables
+  // that scroll horizontally on a phone, so anchoring to them there is unusable.
+  { section: SECTIONS.tabulky, permission: "nav.tabulky.view", addedInVersion: 17, anchor: "nav-tabulky", mobileAnchor: "bottomnav-more", title: "Tabulky", body: "V sekci Tabulky jsou pomocné výpočtové tabulky, které nepatří k žádnému konkrétnímu hotelu. Zatím zde najdete Směnárnu.", placement: "right" },
+  { permission: "tabulky.smenarna.view", addedInVersion: 17, hideOnMobile: true, anchor: "tabulky-tab-smenarna", route: "/tabulky/smenarna", title: "Směnárna + ČNB", body: "Tabulka pro výměnu bankovek a směnu valut. Nic se zde neukládá – slouží jen k výpočtu a po obnovení stránky je prázdná. Kurz „u nás\" se předvyplní podle hodnot z Recepce a lze ho přepsat; do Recepce se nikdy nic nezapisuje.", placement: "bottom" },
+  { permission: "tabulky.smenarna.view", addedInVersion: 17, hideOnMobile: true, anchor: "smenarna-add-row", route: "/tabulky/smenarna", title: "Řádky si přidáte podle potřeby", body: "Začínáte s jedním řádkem. Tlačítkem Přidat řádek si jich vytvoříte tolik, kolik potřebujete, a pojmenujete je vlastním názvem. Stejné řádky se pak používají ve všech tabulkách níže.", placement: "left" },
+  { permission: "tabulky.smenarna.view", addedInVersion: 17, hideOnMobile: true, anchor: "smenarna-swap", route: "/tabulky/smenarna", title: "Výměna bankovek", body: "Do tabulky PŘEDKLÁDÁM zapíšete počty kusů bankovek, které dáváte, do POŽADUJI ty, které chcete zpět. Součty musí sedět – u každého řádku i celkově. Když se neshodují, tabulka Kontrola to zvýrazní.", placement: "top" },
+  { permission: "tabulky.smenarna.view", addedInVersion: 17, hideOnMobile: true, anchor: "smenarna-exchange", route: "/tabulky/smenarna", title: "Směna valut", body: "U každého řádku zadáte částky v eurech, dolarech a librách. Sloupce vpravo dopočítají, kolik dá směnárna, kolik vychází naším kurzem a jaký je mezi tím rozdíl. Chybí-li kurz u měny, kterou jste zadali, tabulka na to upozorní.", placement: "top" },
+  { permission: "tabulky.smenarna.view", addedInVersion: 17, hideOnMobile: true, anchor: "smenarna-denoms", route: "/tabulky/smenarna", title: "Ideální složení", body: "Řádek „potřebuji\" je složení bankovek, které si vyžádáte ve směnárně, aby šly poskládat všechny hromádky zvlášť. Bankovky 5000 se použijí jen do počtu, který zadáte v řádku „směnárna\" – tabulka si o víc 5000 nikdy neřekne.", placement: "top" },
+
   { section: SECTIONS.employees, permission: "nav.employees.view", anchor: "nav-zamestnanci", mobileAnchor: "bottomnav-more", title: "Zaměstnanci", body: "Sekce Zaměstnanci obsahuje karty zaměstnanců s údaji, doklady, smlouvami a historií pracovního poměru.", mobileBody: "Sekce Zaměstnanci obsahuje karty zaměstnanců s údaji, doklady, smlouvami a historií. Na telefonu ji otevřete přes záložku Více ve spodní liště.", placement: "right" },
   { permission: ["employees.view.all", "employees.view.nonManagement"], anchor: "emp-list", scrollBlock: "start", route: "/zamestnanci", title: "Seznam zaměstnanců", body: "Zde vidíte seznam zaměstnanců. Kliknutím na jméno otevřete zaměstnaneckou kartu.", placement: "bottom" },
   { permission: ["employees.view.all", "employees.view.nonManagement"], anchor: "emp-filters", route: "/zamestnanci", title: "Vyhledávání a filtr", body: "Ve vyhledávacím poli můžete hledat zaměstnance podle jména (i za svobodna), pracovní pozice nebo národnosti. Vyhledávání funguje napříč všemi záložkami. Přepínačem záložek zvolíte, jakou kategorii zaměstnanců zobrazit.", placement: "bottom" },
@@ -298,7 +309,7 @@ export const appTour: TourDefinition = {
   // Highest step `addedInVersion` in the list. Bump it (and stamp the new steps'
   // `addedInVersion`) whenever you add steps for a new feature – returning users
   // then see ONLY those steps; first-time users still get the whole tour.
-  version: 16,
+  version: 17,
   label: "Prohlídka aplikace",
   steps: APP_TOUR_STEPS,
 };

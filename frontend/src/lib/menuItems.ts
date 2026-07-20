@@ -35,6 +35,7 @@ export const MENU_ITEMS: ReadonlyArray<MenuItem> = [
   { id: "smeny",       label: "Směny",           path: "/smeny",       permission: "nav.shifts.view" },
   { id: "dovolena",    label: "Dovolená",        path: "/dovolena",    permission: "nav.vacation.view" },
   { id: "recepce",     label: "Recepce",         path: "/recepce",     permission: "nav.recepce.view", mobilePermission: "recepce.mobile.view" },
+  { id: "tabulky",     label: "Tabulky",         path: "/tabulky",     permission: "nav.tabulky.view" },
   { id: "zamestnanci", label: "Zaměstnanci",     path: "/zamestnanci", permission: "nav.employees.view" },
   { id: "mzdy",        label: "Mzdy",            path: "/mzdy",        permission: "nav.payroll.view" },
   { id: "upozorneni",  label: "Upozornění",      path: "/upozorneni",  permission: "nav.alerts.view" },

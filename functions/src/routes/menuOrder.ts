@@ -14,7 +14,7 @@ const db = () => admin.firestore();
 // enforced by the sidebar itself (Layout's resolveOrderByPermission only shows
 // items the user has the permission for), so we don't re-check permissions here.
 const VALID_IDS = new Set<string>([
-  "prehled", "smeny", "dovolena", "recepce", "zamestnanci", "mzdy",
+  "prehled", "smeny", "dovolena", "recepce", "tabulky", "zamestnanci", "mzdy",
   "upozorneni", "smlouvy", "audit", "navody", "nastaveni", "mujProfil",
 ]);
 
