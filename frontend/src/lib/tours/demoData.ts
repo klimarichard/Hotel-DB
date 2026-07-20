@@ -644,6 +644,14 @@ function shiftsFixture(
   if (clean.startsWith(`/shifts/plans/${DEMO_SHIFT_PLAN_ID}/`)) {
     return { hit: true, value: [] };
   }
+  // Previous-month gap badge. Unreachable today – no scenario above yields a
+  // "closed" plan, and the page only calls this for one. Declared anyway so the
+  // shape is right rather than falling through to the `[]` default below; if a
+  // closed-plan scenario is ever added, put demo values here or the tour will
+  // show N/A on every row.
+  if (clean.startsWith("/shifts/prev-month-gap")) {
+    return { hit: true, value: { available: false, values: {} } };
+  }
   // Any other GET under /shifts/* → empty list (safe default, no backend call).
   return { hit: true, value: [] };
 }

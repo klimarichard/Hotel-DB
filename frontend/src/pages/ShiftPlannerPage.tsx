@@ -171,6 +171,13 @@ export default function ShiftPlannerPage() {
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
   const [plan, setPlan] = useState<PlanDetail | null>(null);
+  // Previous-month gap badge (closed plans only). employeeId → signed day count,
+  // or null for "N/A". available:false = no trustworthy previous plan at all, in
+  // which case every row is N/A rather than silently reading as zero.
+  const [prevGap, setPrevGap] = useState<{
+    available: boolean;
+    values: Record<string, number | null>;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showAddEmployee, setShowAddEmployee] = useState(false);
@@ -369,6 +376,33 @@ export default function ShiftPlannerPage() {
   useEffect(() => {
     loadPlan();
   }, [loadPlan]);
+
+  // Previous-month gap badge. Fetched only for a CLOSED plan and only for holders
+  // of shifts.counterTable.view — the same gate the badge renders under, so an
+  // unauthorised page never makes the call. The endpoint returns one integer per
+  // employee rather than the whole previous plan (~900 cell docs for 30 numbers).
+  // A failure yields available:false, i.e. an honest N/A everywhere, never a 0.
+  const showPrevGap = plan?.status === "closed" && can("shifts.counterTable.view");
+  useEffect(() => {
+    if (!showPrevGap) {
+      setPrevGap(null);
+      return;
+    }
+    let cancelled = false;
+    api
+      .get<{ available: boolean; values: Record<string, number | null> }>(
+        `/shifts/prev-month-gap?year=${selectedYear}&month=${selectedMonth}`
+      )
+      .then((r) => {
+        if (!cancelled) setPrevGap(r);
+      })
+      .catch(() => {
+        if (!cancelled) setPrevGap({ available: false, values: {} });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [showPrevGap, selectedYear, selectedMonth]);
 
   // External-change detection. The plan has no realtime channel (firestore.rules
   // block client SDK reads, so an onSnapshot is impossible), so we poll the plan
@@ -1824,6 +1858,20 @@ export default function ShiftPlannerPage() {
               alwaysReadOnlySections={selfServiceOnly ? ["vedoucí"] : []}
               currentEmployeeId={currentEmployeeId}
               showCounterTable={can("shifts.counterTable.view")}
+              prevMonthGapFor={
+                showPrevGap && prevGap
+                  ? (emp) => {
+                      const v = prevGap.available ? prevGap.values[emp.employeeId] ?? null : null;
+                      // Management rows show ONLY the "worked into the new month"
+                      // case. R (admin day) is not work, so a positive gap would
+                      // measure desk time and read as signal – blank, not N/A.
+                      if (emp.section === "vedoucí") {
+                        return v !== null && v < 0 ? String(v) : null;
+                      }
+                      return v === null ? "N/A" : String(v);
+                    }
+                  : undefined
+              }
               showModCounts={canPublish && (plan.status === "closed" || plan.status === "published")}
               onModPersonChange={can("shifts.mod.manage") ? handleModPersonChange : undefined}
               onCellRequestChange={
