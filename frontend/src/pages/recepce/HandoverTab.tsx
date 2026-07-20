@@ -1104,7 +1104,12 @@ function ProtocolEditor({
   // Clickability: sm counts editable by any protocol-edit user; rates + transfer
   // + sm trezor by sm.manage; wata by the hotel's protokol.manage. All disabled
   // once frozen (canEdit is false for non-admins after Předat).
-  const smClickable = canEdit && !!loaded;
+  //
+  // sm is the exception: its value lives only inside the modal, so the next shift
+  // must still be able to OPEN it after a signature to check the counts. The row
+  // stays clickable whenever the doc is loaded; the freeze is applied inside the
+  // modal instead (readOnly), which locks every field rather than the button.
+  const smClickable = !!loaded;
   const smTrezorClickable = canEdit && canManageSm && !!loaded;
   const wataClickable = canEdit && canManage && !!loaded;
   // Hide a zero-valued balance row from users who can't manage it (declutter for
@@ -1578,7 +1583,7 @@ function ProtocolEditor({
                 value={smAmount}
                 clickable={smClickable}
                 onClick={openSmModal}
-                title="Upravit sm"
+                title={canEdit ? "Upravit sm" : "Zobrazit sm"}
                 dataTour="protokol-sm"
               />
               {showSmTrezorRow && (
@@ -1965,6 +1970,7 @@ function ProtocolEditor({
           smTrezor={smTrezor}
           canManageSm={canManageSm}
           canEditCounts={canEdit}
+          readOnly={!canEdit}
           contentDirty={dirty}
           busy={smBusy}
           errorText={smError}
@@ -2007,6 +2013,7 @@ function SmModal({
   smTrezor,
   canManageSm,
   canEditCounts,
+  readOnly,
   contentDirty,
   busy,
   errorText,
@@ -2019,6 +2026,8 @@ function SmModal({
   smTrezor: number;
   canManageSm: boolean;
   canEditCounts: boolean;
+  /** Protocol is frozen by a signature: show the values, lock every field. */
+  readOnly: boolean;
   contentDirty: boolean;
   busy: boolean;
   errorText: string | null;
@@ -2040,7 +2049,10 @@ function SmModal({
   ) => setter((prev) => prev.map((x, j) => (j === i ? (Number.isFinite(v) && v >= 0 ? v : 0) : x)) as [number, number, number]);
 
   const product = smDot(draftRates, draftCounts);
-  const ratesChanged = canManageSm && idxs.some((i) => draftRates[i] !== rates[i]);
+  // sm.manage powers (rate editing + the transfer panel) are additionally frozen
+  // by a signature – readOnly viewers only ever read.
+  const ratesEditable = canManageSm && !readOnly;
+  const ratesChanged = ratesEditable && idxs.some((i) => draftRates[i] !== rates[i]);
   const countsDirty = idxs.some((i) => draftCounts[i] !== counts[i]);
   // Transfer clamps to the SAVED counts and needs the server in sync.
   const clampedTransfer = idxs.map((i) => Math.min(transfer[i], counts[i])) as unknown as [number, number, number];
@@ -2056,12 +2068,13 @@ function SmModal({
           <IconButton variant="close" aria-label="Zavřít" onClick={onCancel} />
         </div>
         <div className={styles.modalBody}>
-          {canManageSm && <p className={styles.modalHint}>Hodnoty jsou společné pro všechny hotely.</p>}
+          {readOnly && <p className={styles.modalHint}>Protokol je podepsaný – hodnoty jsou pouze ke čtení.</p>}
+          {ratesEditable && <p className={styles.modalHint}>Hodnoty jsou společné pro všechny hotely.</p>}
           {/* Per column: rate badge on top (click-to-edit for manage), count field below. */}
           <div className={styles.smGrid}>
             {idxs.map((i) => (
               <div key={`r${i}`} className={styles.smCell}>
-                {canManageSm && editingRate === i ? (
+                {ratesEditable && editingRate === i ? (
                   <input
                     type="number"
                     step="any"
@@ -2074,7 +2087,7 @@ function SmModal({
                     autoFocus
                     disabled={busy}
                   />
-                ) : canManageSm ? (
+                ) : ratesEditable ? (
                   <button
                     type="button"
                     className={`${styles.smRate} ${styles.smRateEditable}`}
@@ -2109,7 +2122,7 @@ function SmModal({
             <strong>{product.toLocaleString("cs-CZ")} Kč</strong>
           </div>
 
-          {canManageSm && (
+          {ratesEditable && (
             <>
               <div className={styles.smDivider} />
               <p className={styles.smSectionTitle}>Přesun do sm trezor</p>
@@ -2155,16 +2168,24 @@ function SmModal({
           {errorText && <div className={styles.error}>{errorText}</div>}
         </div>
         <div className={styles.modalFooter}>
-          <Button variant="secondary" type="button" onClick={onCancel} disabled={busy}>
-            Zrušit
-          </Button>
-          <Button
-            type="button"
-            disabled={busy || (!canEditCounts && !ratesChanged)}
-            onClick={() => onSave(draftCounts, ratesChanged ? draftRates : null)}
-          >
-            {busy ? "Ukládám…" : "Uložit"}
-          </Button>
+          {readOnly ? (
+            <Button type="button" onClick={onCancel}>
+              Zavřít
+            </Button>
+          ) : (
+            <>
+              <Button variant="secondary" type="button" onClick={onCancel} disabled={busy}>
+                Zrušit
+              </Button>
+              <Button
+                type="button"
+                disabled={busy || (!canEditCounts && !ratesChanged)}
+                onClick={() => onSave(draftCounts, ratesChanged ? draftRates : null)}
+              >
+                {busy ? "Ukládám…" : "Uložit"}
+              </Button>
+            </>
+          )}
         </div>
       </div>
     </div>
