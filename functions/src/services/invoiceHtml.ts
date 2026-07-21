@@ -331,7 +331,9 @@ export function buildInvoiceHtml(
     </colgroup><tbody><tr>
       <td>${hotel ? logoImg(hotel.logoDataUri) : ""}</td>
       <td class="inv-title">
-        <div>${draft.deposit ? "Zalohova Faktura" : "Faktura - Danovy Doklad"}</div>
+        <div>${
+          draft.deposit ? "Danovy doklad k prijate zaloze" : "Faktura - Danovy Doklad"
+        }</div>
         <div>${draft.deposit ? "Deposit Invoice" : "Invoice"}</div>
       </td>
     </tr></tbody></table>`;
