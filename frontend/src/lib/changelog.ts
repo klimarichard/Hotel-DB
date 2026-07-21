@@ -27,6 +27,18 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "5.0.0",
+    date: "2026-07-21",
+    changes: [
+      "Faktury: nová sekce pro znovuvytvoření hotelové faktury, kterou Protel vystavil, ale nedokáže ji zobrazit.",
+      "Faktury: podle čísla faktury aplikace sama pozná hotel i to, zda jde o zálohovou fakturu.",
+      "Faktury: položky se vybírají z katalogu, který k nim rovnou doplní sazbu DPH a typ řádku; lze zadat i vlastní text.",
+      "Faktury: součty, rekapitulace DPH i částky v eurech se dopočítávají průběžně, faktura se tiskne jako PDF.",
+      "Faktury: rozpracované faktury se ukládají a lze je kdykoli otevřít a vytisknout znovu.",
+      "Faktury: v Číselnících se spravuje katalog položek, sazby DPH, cestovní kanceláře a údaje hotelů (logo, patička, bankovní účty).",
+    ],
+  },
+  {
     version: "4.15.1",
     date: "2026-07-21",
     changes: [

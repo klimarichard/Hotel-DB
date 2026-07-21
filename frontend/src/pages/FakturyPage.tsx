@@ -30,8 +30,6 @@ import {
   lineTotal,
   matchHotelByInvoiceNo,
   newLineId,
-  dueDateFrom,
-  taxDateFrom,
   type Agency,
   type BillTo,
   type CatalogItem,
@@ -180,7 +178,6 @@ export default function FakturyPage() {
    * The decode is a convenience; once the user overrules it, retyping the number
    * must not silently take the hotel back.
    */
-  const manualHotelRef = useRef(false);
 
   // Remembered halves of the Odběratel switch, so flipping the radio back and
   // forth doesn't discard what was already typed on the other side.
@@ -240,7 +237,6 @@ export default function FakturyPage() {
   }
 
   function startNew() {
-    manualHotelRef.current = false;
     lastAgencyRef.current = { kind: "agency", agencyId: "" };
     lastPersonRef.current = { kind: "person", name: "", ...EMPTY_ADDRESS };
     const d = emptyDraft(name ?? "");
@@ -257,7 +253,6 @@ export default function FakturyPage() {
     setBusy(true);
     try {
       const loaded = await api.get<InvoiceDraft>(`/faktury/${id}`);
-      manualHotelRef.current = true; // a stored invoice already has its hotel decided
       lastAgencyRef.current =
         loaded.billTo.kind === "agency" ? loaded.billTo : { kind: "agency", agencyId: "" };
       lastPersonRef.current =
@@ -319,12 +314,16 @@ export default function FakturyPage() {
     setDraft((d) => {
       if (!d) return d;
       const next: InvoiceDraft = { ...d, invoiceNo: value };
-      if (!manualHotelRef.current) {
-        const match = matchHotelByInvoiceNo(value, config.hotels);
-        if (match) {
-          next.hotelId = match.hotel.id;
-          next.deposit = match.deposit;
-        }
+      // Re-decodes on EVERY keystroke, deliberately overwriting a hotel or
+      // deposit flag the user set by hand. Editing the number is a statement
+      // about which document this is, so it has to win — otherwise correcting
+      // a typo would silently leave the invoice attached to the old hotel.
+      // A manual override still sticks; it just does not survive a later edit
+      // of the number it contradicts.
+      const match = matchHotelByInvoiceNo(value, config.hotels);
+      if (match) {
+        next.hotelId = match.hotel.id;
+        next.deposit = match.deposit;
       }
       return next;
     });
@@ -687,10 +686,7 @@ export default function FakturyPage() {
                       showErrors && !draft.hotelId ? styles.inputError : ""
                     }`}
                     value={draft.hotelId}
-                    onChange={(e) => {
-                      manualHotelRef.current = true;
-                      patchDraft({ hotelId: e.target.value });
-                    }}
+                    onChange={(e) => patchDraft({ hotelId: e.target.value })}
                   >
                     <option value="">– vyberte –</option>
                     {hotelOptions.map((h) => (
@@ -704,10 +700,7 @@ export default function FakturyPage() {
                   <input
                     type="checkbox"
                     checked={draft.deposit}
-                    onChange={(e) => {
-                      manualHotelRef.current = true;
-                      patchDraft({ deposit: e.target.checked });
-                    }}
+                    onChange={(e) => patchDraft({ deposit: e.target.checked })}
                   />
                   <span>Zálohová faktura</span>
                 </label>
@@ -805,21 +798,6 @@ export default function FakturyPage() {
                     onChange={(e) => patchDraft({ issuedAt: e.target.value })}
                   />
                 </label>
-                {/* Derived, never stored: the tax point is the issue date and
-                    payment is due seven days later. Read-only text rather than a
-                    disabled input – there is nothing here to interact with. */}
-                <div className={styles.field}>
-                  <span>Datum zdanitelného plnění</span>
-                  <div className={styles.readonlyValue}>
-                    {formatDateCZ(taxDateFrom(draft.issuedAt)) || "–"}
-                  </div>
-                </div>
-                <div className={styles.field}>
-                  <span>Datum splatnosti</span>
-                  <div className={styles.readonlyValue}>
-                    {formatDateCZ(dueDateFrom(draft.issuedAt)) || "–"}
-                  </div>
-                </div>
                 <label className={styles.field}>
                   <span>Vystavil</span>
                   <input
@@ -829,10 +807,6 @@ export default function FakturyPage() {
                   />
                 </label>
               </div>
-              <p className={styles.hint}>
-                Datum zdanitelného plnění a datum splatnosti se doplňují automaticky podle data
-                vystavení (splatnost je o 7 dní později).
-              </p>
             </section>
 
             {/* ── Odběratel ──────────────────────────────────────────── */}
