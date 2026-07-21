@@ -11,6 +11,10 @@ import {
 } from "../auth/permissions";
 import { ctxFromReq, logCreate, logUpdate } from "../services/auditLog";
 import { isHotelSlug, hotelViewPerm, type HotelSlug } from "../services/hotels";
+import {
+  isDocumentSectionId,
+  maySeeDocumentSection,
+} from "../services/documentSections";
 import { resolveEmployeeDisplays } from "../services/recepceEmployees";
 import * as clock from "../services/clock";
 import { deactivateUserCore } from "../services/userDeactivation";
@@ -882,6 +886,37 @@ authRouter.put("/me/recepce-default", requireAuth, async (req: AuthRequest, res)
     { merge: true }
   );
   res.json({ hotel });
+});
+
+/**
+ * PUT /api/auth/me/dokumenty-default
+ * Body: { section: DocumentSectionId | null }. Self-service, like the theme and
+ * Recepce-default preferences — requireAuth only, no permission key, because a
+ * user may only ever set their OWN default. `null` clears it.
+ *
+ * The default only REORDERS the Dokumenty list (that section's documents float
+ * to the top); it never grants access. Rejecting a section the caller cannot see
+ * keeps the stored value honest, and the read path re-checks live permissions
+ * anyway, so a default stranded by a later revoke simply stops applying.
+ *
+ * Not audit-logged, matching `theme` and `recepce-default`: it is a personal view
+ * preference, not a change to business data.
+ */
+authRouter.put("/me/dokumenty-default", requireAuth, async (req: AuthRequest, res) => {
+  const { section } = req.body as { section: unknown };
+  if (section !== null && !isDocumentSectionId(section)) {
+    res.status(400).json({ error: "Neplatná sekce." });
+    return;
+  }
+  if (section !== null && !maySeeDocumentSection(req.permissions ?? new Set<string>(), section)) {
+    res.status(403).json({ error: "K této sekci nemáte přístup." });
+    return;
+  }
+  await admin.firestore().collection("users").doc(req.uid!).set(
+    { dokumentyDefaultSection: section, updatedAt: FieldValue.serverTimestamp() },
+    { merge: true }
+  );
+  res.json({ section });
 });
 
 /**

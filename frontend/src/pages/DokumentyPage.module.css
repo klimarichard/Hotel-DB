@@ -854,3 +854,37 @@
   border: 1px solid var(--color-border);
   border-radius: 4px;
 }
+
+/* Per-user "Výchozí sekce" picker above the document list. */
+.defaultPicker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.defaultPicker select {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 3px 6px;
+  font-size: 0.75rem;
+  font-family: inherit;
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+}
+
+/* Divider between the default section's documents and everything else. Purely a
+   rule - unlike the "Neaktivní" divider it carries no label, because the group
+   above it is already identified by the picker the user just set. */
+.preferredDivider {
+  height: 0;
+  margin: 8px 2px;
+  padding: 0;
+  border-top: 1px solid var(--color-border);
+  list-style: none;
+}
