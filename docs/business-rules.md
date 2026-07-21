@@ -285,6 +285,40 @@ Tabulky jsou široké a na telefonu se nedají rozumně vyplňovat, proto se pol
 
 ---
 
+## Dokumenty
+
+### Kdo dokument uvidí, určuje jeho sekce
+
+Dokument **bez sekce** vidí každý, kdo má přístup do Dokumentů. Dokument **zařazený do sekce** (Ambiance, Superior, Amigo & Alqush, Ankora) vidí jen ten, kdo má oprávnění pro tuto sekci – ostatním se v seznamu vůbec nezobrazí a nelze jej otevřít ani přímým odkazem. Sekce tedy okruh lidí vždy **zužuje, nikdy nerozšiřuje**.
+
+Kdo má oprávnění **Spravovat dokumenty**, vidí všechny sekce – jinak by nemohl opravit ani smazat to, co je v nich zařazené.
+
+**Zařazení dokumentu do sekce (nebo jeho vyřazení) je změna toho, kdo ho uvidí**, ne jen štítek. Přesunutím dokumentu do sekce ho skryjete všem, kdo na ni nemají oprávnění; vyjmutím ze sekce ho naopak zpřístupníte všem, kdo mají přístup do Dokumentů.
+
+> 🔒 Server. Zdroj: `functions/src/services/documentSections.ts` – `maySeeDocumentSection()`; `functions/src/routes/dokumenty.ts` – filtr seznamu a kontrola v `GET /:id`.
+
+### Výchozí sekce mění jen pořadí, nikdy přístup
+
+Volba **Výchozí sekce** je osobní nastavení každého uživatele: dokumenty ze zvolené sekce se zobrazí na začátku seznamu, zbytek za oddělovačem. **Nezpřístupní ani neskryje žádný dokument** – seznam filtruje server podle oprávnění bez ohledu na toto nastavení.
+
+> 🔒 Server. Zdroj: `functions/src/routes/auth.ts` – `PUT /me/dokumenty-default`; pořadí se skládá v `frontend/src/pages/DokumentyPage.tsx`.
+
+### Vytištěné dokumenty se nikde neukládají
+
+Vyplněním a vytištěním dokumentu **nevzniká žádný záznam**. Hotové PDF se pouze otevře na nové záložce – neukládá se do aplikace, nepřipojuje se k žádnému zaměstnanci a nikde ho později nedohledáte. Ukládá se výhradně **šablona** dokumentu.
+
+Z toho plyne i to, že **smazání dokumentu je nevratné**, ale týká se jen šablony – už vytištěné papíry tím nijak nezmizí a nic se na ně neváže.
+
+> 🔒 Server. Zdroj: `functions/src/routes/dokumenty.ts` – `POST /render-pdf` pouze vykresluje a vrací PDF, žádný zápis do databáze ani úložiště.
+
+### Proměnná typu „Seznam" pojme nejvýše 30 hodnot
+
+U vlastní proměnné typu **Seznam** zadáte hodnoty, ze kterých se pak při vyplňování vybírá. Hodnot může být nejvýše **30** a každá nejvýše **100 znaků**.
+
+Seznam **bez jediné hodnoty** je povolený (typ si zvolíte dřív, než hodnoty vypíšete), ale v takovém případě se při vyplňování místo nabídky zobrazí **obyčejné textové pole**, aby dokument šlo i tak vytisknout. Editor na to upozorňuje hláškou „Bez možností".
+
+> 🔒 Server + 🖥️ Jen rozhraní. Zdroj: `functions/src/routes/dokumenty.ts` a `functions/src/routes/contractTemplates.ts` – `isValidCustomOptions()`; upozornění `customVarWarning()` ve `frontend/src/pages/DokumentyPage.tsx`.
+
 ## Vyřazená pravidla
 
 Pravidla, která dřívější dokumentace uváděla, ale která **v současném kódu neplatí**. Ponechána zde, aby se nevrátila zpět.

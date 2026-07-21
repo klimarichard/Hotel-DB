@@ -178,6 +178,13 @@ export function buildPreviewVars(
     let dv = "";
     if (d?.kind === "fixedVar") dv = vars[d.key] ?? "";
     else if (d?.kind === "literal") dv = formatCustomValue(type, d.value);
+    if (type === "list") {
+      // Preview a list slot with a value it can actually take: its default if one
+      // is set, otherwise its first choice. Generic mock text would misrepresent
+      // the line width for a slot whose values are known and often short.
+      vars[key] = dv || def?.options?.find((o) => o.trim()) || MOCK_CUSTOM_BY_TYPE.text;
+      continue;
+    }
     vars[key] = dv || MOCK_CUSTOM_BY_TYPE[type] || MOCK_CUSTOM_BY_TYPE.text;
   }
 

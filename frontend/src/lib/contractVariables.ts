@@ -97,15 +97,23 @@ export const CUSTOM_VAR_KEYS: string[] = Array.from(
 
 const CUSTOM_VAR_KEY_SET = new Set(CUSTOM_VAR_KEYS);
 
-export type CustomVarType = "text" | "date" | "number" | "bool" | "condition";
+export type CustomVarType = "text" | "date" | "number" | "bool" | "list" | "condition";
 
 export const CUSTOM_VAR_TYPE_LABELS: Record<CustomVarType, string> = {
   text: "Text",
   date: "Datum",
   number: "Číslo",
   bool: "Ano/Ne",
+  list: "Seznam",
   condition: "Podmínka",
 };
+
+/**
+ * Upper bound on the choices a "list" slot may offer. Not a technical limit —
+ * a dropdown longer than this stops being easier than typing the value, and the
+ * cap keeps a runaway paste out of the template document.
+ */
+export const CUSTOM_VAR_MAX_OPTIONS = 30;
 
 // ── Derived conditions (a "condition" custom slot) ───────────────────────────
 // A condition slot has no typed value; it is COMPUTED from a comparison of two
@@ -176,6 +184,13 @@ export interface CustomVarDef {
   /** Only for type "condition": the comparison that computes this slot. */
   condition?: CustomVarCondition;
   /**
+   * Only for type "list": the values offered in the generate-time dropdown, in
+   * the order the author entered them. The chosen value is substituted verbatim,
+   * so these are the display strings themselves — there is no code/label split,
+   * which would be a second thing to keep in sync for no gain here.
+   */
+  options?: string[];
+  /**
    * "Nepovinná" — the slot may be left blank at generation instead of blocking
    * it, for templates where only some of several offered fields apply.
    * An unfilled optional slot renders as an empty string. Absent = required
@@ -231,6 +246,10 @@ export function formatCustomValue(type: CustomVarType, raw: string): string {
     }
     case "bool":
       return value === "true" ? "ano" : "";
+    case "list":
+      // The picked value IS the display string (see CustomVarDef.options), so it
+      // goes in verbatim — no lookup, no formatting.
+      return value;
     case "text":
     default:
       return value;

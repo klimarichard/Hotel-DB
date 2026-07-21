@@ -40,6 +40,7 @@ export const MENU_ITEMS: ReadonlyArray<MenuItem> = [
   { id: "mzdy",        label: "Mzdy",            path: "/mzdy",        permission: "nav.payroll.view" },
   { id: "upozorneni",  label: "Upozornění",      path: "/upozorneni",  permission: "nav.alerts.view" },
   { id: "smlouvy",     label: "Šablony smluv",   path: "/smlouvy",     permission: "nav.contractTemplates.view", hideOnMobile: true },
+  { id: "dokumenty",   label: "Dokumenty",       path: "/dokumenty",   permission: "nav.dokumenty.view", hideOnMobile: true },
   { id: "audit",       label: "Log změn",        path: "/audit",       permission: "nav.audit.view" },
   { id: "navody",      label: "Návody",          path: "/navody",      permission: "nav.guides.view" },
   { id: "nastaveni",   label: "Nastavení",       path: "/nastaveni",   permission: "nav.settings.view" },

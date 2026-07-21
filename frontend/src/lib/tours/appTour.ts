@@ -67,6 +67,7 @@ const SECTIONS = {
   employees: "Zaměstnanci",
   profile: "Můj profil",
   templates: "Šablony smluv",
+  dokumenty: "Dokumenty",
   payroll: "Mzdy",
   alerts: "Upozornění",
   audit: "Log změn",
@@ -236,6 +237,11 @@ export const APP_TOUR_STEPS: TourStep[] = [
   { permission: "nav.contractTemplates.view", anchor: "templates-list", route: "/smlouvy", title: "Zobrazení šablon", body: "V seznamu vlevo si vyberete a prohlédnete dostupné šablony.", placement: "right" },
   { permission: "contractTemplates.manage", anchor: "templates-new", route: "/smlouvy", title: "Nová šablona", body: "Tlačítkem Nová šablona vytvoříte šablonu. Její obsah upravíte v editoru a uložíte.", placement: "bottom" },
 
+  // ── Dokumenty (/dokumenty) ────────────────────────────────────────────────────
+  { section: SECTIONS.dokumenty, permission: "nav.dokumenty.view", addedInVersion: 18, anchor: "nav-dokumenty", mobileAnchor: "bottomnav-more", title: "Dokumenty", body: "V sekci Dokumenty najdete dokumenty připravené k vyplnění a tisku.", mobileBody: "V sekci Dokumenty najdete dokumenty připravené k vyplnění a tisku. Na telefonu ji otevřete přes záložku Více ve spodní liště.", placement: "right" },
+  { permission: "nav.dokumenty.view", addedInVersion: 18, anchor: "dokumenty-generate", route: "/dokumenty", title: "Vyplnění a tisk dokumentu", body: "Vyberte dokument, tlačítkem Vyplnit a vytisknout doplňte údaje, které dokument potřebuje, a otevře se vám jako PDF v nové záložce, odkud jej vytisknete. Nic se nikam neukládá.", placement: "bottom" },
+  { permission: "dokumenty.manage", addedInVersion: 18, anchor: "dokumenty-manage", route: "/dokumenty", title: "Správa dokumentů", body: "Tlačítkem Nový dokument vytvoříte dokument a jeho obsah napíšete v editoru. Tlačítkem Nastavit určíte vlastní proměnné – místa, která ten, kdo dokument tiskne, vyplní podle potřeby. Dokument můžete zařadit do sekce (Ambiance, Superior, Amigo & Alqush, Ankora) – pak jej uvidí jen ti, kdo mají oprávnění pro danou sekci. Dokument bez sekce uvidí každý, kdo má přístup do Dokumentů.", placement: "bottom" },
+
   // ── Mzdy (/mzdy) ──────────────────────────────────────────────────────────────
   { section: SECTIONS.payroll, permission: "nav.payroll.view", anchor: "nav-mzdy", mobileAnchor: "bottomnav-more", title: "Mzdy", body: "V sekci Mzdy se vytvářejí a spravují mzdová období a provádějí přepočty mezd.", mobileBody: "V sekci Mzdy se vytvářejí a spravují mzdová období. Na telefonu ji otevřete přes záložku Více ve spodní liště.", placement: "right" },
   { permission: "nav.payroll.view", anchor: "payroll-table", route: DEMO_PAYROLL, title: "Zobrazení mezd", body: "Tabulka zobrazuje vypočtené mzdy zaměstnanců pro zvolené období. Mzdy se počítají automaticky z plánu směn a výpočet se aktualizuje každý den.", placement: "top" },
@@ -305,7 +311,7 @@ export const appTour: TourDefinition = {
   // Highest step `addedInVersion` in the list. Bump it (and stamp the new steps'
   // `addedInVersion`) whenever you add steps for a new feature – returning users
   // then see ONLY those steps; first-time users still get the whole tour.
-  version: 17,
+  version: 18,
   label: "Prohlídka aplikace",
   steps: APP_TOUR_STEPS,
 };

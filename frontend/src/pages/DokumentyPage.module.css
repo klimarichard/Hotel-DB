@@ -1,3 +1,14 @@
+/*
+ * Dokumenty – editor of standalone document templates.
+ *
+ * Deliberately modelled on ContractTemplatesPage.module.css: the two pages show
+ * the same A4 canvas with the same TipTap toolbar, and the saved HTML is
+ * rendered by the same Puppeteer pipeline, so the editor surface (.a4Page,
+ * .editorContent and the table / page-break rules) must stay metrically
+ * identical. Anything that changes typography here would make the two editors
+ * disagree about where a line wraps.
+ */
+
 .page {
   display: flex;
   flex-direction: column;
@@ -15,6 +26,12 @@
   background: var(--color-surface);
 }
 
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
 .title {
   font-size: 1.25rem;
   font-weight: 600;
@@ -22,9 +39,8 @@
   margin: 0;
 }
 
-/* Takes the whole gap between the left-hand controls and the right-hand save
-   buttons, so the custom-variable warning can run on a single line instead of
-   wrapping inside a narrow box. */
+/* Takes the whole gap between the left-hand controls and the Save button, so
+   the custom-variable warning runs on one line instead of wrapping. */
 .headerActions {
   display: flex;
   align-items: center;
@@ -32,16 +48,23 @@
   gap: 12px;
   flex: 1;
   min-width: 0;
-  margin-left: 24px; /* clearance from the "Nová šablona" button */
+  margin-left: 24px;
 }
 
 .saveMsg {
   font-size: 0.875rem;
 }
 
+.saveMsgOk {
+  color: var(--color-active-text);
+}
+
+.saveMsgErr {
+  color: var(--color-danger-text-strong);
+}
+
 /* "⚠ Bez nastavení: var2 …" – a clickable one-liner that opens the config
-   dialog. Grows to fill the header, and ellipsises rather than wrapping if the
-   window is genuinely too narrow (the full text stays in the tooltip). */
+   dialog. Ellipsises rather than wrapping; the full text stays in the tooltip. */
 .varWarn {
   flex: 1;
   min-width: 0;
@@ -62,23 +85,20 @@
   text-decoration: underline;
 }
 
-.saveMsgOk {
-  color: var(--color-active-text);
-}
-
-.saveMsgErr {
-  color: var(--color-danger-text-strong);
-}
-
-/* Three-column workspace */
+/* Three-column workspace (list | editor | variables) */
 .workspace {
   display: grid;
-  grid-template-columns: 220px 1fr 200px;
+  grid-template-columns: 240px 1fr 200px;
   flex: 1;
   overflow: hidden;
 }
 
-/* Left: template list */
+/* Read-only audience: no variable panel, so the list gets a little more room. */
+.workspaceView {
+  grid-template-columns: 280px 1fr;
+}
+
+/* Left: document list */
 .sidebar {
   border-right: 1px solid var(--color-border);
   overflow-y: auto;
@@ -96,8 +116,7 @@
   margin: 0;
   padding: 8px 0;
   /* Flex column so the inactive group can be pushed to the bottom (its divider
-     carries margin-top:auto). min-height:100% makes "bottom" the bottom of the
-     sidebar viewport, not just below the last active item. */
+     carries margin-top:auto). */
   display: flex;
   flex-direction: column;
   min-height: 100%;
@@ -149,15 +168,7 @@
   margin-top: 2px;
 }
 
-.templateEmpty {
-  display: block;
-  font-size: 0.75rem;
-  color: var(--color-text-subtle);
-  font-style: italic;
-  margin-top: 2px;
-}
-
-/* Deactivated templates: muted, sorted to the bottom (see the sort in the page). */
+/* Deactivated documents: muted, sorted to the bottom (see the sort in the page). */
 .templateItemInactive {
   opacity: 0.7;
 }
@@ -166,9 +177,8 @@
   color: var(--color-text-muted);
 }
 
-/* "Neaktivní" heading that anchors the deactivated-templates group to the
-   bottom of the sidebar. margin-top:auto absorbs the free vertical space above
-   it (collapses to 0 once the list overflows and the sidebar scrolls). */
+/* "Neaktivní" heading that anchors the deactivated group to the bottom of the
+   sidebar. margin-top:auto absorbs the free vertical space above it. */
 .inactiveDivider {
   margin-top: auto;
   padding: 6px 14px 4px;
@@ -187,6 +197,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  margin-top: 4px;
 }
 
 .templateActions {
@@ -225,6 +236,32 @@
 .templateActionDanger:hover:not(:disabled) {
   background: color-mix(in srgb, var(--color-danger) 10%, transparent);
   border-color: var(--color-danger);
+}
+
+/* "Vyplnit a vytisknout" – the one action every viewer gets, so it reads as a
+   primary row action rather than one of the small admin chips. */
+.generateBtn {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  padding: 4px 8px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-info-border);
+  background: var(--color-info-bg-strong);
+  color: var(--color-info-text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.generateBtn:hover:not(:disabled) {
+  filter: brightness(0.97);
+}
+
+.generateBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 /* Center: editor */
@@ -348,17 +385,10 @@
 }
 
 /*
- * A4 page (210 mm × 297 mm) with multipage feel.
- * - min-height: 297 mm so an empty template always shows one full A4 page.
- * - The repeating-linear-gradient paints a visible "desk gap" of 12 mm
- *   between every 297 mm slice, simulating stacked pages without
- *   JavaScript pagination. Cycle length = 309 mm = page (297) + gap (12).
- * - box-shadow gives the whole block a subtle paper-on-desk lift.
- *
- * Padding (1.5 cm top/bottom, 1 cm left/right) only applies to the very
- * first and last "page" of the block – content flowing across a gap
- * still flows continuously inside the editor (manual ↧ page-break node
- * is the way to force a clean break before the gap).
+ * A4 page (210 mm × 297 mm) with multipage feel. The repeating gradient paints
+ * a 12 mm "desk gap" after every 297 mm slice (cycle = 309 mm), simulating
+ * stacked pages without JS pagination. Page padding comes from the template's
+ * own margins, set inline by the component.
  */
 .a4Page {
   width: 210mm;
@@ -367,10 +397,10 @@
   background-color: #fff;
   background-image: repeating-linear-gradient(
     to bottom,
-    #fff       0,
-    #fff       297mm,
-    #d4d4d4    297mm,
-    #d4d4d4    309mm
+    #fff 0,
+    #fff 297mm,
+    #d4d4d4 297mm,
+    #d4d4d4 309mm
   );
   box-sizing: border-box;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
@@ -378,11 +408,9 @@
 }
 
 /*
- * Page-break node ↧ – visual dashed divider in the editor only. Saved HTML
- * keeps just `page-break-before: always; height: 0;` (set inline by
- * PageBreak.renderHTML), so the PDF gets a clean break with no visible
- * mark. The styling lives here so it never reaches the Puppeteer
- * renderer's CSS.
+ * Page-break node ↧ – a visual dashed divider in the editor only. The saved
+ * HTML keeps just `page-break-before: always; height: 0` (set inline by
+ * PageBreak.renderHTML), so the PDF gets a clean break with no visible mark.
  */
 .a4Page [data-page-break] {
   border-top: 2px dashed #999;
@@ -390,18 +418,16 @@
 }
 
 /*
- * In dark mode the paper itself stays white with black text (the contract is
- * printed on white paper, so the editor is kept WYSIWYG). Only the 12 mm
- * "desk gap" between stacked pages is darkened to blend with the dark desk
- * behind it; the box-shadow is deepened for contrast on the dark background.
+ * In dark mode the paper stays white with black text (the document is printed
+ * on white paper, so the editor is kept WYSIWYG). Only the desk gap darkens.
  */
 [data-theme="dark"] .a4Page {
   background-image: repeating-linear-gradient(
     to bottom,
-    #fff       0,
-    #fff       297mm,
-    #2a2a2a    297mm,
-    #2a2a2a    309mm
+    #fff 0,
+    #fff 297mm,
+    #2a2a2a 297mm,
+    #2a2a2a 309mm
   );
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
 }
@@ -447,17 +473,51 @@
   margin: 0;
 }
 
-/* Variable placeholder highlight */
-.editorContent :global(.tiptap-variable) {
-  background: var(--color-info-bg-strong);
-  color: var(--color-info-text);
-  border-radius: 3px;
-  padding: 0 2px;
-  font-family: monospace;
-  font-size: 0.85em;
+/*
+ * Read-only rendering shown to a viewer who may not edit. Same .a4Page box and
+ * the same typography as .editorContent, so what they see matches the print.
+ */
+.previewContent {
+  cursor: default;
+  outline: none;
+  font-family: Arial, sans-serif;
+  font-size: 11pt;
+  line-height: 1.6;
+  color: #000;
 }
 
-/* Right: variable picker */
+.previewContent p {
+  margin: 0 0 0.5em;
+}
+
+.previewContent img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+.previewContent ul,
+.previewContent ol {
+  padding-left: 1.5em;
+  margin-bottom: 0.5em;
+}
+
+.previewContent li {
+  line-height: 1.3;
+}
+
+.previewContent li > p {
+  margin: 0;
+}
+
+/* The dashed page-break divider is an EDITOR affordance – it prints nothing, so
+   the read-only view must not show it (and must not inherit its 2 cm margin). */
+.previewContent [data-page-break] {
+  border-top: none;
+  margin: 0;
+}
+
+/* Right: custom-variable picker */
 .varPanel {
   border-left: 1px solid var(--color-border);
   overflow-y: auto;
@@ -512,7 +572,7 @@
   border-color: var(--color-info-border);
 }
 
-/* Find & Replace bar (slides in below toolbar when active) */
+/* Find & Replace bar (slides in below the toolbar when active) */
 .findBar {
   display: flex;
   align-items: center;
@@ -521,64 +581,6 @@
   border-bottom: 1px solid var(--color-border);
   background: var(--color-info-bg);
   flex-shrink: 0;
-}
-
-/* ── Náhled (preview) ──────────────────────────────────────────────────────
- * Bar of per-conditional checkboxes shown above the canvas while previewing.
- * Wraps, because a template can use several conditionals.
- */
-.previewBar {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 12px;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--color-border);
-  background: var(--color-info-bg);
-  flex-shrink: 0;
-}
-
-.previewBarTitle {
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--color-text);
-}
-
-.previewBarHint {
-  font-size: 0.8125rem;
-  color: var(--color-text-secondary);
-}
-
-.previewToggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 0.8125rem;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  user-select: none;
-}
-
-/*
- * The preview renders the SAME html inside the SAME .a4Page box with the same
- * margins, so it inherits the page's table/page-break rules and the inline
- * typography TipTap saved. Nothing here may change metrics - a font or spacing
- * tweak would silently invalidate the very tab alignment being checked.
- */
-.previewContent {
-  cursor: default;
-}
-
-/*
- * The dashed page-break divider is an EDITOR affordance - it marks the ↧ node and
- * prints nothing. Showing it in a preview that claims to be the real document
- * would be a lie, and it adds 2cm of margin that isn't in the PDF, which would
- * throw off exactly the layout being checked. The .a4Page background still shows
- * where the paper ends.
- */
-.previewContent [data-page-break] {
-  border-top: none;
-  margin: 0;
 }
 
 .findInput {
@@ -622,7 +624,7 @@
   font-size: 1rem;
 }
 
-/* Page-margins bar (slides in below toolbar when active) */
+/* Page-margins bar (slides in below the toolbar when active) */
 .marginsBar {
   display: flex;
   align-items: center;
@@ -698,10 +700,10 @@
   font-weight: 600;
 }
 
-/* Borderless tables. The class lands either on <table> directly (saved
- * HTML / PDF, via renderHTML) OR on the .tableWrapper div that TipTap's
- * column-resize NodeView wraps around the table in the live editor (via
- * the ProseMirror Decoration). A descendant selector matches both. */
+/* Borderless tables. The class lands either on <table> directly (saved HTML /
+ * PDF, via renderHTML) OR on the .tableWrapper div that TipTap's column-resize
+ * NodeView wraps around the table in the live editor. A descendant selector
+ * matches both. */
 .a4Page :global(.hpm-borderless td),
 .a4Page :global(.hpm-borderless th) {
   border: 1px dashed #b8becc !important;
@@ -729,8 +731,23 @@
   font-family: inherit;
 }
 
-/* Phone-only "use a larger screen" notice shown instead of the editor (rendered
-   by the component's isPhone early-return, so these never appear on desktop). */
+/* Applied ALONGSIDE ConfirmModal.module.css's .header, whose own rule is not a
+   flex container – the shared modal has no close button, these dialogs do. */
+.modalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.emptyState {
+  padding: 32px;
+  text-align: center;
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+}
+
+/* Phone-only "use a larger screen" notice shown instead of the editor. */
 .phoneNotice {
   display: flex;
   flex-direction: column;
@@ -761,8 +778,29 @@
   margin: 0;
 }
 
+/*
+ * Phone, read-only audience: the A4 canvas can't fit, but the list of documents
+ * plus its "Vyplnit a vytisknout" button is perfectly usable, so the workspace
+ * collapses to the list alone. (An editor on a phone gets the notice above and
+ * never reaches this.)
+ */
+@media (max-width: 559.98px) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    border-right: none;
+  }
+
+  .editorWrapper {
+    display: none;
+  }
+}
+
 /* Remove-a-choice button in the "Seznam" variable options editor. Icon-only and
-   row-scoped, so it stays local CSS like the other micro-actions. */
+   row-scoped, so it stays local CSS like the other micro-actions rather than
+   moving to the shared IconButton. */
 .optionRemoveBtn {
   flex: 0 0 auto;
   width: 24px;
@@ -780,4 +818,80 @@
 .optionRemoveBtn:hover {
   color: var(--color-danger);
   border-color: var(--color-danger);
+}
+
+/* Section badge on a sidebar row. Only rendered for filed documents – an unfiled
+   one shows nothing rather than a "Bez sekce" chip, because unfiled is the
+   default and labelling the default is noise. */
+/* Sits on its own line under the document name (.templateName is display:block).
+   .templateItem is a plain block, not flex - no align-self here. */
+.sectionBadge {
+  display: inline-block;
+  margin-top: 3px;
+  padding: 1px 6px;
+  font-size: 0.7rem;
+  line-height: 1.4;
+  color: var(--color-text-muted);
+  background: var(--color-bg-subtle, rgba(127, 127, 127, 0.12));
+  border-radius: 8px;
+}
+
+/* Section switcher in the editor header. */
+.sectionPicker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.sectionPicker select {
+  padding: 4px 6px;
+  font-size: 0.8rem;
+  font-family: inherit;
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+}
+
+/* Per-user "Výchozí sekce" picker above the document list.
+   .sidebar has no padding of its own - the horizontal rhythm comes from
+   .templateItem's 14px - so this control has to supply its own, or it sits flush
+   against the header and the sidebar edge. The bottom border separates it from
+   the list it reorders. */
+.defaultPicker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.defaultPicker select {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 3px 6px;
+  font-size: 0.75rem;
+  font-family: inherit;
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+}
+
+/* Divider between the default section's documents and everything else. Purely a
+   rule - unlike the "Neaktivní" divider it carries no label, because the group
+   above it is already identified by the picker the user just set. */
+.preferredDivider {
+  height: 0;
+  /* 14px inset matches .inactiveDivider and the .templateItem text rhythm. */
+  margin: 8px 14px;
+  padding: 0;
+  border-top: 1px solid var(--color-border);
+  list-style: none;
 }
