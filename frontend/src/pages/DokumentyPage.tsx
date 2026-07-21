@@ -187,7 +187,51 @@ const createInputStyle = {
 } as const;
 
 export default function DokumentyPage() {
-  const { can } = useAuth();
+  const { can, dokumentyDefaultSection } = useAuth();
+  /**
+   * Local override of the saved default, so the list re-sorts the instant the
+   * user picks one instead of waiting for /auth/me to be refetched.
+   * `undefined` = no local change yet, use the server value.
+   *
+   * Read the server value STRAIGHT from useAuth – never mirrored into state via
+   * an effect. An effect runs after the render that would read it, so the first
+   * render once authLoading clears would sort with a null default and only
+   * settle a frame later: fine on a fresh browser, visibly wrong for every
+   * returning user. Same trap as the Recepce default hotel.
+   */
+  const [pendingDefault, setPendingDefault] = useState<DocumentSectionId | null | undefined>(undefined);
+  const [savingDefault, setSavingDefault] = useState(false);
+  const defaultSection = (pendingDefault !== undefined
+    ? pendingDefault
+    : (dokumentyDefaultSection as DocumentSectionId | null)) ?? null;
+
+  /**
+   * Sections whose documents this user can see. `dokumenty.manage` sees every
+   * section (it short-circuits the server-side gate too), so the picker offers
+   * all four to an editor.
+   */
+  const visibleSections = useMemo(
+    () =>
+      can("dokumenty.manage")
+        ? DOCUMENT_SECTIONS
+        : DOCUMENT_SECTIONS.filter((sec) => can(sec.viewPerm)),
+    [can]
+  );
+
+  /** Persist the default. Failure is silent-but-reverted: a view preference is
+   *  not worth an error dialog, but the UI must not claim it saved. */
+  async function saveDefaultSection(next: DocumentSectionId | null) {
+    const previous = defaultSection;
+    setPendingDefault(next);
+    setSavingDefault(true);
+    try {
+      await api.put("/auth/me/dokumenty-default", { section: next });
+    } catch {
+      setPendingDefault(previous);
+    } finally {
+      setSavingDefault(false);
+    }
+  }
   // Editing is gated by dokumenty.manage; a view-only user (route permission
   // nav.dokumenty.view) sees the document list plus "Vyplnit a vytisknout" and
   // a read-only rendering – no toolbar, no Save, no create, no variable config.
@@ -461,14 +505,25 @@ export default function DokumentyPage() {
     };
   }, [editor, variableDefs]);
 
-  /** Active documents first, deactivated ones last; alphabetical within a group. */
+  /**
+   * Active documents first, deactivated ones last; alphabetical within a group.
+   * When the user has picked a default section, the active group splits again:
+   * that section's documents float to the top, the rest follow after a divider.
+   * With no default (or none of its documents present) `preferred` is empty and
+   * the list reads exactly as it did before.
+   */
   const sortedDocs = useMemo(() => {
     const activeOf = (d: DocumentMeta) => d.active !== false;
+    const byName = (a: DocumentMeta, b: DocumentMeta) => a.name.localeCompare(b.name, "cs");
+    const active = docs.filter(activeOf).sort(byName);
+    const inactive = docs.filter((d) => !activeOf(d)).sort(byName);
+    if (!defaultSection) return { preferred: [], active, inactive };
     return {
-      active: docs.filter(activeOf).sort((a, b) => a.name.localeCompare(b.name, "cs")),
-      inactive: docs.filter((d) => !activeOf(d)).sort((a, b) => a.name.localeCompare(b.name, "cs")),
+      preferred: active.filter((d) => d.section === defaultSection),
+      active: active.filter((d) => d.section !== defaultSection),
+      inactive,
     };
-  }, [docs]);
+  }, [docs, defaultSection]);
 
   /**
    * The read-only rendering: the stored HTML with every custom slot replaced by
@@ -1021,6 +1076,26 @@ export default function DokumentyPage() {
       <div className={`${styles.workspace} ${canManage ? "" : styles.workspaceView}`}>
         {/* Left: document list */}
         <aside className={styles.sidebar}>
+          {/* Only offered when there is something to choose between. With one
+              visible section (or none) a default would reorder nothing. */}
+          {visibleSections.length > 1 && (
+            <label className={styles.defaultPicker}>
+              <span>Výchozí sekce</span>
+              <select
+                value={defaultSection ?? ""}
+                disabled={savingDefault}
+                title="Dokumenty z této sekce se zobrazí na začátku seznamu."
+                onChange={(e) =>
+                  saveDefaultSection((e.target.value || null) as DocumentSectionId | null)
+                }
+              >
+                <option value="">Žádná</option>
+                {visibleSections.map((sec) => (
+                  <option key={sec.id} value={sec.id}>{sec.label}</option>
+                ))}
+              </select>
+            </label>
+          )}
           {loading ? (
             <p className={styles.loadingText}>Načítám…</p>
           ) : docs.length === 0 ? (
@@ -1030,14 +1105,25 @@ export default function DokumentyPage() {
             </p>
           ) : (
             <ul className={styles.templateList}>
-              {sortedDocs.active.map((d, i) => renderItem(d, i === 0))}
+              {/* Default-section documents, then a divider. The tour anchor rides
+                  the very first row on screen, wherever that ends up. */}
+              {sortedDocs.preferred.map((d, i) => renderItem(d, i === 0))}
+              {sortedDocs.preferred.length > 0 && sortedDocs.active.length > 0 && (
+                <li key="__preferred_sep__" className={styles.preferredDivider} aria-hidden="true" />
+              )}
+              {sortedDocs.active.map((d, i) =>
+                renderItem(d, sortedDocs.preferred.length === 0 && i === 0)
+              )}
               {sortedDocs.inactive.length > 0 && (
                 <li key="__inactive_sep__" className={styles.inactiveDivider}>
                   Neaktivní
                 </li>
               )}
               {sortedDocs.inactive.map((d, i) =>
-                renderItem(d, sortedDocs.active.length === 0 && i === 0)
+                renderItem(
+                  d,
+                  sortedDocs.preferred.length === 0 && sortedDocs.active.length === 0 && i === 0
+                )
               )}
             </ul>
           )}

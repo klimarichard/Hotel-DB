@@ -28,11 +28,13 @@ export interface DocumentSection {
   /**
    * `dokumenty.<id>.view` – gates seeing documents filed under this section.
    *
-   * Nothing on the frontend reads this: the SERVER filters the list and gates the
-   * read, so the client never evaluates section access itself. It is kept because
-   * typing it as `Permission` makes this file cross-check `catalog.ts` at compile
-   * time – a section whose key is missing or misspelled there fails the build
-   * rather than silently gating on a key nobody can ever hold.
+   * The client reads this only to decide which sections to OFFER in the
+   * "Výchozí sekce" picker. It is never the access gate: the server filters the
+   * list and gates the read, so nothing here can widen what a user sees.
+   *
+   * Typing it as `Permission` also makes this file cross-check `catalog.ts` at
+   * compile time – a section whose key is missing or misspelled there fails the
+   * build rather than silently gating on a key nobody can ever hold.
    */
   readonly viewPerm: Permission;
 }
