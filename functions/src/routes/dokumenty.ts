@@ -290,6 +290,95 @@ dokumentyRouter.post(
 );
 
 /**
+ * POST /api/dokumenty/:id/duplicate
+ * Copy an existing document under a new id. Body: { id, name, section }.
+ *
+ * Server-side rather than a client-orchestrated GET + POST + PUT because those
+ * three calls are not atomic: a failure between them leaves an empty document
+ * behind that looks like a real one. Here the copy either lands whole or not at
+ * all.
+ *
+ * Copies the CONTENT (htmlContent, variableDefs, margins) and nothing else.
+ * Deliberately NOT copied:
+ *  - `active` — a duplicate always starts active, even if the source was
+ *    deactivated; you copy a document in order to use it.
+ *  - `section` — taken from the body, not the source. Duplicating is the moment
+ *    you decide who the copy is for, and silently inheriting the source's
+ *    audience is the kind of default that quietly leaks a document.
+ */
+dokumentyRouter.post(
+  "/:id/duplicate",
+  requireAuth,
+  requirePermission("dokumenty.manage"),
+  async (req: AuthRequest, res: Response) => {
+    const { id: newId, name, section } = req.body as {
+      id?: string;
+      name?: string;
+      section?: unknown;
+    };
+    if (!newId || !name || !name.trim()) {
+      res.status(400).json({ error: "id a name jsou povinné." });
+      return;
+    }
+    if (!SLUG_RE.test(newId)) {
+      res.status(400).json({
+        error: "id musí být snake_case (písmena, číslice, podtržítka), 2–40 znaků, začínat písmenem.",
+      });
+      return;
+    }
+    if (section !== undefined && section !== null && section !== "" && !isDocumentSectionId(section)) {
+      res.status(400).json({ error: "Neplatná sekce." });
+      return;
+    }
+
+    const sourceSnap = await db().collection(COLLECTION).doc(req.params.id).get();
+    if (!sourceSnap.exists) {
+      res.status(404).json({ error: "Dokument neexistuje." });
+      return;
+    }
+    const source = sourceSnap.data() as Record<string, unknown>;
+
+    const targetRef = db().collection(COLLECTION).doc(newId);
+    if ((await targetRef.get()).exists) {
+      res.status(409).json({ error: "Dokument s tímto id již existuje." });
+      return;
+    }
+
+    const payload: Record<string, unknown> = {
+      name: name.trim(),
+      section: isDocumentSectionId(section) ? section : null,
+      htmlContent: source.htmlContent ?? "",
+      variables: source.variables ?? [],
+      createdAt: FieldValue.serverTimestamp(),
+      createdBy: req.uid,
+      updatedAt: FieldValue.serverTimestamp(),
+      updatedBy: req.uid,
+    };
+    // Only carry these when the source actually had them, so the copy doesn't
+    // gain an explicit `variableDefs: undefined` / default margins the original
+    // never stored.
+    if (source.variableDefs !== undefined) payload.variableDefs = source.variableDefs;
+    if (source.margins !== undefined) payload.margins = source.margins;
+
+    await targetRef.set(payload);
+    await logCreate(ctxFromReq(req), {
+      collection: COLLECTION,
+      resourceId: newId,
+      summary: {
+        name: name.trim(),
+        section: isDocumentSectionId(section) ? section : null,
+        duplicatedFrom: req.params.id,
+      },
+    });
+    res.status(201).json({
+      id: newId,
+      name: name.trim(),
+      section: isDocumentSectionId(section) ? section : null,
+    });
+  }
+);
+
+/**
  * GET /api/dokumenty/:id
  * Full template including htmlContent.
  */
