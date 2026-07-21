@@ -781,3 +781,15 @@
   color: var(--color-danger);
   border-color: var(--color-danger);
 }
+
+/* The always-present editor controls (currently just Uložit šablonu).
+   margin-left:auto pins them to the right edge so they keep their position when
+   the optional warning / save message render beside them. Mirrors
+   DokumentyPage.module.css - the two editor headers stay structurally parallel. */
+.headerActionsFixed {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
