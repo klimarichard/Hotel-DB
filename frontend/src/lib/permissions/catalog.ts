@@ -287,6 +287,13 @@ export const PERMISSION_SECTIONS = [
         items: [
           { key: "nav.dokumenty.view", label: "Zobrazit Dokumenty", level: 0 },
           { key: "dokumenty.manage", label: "Spravovat dokumenty", level: 1 },
+          // Sections narrow the audience of a document; a document with no
+          // section is visible to everyone holding the master key above. Stems
+          // match lib/hotels.ts, but the keys are independent of Recepce.
+          { key: "dokumenty.ambiance.view", label: "Sekce Ambiance", level: 1, spaceBefore: true },
+          { key: "dokumenty.superior.view", label: "Sekce Superior", level: 1 },
+          { key: "dokumenty.amigo.view", label: "Sekce Amigo & Alqush", level: 1 },
+          { key: "dokumenty.ankora.view", label: "Sekce Ankora", level: 1 },
         ],
       },
     ],

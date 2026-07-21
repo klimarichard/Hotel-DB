@@ -30,6 +30,11 @@ import IconButton from "@/components/IconButton";
 import ConfirmModal from "@/components/ConfirmModal";
 import modalStyles from "@/components/ConfirmModal.module.css";
 import GenerateDocumentModal from "@/components/GenerateDocumentModal";
+import {
+  DOCUMENT_SECTIONS,
+  documentSectionLabel,
+  type DocumentSectionId,
+} from "@/lib/documentSections";
 import { useAuth } from "@/hooks/useAuth";
 import { api, errorMessage } from "@/lib/api";
 import { formatTimestampCZ } from "@/lib/dateFormat";
@@ -69,6 +74,10 @@ interface DocumentMeta {
   variables?: string[];
   /** Absent = active. `false` = deactivated (sorted last, visually muted). */
   active?: boolean;
+  /** Section the document is filed under; null = visible to everyone with page
+   *  access. Server filters the list by this, so an entry arriving here is one
+   *  the caller is allowed to see. */
+  section?: DocumentSectionId | null;
   updatedAt?: { seconds: number } | null;
 }
 
@@ -204,6 +213,7 @@ export default function DokumentyPage() {
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [createIdDraft, setCreateIdDraft] = useState("");
   const [createNameDraft, setCreateNameDraft] = useState("");
+  const [createSectionDraft, setCreateSectionDraft] = useState<DocumentSectionId | "">("");
   const [createSaving, setCreateSaving] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
@@ -534,12 +544,15 @@ export default function DokumentyPage() {
     setSaveMsg(null);
     try {
       const htmlContent = editor.getHTML();
-      const name = docs.find((d) => d.id === selected)?.name ?? selected;
+      const meta = docs.find((d) => d.id === selected);
+      const name = meta?.name ?? selected;
       await api.put(`/dokumenty/${selected}`, {
         name,
         htmlContent,
         margins,
         variableDefs,
+        // Explicit null clears it; omitting the key would leave the old section.
+        section: meta?.section ?? null,
       });
       setSaveMsg("Uloženo");
       setIsDirty(false);
@@ -565,6 +578,7 @@ export default function DokumentyPage() {
       const created = await api.post<{ id: string }>("/dokumenty", {
         id: createIdDraft.trim(),
         name: createNameDraft.trim(),
+        section: createSectionDraft || null,
       });
       setCreateModalOpen(false);
       await fetchDocs();
@@ -881,6 +895,9 @@ export default function DokumentyPage() {
             <span className={styles.dirtyDot} title="Neuložené změny">•</span>
           )}
         </span>
+        {documentSectionLabel(doc.section) && (
+          <span className={styles.sectionBadge}>{documentSectionLabel(doc.section)}</span>
+        )}
         <div className={styles.templateItemFooter}>
           <span className={styles.templateDate}>{formatTimestampCZ(doc.updatedAt)}</span>
           {canManage && (
@@ -944,6 +961,30 @@ export default function DokumentyPage() {
         </div>
         {canManage && (
           <div className={styles.headerActions}>
+            {/* Refiling a document is a permission change in disguise – moving it
+                into a section hides it from everyone without that section's key,
+                and clearing the section exposes it to everyone with page access.
+                Saved with the document, so it follows the same Uložit as the text. */}
+            {selected && (
+              <label className={styles.sectionPicker}>
+                <span>Sekce</span>
+                <select
+                  value={docs.find((d) => d.id === selected)?.section ?? ""}
+                  onChange={(e) => {
+                    const next = (e.target.value || null) as DocumentSectionId | null;
+                    setDocs((prev) =>
+                      prev.map((d) => (d.id === selected ? { ...d, section: next } : d))
+                    );
+                    setIsDirty(true);
+                  }}
+                >
+                  <option value="">Bez sekce</option>
+                  {DOCUMENT_SECTIONS.map((sec) => (
+                    <option key={sec.id} value={sec.id}>{sec.label}</option>
+                  ))}
+                </select>
+              </label>
+            )}
             {varWarning && (
               <button
                 type="button"
@@ -1808,7 +1849,7 @@ export default function DokumentyPage() {
                   Malá písmena, číslice a podtržítka. Začíná písmenem.
                 </p>
               </div>
-              <div>
+              <div style={{ marginBottom: 12 }}>
                 <label style={createLabelStyle}>Název</label>
                 <input
                   type="text"
@@ -1817,6 +1858,23 @@ export default function DokumentyPage() {
                   placeholder="napr. Předávací protokol"
                   style={createInputStyle}
                 />
+              </div>
+              <div>
+                <label style={createLabelStyle}>Sekce</label>
+                <select
+                  value={createSectionDraft}
+                  onChange={(e) => setCreateSectionDraft(e.target.value as DocumentSectionId | "")}
+                  style={createInputStyle}
+                >
+                  <option value="">Bez sekce – pro všechny</option>
+                  {DOCUMENT_SECTIONS.map((sec) => (
+                    <option key={sec.id} value={sec.id}>{sec.label}</option>
+                  ))}
+                </select>
+                <p style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", margin: "4px 0 0" }}>
+                  Dokument v sekci uvidí jen ti, kdo mají oprávnění pro danou sekci.
+                  Bez sekce jej uvidí každý, kdo má přístup do Dokumentů.
+                </p>
               </div>
               {createError && (
                 <p style={{ fontSize: "0.8125rem", color: "var(--color-danger-text-strong)", marginTop: 10 }}>

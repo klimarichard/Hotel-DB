@@ -217,6 +217,14 @@ export const PERMISSION_CATALOG = [
     group: "Dokumenty",
     items: [
       { key: "dokumenty.manage", label: "Spravovat dokumenty" },
+      // Section keys. A document filed under a section is visible only to
+      // holders of that key (plus dokumenty.manage); a document with no section
+      // is visible to anyone with nav.dokumenty.view. Stems mirror the Recepce
+      // hotel keys but are independent of them.
+      { key: "dokumenty.ambiance.view", label: "Sekce Ambiance" },
+      { key: "dokumenty.superior.view", label: "Sekce Superior" },
+      { key: "dokumenty.amigo.view", label: "Sekce Amigo & Alqush" },
+      { key: "dokumenty.ankora.view", label: "Sekce Ankora" },
     ],
   },
   {
