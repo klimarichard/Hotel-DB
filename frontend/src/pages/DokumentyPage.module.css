@@ -895,3 +895,16 @@
   border-top: 1px solid var(--color-border);
   list-style: none;
 }
+
+/* The always-present editor controls (Sekce, Duplikovat, Uložit dokument).
+   margin-left:auto pins them to the right edge so they keep their position when
+   the optional warning / save message appear beside them - those render BEFORE
+   this group in the DOM, and .varWarn is flex:1, so without this the controls
+   slid left every time a warning showed. */
+.headerActionsFixed {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
