@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef, useReducer } from "react";
+import { Fragment, useState, useEffect, useCallback, useMemo, useRef, useReducer } from "react";
 import Button from "@/components/Button";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -35,6 +35,7 @@ import {
   VARIABLE_GROUPS,
   CUSTOM_VAR_KEYS,
   CUSTOM_VAR_TYPE_LABELS,
+  CUSTOM_VAR_MAX_OPTIONS,
   usedCustomVars,
   fillTemplate,
   COMPARABLE_VARS,
@@ -100,10 +101,19 @@ function marginsEqual(a: PageMargins, b: PageMargins): boolean {
  * Returns null when there is nothing to warn about.
  */
 function customVarWarning(html: string, defs: CustomVarDefs): string | null {
-  const unnamed = usedCustomVars(html).filter((k) => !defs[k]?.label?.trim());
-  if (unnamed.length === 0) return null;
-  // One line — the fuller explanation lives in the button's tooltip.
-  return `Bez nastavení: ${unnamed.join(", ")} – chybí název a typ.`;
+  const used = usedCustomVars(html);
+  const unnamed = used.filter((k) => !defs[k]?.label?.trim());
+  // A "list" slot with no choices renders an empty dropdown that can never be
+  // satisfied, so the generate form falls back to a free-text box for it. That
+  // fallback keeps the document producible, which is precisely why the omission
+  // has to be surfaced here instead of being discovered by whoever fills it in.
+  const emptyLists = used.filter(
+    (k) => defs[k]?.type === "list" && !(defs[k]?.options ?? []).some((o) => o.trim())
+  );
+  const parts: string[] = [];
+  if (unnamed.length > 0) parts.push(`Bez nastavení: ${unnamed.join(", ")} – chybí název a typ.`);
+  if (emptyLists.length > 0) parts.push(`Bez možností: ${emptyLists.join(", ")} – seznam nemá žádné hodnoty.`);
+  return parts.length > 0 ? parts.join(" ") : null;
 }
 
 interface TemplateDoc extends TemplateMeta {
@@ -1556,6 +1566,7 @@ export default function ContractTemplatesPage() {
             default: CustomVarDefault | undefined;
             condition: CustomVarCondition | undefined;
             optional: boolean;
+            options: string[] | undefined;
           }>
         ) => {
           setVariableDefs((prev) => {
@@ -1573,6 +1584,13 @@ export default function ContractTemplatesPage() {
             // (bool/condition ignore it), so the author's intent is kept if they
             // switch back.
             const nextOptional = "optional" in patch ? patch.optional : prevDef?.optional;
+            // Choices belong to a "list" slot only; switching the type away drops
+            // them, for the same reason a now-invalid default is dropped.
+            const nextTypeVal = patch.type ?? prevDef?.type ?? "text";
+            const nextOptions =
+              "options" in patch
+                ? patch.options
+                : nextTypeVal === "list" ? prevDef?.options : undefined;
             return {
               ...prev,
               [key]: {
@@ -1583,6 +1601,7 @@ export default function ContractTemplatesPage() {
                 ...(nextDefault ? { default: nextDefault } : {}),
                 ...(nextCondition ? { condition: nextCondition } : {}),
                 ...(nextOptional ? { optional: true } : {}),
+                ...(nextOptions && nextOptions.length > 0 ? { options: nextOptions } : {}),
               },
             };
           });
@@ -1691,9 +1710,77 @@ export default function ContractTemplatesPage() {
           const wantIf = type === "bool";
           return VARIABLE_GROUPS.flatMap((g) => g.vars).filter((v) => (v.kind === "if") === wantIf);
         };
+        /**
+         * Editor for a "list" slot's choices: one input per value plus an add
+         * button. Edited in place rather than as one comma-separated field,
+         * because a choice may legitimately contain a comma ("Praha, Karlín").
+         */
+        const renderOptionsEditor = (key: string) => {
+          const options = variableDefs[key]?.options ?? [];
+          const write = (next: string[]) =>
+            setDef(key, { options: next.length > 0 ? next : undefined });
+          const atLimit = options.length >= CUSTOM_VAR_MAX_OPTIONS;
+          return (
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <span style={{ fontSize: "0.72rem", color: "var(--color-text-muted)" }}>
+                Možnosti k výběru {options.length > 0 && `(${options.length})`}
+              </span>
+              {options.map((opt, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <input
+                    type="text"
+                    style={{ ...fieldStyle, flex: "1 1 auto", minWidth: 0 }}
+                    value={opt}
+                    maxLength={100}
+                    placeholder={`Možnost ${i + 1}`}
+                    aria-label={`Možnost ${i + 1}`}
+                    onChange={(e) => {
+                      const next = [...options];
+                      next[i] = e.target.value;
+                      write(next);
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className={styles.optionRemoveBtn}
+                    aria-label={`Odebrat možnost ${i + 1}`}
+                    title="Odebrat možnost"
+                    onClick={() => write(options.filter((_, j) => j !== i))}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+              <div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={atLimit}
+                  title={atLimit ? `Nejvýše ${CUSTOM_VAR_MAX_OPTIONS} možností` : undefined}
+                  onClick={() => write([...options, ""])}
+                >
+                  + Přidat možnost
+                </Button>
+              </div>
+            </div>
+          );
+        };
+
         // Render the literal-value input matching a slot's type.
         const renderLiteralDefault = (key: string, type: CustomVarType, value: string) => {
           const set = (v: string) => setDef(key, { default: { kind: "literal", value: v } });
+          if (type === "list") {
+            // A list slot's default has to BE one of its choices.
+            const opts = variableDefs[key]?.options ?? [];
+            return (
+              <select style={fieldStyle} value={value} onChange={(e) => set(e.target.value)}>
+                <option value="">– vyberte –</option>
+                {opts.map((o, i) => (
+                  <option key={`${o}-${i}`} value={o}>{o}</option>
+                ))}
+              </select>
+            );
+          }
           if (type === "bool") {
             return (
               <select style={fieldStyle} value={value} onChange={(e) => set(e.target.value)}>
@@ -1790,7 +1877,8 @@ export default function ContractTemplatesPage() {
                         const dflt = def?.default;
                         const source = dflt?.kind ?? "none";
                         return (
-                          <tr key={key}>
+                          <Fragment key={key}>
+                          <tr>
                             <td style={{ padding: "3px 10px 3px 0", whiteSpace: "nowrap" }}>
                               <code style={{ fontSize: "0.75rem" }}>{`{{${key}}}`}</code>
                             </td>
@@ -1857,7 +1945,10 @@ export default function ContractTemplatesPage() {
                                   >
                                     <option value="none">Žádná</option>
                                     <option value="literal">Pevná hodnota</option>
-                                    <option value="fixedVar">Z proměnné</option>
+                                    {/* A list slot's default must be one of its own
+                                        choices, so sourcing it from a built-in
+                                        variable is not offered. */}
+                                    {type !== "list" && <option value="fixedVar">Z proměnné</option>}
                                   </select>
                                   {source === "literal" && (
                                     <div style={{ flex: "1 1 auto", minWidth: 0 }}>
@@ -1879,6 +1970,17 @@ export default function ContractTemplatesPage() {
                               )}
                             </td>
                           </tr>
+                          {/* Choices get their own row: a variable-length list
+                              would blow up the fixed column widths above. */}
+                          {type === "list" && (
+                            <tr>
+                              <td />
+                              <td colSpan={4} style={{ padding: "0 0 10px 0" }}>
+                                {renderOptionsEditor(key)}
+                              </td>
+                            </tr>
+                          )}
+                          </Fragment>
                         );
                       })}
                     </tbody>

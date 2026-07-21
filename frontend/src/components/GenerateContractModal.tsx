@@ -491,6 +491,22 @@ export default function GenerateContractModal({
                                         />
                                         {raw === "true" ? "Ano" : "Ne"}
                                       </label>
+                                    ) : type === "list" && (def?.options?.length ?? 0) > 0 ? (
+                                      // Fixed choice list. An optionless list slot is
+                                      // an authoring mistake (the template editor
+                                      // warns about it) and deliberately falls through
+                                      // to the text input below, so a half-configured
+                                      // template can still be generated.
+                                      <select
+                                        className={styles.varInput}
+                                        value={raw}
+                                        onChange={(e) => setRaw(e.target.value)}
+                                      >
+                                        <option value="">– vyberte –</option>
+                                        {(def?.options ?? []).map((o, i) => (
+                                          <option key={`${o}-${i}`} value={o}>{o}</option>
+                                        ))}
+                                      </select>
                                     ) : (
                                       <input
                                         // A fixed-variable default resolves to an

@@ -169,6 +169,46 @@ export default function GenerateDocumentModal({ templateId, onClose }: Props) {
       );
     }
 
+    if (type === "list") {
+      // An optionless list is an authoring mistake (the editor warns about it),
+      // but it must not become an unfillable required field here – fall back to
+      // a free-text input so the document can still be produced.
+      const options = def?.options ?? [];
+      if (options.length === 0) {
+        return (
+          <div key={key} className={styles.field}>
+            <label className={styles.label} htmlFor={`docvar-${key}`}>{label}</label>
+            <input
+              id={`docvar-${key}`}
+              type="text"
+              className={isMissing ? `${styles.input} ${styles.inputMissing}` : styles.input}
+              value={raw}
+              onChange={(e) => setValue(key, e.target.value)}
+            />
+          </div>
+        );
+      }
+      return (
+        <div key={key} className={styles.field}>
+          <label className={styles.label} htmlFor={`docvar-${key}`}>
+            {label}
+            {def?.optional && <span className={styles.optional}> (nepovinné)</span>}
+          </label>
+          <select
+            id={`docvar-${key}`}
+            className={isMissing ? `${styles.input} ${styles.inputMissing}` : styles.input}
+            value={raw}
+            onChange={(e) => setValue(key, e.target.value)}
+          >
+            <option value="">– vyberte –</option>
+            {options.map((o, i) => (
+              <option key={`${o}-${i}`} value={o}>{o}</option>
+            ))}
+          </select>
+        </div>
+      );
+    }
+
     return (
       <div key={key} className={styles.field}>
         <label className={styles.label} htmlFor={`docvar-${key}`}>

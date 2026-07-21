@@ -760,3 +760,24 @@
   color: var(--color-text-muted);
   margin: 0;
 }
+
+/* Remove-a-choice button in the "Seznam" variable options editor. Icon-only and
+   row-scoped, so it stays local CSS like the other micro-actions. */
+.optionRemoveBtn {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  font-size: 0.8rem;
+  line-height: 1;
+  color: var(--color-text-muted);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.optionRemoveBtn:hover {
+  color: var(--color-danger);
+  border-color: var(--color-danger);
+}

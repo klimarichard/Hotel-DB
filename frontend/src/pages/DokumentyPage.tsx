@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef, useReducer } from "react";
+import { Fragment, useState, useEffect, useCallback, useMemo, useRef, useReducer } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
@@ -42,6 +42,7 @@ import { formatTimestampCZ } from "@/lib/dateFormat";
 import {
   CUSTOM_VAR_KEYS,
   CUSTOM_VAR_TYPE_LABELS,
+  CUSTOM_VAR_MAX_OPTIONS,
   usedCustomVars,
   fillTemplate,
   type CustomVarDefs,
@@ -54,7 +55,7 @@ import styles from "./DokumentyPage.module.css";
  * excluded on purpose: a derived condition compares built-in employee/contract
  * variables, and this page has none – there would be nothing to compare.
  */
-const DOC_VAR_TYPES = ["text", "date", "number", "bool"] as const;
+const DOC_VAR_TYPES = ["text", "date", "number", "bool", "list"] as const;
 type DocVarType = Exclude<CustomVarType, "condition">;
 
 /** A literal default value for a slot. Documents never use `fixedVar` defaults
@@ -106,9 +107,19 @@ function marginsEqual(a: PageMargins, b: PageMargins): boolean {
  * Returns null when there is nothing to warn about.
  */
 function customVarWarning(html: string, defs: CustomVarDefs): string | null {
-  const unnamed = usedCustomVars(html).filter((k) => !defs[k]?.label?.trim());
-  if (unnamed.length === 0) return null;
-  return `Bez nastavení: ${unnamed.join(", ")} – chybí název a typ.`;
+  const used = usedCustomVars(html);
+  const unnamed = used.filter((k) => !defs[k]?.label?.trim());
+  // A "list" slot with no choices renders an empty dropdown that can never be
+  // satisfied, so the generate form falls back to a free-text box for it. That
+  // fallback keeps the document producible, which is precisely why the omission
+  // has to be surfaced here instead of being discovered by whoever fills it in.
+  const emptyLists = used.filter(
+    (k) => defs[k]?.type === "list" && !(defs[k]?.options ?? []).some((o) => o.trim())
+  );
+  const parts: string[] = [];
+  if (unnamed.length > 0) parts.push(`Bez nastavení: ${unnamed.join(", ")} – chybí název a typ.`);
+  if (emptyLists.length > 0) parts.push(`Bez možností: ${emptyLists.join(", ")} – seznam nemá žádné hodnoty.`);
+  return parts.length > 0 ? parts.join(" ") : null;
 }
 
 function SaveIcon() {
@@ -700,6 +711,7 @@ export default function DokumentyPage() {
       type: DocVarType;
       default: LiteralDefault | undefined;
       optional: boolean;
+      options: string[] | undefined;
     }>
   ) {
     setVariableDefs((prev) => {
@@ -708,6 +720,13 @@ export default function DokumentyPage() {
       const nextDefault =
         "default" in patch ? patch.default : typeChanged ? undefined : prevDef?.default;
       const nextOptional = "optional" in patch ? patch.optional : prevDef?.optional;
+      // Choices belong to a "list" slot only. Switching the type away discards
+      // them for the same reason a stale default is discarded: they would sit
+      // invisibly in the stored config and reappear if the author switched back,
+      // long after they stopped meaning anything.
+      const nextType = patch.type ?? prevDef?.type ?? "text";
+      const nextOptions =
+        "options" in patch ? patch.options : nextType === "list" ? prevDef?.options : undefined;
       return {
         ...prev,
         [key]: {
@@ -717,15 +736,86 @@ export default function DokumentyPage() {
           // no-op `optional: false`.
           ...(nextDefault ? { default: nextDefault } : {}),
           ...(nextOptional ? { optional: true } : {}),
+          ...(nextOptions && nextOptions.length > 0 ? { options: nextOptions } : {}),
         },
       };
     });
     setIsDirty(true);
   }
 
+  /**
+   * Editor for a "list" slot's choices: one input per value, plus a row to add
+   * another. Values are edited in place rather than as one comma-separated field
+   * because a choice may legitimately contain a comma ("Praha, Karlín").
+   */
+  function renderOptionsEditor(key: string) {
+    const options = variableDefs[key]?.options ?? [];
+    const write = (next: string[]) =>
+      setDef(key, { options: next.length > 0 ? next : undefined });
+    const atLimit = options.length >= CUSTOM_VAR_MAX_OPTIONS;
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        <span style={{ fontSize: "0.72rem", color: "var(--color-text-muted)" }}>
+          Možnosti k výběru {options.length > 0 && `(${options.length})`}
+        </span>
+        {options.map((opt, i) => (
+          <div key={i} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <input
+              type="text"
+              style={{ ...fieldStyle, flex: "1 1 auto", minWidth: 0 }}
+              value={opt}
+              maxLength={100}
+              placeholder={`Možnost ${i + 1}`}
+              aria-label={`Možnost ${i + 1}`}
+              onChange={(e) => {
+                const next = [...options];
+                next[i] = e.target.value;
+                write(next);
+              }}
+            />
+            <button
+              type="button"
+              className={styles.optionRemoveBtn}
+              aria-label={`Odebrat možnost ${i + 1}`}
+              title="Odebrat možnost"
+              onClick={() => write(options.filter((_, j) => j !== i))}
+            >
+              ✕
+            </button>
+          </div>
+        ))}
+        <div>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={atLimit}
+            title={atLimit ? `Nejvýše ${CUSTOM_VAR_MAX_OPTIONS} možností` : undefined}
+            onClick={() => write([...options, ""])}
+          >
+            + Přidat možnost
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   /** The literal-default input matching a slot's type. */
   function renderLiteralDefault(key: string, type: DocVarType, value: string) {
     const set = (v: string) => setDef(key, { default: { kind: "literal", value: v } });
+    if (type === "list") {
+      // The default of a list slot has to BE one of its choices, so this is a
+      // select over them rather than a free-text box that could hold a value the
+      // dropdown never offers.
+      const options = variableDefs[key]?.options ?? [];
+      return (
+        <select style={fieldStyle} value={value} onChange={(e) => set(e.target.value)}>
+          <option value="">– vyberte –</option>
+          {options.map((o, i) => (
+            <option key={`${o}-${i}`} value={o}>{o}</option>
+          ))}
+        </select>
+      );
+    }
     if (type === "bool") {
       return (
         <select style={fieldStyle} value={value} onChange={(e) => set(e.target.value)}>
@@ -1574,7 +1664,8 @@ export default function DokumentyPage() {
                         // contracts and is never written here.
                         const dflt = def?.default?.kind === "literal" ? def.default : undefined;
                         return (
-                          <tr key={key}>
+                          <Fragment key={key}>
+                          <tr>
                             <td style={{ padding: "3px 10px 3px 0", whiteSpace: "nowrap" }}>
                               <code style={{ fontSize: "0.75rem" }}>{`{{${key}}}`}</code>
                             </td>
@@ -1644,6 +1735,18 @@ export default function DokumentyPage() {
                               </div>
                             </td>
                           </tr>
+                          {/* Choices live on their own row: they are a variable
+                              length list and would blow up the fixed column
+                              widths the other four cells rely on. */}
+                          {type === "list" && (
+                            <tr>
+                              <td />
+                              <td colSpan={4} style={{ padding: "0 0 10px 0" }}>
+                                {renderOptionsEditor(key)}
+                              </td>
+                            </tr>
+                          )}
+                          </Fragment>
                         );
                       })}
                     </tbody>
