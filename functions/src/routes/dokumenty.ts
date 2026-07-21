@@ -38,6 +38,49 @@ function extractVariables(html: string): string[] {
   return Array.from(keys);
 }
 
+/**
+ * Fixed document sections. A document filed under a section is visible only to
+ * holders of that section's key; a document with NO section is visible to anyone
+ * with `nav.dokumenty.view`. Mirrors `frontend/src/lib/documentSections.ts` —
+ * keep the two in sync (the stems also match lib/hotels.ts, but Recepce keys
+ * grant nothing here).
+ *
+ * Hard-coded rather than admin-created because permission keys must exist in the
+ * static catalog: `sanitizePermissionList` silently drops keys it doesn't know,
+ * so a runtime-created key would look grantable and never stick.
+ */
+const DOCUMENT_SECTIONS: Record<string, string> = {
+  ambiance: "dokumenty.ambiance.view",
+  superior: "dokumenty.superior.view",
+  amigo: "dokumenty.amigo.view",
+  ankora: "dokumenty.ankora.view",
+};
+
+function isSectionId(v: unknown): v is string {
+  return typeof v === "string" && Object.prototype.hasOwnProperty.call(DOCUMENT_SECTIONS, v);
+}
+
+/**
+ * Whether this request may see a document filed under `section`.
+ *
+ * Note the `system.admin` check is explicit. The resolver expands that key to the
+ * full static permission set, so an admin DOES hold every section key — but
+ * relying on that silently couples this gate to the resolver's expansion
+ * behaviour, and the whole point of a gate is to not depend on a coincidence.
+ *
+ * `dokumenty.manage` short-circuits too: an editor who could not see a section
+ * could neither fix nor delete what is filed there.
+ */
+function maySeeSection(req: AuthRequest, section: unknown): boolean {
+  const perms = req.permissions ?? new Set<string>();
+  if (perms.has("system.admin") || perms.has("dokumenty.manage")) return true;
+  if (section === null || section === undefined || section === "") return true;
+  // An unknown stored value is treated as RESTRICTED, not unfiled: if a section
+  // is ever retired, its documents must not fall open to everyone.
+  if (!isSectionId(section)) return false;
+  return perms.has(DOCUMENT_SECTIONS[section]);
+}
+
 const SLUG_RE = /^[a-z][a-z0-9_]{1,39}$/;
 
 interface Margins {
@@ -194,13 +237,18 @@ dokumentyRouter.get(
   "/",
   requireAuth,
   requirePermission("nav.dokumenty.view"),
-  async (_req: AuthRequest, res: Response) => {
+  async (req: AuthRequest, res: Response) => {
     const snap = await db().collection(COLLECTION).get();
-    const docs = snap.docs.map((d) => {
+    const docs = snap.docs
+      // Filtered server-side, not just hidden in the UI — the list is the only
+      // place a document's existence is disclosed.
+      .filter((d) => maySeeSection(req, d.data().section))
+      .map((d) => {
       const data = d.data();
       return {
         id: d.id,
         name: data.name,
+        section: data.section ?? null,
         // Absent = active. Only an explicit `active:false` marks a template
         // inactive — see PATCH /:id below.
         active: data.active !== false,
@@ -223,7 +271,11 @@ dokumentyRouter.post(
   requireAuth,
   requirePermission("dokumenty.manage"),
   async (req: AuthRequest, res: Response) => {
-    const { id, name } = req.body as { id?: string; name?: string };
+    const { id, name, section } = req.body as {
+      id?: string;
+      name?: string;
+      section?: unknown;
+    };
     if (!id || !name || !name.trim()) {
       res.status(400).json({ error: "id a name jsou povinné." });
       return;
@@ -240,8 +292,16 @@ dokumentyRouter.post(
       res.status(409).json({ error: "Dokument s tímto id již existuje." });
       return;
     }
+    // null (not absent) so the field always exists: "unfiled" is a real state,
+    // and a missing field would be indistinguishable from a doc written before
+    // sections existed.
+    if (section !== undefined && section !== null && section !== "" && !isSectionId(section)) {
+      res.status(400).json({ error: "Neplatná sekce." });
+      return;
+    }
     await ref.set({
       name: name.trim(),
+      section: isSectionId(section) ? section : null,
       htmlContent: "",
       variables: [],
       margins: { top: 15, bottom: 15, left: 15, right: 15 },
@@ -253,9 +313,13 @@ dokumentyRouter.post(
     await logCreate(ctxFromReq(req), {
       collection: COLLECTION,
       resourceId: id,
-      summary: { name: name.trim() },
+      summary: { name: name.trim(), section: isSectionId(section) ? section : null },
     });
-    res.status(201).json({ id, name: name.trim() });
+    res.status(201).json({
+      id,
+      name: name.trim(),
+      section: isSectionId(section) ? section : null,
+    });
   }
 );
 
@@ -273,6 +337,12 @@ dokumentyRouter.get(
       res.status(404).json({ error: "Dokument neexistuje." });
       return;
     }
+    // 404 rather than 403: a document the caller may not see should not have its
+    // existence confirmed by the status code.
+    if (!maySeeSection(req, doc.data()?.section)) {
+      res.status(404).json({ error: "Dokument neexistuje." });
+      return;
+    }
     res.json({ id: doc.id, ...doc.data() });
   }
 );
@@ -286,11 +356,12 @@ dokumentyRouter.put(
   requireAuth,
   requirePermission("dokumenty.manage"),
   async (req: AuthRequest, res: Response) => {
-    const { name, htmlContent, margins, variableDefs } = req.body as {
+    const { name, htmlContent, margins, variableDefs, section } = req.body as {
       name?: string;
       htmlContent?: string;
       margins?: unknown;
       variableDefs?: unknown;
+      section?: unknown;
     };
 
     if (!name || htmlContent === undefined) {
@@ -339,6 +410,15 @@ dokumentyRouter.put(
     };
     if (margins !== undefined) payload.margins = margins;
     if (variableDefs !== undefined) payload.variableDefs = variableDefs;
+    // Explicit null clears the section (back to visible-to-everyone); omitting
+    // the field leaves the current one untouched.
+    if (section !== undefined) {
+      if (section !== null && section !== "" && !isSectionId(section)) {
+        res.status(400).json({ error: "Neplatná sekce." });
+        return;
+      }
+      payload.section = isSectionId(section) ? section : null;
+    }
 
     const ref = db().collection(COLLECTION).doc(req.params.id);
     const beforeSnap = await ref.get();
