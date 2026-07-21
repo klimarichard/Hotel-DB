@@ -38,6 +38,7 @@ export const PERMISSION_CATALOG = [
       { key: "nav.recepce.view", label: "Zobrazit Recepci" },
       { key: "nav.tabulky.view", label: "Zobrazit Tabulky" },
       { key: "nav.dokumenty.view", label: "Zobrazit Dokumenty" },
+      { key: "nav.faktury.view", label: "Zobrazit Faktury" },
       { key: "nav.employees.view", label: "Zobrazit Zaměstnance" },
       { key: "nav.payroll.view", label: "Zobrazit Mzdy" },
       { key: "nav.alerts.view", label: "Zobrazit Upozornění" },
@@ -225,6 +226,18 @@ export const PERMISSION_CATALOG = [
       { key: "dokumenty.superior.view", label: "Sekce Superior" },
       { key: "dokumenty.amigo.view", label: "Sekce Amigo & Alqush" },
       { key: "dokumenty.ankora.view", label: "Sekce Ankora" },
+    ],
+  },
+  {
+    // Visual reproduction of a Protel invoice that Protel itself can no
+    // longer display. The app is NOT the issuer, so there is no numbering
+    // authority here and no separate "create"/"delete" split: anyone who can
+    // see the page can produce and manage drafts. `faktury.manage` guards the
+    // shared configuration only — the posting catalogue, VAT rate list,
+    // agency address book and per-hotel bank/footer blocks.
+    group: "Faktury",
+    items: [
+      { key: "faktury.manage", label: "Spravovat číselníky faktur" },
     ],
   },
   {

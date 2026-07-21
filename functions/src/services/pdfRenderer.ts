@@ -136,9 +136,29 @@ async function getBrowser(): Promise<Browser> {
   return browserPromise;
 }
 
+export interface RenderOptions {
+  /**
+   * Extra CSS appended after `RENDER_CSS`, for callers that author their own
+   * layout rather than emitting editor HTML. Faktury uses this: the shared
+   * rules put a 1px border on every `table td`, which is right for a contract
+   * and wrong for an invoice.
+   */
+  extraCss?: string;
+  /**
+   * Whether the logo-height measurement below applies. Templates need it
+   * (their logo is part of the flowing body, so page 2+ must start lower).
+   * A fixed layout whose header repeats or does not repeat by its own rules
+   * must switch it off, otherwise a header image silently inflates the top
+   * margin of every subsequent page. Defaults to true — existing callers
+   * keep their behaviour.
+   */
+  logoOffset?: boolean;
+}
+
 export async function renderPdf(
   bodyHtml: string,
-  margins: RenderMargins = DEFAULT_MARGINS
+  margins: RenderMargins = DEFAULT_MARGINS,
+  options: RenderOptions = {}
 ): Promise<Buffer> {
   const browser = await getBrowser();
   const page = await browser.newPage();
@@ -163,7 +183,7 @@ export async function renderPdf(
 <html lang="cs">
 <head>
   <meta charset="utf-8">
-  <style>${RENDER_CSS}</style>
+  <style>${RENDER_CSS}${options.extraCss ?? ""}</style>
 </head>
 <body>${bodyHtml}</body>
 </html>`;
@@ -176,10 +196,12 @@ export async function renderPdf(
     // post-logo body text on page 1. `@page :first` reverts page 1 to the
     // template's original top margin so the logo still pins to where the
     // template author put it.
-    const logoBottomPx = await page.evaluate(() => {
-      const img = document.body.querySelector("img");
-      return img ? img.getBoundingClientRect().bottom : 0;
-    });
+    const logoBottomPx = (options.logoOffset ?? true)
+      ? await page.evaluate(() => {
+          const img = document.body.querySelector("img");
+          return img ? img.getBoundingClientRect().bottom : 0;
+        })
+      : 0;
     const PX_TO_MM = 25.4 / 96;
     const logoMm = +(logoBottomPx * PX_TO_MM).toFixed(1);
     if (logoMm > 0) {
