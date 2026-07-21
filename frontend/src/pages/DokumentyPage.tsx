@@ -258,6 +258,8 @@ export default function DokumentyPage() {
   const [createIdDraft, setCreateIdDraft] = useState("");
   const [createNameDraft, setCreateNameDraft] = useState("");
   const [createSectionDraft, setCreateSectionDraft] = useState<DocumentSectionId | "">("");
+  /** Non-null = the create modal is acting as "duplicate this document". */
+  const [duplicateSource, setDuplicateSource] = useState<DocumentMeta | null>(null);
   const [createSaving, setCreateSaving] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
@@ -626,20 +628,47 @@ export default function DokumentyPage() {
     }
   }
 
+  function closeCreateModal() {
+    setCreateModalOpen(false);
+    setDuplicateSource(null);
+    setCreateError(null);
+  }
+
+  /** Open the modal in duplicate mode, pre-filled from `doc`. */
+  function openDuplicate(doc: DocumentMeta) {
+    // Suggest a slug, still editable. The 40-char cap is the server's SLUG_RE
+    // limit, so a long source id can't produce an id the server would reject.
+    setCreateIdDraft(`${doc.id}_kopie`.slice(0, 40));
+    setCreateNameDraft(`${doc.name} (kopie)`);
+    setCreateSectionDraft(doc.section ?? "");
+    setCreateError(null);
+    setDuplicateSource(doc);
+    setCreateModalOpen(true);
+  }
+
   async function handleCreate() {
     setCreateSaving(true);
     setCreateError(null);
     try {
-      const created = await api.post<{ id: string }>("/dokumenty", {
+      const body = {
         id: createIdDraft.trim(),
         name: createNameDraft.trim(),
         section: createSectionDraft || null,
-      });
-      setCreateModalOpen(false);
+      };
+      const created = duplicateSource
+        ? await api.post<{ id: string }>(`/dokumenty/${duplicateSource.id}/duplicate`, body)
+        : await api.post<{ id: string }>("/dokumenty", body);
+      closeCreateModal();
       await fetchDocs();
-      setSelected(created.id);
+      // requestSwitch, NOT setSelected: switching straight to the new document
+      // would discard unsaved edits in the editor without asking. That was
+      // latent for "new document"; duplicating makes it likely, because the
+      // document you duplicate is usually the one you have open and are editing.
+      requestSwitch(created.id);
     } catch (e) {
-      setCreateError(errorMessage(e, "Chyba při vytváření dokumentu."));
+      setCreateError(
+        errorMessage(e, duplicateSource ? "Chyba při duplikování dokumentu." : "Chyba při vytváření dokumentu.")
+      );
     } finally {
       setCreateSaving(false);
     }
@@ -1016,30 +1045,6 @@ export default function DokumentyPage() {
         </div>
         {canManage && (
           <div className={styles.headerActions}>
-            {/* Refiling a document is a permission change in disguise – moving it
-                into a section hides it from everyone without that section's key,
-                and clearing the section exposes it to everyone with page access.
-                Saved with the document, so it follows the same Uložit as the text. */}
-            {selected && (
-              <label className={styles.sectionPicker}>
-                <span>Sekce</span>
-                <select
-                  value={docs.find((d) => d.id === selected)?.section ?? ""}
-                  onChange={(e) => {
-                    const next = (e.target.value || null) as DocumentSectionId | null;
-                    setDocs((prev) =>
-                      prev.map((d) => (d.id === selected ? { ...d, section: next } : d))
-                    );
-                    setIsDirty(true);
-                  }}
-                >
-                  <option value="">Bez sekce</option>
-                  {DOCUMENT_SECTIONS.map((sec) => (
-                    <option key={sec.id} value={sec.id}>{sec.label}</option>
-                  ))}
-                </select>
-              </label>
-            )}
             {varWarning && (
               <button
                 type="button"
@@ -1059,16 +1064,59 @@ export default function DokumentyPage() {
                 {saveMsg}
               </span>
             )}
-            <Button
-              variant="primary"
-              onClick={handleSave}
-              disabled={saving || !isDirty || !selected}
-            >
-              <span className={styles.saveBtnInner}>
-                <SaveIcon />
-                {saving ? "Ukládám…" : "Uložit dokument"}
-              </span>
-            </Button>
+            {/* Fixed group, pinned right by .headerActionsFixed's margin-left:auto.
+                It must sit AFTER the warning and the save message: those appear
+                and disappear, and .varWarn is flex:1, so with the group before
+                them the controls slid left whenever a warning showed. */}
+            <div className={styles.headerActionsFixed}>
+              {/* Refiling a document is a permission change in disguise – moving it
+                  into a section hides it from everyone without that section's key,
+                  and clearing the section exposes it to everyone with page access.
+                  Saved with the document, so it follows the same Uložit as the text. */}
+              {selected && (
+                <label className={styles.sectionPicker}>
+                  <span>Sekce</span>
+                  <select
+                    value={docs.find((d) => d.id === selected)?.section ?? ""}
+                    onChange={(e) => {
+                      const next = (e.target.value || null) as DocumentSectionId | null;
+                      setDocs((prev) =>
+                        prev.map((d) => (d.id === selected ? { ...d, section: next } : d))
+                      );
+                      setIsDirty(true);
+                    }}
+                  >
+                    <option value="">Bez sekce</option>
+                    {DOCUMENT_SECTIONS.map((sec) => (
+                      <option key={sec.id} value={sec.id}>{sec.label}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {selected && (
+                <Button
+                  variant="secondary"
+                  disabled={saving}
+                  title="Vytvořit kopii tohoto dokumentu pod novým id"
+                  onClick={() => {
+                    const doc = docs.find((d) => d.id === selected);
+                    if (doc) openDuplicate(doc);
+                  }}
+                >
+                  Duplikovat
+                </Button>
+              )}
+              <Button
+                variant="primary"
+                onClick={handleSave}
+                disabled={saving || !isDirty || !selected}
+              >
+                <span className={styles.saveBtnInner}>
+                  <SaveIcon />
+                  {saving ? "Ukládám…" : "Uložit dokument"}
+                </span>
+              </Button>
+            </div>
           </div>
         )}
       </div>
@@ -1911,16 +1959,32 @@ export default function DokumentyPage() {
         <div className={modalStyles.overlay}>
           <div className={modalStyles.modal}>
             <div className={`${modalStyles.header} ${styles.modalHeader}`}>
-              <h2 className={modalStyles.title}>Nový dokument</h2>
+              <h2 className={modalStyles.title}>
+                {duplicateSource ? "Duplikovat dokument" : "Nový dokument"}
+              </h2>
               <IconButton
                 aria-label="Zavřít"
                 disabled={createSaving}
-                onClick={() => setCreateModalOpen(false)}
+                onClick={closeCreateModal}
               >
                 ✕
               </IconButton>
             </div>
             <div className={modalStyles.body}>
+              {duplicateSource && (
+                <p style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)", margin: "0 0 14px" }}>
+                  Zkopíruje se obsah dokumentu „{duplicateSource.name}" včetně nastavení
+                  vlastních proměnných a okrajů stránky. Zadejte id, název a sekci nového
+                  dokumentu.
+                  {selected === duplicateSource.id && isDirty && (
+                    <>
+                      {" "}
+                      <strong>Kopíruje se naposledy uložená verze – neuložené změny se do
+                      kopie nepřenesou.</strong>
+                    </>
+                  )}
+                </p>
+              )}
               <div style={{ marginBottom: 12 }}>
                 <label style={createLabelStyle}>ID (slug)</label>
                 <input
@@ -1969,7 +2033,7 @@ export default function DokumentyPage() {
               )}
             </div>
             <div className={modalStyles.footer}>
-              <Button variant="secondary" onClick={() => setCreateModalOpen(false)} disabled={createSaving}>
+              <Button variant="secondary" onClick={closeCreateModal} disabled={createSaving}>
                 Zrušit
               </Button>
               <Button
@@ -1977,7 +2041,9 @@ export default function DokumentyPage() {
                 disabled={createSaving || !createIdDraft.trim() || !createNameDraft.trim()}
                 onClick={handleCreate}
               >
-                {createSaving ? "Vytvářím…" : "Vytvořit"}
+                {createSaving
+                  ? (duplicateSource ? "Duplikuji…" : "Vytvářím…")
+                  : (duplicateSource ? "Duplikovat" : "Vytvořit")}
               </Button>
             </div>
           </div>
