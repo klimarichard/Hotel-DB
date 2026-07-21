@@ -1045,43 +1045,6 @@ export default function DokumentyPage() {
         </div>
         {canManage && (
           <div className={styles.headerActions}>
-            {/* Refiling a document is a permission change in disguise – moving it
-                into a section hides it from everyone without that section's key,
-                and clearing the section exposes it to everyone with page access.
-                Saved with the document, so it follows the same Uložit as the text. */}
-            {selected && (
-              <label className={styles.sectionPicker}>
-                <span>Sekce</span>
-                <select
-                  value={docs.find((d) => d.id === selected)?.section ?? ""}
-                  onChange={(e) => {
-                    const next = (e.target.value || null) as DocumentSectionId | null;
-                    setDocs((prev) =>
-                      prev.map((d) => (d.id === selected ? { ...d, section: next } : d))
-                    );
-                    setIsDirty(true);
-                  }}
-                >
-                  <option value="">Bez sekce</option>
-                  {DOCUMENT_SECTIONS.map((sec) => (
-                    <option key={sec.id} value={sec.id}>{sec.label}</option>
-                  ))}
-                </select>
-              </label>
-            )}
-            {selected && (
-              <Button
-                variant="secondary"
-                disabled={saving}
-                title="Vytvořit kopii tohoto dokumentu pod novým id"
-                onClick={() => {
-                  const doc = docs.find((d) => d.id === selected);
-                  if (doc) openDuplicate(doc);
-                }}
-              >
-                Duplikovat
-              </Button>
-            )}
             {varWarning && (
               <button
                 type="button"
@@ -1101,16 +1064,59 @@ export default function DokumentyPage() {
                 {saveMsg}
               </span>
             )}
-            <Button
-              variant="primary"
-              onClick={handleSave}
-              disabled={saving || !isDirty || !selected}
-            >
-              <span className={styles.saveBtnInner}>
-                <SaveIcon />
-                {saving ? "Ukládám…" : "Uložit dokument"}
-              </span>
-            </Button>
+            {/* Fixed group, pinned right by .headerActionsFixed's margin-left:auto.
+                It must sit AFTER the warning and the save message: those appear
+                and disappear, and .varWarn is flex:1, so with the group before
+                them the controls slid left whenever a warning showed. */}
+            <div className={styles.headerActionsFixed}>
+              {/* Refiling a document is a permission change in disguise – moving it
+                  into a section hides it from everyone without that section's key,
+                  and clearing the section exposes it to everyone with page access.
+                  Saved with the document, so it follows the same Uložit as the text. */}
+              {selected && (
+                <label className={styles.sectionPicker}>
+                  <span>Sekce</span>
+                  <select
+                    value={docs.find((d) => d.id === selected)?.section ?? ""}
+                    onChange={(e) => {
+                      const next = (e.target.value || null) as DocumentSectionId | null;
+                      setDocs((prev) =>
+                        prev.map((d) => (d.id === selected ? { ...d, section: next } : d))
+                      );
+                      setIsDirty(true);
+                    }}
+                  >
+                    <option value="">Bez sekce</option>
+                    {DOCUMENT_SECTIONS.map((sec) => (
+                      <option key={sec.id} value={sec.id}>{sec.label}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {selected && (
+                <Button
+                  variant="secondary"
+                  disabled={saving}
+                  title="Vytvořit kopii tohoto dokumentu pod novým id"
+                  onClick={() => {
+                    const doc = docs.find((d) => d.id === selected);
+                    if (doc) openDuplicate(doc);
+                  }}
+                >
+                  Duplikovat
+                </Button>
+              )}
+              <Button
+                variant="primary"
+                onClick={handleSave}
+                disabled={saving || !isDirty || !selected}
+              >
+                <span className={styles.saveBtnInner}>
+                  <SaveIcon />
+                  {saving ? "Ukládám…" : "Uložit dokument"}
+                </span>
+              </Button>
+            </div>
           </div>
         )}
       </div>
