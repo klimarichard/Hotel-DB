@@ -550,7 +550,11 @@ fakturyRouter.get(
     // exclusion, and losing a saved invoice from the list is worse than an
     // in-memory sort of a small collection.
     list.sort((a, b) => tsMillis(b.updatedAt) - tsMillis(a.updatedAt));
-    res.json(list);
+    // Wrapped in an object, NOT returned as a bare array — the client reads
+    // `list.invoices`. `api.get<T>()` is an unchecked cast over `res.json()`,
+    // so a shape mismatch here type-checks on both sides and surfaces only as
+    // a permanently empty list at runtime.
+    res.json({ invoices: list });
   }
 );
 
