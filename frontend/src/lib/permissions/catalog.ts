@@ -277,6 +277,21 @@ export const PERMISSION_SECTIONS = [
     ],
   },
   {
+    // Placed next to Šablony smluv on purpose: both are template editors, and
+    // Nápověda renders its sections in this order. Note the Czech slug – the
+    // `documents.*` keys under Zaměstnanci belong to the unrelated per-employee
+    // "Další dokumenty" file uploads.
+    title: "Dokumenty",
+    subsections: [
+      {
+        items: [
+          { key: "nav.dokumenty.view", label: "Zobrazit Dokumenty", level: 0 },
+          { key: "dokumenty.manage", label: "Spravovat dokumenty", level: 1 },
+        ],
+      },
+    ],
+  },
+  {
     title: "Log změn",
     subsections: [
       {

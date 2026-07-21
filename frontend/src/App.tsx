@@ -13,6 +13,7 @@ import SettingsPage from "@/pages/SettingsPage";
 import PayrollPage from "@/pages/PayrollPage";
 import AlertsPage from "@/pages/AlertsPage";
 import ContractTemplatesPage from "@/pages/ContractTemplatesPage";
+import DokumentyPage from "@/pages/DokumentyPage";
 import ShiftPlannerPage from "@/pages/ShiftPlannerPage";
 import VacationPage from "@/pages/VacationPage";
 import RecepcePage from "@/pages/RecepcePage";
@@ -138,6 +139,7 @@ export default function App() {
         <Route path="muj-profil" element={<RequirePermission allow={["nav.profile.view"]}><EmployeeSelfPage /></RequirePermission>} />
         <Route path="mzdy" element={<RequirePermission allow={["nav.payroll.view"]}><PayrollPage /></RequirePermission>} />
         <Route path="smlouvy" element={<RequirePermission allow={["nav.contractTemplates.view"]}><ContractTemplatesPage /></RequirePermission>} />
+        <Route path="dokumenty" element={<RequirePermission allow={["nav.dokumenty.view"]}><DokumentyPage /></RequirePermission>} />
         <Route path="upozorneni" element={<RequirePermission allow={["nav.alerts.view"]}><AlertsPage /></RequirePermission>} />
         <Route path="nastaveni" element={<RequirePermission allow={["nav.settings.view"]}><SettingsPage /></RequirePermission>} />
         <Route path="audit" element={<RequirePermission allow={["nav.audit.view"]}><AuditLogPage /></RequirePermission>} />
