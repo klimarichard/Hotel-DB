@@ -188,8 +188,10 @@ export function computeTotals(
 
   const recap: RecapRow[] = [];
   for (const rate of vatRates) {
-    const gross = byRate.get(rate.id);
-    if (gross === undefined || gross === 0) continue;
+    const gross = byRate.get(rate.id) ?? 0;
+    // Every active bucket is listed, zeros included, matching the printed
+    // document. An inactive rate appears only if a draft still posts to it.
+    if (!rate.active && gross === 0) continue;
     const base = round2(gross / (1 + rate.percent / 100));
     recap.push({
       rateId: rate.id,
