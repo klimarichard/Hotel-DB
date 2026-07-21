@@ -541,7 +541,12 @@ fakturyRouter.get(
         guestName: (data.guestName as string) ?? "",
         billToName: billToName(data.billTo as BillTo | undefined, config),
         total: computeTotals(lines, config.vatRates).total,
-        updatedAt: data.updatedAt ?? null,
+        // ISO string, never the raw Firestore Timestamp. `InvoiceSummary`
+        // declares `string | null` and the client formats it as a date; a
+        // Timestamp serialises to `{_seconds,_nanoseconds}`, which the
+        // formatter passes straight through, and React then throws
+        // "Objects are not valid as a React child" and blanks the page.
+        updatedAt: tsToIso(data.updatedAt),
         updatedBy: data.updatedByName ?? data.updatedBy ?? "",
       };
     });
@@ -557,6 +562,14 @@ fakturyRouter.get(
     res.json({ invoices: list });
   }
 );
+
+/** Firestore Timestamp → ISO string, matching `exchange.ts`'s `tsToIso`. */
+function tsToIso(v: unknown): string | null {
+  if (v && typeof v === "object" && typeof (v as { toDate?: () => Date }).toDate === "function") {
+    return (v as { toDate: () => Date }).toDate().toISOString();
+  }
+  return typeof v === "string" ? v : null;
+}
 
 function tsMillis(v: unknown): number {
   if (v && typeof v === "object" && typeof (v as { toMillis?: () => number }).toMillis === "function") {
@@ -613,7 +626,16 @@ fakturyRouter.get(
       res.status(404).json({ error: "Faktura neexistuje." });
       return;
     }
-    res.json({ id: snap.id, ...snap.data() });
+    // Same Timestamp hazard as the list endpoint: the audit fields would go
+    // out as `{_seconds,_nanoseconds}` objects, ride along in the draft the
+    // editor holds, and be rendered or posted back as junk. Normalise them.
+    const data = snap.data() ?? {};
+    res.json({
+      ...data,
+      id: snap.id,
+      createdAt: tsToIso(data.createdAt),
+      updatedAt: tsToIso(data.updatedAt),
+    });
   }
 );
 

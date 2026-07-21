@@ -263,8 +263,14 @@ export function formatMoney(n: number): string {
  * previous day in UTC+2.
  */
 export function formatDateCZ(iso: string): string {
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? "");
-  if (!m) return iso ?? "";
+  // Guarded against a non-string reaching it despite the signature: the API
+  // layer is an unchecked cast, so a server that hands back a Firestore
+  // Timestamp lands here as an object. Returning it unchanged used to make
+  // React throw "Objects are not valid as a React child", blanking the whole
+  // page. A formatter must never return something it cannot render.
+  if (typeof iso !== "string" || !iso) return "";
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  if (!m) return iso;
   return `${Number(m[3])}. ${Number(m[2])}. ${m[1]}`;
 }
 
