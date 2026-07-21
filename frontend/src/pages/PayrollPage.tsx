@@ -526,6 +526,8 @@ export default function PayrollPage() {
         sectionRow: "padding:3px 5px;font-size:7.5pt;font-weight:700;text-transform:uppercase;background:#e5e7eb;border:1px solid #d1d5db;",
         badge: "display:inline-block;margin-left:4px;padding:0 4px;border:1px solid #d1d5db;border-radius:8px;font-size:6.5pt;color:#4b5563;background:#f3f4f6;",
         nemoc: "display:inline-block;margin-top:1px;padding:0 3px;background:#fef3c7;color:#92400e;border-radius:3px;font-size:6.5pt;font-weight:600;",
+        notesHeading: "font-size:8pt;font-weight:700;text-transform:uppercase;letter-spacing:0.03em;border-bottom:1px solid #d1d5db;padding-bottom:2px;margin-bottom:4px;",
+        noteLine: "font-size:7.5pt;line-height:1.35;margin-bottom:1px;white-space:pre-wrap;",
       };
 
       let rowsHtml = "";
@@ -578,6 +580,31 @@ export default function PayrollPage() {
         }
       }
 
+      // Poznámky section. The Poznámky column itself is PDF-excluded (it is a
+      // button, not a value), so without this block every note on the month is
+      // lost in the export. Listed in the same order as the table – managers
+      // first, then the rest by surname (same `entriesForGroup` helper) – and
+      // per employee in stored order. Every note valid for the month is
+      // included: manual, carried-forward, already-read and system auto-notes.
+      let noteLinesHtml = "";
+      for (const group of SECTION_GROUPS) {
+        for (const entry of entriesForGroup(group.sections)) {
+          const notes = entry.notes ?? [];
+          if (notes.length === 0) continue;
+          const safeName = escapeHtml(employeeSurnameFirst(entry));
+          for (const note of notes) {
+            noteLinesHtml +=
+              `<div style="${cs.noteLine}"><strong>${safeName}:</strong> ${escapeHtml(note.text ?? "")}</div>`;
+          }
+        }
+      }
+      const notesHtml = noteLinesHtml
+        ? `<div style="margin-top:10px;">
+             <div style="${cs.notesHeading}">Poznámky</div>
+             ${noteLinesHtml}
+           </div>`
+        : "";
+
       const headerHtml = `<tr>
         <th style="${cs.header}text-align:left;">Zaměstnanec</th>
         <th style="${cs.header}">HODINY</th>
@@ -605,6 +632,7 @@ export default function PayrollPage() {
             <thead>${headerHtml}</thead>
             <tbody>${rowsHtml}</tbody>
           </table>
+          ${notesHtml}
         </div>`;
 
       const wrapper = document.createElement("div");
