@@ -847,12 +847,19 @@ export default function ContractTemplatesPage() {
                 {saveMsg}
               </span>
             )}
-            <Button variant="primary" onClick={handleSave} disabled={saving || !isDirty}>
-              <span className={styles.saveBtnInner}>
-                <SaveIcon />
-                {saving ? "Ukládám…" : "Uložit šablonu"}
-              </span>
-            </Button>
+            {/* Pinned right by margin-left:auto. .varWarn is flex:1 so it already
+                held the button in place while a warning showed - but the save
+                message can appear WITHOUT a warning, and with no flexible sibling
+                it pushed the button left. Same wrapper as DokumentyPage, so a
+                control added to either header inherits the behaviour. */}
+            <div className={styles.headerActionsFixed}>
+              <Button variant="primary" onClick={handleSave} disabled={saving || !isDirty}>
+                <span className={styles.saveBtnInner}>
+                  <SaveIcon />
+                  {saving ? "Ukládám…" : "Uložit šablonu"}
+                </span>
+              </Button>
+            </div>
           </div>
         )}
       </div>
