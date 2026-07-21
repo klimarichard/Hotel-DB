@@ -299,6 +299,23 @@ export const PERMISSION_SECTIONS = [
     ],
   },
   {
+    // Placed after Dokumenty: both produce a printed document from a form,
+    // and Nápověda renders sections in this order. The app does not issue
+    // invoices — Protel does — so there is no create/delete split. The single
+    // manage key guards the shared číselníky (posting catalogue, VAT rates,
+    // agency address book, per-hotel bank + footer blocks), which are edited
+    // on the page itself rather than in Nastavení.
+    title: "Faktury",
+    subsections: [
+      {
+        items: [
+          { key: "nav.faktury.view", label: "Zobrazit Faktury", level: 0 },
+          { key: "faktury.manage", label: "Spravovat číselníky faktur", level: 1 },
+        ],
+      },
+    ],
+  },
+  {
     title: "Log změn",
     subsections: [
       {

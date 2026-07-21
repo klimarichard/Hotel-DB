@@ -1,0 +1,576 @@
+/*
+ * Faktury – invoice list + editor + číselníky panel.
+ *
+ * The page chrome (.page / .header / .headerLeft / .title / .headerActions)
+ * mirrors DokumentyPage.module.css so the two top-level pages line up exactly:
+ * same 16px/24px header padding, same bottom border, same 1.25rem title. The
+ * body below it scrolls on its own – unlike Dokumenty there is no A4 canvas, so
+ * this page is a plain scrolling form rather than a three-column grid.
+ */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+  background: var(--color-surface);
+}
+
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.saveMsg {
+  font-size: 0.875rem;
+  color: var(--color-active-text);
+}
+
+.body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px 40px;
+  background: var(--color-bg);
+}
+
+.muted {
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}
+
+/* ── Editor ──────────────────────────────────────────────────────── */
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 1200px;
+}
+
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm, 6px);
+  padding: 16px;
+}
+
+.cardTitle {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0 0 12px;
+}
+
+.subTitle {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  margin: 16px 0 8px;
+}
+
+.hint {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  margin: 8px 0 0;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.field > span {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.fieldLabel {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  margin-bottom: 4px;
+}
+
+/* Checkbox sitting in the same grid as the labelled inputs: it has no stacked
+   caption, so it aligns to the bottom of the row instead of the top. */
+.fieldCheck {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  align-self: end;
+  padding-bottom: 7px;
+}
+
+.fieldCheck > span {
+  font-size: 0.8125rem;
+  color: var(--color-text);
+}
+
+.input,
+.textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  font-family: inherit;
+  font-size: 0.8125rem;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-input-bg, var(--color-surface));
+  color: var(--color-text);
+}
+
+.textarea {
+  resize: vertical;
+}
+
+.input:focus,
+.textarea:focus {
+  outline: none;
+  border-color: var(--color-info-border);
+}
+
+/* Only ever applied after a save attempt – nothing is painted red while typing. */
+.inputError {
+  border-color: var(--color-danger);
+}
+
+.rateField {
+  max-width: 220px;
+  margin-bottom: 12px;
+}
+
+.radioRow {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 12px;
+}
+
+.radio,
+.inlineCheck {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8125rem;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+/* A derived value that the user cannot edit (tax point / due date). Rendered as
+   text, not a disabled input: there is nothing to interact with, and a greyed
+   field only invites clicking. Height matches .input so the grid row lines up. */
+.readonlyValue {
+  padding: 6px 8px;
+  font-size: 0.8125rem;
+  line-height: 1.25;
+  border: 1px solid transparent;
+  color: var(--color-text-secondary);
+}
+
+/* The note is prose, not one of the short header fields – it gets its own full
+   width row under the grid. */
+.noteField {
+  margin-top: 12px;
+}
+
+.readonlyAddress {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px dashed var(--color-border);
+  border-radius: 6px;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+  background: var(--color-bg);
+}
+
+/* ── Tables ──────────────────────────────────────────────────────── */
+
+/* Wide content scrolls inside its own box – the page body must never scroll
+   sideways. */
+.tableScroll {
+  overflow-x: auto;
+}
+
+.listTable,
+.linesTable,
+.summaryTable,
+.configTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.listTable th,
+.linesTable th,
+.summaryTable th,
+.configTable th {
+  text-align: left;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+  padding: 0 8px 6px;
+  white-space: nowrap;
+}
+
+.listTable td,
+.linesTable td,
+.summaryTable td,
+.configTable td {
+  padding: 5px 8px;
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text);
+  vertical-align: middle;
+}
+
+/* Fixed layout so the column widths below actually hold: the cells are all
+   full-width inputs, which otherwise negotiate their own sizes and leave Detail
+   and Typ squeezed while Počet and Sazba take space they never use. */
+.linesTable {
+  min-width: 1100px;
+  table-layout: fixed;
+}
+
+.linesTable th:nth-child(1),
+.linesTable td:nth-child(1) {
+  width: 130px;
+}
+
+.linesTable th:nth-child(2),
+.linesTable td:nth-child(2) {
+  width: 62px;
+}
+
+.linesTable th:nth-child(3),
+.linesTable td:nth-child(3) {
+  width: 180px;
+}
+
+.linesTable th:nth-child(4),
+.linesTable td:nth-child(4) {
+  width: 230px;
+}
+
+.linesTable th:nth-child(5),
+.linesTable td:nth-child(5) {
+  width: 92px;
+}
+
+.linesTable th:nth-child(6),
+.linesTable td:nth-child(6) {
+  width: 170px;
+}
+
+.linesTable th:nth-child(7),
+.linesTable td:nth-child(7) {
+  width: 104px;
+}
+
+.linesTable th:nth-child(8),
+.linesTable td:nth-child(8) {
+  width: 100px;
+}
+
+.linesTable th:nth-child(9),
+.linesTable td:nth-child(9) {
+  width: 92px;
+}
+
+.summaryTable {
+  max-width: 640px;
+}
+
+.summaryStrong td {
+  font-weight: 700;
+}
+
+.numCol {
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* No min-width: the column width above owns the sizing now, and a min-width
+   here would silently win over it under table-layout: fixed. */
+.descCell {
+  display: table-cell;
+}
+
+.descCell .cellInput + .cellInput {
+  margin-top: 4px;
+}
+
+.cellInput {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 4px 6px;
+  font-family: inherit;
+  font-size: 0.8125rem;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-input-bg, var(--color-surface));
+  color: var(--color-text);
+}
+
+.cellNum {
+  text-align: right;
+}
+
+/* A free-text line inherits nothing from the catalogue, so its type and VAT
+   controls read as "you have to fill these" – a nudge, not an error state. */
+.cellRequired {
+  border-color: var(--color-info-border);
+  background: var(--color-info-bg);
+}
+
+.linesFooter {
+  margin-top: 10px;
+}
+
+.rowActions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.rowIconBtn {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  padding: 0;
+  font-size: 0.8rem;
+  line-height: 1;
+  color: var(--color-text-muted);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.rowIconBtn:hover:not(:disabled) {
+  background: var(--color-surface-4);
+}
+
+.rowIconBtn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.rowIconDanger:hover:not(:disabled) {
+  color: var(--color-danger);
+  border-color: var(--color-danger);
+}
+
+.linkBtn {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  color: var(--color-info-text);
+  cursor: pointer;
+}
+
+.linkBtn:hover {
+  text-decoration: underline;
+}
+
+.badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  font-size: 0.7rem;
+  line-height: 1.4;
+  color: var(--color-text-muted);
+  background: var(--color-bg-subtle, rgba(127, 127, 127, 0.12));
+  border-radius: 8px;
+}
+
+/* ── Číselníky panel ─────────────────────────────────────────────── */
+
+/* No onClick on this overlay: the panel holds half-edited číselníky and closes
+   only through Zrušit / ✕ / Uložit. */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  width: min(1000px, 100%);
+  max-height: 100%;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+}
+
+.panelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.panelTitle {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0;
+}
+
+.panelBody {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: var(--color-bg);
+}
+
+.panelFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.subCard {
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 12px;
+  background: var(--color-bg);
+}
+
+.subCardHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+  font-size: 0.8125rem;
+  color: var(--color-text);
+}
+
+.subCardHeader > strong {
+  margin-right: auto;
+}
+
+.logoRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.fileInput {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.logoPreview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.logoPreview img {
+  max-width: 160px;
+  max-height: 64px;
+  object-fit: contain;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: #fff;
+  padding: 4px;
+}
+
+.bankGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-top: 12px;
+}
+
+/* ── Phone ───────────────────────────────────────────────────────── */
+
+@media (max-width: 559.98px) {
+  .header {
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 12px 14px;
+  }
+
+  .headerActions {
+    margin-left: 0;
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .body {
+    padding: 14px 14px 32px;
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .overlay {
+    padding: 0;
+  }
+
+  .panel {
+    max-height: 100%;
+    border-radius: 0;
+  }
+}

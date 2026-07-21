@@ -68,6 +68,7 @@ const SECTIONS = {
   profile: "Můj profil",
   templates: "Šablony smluv",
   dokumenty: "Dokumenty",
+  faktury: "Faktury",
   payroll: "Mzdy",
   alerts: "Upozornění",
   audit: "Log změn",
@@ -238,9 +239,21 @@ export const APP_TOUR_STEPS: TourStep[] = [
   { permission: "contractTemplates.manage", anchor: "templates-new", route: "/smlouvy", title: "Nová šablona", body: "Tlačítkem Nová šablona vytvoříte šablonu. Její obsah upravíte v editoru a uložíte.", placement: "bottom" },
 
   // ── Dokumenty (/dokumenty) ────────────────────────────────────────────────────
-  { section: SECTIONS.dokumenty, permission: "nav.dokumenty.view", addedInVersion: 18, anchor: "nav-dokumenty", mobileAnchor: "bottomnav-more", title: "Dokumenty", body: "V sekci Dokumenty najdete dokumenty připravené k vyplnění a tisku.", mobileBody: "V sekci Dokumenty najdete dokumenty připravené k vyplnění a tisku. Na telefonu ji otevřete přes záložku Více ve spodní liště.", placement: "right" },
-  { permission: "nav.dokumenty.view", addedInVersion: 18, anchor: "dokumenty-generate", route: "/dokumenty", title: "Vyplnění a tisk dokumentu", body: "Vyberte dokument, tlačítkem Vyplnit a vytisknout doplňte údaje, které dokument potřebuje, a otevře se vám jako PDF v nové záložce, odkud jej vytisknete. Nic se nikam neukládá.", placement: "bottom" },
-  { permission: "dokumenty.manage", addedInVersion: 18, anchor: "dokumenty-manage", route: "/dokumenty", title: "Správa dokumentů", body: "Tlačítkem Nový dokument vytvoříte dokument a jeho obsah napíšete v editoru. Tlačítkem Nastavit určíte vlastní proměnné – místa, která ten, kdo dokument tiskne, vyplní podle potřeby. Dokument můžete zařadit do sekce (Ambiance, Superior, Amigo & Alqush, Ankora) – pak jej uvidí jen ti, kdo mají oprávnění pro danou sekci. Dokument bez sekce uvidí každý, kdo má přístup do Dokumentů.", placement: "bottom" },
+  // Desktop-only. `hideOnMobile` on the menu item already strips Dokumenty from
+  // BOTH the bottom bar and the "Vice…" sheet, so on a phone there is nothing to
+  // point at and no way to reach the page - the steps must go too, or the tour
+  // advertises a section the user cannot open. Same for Faktury below.
+  { section: SECTIONS.dokumenty, hideOnMobile: true, permission: "nav.dokumenty.view", addedInVersion: 18, anchor: "nav-dokumenty", title: "Dokumenty", body: "V sekci Dokumenty najdete dokumenty připravené k vyplnění a tisku.", placement: "right" },
+  { hideOnMobile: true, permission: "nav.dokumenty.view", addedInVersion: 18, anchor: "dokumenty-generate", route: "/dokumenty", title: "Vyplnění a tisk dokumentu", body: "Vyberte dokument, tlačítkem Vyplnit a vytisknout doplňte údaje, které dokument potřebuje, a otevře se vám jako PDF v nové záložce, odkud jej vytisknete. Nic se nikam neukládá.", placement: "bottom" },
+  { hideOnMobile: true, permission: "dokumenty.manage", addedInVersion: 18, anchor: "dokumenty-manage", route: "/dokumenty", title: "Správa dokumentů", body: "Tlačítkem Nový dokument vytvoříte dokument a jeho obsah napíšete v editoru. Tlačítkem Nastavit určíte vlastní proměnné – místa, která ten, kdo dokument tiskne, vyplní podle potřeby. Dokument můžete zařadit do sekce (Ambiance, Superior, Amigo & Alqush, Ankora) – pak jej uvidí jen ti, kdo mají oprávnění pro danou sekci. Dokument bez sekce uvidí každý, kdo má přístup do Dokumentů.", placement: "bottom" },
+
+  // ── Faktury (/faktury) ────────────────────────────────────────────────────────
+  // Runs against the REAL page, like Dokumenty above: it mounts on GET /config
+  // (which falls back to seeded defaults when nothing is configured yet) and an
+  // invoice list that is simply empty for a new user, so there is no branch that
+  // could render blank and no demo fixture is needed.
+  { section: SECTIONS.faktury, hideOnMobile: true, permission: "nav.faktury.view", addedInVersion: 19, anchor: "nav-faktury", title: "Faktury", body: "V sekci Faktury vytvoříte fakturu, kterou např. Protel vystavil, ale nedokáže ji zobrazit.", placement: "right" },
+  { hideOnMobile: true, permission: "nav.faktury.view", addedInVersion: 19, anchor: "faktury-new", route: "/faktury", title: "Vytvoření faktury", body: "Tlačítkem Nová faktura založíte fakturu. Číslo faktury opište z Protelu – podle něj aplikace sama pozná hotel a to, zda jde o zálohovou fakturu (hotel i typ ale můžete kdykoli přepsat ručně). Vyplníte údaje o hostovi, odběratele a jednotlivé řádky. Popis řádku vyberete z katalogu položek, který k němu rovnou doplní sazbu DPH. Pokud potřebujete vlastní text, sazbu DPH a typ řádku musíte zvolit sami. Tlačítkem Vytisknout otevřete fakturu jako PDF v nové záložce.", placement: "bottom" },
 
   // ── Mzdy (/mzdy) ──────────────────────────────────────────────────────────────
   { section: SECTIONS.payroll, permission: "nav.payroll.view", anchor: "nav-mzdy", mobileAnchor: "bottomnav-more", title: "Mzdy", body: "V sekci Mzdy se vytvářejí a spravují mzdová období a provádějí přepočty mezd.", mobileBody: "V sekci Mzdy se vytvářejí a spravují mzdová období. Na telefonu ji otevřete přes záložku Více ve spodní liště.", placement: "right" },
@@ -311,7 +324,7 @@ export const appTour: TourDefinition = {
   // Highest step `addedInVersion` in the list. Bump it (and stamp the new steps'
   // `addedInVersion`) whenever you add steps for a new feature – returning users
   // then see ONLY those steps; first-time users still get the whole tour.
-  version: 18,
+  version: 19,
   label: "Prohlídka aplikace",
   steps: APP_TOUR_STEPS,
 };

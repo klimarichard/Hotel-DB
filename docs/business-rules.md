@@ -319,6 +319,22 @@ Seznam **bez jediné hodnoty** je povolený (typ si zvolíte dřív, než hodnot
 
 > 🔒 Server + 🖥️ Jen rozhraní. Zdroj: `functions/src/routes/dokumenty.ts` a `functions/src/routes/contractTemplates.ts` – `isValidCustomOptions()`; upozornění `customVarWarning()` ve `frontend/src/pages/DokumentyPage.tsx`.
 
+## Faktury
+
+### Faktura zde je koncept, ne účetní doklad – smazání je tiché a nevratné
+
+Faktura vytvořená na této stránce je **vizuální kopie** dokladu, který vystavil Protel – tato aplikace fakturu nevystavuje ani nečísluje. Uložená faktura se proto chová jinak než většina ostatních dat v aplikaci: smazání **nezanechává žádnou stopu v Logu změn** a je **nevratné** (žádný koš, žádná záloha). Skutečný doklad v Protelu tím není nijak dotčen – maže se jen tato kopie.
+
+> 🔒 Server. Zdroj: `functions/src/routes/faktury.ts` – `DELETE /:id` (`:664-678`) a `POST/PUT` konceptu (`:572-599`, `:616-657`) neobsahují žádné volání auditního logu, na rozdíl od `PUT /config`, které auditované je (`:393-450`).
+
+### Sazba DPH v bloku „Záloha" se v rekapitulaci vykazuje zvlášť
+
+Česká pravidla vyžadují, aby přijatá **záloha** byla v rekapitulaci DPH vykázána zvlášť od běžného plnění, které pak zúčtovává. Sazba DPH v číselníku proto nese kromě procenta i **blok** (Běžná / Záloha); dvě sazby se stejným procentem (např. 12 % běžná a 12 % záloha) se **nikdy nesčítají do jednoho řádku** v rekapitulaci se vykazují jako samostatné řádky a poznají se **jen podle názvu sazby** (např. „Deposit 12.00 %"), přesně jako na původním dokladu z Excelu – žádný oddělovací nadpis tam není.
+
+**Přeřazení sazby do špatného bloku v číselníku Faktur není vidět nikde jinde než v rekapitulaci vytištěné faktury** – smísí zálohu s běžným plněním tiše, bez upozornění.
+
+> 🔒 Server + ⚙️ Automatika. Zdroj: `functions/src/services/invoiceTypes.ts:16-23` (blok jako součást sazby), `computeTotals()` `:194-239` (řádky se sčítají podle `vatRateId`, blok se nese dál); rozdělení rekapitulace podle bloku `functions/src/services/invoiceHtml.ts:475-501`. Stejná pravidla platí i pro živý náhled v prohlížeči, `frontend/src/lib/faktury.ts:170-214`.
+
 ## Vyřazená pravidla
 
 Pravidla, která dřívější dokumentace uváděla, ale která **v současném kódu neplatí**. Ponechána zde, aby se nevrátila zpět.
