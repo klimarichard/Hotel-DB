@@ -107,6 +107,14 @@ export const INVOICE_CSS = `
   .inv-lines tr { break-inside: avoid; }
   .num { text-align: right; white-space: nowrap; }
   .ctr { text-align: center; }
+  /* .num keeps figures on one line, but the bilingual column HEADINGS are
+     long enough to overrun their column and collide with the next one. Let
+     header cells wrap; only the data cells need the nowrap. */
+  th.num, th.ctr { white-space: normal; }
+  /* The shared RENDER_CSS sets table-layout: fixed, which splits a
+     label/value table into two equal columns – the nowrap label then overflows
+     and butts straight against its value. These tables size to content. */
+  .inv-fit { table-layout: auto; width: auto; }
   .inv-tail { break-inside: avoid; margin-top: 5mm; }
   .inv-totals td { padding: 1mm 2mm; }
   .inv-totals .inv-totals-label { font-weight: 700; }
@@ -360,7 +368,7 @@ function bankBlock(
 ): string {
   return `<div class="inv-bank-head">${esc(heading)}</div>
     <div>${esc(bankName)}</div>
-    <table><tbody>
+    <table class="inv-fit"><tbody>
       ${labelRows([
         { label: `A/C No. ${suffix}:`, value: bank.account },
         { label: `SWIFT ${suffix}:`, value: bank.swift },
@@ -413,7 +421,7 @@ export function buildInvoiceHtml(
   const parties = `<table class="inv-block"><colgroup>
       <col style="width:58%"><col style="width:42%">
     </colgroup><tbody><tr>
-      <td><table><tbody>${guest}</tbody></table></td>
+      <td><table class="inv-fit"><tbody>${guest}</tbody></table></td>
       <td>${correspondenceBlock(party)}</td>
     </tr></tbody></table>
     ${billedToBand(party)}`;
