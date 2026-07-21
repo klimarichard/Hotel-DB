@@ -189,6 +189,29 @@ function sanitizeLine(raw: unknown): InvoiceLine {
   };
 }
 
+/**
+ * The supplier reference used to be one free-text field; it is now two
+ * ("Cislo v AvailPro" / "Cislo rezervace partnera"). Drafts saved before the
+ * split still carry the combined `supplierResNo`, so read it and cut on the
+ * first slash rather than silently dropping data the user typed.
+ */
+function splitSupplierRef(d: Record<string, unknown>): {
+  availProNo: string;
+  partnerResNo: string;
+} {
+  if (d.availProNo !== undefined || d.partnerResNo !== undefined) {
+    return { availProNo: str(d.availProNo), partnerResNo: str(d.partnerResNo) };
+  }
+  const legacy = str(d.supplierResNo);
+  if (!legacy) return { availProNo: "", partnerResNo: "" };
+  const at = legacy.indexOf("/");
+  if (at < 0) return { availProNo: legacy, partnerResNo: "" };
+  return {
+    availProNo: legacy.slice(0, at).trim(),
+    partnerResNo: legacy.slice(at + 1).trim(),
+  };
+}
+
 /** Whole-draft replace. Unknown fields are dropped — the body is never spread. */
 function sanitizeDraft(raw: unknown): InvoiceDraft {
   const d = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
@@ -202,8 +225,6 @@ function sanitizeDraft(raw: unknown): InvoiceDraft {
     ["arrival", false],
     ["departure", false],
     ["issuedAt", true],
-    ["taxDate", false],
-    ["dueDate", false],
   ] as const) {
     if (d[key] !== undefined && !isDateish(d[key], allowTime)) {
       fail(`Neplatné datum v poli ${key} (očekává se YYYY-MM-DD).`);
@@ -222,15 +243,15 @@ function sanitizeDraft(raw: unknown): InvoiceDraft {
     arrival: (d.arrival as string) ?? "",
     departure: (d.departure as string) ?? "",
     reservationNo: str(d.reservationNo),
-    supplierResNo: str(d.supplierResNo),
+    ...splitSupplierRef(d),
     issuedAt: (d.issuedAt as string) ?? "",
-    taxDate: (d.taxDate as string) ?? "",
-    dueDate: (d.dueDate as string) ?? "",
     billTo: sanitizeBillTo(d.billTo),
     lines: lines.map(sanitizeLine),
     eurRate,
     issuedBy: str(d.issuedBy),
-    eftReceipt: str(d.eftReceipt),
+    // Free note, printed in italics under the invoice number. Allowed more
+    // room than the 200-char default — it is prose, not an identifier.
+    note: str(d.note, 500),
   };
 }
 
@@ -480,21 +501,8 @@ fakturyRouter.post(
     // The issuer footer line comes from the `companies` doc the invoice hotel
     // points at. A missing/unset company is NOT an error — the layout simply
     // omits that line, and the hotel's own `footer` block still prints.
-    let company: CompanyInfo | null = null;
     const hotel = config.hotels.find((h) => h.id === draft.hotelId);
-    if (hotel?.companyId) {
-      const snap = await db().collection("companies").doc(hotel.companyId).get();
-      if (snap.exists) {
-        const c = snap.data() as Record<string, unknown>;
-        company = {
-          name: typeof c.name === "string" ? c.name : "",
-          address: typeof c.address === "string" ? c.address : "",
-          ic: typeof c.ic === "string" ? c.ic : "",
-          dic: typeof c.dic === "string" ? c.dic : "",
-          fileNo: typeof c.fileNo === "string" ? c.fileNo : "",
-        };
-      }
-    }
+    const company = await loadIssuer(hotel?.companyId ?? null);
 
     try {
       const html = buildInvoiceHtml(draft, config, company);
@@ -562,6 +570,42 @@ fakturyRouter.get(
     res.json({ invoices: list });
   }
 );
+
+function toCompanyInfo(c: Record<string, unknown>): CompanyInfo {
+  return {
+    name: typeof c.name === "string" ? c.name : "",
+    address: typeof c.address === "string" ? c.address : "",
+    ic: typeof c.ic === "string" ? c.ic : "",
+    dic: typeof c.dic === "string" ? c.dic : "",
+    fileNo: typeof c.fileNo === "string" ? c.fileNo : "",
+  };
+}
+
+/**
+ * The issuing legal entity for the footer line.
+ *
+ * Falls back to HPM when the hotel has no `companyId` — which is the state
+ * every hotel ships in, since the seeded registry cannot know the auto-ids of
+ * the `companies` docs. The fallback is not a guess: the source workbook's
+ * Hotel Details sheet lists "Hotel Property Management s.r.o." as the issuer
+ * for all five hotels. Setting a company on the hotel overrides it, which is
+ * what STP-issued invoices would need.
+ */
+async function loadIssuer(companyId: string | null): Promise<CompanyInfo | null> {
+  if (companyId) {
+    const snap = await db().collection("companies").doc(companyId).get();
+    if (snap.exists) return toCompanyInfo(snap.data() as Record<string, unknown>);
+  }
+  const fallback = await db()
+    .collection("companies")
+    .where("abbreviation", "==", "HPM")
+    .limit(1)
+    .get();
+  if (!fallback.empty) {
+    return toCompanyInfo(fallback.docs[0].data() as Record<string, unknown>);
+  }
+  return null;
+}
 
 /** Firestore Timestamp → ISO string, matching `exchange.ts`'s `tsToIso`. */
 function tsToIso(v: unknown): string | null {

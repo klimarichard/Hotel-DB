@@ -87,9 +87,17 @@ Read via `readConfig()` (`faktury.ts:348-358`), which returns the shipped `DEFAU
 
 A logo must be a `data:image/(png|jpeg|webp);base64,...` URI — the same three raster formats `services/pdfRenderer.ts`'s headless Chromium reliably prints, and the only URI scheme its SSRF guard (`pdfRenderer.ts:172-180`) lets through in the first place. `LOGO_RE`/`DATA_URI_RE` (`faktury.ts:124`, `invoiceHtml.ts:233`) enforce the same pattern on both the write path and the render path.
 
+### Fields that are derived, not stored
+
+`taxDate` and `dueDate` are **not** fields. The tax point is the issue date and the invoice falls due seven days later, so both are computed from `issuedAt` by `taxDateFrom()` / `dueDateFrom()` — mirrored on the client, which shows them read-only. Deriving makes the rule structurally true rather than merely enforced: a stored copy could only ever drift out of step with the date it follows. `issuedAt` carries a time (`YYYY-MM-DDTHH:MM`) because the original prints one.
+
+The supplier reference is **two** fields, `availProNo` (optional) and `partnerResNo`, joined for print by `supplierRefLine()`. The separator belongs to the partner number: it is dropped only when the partner number is missing *and* an AvailPro number is present. A missing AvailPro number keeps the slash (`/ ABC123`), because that still reads as "partner reference, no AvailPro reference". Drafts saved before the split are migrated on read by `splitSupplierRef()` in `faktury.ts`, which cuts the legacy `supplierResNo` on its first slash.
+
+There is no `eftReceipt` field: these invoices never carry one. The printed document keeps the `EFT Receipt:` heading (in monospace, as the original has it), permanently without a value.
+
 ### `invoiceDrafts/{autoId}` — one document per saved reproduction
 
-Shape is `InvoiceDraft` (`invoiceTypes.ts:132-153`) plus bookkeeping fields (`createdAt`/`createdBy`/`createdByName`, `updatedAt`/`updatedBy`/`updatedByName`). The id is always a Firestore auto-id (`faktury.ts:588` — `db().collection(COLLECTION).add(...)`), **never** the invoice number, precisely because the invoice number carries no uniqueness guarantee. `PUT /:id` is a whole-document `.set()` (not a merge) since the client always holds the complete draft and a merge would leave orphaned fields behind after an edit that clears something (`faktury.ts:622-657`) — it does preserve `createdAt`/`createdBy`/`createdByName` from the existing doc across the replace.
+Shape is `InvoiceDraft` plus bookkeeping fields (`createdAt`/`createdBy`/`createdByName`, `updatedAt`/`updatedBy`/`updatedByName`). The id is always a Firestore auto-id (`faktury.ts:588` — `db().collection(COLLECTION).add(...)`), **never** the invoice number, precisely because the invoice number carries no uniqueness guarantee. `PUT /:id` is a whole-document `.set()` (not a merge) since the client always holds the complete draft and a merge would leave orphaned fields behind after an edit that clears something (`faktury.ts:622-657`) — it does preserve `createdAt`/`createdBy`/`createdByName` from the existing doc across the replace.
 
 `MAX_LINES = 200` per draft (`faktury.ts:117`).
 

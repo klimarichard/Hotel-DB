@@ -110,16 +110,60 @@ export interface InvoiceDraft {
   roomNo: string;
   arrival: string;
   departure: string;
+  /** Protel reservation number ("Cislo rezervace v Protelu" in the form). */
   reservationNo: string;
-  supplierResNo: string;
+  /** Optional AvailPro reference — left half of the supplier line. */
+  availProNo: string;
+  /** Partner's own reservation number — right half. */
+  partnerResNo: string;
+  /** YYYY-MM-DDTHH:MM — date AND time. */
   issuedAt: string;
-  taxDate: string;
-  dueDate: string;
   billTo: BillTo;
   lines: InvoiceLine[];
   eurRate: number;
   issuedBy: string;
-  eftReceipt: string;
+  /** Free note, printed in italics under the invoice number. */
+  note: string;
+}
+
+/*
+ * Tax point and due date are DERIVED from `issuedAt`, never stored: the tax
+ * point is the issue date and payment is due seven days later, so a stored
+ * copy could only ever drift out of step with the date it follows. Shown
+ * read-only in the form; the PDF renderer derives them the same way.
+ */
+
+export function taxDateFrom(issuedAt: string): string {
+  return (issuedAt ?? "").slice(0, 10);
+}
+
+/**
+ * Issue date + 7 days, built from local date PARTS. Never
+ * `new Date("YYYY-MM-DD")`: that parses as UTC and returns the previous day
+ * once rendered in UTC+2.
+ */
+export function dueDateFrom(issuedAt: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(issuedAt ?? "");
+  if (!m) return "";
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]) + 7);
+  const pad = (n: number): string => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/**
+ * "availPro / partner". The slash belongs to the partner number: with no
+ * partner number it goes, with no AvailPro number it stays, so a lone
+ * "/ ABC123" still reads as "partner reference, no AvailPro reference".
+ */
+export function supplierRefLine(availProNo: string, partnerResNo: string): string {
+  const left = (availProNo ?? "").trim();
+  const right = (partnerResNo ?? "").trim();
+  // The slash is dropped in exactly ONE case: a partner number is missing
+  // while an AvailPro number is present, so there is nothing left to
+  // separate. If the AvailPro number is missing the slash stays, even when
+  // both are empty - it is part of the field's printed form.
+  if (!right && left) return left;
+  return `${left} / ${right}`.trim();
 }
 
 /** What `GET /api/faktury` returns per row (no `lines`, no addresses). */

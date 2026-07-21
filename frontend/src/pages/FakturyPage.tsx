@@ -30,6 +30,8 @@ import {
   lineTotal,
   matchHotelByInvoiceNo,
   newLineId,
+  dueDateFrom,
+  taxDateFrom,
   type Agency,
   type BillTo,
   type CatalogItem,
@@ -67,14 +69,16 @@ const LINE_GROUPS = Object.keys(LINE_GROUP_LABELS) as LineGroup[];
 const byCs = (a: string, b: string) => a.localeCompare(b, "cs");
 
 /**
- * Today as YYYY-MM-DD, built from local parts. `new Date().toISOString()` would
- * roll back a day in UTC+2 for anything after 22:00.
+ * Now as YYYY-MM-DDTHH:MM (what `<input type="datetime-local">` wants), built
+ * from local parts. `new Date().toISOString()` would roll back a day in UTC+2
+ * for anything after 22:00 – and shift the time on every invoice.
  */
-function todayISO(): string {
+function nowLocalDateTime(): string {
   const d = new Date();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${d.getFullYear()}-${mm}-${dd}`;
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(
+    d.getMinutes()
+  )}`;
 }
 
 function emptyDraft(issuedBy: string): InvoiceDraft {
@@ -87,16 +91,30 @@ function emptyDraft(issuedBy: string): InvoiceDraft {
     arrival: "",
     departure: "",
     reservationNo: "",
-    supplierResNo: "",
-    issuedAt: todayISO(),
-    taxDate: todayISO(),
-    dueDate: todayISO(),
+    availProNo: "",
+    partnerResNo: "",
+    issuedAt: nowLocalDateTime(),
     billTo: { kind: "agency", agencyId: "" },
+    // A brand-new invoice has no arrival yet, so the first row starts blank;
+    // every row added later inherits the arrival date (see `addLine`).
     lines: [emptyLine()],
     eurRate: 0,
     issuedBy,
-    eftReceipt: "",
+    note: "",
   };
+}
+
+/**
+ * The raw text of a price cell → a number, or null when the text is a legitimate
+ * intermediate state that must not be committed ("-", ".", "1e"). A comma is a
+ * decimal point: Czech keyboards put it on the numeric block.
+ */
+function parsePrice(raw: string): number | null {
+  const t = raw.replace(",", ".").trim();
+  if (t === "") return 0;
+  if (!/^-?\d*\.?\d*$/.test(t)) return null;
+  const n = Number(t);
+  return Number.isFinite(n) ? n : null;
 }
 
 /** CZK → EUR at the invoice's own rate. Never Infinity/NaN: an en dash instead. */
@@ -144,6 +162,14 @@ export default function FakturyPage() {
    * entry behind it, so its VAT bucket and its type have to be chosen by hand.
    */
   const [customLines, setCustomLines] = useState<Record<string, boolean>>({});
+  /**
+   * Raw text of the price cells being typed, keyed by line id. The draft only
+   * ever holds numbers, and a controlled number field would snap "-" back to 0
+   * before the digits arrive – payments are always negative, so the minus has to
+   * survive. Cleared whenever a line goes away or another invoice is opened, so
+   * a recycled id can never inherit someone else's text.
+   */
+  const [priceText, setPriceText] = useState<Record<string, string>>({});
   /**
    * Only set by Uložit. Validation must never paint a field red before the user
    * has acted – a fresh invoice is empty by definition.
@@ -221,6 +247,7 @@ export default function FakturyPage() {
     setDraft(d);
     setDraftId(null);
     setCustomLines({});
+    setPriceText({});
     setShowErrors(false);
     setDirty(false);
     setSaveMsg(null);
@@ -238,6 +265,7 @@ export default function FakturyPage() {
       setDraft({ ...loaded, lines: loaded.lines ?? [] });
       setDraftId(id);
       setCustomLines(deriveCustomLines(loaded.lines ?? [], config.items));
+      setPriceText({});
       setShowErrors(false);
       setDirty(false);
       setSaveMsg(null);
@@ -251,6 +279,8 @@ export default function FakturyPage() {
   function closeEditor() {
     setDraft(null);
     setDraftId(null);
+    setCustomLines({});
+    setPriceText({});
     setDirty(false);
     setSaveMsg(null);
   }
@@ -315,8 +345,33 @@ export default function FakturyPage() {
     setDirty(true);
   }
 
+  /**
+   * A new row starts on the reservation's arrival date – that is what the
+   * receptionist is retyping in practice. `emptyLine()` stays date-less on
+   * purpose; the arrival is only known here.
+   */
+  /**
+   * Arrival doubles as the default date for item rows. A new invoice starts
+   * with one empty row BEFORE arrival is known, so setting arrival backfills
+   * any row whose date is still blank — that is what makes the default apply
+   * to the first row too, not just to rows added afterwards. Rows that already
+   * carry a date are left alone: the user set those deliberately.
+   */
+  function setArrival(arrival: string) {
+    setDraft((d) =>
+      d
+        ? {
+            ...d,
+            arrival,
+            lines: d.lines.map((l) => (l.date ? l : { ...l, date: arrival })),
+          }
+        : d
+    );
+    setDirty(true);
+  }
+
   function addLine() {
-    setDraft((d) => (d ? { ...d, lines: [...d.lines, emptyLine()] } : d));
+    setDraft((d) => (d ? { ...d, lines: [...d.lines, { ...emptyLine(), date: d.arrival || "" }] } : d));
     setDirty(true);
   }
 
@@ -327,7 +382,30 @@ export default function FakturyPage() {
       delete next[id];
       return next;
     });
+    setPriceText((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
     setDirty(true);
+  }
+
+  /** Typing in a price cell: show the raw text, commit only what parses. */
+  function changePrice(id: string, raw: string) {
+    setPriceText((prev) => ({ ...prev, [id]: raw }));
+    const parsed = parsePrice(raw);
+    if (parsed !== null) patchLine(id, { unitPrice: parsed });
+  }
+
+  /** Leaving a price cell drops the raw text, so the number is shown normalised. */
+  function blurPrice(id: string) {
+    const raw = priceText[id];
+    if (raw !== undefined && parsePrice(raw) === null) patchLine(id, { unitPrice: 0 });
+    setPriceText((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
   }
 
   function moveLine(id: string, dir: -1 | 1) {
@@ -645,6 +723,15 @@ export default function FakturyPage() {
                     : "Z čísla se nepodařilo rozpoznat hotel – vyberte jej ručně."}
                 </p>
               )}
+              <label className={`${styles.field} ${styles.noteField}`}>
+                <span>Poznámka (nepovinné)</span>
+                <input
+                  className={styles.input}
+                  value={draft.note}
+                  onChange={(e) => patchDraft({ note: e.target.value })}
+                />
+              </label>
+              <p className={styles.hint}>Poznámka bude zobrazena pod číslem faktury.</p>
             </section>
 
             {/* ── Host ───────────────────────────────────────────────── */}
@@ -673,7 +760,7 @@ export default function FakturyPage() {
                     type="date"
                     className={styles.input}
                     value={draft.arrival}
-                    onChange={(e) => patchDraft({ arrival: e.target.value })}
+                    onChange={(e) => setArrival(e.target.value)}
                   />
                 </label>
                 <label className={styles.field}>
@@ -686,7 +773,7 @@ export default function FakturyPage() {
                   />
                 </label>
                 <label className={styles.field}>
-                  <span>Číslo rezervace</span>
+                  <span>Číslo rezervace v Protelu</span>
                   <input
                     className={styles.input}
                     value={draft.reservationNo}
@@ -694,40 +781,45 @@ export default function FakturyPage() {
                   />
                 </label>
                 <label className={styles.field}>
-                  <span>Číslo rezervace dodavatele</span>
+                  <span>Číslo v AvailPro (nepovinné)</span>
                   <input
                     className={styles.input}
-                    value={draft.supplierResNo}
-                    onChange={(e) => patchDraft({ supplierResNo: e.target.value })}
+                    value={draft.availProNo}
+                    onChange={(e) => patchDraft({ availProNo: e.target.value })}
+                  />
+                </label>
+                <label className={styles.field}>
+                  <span>Číslo rezervace partnera</span>
+                  <input
+                    className={styles.input}
+                    value={draft.partnerResNo}
+                    onChange={(e) => patchDraft({ partnerResNo: e.target.value })}
                   />
                 </label>
                 <label className={styles.field}>
                   <span>Vystaveno</span>
                   <input
-                    type="date"
+                    type="datetime-local"
                     className={styles.input}
                     value={draft.issuedAt}
                     onChange={(e) => patchDraft({ issuedAt: e.target.value })}
                   />
                 </label>
-                <label className={styles.field}>
+                {/* Derived, never stored: the tax point is the issue date and
+                    payment is due seven days later. Read-only text rather than a
+                    disabled input – there is nothing here to interact with. */}
+                <div className={styles.field}>
                   <span>Datum zdanitelného plnění</span>
-                  <input
-                    type="date"
-                    className={styles.input}
-                    value={draft.taxDate}
-                    onChange={(e) => patchDraft({ taxDate: e.target.value })}
-                  />
-                </label>
-                <label className={styles.field}>
+                  <div className={styles.readonlyValue}>
+                    {formatDateCZ(taxDateFrom(draft.issuedAt)) || "–"}
+                  </div>
+                </div>
+                <div className={styles.field}>
                   <span>Datum splatnosti</span>
-                  <input
-                    type="date"
-                    className={styles.input}
-                    value={draft.dueDate}
-                    onChange={(e) => patchDraft({ dueDate: e.target.value })}
-                  />
-                </label>
+                  <div className={styles.readonlyValue}>
+                    {formatDateCZ(dueDateFrom(draft.issuedAt)) || "–"}
+                  </div>
+                </div>
                 <label className={styles.field}>
                   <span>Vystavil</span>
                   <input
@@ -736,15 +828,11 @@ export default function FakturyPage() {
                     onChange={(e) => patchDraft({ issuedBy: e.target.value })}
                   />
                 </label>
-                <label className={styles.field}>
-                  <span>EFT / doklad</span>
-                  <input
-                    className={styles.input}
-                    value={draft.eftReceipt}
-                    onChange={(e) => patchDraft({ eftReceipt: e.target.value })}
-                  />
-                </label>
               </div>
+              <p className={styles.hint}>
+                Datum zdanitelného plnění a datum splatnosti se doplňují automaticky podle data
+                vystavení (splatnost je o 7 dní později).
+              </p>
             </section>
 
             {/* ── Odběratel ──────────────────────────────────────────── */}
@@ -888,9 +976,9 @@ export default function FakturyPage() {
               )}
             </section>
 
-            {/* ── Řádky ──────────────────────────────────────────────── */}
+            {/* ── Položky ────────────────────────────────────────────── */}
             <section className={styles.card}>
-              <h2 className={styles.cardTitle}>Řádky</h2>
+              <h2 className={styles.cardTitle}>Položky</h2>
               <div className={styles.tableScroll}>
                 <table className={styles.linesTable}>
                   <thead>
@@ -976,14 +1064,16 @@ export default function FakturyPage() {
                             />
                           </td>
                           <td>
+                            {/* Deliberately a text field: a number input cannot
+                                hold "-" or "1." while it is being typed, so a
+                                negative payment could never be entered. */}
                             <input
-                              type="number"
-                              step="any"
+                              type="text"
+                              inputMode="decimal"
                               className={`${styles.cellInput} ${styles.cellNum}`}
-                              value={line.unitPrice}
-                              onChange={(e) =>
-                                patchLine(line.id, { unitPrice: Number(e.target.value) || 0 })
-                              }
+                              value={priceText[line.id] ?? String(line.unitPrice)}
+                              onChange={(e) => changePrice(line.id, e.target.value)}
+                              onBlur={() => blurPrice(line.id)}
                             />
                           </td>
                           <td>
