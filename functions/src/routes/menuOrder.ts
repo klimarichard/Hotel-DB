@@ -15,7 +15,7 @@ const db = () => admin.firestore();
 // items the user has the permission for), so we don't re-check permissions here.
 const VALID_IDS = new Set<string>([
   "prehled", "smeny", "dovolena", "recepce", "tabulky", "zamestnanci", "mzdy",
-  "upozorneni", "smlouvy", "audit", "navody", "nastaveni", "mujProfil",
+  "upozorneni", "smlouvy", "dokumenty", "audit", "navody", "nastaveni", "mujProfil",
 ]);
 
 const docRef = () => db().collection("settings").doc("menuOrder");

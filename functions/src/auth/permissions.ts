@@ -37,6 +37,7 @@ export const PERMISSION_CATALOG = [
       { key: "nav.vacation.view", label: "Zobrazit Dovolenou" },
       { key: "nav.recepce.view", label: "Zobrazit Recepci" },
       { key: "nav.tabulky.view", label: "Zobrazit Tabulky" },
+      { key: "nav.dokumenty.view", label: "Zobrazit Dokumenty" },
       { key: "nav.employees.view", label: "Zobrazit Zaměstnance" },
       { key: "nav.payroll.view", label: "Zobrazit Mzdy" },
       { key: "nav.alerts.view", label: "Zobrazit Upozornění" },
@@ -206,6 +207,16 @@ export const PERMISSION_CATALOG = [
     group: "Tabulky",
     items: [
       { key: "tabulky.smenarna.view", label: "Směnárna + ČNB" },
+    ],
+  },
+  {
+    // Standalone printable document templates (documentTemplates/{id}) authored
+    // in the TipTap editor and filled in + printed by a viewer. Deliberately
+    // uses the Czech slug `dokumenty.*`: the `documents.*` keys above belong to
+    // the unrelated per-employee "Další dokumenty" file uploads.
+    group: "Dokumenty",
+    items: [
+      { key: "dokumenty.manage", label: "Spravovat dokumenty" },
     ],
   },
   {
