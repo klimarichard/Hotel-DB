@@ -21,16 +21,54 @@ All in `functions/src/routes/dokumenty.ts`, mounted at `/api/dokumenty` (`functi
 | `POST /render-pdf` | `nav.dokumenty.view` | Registered before the `/:id` routes so the literal path always wins. Reuses `services/pdfRenderer.ts` — the same Puppeteer service `POST /contracts/render-pdf` uses, unchanged by this feature — but gated on `nav.dokumenty.view`, **not** `contracts.generate`: a Dokumenty viewer must not need any contracts permission to print. Body `{ html, margins? }`; returns `application/pdf`. No audit entry (nothing is stored). |
 | `GET /` | `nav.dokumenty.view` | List without `htmlContent` (can approach 1 MB/doc). Filtered server-side by section — see below. |
 | `POST /` | `dokumenty.manage` | Creates an empty template. Body `{ id, name, section? }`; `id` is a snake_case slug (`^[a-z][a-z0-9_]{1,39}$`), 409 if it already exists. |
+| `POST /:id/duplicate` | `dokumenty.manage` | Copy an existing template under a new id. Body `{ id, name, section? }`; same slug validation and 409-on-collision as `POST /`. Copies `htmlContent`, `variableDefs` and `margins` from the source — see [Duplicating](#duplicating). |
 | `GET /:id` | `nav.dokumenty.view` | Full template incl. `htmlContent`. Returns **404, not 403**, when the caller may not see the document's section — see below. |
 | `PUT /:id` | `dokumenty.manage` | Upsert. Body `{ name, htmlContent, margins?, variableDefs?, section? }`. Re-extracts `variables` from the HTML server-side. |
 | `PATCH /:id` | `dokumenty.manage` | `{ active: boolean }` — deactivate/reactivate. Absent `active` field = active; only an explicit `false` marks it inactive. Reversible. |
 | `DELETE /:id` | `dokumenty.manage` | Hard delete. |
 
-`PUT /api/auth/me/dokumenty-default` (in `functions/src/routes/auth.ts`) is the eighth Dokumenty-adjacent endpoint but lives on the auth router — see [Per-user default section](#per-user-default-section).
+`PUT /api/auth/me/dokumenty-default` (in `functions/src/routes/auth.ts`) is the ninth Dokumenty-adjacent endpoint but lives on the auth router — see [Per-user default section](#per-user-default-section).
 
 ### Size guard on `PUT /:id`
 
 Firestore caps a document at 1 MiB; `htmlContent` is by far the largest field and balloons when the editor inlines base64 images. `PUT /:id` rejects an oversized payload up front with a Czech 413 (`functions/src/routes/dokumenty.ts:356-366`) rather than letting a raw Firestore error surface, and catches the same failure again around the actual write in case something slips past the pre-check (`:394-407`). Same pattern as the contract-template editor.
+
+## Duplicating
+
+`POST /:id/duplicate` exists as a server endpoint rather than a client-orchestrated
+`GET` + `POST` + `PUT` because those three calls are not atomic: a failure between
+the create and the content write leaves an empty document behind that looks like a
+real one. The endpoint either lands the copy whole or not at all.
+
+Copied from the source: `htmlContent`, `variableDefs`, `margins` (the last two only
+when the source actually stored them, so the copy doesn't gain defaults the
+original never had).
+
+**Deliberately not copied:**
+- `active` — a duplicate always starts active, even when the source is deactivated.
+  You copy a document in order to use it.
+- `section` — taken from the request body, not inherited. Duplicating is the moment
+  the author decides who the copy is for; silently inheriting the source's audience
+  is the kind of default that files a document into the wrong section unnoticed. The
+  UI pre-fills the source's section as a visible, editable suggestion.
+
+The audit entry records `duplicatedFrom: <sourceId>` in its summary.
+
+**Frontend.** The `Duplikovat` button lives in the editor header (`.headerActionsFixed`),
+not on the sidebar rows: `.templateActions` is `flex-shrink: 0` inside a 240 px
+sidebar and already carries Deaktivovat + Smazat, so a third button overflowed the
+row — and acting on the open document makes it unambiguous which one is copied. The
+create modal doubles as the duplicate form (same three fields) keyed off
+`duplicateSource`; `closeCreateModal()` is the single reset path so duplicate mode
+cannot leak into the next plain "new document".
+
+Two details that matter:
+- The copy is made from the **saved** document. When the open document is dirty the
+  modal says so in bold, rather than silently copying stale content.
+- After creating or duplicating, the page switches to the new document through
+  `requestSwitch`, **not** `setSelected` — the latter bypasses the unsaved-changes
+  prompt. That was latent for plain creation; duplicating made it likely, because
+  the document you duplicate is usually the one you have open and are editing.
 
 ## Firestore shape: `documentTemplates/{id}`
 
