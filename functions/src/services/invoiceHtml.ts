@@ -39,6 +39,9 @@ import {
   RecapRow,
   computeTotals,
   lineTotal,
+  taxDateFrom,
+  dueDateFrom,
+  supplierRefLine,
 } from "./invoiceTypes";
 
 /** The issuing legal entity, printed above the page footer. */
@@ -55,10 +58,10 @@ export interface CompanyInfo {
  * page footer and needs room that the flowing content never claims.
  */
 export const INVOICE_MARGINS: RenderMargins = {
-  top: 12,
-  bottom: 16,
-  left: 14,
-  right: 14,
+  top: 8,
+  bottom: 12,
+  left: 6,
+  right: 6,
 };
 
 /**
@@ -68,7 +71,7 @@ export const INVOICE_MARGINS: RenderMargins = {
  * it asks for them.
  */
 export const INVOICE_CSS = `
-  body { font-size: 9.5pt; line-height: 1.18; }
+  body { font-size: 8.5pt; line-height: 1.18; }
   table { margin: 0; }
   table td, table th {
     border: none;
@@ -88,7 +91,7 @@ export const INVOICE_CSS = `
   .inv-content { padding-bottom: 4mm; }
 
   /* Header band: logo left, the title block right. */
-  .inv-title { text-align: right; font-weight: 700; font-size: 11.5pt; }
+  .inv-title { text-align: right; font-weight: 700; font-size: 11pt; }
   .inv-logo { max-height: 20mm; width: auto; display: block; }
 
   /* Guest details and correspondence address share ONE ten-row grid, which
@@ -101,6 +104,7 @@ export const INVOICE_CSS = `
   .inv-billed td { padding-right: 4mm; }
   .inv-no { margin-top: 1.5mm; font-weight: 700; }
   .inv-no .val { padding-left: 8mm; }
+  .inv-note { font-style: italic; margin-top: 0.8mm; }
 
   /* Rules. The document has exactly four kinds and nothing else. */
   .rule { border-top: 0.8pt solid #000; }
@@ -112,7 +116,7 @@ export const INVOICE_CSS = `
     border-bottom: 0.8pt solid #000;
     padding: 1mm 0;
     font-weight: 700;
-    font-size: 8.5pt;
+    font-size: 8pt;
   }
   .inv-lines td { padding: 0.5mm 0; }
   .inv-lines thead { display: table-header-group; }
@@ -122,30 +126,35 @@ export const INVOICE_CSS = `
   .inv-totals { margin-top: 1.5mm; }
   .inv-totals td { padding: 0.6mm 0; }
 
-  .inv-recap { margin-top: 3mm; font-size: 8.5pt; }
+  .inv-recap { margin-top: 3mm; font-size: 8pt; }
   /* Column HEADINGS are long enough to overrun their column and collide
      with the next one, so they drop the nowrap that .num gives the
      figures and are set a shade smaller. */
   .inv-recap th {
     padding-bottom: 1.5mm;
-    font-size: 8pt;
+    font-size: 7.5pt;
     white-space: normal;
   }
   .inv-recap td { padding: 0.35mm 0; }
   .inv-recap tr.total td { padding-top: 2mm; }
 
-  .inv-eft { margin-top: 2.5mm; }
+  /* Monospace, matching the original export. The value is intentionally
+     absent: these invoices never have an EFT receipt, so the editor has no
+     field for it, but the heading remains part of the document. */
+  .inv-eft { margin-top: 2.5mm; font-family: "Courier New", Courier, monospace; }
   .inv-issued { margin-top: 2mm; text-align: right; }
   /* break-inside on the OUTER table: its cells hold nested tables, and a
      nested table straddling a page break renders its rows on BOTH pages in
      Chrome - the bank rows printed twice before this was pinned down. */
-  .inv-bank { margin-top: 2.5mm; font-size: 9pt; break-inside: avoid; }
+  .inv-bank { margin-top: 2.5mm; font-size: 8pt; break-inside: avoid; }
   .inv-bank td { padding: 0.35mm 0; }
   .inv-bank .cell { padding-right: 6mm; }
   .inv-bank .lbl { width: 34%; }
   .inv-company {
     margin-top: 2.5mm;
-    font-size: 6.8pt;
+    font-size: 7pt;
+    /* Must stay on ONE row - it is a single legal identification line. */
+    white-space: nowrap;
     text-align: center;
   }
 
@@ -157,7 +166,7 @@ export const INVOICE_CSS = `
     right: 0;
     bottom: 0;
     text-align: center;
-    font-size: 10.5pt;
+    font-size: 10pt;
     line-height: 1.4;
   }
 `;
@@ -340,11 +349,28 @@ export function buildInvoiceHtml(
     ["Arrival / Prijezd:", fmtShort(draft.arrival), esc(party.slots[0]), ""],
     ["Departure / Odjezd:", fmtShort(draft.departure), esc(party.slots[1]), ""],
     ["Reservation No. / Cislo Rezervace:", draft.reservationNo, esc(party.slots[2]), ""],
-    ["Supplier Reservation Number:", draft.supplierResNo, esc(party.slots[3]), ""],
+    [
+      "Supplier Reservation Number:",
+      supplierRefLine(draft.availProNo, draft.partnerResNo),
+      esc(party.slots[3]),
+      "",
+    ],
     ["", "", esc(party.slots[4]), ""],
     ["Issued / Vystaveno:", fmtLong(draft.issuedAt), "", ""],
-    ["Tax Charged / Datum zdanit. plneni:", fmtLong(draft.taxDate), "IC:", esc(party.ic)],
-    ["Payable On / Datum Splatnosti:", fmtLong(draft.dueDate), "DIC:", esc(party.dic)],
+    // Both derived, never stored: the tax point IS the issue date and the
+    // invoice falls due seven days later.
+    [
+      "Tax Charged / Datum zdanit. plneni:",
+      fmtLong(taxDateFrom(draft.issuedAt)),
+      "IC:",
+      esc(party.ic),
+    ],
+    [
+      "Payable On / Datum Splatnosti:",
+      fmtLong(dueDateFrom(draft.issuedAt)),
+      "DIC:",
+      esc(party.dic),
+    ],
   ];
   // Rows 2 / 3 of the right column are pre-escaped markup; the left pair and
   // the IC/DIC values are raw and still need escaping.
@@ -380,7 +406,11 @@ export function buildInvoiceHtml(
   /* 5 — invoice number: plain bold text at a tab stop, no box. */
   const invoiceNo = `<div class="inv-no">Invoice No. / Faktura Cislo<span class="val">${esc(
     draft.invoiceNo
-  )}</span></div>`;
+  )}</span></div>${
+    draft.note && draft.note.trim()
+      ? `<div class="inv-note"><span class="bold">Note: </span>${esc(draft.note.trim())}</div>`
+      : ""
+  }`;
 
   /* 6 — line table. Payment and transfer rows already carry their sign. */
   const lineRow = (line: InvoiceLine): string => `<tr>
@@ -453,7 +483,7 @@ export function buildInvoiceHtml(
     </tbody></table>`;
 
   /* 9 — EFT receipt, issued-by, then the two bank blocks. */
-  const eft = `<div class="inv-eft">EFT Receipt:&nbsp;&nbsp;${esc(draft.eftReceipt)}</div>
+  const eft = `<div class="inv-eft">EFT Receipt:</div>
     <div class="inv-issued">Issued By:&nbsp;&nbsp;&nbsp;${esc(draft.issuedBy)}</div>`;
 
   const bankRows = (
@@ -480,8 +510,8 @@ export function buildInvoiceHtml(
       </tbody></table>
     </td>`;
 
-  const bank = `<div class="rule" style="margin-top:4mm"></div>
-    <table class="inv-bank"><colgroup>
+  // No rule above this block: the original has none under "Issued By".
+  const bank = `<table class="inv-bank" style="margin-top:4mm"><colgroup>
       <col style="width:50%"><col style="width:50%">
     </colgroup><tbody><tr>
       ${bankCell("EUR Account Number / EUR bankovni ucet Czech Republic", "EUR", hotel?.bankEur)}

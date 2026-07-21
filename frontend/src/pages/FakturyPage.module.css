@@ -191,6 +191,23 @@
   cursor: pointer;
 }
 
+/* A derived value that the user cannot edit (tax point / due date). Rendered as
+   text, not a disabled input: there is nothing to interact with, and a greyed
+   field only invites clicking. Height matches .input so the grid row lines up. */
+.readonlyValue {
+  padding: 6px 8px;
+  font-size: 0.8125rem;
+  line-height: 1.25;
+  border: 1px solid transparent;
+  color: var(--color-text-secondary);
+}
+
+/* The note is prose, not one of the short header fields – it gets its own full
+   width row under the grid. */
+.noteField {
+  margin-top: 12px;
+}
+
 .readonlyAddress {
   margin-top: 10px;
   padding: 10px 12px;
@@ -243,8 +260,57 @@
   vertical-align: middle;
 }
 
+/* Fixed layout so the column widths below actually hold: the cells are all
+   full-width inputs, which otherwise negotiate their own sizes and leave Detail
+   and Typ squeezed while Počet and Sazba take space they never use. */
 .linesTable {
-  min-width: 1000px;
+  min-width: 1100px;
+  table-layout: fixed;
+}
+
+.linesTable th:nth-child(1),
+.linesTable td:nth-child(1) {
+  width: 130px;
+}
+
+.linesTable th:nth-child(2),
+.linesTable td:nth-child(2) {
+  width: 62px;
+}
+
+.linesTable th:nth-child(3),
+.linesTable td:nth-child(3) {
+  width: 180px;
+}
+
+.linesTable th:nth-child(4),
+.linesTable td:nth-child(4) {
+  width: 230px;
+}
+
+.linesTable th:nth-child(5),
+.linesTable td:nth-child(5) {
+  width: 92px;
+}
+
+.linesTable th:nth-child(6),
+.linesTable td:nth-child(6) {
+  width: 170px;
+}
+
+.linesTable th:nth-child(7),
+.linesTable td:nth-child(7) {
+  width: 104px;
+}
+
+.linesTable th:nth-child(8),
+.linesTable td:nth-child(8) {
+  width: 100px;
+}
+
+.linesTable th:nth-child(9),
+.linesTable td:nth-child(9) {
+  width: 92px;
 }
 
 .summaryTable {
@@ -260,8 +326,9 @@
   white-space: nowrap;
 }
 
+/* No min-width: the column width above owns the sizing now, and a min-width
+   here would silently win over it under table-layout: fixed. */
 .descCell {
-  min-width: 220px;
   display: table-cell;
 }
 
