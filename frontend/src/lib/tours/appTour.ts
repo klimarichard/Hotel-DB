@@ -68,6 +68,7 @@ const SECTIONS = {
   profile: "Můj profil",
   templates: "Šablony smluv",
   dokumenty: "Dokumenty",
+  faktury: "Faktury",
   payroll: "Mzdy",
   alerts: "Upozornění",
   audit: "Log změn",
@@ -242,6 +243,15 @@ export const APP_TOUR_STEPS: TourStep[] = [
   { permission: "nav.dokumenty.view", addedInVersion: 18, anchor: "dokumenty-generate", route: "/dokumenty", title: "Vyplnění a tisk dokumentu", body: "Vyberte dokument, tlačítkem Vyplnit a vytisknout doplňte údaje, které dokument potřebuje, a otevře se vám jako PDF v nové záložce, odkud jej vytisknete. Nic se nikam neukládá.", placement: "bottom" },
   { permission: "dokumenty.manage", addedInVersion: 18, anchor: "dokumenty-manage", route: "/dokumenty", title: "Správa dokumentů", body: "Tlačítkem Nový dokument vytvoříte dokument a jeho obsah napíšete v editoru. Tlačítkem Nastavit určíte vlastní proměnné – místa, která ten, kdo dokument tiskne, vyplní podle potřeby. Dokument můžete zařadit do sekce (Ambiance, Superior, Amigo & Alqush, Ankora) – pak jej uvidí jen ti, kdo mají oprávnění pro danou sekci. Dokument bez sekce uvidí každý, kdo má přístup do Dokumentů.", placement: "bottom" },
 
+  // ── Faktury (/faktury) ────────────────────────────────────────────────────────
+  // Runs against the REAL page, like Dokumenty above: it mounts on GET /config
+  // (which falls back to seeded defaults when nothing is configured yet) and an
+  // invoice list that is simply empty for a new user, so there is no branch that
+  // could render blank and no demo fixture is needed.
+  { section: SECTIONS.faktury, permission: "nav.faktury.view", addedInVersion: 19, anchor: "nav-faktury", mobileAnchor: "bottomnav-more", title: "Faktury", body: "V sekci Faktury znovu vytvoříte hotelovou fakturu, kterou Protel vystavil, ale nedokáže ji zobrazit.", mobileBody: "V sekci Faktury znovu vytvoříte hotelovou fakturu, kterou Protel vystavil, ale nedokáže ji zobrazit. Na telefonu ji otevřete přes záložku Více ve spodní liště.", placement: "right" },
+  { permission: "nav.faktury.view", addedInVersion: 19, anchor: "faktury-new", route: "/faktury", title: "Vytvoření faktury", body: "Tlačítkem Nová faktura založíte fakturu. Číslo faktury opište z Protelu – podle něj aplikace sama pozná hotel a to, zda jde o zálohovou fakturu (hotel i typ ale můžete kdykoli přepsat ručně). Vyplníte údaje o hostovi, odběratele a jednotlivé řádky. Popis řádku vyberete z katalogu položek, který k němu rovnou doplní sazbu DPH; pokud potřebujete vlastní text, sazbu a typ řádku zvolíte sami. Součty, rekapitulaci DPH i částky v eurech aplikace dopočítá průběžně. Tlačítkem Vytisknout otevřete fakturu jako PDF v nové záložce. Faktury se ukládají jako pracovní podklady k opětovnému tisku – nejsou účetním dokladem, tím zůstává doklad z Protelu.", placement: "bottom" },
+  { permission: "faktury.manage", addedInVersion: 19, anchor: "faktury-ciselniky", route: "/faktury", title: "Číselníky faktur", body: "V Číselnících spravujete podklady, ze kterých faktury vznikají: katalog položek (popis + sazba DPH + typ řádku), sazby DPH, cestovní kanceláře a jednotlivé hotely (logo, patička, čísla knih a bankovní účty). Zálohové sazby DPH se v rekapitulaci vykazují zvlášť od běžných, jak vyžadují české předpisy.", placement: "bottom" },
+
   // ── Mzdy (/mzdy) ──────────────────────────────────────────────────────────────
   { section: SECTIONS.payroll, permission: "nav.payroll.view", anchor: "nav-mzdy", mobileAnchor: "bottomnav-more", title: "Mzdy", body: "V sekci Mzdy se vytvářejí a spravují mzdová období a provádějí přepočty mezd.", mobileBody: "V sekci Mzdy se vytvářejí a spravují mzdová období. Na telefonu ji otevřete přes záložku Více ve spodní liště.", placement: "right" },
   { permission: "nav.payroll.view", anchor: "payroll-table", route: DEMO_PAYROLL, title: "Zobrazení mezd", body: "Tabulka zobrazuje vypočtené mzdy zaměstnanců pro zvolené období. Mzdy se počítají automaticky z plánu směn a výpočet se aktualizuje každý den.", placement: "top" },
@@ -311,7 +321,7 @@ export const appTour: TourDefinition = {
   // Highest step `addedInVersion` in the list. Bump it (and stamp the new steps'
   // `addedInVersion`) whenever you add steps for a new feature – returning users
   // then see ONLY those steps; first-time users still get the whole tour.
-  version: 18,
+  version: 19,
   label: "Prohlídka aplikace",
   steps: APP_TOUR_STEPS,
 };
