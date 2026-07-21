@@ -213,8 +213,13 @@ export function computeTotals(
 
   const recap: RecapRow[] = [];
   for (const rate of vatRates) {
-    const gross = byRate.get(rate.id);
-    if (gross === undefined || gross === 0) continue;
+    const gross = byRate.get(rate.id) ?? 0;
+    // The printed document lists EVERY active bucket, zeros included — see
+    // excels/excel_invoice.pdf, where 10 %, 15 % and all four Deposit rows
+    // show 0,00. A deactivated rate is skipped unless an existing draft
+    // still posts to it, so retiring a rate never silently drops money off
+    // an invoice that already used it.
+    if (!rate.active && gross === 0) continue;
     const base = round2(gross / (1 + rate.percent / 100));
     recap.push({
       rateId: rate.id,
@@ -284,36 +289,48 @@ export function round2(n: number): number {
  * could return, and the whole list is admin-editable, so they sit dormant
  * rather than being deleted.
  */
+/*
+ * Order and wording match the printed export (`excels/excel_invoice.pdf`)
+ * exactly: the recap lists normal rates ascending, then the three
+ * out-of-scope buckets, then the advance rates as "Deposit N %". The label
+ * is printed VERBATIM, so it carries its own "%" and its own "Deposit "
+ * prefix rather than the renderer deriving them — that keeps a label the
+ * admin edits actually visible on the document.
+ *
+ * The document is written without diacritics throughout (a legacy of the
+ * workbook), and these labels follow suit so a reproduced invoice reads
+ * identically to a real one.
+ */
 export const DEFAULT_VAT_RATES: VatRate[] = [
-  { id: "p12", label: "12", percent: 12, block: "normal", active: true },
-  { id: "p21", label: "21", percent: 21, block: "normal", active: true },
-  { id: "p10", label: "10", percent: 10, block: "normal", active: false },
-  { id: "p15", label: "15", percent: 15, block: "normal", active: false },
+  { id: "p10", label: "10.00 %", percent: 10, block: "normal", active: false },
+  { id: "p12", label: "12.00 %", percent: 12, block: "normal", active: true },
+  { id: "p15", label: "15.00 %", percent: 15, block: "normal", active: false },
+  { id: "p21", label: "21.00 %", percent: 21, block: "normal", active: true },
   {
     id: "npd",
-    label: "Není předmětem daně – finanční plnění",
+    label: "Neni predmetem dane - financni plneni",
     percent: 0,
     block: "normal",
     active: true,
   },
   {
     id: "nppdz",
-    label: "Není předmětem plnění dle §36(13) zákona o DPH",
+    label: "Neni predmetem plneni dle §36(13) zakona o DPH",
     percent: 0,
     block: "normal",
     active: true,
   },
   {
     id: "op",
-    label: "Osvobozené plnění – 0 %",
+    label: "Osvobozene plneni - 0 %",
     percent: 0,
     block: "normal",
     active: true,
   },
-  { id: "a12", label: "12 (záloha)", percent: 12, block: "advance", active: true },
-  { id: "a21", label: "21 (záloha)", percent: 21, block: "advance", active: true },
-  { id: "a10", label: "10 (záloha)", percent: 10, block: "advance", active: false },
-  { id: "a15", label: "15 (záloha)", percent: 15, block: "advance", active: false },
+  { id: "a10", label: "Deposit 10.00 %", percent: 10, block: "advance", active: false },
+  { id: "a12", label: "Deposit 12.00 %", percent: 12, block: "advance", active: true },
+  { id: "a15", label: "Deposit 15.00 %", percent: 15, block: "advance", active: false },
+  { id: "a21", label: "Deposit 21.00 %", percent: 21, block: "advance", active: true },
 ];
 
 const item = (description: string, vatRateId: string): CatalogItem => ({

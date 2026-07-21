@@ -329,7 +329,7 @@ Faktura vytvořená na této stránce je **vizuální kopie** dokladu, který vy
 
 ### Sazba DPH v bloku „Záloha" se v rekapitulaci vykazuje zvlášť
 
-Česká pravidla vyžadují, aby přijatá **záloha** byla v rekapitulaci DPH vykázána zvlášť od běžného plnění, které pak zúčtovává. Sazba DPH v číselníku proto nese kromě procenta i **blok** (Běžná / Záloha); dvě sazby se stejným procentem (např. 12 % běžná a 12 % záloha) se **nikdy nesčítají do jednoho řádku** a v rekapitulaci se zálohové řádky vždy zobrazují pod vlastním nadpisem "Zálohy / Advances", odděleně od běžných.
+Česká pravidla vyžadují, aby přijatá **záloha** byla v rekapitulaci DPH vykázána zvlášť od běžného plnění, které pak zúčtovává. Sazba DPH v číselníku proto nese kromě procenta i **blok** (Běžná / Záloha); dvě sazby se stejným procentem (např. 12 % běžná a 12 % záloha) se **nikdy nesčítají do jednoho řádku** v rekapitulaci se vykazují jako samostatné řádky a poznají se **jen podle názvu sazby** (např. „Deposit 12.00 %"), přesně jako na původním dokladu z Excelu – žádný oddělovací nadpis tam není.
 
 **Přeřazení sazby do špatného bloku v číselníku Faktur není vidět nikde jinde než v rekapitulaci vytištěné faktury** – smísí zálohu s běžným plněním tiše, bez upozornění.
 
