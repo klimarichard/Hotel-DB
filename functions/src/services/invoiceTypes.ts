@@ -395,8 +395,6 @@ export const DEFAULT_CATALOG_ITEMS: CatalogItem[] = [
   { id: "invoice", description: "Invoice", vatRateId: null, group: "transfer", active: true },
 ];
 
-const emptyBank = (): BankBlock => ({ account: "", swift: "", iban: "" });
-
 /**
  * Seeded from the workbook's Hotel Details sheet. Logos start empty — the
  * admin uploads one per hotel on the page.

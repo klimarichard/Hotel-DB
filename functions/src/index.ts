@@ -42,6 +42,7 @@ import { guidesRouter } from "./routes/guides";
 import { terminalRouter } from "./routes/terminal";
 import { exchangeRouter } from "./routes/exchange";
 import { dokumentyRouter } from "./routes/dokumenty";
+import { fakturyRouter } from "./routes/faktury";
 import * as clock from "./services/clock";
 import { requireAuth, AuthRequest } from "./middleware/auth";
 import { requirePermission } from "./auth/permissions";
@@ -141,6 +142,7 @@ app.use("/guides", guidesRouter);
 app.use("/terminal", terminalRouter);
 app.use("/exchange", exchangeRouter);
 app.use("/dokumenty", dokumentyRouter);
+app.use("/faktury", fakturyRouter);
 
 // Health check
 app.get("/health", (_req, res) => {
