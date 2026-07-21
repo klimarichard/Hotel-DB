@@ -69,7 +69,11 @@ function isValidMargins(m: unknown): m is Margins {
  *                  default?, condition?, optional? }, … }
  */
 const CUSTOM_VAR_KEYS = new Set(Array.from({ length: 10 }, (_, i) => `var${i + 1}`));
-const CUSTOM_VAR_TYPES = new Set(["text", "date", "number", "bool", "condition"]);
+// No "condition" here, unlike contractTemplates: a condition slot is computed
+// by comparing built-in employee variables, and documents have none. The
+// Dokumenty editor never offers it, so the server refuses it too rather than
+// accepting a type that could only ever have arrived by hand-crafted request.
+const CUSTOM_VAR_TYPES = new Set(["text", "date", "number", "bool", "list"]);
 const COMPARE_OPS = new Set(["lt", "lte", "gt", "gte", "eq", "neq", "empty", "notEmpty"]);
 // Unary operators test the left operand alone — no right operand required.
 const UNARY_COMPARE_OPS = new Set(["empty", "notEmpty"]);
@@ -108,6 +112,21 @@ function isValidCustomDefault(v: unknown): boolean {
   return false;
 }
 
+/**
+ * Choices offered by a "list" slot. Shape-only validation: an empty list is
+ * allowed here on purpose, because the editor lets an author pick the type
+ * before typing the values and rejecting that mid-configuration save would be
+ * hostile. The editor warns about an optionless list instead.
+ */
+const CUSTOM_VAR_MAX_OPTIONS = 30;
+const CUSTOM_VAR_OPTION_MAX = 100;
+function isValidCustomOptions(v: unknown): boolean {
+  if (v === undefined) return true;
+  if (!Array.isArray(v)) return false;
+  if (v.length > CUSTOM_VAR_MAX_OPTIONS) return false;
+  return v.every((o) => typeof o === "string" && o.length <= CUSTOM_VAR_OPTION_MAX);
+}
+
 function isValidVariableDefs(v: unknown): boolean {
   if (!v || typeof v !== "object" || Array.isArray(v)) return false;
   return Object.entries(v as Record<string, unknown>).every(([key, def]) => {
@@ -121,6 +140,7 @@ function isValidVariableDefs(v: unknown): boolean {
       CUSTOM_VAR_TYPES.has(d.type) &&
       isValidCustomDefault(d.default) &&
       isValidCondition(d.condition) &&
+      isValidCustomOptions(d.options) &&
       // "Nepovinná" – absent means required, so only a real boolean is
       // accepted; a truthy string would silently make a slot optional.
       (d.optional === undefined || typeof d.optional === "boolean")
@@ -286,7 +306,7 @@ dokumentyRouter.put(
     if (variableDefs !== undefined && !isValidVariableDefs(variableDefs)) {
       res.status(400).json({
         error:
-          "variableDefs musí být objekt {var1..var10: {label, type, optional?}}, kde type je text|date|number|bool a optional je true|false.",
+          "variableDefs musí být objekt {var1..var10: {label, type, optional?, options?}}, kde type je text|date|number|bool|list, optional je true|false a options je seznam nejvýše 30 textových hodnot.",
       });
       return;
     }
