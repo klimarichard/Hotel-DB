@@ -817,7 +817,7 @@ export default function FakturyPage() {
                     checked={draft.deposit}
                     onChange={(e) => patchDraft({ deposit: e.target.checked })}
                   />
-                  <span>Zálohová faktura</span>
+                  <span>Depozit</span>
                 </label>
               </div>
               {/* A quiet hint, never a validation error: the number is typed in
@@ -826,7 +826,7 @@ export default function FakturyPage() {
                 <p className={styles.hint}>
                   {decoded
                     ? `Rozpoznáno: ${decoded.hotel.name}, ${
-                        decoded.deposit ? "zálohová faktura" : "běžná faktura"
+                        decoded.deposit ? "depozit" : "běžná faktura"
                       }.`
                     : "Z čísla se nepodařilo rozpoznat hotel – vyberte jej ručně."}
                 </p>
@@ -1321,8 +1321,11 @@ export default function FakturyPage() {
                   <table className={styles.summaryTable}>
                     <thead>
                       <tr>
+                        {/* No Blok column: a depozit bucket is already named
+                            as one ("Deposit 12.00 %"), exactly as on the
+                            printed recap, so the column only repeated the
+                            label beside it. */}
                         <th>Sazba</th>
-                        <th>Blok</th>
                         <th className={styles.numCol}>Základ</th>
                         <th className={styles.numCol}>DPH</th>
                         {/* No EUR column: the VAT recap is a CZK statement for
@@ -1337,7 +1340,6 @@ export default function FakturyPage() {
                           <td>
                             {r.label} ({r.percent} %)
                           </td>
-                          <td>{r.block === "advance" ? "Záloha" : "Běžná"}</td>
                           <td className={styles.numCol}>{formatMoney(r.base)}</td>
                           <td className={styles.numCol}>{formatMoney(r.vat)}</td>
                           <td className={styles.numCol}>{formatMoney(r.total)}</td>
@@ -1346,7 +1348,7 @@ export default function FakturyPage() {
                     </tbody>
                     <tfoot>
                       <tr className={styles.summaryStrong}>
-                        <td colSpan={2}>Celkem</td>
+                        <td>Celkem</td>
                         <td className={styles.numCol}>{formatMoney(totals.recapBase)}</td>
                         <td className={styles.numCol}>{formatMoney(totals.recapVat)}</td>
                         <td className={styles.numCol}>{formatMoney(totals.recapTotal)}</td>
@@ -1443,7 +1445,7 @@ function InvoiceList({
                 <button type="button" className={styles.linkBtn} onClick={() => onOpen(inv.id)}>
                   {inv.invoiceNo || "(bez čísla)"}
                 </button>
-                {inv.deposit && <span className={styles.badge}>Záloha</span>}
+                {inv.deposit && <span className={styles.badge}>Depozit</span>}
               </td>
               <td>{hotelName(inv.hotelId)}</td>
               <td>{inv.guestName}</td>
@@ -1803,7 +1805,7 @@ function ConfigPanel({
           {tab === "vat" && (
             <section className={styles.card}>
               <p className={styles.hint}>
-                Sazba zařazená do bloku „Záloha" se v rekapitulaci DPH vykazuje zvlášť od běžných
+                Sazba zařazená do bloku „Depozit" se v rekapitulaci DPH vykazuje zvlášť od běžných
                 sazeb, jak vyžadují česká pravidla pro zálohové faktury.
               </p>
               <p className={styles.hint}>
@@ -1871,7 +1873,7 @@ function ConfigPanel({
                             }
                           >
                             <option value="normal">Běžná</option>
-                            <option value="advance">Záloha</option>
+                            <option value="advance">Depozit</option>
                           </select>
                         </td>
                         <td>
@@ -2189,7 +2191,8 @@ function ConfigPanel({
                   </label>
                 </div>
                 <p className={styles.hint}>
-                  Číslo knihy a číslo knihy záloh rozhodují, který hotel se rozpozná z čísla faktury.
+                  Číselná řada a číselná řada – depozit rozhodují, který hotel se rozpozná z čísla
+                  faktury.
                 </p>
                 <div className={styles.grid}>
                   <label className={styles.field}>
@@ -2201,7 +2204,7 @@ function ConfigPanel({
                     />
                   </label>
                   <label className={styles.field}>
-                    <span>Číslo knihy</span>
+                    <span>Číselná řada</span>
                     <input
                       type="number"
                       className={styles.input}
@@ -2214,7 +2217,7 @@ function ConfigPanel({
                     />
                   </label>
                   <label className={styles.field}>
-                    <span>Číslo knihy záloh</span>
+                    <span>Číselná řada – depozit</span>
                     <input
                       type="number"
                       className={styles.input}
