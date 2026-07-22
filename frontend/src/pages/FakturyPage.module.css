@@ -227,6 +227,12 @@
   overflow-x: auto;
 }
 
+/* In the číselníky panel a table always follows explanatory hints, whose 8px
+   top margin left the column headings crowded against the text above them. */
+.panelBody .tableScroll {
+  margin-top: 14px;
+}
+
 .listTable,
 .linesTable,
 .summaryTable,
@@ -311,6 +317,51 @@
 .linesTable th:nth-child(9),
 .linesTable td:nth-child(9) {
   width: 92px;
+}
+
+/* Číselníky tables: the free-text description carries the meaning, so it takes
+   whatever the fixed-width controls beside it don't need. Widths on the other
+   columns only (no width on Popis) — that is what lets it absorb the rest. */
+.vatTable th:nth-child(2),
+.vatTable td:nth-child(2) {
+  width: 64px;
+}
+
+.vatTable th:nth-child(3),
+.vatTable td:nth-child(3) {
+  width: 110px;
+}
+
+.vatTable th:nth-child(4),
+.vatTable td:nth-child(4),
+.vatTable th:nth-child(5),
+.vatTable td:nth-child(5) {
+  width: 88px;
+}
+
+.vatTable th:nth-child(6),
+.vatTable td:nth-child(6) {
+  width: 44px;
+}
+
+.itemTable th:nth-child(2),
+.itemTable td:nth-child(2) {
+  width: 190px;
+}
+
+.itemTable th:nth-child(3),
+.itemTable td:nth-child(3) {
+  width: 150px;
+}
+
+.itemTable th:nth-child(4),
+.itemTable td:nth-child(4) {
+  width: 70px;
+}
+
+.itemTable th:nth-child(5),
+.itemTable td:nth-child(5) {
+  width: 44px;
 }
 
 .summaryTable {
@@ -496,6 +547,103 @@
   margin: 0;
 }
 
+/* ── Číselníky tabs ──────────────────────────────────────────────── */
+
+/* Sits between the panel header and the scrolling body, so switching číselník
+   never scrolls the tabs away. Matches the Nastavení tab convention. */
+.tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+
+.tab {
+  padding: 9px 14px;
+  font: inherit;
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.tab:hover {
+  color: var(--color-text);
+}
+
+.tabActive {
+  color: var(--color-active-text);
+  border-bottom-color: var(--color-active-text);
+  font-weight: 600;
+}
+
+/* ── Číselníky entity lists (kanceláře / hotely) ─────────────────── */
+
+.entityList {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.entityRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--color-surface);
+}
+
+.entityRow + .entityRow {
+  border-top: 1px solid var(--color-border);
+}
+
+/* The name is the primary way into the detail form; the Upravit button is the
+   discoverable one. Both do the same thing on purpose. */
+.entityName {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.entityName:hover {
+  text-decoration: underline;
+}
+
+.entityMeta {
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  text-align: right;
+}
+
+/* .entityMeta's margin-left: auto does the pushing — it is rendered even when
+   empty precisely so the actions stay pinned right on every row. */
+.entityRow .rowActions {
+  margin-left: 12px;
+  flex-shrink: 0;
+}
+
+.detailHeader {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
 .panelBody {
   flex: 1;
   overflow-y: auto;
@@ -508,6 +656,7 @@
 
 .panelFooter {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
   gap: 10px;
   padding: 12px 18px;
@@ -515,24 +664,8 @@
   flex-shrink: 0;
 }
 
-.subCard {
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  padding: 12px;
-  margin-bottom: 12px;
-  background: var(--color-bg);
-}
-
-.subCardHeader {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 10px;
-  font-size: 0.8125rem;
-  color: var(--color-text);
-}
-
-.subCardHeader > strong {
+/* "Uloženo" sits at the far left of the footer, away from the buttons. */
+.panelFooter .saveMsg {
   margin-right: auto;
 }
 

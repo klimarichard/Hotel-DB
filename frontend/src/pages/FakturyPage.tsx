@@ -1363,10 +1363,10 @@ export default function FakturyPage() {
       {configOpen && canManage && (
         <ConfigPanel
           config={config}
-          onSaved={(next) => {
-            setConfig(next);
-            setConfigOpen(false);
-          }}
+          // Saving no longer closes the panel, so this only refreshes the
+          // page's copy — the editor below picks up a renamed agency or a new
+          // catalogue item straight away.
+          onSaved={setConfig}
           onClose={() => setConfigOpen(false)}
           onError={setErrorModal}
         />
@@ -1555,6 +1555,37 @@ function emptyBank() {
   return { account: "", swift: "", iban: "" };
 }
 
+/* ------------------------------------------------------------------ */
+/* Číselníky panel                                                     */
+/* ------------------------------------------------------------------ */
+
+type ConfigTab = "vat" | "items" | "agencies" | "hotels";
+
+const CONFIG_TABS: { id: ConfigTab; label: string }[] = [
+  { id: "vat", label: "Sazby DPH" },
+  { id: "items", label: "Katalog položek" },
+  { id: "agencies", label: "Cestovní kanceláře" },
+  { id: "hotels", label: "Hotely" },
+];
+
+/**
+ * Display order for the two address-book tabs: active entries first, each group
+ * in Czech collation.
+ *
+ * Sorting a COPY matters. The stored order of `vatRates` is meaningful — the
+ * printed recap follows it — so nothing here may reorder an array in place;
+ * agencies and hotels carry no order at all, which is exactly why they can be
+ * sorted freely for display.
+ */
+function byActiveThenName<T extends { active: boolean }>(
+  rows: T[],
+  nameOf: (row: T) => string
+): T[] {
+  return [...rows].sort((a, b) =>
+    a.active === b.active ? byCs(nameOf(a), nameOf(b)) : a.active ? -1 : 1
+  );
+}
+
 function ConfigPanel({
   config,
   onSaved,
@@ -1562,6 +1593,7 @@ function ConfigPanel({
   onError,
 }: {
   config: FakturyConfig;
+  /** Hands the saved config back to the page. Does NOT close the panel. */
   onSaved: (next: FakturyConfig) => void;
   onClose: () => void;
   onError: (message: string) => void;
@@ -1573,6 +1605,27 @@ function ConfigPanel({
   const [hotels, setHotels] = useState<InvoiceHotel[]>(config.hotels);
   const [companies, setCompanies] = useState<{ id: string; name: string }[]>([]);
   const [saving, setSaving] = useState(false);
+  const [savedMsg, setSavedMsg] = useState<string | null>(null);
+
+  const [tab, setTab] = useState<ConfigTab>("vat");
+  /** Which agency / hotel is open in its detail form; null = the list. */
+  const [editingAgency, setEditingAgency] = useState<string | null>(null);
+  const [editingHotel, setEditingHotel] = useState<string | null>(null);
+  const [confirmState, setConfirmState] = useState<ConfirmState>(null);
+
+  const draft: FakturyConfig = useMemo(
+    () => ({ vatRates, items, agencies, hotels }),
+    [vatRates, items, agencies, hotels]
+  );
+
+  /**
+   * Last state known to be on the server. Compared by value rather than tracked
+   * with a dirty flag, so undoing an edit by hand genuinely un-dirties the
+   * panel — with a flag, retyping a character back to what it was would leave
+   * Uložit enabled forever and the leave-warning firing over nothing.
+   */
+  const [savedSnapshot, setSavedSnapshot] = useState<string>(() => JSON.stringify(config));
+  const dirty = useMemo(() => JSON.stringify(draft) !== savedSnapshot, [draft, savedSnapshot]);
 
   useEffect(() => {
     api
@@ -1581,17 +1634,49 @@ function ConfigPanel({
       .catch(() => undefined);
   }, []);
 
-  async function save() {
+  async function save(): Promise<boolean> {
     setSaving(true);
     try {
-      const payload: FakturyConfig = { vatRates, items, agencies, hotels };
-      await api.put("/faktury/config", payload);
-      onSaved(payload);
+      await api.put("/faktury/config", draft);
+      // The panel STAYS OPEN: editing číselníky is a session of many small
+      // changes across four tabs, and closing on every save would make saving
+      // often feel like a punishment - which is how unsaved work gets lost.
+      setSavedSnapshot(JSON.stringify(draft));
+      onSaved(draft);
+      setSavedMsg("Uloženo");
+      setTimeout(() => setSavedMsg(null), 3000);
+      return true;
     } catch (e) {
       onError(errorMessage(e, "Číselníky se nepodařilo uložit."));
+      return false;
     } finally {
       setSaving(false);
     }
+  }
+
+  /** Zrušit / ✕ — never discards silently. */
+  function requestClose() {
+    if (!dirty) {
+      onClose();
+      return;
+    }
+    setConfirmState({
+      title: "Neuložené změny",
+      message: "V číselnících máte neuložené změny. Chcete je před zavřením uložit?",
+      confirmLabel: "Uložit a zavřít",
+      tertiary: {
+        label: "Zahodit změny",
+        variant: "danger",
+        onClick: () => {
+          setConfirmState(null);
+          onClose();
+        },
+      },
+      onConfirm: async () => {
+        setConfirmState(null);
+        if (await save()) onClose();
+      },
+    });
   }
 
   async function handleLogo(hotelId: string, file: File | undefined) {
@@ -1607,6 +1692,81 @@ function ConfigPanel({
   }
 
   const vatSorted = useMemo(() => [...vatRates].sort((a, b) => byCs(a.label, b.label)), [vatRates]);
+  const agencyList = useMemo(() => byActiveThenName(agencies, (a) => a.name), [agencies]);
+  const hotelList = useMemo(() => byActiveThenName(hotels, (h) => h.name), [hotels]);
+
+  const agency = editingAgency ? agencies.find((a) => a.id === editingAgency) ?? null : null;
+  const hotel = editingHotel ? hotels.find((h) => h.id === editingHotel) ?? null : null;
+
+  function patchAgency(id: string, p: Partial<Agency>) {
+    setAgencies((prev) => prev.map((x) => (x.id === id ? { ...x, ...p } : x)));
+  }
+
+  function patchHotel(id: string, p: Partial<InvoiceHotel>) {
+    setHotels((prev) => prev.map((x) => (x.id === id ? { ...x, ...p } : x)));
+  }
+
+  function addAgency() {
+    const id = newLineId();
+    setAgencies((prev) => [...prev, { id, name: "", active: true, ...EMPTY_ADDRESS }]);
+    // Straight into the detail form: a nameless row in the list is not
+    // something anyone wants to hunt for afterwards.
+    setEditingAgency(id);
+  }
+
+  function addHotel() {
+    const id = newLineId();
+    setHotels((prev) => [
+      ...prev,
+      {
+        id,
+        name: "",
+        bookNo: null,
+        depositBookNo: null,
+        companyId: null,
+        logoDataUri: "",
+        footer: "",
+        bankName: "",
+        bankEur: emptyBank(),
+        bankCzk: emptyBank(),
+        active: true,
+      },
+    ]);
+    setEditingHotel(id);
+  }
+
+  /**
+   * Removal is confirmed even though it only touches local state until Uložit:
+   * a hotel carries its logo, both bank blocks and its footer, and an agency a
+   * full address — none of it recoverable from the list row that replaced it.
+   */
+  function requestRemoveAgency(a: Agency) {
+    setConfirmState({
+      title: "Smazat kancelář",
+      message: `Opravdu chcete smazat kancelář ${a.name || "bez názvu"}? Faktury, které ji mají vybranou, zůstanou uložené, ale odběratele už nedohledají. Změna se projeví až po uložení číselníků.`,
+      confirmLabel: "Smazat",
+      danger: true,
+      onConfirm: () => {
+        setAgencies((prev) => prev.filter((x) => x.id !== a.id));
+        if (editingAgency === a.id) setEditingAgency(null);
+        setConfirmState(null);
+      },
+    });
+  }
+
+  function requestRemoveHotel(h: InvoiceHotel) {
+    setConfirmState({
+      title: "Smazat hotel",
+      message: `Opravdu chcete smazat hotel ${h.name || "bez názvu"}? Přijdete tím o jeho logo, patičku i oba bankovní účty a faktury s jeho číslem knihy přestanou hotel rozpoznávat. Změna se projeví až po uložení číselníků.`,
+      confirmLabel: "Smazat",
+      danger: true,
+      onConfirm: () => {
+        setHotels((prev) => prev.filter((x) => x.id !== h.id));
+        if (editingHotel === h.id) setEditingHotel(null);
+        setConfirmState(null);
+      },
+    });
+  }
 
   /* The overlay deliberately has NO onClick – this panel holds half-edited
      číselníky and must close only through its own buttons. */
@@ -1615,546 +1775,597 @@ function ConfigPanel({
       <div className={styles.panel}>
         <div className={styles.panelHeader}>
           <h2 className={styles.panelTitle}>Číselníky faktur</h2>
-          <IconButton variant="close" aria-label="Zavřít číselníky" onClick={onClose}>
+          <IconButton variant="close" aria-label="Zavřít číselníky" onClick={requestClose}>
             ✕
           </IconButton>
         </div>
 
+        {/* One tab per číselník. The panel used to stack all four on one
+            scrolling page, which buried the hotel bank blocks under ~40 rows
+            of catalogue. */}
+        <div className={styles.tabs} role="tablist">
+          {CONFIG_TABS.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={tab === t.id}
+              className={`${styles.tab} ${tab === t.id ? styles.tabActive : ""}`}
+              onClick={() => setTab(t.id)}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
         <div className={styles.panelBody}>
           {/* ── Sazby DPH ──────────────────────────────────────────── */}
-          <section className={styles.card}>
-            <h3 className={styles.cardTitle}>Sazby DPH</h3>
-            <p className={styles.hint}>
-              Sazba zařazená do bloku „Záloha" se v rekapitulaci DPH vykazuje zvlášť od běžných
-              sazeb, jak vyžadují česká pravidla pro zálohové faktury.
-            </p>
-            <p className={styles.hint}>
-              „Aktivní" určuje, zda lze sazbu vybrat na řádku faktury. „Zobrazit při tisku"
-              určuje, zda se sazba objeví v rekapitulaci DPH i tehdy, když je neaktivní a
-              nulová – tak se na faktuře tisknou historické sazby 10 % a 15 % včetně jejich
-              zálohových protějšků.
-            </p>
-            <div className={styles.tableScroll}>
-              <table className={styles.configTable}>
-                <thead>
-                  <tr>
-                    <th>Popis</th>
-                    <th>Procento</th>
-                    <th>Blok</th>
-                    <th>Aktivní</th>
-                    <th>Zobrazit při tisku</th>
-                    <th aria-label="Akce" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {vatRates.map((r) => (
-                    <tr key={r.id}>
-                      <td>
-                        <input
-                          className={styles.cellInput}
-                          value={r.label}
-                          onChange={(e) =>
-                            setVatRates((prev) =>
-                              prev.map((x) => (x.id === r.id ? { ...x, label: e.target.value } : x))
-                            )
-                          }
-                        />
-                      </td>
-                      <td>
-                        <input
-                          type="number"
-                          step="any"
-                          className={`${styles.cellInput} ${styles.cellNum}`}
-                          value={r.percent}
-                          onChange={(e) =>
-                            setVatRates((prev) =>
-                              prev.map((x) =>
-                                x.id === r.id ? { ...x, percent: Number(e.target.value) || 0 } : x
-                              )
-                            )
-                          }
-                        />
-                      </td>
-                      <td>
-                        <select
-                          className={styles.cellInput}
-                          value={r.block}
-                          onChange={(e) =>
-                            setVatRates((prev) =>
-                              prev.map((x) =>
-                                x.id === r.id
-                                  ? { ...x, block: e.target.value as VatRate["block"] }
-                                  : x
-                              )
-                            )
-                          }
-                        >
-                          <option value="normal">Běžná</option>
-                          <option value="advance">Záloha</option>
-                        </select>
-                      </td>
-                      <td>
-                        <input
-                          type="checkbox"
-                          checked={r.active}
-                          aria-label="Aktivní"
-                          onChange={(e) =>
-                            setVatRates((prev) =>
-                              prev.map((x) => (x.id === r.id ? { ...x, active: e.target.checked } : x))
-                            )
-                          }
-                        />
-                      </td>
-                      <td>
-                        {/* Independent of Aktivní on purpose — see the hint
-                            above the table. An active rate always prints, so
-                            this box only decides anything while inactive. */}
-                        <input
-                          type="checkbox"
-                          checked={r.showInPrint === true}
-                          aria-label="Zobrazit při tisku"
-                          onChange={(e) =>
-                            setVatRates((prev) =>
-                              prev.map((x) =>
-                                x.id === r.id ? { ...x, showInPrint: e.target.checked } : x
-                              )
-                            )
-                          }
-                        />
-                      </td>
-                      <td>
-                        <button
-                          type="button"
-                          className={`${styles.rowIconBtn} ${styles.rowIconDanger}`}
-                          aria-label="Odebrat sazbu"
-                          onClick={() => setVatRates((prev) => prev.filter((x) => x.id !== r.id))}
-                        >
-                          ✕
-                        </button>
-                      </td>
+          {tab === "vat" && (
+            <section className={styles.card}>
+              <p className={styles.hint}>
+                Sazba zařazená do bloku „Záloha" se v rekapitulaci DPH vykazuje zvlášť od běžných
+                sazeb, jak vyžadují česká pravidla pro zálohové faktury.
+              </p>
+              <p className={styles.hint}>
+                „Aktivní" určuje, zda lze sazbu vybrat na řádku faktury. „Zobrazit při tisku"
+                určuje, zda se sazba objeví v rekapitulaci DPH i tehdy, když je neaktivní a
+                nulová – tak se na faktuře tisknou historické sazby 10 % a 15 % včetně jejich
+                zálohových protějšků.
+              </p>
+              <div className={styles.tableScroll}>
+                <table className={`${styles.configTable} ${styles.vatTable}`}>
+                  <thead>
+                    <tr>
+                      <th>Popis</th>
+                      <th>%</th>
+                      <th>Blok</th>
+                      <th>Aktivní</th>
+                      <th>Zobrazit při tisku</th>
+                      <th aria-label="Akce" />
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() =>
-                setVatRates((prev) => [
-                  ...prev,
-                  { id: newLineId(), label: "", percent: 0, block: "normal", active: true },
-                ])
-              }
-            >
-              + Přidat sazbu
-            </Button>
-          </section>
+                  </thead>
+                  <tbody>
+                    {vatRates.map((r) => (
+                      <tr key={r.id}>
+                        <td>
+                          <input
+                            className={styles.cellInput}
+                            value={r.label}
+                            onChange={(e) =>
+                              setVatRates((prev) =>
+                                prev.map((x) => (x.id === r.id ? { ...x, label: e.target.value } : x))
+                              )
+                            }
+                          />
+                        </td>
+                        <td>
+                          {/* Left-aligned, unlike money: this is a rate, and at
+                              two digits a right-aligned column only opens a gap
+                              between the number and its heading. */}
+                          <input
+                            type="number"
+                            step="any"
+                            className={styles.cellInput}
+                            value={r.percent}
+                            onChange={(e) =>
+                              setVatRates((prev) =>
+                                prev.map((x) =>
+                                  x.id === r.id ? { ...x, percent: Number(e.target.value) || 0 } : x
+                                )
+                              )
+                            }
+                          />
+                        </td>
+                        <td>
+                          <select
+                            className={styles.cellInput}
+                            value={r.block}
+                            onChange={(e) =>
+                              setVatRates((prev) =>
+                                prev.map((x) =>
+                                  x.id === r.id
+                                    ? { ...x, block: e.target.value as VatRate["block"] }
+                                    : x
+                                )
+                              )
+                            }
+                          >
+                            <option value="normal">Běžná</option>
+                            <option value="advance">Záloha</option>
+                          </select>
+                        </td>
+                        <td>
+                          <input
+                            type="checkbox"
+                            checked={r.active}
+                            aria-label="Aktivní"
+                            onChange={(e) =>
+                              setVatRates((prev) =>
+                                prev.map((x) => (x.id === r.id ? { ...x, active: e.target.checked } : x))
+                              )
+                            }
+                          />
+                        </td>
+                        <td>
+                          {/* Independent of Aktivní on purpose — see the hint
+                              above the table. An active rate always prints, so
+                              this box only decides anything while inactive. */}
+                          <input
+                            type="checkbox"
+                            checked={r.showInPrint === true}
+                            aria-label="Zobrazit při tisku"
+                            onChange={(e) =>
+                              setVatRates((prev) =>
+                                prev.map((x) =>
+                                  x.id === r.id ? { ...x, showInPrint: e.target.checked } : x
+                                )
+                              )
+                            }
+                          />
+                        </td>
+                        <td>
+                          <button
+                            type="button"
+                            className={`${styles.rowIconBtn} ${styles.rowIconDanger}`}
+                            aria-label="Odebrat sazbu"
+                            onClick={() => setVatRates((prev) => prev.filter((x) => x.id !== r.id))}
+                          >
+                            ✕
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() =>
+                  setVatRates((prev) => [
+                    ...prev,
+                    { id: newLineId(), label: "", percent: 0, block: "normal", active: true },
+                  ])
+                }
+              >
+                + Přidat sazbu
+              </Button>
+            </section>
+          )}
 
           {/* ── Katalog položek ────────────────────────────────────── */}
-          <section className={styles.card}>
-            <h3 className={styles.cardTitle}>Katalog položek</h3>
-            <p className={styles.hint}>
-              Z tohoto seznamu vybírá rozbalovací nabídka v popisu řádku faktury. Vybraná položka
-              zároveň doplní svou sazbu DPH a typ řádku.
-            </p>
-            <div className={styles.tableScroll}>
-              <table className={styles.configTable}>
-                <thead>
-                  <tr>
-                    <th>Popis</th>
-                    <th>Sazba DPH</th>
-                    <th>Typ</th>
-                    <th>Aktivní</th>
-                    <th aria-label="Akce" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((it) => (
-                    <tr key={it.id}>
-                      <td>
-                        <input
-                          className={styles.cellInput}
-                          value={it.description}
-                          onChange={(e) =>
-                            setItems((prev) =>
-                              prev.map((x) =>
-                                x.id === it.id ? { ...x, description: e.target.value } : x
-                              )
-                            )
-                          }
-                        />
-                      </td>
-                      <td>
-                        <select
-                          className={styles.cellInput}
-                          value={it.vatRateId ?? ""}
-                          onChange={(e) =>
-                            setItems((prev) =>
-                              prev.map((x) =>
-                                x.id === it.id ? { ...x, vatRateId: e.target.value || null } : x
-                              )
-                            )
-                          }
-                        >
-                          <option value="">– žádná –</option>
-                          {vatSorted.map((r) => (
-                            <option key={r.id} value={r.id}>
-                              {r.label}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                      <td>
-                        <select
-                          className={styles.cellInput}
-                          value={it.group}
-                          onChange={(e) =>
-                            setItems((prev) =>
-                              prev.map((x) =>
-                                x.id === it.id ? { ...x, group: e.target.value as LineGroup } : x
-                              )
-                            )
-                          }
-                        >
-                          {LINE_GROUPS.map((g) => (
-                            <option key={g} value={g}>
-                              {LINE_GROUP_LABELS[g]}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                      <td>
-                        <input
-                          type="checkbox"
-                          checked={it.active}
-                          aria-label="Aktivní"
-                          onChange={(e) =>
-                            setItems((prev) =>
-                              prev.map((x) => (x.id === it.id ? { ...x, active: e.target.checked } : x))
-                            )
-                          }
-                        />
-                      </td>
-                      <td>
-                        <button
-                          type="button"
-                          className={`${styles.rowIconBtn} ${styles.rowIconDanger}`}
-                          aria-label="Odebrat položku"
-                          onClick={() => setItems((prev) => prev.filter((x) => x.id !== it.id))}
-                        >
-                          ✕
-                        </button>
-                      </td>
+          {tab === "items" && (
+            <section className={styles.card}>
+              <p className={styles.hint}>
+                Z tohoto seznamu vybírá rozbalovací nabídka v popisu řádku faktury. Vybraná položka
+                zároveň doplní svou sazbu DPH a typ řádku – na řádku faktury je pak už nelze změnit.
+              </p>
+              <div className={styles.tableScroll}>
+                <table className={`${styles.configTable} ${styles.itemTable}`}>
+                  <thead>
+                    <tr>
+                      <th>Popis</th>
+                      <th>Sazba DPH</th>
+                      <th>Typ</th>
+                      <th>Aktivní</th>
+                      <th aria-label="Akce" />
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() =>
-                setItems((prev) => [
-                  ...prev,
-                  { id: newLineId(), description: "", vatRateId: null, group: "item", active: true },
-                ])
-              }
-            >
-              + Přidat položku
-            </Button>
-          </section>
+                  </thead>
+                  <tbody>
+                    {items.map((it) => (
+                      <tr key={it.id}>
+                        <td>
+                          <input
+                            className={styles.cellInput}
+                            value={it.description}
+                            onChange={(e) =>
+                              setItems((prev) =>
+                                prev.map((x) =>
+                                  x.id === it.id ? { ...x, description: e.target.value } : x
+                                )
+                              )
+                            }
+                          />
+                        </td>
+                        <td>
+                          <select
+                            className={styles.cellInput}
+                            value={it.vatRateId ?? ""}
+                            onChange={(e) =>
+                              setItems((prev) =>
+                                prev.map((x) =>
+                                  x.id === it.id ? { ...x, vatRateId: e.target.value || null } : x
+                                )
+                              )
+                            }
+                          >
+                            <option value="">– žádná –</option>
+                            {vatSorted.map((r) => (
+                              <option key={r.id} value={r.id}>
+                                {r.label}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td>
+                          <select
+                            className={styles.cellInput}
+                            value={it.group}
+                            onChange={(e) =>
+                              setItems((prev) =>
+                                prev.map((x) =>
+                                  x.id === it.id ? { ...x, group: e.target.value as LineGroup } : x
+                                )
+                              )
+                            }
+                          >
+                            {LINE_GROUPS.map((g) => (
+                              <option key={g} value={g}>
+                                {LINE_GROUP_LABELS[g]}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td>
+                          <input
+                            type="checkbox"
+                            checked={it.active}
+                            aria-label="Aktivní"
+                            onChange={(e) =>
+                              setItems((prev) =>
+                                prev.map((x) => (x.id === it.id ? { ...x, active: e.target.checked } : x))
+                              )
+                            }
+                          />
+                        </td>
+                        <td>
+                          <button
+                            type="button"
+                            className={`${styles.rowIconBtn} ${styles.rowIconDanger}`}
+                            aria-label="Odebrat položku"
+                            onClick={() => setItems((prev) => prev.filter((x) => x.id !== it.id))}
+                          >
+                            ✕
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() =>
+                  setItems((prev) => [
+                    ...prev,
+                    { id: newLineId(), description: "", vatRateId: null, group: "item", active: true },
+                  ])
+                }
+              >
+                + Přidat položku
+              </Button>
+            </section>
+          )}
 
           {/* ── Cestovní kanceláře ─────────────────────────────────── */}
-          <section className={styles.card}>
-            <h3 className={styles.cardTitle}>Cestovní kanceláře</h3>
-            {agencies.map((a) => {
-              const patch = (p: Partial<Agency>) =>
-                setAgencies((prev) => prev.map((x) => (x.id === a.id ? { ...x, ...p } : x)));
-              return (
-                <div key={a.id} className={styles.subCard}>
-                  <div className={styles.subCardHeader}>
-                    <strong>{a.name || "Nová kancelář"}</strong>
-                    <label className={styles.inlineCheck}>
-                      <input
-                        type="checkbox"
-                        checked={a.active}
-                        onChange={(e) => patch({ active: e.target.checked })}
-                      />
-                      <span>Aktivní</span>
-                    </label>
-                    <button
-                      type="button"
-                      className={`${styles.rowIconBtn} ${styles.rowIconDanger}`}
-                      aria-label="Odebrat kancelář"
-                      onClick={() => setAgencies((prev) => prev.filter((x) => x.id !== a.id))}
-                    >
-                      ✕
-                    </button>
-                  </div>
-                  <div className={styles.grid}>
-                    <label className={styles.field}>
-                      <span>Název</span>
-                      <input
-                        className={styles.input}
-                        value={a.name}
-                        onChange={(e) => patch({ name: e.target.value })}
-                      />
-                    </label>
-                    <label className={styles.field}>
-                      <span>Ulice</span>
-                      <input
-                        className={styles.input}
-                        value={a.street1}
-                        onChange={(e) => patch({ street1: e.target.value })}
-                      />
-                    </label>
-                    <label className={styles.field}>
-                      <span>Ulice 2</span>
-                      <input
-                        className={styles.input}
-                        value={a.street2}
-                        onChange={(e) => patch({ street2: e.target.value })}
-                      />
-                    </label>
-                    <label className={styles.field}>
-                      <span>Ulice 3</span>
-                      <input
-                        className={styles.input}
-                        value={a.street3}
-                        onChange={(e) => patch({ street3: e.target.value })}
-                      />
-                    </label>
-                    <label className={styles.field}>
-                      <span>PSČ</span>
-                      <input
-                        className={styles.input}
-                        value={a.zip}
-                        onChange={(e) => patch({ zip: e.target.value })}
-                      />
-                    </label>
-                    <label className={styles.field}>
-                      <span>Město</span>
-                      <input
-                        className={styles.input}
-                        value={a.city}
-                        onChange={(e) => patch({ city: e.target.value })}
-                      />
-                    </label>
-                    {/* Same searchable field as the invoice's own Země: the
-                        agency address prints on the invoice identically. */}
-                    <CountryField value={a.country} onChange={(country) => patch({ country })} />
-                    <label className={styles.field}>
-                      <span>IČ</span>
-                      <input
-                        className={styles.input}
-                        value={a.ic}
-                        onChange={(e) => patch({ ic: e.target.value })}
-                      />
-                    </label>
-                    <label className={styles.field}>
-                      <span>DIČ</span>
-                      <input
-                        className={styles.input}
-                        value={a.dic}
-                        onChange={(e) => patch({ dic: e.target.value })}
-                      />
-                    </label>
-                  </div>
+          {tab === "agencies" &&
+            (agency ? (
+              <section className={styles.card}>
+                <div className={styles.detailHeader}>
+                  <Button variant="ghost" size="sm" onClick={() => setEditingAgency(null)}>
+                    ← Zpět na seznam
+                  </Button>
+                  <label className={styles.inlineCheck}>
+                    <input
+                      type="checkbox"
+                      checked={agency.active}
+                      onChange={(e) => patchAgency(agency.id, { active: e.target.checked })}
+                    />
+                    <span>Aktivní</span>
+                  </label>
                 </div>
-              );
-            })}
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() =>
-                setAgencies((prev) => [
-                  ...prev,
-                  { id: newLineId(), name: "", active: true, ...EMPTY_ADDRESS },
-                ])
-              }
-            >
-              + Přidat kancelář
-            </Button>
-          </section>
-
-          {/* ── Hotely ─────────────────────────────────────────────── */}
-          <section className={styles.card}>
-            <h3 className={styles.cardTitle}>Hotely</h3>
-            <p className={styles.hint}>
-              Číslo knihy a číslo knihy záloh rozhodují, který hotel se rozpozná z čísla faktury.
-            </p>
-            {hotels.map((h) => {
-              const patch = (p: Partial<InvoiceHotel>) =>
-                setHotels((prev) => prev.map((x) => (x.id === h.id ? { ...x, ...p } : x)));
-              return (
-                <div key={h.id} className={styles.subCard}>
-                  <div className={styles.subCardHeader}>
-                    <strong>{h.name || "Nový hotel"}</strong>
-                    <label className={styles.inlineCheck}>
-                      <input
-                        type="checkbox"
-                        checked={h.active}
-                        onChange={(e) => patch({ active: e.target.checked })}
-                      />
-                      <span>Aktivní</span>
-                    </label>
-                    <button
-                      type="button"
-                      className={`${styles.rowIconBtn} ${styles.rowIconDanger}`}
-                      aria-label="Odebrat hotel"
-                      onClick={() => setHotels((prev) => prev.filter((x) => x.id !== h.id))}
-                    >
-                      ✕
-                    </button>
-                  </div>
-                  <div className={styles.grid}>
-                    <label className={styles.field}>
-                      <span>Název</span>
-                      <input
-                        className={styles.input}
-                        value={h.name}
-                        onChange={(e) => patch({ name: e.target.value })}
-                      />
-                    </label>
-                    <label className={styles.field}>
-                      <span>Číslo knihy</span>
-                      <input
-                        type="number"
-                        className={styles.input}
-                        value={h.bookNo ?? ""}
-                        onChange={(e) =>
-                          patch({ bookNo: e.target.value === "" ? null : Number(e.target.value) })
-                        }
-                      />
-                    </label>
-                    <label className={styles.field}>
-                      <span>Číslo knihy záloh</span>
-                      <input
-                        type="number"
-                        className={styles.input}
-                        value={h.depositBookNo ?? ""}
-                        onChange={(e) =>
-                          patch({
-                            depositBookNo: e.target.value === "" ? null : Number(e.target.value),
-                          })
-                        }
-                      />
-                    </label>
-                    <label className={styles.field}>
-                      <span>Firma</span>
-                      <select
-                        className={styles.input}
-                        value={h.companyId ?? ""}
-                        onChange={(e) => patch({ companyId: e.target.value || null })}
-                      >
-                        <option value="">– žádná –</option>
-                        {companies.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className={styles.field}>
-                      <span>Banka</span>
-                      <input
-                        className={styles.input}
-                        value={h.bankName}
-                        onChange={(e) => patch({ bankName: e.target.value })}
-                      />
-                    </label>
-                  </div>
-
-                  <div className={styles.logoRow}>
-                    <div>
-                      <span className={styles.fieldLabel}>Logo</span>
-                      <input
-                        type="file"
-                        accept="image/png,image/jpeg,image/webp"
-                        className={styles.fileInput}
-                        onChange={(e) => {
-                          handleLogo(h.id, e.target.files?.[0]);
-                          e.target.value = "";
-                        }}
-                      />
-                      <p className={styles.hint}>PNG, JPEG nebo WEBP. Velké obrázky se zmenší.</p>
-                    </div>
-                    {h.logoDataUri && (
-                      <div className={styles.logoPreview}>
-                        <img src={h.logoDataUri} alt={`Logo – ${h.name}`} />
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => patch({ logoDataUri: "" })}
-                        >
-                          Odebrat logo
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-
+                <div className={styles.grid}>
                   <label className={styles.field}>
-                    <span>Patička</span>
-                    <textarea
-                      className={styles.textarea}
-                      rows={3}
-                      value={h.footer}
-                      onChange={(e) => patch({ footer: e.target.value })}
+                    <span>Název</span>
+                    <input
+                      className={styles.input}
+                      value={agency.name}
+                      onChange={(e) => patchAgency(agency.id, { name: e.target.value })}
                     />
                   </label>
-
-                  <div className={styles.bankGrid}>
-                    <BankFields
-                      title="Účet EUR"
-                      block={h.bankEur}
-                      onChange={(b) => patch({ bankEur: b })}
+                  <label className={styles.field}>
+                    <span>Ulice</span>
+                    <input
+                      className={styles.input}
+                      value={agency.street1}
+                      onChange={(e) => patchAgency(agency.id, { street1: e.target.value })}
                     />
-                    <BankFields
-                      title="Účet CZK"
-                      block={h.bankCzk}
-                      onChange={(b) => patch({ bankCzk: b })}
+                  </label>
+                  <label className={styles.field}>
+                    <span>Ulice 2</span>
+                    <input
+                      className={styles.input}
+                      value={agency.street2}
+                      onChange={(e) => patchAgency(agency.id, { street2: e.target.value })}
                     />
-                  </div>
+                  </label>
+                  <label className={styles.field}>
+                    <span>Ulice 3</span>
+                    <input
+                      className={styles.input}
+                      value={agency.street3}
+                      onChange={(e) => patchAgency(agency.id, { street3: e.target.value })}
+                    />
+                  </label>
+                  <label className={styles.field}>
+                    <span>PSČ</span>
+                    <input
+                      className={styles.input}
+                      value={agency.zip}
+                      onChange={(e) => patchAgency(agency.id, { zip: e.target.value })}
+                    />
+                  </label>
+                  <label className={styles.field}>
+                    <span>Město</span>
+                    <input
+                      className={styles.input}
+                      value={agency.city}
+                      onChange={(e) => patchAgency(agency.id, { city: e.target.value })}
+                    />
+                  </label>
+                  {/* Same searchable field as the invoice's own Země: the
+                      agency address prints on the invoice identically. */}
+                  <CountryField
+                    value={agency.country}
+                    onChange={(country) => patchAgency(agency.id, { country })}
+                  />
+                  <label className={styles.field}>
+                    <span>IČ</span>
+                    <input
+                      className={styles.input}
+                      value={agency.ic}
+                      onChange={(e) => patchAgency(agency.id, { ic: e.target.value })}
+                    />
+                  </label>
+                  <label className={styles.field}>
+                    <span>DIČ</span>
+                    <input
+                      className={styles.input}
+                      value={agency.dic}
+                      onChange={(e) => patchAgency(agency.id, { dic: e.target.value })}
+                    />
+                  </label>
                 </div>
-              );
-            })}
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() =>
-                setHotels((prev) => [
-                  ...prev,
-                  {
-                    id: newLineId(),
-                    name: "",
-                    bookNo: null,
-                    depositBookNo: null,
-                    companyId: null,
-                    logoDataUri: "",
-                    footer: "",
-                    bankName: "",
-                    bankEur: emptyBank(),
-                    bankCzk: emptyBank(),
-                    active: true,
-                  },
-                ])
-              }
-            >
-              + Přidat hotel
-            </Button>
-          </section>
+              </section>
+            ) : (
+              <section className={styles.card}>
+                <ul className={styles.entityList}>
+                  {agencyList.map((a) => (
+                    <li key={a.id} className={styles.entityRow}>
+                      <button
+                        type="button"
+                        className={styles.entityName}
+                        onClick={() => setEditingAgency(a.id)}
+                      >
+                        {a.name || "(bez názvu)"}
+                      </button>
+                      {!a.active && <span className={styles.badge}>Neaktivní</span>}
+                      <span className={styles.entityMeta}>
+                        {[a.dic, a.country].filter(Boolean).join(", ")}
+                      </span>
+                      <div className={styles.rowActions}>
+                        <Button variant="secondary" size="sm" onClick={() => setEditingAgency(a.id)}>
+                          Upravit
+                        </Button>
+                        <Button variant="danger" size="sm" onClick={() => requestRemoveAgency(a)}>
+                          Smazat
+                        </Button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+                <Button variant="secondary" size="sm" onClick={addAgency}>
+                  + Přidat kancelář
+                </Button>
+              </section>
+            ))}
+
+          {/* ── Hotely ─────────────────────────────────────────────── */}
+          {tab === "hotels" &&
+            (hotel ? (
+              <section className={styles.card}>
+                <div className={styles.detailHeader}>
+                  <Button variant="ghost" size="sm" onClick={() => setEditingHotel(null)}>
+                    ← Zpět na seznam
+                  </Button>
+                  <label className={styles.inlineCheck}>
+                    <input
+                      type="checkbox"
+                      checked={hotel.active}
+                      onChange={(e) => patchHotel(hotel.id, { active: e.target.checked })}
+                    />
+                    <span>Aktivní</span>
+                  </label>
+                </div>
+                <p className={styles.hint}>
+                  Číslo knihy a číslo knihy záloh rozhodují, který hotel se rozpozná z čísla faktury.
+                </p>
+                <div className={styles.grid}>
+                  <label className={styles.field}>
+                    <span>Název</span>
+                    <input
+                      className={styles.input}
+                      value={hotel.name}
+                      onChange={(e) => patchHotel(hotel.id, { name: e.target.value })}
+                    />
+                  </label>
+                  <label className={styles.field}>
+                    <span>Číslo knihy</span>
+                    <input
+                      type="number"
+                      className={styles.input}
+                      value={hotel.bookNo ?? ""}
+                      onChange={(e) =>
+                        patchHotel(hotel.id, {
+                          bookNo: e.target.value === "" ? null : Number(e.target.value),
+                        })
+                      }
+                    />
+                  </label>
+                  <label className={styles.field}>
+                    <span>Číslo knihy záloh</span>
+                    <input
+                      type="number"
+                      className={styles.input}
+                      value={hotel.depositBookNo ?? ""}
+                      onChange={(e) =>
+                        patchHotel(hotel.id, {
+                          depositBookNo: e.target.value === "" ? null : Number(e.target.value),
+                        })
+                      }
+                    />
+                  </label>
+                  <label className={styles.field}>
+                    <span>Firma</span>
+                    <select
+                      className={styles.input}
+                      value={hotel.companyId ?? ""}
+                      onChange={(e) => patchHotel(hotel.id, { companyId: e.target.value || null })}
+                    >
+                      <option value="">– žádná –</option>
+                      {companies.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className={styles.field}>
+                    <span>Banka</span>
+                    <input
+                      className={styles.input}
+                      value={hotel.bankName}
+                      onChange={(e) => patchHotel(hotel.id, { bankName: e.target.value })}
+                    />
+                  </label>
+                </div>
+
+                <div className={styles.logoRow}>
+                  <div>
+                    <span className={styles.fieldLabel}>Logo</span>
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      className={styles.fileInput}
+                      onChange={(e) => {
+                        handleLogo(hotel.id, e.target.files?.[0]);
+                        e.target.value = "";
+                      }}
+                    />
+                    <p className={styles.hint}>PNG, JPEG nebo WEBP. Velké obrázky se zmenší.</p>
+                  </div>
+                  {hotel.logoDataUri && (
+                    <div className={styles.logoPreview}>
+                      <img src={hotel.logoDataUri} alt={`Logo – ${hotel.name}`} />
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => patchHotel(hotel.id, { logoDataUri: "" })}
+                      >
+                        Odebrat logo
+                      </Button>
+                    </div>
+                  )}
+                </div>
+
+                <label className={styles.field}>
+                  <span>Patička</span>
+                  <textarea
+                    className={styles.textarea}
+                    rows={3}
+                    value={hotel.footer}
+                    onChange={(e) => patchHotel(hotel.id, { footer: e.target.value })}
+                  />
+                </label>
+
+                <div className={styles.bankGrid}>
+                  <BankFields
+                    title="Účet EUR"
+                    block={hotel.bankEur}
+                    onChange={(b) => patchHotel(hotel.id, { bankEur: b })}
+                  />
+                  <BankFields
+                    title="Účet CZK"
+                    block={hotel.bankCzk}
+                    onChange={(b) => patchHotel(hotel.id, { bankCzk: b })}
+                  />
+                </div>
+              </section>
+            ) : (
+              <section className={styles.card}>
+                <ul className={styles.entityList}>
+                  {hotelList.map((h) => (
+                    <li key={h.id} className={styles.entityRow}>
+                      <button
+                        type="button"
+                        className={styles.entityName}
+                        onClick={() => setEditingHotel(h.id)}
+                      >
+                        {h.name || "(bez názvu)"}
+                      </button>
+                      {!h.active && <span className={styles.badge}>Neaktivní</span>}
+                      <span className={styles.entityMeta}>
+                        {[
+                          h.bookNo !== null ? `číselná řada ${h.bookNo}` : "",
+                          h.depositBookNo !== null ? `depozitní ${h.depositBookNo}` : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </span>
+                      <div className={styles.rowActions}>
+                        <Button variant="secondary" size="sm" onClick={() => setEditingHotel(h.id)}>
+                          Upravit
+                        </Button>
+                        <Button variant="danger" size="sm" onClick={() => requestRemoveHotel(h)}>
+                          Smazat
+                        </Button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+                <Button variant="secondary" size="sm" onClick={addHotel}>
+                  + Přidat hotel
+                </Button>
+              </section>
+            ))}
         </div>
 
         <div className={styles.panelFooter}>
-          <Button variant="secondary" onClick={onClose} disabled={saving}>
-            Zrušit
+          {savedMsg && <span className={styles.saveMsg}>{savedMsg}</span>}
+          <Button variant="secondary" onClick={requestClose} disabled={saving}>
+            Zavřít
           </Button>
-          <Button variant="primary" onClick={save} disabled={saving}>
+          {/* Disabled while there is nothing to save: with the panel staying
+              open, an enabled button is the only remaining signal that
+              something is still unsaved. */}
+          <Button variant="primary" onClick={save} disabled={saving || !dirty}>
             {saving ? "Ukládám…" : "Uložit číselníky"}
           </Button>
         </div>
       </div>
+
+      {confirmState && (
+        <ConfirmModal
+          title={confirmState.title}
+          message={confirmState.message}
+          confirmLabel={confirmState.confirmLabel}
+          danger={confirmState.danger}
+          tertiary={confirmState.tertiary}
+          onConfirm={confirmState.onConfirm}
+          onCancel={() => setConfirmState(null)}
+        />
+      )}
     </div>
   );
 }

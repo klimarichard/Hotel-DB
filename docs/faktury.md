@@ -87,6 +87,10 @@ Two Firestore locations, both under the fixed collections declared in `functions
 }
 ```
 
+The editor for all four arrays is the **Číselníky panel**, one tab per array (`ConfigTab` in `FakturyPage.tsx`). It holds the whole config in local state and writes it with **one** `PUT`; saving **does not close the panel** and the Uložit button is disabled while there is nothing to save. "Dirty" is a value comparison against the last-saved snapshot (`JSON.stringify`), not a flag — so undoing an edit by hand genuinely un-dirties the panel, instead of leaving the leave-warning armed over a change that no longer exists. Closing with unsaved changes goes through the three-way ConfirmModal (uložit / zahodit / zrušit) used by Šablony and Dokumenty.
+
+Agencies and hotels render as **lists** (name + Upravit/Smazat) that open a detail form, rather than all fields at once; both lists are sorted active-first then by Czech collation. ⚠️ That sort is applied to a **copy**, for display only: `vatRates` order *is* meaningful (the printed recap follows it), so nothing in this panel may ever sort an array in place.
+
 Read via `readConfig()` (`faktury.ts:348-358`), which returns the shipped `DEFAULT_FAKTURY_CONFIG` when the doc doesn't exist yet — **lazily seeded on purpose**: a `GET` must never write, so the defaults only become a real document the first time an admin saves the číselníky panel.
 
 ⚠️ **900 kB write guard, because five embedded logos can approach Firestore's 1 MiB document ceiling.** `PUT /config` computes `Buffer.byteLength(JSON.stringify(config))` and rejects anything over 900 000 bytes with a 413 and a Czech message naming logos as the likely cause (`faktury.ts:409-420`), rather than letting an oversized write fail with an opaque Firestore 500. Each individual logo is separately capped at `LOGO_MAX = 150_000` characters of base64 (`faktury.ts:124-125`), enforced both server-side (`sanitizeConfig`, `faktury.ts:309-317`) and client-side, where `prepareLogo()` (`FakturyPage.tsx:1330-1351`) tries three progressively smaller re-encodes (600px PNG → 500px JPEG q0.85 → 360px JPEG q0.75) before giving up and telling the admin to use a smaller image. **This is a real trap for the next config field**: five hotels × a future new base64-ish field is the same ceiling again: budget accordingly, don't just raise `LOGO_MAX`.
@@ -135,6 +139,12 @@ The editor's **Vystavil** field defaults from `employeeName` on `/auth/me`, whic
 ## Rendering: `buildInvoiceHtml()` + `renderPdf(..., { extraCss, logoOffset: false })`
 
 `invoiceHtml.ts` is pure — no Firestore, no I/O, no async, no clock, no randomness; the same `InvoiceDraft` + `FakturyConfig` + `CompanyInfo | null` always yields the same HTML bytes. It lays out the page with tables and explicit column widths rather than flexbox, because print pagination across a page break is more predictable that way and the line-item table is the one region allowed to overflow onto a second page.
+
+### The payer's address is compacted, and laid out column-major
+
+`addressSlots()` drops empty lines instead of printing them (zip and city always share one line, as on an envelope), so an unused *Ulice 3* closes up rather than punching an empty row through the block. This was long believed unsafe — the blanks supposedly kept IC / DIC level with Tax Charged / Payable On in the meta grid. They do not: that grid's row heights come from the **left** column, which is ten fixed labels regardless of the address. Verified by rendering both a 3-line and a 5-line address; IC / DIC stay on rows 9–10 either way.
+
+The **Billed To** band pours the same lines (name first) into a 3 × 2 grid **column-major** — `[1] [3] [5]` over `[2] [4] [6]` — rather than assigning each field a fixed cell. Filling by position is what makes a short address read correctly: it simply stops early, instead of leaving the middle column empty with the last column stranded beyond it.
 
 ### Line-table geometry — three rules that constrain each other
 
