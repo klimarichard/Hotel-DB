@@ -39,11 +39,15 @@ Czech VAT law requires a **received advance** to be recapped on its own line, se
 
 **Every *active* rate gets a row, including ones that carry no money** — the real printed export (`excels/excel_invoice.pdf`) lists all eleven buckets with `0,00` against the unused ones, so a reproduction that printed only the used ones would be visibly different from the original. An *inactive* rate is skipped unless an existing draft still posts to it, so deactivating a rate never silently drops money off an invoice that already used it.
 
+**`active` and `showInPrint` answer two different questions**, and conflating them is what made the printed recap wrong before v5.0.1. `active` decides whether a receptionist may *post* to a rate (it drives the Sazba DPH dropdown); `showInPrint` (the "Zobrazit při tisku" tickbox in Číselníky) decides whether the bucket *appears* in the recap while inactive and empty. The retired 10 % / 15 % rates and their Deposit twins need the second without the first — they must never be postable again, yet the original prints all four as `0,00`. The recap skip is therefore `if (!rate.active && !rate.showInPrint && gross === 0) continue;`, mirrored in both `computeTotals()` implementations.
+
+`showInPrint` is **opt-in** in `sanitizeConfig()` (`e.showInPrint === true`), not defaulted like `active` (`e.active !== false`). A config document saved before the flag existed therefore keeps printing exactly what it printed the day before the deploy; an admin ticks the four boxes when they want the historical rates back. Changing what an invoice prints is not something a deploy should do on its own.
+
 The advance rows are **not** given a sub-heading: in the original they are distinguished purely by their label (`Deposit 12.00 %`), which the číselník carries as text. That is why `DEFAULT_VAT_RATES` stores print-ready labels (`"12.00 %"`, `"Deposit 12.00 %"`) rather than bare numbers — the renderer prints `rate.label` verbatim so an admin-edited label actually reaches the document. **Losing the `block` flag on a rate merges a deposit into the normal recap**, and because the visual cue is only the label, that mistake is invisible anywhere except the printed recap. See the matching entry in [`business-rules.md`](business-rules.md).
 
 Base is derived by *stripping* VAT out of the gross line total (`gross / (1 + percent/100)`), because prices are entered VAT-inclusive exactly as Protel posts them and exactly as the source workbook computed — not the other way round (line price → base → +VAT).
 
-The seed VAT rates (`DEFAULT_VAT_RATES`, `invoiceTypes.ts:287-317`) ship 10% and 15% **inactive**: both are historical Czech rates that could return, and the whole list is admin-editable, so they sit dormant rather than being deleted.
+The seed VAT rates (`DEFAULT_VAT_RATES`) ship 10% and 15% (and their Deposit twins) **inactive but `showInPrint: true`**: both are historical Czech rates that could return, and the whole list is admin-editable, so they sit dormant rather than being deleted — dormant meaning "not postable", not "not printed".
 
 ## Five invoice hotels, not the app's four Recepce hotels
 
@@ -63,6 +67,8 @@ Each `InvoiceHotel` also points at an optional `companyId` (`companies/{id}`) th
 
 The `"Invoice"` transfer line is printed on the PDF like any other line, but `computeTotals()` deliberately skips it for **both** totals (`invoiceTypes.ts:211`, `"transfer" deliberately contributes to neither`): it documents that the guest folio was zeroed out to the agency's account, it is not itself a supply (so it must not inflate the VAT recap) and it is not a payment received by the hotel (so it must not inflate Uhrazeno). It exists in the catalogue purely so the printed line-item list matches Protel's own folio transfer entry.
 
+**A catalogue pick owns the line's `group` and `vatRateId`.** In the editor both selects are disabled while the row's description matches a catalogue entry, and editable only for a `Vlastní text…` row (or an untouched empty one): deciding those two fields is what the catalogue exists for, and a line silently disagreeing with it posts to the wrong recap bucket — a mistake visible nowhere except the printed recap. Fixing a wrong mapping belongs in Číselníky, where it fixes every future line at once.
+
 A line's `vatRateId` is deliberately **not validated against the current config's rate list** on save (`faktury.ts:173-176`): the catalogue is admin-editable, so an older draft may reference a rate that has since been deleted. That must degrade gracefully — the recap simply omits the bucket — rather than 400 and leave the draft unopenable.
 
 ## Storage
@@ -73,7 +79,7 @@ Two Firestore locations, both under the fixed collections declared in `functions
 
 ```
 {
-  vatRates: VatRate[],       // { id, label, percent, block, active }
+  vatRates: VatRate[],       // { id, label, percent, block, active, showInPrint? }
   items:    CatalogItem[],  // { id, description, vatRateId | null, group, active }
   agencies: Agency[],       // { id, name, ...PartyAddress, active }
   hotels:   InvoiceHotel[], // { id, name, bookNo, depositBookNo, companyId, logoDataUri, footer, bankName, bankEur, bankCzk, active }
@@ -91,7 +97,9 @@ A logo must be a `data:image/(png|jpeg|webp);base64,...` URI — the same three 
 
 `taxDate` and `dueDate` are **not** fields. The tax point is the issue date and the invoice falls due seven days later, so both are computed from `issuedAt` by `taxDateFrom()` / `dueDateFrom()` — mirrored on the client, which shows them read-only. Deriving makes the rule structurally true rather than merely enforced: a stored copy could only ever drift out of step with the date it follows. `issuedAt` carries a time (`YYYY-MM-DDTHH:MM`) because the original prints one.
 
-The supplier reference is **two** fields, `availProNo` (optional) and `partnerResNo`, joined for print by `supplierRefLine()`. The separator belongs to the partner number: it is dropped only when the partner number is missing *and* an AvailPro number is present. A missing AvailPro number keeps the slash (`/ ABC123`), because that still reads as "partner reference, no AvailPro reference". Drafts saved before the split are migrated on read by `splitSupplierRef()` in `faktury.ts`, which cuts the legacy `supplierResNo` on its first slash.
+The supplier reference is **two** fields, `availProNo` (optional) and `partnerResNo`, joined for print by `supplierRefLine()`. The separator belongs to the partner number: it prints whenever there *is* a partner number and never otherwise — `A / B`, `/ B`, `A`, and an empty line for an empty field. A leading `/ ABC123` still reads as "partner reference, no AvailPro reference"; an empty field printing a bare `/` read as a mistake, which is why the both-empty case lost its slash in v5.0.1. Drafts saved before the split are migrated on read by `splitSupplierRef()` in `faktury.ts`, which cuts the legacy `supplierResNo` on its first slash.
+
+The bill-to **country** is stored in the form it prints: the English name in capitals (`CZECH REPUBLIC`, `GREAT BRITAIN`). The editor's Země field searches Czech names against `frontend/src/lib/countriesEn.ts` — a pure data module keyed 1:1 by alpha-3 code with `lib/nationalities.ts`, same 249 codes in the same order — and stores the English value on an exact match, keeping free text otherwise, since the field is printed verbatim and refusing an unlisted country would be worse than printing it. `GBR` and `CZE` deliberately deviate from the ISO English short name; the file header says so, so nobody "corrects" them.
 
 There is no `eftReceipt` field: these invoices never carry one. The printed document keeps the `EFT Receipt:` heading (in monospace, as the original has it), permanently without a value.
 
@@ -116,13 +124,23 @@ All in `functions/src/routes/faktury.ts`, mounted at `/api/faktury`. Config rout
 | `PUT /:id` | `nav.faktury.view` | Whole-draft replace (see above). |
 | `DELETE /:id` | `nav.faktury.view` | Hard delete, no soft-delete, no audit. |
 
-### ⚠️ `GET /faktury` response-shape mismatch (verify before relying on the list)
+### `GET /faktury` response shape + the editor name
 
-The route sends the array of summaries directly — `res.json(list)` (`faktury.ts:554`), **not** `res.json({ invoices: list })`. `frontend/src/pages/FakturyPage.tsx` calls it as `api.get<{ invoices: InvoiceSummary[] }>("/faktury")` and then reads `list.invoices ?? []` in three places (`loadAll`, the post-save refresh in `handleSave`, and the post-delete refresh in `doDelete`). `api.get()` does no response-shape unwrapping (`frontend/src/lib/api.ts:105` — it is a plain `res.json()` cast to the generic type), so as written `list.invoices` reads a property that does not exist on the server's payload. **This looks like a genuine frontend/backend contract mismatch that would leave the saved-invoice list permanently empty** — flagged here rather than silently documented as working; confirm against a live run before treating either side as authoritative, and fix whichever side is wrong (either wrap the route's response in `{ invoices }`, or read the array directly on the client).
+`GET /` wraps its payload — `res.json({ invoices: list })` — matching the client's `api.get<{ invoices: InvoiceSummary[] }>("/faktury")` and its `list.invoices ?? []`. Keep them in step: `api.get()` does no response-shape unwrapping (it is a plain `res.json()` cast to the generic type), so a mismatch here type-checks on **both** sides and shows up only as a permanently empty list at runtime. It shipped that way once; see [`feedback_verify_agent_api_contracts`] in project memory.
+
+The row's `updatedBy` is a **name, not a uid**, and it is resolved on READ: `resolveDisplayNamesByUid()` (shared with the handover signatures) maps the storing uid → linked employee → live display name ("Zobrazované jméno", else "Jméno Příjmení", first name first). The `updatedByName` snapshot written at save time survives only as the fallback for a deleted user account. Renaming an employee therefore fixes every historical row instead of only future ones — the same read-time resolution rule the rest of the app follows.
+
+The editor's **Vystavil** field defaults from `employeeName` on `/auth/me`, which is that same live lookup for the current user, *not* `users/{uid}.name`. The account name is the terminal's on a shared reception login ("Recepce Ankora"); the invoice wants the person. The field stays editable — whoever is on shift sometimes retypes a colleague's invoice.
 
 ## Rendering: `buildInvoiceHtml()` + `renderPdf(..., { extraCss, logoOffset: false })`
 
 `invoiceHtml.ts` is pure — no Firestore, no I/O, no async, no clock, no randomness; the same `InvoiceDraft` + `FakturyConfig` + `CompanyInfo | null` always yields the same HTML bytes. It lays out the page with tables and explicit column widths rather than flexbox, because print pagination across a page break is more predictable that way and the line-item table is the one region allowed to overflow onto a second page.
+
+### Line-table geometry — three rules that constrain each other
+
+1. **Cells clip, they never wrap.** One posting is one row; a wrapped cell is taller than its neighbours and destroys that reading. Clipping only works because the shared `RENDER_CSS` already sets `table-layout: fixed` — under auto layout a long description simply widens its own column and there is nothing to clip against. `overflow: hidden` is unreliable on a `td` itself, so every cell wraps its content in a `div.clip`.
+2. **Column widths are therefore load-bearing, not cosmetic.** `10 / 5 / 23 / 28 / 18 / 16 %`, summing to 100. Do not squeeze Date below ~10 %: with clipping on, a column too narrow for `DD/MM/YY` plus its 3 mm gutter silently loses the end of the date instead of wrapping it. The two money columns are right-aligned, so their figures sit at each column's *right* edge — shrinking **Total Price** is what moves *Price per Unit* rightwards, not shrinking Price per Unit itself.
+3. **The totals block mirrors the last two columns** (`18 % / 16 %`) **and their gutters.** Equal widths alone do not line the figures up: Price per Unit carries a 3 mm `.pad` gutter, so the totals' CZK column repeats it (`.inv-totals .pad`) or its figures hang 3 mm further right than the prices above them. Total Price has no gutter, so the EUR column has none either. Change any width and all three of these move together.
 
 `services/pdfRenderer.ts` (shared with Contracts and Dokumenty) grew two options specifically for this feature (`pdfRenderer.ts:139-156`):
 
@@ -150,6 +168,7 @@ Own **Faktury** section in the permission matrix (`frontend/src/lib/permissions/
 - `functions/src/services/invoiceTypes.ts` — types, seed defaults, `computeTotals`, `decodeBookNo`/`matchHotelByInvoiceNo`.
 - `functions/src/services/invoiceHtml.ts` — the A4 print layout.
 - `functions/src/services/pdfRenderer.ts` — shared Puppeteer renderer; `extraCss`/`logoOffset` options added for this feature.
+- `frontend/src/lib/countriesEn.ts` — alpha-3 → printed English country name, paired 1:1 with `lib/nationalities.ts`.
 - `frontend/src/lib/faktury.ts` — client mirror of the types + arithmetic (never imports the server module, by the same pattern as `lib/hotels.ts` ↔ `services/hotels.ts`).
 - `frontend/src/pages/FakturyPage.tsx` / `.module.css` — the list + editor page and the číselníky panel.
 - `frontend/src/lib/menuItems.ts` (`id: "faktury"`, `hideOnMobile: true`) and `functions/src/routes/menuOrder.ts` (`VALID_IDS` already includes `"faktury"`).
