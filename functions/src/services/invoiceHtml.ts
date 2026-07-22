@@ -139,6 +139,13 @@ export const INVOICE_CSS = `
 
   .inv-totals { margin-top: 1.5mm; }
   .inv-totals td { padding: 0.6mm 0; }
+  /* The CZK column sits under the line table's Price per Unit, which carries a
+     3 mm gutter (.pad) between itself and Total Price. Equal column WIDTHS are
+     not enough to line the figures up - right-aligned text ends at the content
+     edge, so the gutter has to be repeated here or the CZK figures hang 3 mm
+     further right than the prices above them. The EUR column matches Total
+     Price, which has no gutter. */
+  .inv-totals .pad { padding-right: 3mm; }
 
   .inv-recap { margin-top: 3mm; font-size: 8pt; }
   /* Column HEADINGS are long enough to overrun their column and collide
@@ -473,7 +480,7 @@ export function buildInvoiceHtml(
     const c = bold ? ' class="bold"' : "";
     return `<tr>
       <td${c}>${esc(label)}</td>
-      <td class="num${bold ? " bold" : ""}">${esc(fmtCzk(czk))}</td>
+      <td class="num pad${bold ? " bold" : ""}">${esc(fmtCzk(czk))}</td>
       <td class="num${bold ? " bold" : ""}">${esc(fmtEur(czk, rate))}</td>
     </tr>`;
   };

@@ -333,6 +333,19 @@
   white-space: nowrap;
 }
 
+/* A numeric column's HEADING follows its figures.
+   `.summaryTable th` (class + type) out-specifies a bare `.numCol` (class), so
+   the shared left-aligning `th` rule above would otherwise win no matter what
+   the markup says. These selectors match its specificity and come later, which
+   is the whole reason this block exists — do not "simplify" it back to
+   `.numCol`. */
+.listTable th.numCol,
+.linesTable th.numCol,
+.summaryTable th.numCol,
+.configTable th.numCol {
+  text-align: right;
+}
+
 /* No min-width: the column width above owns the sizing now, and a min-width
    here would silently win over it under table-layout: fixed. */
 .descCell {
@@ -357,6 +370,16 @@
 
 .cellNum {
   text-align: right;
+}
+
+/* Reads as "this value is decided elsewhere", not as "this control is broken":
+   the Typ / Sazba DPH selects are locked while the row comes from the
+   catalogue. Kept legible - the value still has to be readable at a glance. */
+.cellInput:disabled {
+  color: var(--color-text-secondary);
+  background: var(--color-bg);
+  border-style: dashed;
+  cursor: default;
 }
 
 /* A free-text line inherits nothing from the catalogue, so its type and VAT
