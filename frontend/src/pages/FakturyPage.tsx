@@ -817,7 +817,7 @@ export default function FakturyPage() {
                     checked={draft.deposit}
                     onChange={(e) => patchDraft({ deposit: e.target.checked })}
                   />
-                  <span>Zálohová faktura</span>
+                  <span>Deposit</span>
                 </label>
               </div>
               {/* A quiet hint, never a validation error: the number is typed in
@@ -826,7 +826,7 @@ export default function FakturyPage() {
                 <p className={styles.hint}>
                   {decoded
                     ? `Rozpoznáno: ${decoded.hotel.name}, ${
-                        decoded.deposit ? "zálohová faktura" : "běžná faktura"
+                        decoded.deposit ? "deposit" : "běžná faktura"
                       }.`
                     : "Z čísla se nepodařilo rozpoznat hotel – vyberte jej ručně."}
                 </p>
@@ -1443,7 +1443,7 @@ function InvoiceList({
                 <button type="button" className={styles.linkBtn} onClick={() => onOpen(inv.id)}>
                   {inv.invoiceNo || "(bez čísla)"}
                 </button>
-                {inv.deposit && <span className={styles.badge}>Záloha</span>}
+                {inv.deposit && <span className={styles.badge}>Deposit</span>}
               </td>
               <td>{hotelName(inv.hotelId)}</td>
               <td>{inv.guestName}</td>
@@ -2189,7 +2189,8 @@ function ConfigPanel({
                   </label>
                 </div>
                 <p className={styles.hint}>
-                  Číslo knihy a číslo knihy záloh rozhodují, který hotel se rozpozná z čísla faktury.
+                  Číselná řada a číselná řada – deposit rozhodují, který hotel se rozpozná z čísla
+                  faktury.
                 </p>
                 <div className={styles.grid}>
                   <label className={styles.field}>
@@ -2201,7 +2202,7 @@ function ConfigPanel({
                     />
                   </label>
                   <label className={styles.field}>
-                    <span>Číslo knihy</span>
+                    <span>Číselná řada</span>
                     <input
                       type="number"
                       className={styles.input}
@@ -2214,7 +2215,7 @@ function ConfigPanel({
                     />
                   </label>
                   <label className={styles.field}>
-                    <span>Číslo knihy záloh</span>
+                    <span>Číselná řada – deposit</span>
                     <input
                       type="number"
                       className={styles.input}
