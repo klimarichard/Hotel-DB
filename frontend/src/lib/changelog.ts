@@ -27,6 +27,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "5.0.4",
+    date: "2026-07-22",
+    changes: [
+      "Drobné opravy v textových editorech.",
+    ],
+  },
+  {
     version: "5.0.3",
     date: "2026-07-22",
     changes: [

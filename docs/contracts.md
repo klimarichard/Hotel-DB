@@ -20,7 +20,7 @@ PDFs generated client-side via `html2pdf.js` — Puppeteer was too large for Gen
 
 ### Phase 4 — Contracts
 - Company data in `companies/{companyId}` (e.g. `companies/HPM`, `companies/STP`).
-- TipTap extensions: StarterKit, Underline, TextStyle, FontFamily, FontSize (custom), TextAlign, Color, Image, TabParagraph (custom), ListItemIndent (custom).
+- TipTap extensions: StarterKit (configured via the shared `STARTER_KIT_OPTIONS` — no paragraph, and **no automatic hyperlinks**; see [dokumenty.md](dokumenty.md#libeditorextensionsts)), Underline, TextStyle, FontFamily, FontSize (custom), TextAlign, Color, Image, TabParagraph (custom), ListItemIndent (custom).
 
 ---
 
