@@ -12,7 +12,7 @@
  * has to produce the on-screen summary here and the PDF there.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 
 import Button from "@/components/Button";
 import IconButton from "@/components/IconButton";
@@ -42,6 +42,8 @@ import {
   type PartyAddress,
   type VatRate,
 } from "@/lib/faktury";
+import { NATIONALITIES } from "@/lib/nationalities";
+import { COUNTRY_NAMES_EN } from "@/lib/countriesEn";
 import styles from "./FakturyPage.module.css";
 
 /* ------------------------------------------------------------------ */
@@ -62,6 +64,9 @@ const EMPTY_ADDRESS: PartyAddress = {
 const EMPTY_CONFIG: FakturyConfig = { vatRates: [], items: [], agencies: [], hotels: [] };
 
 const LINE_GROUPS = Object.keys(LINE_GROUP_LABELS) as LineGroup[];
+
+type AgencyBillTo = Extract<BillTo, { kind: "agency" }>;
+type PersonBillTo = Extract<BillTo, { kind: "person" }>;
 
 /** Czech collation – every dropdown on this page sorts through it. */
 const byCs = (a: string, b: string) => a.localeCompare(b, "cs");
@@ -126,6 +131,80 @@ function activeFirst<T extends { active: boolean }>(rows: T[], keepId: string | 
 }
 
 /* ------------------------------------------------------------------ */
+/* Země                                                                */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The country is SEARCHED in Czech but STORED in English capitals, because the
+ * stored string is exactly what the invoice prints ("CZECH REPUBLIC") — the
+ * document is an English-language export. That is also why the field keeps a
+ * free-typed value instead of clearing it the way the employee form's
+ * nationality field does: nationality stores an ISO code that must be a real
+ * code, this stores printed text, and refusing to print what the user typed
+ * would be worse than printing an unlisted country.
+ */
+const COUNTRY_OPTIONS: { cs: string; en: string }[] = NATIONALITIES.map((n) => ({
+  cs: n.name,
+  en: COUNTRY_NAMES_EN[n.code] ?? "",
+})).filter((o) => o.en !== "");
+
+const countryLabel = (o: { cs: string; en: string }): string => `${o.cs} – ${o.en}`;
+
+/**
+ * Typed text → what gets stored. A picked suggestion, an exact Czech name or an
+ * exact English name all snap to the printed English form; anything else is
+ * kept verbatim, so a half-typed word is never destroyed mid-keystroke.
+ */
+function resolveCountry(raw: string): string {
+  const t = raw.trim();
+  if (!t) return "";
+  const lower = t.toLowerCase();
+  const hit =
+    COUNTRY_OPTIONS.find((o) => countryLabel(o) === t) ??
+    COUNTRY_OPTIONS.find((o) => o.cs.toLowerCase() === lower) ??
+    COUNTRY_OPTIONS.find((o) => o.en.toLowerCase() === lower);
+  return hit ? hit.en : raw;
+}
+
+/**
+ * Searchable country input. Deliberately holds NO local draft state: the stored
+ * value is the input's value, so there is nothing to keep in sync when a
+ * different invoice is opened. Each instance gets its own datalist id — the
+ * číselníky panel can be open over the editor, putting several on screen.
+ */
+function CountryField({
+  label = "Země",
+  value,
+  onChange,
+}: {
+  label?: string;
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  // useId() yields ":r3:"; the colons are legal in an id but trip up anything
+  // that later wants to select it, so they are stripped here rather than
+  // debugged in six months.
+  const listId = `faktury-country-${useId().replace(/:/g, "")}`;
+  return (
+    <label className={styles.field}>
+      <span>{label}</span>
+      <input
+        className={styles.input}
+        list={listId}
+        value={value}
+        placeholder="Začněte psát název země (např. Česko)…"
+        onChange={(e) => onChange(resolveCountry(e.target.value))}
+      />
+      <datalist id={listId}>
+        {COUNTRY_OPTIONS.map((o) => (
+          <option key={o.cs} value={countryLabel(o)} />
+        ))}
+      </datalist>
+    </label>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Page                                                                */
 /* ------------------------------------------------------------------ */
 
@@ -141,7 +220,7 @@ type ConfirmState = {
 export default function FakturyPage() {
   // Read straight from the hook in render – never mirrored into state via an
   // effect, which would render one frame with the wrong (pre-auth) value.
-  const { can, user, name } = useAuth();
+  const { can, user, name, employeeName } = useAuth();
   const canManage = can("faktury.manage");
 
   const [config, setConfig] = useState<FakturyConfig>(EMPTY_CONFIG);
@@ -181,8 +260,10 @@ export default function FakturyPage() {
 
   // Remembered halves of the Odběratel switch, so flipping the radio back and
   // forth doesn't discard what was already typed on the other side.
-  const lastAgencyRef = useRef<BillTo>({ kind: "agency", agencyId: "" });
-  const lastPersonRef = useRef<BillTo>({ kind: "person", name: "", ...EMPTY_ADDRESS });
+  // Typed to their own variant, not to BillTo: `setBillKind` reads the person's
+  // name out of the remembered half, which the union alone does not promise.
+  const lastAgencyRef = useRef<AgencyBillTo>({ kind: "agency", agencyId: "" });
+  const lastPersonRef = useRef<PersonBillTo>({ kind: "person", name: "", ...EMPTY_ADDRESS });
 
   const [errorModal, setErrorModal] = useState<string | null>(null);
   const [confirmState, setConfirmState] = useState<ConfirmState>(null);
@@ -239,7 +320,11 @@ export default function FakturyPage() {
   function startNew() {
     lastAgencyRef.current = { kind: "agency", agencyId: "" };
     lastPersonRef.current = { kind: "person", name: "", ...EMPTY_ADDRESS };
-    const d = emptyDraft(name ?? "");
+    // "Vystavil" defaults to the PERSON, not the account: `employeeName` is the
+    // linked employee's display name, `name` only the users/ record — which on
+    // a shared reception terminal names the terminal. Still editable; a
+    // colleague's invoice is sometimes retyped by whoever is on shift.
+    const d = emptyDraft(employeeName ?? name ?? "");
     setDraft(d);
     setDraftId(null);
     setCustomLines({});
@@ -350,11 +435,11 @@ export default function FakturyPage() {
    * purpose; the arrival is only known here.
    */
   /**
-   * Arrival doubles as the default date for item rows. A new invoice starts
-   * with one empty row BEFORE arrival is known, so setting arrival backfills
-   * any row whose date is still blank — that is what makes the default apply
-   * to the first row too, not just to rows added afterwards. Rows that already
-   * carry a date are left alone: the user set those deliberately.
+   * Arrival doubles as the default date for item rows. While it is being typed
+   * only still-blank rows are filled — a date input fires onChange on every
+   * intermediate value, so anything more aggressive would fight the user
+   * mid-edit. Rows that already carry a date are left alone: the user set those
+   * deliberately.
    */
   function setArrival(arrival: string) {
     setDraft((d) =>
@@ -367,6 +452,29 @@ export default function FakturyPage() {
         : d
     );
     setDirty(true);
+  }
+
+  /**
+   * Leaving the arrival field forces the FIRST row onto that date, even if it
+   * already had one.
+   *
+   * Why on blur and not on change: the first row is created before arrival is
+   * known, so it is the one row whose date is always a guess. Typing an arrival
+   * date walks through intermediate values (0002-07-…), and overwriting the row
+   * on each of them puts junk in the cell; committing once, when the field is
+   * done, is the moment the value is actually meaningful. Later rows inherit
+   * the arrival at creation time (`addLine`) and are never rewritten — those
+   * are night-by-night dates the user owns.
+   */
+  function commitArrivalToFirstLine() {
+    // Read from state rather than inside a setDraft updater: this has to know
+    // whether anything actually changed so it can leave `dirty` alone when it
+    // did not, and an updater is the wrong place to decide that.
+    if (!draft || !draft.arrival || draft.lines.length === 0) return;
+    if (draft.lines[0].date === draft.arrival) return;
+    patchDraft({
+      lines: draft.lines.map((l, i) => (i === 0 ? { ...l, date: draft.arrival } : l)),
+    });
   }
 
   function addLine() {
@@ -455,7 +563,14 @@ export default function FakturyPage() {
       if (d.billTo.kind === kind) return d;
       if (d.billTo.kind === "agency") lastAgencyRef.current = d.billTo;
       else lastPersonRef.current = d.billTo;
-      return { ...d, billTo: kind === "agency" ? lastAgencyRef.current : lastPersonRef.current };
+      if (kind === "agency") return { ...d, billTo: lastAgencyRef.current };
+      // Billing a private person means, almost always, billing the guest — so
+      // the name comes across instead of being retyped. Only when there is
+      // nothing on the person side yet: a name already typed there (or one kept
+      // from an earlier switch) is the user's own answer and must survive the
+      // radio being flipped back and forth.
+      const person = lastPersonRef.current;
+      return { ...d, billTo: { ...person, name: person.name.trim() || d.guestName } };
     });
     setDirty(true);
   }
@@ -754,6 +869,7 @@ export default function FakturyPage() {
                     className={styles.input}
                     value={draft.arrival}
                     onChange={(e) => setArrival(e.target.value)}
+                    onBlur={commitArrivalToFirstLine}
                   />
                 </label>
                 <label className={styles.field}>
@@ -922,14 +1038,10 @@ export default function FakturyPage() {
                       onChange={(e) => patchPerson({ city: e.target.value })}
                     />
                   </label>
-                  <label className={styles.field}>
-                    <span>Země</span>
-                    <input
-                      className={styles.input}
-                      value={draft.billTo.country}
-                      onChange={(e) => patchPerson({ country: e.target.value })}
-                    />
-                  </label>
+                  <CountryField
+                    value={draft.billTo.country}
+                    onChange={(country) => patchPerson({ country })}
+                  />
                   <label className={styles.field}>
                     <span>IČ</span>
                     <input
@@ -964,7 +1076,9 @@ export default function FakturyPage() {
                       <th>Cena/jedn.</th>
                       <th>Typ</th>
                       <th>Sazba DPH</th>
-                      <th className={styles.numCol}>Součet</th>
+                      {/* Left-aligned like every other column: the row is read
+                          across, not scanned as a column of figures. */}
+                      <th>Součet</th>
                       <th aria-label="Akce" />
                     </tr>
                   </thead>
@@ -982,6 +1096,13 @@ export default function FakturyPage() {
                         ? "__custom__"
                         : config.items.find((it) => it.description === line.description)?.id ?? "";
                       const vatMissing = showErrors && line.group === "item" && !line.vatRateId;
+                      // A catalogue entry OWNS its type and VAT bucket, so both
+                      // are read-only while one is selected: those two fields
+                      // are what the catalogue exists to decide, and a line
+                      // that silently disagrees with it posts to the wrong
+                      // recap row. Free text has no entry to inherit from, and
+                      // an untouched row has nothing yet — both stay editable.
+                      const fromCatalog = !isCustom && catalogValue !== "";
                       return (
                         <tr key={line.id}>
                           <td>
@@ -1058,6 +1179,12 @@ export default function FakturyPage() {
                                 isCustom ? styles.cellRequired : ""
                               }`}
                               value={line.group}
+                              disabled={fromCatalog}
+                              title={
+                                fromCatalog
+                                  ? "Typ je dán vybranou položkou katalogu."
+                                  : undefined
+                              }
                               onChange={(e) =>
                                 patchLine(line.id, { group: e.target.value as LineGroup })
                               }
@@ -1075,6 +1202,12 @@ export default function FakturyPage() {
                                 isCustom ? styles.cellRequired : ""
                               } ${vatMissing ? styles.inputError : ""}`}
                               value={line.vatRateId ?? ""}
+                              disabled={fromCatalog}
+                              title={
+                                fromCatalog
+                                  ? "Sazba DPH je dána vybranou položkou katalogu."
+                                  : undefined
+                              }
                               onChange={(e) =>
                                 patchLine(line.id, { vatRateId: e.target.value || null })
                               }
@@ -1087,7 +1220,7 @@ export default function FakturyPage() {
                               ))}
                             </select>
                           </td>
-                          <td className={styles.numCol}>{formatMoney(lineTotal(line))}</td>
+                          <td>{formatMoney(lineTotal(line))}</td>
                           <td>
                             <div className={styles.rowActions}>
                               <button
@@ -1132,6 +1265,10 @@ export default function FakturyPage() {
                   + Přidat řádek
                 </Button>
               </div>
+              <p className={styles.hint}>
+                Typ a sazbu DPH určuje vybraná položka katalogu – měnit je lze jen u řádku s
+                vlastním textem. Katalog upravíte v Číselnících.
+              </p>
             </section>
 
             {/* ── Živý souhrn ────────────────────────────────────────── */}
@@ -1149,7 +1286,7 @@ export default function FakturyPage() {
                 />
               </label>
 
-              <table className={styles.summaryTable}>
+              <table className={`${styles.summaryTable} ${styles.totalsTable}`}>
                 <thead>
                   <tr>
                     <th />
@@ -1188,8 +1325,10 @@ export default function FakturyPage() {
                         <th>Blok</th>
                         <th className={styles.numCol}>Základ</th>
                         <th className={styles.numCol}>DPH</th>
+                        {/* No EUR column: the VAT recap is a CZK statement for
+                            the Czech tax authority, and the printed invoice
+                            has no EUR column here either. */}
                         <th className={styles.numCol}>Celkem</th>
-                        <th className={styles.numCol}>Celkem EUR</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1202,7 +1341,6 @@ export default function FakturyPage() {
                           <td className={styles.numCol}>{formatMoney(r.base)}</td>
                           <td className={styles.numCol}>{formatMoney(r.vat)}</td>
                           <td className={styles.numCol}>{formatMoney(r.total)}</td>
-                          <td className={styles.numCol}>{toEur(r.total, draft.eurRate)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -1212,7 +1350,6 @@ export default function FakturyPage() {
                         <td className={styles.numCol}>{formatMoney(totals.recapBase)}</td>
                         <td className={styles.numCol}>{formatMoney(totals.recapVat)}</td>
                         <td className={styles.numCol}>{formatMoney(totals.recapTotal)}</td>
-                        <td className={styles.numCol}>{toEur(totals.recapTotal, draft.eurRate)}</td>
                       </tr>
                     </tfoot>
                   </table>
@@ -1294,7 +1431,7 @@ function InvoiceList({
             <th>Hotel</th>
             <th>Host</th>
             <th>Odběratel</th>
-            <th className={styles.numCol}>Celkem</th>
+            <th>Celkem</th>
             <th>Poslední úprava</th>
             <th aria-label="Akce" />
           </tr>
@@ -1311,7 +1448,7 @@ function InvoiceList({
               <td>{hotelName(inv.hotelId)}</td>
               <td>{inv.guestName}</td>
               <td>{inv.billToName}</td>
-              <td className={styles.numCol}>{formatMoney(inv.total)}</td>
+              <td>{formatMoney(inv.total)}</td>
               <td className={styles.muted}>
                 {inv.updatedAt ? formatDateCZ(inv.updatedAt) : "–"}
                 {inv.updatedBy ? ` · ${inv.updatedBy}` : ""}
@@ -1491,6 +1628,12 @@ function ConfigPanel({
               Sazba zařazená do bloku „Záloha" se v rekapitulaci DPH vykazuje zvlášť od běžných
               sazeb, jak vyžadují česká pravidla pro zálohové faktury.
             </p>
+            <p className={styles.hint}>
+              „Aktivní" určuje, zda lze sazbu vybrat na řádku faktury. „Zobrazit při tisku"
+              určuje, zda se sazba objeví v rekapitulaci DPH i tehdy, když je neaktivní a
+              nulová – tak se na faktuře tisknou historické sazby 10 % a 15 % včetně jejich
+              zálohových protějšků.
+            </p>
             <div className={styles.tableScroll}>
               <table className={styles.configTable}>
                 <thead>
@@ -1499,6 +1642,7 @@ function ConfigPanel({
                     <th>Procento</th>
                     <th>Blok</th>
                     <th>Aktivní</th>
+                    <th>Zobrazit při tisku</th>
                     <th aria-label="Akce" />
                   </tr>
                 </thead>
@@ -1557,6 +1701,23 @@ function ConfigPanel({
                           onChange={(e) =>
                             setVatRates((prev) =>
                               prev.map((x) => (x.id === r.id ? { ...x, active: e.target.checked } : x))
+                            )
+                          }
+                        />
+                      </td>
+                      <td>
+                        {/* Independent of Aktivní on purpose — see the hint
+                            above the table. An active rate always prints, so
+                            this box only decides anything while inactive. */}
+                        <input
+                          type="checkbox"
+                          checked={r.showInPrint === true}
+                          aria-label="Zobrazit při tisku"
+                          onChange={(e) =>
+                            setVatRates((prev) =>
+                              prev.map((x) =>
+                                x.id === r.id ? { ...x, showInPrint: e.target.checked } : x
+                              )
                             )
                           }
                         />
@@ -1780,14 +1941,9 @@ function ConfigPanel({
                         onChange={(e) => patch({ city: e.target.value })}
                       />
                     </label>
-                    <label className={styles.field}>
-                      <span>Země</span>
-                      <input
-                        className={styles.input}
-                        value={a.country}
-                        onChange={(e) => patch({ country: e.target.value })}
-                      />
-                    </label>
+                    {/* Same searchable field as the invoice's own Země: the
+                        agency address prints on the invoice identically. */}
+                    <CountryField value={a.country} onChange={(country) => patch({ country })} />
                     <label className={styles.field}>
                       <span>IČ</span>
                       <input

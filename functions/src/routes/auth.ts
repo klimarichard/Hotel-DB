@@ -668,7 +668,27 @@ authRouter.get("/me", requireAuth, async (req: AuthRequest, res) => {
     sharedTerminal = td?.sharedTerminal === true;
     noSelfLogout = td?.noSelfLogout === true;
   }
-  res.json({ uid: doc.id, ...data, permissions, roleTypeName, sharedTerminal, noSelfLogout });
+  // Live display name of the employee this account is linked to ("Zobrazované
+  // jméno", else "Jméno Příjmení"). Distinct from `name`, which is the ACCOUNT
+  // name on users/{uid} — for a shared terminal that is "Recepce Ankora", and
+  // for everyone else it is a copy frozen when the account was created. Forms
+  // that pre-fill "who is doing this" (Faktury → Vystavil) want the person.
+  // Null when the account has no linked employee, so callers keep a fallback.
+  let employeeName: string | null = null;
+  const linkedEmployee = typeof data.employeeId === "string" ? data.employeeId : "";
+  if (linkedEmployee) {
+    const displays = await resolveEmployeeDisplays([linkedEmployee]);
+    employeeName = displays.get(linkedEmployee)?.name ?? null;
+  }
+  res.json({
+    uid: doc.id,
+    ...data,
+    permissions,
+    roleTypeName,
+    sharedTerminal,
+    noSelfLogout,
+    employeeName,
+  });
 });
 
 // ─── No-self-logout release (shared terminals) ────────────────────────────────

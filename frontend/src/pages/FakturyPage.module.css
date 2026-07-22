@@ -317,6 +317,13 @@
   max-width: 640px;
 }
 
+/* The three-row Celkem / Uhrazeno / K úhradě block. Held narrower than the VAT
+   recap below it: with only a short label and two figures, the full width left
+   the CZK and EUR headings stranded far from the numbers under them. */
+.totalsTable {
+  max-width: 380px;
+}
+
 .summaryStrong td {
   font-weight: 700;
 }
@@ -324,6 +331,19 @@
 .numCol {
   text-align: right;
   white-space: nowrap;
+}
+
+/* A numeric column's HEADING follows its figures.
+   `.summaryTable th` (class + type) out-specifies a bare `.numCol` (class), so
+   the shared left-aligning `th` rule above would otherwise win no matter what
+   the markup says. These selectors match its specificity and come later, which
+   is the whole reason this block exists — do not "simplify" it back to
+   `.numCol`. */
+.listTable th.numCol,
+.linesTable th.numCol,
+.summaryTable th.numCol,
+.configTable th.numCol {
+  text-align: right;
 }
 
 /* No min-width: the column width above owns the sizing now, and a min-width
@@ -350,6 +370,16 @@
 
 .cellNum {
   text-align: right;
+}
+
+/* Reads as "this value is decided elsewhere", not as "this control is broken":
+   the Typ / Sazba DPH selects are locked while the row comes from the
+   catalogue. Kept legible - the value still has to be readable at a glance. */
+.cellInput:disabled {
+  color: var(--color-text-secondary);
+  background: var(--color-bg);
+  border-style: dashed;
+  cursor: default;
 }
 
 /* A free-text line inherits nothing from the catalogue, so its type and VAT

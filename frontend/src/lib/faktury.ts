@@ -33,6 +33,13 @@ export interface VatRate {
   percent: number;
   block: VatBlock;
   active: boolean;
+  /**
+   * "Zobrazit při tisku" — appear in the VAT recap even while inactive and
+   * empty. `active` gates whether a line may POST to the rate; this gates
+   * whether it prints. The retired 10 % / 15 % buckets need the second without
+   * the first.
+   */
+  showInPrint?: boolean;
 }
 
 export interface CatalogItem {
@@ -151,18 +158,17 @@ export function dueDateFrom(issuedAt: string): string {
 }
 
 /**
- * "availPro / partner". The slash belongs to the partner number: with no
- * partner number it goes, with no AvailPro number it stays, so a lone
- * "/ ABC123" still reads as "partner reference, no AvailPro reference".
+ * "availPro / partner". The slash belongs to the partner number: it prints
+ * whenever there is one and never otherwise, so a lone "/ ABC123" still reads
+ * as "partner reference, no AvailPro reference" while an empty field prints
+ * empty instead of as a stray slash.
  */
 export function supplierRefLine(availProNo: string, partnerResNo: string): string {
   const left = (availProNo ?? "").trim();
   const right = (partnerResNo ?? "").trim();
-  // The slash is dropped in exactly ONE case: a partner number is missing
-  // while an AvailPro number is present, so there is nothing left to
-  // separate. If the AvailPro number is missing the slash stays, even when
-  // both are empty - it is part of the field's printed form.
-  if (!right && left) return left;
+  // No partner number, nothing to separate — this also covers both-empty,
+  // which must print as an empty line rather than a bare "/".
+  if (!right) return left;
   return `${left} / ${right}`.trim();
 }
 
@@ -234,8 +240,9 @@ export function computeTotals(
   for (const rate of vatRates) {
     const gross = byRate.get(rate.id) ?? 0;
     // Every active bucket is listed, zeros included, matching the printed
-    // document. An inactive rate appears only if a draft still posts to it.
-    if (!rate.active && gross === 0) continue;
+    // document. An inactive rate appears only if it is flagged "Zobrazit při
+    // tisku" or a draft still posts to it.
+    if (!rate.active && !rate.showInPrint && gross === 0) continue;
     const base = round2(gross / (1 + rate.percent / 100));
     recap.push({
       rateId: rate.id,
