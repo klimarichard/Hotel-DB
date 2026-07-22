@@ -18,6 +18,30 @@ import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 
 /**
+ * StarterKit options shared by both editors (Šablony smluv, Dokumenty).
+ *
+ * `paragraph: false` — replaced by {@link TabParagraph}, which bakes the CSS
+ * tab stops into every stored `<p>`.
+ *
+ * `link` — StarterKit v3 bundles the Link extension, and its defaults turn
+ * anything that looks like a URL or an e-mail address into a hyperlink **by
+ * itself**: `autolink` while typing, `linkOnPaste` when pasting over a
+ * selection. Neither editor has a link button, so a link that appeared this
+ * way could not be removed again — the mark had no UI at all. Both are off.
+ *
+ * The extension itself is deliberately NOT disabled (`link: false`). Dropping
+ * the mark would make every `<a>` in an already-saved template or document
+ * vanish on load, silently rewriting stored content to fix a typing
+ * annoyance. Keeping the mark means existing documents round-trip unchanged;
+ * only the automatic creation stops. `openOnClick: false` keeps a click on
+ * such a legacy link inside the editor from navigating away mid-edit.
+ */
+export const STARTER_KIT_OPTIONS = {
+  paragraph: false,
+  link: { autolink: false, linkOnPaste: false, openOnClick: false },
+} as const;
+
+/**
  * Table extended with a `borderless` attribute. The base @tiptap/extension-table
  * registers a NodeView for column resizing that owns the live <table> DOM
  * element, so neither addAttributes' renderHTML nor an extension-level

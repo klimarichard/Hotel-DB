@@ -11,6 +11,7 @@ import { TableRow } from "@tiptap/extension-table-row";
 import { TableHeader } from "@tiptap/extension-table-header";
 import { TableCell } from "@tiptap/extension-table-cell";
 import {
+  STARTER_KIT_OPTIONS,
   Table,
   ResizableImage,
   IMAGE_WIDTH_PRESETS,
@@ -232,7 +233,7 @@ export default function ContractTemplatesPage() {
 
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({ paragraph: false }),
+      StarterKit.configure(STARTER_KIT_OPTIONS),
       TabParagraph,
       ListItemIndent,
       NbspKeybind,
