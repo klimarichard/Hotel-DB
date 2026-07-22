@@ -328,19 +328,14 @@
 }
 
 .vatTable th:nth-child(3),
-.vatTable td:nth-child(3) {
-  width: 110px;
-}
-
+.vatTable td:nth-child(3),
 .vatTable th:nth-child(4),
-.vatTable td:nth-child(4),
-.vatTable th:nth-child(5),
-.vatTable td:nth-child(5) {
+.vatTable td:nth-child(4) {
   width: 88px;
 }
 
-.vatTable th:nth-child(6),
-.vatTable td:nth-child(6) {
+.vatTable th:nth-child(5),
+.vatTable td:nth-child(5) {
   width: 44px;
 }
 
