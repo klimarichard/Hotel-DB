@@ -1096,6 +1096,13 @@ export default function FakturyPage() {
                         ? "__custom__"
                         : config.items.find((it) => it.description === line.description)?.id ?? "";
                       const vatMissing = showErrors && line.group === "item" && !line.vatRateId;
+                      // A catalogue entry OWNS its type and VAT bucket, so both
+                      // are read-only while one is selected: those two fields
+                      // are what the catalogue exists to decide, and a line
+                      // that silently disagrees with it posts to the wrong
+                      // recap row. Free text has no entry to inherit from, and
+                      // an untouched row has nothing yet — both stay editable.
+                      const fromCatalog = !isCustom && catalogValue !== "";
                       return (
                         <tr key={line.id}>
                           <td>
@@ -1172,6 +1179,12 @@ export default function FakturyPage() {
                                 isCustom ? styles.cellRequired : ""
                               }`}
                               value={line.group}
+                              disabled={fromCatalog}
+                              title={
+                                fromCatalog
+                                  ? "Typ je dán vybranou položkou katalogu."
+                                  : undefined
+                              }
                               onChange={(e) =>
                                 patchLine(line.id, { group: e.target.value as LineGroup })
                               }
@@ -1189,6 +1202,12 @@ export default function FakturyPage() {
                                 isCustom ? styles.cellRequired : ""
                               } ${vatMissing ? styles.inputError : ""}`}
                               value={line.vatRateId ?? ""}
+                              disabled={fromCatalog}
+                              title={
+                                fromCatalog
+                                  ? "Sazba DPH je dána vybranou položkou katalogu."
+                                  : undefined
+                              }
                               onChange={(e) =>
                                 patchLine(line.id, { vatRateId: e.target.value || null })
                               }
@@ -1246,6 +1265,10 @@ export default function FakturyPage() {
                   + Přidat řádek
                 </Button>
               </div>
+              <p className={styles.hint}>
+                Typ a sazbu DPH určuje vybraná položka katalogu – měnit je lze jen u řádku s
+                vlastním textem. Katalog upravíte v Číselnících.
+              </p>
             </section>
 
             {/* ── Živý souhrn ────────────────────────────────────────── */}
