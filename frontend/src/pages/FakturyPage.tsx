@@ -2140,9 +2140,6 @@ function ConfigPanel({
               </section>
             ) : (
               <section className={styles.card}>
-                <p className={styles.hint}>
-                  Neaktivní kanceláře jsou na konci seznamu a v nabídce odběratele se nenabízejí.
-                </p>
                 <ul className={styles.entityList}>
                   {agencyList.map((a) => (
                     <li key={a.id} className={styles.entityRow}>
@@ -2155,7 +2152,7 @@ function ConfigPanel({
                       </button>
                       {!a.active && <span className={styles.badge}>Neaktivní</span>}
                       <span className={styles.entityMeta}>
-                        {[a.city, a.country].filter(Boolean).join(", ")}
+                        {[a.dic, a.country].filter(Boolean).join(", ")}
                       </span>
                       <div className={styles.rowActions}>
                         <Button variant="secondary" size="sm" onClick={() => setEditingAgency(a.id)}>
@@ -2307,10 +2304,6 @@ function ConfigPanel({
               </section>
             ) : (
               <section className={styles.card}>
-                <p className={styles.hint}>
-                  Neaktivní hotely jsou na konci seznamu. Číslo knihy a číslo knihy záloh rozhodují,
-                  který hotel se rozpozná z čísla faktury.
-                </p>
                 <ul className={styles.entityList}>
                   {hotelList.map((h) => (
                     <li key={h.id} className={styles.entityRow}>
@@ -2324,8 +2317,8 @@ function ConfigPanel({
                       {!h.active && <span className={styles.badge}>Neaktivní</span>}
                       <span className={styles.entityMeta}>
                         {[
-                          h.bookNo !== null ? `kniha ${h.bookNo}` : "",
-                          h.depositBookNo !== null ? `zálohy ${h.depositBookNo}` : "",
+                          h.bookNo !== null ? `číselná řada ${h.bookNo}` : "",
+                          h.depositBookNo !== null ? `depozitní ${h.depositBookNo}` : "",
                         ]
                           .filter(Boolean)
                           .join(" · ")}

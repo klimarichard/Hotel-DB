@@ -227,6 +227,12 @@
   overflow-x: auto;
 }
 
+/* In the číselníky panel a table always follows explanatory hints, whose 8px
+   top margin left the column headings crowded against the text above them. */
+.panelBody .tableScroll {
+  margin-top: 14px;
+}
+
 .listTable,
 .linesTable,
 .summaryTable,
