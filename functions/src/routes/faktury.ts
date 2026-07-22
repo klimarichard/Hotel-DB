@@ -33,6 +33,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { requireAuth, AuthRequest } from "../middleware/auth";
 import { requirePermission } from "../auth/permissions";
 import { ctxFromReq, logUpdate } from "../services/auditLog";
+import { resolveDisplayNamesByUid } from "../services/recepceEmployees";
 import { renderPdf } from "../services/pdfRenderer";
 import {
   DEFAULT_FAKTURY_CONFIG,
@@ -297,6 +298,9 @@ function sanitizeConfig(raw: unknown): FakturyConfig {
       percent,
       block: VAT_BLOCKS.has(e.block as VatBlock) ? (e.block as VatBlock) : "normal",
       active: e.active !== false,
+      // Opt-IN, unlike `active`: a config saved before this flag existed keeps
+      // printing exactly what it printed yesterday until an admin ticks the box.
+      showInPrint: e.showInPrint === true,
     };
   });
 
@@ -538,9 +542,22 @@ fakturyRouter.get(
   requirePermission(VIEW_PERM),
   async (_req: AuthRequest, res: Response) => {
     const [snap, config] = await Promise.all([db().collection(COLLECTION).get(), readConfig()]);
+    // Who last touched each draft: the LIVE display name ("Zobrazované jméno",
+    // else "Jméno Příjmení") of the employee linked to that user account, not
+    // the name snapshotted at save time. Same read-time resolution — and the
+    // same shared helper — as the handover signatures, so an employee rename
+    // fixes every old row instead of only future ones. Uids with no linked
+    // employee are simply absent from the map; the snapshot catches those.
+    const editors = await resolveDisplayNamesByUid(
+      snap.docs.map((d) => {
+        const uid = (d.data() as Record<string, unknown>).updatedBy;
+        return typeof uid === "string" ? uid : "";
+      })
+    );
     const list = snap.docs.map((d) => {
       const data = d.data() as Record<string, unknown>;
       const lines = Array.isArray(data.lines) ? (data.lines as InvoiceLine[]) : [];
+      const editorUid = typeof data.updatedBy === "string" ? data.updatedBy : "";
       return {
         id: d.id,
         invoiceNo: (data.invoiceNo as string) ?? "",
@@ -555,7 +572,10 @@ fakturyRouter.get(
         // formatter passes straight through, and React then throws
         // "Objects are not valid as a React child" and blanks the page.
         updatedAt: tsToIso(data.updatedAt),
-        updatedBy: data.updatedByName ?? data.updatedBy ?? "",
+        // A NAME, never a uid: the field is rendered straight into the list.
+        // The snapshot is the last resort, for a user account that has since
+        // been deleted.
+        updatedBy: editors.get(editorUid) || (data.updatedByName as string) || "",
       };
     });
     // Sorted in memory rather than via orderBy: a legacy doc without

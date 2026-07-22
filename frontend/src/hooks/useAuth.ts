@@ -16,6 +16,14 @@ interface AuthState {
   employeeId: string | null;
   /** Display name from users/{uid}.name (via /auth/me); null when unset. */
   name: string | null;
+  /**
+   * LIVE display name of the employee this account is linked to ("Zobrazované
+   * jméno", else "Jméno Příjmení"). Null when the account has no linked
+   * employee. Prefer this over `name` when pre-filling "who is doing this" into
+   * a form: `name` is the ACCOUNT name, which on a shared terminal is the
+   * terminal ("Recepce Ankora") rather than the person sitting at it.
+   */
+  employeeName: string | null;
   /** Display name of the user's type (roleType), for the sidebar label. */
   roleTypeName: string | null;
   /**
@@ -61,6 +69,7 @@ export function useAuth(): AuthValue {
     roleType: null,
     employeeId: null,
     name: null,
+    employeeName: null,
     roleTypeName: null,
     recepceDefaultHotel: null,
     dokumentyDefaultSection: null,
@@ -75,14 +84,15 @@ export function useAuth(): AuthValue {
       if (user) {
         const tokenResult = await user.getIdTokenResult();
         const profile = await api
-          .get<{ employeeId: string | null; name?: string | null; permissions?: string[]; roleTypeName?: string | null; roleType?: string | null; recepceDefaultHotel?: string | null; dokumentyDefaultSection?: string | null; sharedTerminal?: boolean; noSelfLogout?: boolean }>("/auth/me")
-          .catch(() => ({ employeeId: null, name: null, permissions: [] as string[], roleTypeName: null, roleType: null, recepceDefaultHotel: null, dokumentyDefaultSection: null, sharedTerminal: false, noSelfLogout: false }));
+          .get<{ employeeId: string | null; name?: string | null; employeeName?: string | null; permissions?: string[]; roleTypeName?: string | null; roleType?: string | null; recepceDefaultHotel?: string | null; dokumentyDefaultSection?: string | null; sharedTerminal?: boolean; noSelfLogout?: boolean }>("/auth/me")
+          .catch(() => ({ employeeId: null, name: null, employeeName: null, permissions: [] as string[], roleTypeName: null, roleType: null, recepceDefaultHotel: null, dokumentyDefaultSection: null, sharedTerminal: false, noSelfLogout: false }));
         setState({
           user,
           role: (tokenResult.claims.role as UserRole) ?? null,
           roleType: profile.roleType ?? null,
           employeeId: profile.employeeId ?? null,
           name: profile.name ?? null,
+          employeeName: profile.employeeName ?? null,
           roleTypeName: profile.roleTypeName ?? null,
           recepceDefaultHotel: profile.recepceDefaultHotel ?? null,
           dokumentyDefaultSection: profile.dokumentyDefaultSection ?? null,
@@ -92,7 +102,7 @@ export function useAuth(): AuthValue {
           loading: false,
         });
       } else {
-        setState({ user: null, role: null, roleType: null, employeeId: null, name: null, roleTypeName: null, recepceDefaultHotel: null, dokumentyDefaultSection: null, sharedTerminal: false, noSelfLogout: false, permissions: EMPTY_PERMS, loading: false });
+        setState({ user: null, role: null, roleType: null, employeeId: null, name: null, employeeName: null, roleTypeName: null, recepceDefaultHotel: null, dokumentyDefaultSection: null, sharedTerminal: false, noSelfLogout: false, permissions: EMPTY_PERMS, loading: false });
       }
     });
   }, []);
