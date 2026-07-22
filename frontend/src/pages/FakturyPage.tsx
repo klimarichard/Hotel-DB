@@ -1321,8 +1321,11 @@ export default function FakturyPage() {
                   <table className={styles.summaryTable}>
                     <thead>
                       <tr>
+                        {/* No Blok column: a depozit bucket is already named
+                            as one ("Deposit 12.00 %"), exactly as on the
+                            printed recap, so the column only repeated the
+                            label beside it. */}
                         <th>Sazba</th>
-                        <th>Blok</th>
                         <th className={styles.numCol}>Základ</th>
                         <th className={styles.numCol}>DPH</th>
                         {/* No EUR column: the VAT recap is a CZK statement for
@@ -1337,7 +1340,6 @@ export default function FakturyPage() {
                           <td>
                             {r.label} ({r.percent} %)
                           </td>
-                          <td>{r.block === "advance" ? "Depozit" : "Běžná"}</td>
                           <td className={styles.numCol}>{formatMoney(r.base)}</td>
                           <td className={styles.numCol}>{formatMoney(r.vat)}</td>
                           <td className={styles.numCol}>{formatMoney(r.total)}</td>
@@ -1346,7 +1348,7 @@ export default function FakturyPage() {
                     </tbody>
                     <tfoot>
                       <tr className={styles.summaryStrong}>
-                        <td colSpan={2}>Celkem</td>
+                        <td>Celkem</td>
                         <td className={styles.numCol}>{formatMoney(totals.recapBase)}</td>
                         <td className={styles.numCol}>{formatMoney(totals.recapVat)}</td>
                         <td className={styles.numCol}>{formatMoney(totals.recapTotal)}</td>
@@ -1803,9 +1805,8 @@ function ConfigPanel({
           {tab === "vat" && (
             <section className={styles.card}>
               <p className={styles.hint}>
-                Depozitní sazby (v seznamu je poznáte podle názvu, např. „Deposit 12.00 %") se
-                v rekapitulaci DPH vykazují zvlášť od běžných sazeb, jak vyžadují česká pravidla.
-                Toto zařazení je pevně dané a v číselníku se nenastavuje.
+                Sazba zařazená do bloku „Depozit" se v rekapitulaci DPH vykazuje zvlášť od běžných
+                sazeb, jak vyžadují česká pravidla pro zálohové faktury.
               </p>
               <p className={styles.hint}>
                 „Aktivní" určuje, zda lze sazbu vybrat na řádku faktury. „Zobrazit při tisku"
@@ -1819,6 +1820,7 @@ function ConfigPanel({
                     <tr>
                       <th>Popis</th>
                       <th>%</th>
+                      <th>Blok</th>
                       <th>Aktivní</th>
                       <th>Zobrazit při tisku</th>
                       <th aria-label="Akce" />
@@ -1855,6 +1857,24 @@ function ConfigPanel({
                               )
                             }
                           />
+                        </td>
+                        <td>
+                          <select
+                            className={styles.cellInput}
+                            value={r.block}
+                            onChange={(e) =>
+                              setVatRates((prev) =>
+                                prev.map((x) =>
+                                  x.id === r.id
+                                    ? { ...x, block: e.target.value as VatRate["block"] }
+                                    : x
+                                )
+                              )
+                            }
+                          >
+                            <option value="normal">Běžná</option>
+                            <option value="advance">Depozit</option>
+                          </select>
                         </td>
                         <td>
                           <input
