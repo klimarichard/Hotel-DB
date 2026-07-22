@@ -817,7 +817,7 @@ export default function FakturyPage() {
                     checked={draft.deposit}
                     onChange={(e) => patchDraft({ deposit: e.target.checked })}
                   />
-                  <span>Deposit</span>
+                  <span>Depozit</span>
                 </label>
               </div>
               {/* A quiet hint, never a validation error: the number is typed in
@@ -826,7 +826,7 @@ export default function FakturyPage() {
                 <p className={styles.hint}>
                   {decoded
                     ? `Rozpoznáno: ${decoded.hotel.name}, ${
-                        decoded.deposit ? "deposit" : "běžná faktura"
+                        decoded.deposit ? "depozit" : "běžná faktura"
                       }.`
                     : "Z čísla se nepodařilo rozpoznat hotel – vyberte jej ručně."}
                 </p>
@@ -1337,7 +1337,7 @@ export default function FakturyPage() {
                           <td>
                             {r.label} ({r.percent} %)
                           </td>
-                          <td>{r.block === "advance" ? "Záloha" : "Běžná"}</td>
+                          <td>{r.block === "advance" ? "Depozit" : "Běžná"}</td>
                           <td className={styles.numCol}>{formatMoney(r.base)}</td>
                           <td className={styles.numCol}>{formatMoney(r.vat)}</td>
                           <td className={styles.numCol}>{formatMoney(r.total)}</td>
@@ -1443,7 +1443,7 @@ function InvoiceList({
                 <button type="button" className={styles.linkBtn} onClick={() => onOpen(inv.id)}>
                   {inv.invoiceNo || "(bez čísla)"}
                 </button>
-                {inv.deposit && <span className={styles.badge}>Deposit</span>}
+                {inv.deposit && <span className={styles.badge}>Depozit</span>}
               </td>
               <td>{hotelName(inv.hotelId)}</td>
               <td>{inv.guestName}</td>
@@ -1803,8 +1803,9 @@ function ConfigPanel({
           {tab === "vat" && (
             <section className={styles.card}>
               <p className={styles.hint}>
-                Sazba zařazená do bloku „Záloha" se v rekapitulaci DPH vykazuje zvlášť od běžných
-                sazeb, jak vyžadují česká pravidla pro zálohové faktury.
+                Depozitní sazby (v seznamu je poznáte podle názvu, např. „Deposit 12.00 %") se
+                v rekapitulaci DPH vykazují zvlášť od běžných sazeb, jak vyžadují česká pravidla.
+                Toto zařazení je pevně dané a v číselníku se nenastavuje.
               </p>
               <p className={styles.hint}>
                 „Aktivní" určuje, zda lze sazbu vybrat na řádku faktury. „Zobrazit při tisku"
@@ -1818,7 +1819,6 @@ function ConfigPanel({
                     <tr>
                       <th>Popis</th>
                       <th>%</th>
-                      <th>Blok</th>
                       <th>Aktivní</th>
                       <th>Zobrazit při tisku</th>
                       <th aria-label="Akce" />
@@ -1855,24 +1855,6 @@ function ConfigPanel({
                               )
                             }
                           />
-                        </td>
-                        <td>
-                          <select
-                            className={styles.cellInput}
-                            value={r.block}
-                            onChange={(e) =>
-                              setVatRates((prev) =>
-                                prev.map((x) =>
-                                  x.id === r.id
-                                    ? { ...x, block: e.target.value as VatRate["block"] }
-                                    : x
-                                )
-                              )
-                            }
-                          >
-                            <option value="normal">Běžná</option>
-                            <option value="advance">Záloha</option>
-                          </select>
                         </td>
                         <td>
                           <input
@@ -2189,7 +2171,7 @@ function ConfigPanel({
                   </label>
                 </div>
                 <p className={styles.hint}>
-                  Číselná řada a číselná řada – deposit rozhodují, který hotel se rozpozná z čísla
+                  Číselná řada a číselná řada – depozit rozhodují, který hotel se rozpozná z čísla
                   faktury.
                 </p>
                 <div className={styles.grid}>
@@ -2215,7 +2197,7 @@ function ConfigPanel({
                     />
                   </label>
                   <label className={styles.field}>
-                    <span>Číselná řada – deposit</span>
+                    <span>Číselná řada – depozit</span>
                     <input
                       type="number"
                       className={styles.input}
