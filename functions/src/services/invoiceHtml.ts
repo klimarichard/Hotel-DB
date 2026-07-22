@@ -96,7 +96,9 @@ export const INVOICE_CSS = `
 
   /* Guest details and correspondence address share ONE ten-row grid, which
      is what puts IC / DIC on the same baselines as Tax Charged / Payable On
-     in the original. Blank slots are rendered, never collapsed. */
+     in the original. The row COUNT comes from the left column's ten fixed
+     labels, so the address on the right is free to be shorter - it is
+     compacted, and its unused tail simply leaves empty cells. */
   .inv-meta { margin-top: 4mm; }
   .inv-meta td { padding: 0; }
   .inv-meta .sp { height: 2.2mm; }
@@ -298,15 +300,29 @@ function logoImg(dataUri: string): string {
 
 interface ResolvedParty {
   name: string;
-  /** Fixed five slots, blanks INCLUDED, in workbook row order. */
+  /**
+   * The address lines that actually carry text, in workbook row order, with
+   * blanks REMOVED — at most five, often two or three.
+   *
+   * Earlier versions kept the five slots fixed and printed the blanks, on the
+   * theory that the empty rows were what kept IC / DIC level with Tax Charged
+   * and Payable On in the meta grid. They are not: the meta table is one grid
+   * whose row heights come from the LEFT column, which is fixed at ten rows of
+   * labels no matter what the address does. Only the address's own tail is
+   * affected, so an unused "Ulice 3" now closes up instead of punching a hole
+   * through the block.
+   */
   slots: string[];
   ic: string;
   dic: string;
 }
 
+/** Zip and city share one line, as they do when written on an envelope. */
 function addressSlots(p: PartyAddress): string[] {
   const zipCity = [p.zip, p.city].filter((s) => !!s && !!s.trim()).join(" ");
-  return [p.street1 ?? "", p.street2 ?? "", p.street3 ?? "", zipCity, p.country ?? ""];
+  return [p.street1, p.street2, p.street3, zipCity, p.country]
+    .map((s) => (s ?? "").trim())
+    .filter((s) => s !== "");
 }
 
 /**
@@ -318,7 +334,7 @@ function resolveBillTo(draft: InvoiceDraft, config: FakturyConfig): ResolvedPart
   const billTo = draft.billTo;
   if (billTo.kind === "agency") {
     const agency = config.agencies.find((a) => a.id === billTo.agencyId);
-    if (!agency) return { name: "", slots: ["", "", "", "", ""], ic: "", dic: "" };
+    if (!agency) return { name: "", slots: [], ic: "", dic: "" };
     return {
       name: agency.name,
       slots: addressSlots(agency),
@@ -365,10 +381,15 @@ export function buildInvoiceHtml(
 
   /*
    * 2 + 3 — the ten-row meta grid. Left column pair is the guest, right
-   * column pair the correspondence address; row 7 is blank on the left and
+   * column pair the correspondence address; row 7 is a spacer on the left and
    * row 8 blank on the right, exactly as the workbook rows run. Building it
    * as ONE table is what guarantees IC/DIC line up with Tax Charged and
    * Payable On, which is how the original reads.
+   *
+   * The address slots are COMPACTED (see `addressSlots`), so an unused
+   * "Ulice 3" closes up rather than printing an empty row mid-block. The ten
+   * rows survive regardless: their heights come from the left column's fixed
+   * labels, not from the address.
    */
   const metaRows: [string, string, string, string][] = [
     ["Guest Name / Jmeno Hosta:", draft.guestName, "Correspondence Address", ""],
@@ -416,18 +437,32 @@ export function buildInvoiceHtml(
         .join("")}
     </tbody></table>`;
 
-  /* 4 — Billed To band: the same payer again, spread over three columns by
-     FIELD position (name/street1 | street2/street3 | zip-city/country), so
-     an empty middle column stays empty instead of pulling later lines left. */
-  const billedCol = (a: string, b: string): string =>
+  /*
+   * 4 — Billed To band: the same payer again, as up to six non-empty lines
+   * (the name plus the compacted address) poured COLUMN-major into a 3 × 2
+   * grid:
+   *
+   *     [1] [3] [5]
+   *     [2] [4] [6]
+   *
+   * Filling by position rather than by field is what makes a short address
+   * read correctly: a payer with one street line and no country simply stops
+   * after [3] instead of leaving the middle column blank and the last column
+   * stranded on its own.
+   */
+  const billedEntries: string[] = [
+    ...(party.name ? [`<span class="bold">${esc(party.name)}</span>`] : []),
+    ...party.slots.map((s) => esc(s)),
+  ];
+  const billedCol = (a: string | undefined, b: string | undefined): string =>
     `<td>${a ? `<div>${a}</div>` : ""}${b ? `<div>${b}</div>` : ""}</td>`;
   const billed = `<div class="bold" style="margin-top:4mm">Billed To:</div>
     <table class="inv-billed"><colgroup>
       <col style="width:40%"><col style="width:25%"><col style="width:35%">
     </colgroup><tbody><tr>
-      ${billedCol(`<span class="bold">${esc(party.name)}</span>`, esc(party.slots[0]))}
-      ${billedCol(esc(party.slots[1]), esc(party.slots[2]))}
-      ${billedCol(esc(party.slots[3]), esc(party.slots[4]))}
+      ${billedCol(billedEntries[0], billedEntries[1])}
+      ${billedCol(billedEntries[2], billedEntries[3])}
+      ${billedCol(billedEntries[4], billedEntries[5])}
     </tr></tbody></table>`;
 
   /* 5 — invoice number: plain bold text at a tab stop, no box. */
