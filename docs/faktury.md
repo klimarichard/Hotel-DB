@@ -140,6 +140,12 @@ The editor's **Vystavil** field defaults from `employeeName` on `/auth/me`, whic
 
 `invoiceHtml.ts` is pure — no Firestore, no I/O, no async, no clock, no randomness; the same `InvoiceDraft` + `FakturyConfig` + `CompanyInfo | null` always yields the same HTML bytes. It lays out the page with tables and explicit column widths rather than flexbox, because print pagination across a page break is more predictable that way and the line-item table is the one region allowed to overflow onto a second page.
 
+### The payer's address is compacted, and laid out column-major
+
+`addressSlots()` drops empty lines instead of printing them (zip and city always share one line, as on an envelope), so an unused *Ulice 3* closes up rather than punching an empty row through the block. This was long believed unsafe — the blanks supposedly kept IC / DIC level with Tax Charged / Payable On in the meta grid. They do not: that grid's row heights come from the **left** column, which is ten fixed labels regardless of the address. Verified by rendering both a 3-line and a 5-line address; IC / DIC stay on rows 9–10 either way.
+
+The **Billed To** band pours the same lines (name first) into a 3 × 2 grid **column-major** — `[1] [3] [5]` over `[2] [4] [6]` — rather than assigning each field a fixed cell. Filling by position is what makes a short address read correctly: it simply stops early, instead of leaving the middle column empty with the last column stranded beyond it.
+
 ### Line-table geometry — three rules that constrain each other
 
 1. **Cells clip, they never wrap.** One posting is one row; a wrapped cell is taller than its neighbours and destroys that reading. Clipping only works because the shared `RENDER_CSS` already sets `table-layout: fixed` — under auto layout a long description simply widens its own column and there is nothing to clip against. `overflow: hidden` is unreliable on a `td` itself, so every cell wraps its content in a `div.clip`.
