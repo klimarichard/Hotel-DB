@@ -333,7 +333,20 @@ Faktura vytvořená na této stránce je **vizuální kopie** dokladu, který vy
 
 **Přeřazení sazby do špatného bloku v číselníku Faktur není vidět nikde jinde než v rekapitulaci vytištěné faktury** – smísí zálohu s běžným plněním tiše, bez upozornění.
 
-> 🔒 Server + ⚙️ Automatika. Zdroj: `functions/src/services/invoiceTypes.ts:16-23` (blok jako součást sazby), `computeTotals()` `:194-239` (řádky se sčítají podle `vatRateId`, blok se nese dál); rozdělení rekapitulace podle bloku `functions/src/services/invoiceHtml.ts:475-501`. Stejná pravidla platí i pro živý náhled v prohlížeči, `frontend/src/lib/faktury.ts:170-214`.
+> 🔒 Server + ⚙️ Automatika. Zdroj: `functions/src/services/invoiceTypes.ts` – blok jako součást sazby (`VatBlock`) a `computeTotals()` (řádky se sčítají podle `vatRateId`, blok se nese dál); vykreslení rekapitulace `functions/src/services/invoiceHtml.ts` (`recapBlock`). Stejná pravidla platí i pro živý náhled v prohlížeči, `frontend/src/lib/faktury.ts`.
+
+### „Aktivní" a „Zobrazit při tisku" u sazby DPH nejsou totéž
+
+U sazby DPH v Číselnících rozhodují **dvě nezávislá zaškrtávátka**:
+
+- **Aktivní** – sazbu lze vybrat na řádku faktury. Neaktivní sazba se v nabídce vůbec neobjeví.
+- **Zobrazit při tisku** – sazba se objeví v rekapitulaci DPH i tehdy, když je neaktivní a nulová (vytiskne se s `0,00`).
+
+Historické sazby 10 % a 15 % (a jejich zálohové protějšky) mají být **neaktivní, ale tištěné**: nikdo je už nesmí použít, původní doklad z Protelu je však vypisuje. Sazba, na kterou odkazuje některá uložená faktura, se v rekapitulaci objeví vždy, i bez obou zaškrtávátek – zrušením sazby tak nikdy tiše nezmizí peníze z již vystavené faktury.
+
+**Zaškrtnutí „Zobrazit při tisku" mění vzhled všech tištěných faktur** – i těch dávno uložených, protože rekapitulace se počítá při tisku, neukládá se.
+
+> 🔒 Server + ⚙️ Automatika. Zdroj: `functions/src/services/invoiceTypes.ts` – `VatRate.showInPrint` a podmínka v `computeTotals()` (`!rate.active && !rate.showInPrint && gross === 0` → řádek se vynechá); zrcadleno v `frontend/src/lib/faktury.ts`. Nová konfigurace příznak nedostane automaticky – `sanitizeConfig()` ho čte jako `showInPrint === true`.
 
 ## Vyřazená pravidla
 
