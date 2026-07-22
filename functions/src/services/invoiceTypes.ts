@@ -42,6 +42,18 @@ export interface VatRate {
   percent: number;
   block: VatBlock;
   active: boolean;
+  /**
+   * "Zobrazit při tisku" — list this bucket in the VAT recap even when it is
+   * inactive and carries no money.
+   *
+   * `active` and this flag answer two different questions. `active` decides
+   * whether a receptionist can POST to the rate; this decides whether the rate
+   * appears on the printed recap. The historical Czech rates (10 %, 15 % and
+   * their Deposit twins) must never be postable again, yet the real Protel
+   * export still prints all four as 0,00 — so a rate that is "invalid" and
+   * "not printed" had to stop being the same thing.
+   */
+  showInPrint?: boolean;
 }
 
 /** One entry of the admin-maintained posting catalogue (the workbook's TAA sheet). */
@@ -184,20 +196,22 @@ export function dueDateFrom(issuedAt: string): string {
 /**
  * The supplier reference line, "availPro / partner".
  *
- * The separator follows the partner number, not the AvailPro one: with no
- * partner number there is nothing to separate, so the slash goes. With no
- * AvailPro number the slash STAYS, because a leading "/ ABC123" still reads
- * as "no AvailPro reference, partner reference ABC123" — dropping it would
- * make the remaining number ambiguous about which system it came from.
+ * The separator belongs to the PARTNER number: it prints whenever there is a
+ * partner number, and never otherwise. A leading "/ ABC123" therefore still
+ * reads as "no AvailPro reference, partner reference ABC123", while an empty
+ * field prints as genuinely empty rather than as a stray slash.
+ *
+ *   both    → "AP123 / ABC123"
+ *   partner → "/ ABC123"
+ *   availPro→ "AP123"
+ *   neither → ""
  */
 export function supplierRefLine(availProNo: string, partnerResNo: string): string {
   const left = (availProNo ?? "").trim();
   const right = (partnerResNo ?? "").trim();
-  // The slash is dropped in exactly ONE case: a partner number is missing
-  // while an AvailPro number is present, so there is nothing left to
-  // separate. If the AvailPro number is missing the slash stays, even when
-  // both are empty - it is part of the field's printed form.
-  if (!right && left) return left;
+  // No partner number, nothing to separate — this also covers the both-empty
+  // case, which must print as an empty line, not as a bare "/".
+  if (!right) return left;
   return `${left} / ${right}`.trim();
 }
 
@@ -265,10 +279,11 @@ export function computeTotals(
     const gross = byRate.get(rate.id) ?? 0;
     // The printed document lists EVERY active bucket, zeros included — see
     // excels/excel_invoice.pdf, where 10 %, 15 % and all four Deposit rows
-    // show 0,00. A deactivated rate is skipped unless an existing draft
-    // still posts to it, so retiring a rate never silently drops money off
-    // an invoice that already used it.
-    if (!rate.active && gross === 0) continue;
+    // show 0,00. A deactivated rate is skipped unless it is flagged
+    // "Zobrazit při tisku" (the retired-but-still-printed rates) or an
+    // existing draft still posts to it, so retiring a rate never silently
+    // drops money off an invoice that already used it.
+    if (!rate.active && !rate.showInPrint && gross === 0) continue;
     const base = round2(gross / (1 + rate.percent / 100));
     recap.push({
       rateId: rate.id,
@@ -336,7 +351,9 @@ export function round2(n: number): number {
  * Shipped as the initial `settings/fakturyConfig` when the doc is absent.
  * 10 % and 15 % are seeded INACTIVE: both are historical Czech rates that
  * could return, and the whole list is admin-editable, so they sit dormant
- * rather than being deleted.
+ * rather than being deleted. They (and their Deposit twins) still carry
+ * `showInPrint`, because the real export prints them as 0,00 rows — dormant
+ * means "not postable", not "not printed".
  */
 /*
  * Order and wording match the printed export (`excels/excel_invoice.pdf`)
@@ -351,9 +368,9 @@ export function round2(n: number): number {
  * identically to a real one.
  */
 export const DEFAULT_VAT_RATES: VatRate[] = [
-  { id: "p10", label: "10.00 %", percent: 10, block: "normal", active: false },
+  { id: "p10", label: "10.00 %", percent: 10, block: "normal", active: false, showInPrint: true },
   { id: "p12", label: "12.00 %", percent: 12, block: "normal", active: true },
-  { id: "p15", label: "15.00 %", percent: 15, block: "normal", active: false },
+  { id: "p15", label: "15.00 %", percent: 15, block: "normal", active: false, showInPrint: true },
   { id: "p21", label: "21.00 %", percent: 21, block: "normal", active: true },
   {
     id: "npd",
@@ -376,9 +393,9 @@ export const DEFAULT_VAT_RATES: VatRate[] = [
     block: "normal",
     active: true,
   },
-  { id: "a10", label: "Deposit 10.00 %", percent: 10, block: "advance", active: false },
+  { id: "a10", label: "Deposit 10.00 %", percent: 10, block: "advance", active: false, showInPrint: true },
   { id: "a12", label: "Deposit 12.00 %", percent: 12, block: "advance", active: true },
-  { id: "a15", label: "Deposit 15.00 %", percent: 15, block: "advance", active: false },
+  { id: "a15", label: "Deposit 15.00 %", percent: 15, block: "advance", active: false, showInPrint: true },
   { id: "a21", label: "Deposit 21.00 %", percent: 21, block: "advance", active: true },
 ];
 

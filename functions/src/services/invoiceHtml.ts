@@ -110,7 +110,11 @@ export const INVOICE_CSS = `
   .rule { border-top: 0.8pt solid #000; }
   .rule-strong { border-top: 1.1pt solid #000; }
 
-  .inv-lines { margin-top: 3mm; }
+  /* table-layout: fixed so the colgroup widths are BINDING. Under the default
+     auto layout a long description simply widens its column and drags every
+     later column out of place — and no amount of clipping can help while the
+     column is still free to grow. */
+  .inv-lines { margin-top: 3mm; table-layout: fixed; width: 100%; }
   .inv-lines th {
     border-top: 0.8pt solid #000;
     border-bottom: 0.8pt solid #000;
@@ -122,6 +126,16 @@ export const INVOICE_CSS = `
   .inv-lines thead { display: table-header-group; }
   .inv-lines tr { break-inside: avoid; }
   .inv-lines .pad { padding-right: 3mm; }
+  /* Over-long cell content is CUT at the column edge, never wrapped: a wrapped
+     row is taller than its neighbours and breaks the one-line-per-posting read
+     of the document. "overflow: hidden" is unreliable on a table cell itself
+     (no backticks in here - this whole stylesheet is a template literal),
+     so every cell wraps its content in this block instead. */
+  .inv-lines .clip {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: clip;
+  }
 
   .inv-totals { margin-top: 1.5mm; }
   .inv-totals td { padding: 0.6mm 0; }
@@ -150,6 +164,10 @@ export const INVOICE_CSS = `
   .inv-bank td { padding: 0.35mm 0; }
   .inv-bank .cell { padding-right: 6mm; }
   .inv-bank .lbl { width: 34%; }
+  /* The bank branch line ("CSOB a.s. …") is part of the ACCOUNT DETAILS, not of
+     the heading above it, so the gap goes under the heading — not between the
+     branch line and the numbers it belongs with. */
+  .inv-bank .bhead { margin-bottom: 1.8mm; }
   .inv-company {
     margin-top: 2.5mm;
     font-size: 7pt;
@@ -166,7 +184,7 @@ export const INVOICE_CSS = `
     right: 0;
     bottom: 0;
     text-align: center;
-    font-size: 10pt;
+    font-size: 8pt;
     line-height: 1.4;
   }
 `;
@@ -415,21 +433,36 @@ export function buildInvoiceHtml(
   }`;
 
   /* 6 — line table. Payment and transfer rows already carry their sign. */
+  const cell = (cls: string, value: string): string =>
+    `<td class="${cls}"><div class="clip">${value}</div></td>`;
+
   const lineRow = (line: InvoiceLine): string => `<tr>
-      <td class="pad">${esc(fmtShort(line.date))}</td>
-      <td class="ctr pad">${esc(fmtUnits(line.units))}</td>
-      <td class="pad">${esc(line.description)}</td>
-      <td class="ital pad">${esc(fmtShort(line.detail))}</td>
-      <td class="num pad">${esc(fmtCzk(line.unitPrice))}</td>
-      <td class="num">${esc(fmtCzk(lineTotal(line)))}</td>
+      ${cell("pad", esc(fmtShort(line.date)))}
+      ${cell("ctr pad", esc(fmtUnits(line.units)))}
+      ${cell("pad", esc(line.description))}
+      ${cell("ital pad", esc(fmtShort(line.detail)))}
+      ${cell("num pad", esc(fmtCzk(line.unitPrice)))}
+      ${cell("num", esc(fmtCzk(lineTotal(line))))}
     </tr>`;
 
+  /*
+   * Column widths, summing to 100. Date and Units are kept tight — a
+   * fixed-width DD/MM/YY plus its 3 mm pad, and a one- or two-digit count —
+   * which pulls Description and the free Detail column leftwards and gives
+   * them the room the long postings actually need. Do not squeeze Date below
+   * ~10 %: cells are CLIPPED now, so a column too narrow for its content loses
+   * the end of the date silently rather than wrapping it.
+   *
+   * The two money columns are right-aligned, so their FIGURES sit at each
+   * column's right edge — shrinking Total Price is what moves Price per Unit
+   * rightwards, not shrinking Price per Unit itself.
+   */
   const lines = `<table class="inv-lines"><colgroup>
-      <col style="width:11%"><col style="width:8%"><col style="width:24%">
-      <col style="width:17%"><col style="width:20%"><col style="width:20%">
+      <col style="width:10%"><col style="width:5%"><col style="width:23%">
+      <col style="width:28%"><col style="width:18%"><col style="width:16%">
     </colgroup>
     <thead><tr>
-      <th class="ctr">Date</th><th class="ctr">Units</th><th>Description</th><th></th>
+      <th>Date</th><th class="ctr">Units</th><th>Description</th><th></th>
       <th class="num">Price per Unit CZK</th><th class="num">Total Price CZK</th>
     </tr></thead>
     <tbody>${draft.lines.map(lineRow).join("")}</tbody></table>
@@ -445,8 +478,11 @@ export function buildInvoiceHtml(
     </tr>`;
   };
 
+  /* The CZK and EUR figures sit directly under the line table's last two
+     columns, so widths 2 and 3 mirror those (18 % / 16 %) exactly — change one
+     and the other has to follow. */
   const totalsBlock = `<table class="inv-totals"><colgroup>
-      <col style="width:48%"><col style="width:26%"><col style="width:26%">
+      <col style="width:66%"><col style="width:18%"><col style="width:16%">
     </colgroup><tbody>
       ${totalsRow("Total / Celkem:", totals.total, true)}
       ${totalsRow("Received Payments / Uhrazeno:", totals.payments)}
@@ -505,9 +541,9 @@ export function buildInvoiceHtml(
     suffix: string,
     bank: { account: string; swift: string; iban: string } | undefined
   ): string => `<td class="cell">
-      <div>${esc(heading)}</div>
+      <div class="bhead">${esc(heading)}</div>
       <div>${esc(hotel?.bankName ?? "")}</div>
-      <table style="margin-top:1.5mm"><tbody>
+      <table><tbody>
         ${bank ? bankRows(suffix, bank) : ""}
       </tbody></table>
     </td>`;

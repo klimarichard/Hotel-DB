@@ -317,6 +317,13 @@
   max-width: 640px;
 }
 
+/* The three-row Celkem / Uhrazeno / K úhradě block. Held narrower than the VAT
+   recap below it: with only a short label and two figures, the full width left
+   the CZK and EUR headings stranded far from the numbers under them. */
+.totalsTable {
+  max-width: 380px;
+}
+
 .summaryStrong td {
   font-weight: 700;
 }
