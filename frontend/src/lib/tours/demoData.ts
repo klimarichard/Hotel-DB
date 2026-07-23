@@ -60,7 +60,6 @@ export type TourScenario =
   | "taxi"
   | "lobby-bar"
   | "terminal"
-  | "odvody"
   | "guides";
 export const tourDemo: { active: boolean; scenario: TourScenario | null } = {
   active: false,
@@ -773,13 +772,12 @@ function demoOdvodRegisters(slug: string): {
 }
 
 /**
- * Serve `/odvody/{slug}/pending` inside the PROTOKOL demos, so the locked
- * „odvod + účty" row carries its "Provést odvod" button. Separate from
- * odvodyFixture because it belongs to a different scenario.
+ * Serve `/odvody/{slug}/pending`, so the locked „odvod + účty" row carries its
+ * "Provést odvod" button. Kept separate from odvodyFixture (and dispatched
+ * BEFORE it) because odvodyFixture's catch-all would swallow this path.
  */
 function odvodyPendingFixture(clean: string): { hit: boolean; value?: unknown } | null {
-  if (!clean.startsWith("/odvody/")) return null;
-  if (!clean.endsWith("/pending")) return { hit: true, value: {} };
+  if (!clean.startsWith("/odvody/") || !clean.endsWith("/pending")) return null;
   return {
     hit: true,
     value: {
@@ -793,10 +791,12 @@ function odvodyPendingFixture(clean: string): { hit: boolean; value?: unknown } 
   };
 }
 
-/** Serve mocks for /odvody/* while the odvody demo is active. */
+/** Serve mocks for /odvody/* – the odvod modal opened from the protokol demo. */
 function odvodyFixture(isGet: boolean, clean: string): { hit: boolean; value?: unknown } | null {
   if (clean !== "/odvody" && !clean.startsWith("/odvody/")) return null;
-  // PUT (save) / DELETE → swallow; the tab reloads via the GET below.
+  // `/odvody/{slug}/pending` belongs to odvodyPendingFixture; never swallow it.
+  if (clean.endsWith("/pending")) return null;
+  // PUT (save) / DELETE → swallow; the modal reloads via the GET below.
   if (!isGet) return { hit: true, value: { ok: true } };
   const m = clean.match(/^\/odvody\/([^/]+)\/(\d{4}-\d{2})$/);
   if (!m) return { hit: true, value: {} };
@@ -812,8 +812,8 @@ function odvodyFixture(isGet: boolean, clean: string): { hit: boolean; value?: u
       lastDay,
       registers,
       defaultWeights: weights,
-      // Nothing saved yet → the tab shows the "Zadat odvod" entry point, which
-      // is what the tour points at.
+      // Nothing saved yet → the modal opens on an empty form, which is what the
+      // tour points at.
       saved: null,
       target: {
         shiftDate: realTodayIso(),
@@ -826,8 +826,14 @@ function odvodyFixture(isGet: boolean, clean: string): { hit: boolean; value?: u
         { id: "demo-acc-1", name: "Květiny", amount: 1200, locked: false },
         { id: "demo-acc-2", name: "Room service", amount: 3450, locked: true },
       ],
-      trezorCZK: { "5000": 10, "2000": 5 },
-      trezorEUR: { "100": 3 },
+      // Mirrors the demo protokol's own cash counts (see buildDemoHandover), so
+      // the modal and the protocol underneath it agree.
+      drawers: {
+        trezorCZK: { "5000": 10, "2000": 5 },
+        kasaCZK: { "5000": 3, "1000": 5, "500": 4, "200": 6, "100": 8 },
+        trezorEUR: { "100": 3 },
+        kasaEUR: { "50": 4, "20": 6, "10": 5 },
+      },
     },
   };
 }
@@ -1183,7 +1189,6 @@ function activeScenario(): TourScenario | null {
     case "/napoveda/ukazka-taxi": return "taxi";
     case "/napoveda/ukazka-lobby-bar": return "lobby-bar";
     case "/napoveda/ukazka-terminal": return "terminal";
-    case "/napoveda/ukazka-odvody": return "odvody";
     case "/napoveda/ukazka-navody": return "guides";
     default: return null;
   }
@@ -1297,8 +1302,15 @@ export function getDemoResponse(
     case "protokol-empty":
     case "protokol-signed":
       // The protokol tab also asks whether a month-end odvod is pending on this
-      // shift; without the second fixture that call escapes to the real API.
-      return handoverFixture(isGet, clean, scenario) ?? odvodyPendingFixture(clean) ?? { hit: false };
+      // shift, and „Připravit odvod" opens the odvod modal from inside it – so
+      // both odvod fixtures belong to this scenario. Without them those calls
+      // escape to the real API. Order matters: odvodyFixture's catch-all would
+      // swallow `/odvody/{slug}/pending`, so the pending fixture goes first.
+      return (
+        handoverFixture(isGet, clean, scenario) ??
+        odvodyPendingFixture(clean) ??
+        odvodyFixture(isGet, clean) ?? { hit: false }
+      );
     case "walkiny":
       return walkinsFixture(isGet, clean) ?? { hit: false };
     case "taxi":
@@ -1307,8 +1319,6 @@ export function getDemoResponse(
       return lobbyBarFixture(isGet, clean) ?? { hit: false };
     case "terminal":
       return terminalFixture(isGet, clean) ?? { hit: false };
-    case "odvody":
-      return odvodyFixture(isGet, clean) ?? { hit: false };
     // ── Návody demo (list of PDF/link guides with tags) ──
     case "guides":
       return guidesFixture(isGet, clean) ?? { hit: false };

@@ -45,7 +45,6 @@ import { ctxFromReq, writeAudit } from "../services/auditLog";
 import {
   isHotelSlug,
   HotelSlug,
-  odvodyViewPerm,
   odvodyManagePerm,
   handoverEditPerm,
   handoverManagePerm,
@@ -70,8 +69,10 @@ import {
   ODVOD_REGISTERS,
   DEFAULT_SPLIT_WEIGHTS,
   computeOdvodPlan,
+  allocateFromDrawers,
+  allocationTotal,
+  normalizeEffect,
   czkNominalTotal,
-  eurNominalTotal,
   isMonthStr,
   monthOf,
   lastDayOfMonth,
@@ -96,21 +97,20 @@ function validateHotelParam(req: AuthRequest, res: Response, next: NextFunction)
   next();
 }
 
-/** Dynamic per-hotel gate for the Odvody tab. `manage` implies `view`. */
-function requireOdvodyPerm(kind: "view" | "manage") {
-  return (req: AuthRequest, res: Response, next: NextFunction): void => {
-    const hotel = req.params.hotel as HotelSlug;
-    const set = req.permissions ?? new Set<string>();
-    const ok =
-      set.has("system.admin") ||
-      set.has(odvodyManagePerm(hotel)) ||
-      (kind === "view" && set.has(odvodyViewPerm(hotel)));
-    if (ok) {
-      next();
-      return;
-    }
-    res.status(403).json({ error: "Nemáte oprávnění k této akci." });
-  };
+/**
+ * Dynamic per-hotel gate for preparing an odvod. There is no separate view
+ * right: the whole feature is one button inside the protocol, shown only to
+ * holders of `recepce.<stem>.odvody.manage`, so reading and writing carry the
+ * same permission.
+ */
+function requireOdvodyManage(req: AuthRequest, res: Response, next: NextFunction): void {
+  const hotel = req.params.hotel as HotelSlug;
+  const set = req.permissions ?? new Set<string>();
+  if (set.has("system.admin") || set.has(odvodyManagePerm(hotel))) {
+    next();
+    return;
+  }
+  res.status(403).json({ error: "Nemáte oprávnění k této akci." });
 }
 
 /**
@@ -201,7 +201,10 @@ function reverseEffect(content: ProtoContent, effect: OdvodEffect): { error: str
     kasaEUR: { ...content.cashCounts.kasaEUR },
     trezorEUR: { ...content.cashCounts.trezorEUR },
   };
-  addPieces(cashCounts.trezorCZK, effect.trezorCzkTaken, +1);
+  // Each note goes back to the drawer it came out of, which is exactly why the
+  // allocation is stored per drawer rather than as one total.
+  addPieces(cashCounts.trezorCZK, effect.czkTaken.trezor, +1);
+  addPieces(cashCounts.kasaCZK, effect.czkTaken.kasa, +1);
 
   return { content: { cashCounts, accounts } };
 }
@@ -222,23 +225,22 @@ function applyEffect(
     lineId: string;
   }
 ): { error: string } | { content: ProtoContent; effect: OdvodEffect; receiptsTotal: number } {
-  const trezorCZK = { ...content.cashCounts.trezorCZK };
-
-  for (const [denom, pieces] of Object.entries(args.nominalsCZK)) {
-    const have = trezorCZK[denom] ?? 0;
-    if (pieces > have) {
-      return {
-        error: `V trezoru CZK není dost bankovek ${denom} Kč – k odvodu ${pieces} ks, v protokolu ${have} ks.`,
-      };
-    }
+  // Vault first, till for whatever the vault cannot cover.
+  const czk = allocateFromDrawers(args.nominalsCZK, content.cashCounts.trezorCZK, content.cashCounts.kasaCZK);
+  if ("denom" in czk) {
+    return {
+      error:
+        `Není dost bankovek ${czk.denom} Kč – k odvodu ${czk.requested} ks, ` +
+        `v protokolu ${czk.trezorHas} ks v trezoru a ${czk.kasaHas} ks v kase.`,
+    };
   }
-  for (const [denom, pieces] of Object.entries(args.nominalsEUR)) {
-    const have = content.cashCounts.trezorEUR[denom] ?? 0;
-    if (pieces > have) {
-      return {
-        error: `V trezoru EUR není dost bankovek ${denom} € – k odvodu ${pieces} ks, v protokolu ${have} ks.`,
-      };
-    }
+  const eur = allocateFromDrawers(args.nominalsEUR, content.cashCounts.trezorEUR, content.cashCounts.kasaEUR);
+  if ("denom" in eur) {
+    return {
+      error:
+        `Není dost bankovek ${eur.denom} € – k odvodu ${eur.requested} ks, ` +
+        `v protokolu ${eur.trezorHas} ks v trezoru a ${eur.kasaHas} ks v kase.`,
+    };
   }
 
   const wanted = new Set(args.receiptIds);
@@ -255,16 +257,21 @@ function applyEffect(
   const receiptsTotal = removed.reduce((sum, r) => sum + Math.round(r.amount || 0), 0);
   const lineAmount = czkNominalTotal(args.nominalsCZK) + receiptsTotal;
 
-  addPieces(trezorCZK, args.nominalsCZK, -1);
+  // Only CZK moves now. The EUR allocation is recorded but not applied: those
+  // notes stay put until "Provést odvod" on the closing night shift.
+  const trezorCZK = { ...content.cashCounts.trezorCZK };
+  const kasaCZK = { ...content.cashCounts.kasaCZK };
+  addPieces(trezorCZK, czk.alloc.trezor, -1);
+  addPieces(kasaCZK, czk.alloc.kasa, -1);
   kept.push({ id: args.lineId, name: ODVOD_LINE_NAME, amount: lineAmount, locked: true });
 
   return {
-    content: { cashCounts: { ...content.cashCounts, trezorCZK }, accounts: kept },
+    content: { cashCounts: { ...content.cashCounts, trezorCZK, kasaCZK }, accounts: kept },
     effect: {
       shiftDate: args.shiftDate,
       shiftType: args.shiftType,
-      trezorCzkTaken: { ...args.nominalsCZK },
-      trezorEurPending: { ...args.nominalsEUR },
+      czkTaken: czk.alloc,
+      eurPending: eur.alloc,
       removedAccounts: removed,
       lineId: args.lineId,
       lineAmount,
@@ -358,6 +365,7 @@ function seedContent(prevDoc: HandoverDoc | undefined): ProtoContent {
 }
 
 function serializeOdvod(id: string, d: OdvodDoc): Record<string, unknown> {
+  const effect = normalizeEffect(d.effect);
   return {
     id,
     month: d.month,
@@ -368,15 +376,15 @@ function serializeOdvod(id: string, d: OdvodDoc): Record<string, unknown> {
     weights: d.weights ?? {},
     eurSettled: !!d.eurSettled,
     eurSettledOn: d.eurSettledOn ?? null,
-    effect: d.effect
+    effect: effect
       ? {
-          shiftDate: d.effect.shiftDate,
-          shiftType: d.effect.shiftType,
-          lineId: d.effect.lineId,
-          lineAmount: d.effect.lineAmount,
-          removedAccounts: d.effect.removedAccounts ?? [],
-          trezorCzkTaken: d.effect.trezorCzkTaken ?? {},
-          trezorEurPending: d.effect.trezorEurPending ?? {},
+          shiftDate: effect.shiftDate,
+          shiftType: effect.shiftType,
+          lineId: effect.lineId,
+          lineAmount: effect.lineAmount,
+          removedAccounts: effect.removedAccounts,
+          czkTaken: effect.czkTaken,
+          eurPending: effect.eurPending,
         }
       : null,
   };
@@ -410,16 +418,17 @@ odvodyRouter.get(
       return;
     }
     const d = snap.data() as OdvodDoc;
-    if (!d.effect || d.eurSettled) {
+    const eff = normalizeEffect(d.effect);
+    if (!eff || d.eurSettled) {
       res.json({ pending: null });
       return;
     }
     res.json({
       pending: {
         month,
-        lineId: d.effect.lineId,
-        lineAmount: d.effect.lineAmount,
-        eurTotal: eurNominalTotal(d.effect.trezorEurPending),
+        lineId: eff.lineId,
+        lineAmount: eff.lineAmount,
+        eurTotal: allocationTotal(eff.eurPending, EUR_DENOMS),
       },
     });
   }
@@ -458,7 +467,8 @@ odvodyRouter.post(
 
         if (!odvodSnap.exists) throw new Error("Pro tento měsíc není uložen žádný odvod.");
         const odvod = odvodSnap.data() as OdvodDoc;
-        if (!odvod.effect) throw new Error("Odvod není zapsán do protokolu.");
+        const effect = normalizeEffect(odvod.effect);
+        if (!effect) throw new Error("Odvod není zapsán do protokolu.");
         if (odvod.eurSettled) throw new Error("Odvod už byl proveden.");
         if (!protoSnap.exists) throw new Error("Protokol pro tuto směnu neexistuje.");
 
@@ -468,26 +478,38 @@ odvodyRouter.post(
         }
 
         const content = contentOf(doc);
-        const idx = content.accounts.findIndex((a) => a.id === odvod.effect!.lineId);
+        const idx = content.accounts.findIndex((a) => a.id === effect.lineId);
         if (idx === -1) {
           throw new Error(`Řádek "${ODVOD_LINE_NAME}" v tomto protokolu není – zkontrolujte protokol ručně.`);
         }
-        const pending = odvod.effect.trezorEurPending ?? {};
-        for (const [denom, pieces] of Object.entries(pending)) {
-          const have = content.cashCounts.trezorEUR[denom] ?? 0;
-          if (pieces > have) {
-            throw new Error(
-              `V trezoru EUR není dost bankovek ${denom} € – k odvodu ${pieces} ks, v protokolu ${have} ks.`
-            );
+
+        // Re-check availability now, per drawer: the notes were only earmarked
+        // when the odvod was prepared, and the shifts since then could have
+        // spent them. Each drawer must still hold what was booked against it.
+        const pending = effect.eurPending;
+        for (const [drawer, pieces] of [
+          ["trezorEUR", pending.trezor] as const,
+          ["kasaEUR", pending.kasa] as const,
+        ]) {
+          for (const [denom, want] of Object.entries(pieces)) {
+            const have = content.cashCounts[drawer as DrawerKey][denom] ?? 0;
+            if (want > have) {
+              throw new Error(
+                `V ${drawer === "trezorEUR" ? "trezoru" : "kase"} EUR není dost bankovek ${denom} € – ` +
+                  `k odvodu ${want} ks, v protokolu ${have} ks.`
+              );
+            }
           }
         }
 
         const trezorEUR = { ...content.cashCounts.trezorEUR };
-        addPieces(trezorEUR, pending, -1);
+        const kasaEUR = { ...content.cashCounts.kasaEUR };
+        addPieces(trezorEUR, pending.trezor, -1);
+        addPieces(kasaEUR, pending.kasa, -1);
 
         tx.update(protoRef, {
           accounts: content.accounts.filter((_, i) => i !== idx),
-          cashCounts: { ...content.cashCounts, trezorEUR },
+          cashCounts: { ...content.cashCounts, trezorEUR, kasaEUR },
           updatedBy: req.uid,
           updatedAt: FieldValue.serverTimestamp(),
         });
@@ -499,7 +521,7 @@ odvodyRouter.post(
           updatedAt: FieldValue.serverTimestamp(),
         });
 
-        return { lineAmount: odvod.effect.lineAmount, eurTotal: eurNominalTotal(pending) };
+        return { lineAmount: effect.lineAmount, eurTotal: allocationTotal(pending, EUR_DENOMS) };
       });
 
       await writeAudit(ctxFromReq(req), {
@@ -526,7 +548,7 @@ odvodyRouter.post(
 odvodyRouter.get(
   "/:hotel/:month",
   requireAuth,
-  requireOdvodyPerm("view"),
+  requireOdvodyManage,
   async (req: AuthRequest, res: Response) => {
     const hotel = req.params.hotel as HotelSlug;
     const month = req.params.month;
@@ -564,8 +586,14 @@ odvodyRouter.get(
       accounts: content.accounts
         .filter((a) => a.id)
         .map((a) => ({ id: a.id as string, name: a.name, amount: a.amount, locked: !!a.locked })),
-      trezorCZK: content.cashCounts.trezorCZK,
-      trezorEUR: content.cashCounts.trezorEUR,
+      // All four drawers: the vault is the normal source, but a denomination it
+      // cannot cover is taken from the till, so the modal has to show both.
+      drawers: {
+        trezorCZK: content.cashCounts.trezorCZK,
+        kasaCZK: content.cashCounts.kasaCZK,
+        trezorEUR: content.cashCounts.trezorEUR,
+        kasaEUR: content.cashCounts.kasaEUR,
+      },
     });
   }
 );
@@ -578,7 +606,7 @@ odvodyRouter.get(
 odvodyRouter.put(
   "/:hotel/:month",
   requireAuth,
-  requireOdvodyPerm("manage"),
+  requireOdvodyManage,
   async (req: AuthRequest, res: Response) => {
     const hotel = req.params.hotel as HotelSlug;
     const month = req.params.month;
@@ -628,13 +656,14 @@ odvodyRouter.put(
         const wasSigned = !!(protoDoc?.predal || protoDoc?.prevzal);
 
         let content = protoDoc ? contentOf(protoDoc) : seedContent(prevDoc);
-        if (existing?.effect) {
-          const rev = reverseEffect(content, existing.effect);
+        const existingEffect = normalizeEffect(existing?.effect);
+        if (existingEffect) {
+          const rev = reverseEffect(content, existingEffect);
           if ("error" in rev) throw new Error(rev.error);
           content = rev.content;
         }
 
-        const lineId = existing?.effect?.lineId ?? odvodRef.id + "-" + Date.now().toString(36);
+        const lineId = existingEffect?.lineId ?? odvodRef.id + "-" + Date.now().toString(36);
         const applied = applyEffect(content, {
           shiftDate: target.shiftDate,
           shiftType: target.shiftType,
@@ -741,7 +770,7 @@ odvodyRouter.put(
 odvodyRouter.delete(
   "/:hotel/:month",
   requireAuth,
-  requireOdvodyPerm("manage"),
+  requireOdvodyManage,
   async (req: AuthRequest, res: Response) => {
     const hotel = req.params.hotel as HotelSlug;
     const month = req.params.month;
@@ -763,9 +792,10 @@ odvodyRouter.delete(
           throw new Error("Provedený odvod nelze smazat – peníze už fyzicky odešly.");
         }
 
-        if (existing.effect) {
+        const existingEffect = normalizeEffect(existing.effect);
+        if (existingEffect) {
           if (!protoSnap.exists) throw new Error("Protokol pro aktuální směnu neexistuje.");
-          const rev = reverseEffect(contentOf(protoSnap.data() as HandoverDoc), existing.effect);
+          const rev = reverseEffect(contentOf(protoSnap.data() as HandoverDoc), existingEffect);
           if ("error" in rev) throw new Error(rev.error);
           tx.update(protoRef, {
             accounts: rev.content.accounts,

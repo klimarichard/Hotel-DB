@@ -308,6 +308,56 @@ export function computeOdvodPlan(args: {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
+ * Where the counted-out notes actually came from. The vault is the normal
+ * source, but it need not hold enough of a given denomination, so the shortfall
+ * is taken from the till. Recorded per drawer rather than as one total because
+ * a reversal has to put every note back where it came from.
+ */
+export interface DrawerAllocation {
+  trezor: Record<string, number>;
+  kasa: Record<string, number>;
+}
+
+export function emptyAllocation(): DrawerAllocation {
+  return { trezor: {}, kasa: {} };
+}
+
+/**
+ * Spread a requested count over the vault and then the till, vault first.
+ *
+ * Fails rather than partially allocating: a denomination that neither drawer
+ * can cover is a counting mistake, and quietly taking fewer notes than asked
+ * for would make the odvod's total disagree with the notes in the hand.
+ */
+export function allocateFromDrawers(
+  requested: Record<string, number>,
+  trezor: Record<string, number>,
+  kasa: Record<string, number>
+): { alloc: DrawerAllocation } | { denom: string; requested: number; trezorHas: number; kasaHas: number } {
+  const alloc = emptyAllocation();
+  for (const [denom, rawPieces] of Object.entries(requested)) {
+    const pieces = Math.floor(rawPieces);
+    if (!Number.isFinite(pieces) || pieces <= 0) continue;
+    const trezorHas = Math.floor(trezor[denom] ?? 0);
+    const kasaHas = Math.floor(kasa[denom] ?? 0);
+    if (pieces > trezorHas + kasaHas) {
+      return { denom, requested: pieces, trezorHas, kasaHas };
+    }
+    const fromTrezor = Math.min(pieces, trezorHas);
+    const fromKasa = pieces - fromTrezor;
+    if (fromTrezor > 0) alloc.trezor[denom] = fromTrezor;
+    if (fromKasa > 0) alloc.kasa[denom] = fromKasa;
+  }
+  return { alloc };
+}
+
+/** Face value of both halves of an allocation. */
+export function allocationTotal(alloc: DrawerAllocation | undefined, allowed: readonly string[]): number {
+  if (!alloc) return 0;
+  return denomTotal(alloc.trezor, allowed) + denomTotal(alloc.kasa, allowed);
+}
+
+/**
  * Everything an applied odvod did to the protocol, recorded verbatim so it can
  * be undone exactly. This is what makes an odvod editable: re-saving reverses
  * the stored effect and applies a freshly computed one, rather than trying to
@@ -317,16 +367,37 @@ export interface OdvodEffect {
   /** The protocol the effect landed on (the current shift at save time). */
   shiftDate: string;
   shiftType: ShiftType;
-  /** denom → pieces subtracted from `trezorCZK`, to be added back on reverse. */
-  trezorCzkTaken: Record<string, number>;
-  /** denom → pieces to subtract from `trezorEUR` when "Provést odvod" runs. */
-  trezorEurPending: Record<string, number>;
+  /** CZK notes removed at save time, per drawer, to be added back on reverse. */
+  czkTaken: DrawerAllocation;
+  /** EUR notes to remove per drawer when "Provést odvod" runs. */
+  eurPending: DrawerAllocation;
   /** Full copies of the deleted účty rows, with their original array position. */
   removedAccounts: Array<AccountRow & { index: number }>;
   /** The locked "odvod + účty" row written into účty. */
   lineId: string;
   lineAmount: number;
   appliedAt: Timestamp;
+}
+
+/**
+ * Read an effect stored before the till fallback existed, when both fields were
+ * bare vault maps. Staging carries such documents; without this they would
+ * reverse as empty allocations and silently strand the banknotes.
+ */
+interface LegacyOdvodEffect {
+  trezorCzkTaken?: Record<string, number>;
+  trezorEurPending?: Record<string, number>;
+}
+
+export function normalizeEffect(raw: OdvodEffect | null | undefined): OdvodEffect | null {
+  if (!raw) return null;
+  const legacy = raw as unknown as LegacyOdvodEffect;
+  return {
+    ...raw,
+    czkTaken: raw.czkTaken ?? { trezor: legacy.trezorCzkTaken ?? {}, kasa: {} },
+    eurPending: raw.eurPending ?? { trezor: legacy.trezorEurPending ?? {}, kasa: {} },
+    removedAccounts: raw.removedAccounts ?? [],
+  };
 }
 
 export interface OdvodDoc {

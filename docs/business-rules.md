@@ -350,17 +350,25 @@ Historické sazby 10 % a 15 % (a jejich zálohové protějšky) mají být **nea
 
 ## Recepce – Odvody
 
+### Odvody se připravují z Předávacího protokolu, ne ze samostatné záložky
+
+Odvod se zadává tlačítkem **„Připravit odvod"** v sekci **Účty** předávacího protokolu, vedle tlačítka „+ Přidat účet". Tlačítko vidí jen držitelé oprávnění **„Připravit odvod"** (`recepce.<hotel>.odvody.manage`), které je v matici zařazeno **pod Předávacím protokolem**, na stejné úrovni jako „Spravovat protokol". Samostatné oprávnění pro pouhé prohlížení odvodů neexistuje – kdo odvod vidí, ten ho i zadává.
+
+Tlačítko se nezobrazí na **podepsaném** protokolu; podpis je nutné nejdřív zrušit.
+
+> 🔒 Server. Zdroj: `functions/src/routes/odvody.ts` (`requireOdvodyManage`), zařazení v matici `frontend/src/lib/permissions/catalog.ts` (odvody.manage jako level 3 pod `protokol.view`).
+
 ### Uložení odvodu okamžitě přepíše protokol, ale peníze ještě neodejdou
 
 Uložením odvodu se v **předávacím protokolu aktuální směny** stane trojí:
 
-1. z **trezoru CZK** se odečtou spočítané bankovky,
+1. odečtou se spočítané **bankovky CZK** – přednostně z **trezoru**, a nestačí-li v něm daný nominál, zbytek se automaticky vezme z **kasy**,
 2. **zaškrtnuté účty** se z protokolu smažou (jsou už zavedené v účetnictví),
 3. místo nich přibude jeden **zamčený řádek „odvod + účty"** v hodnotě `bankovky CZK + zaškrtnuté účty`.
 
 Celkový součet CZK v protokolu se tím **nezmění** – peníze se jen přesunou z bankovek a papírových účtů do jedné položky. Fyzicky jsou pořád v hotelu.
 
-**Bankovky EUR zůstávají v trezoru** a v protokolu se nemění vůbec nic. Odečtou se až při provedení odvodu (viz níže).
+**Bankovky EUR zůstávají na místě** a v protokolu se nemění vůbec nic. Odečtou se až při provedení odvodu (viz níže) – a to ze stejných zásuvek, ze kterých byly při přípravě odvodu vyhrazeny.
 
 Protože nový protokol přebírá hotovost i účty z předchozí směny, zamčený řádek i snížený trezor se dál nesou celým řetězcem směn samy.
 
@@ -378,11 +386,15 @@ Běžnou úpravu podepsaného protokolu server odmítá. **Uložení odvodu je v
 
 > 🔒 Server. Zdroj: `functions/src/routes/odvody.ts:578` (`PUT`), příznak v auditu na `:727`.
 
-### Odvod nelze uložit, pokud bankovky v trezoru nejsou
+### Chybí-li nominál v trezoru, dobere se z kasy – ale jen do jejich součtu
 
-Počty kusů se kontrolují proti stavu trezoru v cílovém protokolu, pro **obě měny**. Chybí-li byť jeden kus, uložení se odmítne i s uvedením, kolik je k dispozici. Stejná kontrola u EUR běží znovu při provedení odvodu – bankovky mezitím mohly z trezoru zmizet.
+Bankovky se berou **nejdřív z trezoru**; co v něm daný nominál nepokryje, doplní se **z kasy**. V modálu jsou proto oba stavy vidět ve dvou sloupcích (TREZOR a KASA) a u řádku, který sáhl do kasy, je to výslovně napsané.
 
-> 🔒 Server. Zdroj: `functions/src/routes/odvody.ts:214` (`applyEffect`, kontroly na `:227-243`), opakovaná kontrola EUR na `:477-484`.
+Nestačí-li ani součet obou, uložení se **odmítne** – s uvedením, kolik kusů je v trezoru a kolik v kase. Odvod se nikdy neuloží částečně: menší počet bankovek, než kolik si člověk odpočítal do ruky, by rozešel doklad se skutečností.
+
+Aplikace si pamatuje, **ze které zásuvky který kus pochází**, takže vrácení odvodu vrátí bankovky přesně tam, odkud byly vzaty. U eur se dostupnost kontroluje **znovu při provedení odvodu**, protože směny mezitím mohly bankovky utratit.
+
+> 🔒 Server. Zdroj: `functions/src/services/odvodyShared.ts` (`allocateFromDrawers`), použití v `functions/src/routes/odvody.ts` (`applyEffect`), opakovaná kontrola EUR v `POST /:hotel/settle-eur`.
 
 ### Odvod je upravitelný, ale oprava se dělá vrácením, ne přepočtem
 
@@ -400,7 +412,7 @@ Zásah odvodu do protokolu **neprochází historií změn ani funkcí Zpět/Znov
 
 ### Provedený odvod je nevratný
 
-Tlačítko **„Provést odvod"** se objeví u zamčeného řádku pouze na **poslední noční směně v měsíci** (noční směna je vedená pod dnem, kdy začíná – poslední noční červencová směna je tedy 31. 7., i když končí 1. 8.). Potvrzením se zamčený řádek z Účtů smaže a z **trezoru EUR** se odečtou bankovky. Teprve tím peníze z protokolu skutečně odejdou a celkové součty klesnou.
+Tlačítko **„Provést odvod"** se objeví u zamčeného řádku pouze na **poslední noční směně v měsíci** (noční směna je vedená pod dnem, kdy začíná – poslední noční červencová směna je tedy 31. 7., i když končí 1. 8.). Potvrzením se zamčený řádek z Účtů smaže a odečtou se **bankovky EUR** – z trezoru a z kasy přesně v tom rozdělení, ve kterém byly při přípravě odvodu vyhrazeny. Teprve tím peníze z protokolu skutečně odejdou a celkové součty klesnou.
 
 Provedený odvod **už nelze upravit ani smazat** – peníze fyzicky odešly. Případnou opravu je nutné udělat přímo v protokolu.
 
