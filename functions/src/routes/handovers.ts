@@ -27,6 +27,9 @@ import {
   handoverCol,
   previousShift,
   nextShift,
+  CZK_DENOMS,
+  EUR_DENOMS,
+  DrawerKey,
 } from "../services/handoverShared";
 import { scheduledSigner } from "../services/scheduleLookup";
 import { resolveEmployeeDisplays, recepceDisplayName, recepceSortKey } from "../services/recepceEmployees";
@@ -56,10 +59,6 @@ export const handoversRouter = Router();
 function todayPrague(): string {
   return new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Prague" }).format(new Date());
 }
-
-const CZK_DENOMS = ["5000", "2000", "1000", "500", "200", "100", "50", "20", "10", "5", "2", "1"] as const;
-const EUR_DENOMS = ["500", "200", "100", "50", "20", "10", "5", "2", "1"] as const;
-type DrawerKey = "kasaCZK" | "trezorCZK" | "kasaEUR" | "trezorEUR";
 
 function sanitizeDenomMap(raw: unknown, allowed: readonly string[]): Record<string, number> {
   const out: Record<string, number> = {};

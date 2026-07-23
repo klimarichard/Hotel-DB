@@ -18,7 +18,7 @@ export const HOTEL_SLUGS = ["ambiance", "superior", "amigo-alqush", "ankora"] as
 export type HotelSlug = (typeof HOTEL_SLUGS)[number];
 export type HotelCode = "A" | "S" | "Q" | "K";
 
-export type TabId = "protokol" | "walkiny" | "taxi" | "lobbyBar" | "terminal";
+export type TabId = "protokol" | "walkiny" | "taxi" | "lobbyBar" | "terminal" | "odvody";
 
 export interface HotelTab {
   readonly id: TabId;
@@ -59,6 +59,10 @@ export interface Hotel {
    * "Předáno" column. Only Amigo & Alqush has a Terminál tab, hence optional.
    */
   readonly terminalManagePerm?: Permission;
+  /** `recepce.<stem>.odvody.view` – gates the Odvody tab + add/edit/delete entries. */
+  readonly odvodyViewPerm: Permission;
+  /** `recepce.<stem>.odvody.manage` – gates setting the odvody visible date range + seeing all entries. */
+  readonly odvodyManagePerm: Permission;
   readonly tabs: readonly HotelTab[];
 }
 
@@ -78,11 +82,14 @@ export const HOTELS: readonly Hotel[] = [
     taxiViewPerm: "recepce.ambiance.taxi.view",
     taxiManagePerm: "recepce.ambiance.taxi.manage",
     lobbyBarManagePerm: "recepce.ambiance.lobbyBar.manage",
+    odvodyViewPerm: "recepce.ambiance.odvody.view",
+    odvodyManagePerm: "recepce.ambiance.odvody.manage",
     tabs: [
       { id: "protokol", label: "Předávací protokol", viewPerm: "recepce.ambiance.protokol.view" },
       { id: "walkiny", label: "Walkiny", viewPerm: "recepce.ambiance.walkiny.view" },
       { id: "taxi", label: "Taxi", viewPerm: "recepce.ambiance.taxi.view" },
       { id: "lobbyBar", label: "Lobby bar", viewPerm: "recepce.ambiance.lobbyBar.view" },
+      { id: "odvody", label: "Odvody", viewPerm: "recepce.ambiance.odvody.view" },
     ],
   },
   {
@@ -98,10 +105,13 @@ export const HOTELS: readonly Hotel[] = [
     walkinyManagePerm: "recepce.superior.walkiny.manage",
     taxiViewPerm: "recepce.superior.taxi.view",
     taxiManagePerm: "recepce.superior.taxi.manage",
+    odvodyViewPerm: "recepce.superior.odvody.view",
+    odvodyManagePerm: "recepce.superior.odvody.manage",
     tabs: [
       { id: "protokol", label: "Předávací protokol", viewPerm: "recepce.superior.protokol.view" },
       { id: "walkiny", label: "Walkiny", viewPerm: "recepce.superior.walkiny.view" },
       { id: "taxi", label: "Taxi", viewPerm: "recepce.superior.taxi.view" },
+      { id: "odvody", label: "Odvody", viewPerm: "recepce.superior.odvody.view" },
     ],
   },
   {
@@ -118,11 +128,14 @@ export const HOTELS: readonly Hotel[] = [
     taxiViewPerm: "recepce.amigo.taxi.view",
     taxiManagePerm: "recepce.amigo.taxi.manage",
     terminalManagePerm: "recepce.amigo.terminal.manage",
+    odvodyViewPerm: "recepce.amigo.odvody.view",
+    odvodyManagePerm: "recepce.amigo.odvody.manage",
     tabs: [
       { id: "protokol", label: "Předávací protokol", viewPerm: "recepce.amigo.protokol.view" },
       { id: "walkiny", label: "Walkiny", viewPerm: "recepce.amigo.walkiny.view" },
       { id: "taxi", label: "Taxi", viewPerm: "recepce.amigo.taxi.view" },
       { id: "terminal", label: "Terminál", viewPerm: "recepce.amigo.terminal.view" },
+      { id: "odvody", label: "Odvody", viewPerm: "recepce.amigo.odvody.view" },
     ],
   },
   {
@@ -138,10 +151,13 @@ export const HOTELS: readonly Hotel[] = [
     walkinyManagePerm: "recepce.ankora.walkiny.manage",
     taxiViewPerm: "recepce.ankora.taxi.view",
     taxiManagePerm: "recepce.ankora.taxi.manage",
+    odvodyViewPerm: "recepce.ankora.odvody.view",
+    odvodyManagePerm: "recepce.ankora.odvody.manage",
     tabs: [
       { id: "protokol", label: "Předávací protokol", viewPerm: "recepce.ankora.protokol.view" },
       { id: "walkiny", label: "Walkiny", viewPerm: "recepce.ankora.walkiny.view" },
       { id: "taxi", label: "Taxi", viewPerm: "recepce.ankora.taxi.view" },
+      { id: "odvody", label: "Odvody", viewPerm: "recepce.ankora.odvody.view" },
     ],
   },
 ];
