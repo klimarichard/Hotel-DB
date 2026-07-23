@@ -736,6 +736,15 @@
   border-bottom: 1px solid var(--color-border);
 }
 
+/* „+ Přidat účet" and „Připravit odvod" sit together on the right of the header. */
+.accountsHeaderActions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .accountsTitle {
   margin: 0;
   font-size: 0.8125rem;

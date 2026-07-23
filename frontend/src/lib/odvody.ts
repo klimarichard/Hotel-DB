@@ -50,14 +50,24 @@ export interface OdvodAccount {
   locked: boolean;
 }
 
+/**
+ * Where counted-out notes come from. The vault is the normal source; a
+ * denomination it cannot cover is topped up from the till, so every count is
+ * recorded per drawer and goes back to the same drawer when reversed.
+ */
+export interface DrawerAllocation {
+  trezor: Record<string, number>;
+  kasa: Record<string, number>;
+}
+
 export interface SavedOdvodEffect {
   shiftDate: string;
   shiftType: "den" | "noc";
   lineId: string;
   lineAmount: number;
   removedAccounts: Array<OdvodAccount & { index: number }>;
-  trezorCzkTaken: Record<string, number>;
-  trezorEurPending: Record<string, number>;
+  czkTaken: DrawerAllocation;
+  eurPending: DrawerAllocation;
 }
 
 export interface SavedOdvod {
@@ -91,8 +101,14 @@ export interface OdvodContext {
   };
   /** Účty rows available for ticking (with this odvod's effect taken back). */
   accounts: OdvodAccount[];
-  trezorCZK: Record<string, number>;
-  trezorEUR: Record<string, number>;
+  /** All four cash drawers of the target protokol, with this odvod's effect
+   *  taken back — what the modal offers as available stock. */
+  drawers: {
+    trezorCZK: Record<string, number>;
+    kasaCZK: Record<string, number>;
+    trezorEUR: Record<string, number>;
+    kasaEUR: Record<string, number>;
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -132,6 +148,31 @@ export function denomTotal(map: Record<string, number> | undefined, allowed: rea
 
 export const czkNominalTotal = (m?: Record<string, number>) => denomTotal(m, CZK_DENOMS);
 export const eurNominalTotal = (m?: Record<string, number>) => denomTotal(m, EUR_DENOMS);
+
+/** Face value of both halves of an allocation. */
+export function allocationTotal(alloc: DrawerAllocation | undefined, allowed: readonly string[]): number {
+  if (!alloc) return 0;
+  return denomTotal(alloc.trezor, allowed) + denomTotal(alloc.kasa, allowed);
+}
+
+/**
+ * How a requested count would be sourced: vault first, till for the shortfall.
+ * Mirrors `allocateFromDrawers` on the server so the modal can show the split
+ * as it is typed, rather than only learning about it from a save error.
+ *
+ * `short` is how many pieces neither drawer can cover (0 when it all fits).
+ */
+export function splitAcrossDrawers(
+  pieces: number,
+  trezorHas: number,
+  kasaHas: number
+): { fromTrezor: number; fromKasa: number; short: number } {
+  const want = Math.max(0, Math.floor(pieces));
+  const fromTrezor = Math.min(want, Math.max(0, trezorHas));
+  const rest = want - fromTrezor;
+  const fromKasa = Math.min(rest, Math.max(0, kasaHas));
+  return { fromTrezor, fromKasa, short: rest - fromKasa };
+}
 
 /** Display helper: "12 340 Kč" / "1 250 €". No decimals in either currency –
  *  every odvod figure is a whole unit (see MONEY_STEP). */
