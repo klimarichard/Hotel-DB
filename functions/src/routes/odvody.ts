@@ -228,7 +228,7 @@ function applyEffect(
     const have = trezorCZK[denom] ?? 0;
     if (pieces > have) {
       return {
-        error: `V trezoru CZK není dost bankovek ${denom} Kč — k odvodu ${pieces} ks, v protokolu ${have} ks.`,
+        error: `V trezoru CZK není dost bankovek ${denom} Kč – k odvodu ${pieces} ks, v protokolu ${have} ks.`,
       };
     }
   }
@@ -236,7 +236,7 @@ function applyEffect(
     const have = content.cashCounts.trezorEUR[denom] ?? 0;
     if (pieces > have) {
       return {
-        error: `V trezoru EUR není dost bankovek ${denom} € — k odvodu ${pieces} ks, v protokolu ${have} ks.`,
+        error: `V trezoru EUR není dost bankovek ${denom} € – k odvodu ${pieces} ks, v protokolu ${have} ks.`,
       };
     }
   }
@@ -470,14 +470,14 @@ odvodyRouter.post(
         const content = contentOf(doc);
         const idx = content.accounts.findIndex((a) => a.id === odvod.effect!.lineId);
         if (idx === -1) {
-          throw new Error(`Řádek "${ODVOD_LINE_NAME}" v tomto protokolu není — zkontrolujte protokol ručně.`);
+          throw new Error(`Řádek "${ODVOD_LINE_NAME}" v tomto protokolu není – zkontrolujte protokol ručně.`);
         }
         const pending = odvod.effect.trezorEurPending ?? {};
         for (const [denom, pieces] of Object.entries(pending)) {
           const have = content.cashCounts.trezorEUR[denom] ?? 0;
           if (pieces > have) {
             throw new Error(
-              `V trezoru EUR není dost bankovek ${denom} € — k odvodu ${pieces} ks, v protokolu ${have} ks.`
+              `V trezoru EUR není dost bankovek ${denom} € – k odvodu ${pieces} ks, v protokolu ${have} ks.`
             );
           }
         }
@@ -614,7 +614,7 @@ odvodyRouter.put(
         const existing = odvodSnap.exists ? (odvodSnap.data() as OdvodDoc) : null;
         if (existing?.eurSettled) {
           throw new Error(
-            "Tento odvod už byl proveden — peníze fyzicky odešly, takže ho nelze měnit. " +
+            "Tento odvod už byl proveden – peníze fyzicky odešly, takže ho nelze měnit. " +
               "Případnou opravu proveďte přímo v protokolu."
           );
         }
@@ -760,7 +760,7 @@ odvodyRouter.delete(
         if (!odvodSnap.exists) throw new Error("Pro tento měsíc není uložen žádný odvod.");
         const existing = odvodSnap.data() as OdvodDoc;
         if (existing.eurSettled) {
-          throw new Error("Provedený odvod nelze smazat — peníze už fyzicky odešly.");
+          throw new Error("Provedený odvod nelze smazat – peníze už fyzicky odešly.");
         }
 
         if (existing.effect) {

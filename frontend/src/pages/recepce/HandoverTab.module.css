@@ -780,6 +780,17 @@
   background: var(--tint-alt);
 }
 
+/* "Provést odvod" – sits inside .rowActions on the locked „odvod + účty" row of
+   the closing night shift. The Účty column is narrow (1.15fr of the cash grid),
+   so the shared <Button size="sm"> is tightened to the scale of the neighbouring
+   row micro-actions; the class is doubled so it outranks Button.module.css's
+   .sm regardless of stylesheet order. Colours stay the shared primary variant. */
+.odvodBtn.odvodBtn {
+  padding: 0.2rem 0.5rem;
+  font-size: 0.75rem;
+  border-radius: var(--radius-sm);
+}
+
 .accountTotalRow {
   font-weight: 700;
   border-top: 2px solid var(--color-border);

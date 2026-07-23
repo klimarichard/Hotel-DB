@@ -348,6 +348,90 @@ Historické sazby 10 % a 15 % (a jejich zálohové protějšky) mají být **nea
 
 > 🔒 Server + ⚙️ Automatika. Zdroj: `functions/src/services/invoiceTypes.ts` – `VatRate.showInPrint` a podmínka v `computeTotals()` (`!rate.active && !rate.showInPrint && gross === 0` → řádek se vynechá); zrcadleno v `frontend/src/lib/faktury.ts`. Nová konfigurace příznak nedostane automaticky – `sanitizeConfig()` ho čte jako `showInPrint === true`.
 
+## Recepce – Odvody
+
+### Uložení odvodu okamžitě přepíše protokol, ale peníze ještě neodejdou
+
+Uložením odvodu se v **předávacím protokolu aktuální směny** stane trojí:
+
+1. z **trezoru CZK** se odečtou spočítané bankovky,
+2. **zaškrtnuté účty** se z protokolu smažou (jsou už zavedené v účetnictví),
+3. místo nich přibude jeden **zamčený řádek „odvod + účty"** v hodnotě `bankovky CZK + zaškrtnuté účty`.
+
+Celkový součet CZK v protokolu se tím **nezmění** – peníze se jen přesunou z bankovek a papírových účtů do jedné položky. Fyzicky jsou pořád v hotelu.
+
+**Bankovky EUR zůstávají v trezoru** a v protokolu se nemění vůbec nic. Odečtou se až při provedení odvodu (viz níže).
+
+Protože nový protokol přebírá hotovost i účty z předchozí směny, zamčený řádek i snížený trezor se dál nesou celým řetězcem směn samy.
+
+> 🔒 Server + ⚙️ Automatika. Zdroj: `functions/src/routes/odvody.ts:214` (`applyEffect`), zápis do protokolu v `PUT /:hotel/:month` na `:578`.
+
+### Odvod se vždy zapíše do protokolu právě probíhající směny
+
+Cílem není protokol, který si uživatel vybere, ale **protokol směny, která běží v okamžiku uložení** (denní 07:00–18:59, jinak noční). Neexistuje-li ještě, aplikace ho založí a přenese do něj zůstatky z předchozí směny – ale **jen tehdy, je-li předchozí směna podepsaná oběma podpisy, nebo neexistuje**. Jinak uložení odmítne s vysvětlením: rozepsaná směna by se předčasně „zmrazila" a recepční by pak tlačítkem „další směna" otevřel tuto zastaralou kopii místo svých konečných čísel.
+
+> 🔒 Server. Zdroj: `functions/src/routes/odvody.ts:324` (`resolveTarget`), podmínka blokace na `:334-341`.
+
+### Odvod smí přepsat i podepsaný protokol
+
+Běžnou úpravu podepsaného protokolu server odmítá. **Uložení odvodu je výjimka** – jde o privilegovanou měsíční operaci, kterou provádí držitel práva `recepce.<hotel>.odvody.manage`. Přepis se zaznamená do protokolu změn s příznakem `overrodeSignature`, takže je dohledatelný.
+
+> 🔒 Server. Zdroj: `functions/src/routes/odvody.ts:578` (`PUT`), příznak v auditu na `:727`.
+
+### Odvod nelze uložit, pokud bankovky v trezoru nejsou
+
+Počty kusů se kontrolují proti stavu trezoru v cílovém protokolu, pro **obě měny**. Chybí-li byť jeden kus, uložení se odmítne i s uvedením, kolik je k dispozici. Stejná kontrola u EUR běží znovu při provedení odvodu – bankovky mezitím mohly z trezoru zmizet.
+
+> 🔒 Server. Zdroj: `functions/src/routes/odvody.ts:214` (`applyEffect`, kontroly na `:227-243`), opakovaná kontrola EUR na `:477-484`.
+
+### Odvod je upravitelný, ale oprava se dělá vrácením, ne přepočtem
+
+Uložený odvod lze kdykoli přepsat nebo smazat. Aplikace k tomu **nepočítá rozdíl** proti protokolu – u každého odvodu má uloženo, co přesně provedl (které bankovky, celé znění smazaných účtů, id vytvořeného řádku), a při úpravě to nejdřív celé **vrátí zpět** a teprve pak zapíše nový stav.
+
+Vrácení je záměrně přísné: **není-li v protokolu zamčený řádek „odvod + účty", operace se odmítne**. Aplikace v takové situaci bankovky do trezoru nepřipíše, protože by dopisovala peníze do stavu, za který nikdo neručí. Protokol je pak nutné srovnat ručně.
+
+> 🔒 Server. Zdroj: `functions/src/routes/odvody.ts:179` (`reverseEffect`), uložený zásah `OdvodEffect` v `functions/src/services/odvodyShared.ts`.
+
+### Změny odvodu se nezapisují do historie protokolu a nejdou vzít zpět
+
+Zásah odvodu do protokolu **neprochází historií změn ani funkcí Zpět/Znovu** – stejně jako převody sm a wata. Zásah se totiž týká dvou dokumentů zároveň; kdyby šlo vzít zpět samotné snížení trezoru, záznam odvodu by dál tvrdil, že peníze odešly. Změny se místo toho zapisují do protokolu změn (auditu).
+
+> 🔒 Server. Zdroj: `functions/src/routes/odvody.ts` – hlavičkový komentář; obdobné pravidlo `functions/src/services/handoverHistory.ts`.
+
+### Provedený odvod je nevratný
+
+Tlačítko **„Provést odvod"** se objeví u zamčeného řádku pouze na **poslední noční směně v měsíci** (noční směna je vedená pod dnem, kdy začíná – poslední noční červencová směna je tedy 31. 7., i když končí 1. 8.). Potvrzením se zamčený řádek z Účtů smaže a z **trezoru EUR** se odečtou bankovky. Teprve tím peníze z protokolu skutečně odejdou a celkové součty klesnou.
+
+Provedený odvod **už nelze upravit ani smazat** – peníze fyzicky odešly. Případnou opravu je nutné udělat přímo v protokolu.
+
+Tlačítko smí stisknout kterýkoli recepční s právem upravovat protokol; právo `odvody.manage` k tomu potřeba není. Na podepsaném protokolu tlačítko nefunguje – podpis je nutné nejdřív zrušit.
+
+> 🔒 Server. Zdroj: `functions/src/routes/odvody.ts:433` (`POST /:hotel/settle-eur`), podmínka poslední noční směny `isLastNightOfMonth()` v `functions/src/services/odvodyShared.ts`; blokace úprav v `PUT` na `:615-620` a v `DELETE` na `:762-765`.
+
+### Depozity se odvádějí vždy celé, zbytek jde z hotovosti
+
+Ze čtyř hodnot opsaných z Protelu se **oba depozity odvádějí v plné výši**, bez ohledu na to, kolik se odvádí celkem. Teprve zbytek (`celkem k odvodu − depozity`) se bere z položky *cash*.
+
+Je-li depozitů víc, než kolik se má odvést, aplikace na to **upozorní, ale uložení nezablokuje** – hodnoty z Protelu zadává člověk a může vědět víc.
+
+> 🔒 Server (výpočet) + 🖥️ Jen rozhraní (upozornění). Zdroj: `functions/src/services/odvodyShared.ts:155` (`computeCurrencyPlan`), zrcadleno v `frontend/src/lib/odvody.ts`.
+
+### Amigo & Alqush: poměr se vztahuje na zůstatek, ne na odvedenou částku
+
+Amigo a Alqush mají **společnou hotovost, ale oddělené registry v Protelu**, proto se u nich zadává osm hodnot místo čtyř. Depozity se i zde odvádějí celé; zbytek se mezi oba hotely rozdělí tak, aby **zůstatky v pokladnách po odvodu** byly v zadaném poměru – tedy ne tak, aby v poměru byly odvedené částky.
+
+Poměr odpovídá **počtu pokojů** (výchozí 70 : 24) a je v modálu **editovatelný**, protože se počty pokojů mohou změnit. Zaokrouhlení pohltí poslední hotel v pořadí, takže součet odvedených částek vždy přesně sedí na požadovaný zbytek.
+
+*Příklad:* celkem k odvodu 150 000 Kč; Amigo cash 180 000 / depozit 20 000, Alqush cash 60 000 / depozit 5 000. Depozity 25 000 odejdou celé, z hotovosti se bere 125 000. V pokladnách zůstane 115 000, rozdělených 70 : 24 → Amigo 85 638, Alqush 29 362. Odvede se tedy **Amigo 94 362** a **Alqush 30 638**.
+
+> 🔒 Server. Zdroj: `functions/src/services/odvodyShared.ts:155` (`computeCurrencyPlan`, větev pro víc registrů), výchozí poměr `DEFAULT_SPLIT_WEIGHTS`.
+
+### Na hotel a měsíc připadá jeden odvod
+
+Odvod je uložen pod klíčem měsíce (`hotels/<hotel>/odvody/<RRRR-MM>`), takže **druhé uložení tentýž měsíc přepíše to první** (s vrácením předchozího zásahu, viz výše). Rozdělit měsíc na dva odvody nelze.
+
+> 🔒 Server. Zdroj: `functions/src/services/odvodyShared.ts` (`odvodCol`), `functions/src/routes/odvody.ts:578`.
+
 ## Vyřazená pravidla
 
 Pravidla, která dřívější dokumentace uváděla, ale která **v současném kódu neplatí**. Ponechána zde, aby se nevrátila zpět.

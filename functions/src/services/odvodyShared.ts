@@ -194,7 +194,7 @@ export function computeCurrencyPlan(
     const stays = roundMoney(cashTotal - cashRemainder, currency);
     if (stays < 0) {
       warnings.push(
-        `V pokladnách není dost hotovosti — chybí ${fmt(Math.abs(stays))}. Zkontrolujte hodnoty z Protelu.`
+        `V pokladnách není dost hotovosti – chybí ${fmt(Math.abs(stays))}. Zkontrolujte hodnoty z Protelu.`
       );
     }
 

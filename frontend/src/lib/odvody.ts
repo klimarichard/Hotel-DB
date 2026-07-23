@@ -198,7 +198,7 @@ export function computeCurrencyPlan(
     // S — what stays across both registers once the remainder has been taken.
     const stays = roundMoney(cashTotal - cashRemainder, currency);
     if (stays < 0) {
-      warnings.push(`V pokladnách není dost hotovosti — chybí ${fmt(Math.abs(stays))}. Zkontrolujte hodnoty z Protelu.`);
+      warnings.push(`V pokladnách není dost hotovosti – chybí ${fmt(Math.abs(stays))}. Zkontrolujte hodnoty z Protelu.`);
     }
 
     const w = registers.map((r) => {
