@@ -46,6 +46,7 @@ const DEMO_WALKINY = "/napoveda/ukazka-walkiny"; // populated walk-ins table
 const DEMO_TAXI = "/napoveda/ukazka-taxi"; // populated rides + routes ceník
 const DEMO_LOBBY_BAR = "/napoveda/ukazka-lobby-bar"; // populated sales + item ceník (Ambiance only)
 const DEMO_TERMINAL = "/napoveda/ukazka-terminal"; // populated payments (Amigo & Alqush only)
+const DEMO_ODVODY = "/napoveda/ukazka-odvody"; // month with no odvod yet → entry point visible
 // Návody demo: the REAL Návody page on mock guides + tags. The PDF viewer
 // fetches its binary with a raw fetch (not via lib/api), so it CANNOT be mocked –
 // the tour only shows the list and never opens a guide.
@@ -173,6 +174,11 @@ export const APP_TOUR_STEPS: TourStep[] = [
 
   // ── Recepce → Terminál (demo tab; jen Amigo & Alqush) ────────────────────────
   { permission: "recepce.amigo.terminal.view", addedInVersion: 13, hideOnMobile: true, anchor: "terminal-add", route: DEMO_TERMINAL, title: "Platby z terminálu", body: "Tímto tlačítkem přidáte platbu: datum, částku v korunách a za co host zaplatil. U volby „Jiné…“ je povinná poznámka.", placement: "bottom" },
+
+  // ── Recepce → Odvody (demo tab) ──────────────────────────────────────────────
+  { permission: ["recepce.ambiance.odvody.view", "recepce.superior.odvody.view", "recepce.amigo.odvody.view", "recepce.ankora.odvody.view"], addedInVersion: 20, hideOnMobile: true, anchor: "odvody-open", route: DEMO_ODVODY, title: "Zadání odvodu", body: "Tímto tlačítkem otevřete formulář odvodu za zvolený měsíc. Spočítáte v něm bankovky CZK a EUR, které jdou z trezoru do banky, zaškrtnete účty, které už jsou zavedené v účetnictví, a opíšete hodnoty z Protelu (CZK cash, CZK cash depozit, EUR cash, EUR cash depozit). Částky k odvedení se dopočítají samy. U hotelu Amigo & Alqush zadáváte hodnoty za oba hotely a navíc poměr, podle kterého se rozdělí zbylá hotovost.", placement: "bottom" },
+  { permission: ["recepce.ambiance.odvody.view", "recepce.superior.odvody.view", "recepce.amigo.odvody.view", "recepce.ankora.odvody.view"], addedInVersion: 20, hideOnMobile: true, anchor: "odvody-print", route: DEMO_ODVODY, title: "Tisk odvodu", body: "Tlačítkem Tisk vytisknete podklad pro odvod: částky pro CZK cash, CZK cash depozit, EUR cash a EUR cash depozit, a termín, do kdy je potřeba odvod provést.", placement: "bottom" },
+  { permission: ["recepce.ambiance.protokol.view", "recepce.superior.protokol.view", "recepce.amigo.protokol.view", "recepce.ankora.protokol.view"], addedInVersion: 20, hideOnMobile: true, anchor: "odvody-settle", route: DEMO_PROTOKOL, title: "Provedení odvodu", body: "Uložený odvod přidá do Účtů zamčený řádek „odvod + účty“. Na poslední noční směně v měsíci se u něj objeví tlačítko Provést odvod – tím řádek z protokolu zmizí a z trezoru EUR se odečtou odváděné bankovky. Teprve tímto krokem peníze z protokolu skutečně odejdou, a zpět už to vzít nelze.", placement: "left" },
 
   // ── Zaměstnanci – seznam (/zamestnanci) ──────────────────────────────────────
   // Merged: view.all (vedení incl.) + view.nonManagement collapse into one step.
@@ -324,7 +330,7 @@ export const appTour: TourDefinition = {
   // Highest step `addedInVersion` in the list. Bump it (and stamp the new steps'
   // `addedInVersion`) whenever you add steps for a new feature – returning users
   // then see ONLY those steps; first-time users still get the whole tour.
-  version: 19,
+  version: 20,
   label: "Prohlídka aplikace",
   steps: APP_TOUR_STEPS,
 };

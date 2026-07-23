@@ -170,6 +170,7 @@ export default function App() {
         <Route path="napoveda/ukazka-taxi" element={<TourDemoRoute scenario="taxi"><RecepceDemoPage tab="taxi" key="demo-taxi" /></TourDemoRoute>} />
         <Route path="napoveda/ukazka-lobby-bar" element={<TourDemoRoute scenario="lobby-bar"><RecepceDemoPage tab="lobbyBar" key="demo-lobby-bar" /></TourDemoRoute>} />
         <Route path="napoveda/ukazka-terminal" element={<TourDemoRoute scenario="terminal"><RecepceDemoPage tab="terminal" key="demo-terminal" /></TourDemoRoute>} />
+        <Route path="napoveda/ukazka-odvody" element={<TourDemoRoute scenario="odvody"><RecepceDemoPage tab="odvody" key="demo-odvody" /></TourDemoRoute>} />
         <Route path="napoveda/ukazka-navody" element={<TourDemoRoute scenario="guides"><GuidesPage key="demo-guides" /></TourDemoRoute>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
