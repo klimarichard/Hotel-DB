@@ -298,6 +298,7 @@ export const PERMISSION_SECTIONS = [
           { key: "dokumenty.superior.view", label: "Sekce Superior", level: 1 },
           { key: "dokumenty.amigo.view", label: "Sekce Amigo & Alqush", level: 1 },
           { key: "dokumenty.ankora.view", label: "Sekce Ankora", level: 1 },
+          { key: "dokumenty.temp.view", label: "Sekce TEMP", level: 1 },
         ],
       },
     ],

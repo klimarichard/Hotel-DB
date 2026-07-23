@@ -19,7 +19,7 @@ import type { Permission } from "@/lib/permissions/catalog";
  * never widens it.
  */
 
-export const DOCUMENT_SECTION_IDS = ["ambiance", "superior", "amigo", "ankora"] as const;
+export const DOCUMENT_SECTION_IDS = ["ambiance", "superior", "amigo", "ankora", "temp"] as const;
 export type DocumentSectionId = (typeof DOCUMENT_SECTION_IDS)[number];
 
 export interface DocumentSection {
@@ -44,6 +44,11 @@ export const DOCUMENT_SECTIONS: readonly DocumentSection[] = [
   { id: "superior", label: "Superior", viewPerm: "dokumenty.superior.view" },
   { id: "amigo", label: "Amigo & Alqush", viewPerm: "dokumenty.amigo.view" },
   { id: "ankora", label: "Ankora", viewPerm: "dokumenty.ankora.view" },
+  // Not a hotel: a workspace for drafting documents and trying features out,
+  // kept out of everyone else's list. It is an ordinary section in every other
+  // respect — `dokumenty.manage` and `system.admin` still see into it, as they
+  // do for the four above.
+  { id: "temp", label: "TEMP", viewPerm: "dokumenty.temp.view" },
 ];
 
 /** Display label for a stored section value; null/unknown reads as "no section". */

@@ -105,6 +105,7 @@ Four hard-coded values, mirroring the Recepce hotel stems but an **independent**
 | `superior` | Superior | `dokumenty.superior.view` |
 | `amigo` | Amigo & Alqush | `dokumenty.amigo.view` |
 | `ankora` | Ankora | `dokumenty.ankora.view` |
+| `temp` | TEMP | `dokumenty.temp.view` |
 
 Defined twice, deliberately kept in lockstep: `functions/src/services/documentSections.ts` (server) and `frontend/src/lib/documentSections.ts` (client, typed as `Permission` so a key missing from `catalog.ts` fails the build). A document filed under a section is visible only to holders of that section's key (plus the two short-circuits below); a document with **no** section is visible to anyone with `nav.dokumenty.view` — a section only ever narrows the audience.
 
@@ -175,5 +176,6 @@ The module also exports **`STARTER_KIT_OPTIONS`**, which both pages pass to `Sta
 | `dokumenty.superior.view` | see documents filed under Superior |
 | `dokumenty.amigo.view` | see documents filed under Amigo & Alqush |
 | `dokumenty.ankora.view` | see documents filed under Ankora |
+| `dokumenty.temp.view` | see documents filed under TEMP |
 
 Own **Dokumenty** section in the permission matrix, registered in both `frontend/src/lib/permissions/catalog.ts` and `functions/src/auth/permissions.ts`. Not granted to any built-in user type by default — `admin` reaches everything via the `system.admin` wildcard (and the explicit check in `maySeeDocumentSection`); everyone else needs an explicit grant, same posture as Recepce and Tabulky.
