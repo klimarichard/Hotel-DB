@@ -1,0 +1,654 @@
+/* Odvody – the whole feature is one dialog opened from the Předávací protokol:
+   month stepper + saved-month card + editable sections + the print sheet.
+   Modal shell classes mirror LobbyBarTab/WalkinsTab so the surfaces stay uniform. */
+
+.monthNav {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.navBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text-heading);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.navBtn:hover {
+  background: var(--color-surface-2, var(--color-surface));
+}
+
+.monthLabel {
+  min-width: 8.5rem;
+  text-align: center;
+  font-weight: 700;
+  color: var(--color-text-heading);
+}
+
+.empty {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+}
+
+.statusError {
+  color: var(--color-danger, #dc2626);
+}
+
+.mutedCell {
+  color: var(--color-text-muted);
+}
+
+/* A denomination the vault cannot cover on its own – the till tops it up. */
+.tillCell {
+  color: var(--color-warning-text, #92400e);
+  font-weight: 600;
+}
+
+.tillHint {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: normal;
+  white-space: nowrap;
+}
+
+/* Pre-existing blocker coming back from the server (target protocol state). */
+.banner {
+  padding: 10px 12px;
+  border: 1px solid var(--color-warning-border, #f59e0b);
+  border-left-width: 4px;
+  border-radius: 6px;
+  background: var(--color-warning-bg, #fef3c7);
+  color: var(--color-warning-text, #92400e);
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+/* Which protokol the odvod will be written into (NOT necessarily the open one). */
+.targetLine {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+}
+
+.targetLine strong {
+  color: var(--color-text-heading);
+  white-space: nowrap;
+}
+
+/* ── month summary card ───────────────────────────────────────────────────── */
+.card {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+  overflow: hidden;
+}
+
+.cardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface-2, var(--color-surface));
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--color-text-heading);
+}
+
+.badgeDone,
+.badgePending {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.badgeDone {
+  background: var(--color-success-bg, #dcfce7);
+  color: var(--color-success-text, #15803d);
+}
+
+.badgePending {
+  background: var(--color-surface-3, var(--color-surface-2));
+  color: var(--color-text-secondary);
+}
+
+.cardBody {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0.85rem 1rem;
+}
+
+.cardRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+}
+
+.cardRow strong {
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-heading);
+  white-space: nowrap;
+}
+
+.cardNote {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}
+
+/* ── modal ────────────────────────────────────────────────────────────────── */
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: var(--overlay-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  width: 720px;
+  max-width: calc(100vw - 2rem);
+  max-height: calc(100vh - 3rem);
+  box-shadow: 0 20px 60px var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+}
+
+.modalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.modalTitle {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-heading);
+}
+
+.modalBody {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  overflow-y: auto;
+}
+
+.modalFooter {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--color-border);
+  flex-wrap: wrap;
+}
+
+/* Tisk + Smazat sit on the left, the Zrušit/Uložit pair stays on the right. */
+.footerLeft {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-right: auto;
+}
+
+.readOnlyNote {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--color-surface-2, var(--color-surface));
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--color-text-muted);
+}
+
+.sectionHint {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}
+
+.sectionEmpty {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+.sectionTotal {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-top: 6px;
+  border-top: 1px solid var(--color-border);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.sectionTotal strong {
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-heading);
+}
+
+/* ── inputs ───────────────────────────────────────────────────────────────── */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.fieldHint {
+  font-size: 0.75rem;
+  font-weight: normal;
+  color: var(--color-text-muted);
+}
+
+.input {
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  background: var(--color-input-bg, var(--color-bg));
+  color: var(--color-text-heading);
+  font-size: 0.9rem;
+  font-weight: normal;
+}
+
+.input:disabled {
+  background: var(--color-surface-2, var(--color-surface));
+  color: var(--color-text-muted);
+}
+
+.inputNumber {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.inputNumber::-webkit-inner-spin-button,
+.inputNumber::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.inputError {
+  border-color: var(--color-danger, #dc2626);
+}
+
+.grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+/* ── denominations ────────────────────────────────────────────────────────── */
+.denomWrap {
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+}
+
+.denomTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.denomTable th {
+  text-align: left;
+  padding: 0.4rem 0.6rem;
+  background: var(--color-surface-2, var(--color-surface));
+  border-bottom: 1px solid var(--color-border);
+  font-weight: 700;
+  color: var(--color-text-heading);
+  white-space: nowrap;
+}
+
+.denomTable td {
+  padding: 0.25rem 0.6rem;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-heading);
+  white-space: nowrap;
+}
+
+.denomTable tfoot td {
+  border-bottom: none;
+  font-weight: 700;
+  background: var(--color-surface-2, var(--color-surface));
+}
+
+.denomCell {
+  font-weight: 600;
+}
+
+.numCell {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.ksInput {
+  width: 5rem;
+  padding: 0.25rem 0.4rem;
+}
+
+.denomNote {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--color-danger, #dc2626);
+}
+
+.denomTillNote {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--color-warning-text, #92400e);
+}
+
+/* ── účty ─────────────────────────────────────────────────────────────────── */
+.accountList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+}
+
+.accountRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.85rem;
+  color: var(--color-text-heading);
+  cursor: pointer;
+}
+
+.accountName {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.accountAmount {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ── protel + výpočet ─────────────────────────────────────────────────────── */
+.protelGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.protelLabel {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--color-text-heading);
+}
+
+/* ── poměr rozdělení (read-only + „Upravit poměr") ────────────────────────── */
+.ratioDisplay {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-surface-2, var(--color-surface));
+}
+
+.ratioValue {
+  font-size: 0.9rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-heading);
+}
+
+/* Nested dialog: must sit ABOVE .modalOverlay (z-index 1000). */
+.ratioOverlay {
+  position: fixed;
+  inset: 0;
+  background: var(--overlay-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100;
+}
+
+.ratioModal {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  width: 380px;
+  max-width: calc(100vw - 2rem);
+  box-shadow: 0 20px 60px var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+}
+
+.ratioBody {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.preview {
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-surface-2, var(--color-surface));
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.previewRow,
+.previewTotal {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.previewTotal {
+  padding-top: 5px;
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-heading);
+}
+
+.previewValue {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--color-text-heading);
+  white-space: nowrap;
+}
+
+.planTableWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.planTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.planTable td {
+  padding: 0.3rem 0.6rem;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-heading);
+}
+
+.warnList {
+  list-style: disc;
+  margin: 0;
+  padding: 8px 10px 8px 28px;
+  border-radius: 6px;
+  border: 1px solid var(--color-warning-border, #f59e0b);
+  background: var(--color-warning-bg, #fef3c7);
+  color: var(--color-warning-text, #92400e);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
+.warnList li + li {
+  margin-top: 4px;
+}
+
+/* ── print (black & white, one A4 portrait) ───────────────────────────────── */
+.printArea {
+  display: none;
+}
+
+@media print {
+  :global(body *) {
+    visibility: hidden;
+  }
+  /* The dialog is a fixed-position layer over the whole page – hide it outright
+     rather than relying on visibility, so it cannot claim the printed sheet. */
+  .modalOverlay,
+  .ratioOverlay {
+    display: none !important;
+  }
+  .printArea,
+  .printArea * {
+    visibility: visible;
+  }
+  .printArea {
+    display: block;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    color: #000 !important;
+    background: #fff;
+    font-size: 11pt;
+  }
+  .printArea * {
+    color: #000 !important;
+  }
+  @page {
+    size: A4 portrait;
+    margin: 15mm;
+  }
+}
+
+.printTitle {
+  font-size: 16pt;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.printMonth {
+  margin-top: 2pt;
+  font-size: 12pt;
+  font-weight: 600;
+}
+
+.printBody {
+  margin: 12pt 0 0 10mm;
+  display: flex;
+  flex-direction: column;
+  gap: 10pt;
+}
+
+.printRegister {
+  break-inside: avoid;
+}
+
+.printRegisterLabel {
+  font-weight: 700;
+  margin-bottom: 2pt;
+}
+
+.printRow {
+  display: flex;
+  gap: 8pt;
+  max-width: 90mm;
+  font-variant-numeric: tabular-nums;
+}
+
+.printRow span:first-child {
+  min-width: 45mm;
+}
+
+.printRow span:last-child {
+  flex: 1;
+  text-align: right;
+  font-weight: 600;
+}
+
+.printDeadline {
+  margin-top: 16pt;
+  font-weight: 600;
+}

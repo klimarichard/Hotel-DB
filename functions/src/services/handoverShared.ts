@@ -5,6 +5,17 @@ import { HotelSlug } from "./hotels";
 export const SHIFT_TYPES = ["den", "noc"] as const;
 export type ShiftType = (typeof SHIFT_TYPES)[number];
 
+/**
+ * Banknote/coin denominations counted in the protocol's cash tables, and the
+ * four drawers they are counted into (currency × place). Declared here rather
+ * than in routes/handovers.ts because Odvody counts out of the very same
+ * denominations — one list, so a note that exists for the protocol can never be
+ * missing from an odvod.
+ */
+export const CZK_DENOMS = ["5000", "2000", "1000", "500", "200", "100", "50", "20", "10", "5", "2", "1"] as const;
+export const EUR_DENOMS = ["500", "200", "100", "50", "20", "10", "5", "2", "1"] as const;
+export type DrawerKey = "kasaCZK" | "trezorCZK" | "kasaEUR" | "trezorEUR";
+
 export type SignatureSlot = "predal" | "prevzal";
 export const SIGNATURE_SLOTS: readonly SignatureSlot[] = ["predal", "prevzal"];
 

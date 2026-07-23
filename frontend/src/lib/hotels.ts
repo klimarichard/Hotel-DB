@@ -59,6 +59,8 @@ export interface Hotel {
    * "Předáno" column. Only Amigo & Alqush has a Terminál tab, hence optional.
    */
   readonly terminalManagePerm?: Permission;
+  /** `recepce.<stem>.odvody.manage` – gates the „Připravit odvod“ button in the Předávací protokol. */
+  readonly odvodyManagePerm: Permission;
   readonly tabs: readonly HotelTab[];
 }
 
@@ -78,6 +80,7 @@ export const HOTELS: readonly Hotel[] = [
     taxiViewPerm: "recepce.ambiance.taxi.view",
     taxiManagePerm: "recepce.ambiance.taxi.manage",
     lobbyBarManagePerm: "recepce.ambiance.lobbyBar.manage",
+    odvodyManagePerm: "recepce.ambiance.odvody.manage",
     tabs: [
       { id: "protokol", label: "Předávací protokol", viewPerm: "recepce.ambiance.protokol.view" },
       { id: "walkiny", label: "Walkiny", viewPerm: "recepce.ambiance.walkiny.view" },
@@ -98,6 +101,7 @@ export const HOTELS: readonly Hotel[] = [
     walkinyManagePerm: "recepce.superior.walkiny.manage",
     taxiViewPerm: "recepce.superior.taxi.view",
     taxiManagePerm: "recepce.superior.taxi.manage",
+    odvodyManagePerm: "recepce.superior.odvody.manage",
     tabs: [
       { id: "protokol", label: "Předávací protokol", viewPerm: "recepce.superior.protokol.view" },
       { id: "walkiny", label: "Walkiny", viewPerm: "recepce.superior.walkiny.view" },
@@ -118,6 +122,7 @@ export const HOTELS: readonly Hotel[] = [
     taxiViewPerm: "recepce.amigo.taxi.view",
     taxiManagePerm: "recepce.amigo.taxi.manage",
     terminalManagePerm: "recepce.amigo.terminal.manage",
+    odvodyManagePerm: "recepce.amigo.odvody.manage",
     tabs: [
       { id: "protokol", label: "Předávací protokol", viewPerm: "recepce.amigo.protokol.view" },
       { id: "walkiny", label: "Walkiny", viewPerm: "recepce.amigo.walkiny.view" },
@@ -138,6 +143,7 @@ export const HOTELS: readonly Hotel[] = [
     walkinyManagePerm: "recepce.ankora.walkiny.manage",
     taxiViewPerm: "recepce.ankora.taxi.view",
     taxiManagePerm: "recepce.ankora.taxi.manage",
+    odvodyManagePerm: "recepce.ankora.odvody.manage",
     tabs: [
       { id: "protokol", label: "Předávací protokol", viewPerm: "recepce.ankora.protokol.view" },
       { id: "walkiny", label: "Walkiny", viewPerm: "recepce.ankora.walkiny.view" },

@@ -703,6 +703,10 @@ function buildDemoHandover(signed: boolean): unknown {
       trezorEUR: { "100": 3 },
     },
     accounts: [
+      // The locked row a saved odvod leaves behind. Present so the protokol demo
+      // can show the "Provést odvod" button (see odvodyPendingFixture) — the
+      // button renders only on the row whose id the server names as pending.
+      { id: DEMO_ODVOD_LINE_ID, name: "odvod + účty", amount: 150000, locked: true },
       { id: "demo-acc-1", name: "Květiny", amount: 1200, locked: false },
       { id: "demo-acc-2", name: "Room service", amount: 3450, locked: true },
     ],
@@ -739,6 +743,98 @@ function buildDemoHistory(signed: boolean): unknown {
     // Frozen once signed → undo/redo locked.
     canUndo: !signed,
     canRedo: false,
+  };
+}
+
+/** Id of the locked „odvod + účty" row in the demo protokol. */
+const DEMO_ODVOD_LINE_ID = "demo-acc-odvod";
+
+/**
+ * Registers + default split weights per hotel, mirroring ODVOD_REGISTERS /
+ * DEFAULT_SPLIT_WEIGHTS on the server. Amigo & Alqush is the two-register case,
+ * so the tour shows the split ratio for whoever manages that hotel.
+ */
+function demoOdvodRegisters(slug: string): {
+  registers: Array<{ key: string; label: string }>;
+  weights: Record<string, number>;
+} {
+  if (slug === "amigo-alqush") {
+    return {
+      registers: [
+        { key: "amigo", label: "Amigo" },
+        { key: "alqush", label: "Alqush" },
+      ],
+      weights: { amigo: 70, alqush: 24 },
+    };
+  }
+  const label = slug === "ambiance" ? "Ambiance" : slug === "superior" ? "Superior" : "Ankora";
+  return { registers: [{ key: slug, label }], weights: { [slug]: 1 } };
+}
+
+/**
+ * Serve `/odvody/{slug}/pending`, so the locked „odvod + účty" row carries its
+ * "Provést odvod" button. Kept separate from odvodyFixture (and dispatched
+ * BEFORE it) because odvodyFixture's catch-all would swallow this path.
+ */
+function odvodyPendingFixture(clean: string): { hit: boolean; value?: unknown } | null {
+  if (!clean.startsWith("/odvody/") || !clean.endsWith("/pending")) return null;
+  return {
+    hit: true,
+    value: {
+      pending: {
+        month: realTodayIso().slice(0, 7),
+        lineId: DEMO_ODVOD_LINE_ID,
+        lineAmount: 150000,
+        eurTotal: 2260,
+      },
+    },
+  };
+}
+
+/** Serve mocks for /odvody/* – the odvod modal opened from the protokol demo. */
+function odvodyFixture(isGet: boolean, clean: string): { hit: boolean; value?: unknown } | null {
+  if (clean !== "/odvody" && !clean.startsWith("/odvody/")) return null;
+  // `/odvody/{slug}/pending` belongs to odvodyPendingFixture; never swallow it.
+  if (clean.endsWith("/pending")) return null;
+  // PUT (save) / DELETE → swallow; the modal reloads via the GET below.
+  if (!isGet) return { hit: true, value: { ok: true } };
+  const m = clean.match(/^\/odvody\/([^/]+)\/(\d{4}-\d{2})$/);
+  if (!m) return { hit: true, value: {} };
+  const [, slug, month] = m;
+  const { registers, weights } = demoOdvodRegisters(slug);
+  const y = Number(month.slice(0, 4));
+  const mo = Number(month.slice(5, 7));
+  const lastDay = `${month}-${String(new Date(y, mo, 0).getDate()).padStart(2, "0")}`;
+  return {
+    hit: true,
+    value: {
+      month,
+      lastDay,
+      registers,
+      defaultWeights: weights,
+      // Nothing saved yet → the modal opens on an empty form, which is what the
+      // tour points at.
+      saved: null,
+      target: {
+        shiftDate: realTodayIso(),
+        shiftType: realShiftNow(),
+        exists: true,
+        signed: false,
+        blocked: null,
+      },
+      accounts: [
+        { id: "demo-acc-1", name: "Květiny", amount: 1200, locked: false },
+        { id: "demo-acc-2", name: "Room service", amount: 3450, locked: true },
+      ],
+      // Mirrors the demo protokol's own cash counts (see buildDemoHandover), so
+      // the modal and the protocol underneath it agree.
+      drawers: {
+        trezorCZK: { "5000": 10, "2000": 5 },
+        kasaCZK: { "5000": 3, "1000": 5, "500": 4, "200": 6, "100": 8 },
+        trezorEUR: { "100": 3 },
+        kasaEUR: { "50": 4, "20": 6, "10": 5 },
+      },
+    },
   };
 }
 
@@ -1205,7 +1301,16 @@ export function getDemoResponse(
     case "protokol":
     case "protokol-empty":
     case "protokol-signed":
-      return handoverFixture(isGet, clean, scenario) ?? { hit: false };
+      // The protokol tab also asks whether a month-end odvod is pending on this
+      // shift, and „Připravit odvod" opens the odvod modal from inside it – so
+      // both odvod fixtures belong to this scenario. Without them those calls
+      // escape to the real API. Order matters: odvodyFixture's catch-all would
+      // swallow `/odvody/{slug}/pending`, so the pending fixture goes first.
+      return (
+        handoverFixture(isGet, clean, scenario) ??
+        odvodyPendingFixture(clean) ??
+        odvodyFixture(isGet, clean) ?? { hit: false }
+      );
     case "walkiny":
       return walkinsFixture(isGet, clean) ?? { hit: false };
     case "taxi":

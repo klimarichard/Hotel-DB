@@ -8,6 +8,7 @@ import ConfirmModal from "@/components/ConfirmModal";
 import type { Hotel } from "@/lib/hotels";
 import { verifyCredential } from "@/lib/secondaryAuth";
 import SignModal, { type Signer } from "@/components/SignModal";
+import OdvodyModal from "./OdvodyModal";
 import styles from "./HandoverTab.module.css";
 
 type ShiftType = "den" | "noc";
@@ -407,6 +408,21 @@ function SpecialRow({
   );
 }
 
+/**
+ * The month-end odvod still owing its EUR leg on THIS protocol, as reported by
+ * GET /odvody/:hotel/pending. Non-null only when the server has decided this is
+ * the closing night shift of a month with a saved, not-yet-performed odvod – the
+ * client never re-derives any of that month/date logic.
+ */
+interface PendingOdvod {
+  month: string;
+  /** Id of the locked „odvod + účty" účty row that the settle removes. */
+  lineId: string;
+  lineAmount: number;
+  /** CZK-free EUR nominal total that will be subtracted from trezor €. */
+  eurTotal: number;
+}
+
 interface ConfirmState {
   title: string;
   message: string;
@@ -526,6 +542,7 @@ function ProtocolEditor({
   const canDelete = can(hotel.protokolDeletePerm);
   const canManage = can(hotel.protokolManagePerm);
   const canManageSm = can("recepce.sm.manage");
+  const canOdvody = can(hotel.odvodyManagePerm);
   const isAdmin = can("system.admin");
   const docId = `${shiftDate}_${shiftType}`;
 
@@ -548,6 +565,12 @@ function ProtocolEditor({
   const [wataModalOpen, setWataModalOpen] = useState(false);
   const [smBusy, setSmBusy] = useState(false);
   const [smError, setSmError] = useState<string | null>(null);
+
+  // ── Odvod (month-end transfer: the EUR leg finished on this shift) ─────────
+  const [pendingOdvod, setPendingOdvod] = useState<PendingOdvod | null>(null);
+  const [odvodBusy, setOdvodBusy] = useState(false);
+  // „Připravit odvod" – the month-end odvod dialog, opened from the Účty header.
+  const [odvodOpen, setOdvodOpen] = useState(false);
 
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
   const [editingNoteIdx, setEditingNoteIdx] = useState<number | null>(null);
@@ -725,6 +748,26 @@ function ProtocolEditor({
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Ask the server whether this exact protocol is the closing night shift of a
+  // month whose odvod still owes its EUR leg. ALL the month/last-night logic is
+  // server-side – a null answer simply means no button. Any receptionist may
+  // call it (it is gated on the ordinary protokol-edit permission).
+  async function refreshPendingOdvod(): Promise<void> {
+    try {
+      const res = await api.get<{ pending: PendingOdvod | null }>(
+        `/odvody/${hotel.slug}/pending?date=${encodeURIComponent(shiftDate)}&shift=${shiftType}`
+      );
+      setPendingOdvod(res.pending ?? null);
+    } catch {
+      // non-fatal – the "Provést odvod" button just doesn't appear
+    }
+  }
+
+  useEffect(() => {
+    void refreshPendingOdvod();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1202,6 +1245,75 @@ function ProtocolEditor({
     }
   }
 
+  /**
+   * The odvod dialog saved (or deleted) an odvod. It may well have written into
+   * THIS protocol – it targets the currently running shift, which is often the
+   * one on screen – so re-read the doc and reseed from it exactly as
+   * `settleOdvod` does. Without that, the still-open editor would push its
+   * pre-odvod content straight back over the server's version on the next
+   * autosave. The pending-odvod probe is re-run too, so the "Provést odvod"
+   * button appears/disappears in step with what was just saved.
+   */
+  async function handleOdvodSaved() {
+    try {
+      const fresh = await api.get<Handover>(`/handovers/${hotel.slug}/${docId}`);
+      applyDoc(fresh);
+    } catch {
+      // 404/network: nothing to reseed here – the change-detection poll will
+      // pick the protocol up (or the empty state stands).
+    }
+    await refreshPendingOdvod();
+    setOdvodOpen(false);
+  }
+
+  // ── Odvod – finish the month-end transfer (EUR leg) ────────────────────────
+  // The CZK banknotes left trezor CZK when the odvod was saved; on this closing
+  // night shift the receptionist removes the locked „odvod + účty" row and the
+  // EUR nominals leave trezor €. Both happen server-side in one transaction; we
+  // only re-read the resulting protocol.
+  function requestSettleOdvod() {
+    if (!pendingOdvod || !canEdit || odvodBusy) return;
+    setConfirm({
+      title: "Provést odvod",
+      message:
+        "Opravdu chcete provést odvod? " +
+        `Z protokolu se odebere řádek „odvod + účty" (${pendingOdvod.lineAmount.toLocaleString("cs-CZ")} Kč) ` +
+        `a z trezoru EUR se odečtou bankovky v hodnotě ${pendingOdvod.eurTotal.toLocaleString("cs-CZ")} €.`,
+      confirmLabel: "Provést odvod",
+      onConfirm: () => void settleOdvod(),
+    });
+  }
+
+  async function settleOdvod() {
+    if (odvodBusy) return;
+    // Close the confirmation first: it stays up for the whole round-trip
+    // otherwise, and its own button would still be live for a second click.
+    setConfirm(null);
+    setOdvodBusy(true);
+    try {
+      await api.post<{ ok: true; lineAmount: number; eurTotal: number }>(`/odvody/${hotel.slug}/settle-eur`, {
+        shiftDate,
+        shiftType,
+      });
+      // Re-read the protocol instead of touching `accounts` / cash locally: the
+      // settle is entirely the server's, and applyDoc also refreshes the saved
+      // baseline so autosave doesn't try to push the pre-settle content back.
+      const fresh = await api.get<Handover>(`/handovers/${hotel.slug}/${docId}`);
+      applyDoc(fresh);
+      setPendingOdvod(null);
+    } catch (err) {
+      setConfirm({
+        title: "Chyba",
+        message: err instanceof Error ? err.message : "Odvod se nepodařilo provést.",
+        showCancel: false,
+        confirmLabel: "OK",
+        onConfirm: () => setConfirm(null),
+      });
+    } finally {
+      setOdvodBusy(false);
+    }
+  }
+
   // ── Cash ─────────────────────────────────────────────────────────────────
   function setDenomCount(drawer: DrawerKey, denom: string, n: number) {
     setCashCounts((prev) => {
@@ -1570,11 +1682,24 @@ function ProtocolEditor({
           <div className={styles.accountsContainer} data-tour="protokol-ucty">
             <div className={styles.accountsContainerHeader}>
               <h3 className={styles.accountsTitle}>Účty</h3>
-              {canEdit && (
-                <Button variant="primary" size="sm" onClick={addAccountRow}>
-                  + Přidat účet
-                </Button>
-              )}
+              <div className={styles.accountsHeaderActions}>
+                {canEdit && (
+                  <Button variant="primary" size="sm" onClick={addAccountRow}>
+                    + Přidat účet
+                  </Button>
+                )}
+                {canOdvody && canEdit && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setOdvodOpen(true)}
+                    title="Připravit měsíční odvod hotovosti"
+                    data-tour="odvody-open"
+                  >
+                    Připravit odvod
+                  </Button>
+                )}
+              </div>
             </div>
             <div className={styles.accountsList}>
               {/* Three special rows pinned to the top, above a separator. */}
@@ -1654,6 +1779,21 @@ function ProtocolEditor({
                       )}
                       <span className={styles.accountSuffix}>Kč</span>
                       <div className={styles.rowActions}>
+                        {/* Closing night shift of the month: finish the odvod. Only
+                            ever on the locked „odvod + účty" row the server names. */}
+                        {canEdit && pendingOdvod && acc.id === pendingOdvod.lineId && (
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            className={styles.odvodBtn}
+                            onClick={requestSettleOdvod}
+                            disabled={odvodBusy}
+                            title="Dokončit odvod – odebrat řádek a odečíst bankovky z trezoru €"
+                            data-tour="odvody-settle"
+                          >
+                            {odvodBusy ? "Provádím…" : "Provést odvod"}
+                          </Button>
+                        )}
                         {rowEditable && (
                           <EditActionButton
                             editing={isEditing}
@@ -1993,6 +2133,14 @@ function ProtocolEditor({
             setWataModalOpen(false);
             setSmError(null);
           }}
+        />
+      )}
+
+      {odvodOpen && (
+        <OdvodyModal
+          hotel={hotel}
+          onClose={() => setOdvodOpen(false)}
+          onSaved={() => void handleOdvodSaved()}
         />
       )}
 
