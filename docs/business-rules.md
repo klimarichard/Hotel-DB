@@ -289,7 +289,7 @@ Tabulky jsou široké a na telefonu se nedají rozumně vyplňovat, proto se pol
 
 ### Kdo dokument uvidí, určuje jeho sekce
 
-Dokument **bez sekce** vidí každý, kdo má přístup do Dokumentů. Dokument **zařazený do sekce** (Ambiance, Superior, Amigo & Alqush, Ankora) vidí jen ten, kdo má oprávnění pro tuto sekci – ostatním se v seznamu vůbec nezobrazí a nelze jej otevřít ani přímým odkazem. Sekce tedy okruh lidí vždy **zužuje, nikdy nerozšiřuje**.
+Dokument **bez sekce** vidí každý, kdo má přístup do Dokumentů. Dokument **zařazený do sekce** (Ambiance, Superior, Amigo & Alqush, Ankora, TEMP) vidí jen ten, kdo má oprávnění pro tuto sekci – ostatním se v seznamu vůbec nezobrazí a nelze jej otevřít ani přímým odkazem. Sekce tedy okruh lidí vždy **zužuje, nikdy nerozšiřuje**.
 
 Kdo má oprávnění **Spravovat dokumenty**, vidí všechny sekce – jinak by nemohl opravit ani smazat to, co je v nich zařazené.
 

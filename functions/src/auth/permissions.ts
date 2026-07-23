@@ -230,6 +230,7 @@ export const PERMISSION_CATALOG = [
       { key: "dokumenty.superior.view", label: "Sekce Superior" },
       { key: "dokumenty.amigo.view", label: "Sekce Amigo & Alqush" },
       { key: "dokumenty.ankora.view", label: "Sekce Ankora" },
+      { key: "dokumenty.temp.view", label: "Sekce TEMP" },
     ],
   },
   {
