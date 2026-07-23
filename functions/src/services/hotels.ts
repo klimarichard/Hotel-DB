@@ -132,3 +132,14 @@ export function terminalViewPerm(slug: HotelSlug): string {
 export function terminalManagePerm(slug: HotelSlug): string {
   return `recepce.${SLUG_TO_STEM[slug]}.terminal.manage`;
 }
+
+/** `recepce.<stem>.odvody.view` — see the Odvody tab + add/edit/delete entries. */
+export function odvodyViewPerm(slug: HotelSlug): string {
+  return `recepce.${SLUG_TO_STEM[slug]}.odvody.view`;
+}
+
+/** `recepce.<stem>.odvody.manage` ("Spravovat odvody") — set the odvody visible
+ *  date range and see/add entries with no range restriction. */
+export function odvodyManagePerm(slug: HotelSlug): string {
+  return `recepce.${SLUG_TO_STEM[slug]}.odvody.manage`;
+}

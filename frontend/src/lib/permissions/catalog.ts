@@ -120,6 +120,8 @@ export const PERMISSION_SECTIONS = [
           { key: "recepce.ambiance.taxi.manage", label: "Spravovat taxi", level: 3 },
           { key: "recepce.ambiance.lobbyBar.view", label: "Lobby bar", level: 2 },
           { key: "recepce.ambiance.lobbyBar.manage", label: "Spravovat lobby bar", level: 3 },
+          { key: "recepce.ambiance.odvody.view", label: "Odvody", level: 2 },
+          { key: "recepce.ambiance.odvody.manage", label: "Spravovat odvody", level: 3 },
         ],
       },
       {
@@ -134,6 +136,8 @@ export const PERMISSION_SECTIONS = [
           { key: "recepce.superior.walkiny.manage", label: "Spravovat walkiny", level: 3 },
           { key: "recepce.superior.taxi.view", label: "Taxi", level: 2 },
           { key: "recepce.superior.taxi.manage", label: "Spravovat taxi", level: 3 },
+          { key: "recepce.superior.odvody.view", label: "Odvody", level: 2 },
+          { key: "recepce.superior.odvody.manage", label: "Spravovat odvody", level: 3 },
         ],
       },
       {
@@ -150,6 +154,8 @@ export const PERMISSION_SECTIONS = [
           { key: "recepce.amigo.taxi.manage", label: "Spravovat taxi", level: 3 },
           { key: "recepce.amigo.terminal.view", label: "Terminál", level: 2 },
           { key: "recepce.amigo.terminal.manage", label: "Spravovat terminál", level: 3 },
+          { key: "recepce.amigo.odvody.view", label: "Odvody", level: 2 },
+          { key: "recepce.amigo.odvody.manage", label: "Spravovat odvody", level: 3 },
         ],
       },
       {
@@ -164,6 +170,8 @@ export const PERMISSION_SECTIONS = [
           { key: "recepce.ankora.walkiny.manage", label: "Spravovat walkiny", level: 3 },
           { key: "recepce.ankora.taxi.view", label: "Taxi", level: 2 },
           { key: "recepce.ankora.taxi.manage", label: "Spravovat taxi", level: 3 },
+          { key: "recepce.ankora.odvody.view", label: "Odvody", level: 2 },
+          { key: "recepce.ankora.odvody.manage", label: "Spravovat odvody", level: 3 },
         ],
       },
     ],
