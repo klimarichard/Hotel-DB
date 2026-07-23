@@ -87,11 +87,22 @@ function num(v: unknown): number {
   return typeof v === "number" && Number.isFinite(v) ? v : 0;
 }
 
-/** CZK is whole crowns; EUR keeps cents. Rounding is applied at every step so
- *  the printed figures always add up exactly to the totals above them. */
+/**
+ * Smallest unit an odvod can actually hand over, per currency.
+ *
+ * EUR is 1, not 0.01, and that is a physical fact rather than a preference: the
+ * vault holds banknotes (500…1) and no cent coins, so a cash-out figure with
+ * cents could not be counted out. It matters most in the Amigo/Alqush split,
+ * which would otherwise land on amounts like 1 289,36 €.
+ */
+const MONEY_STEP: Record<OdvodCurrency, number> = { CZK: 1, EUR: 1 };
+
+/** Rounding is applied at every step so the printed figures always add up
+ *  exactly to the totals above them. */
 export function roundMoney(n: number, currency: OdvodCurrency): number {
   if (!Number.isFinite(n)) return 0;
-  return currency === "CZK" ? Math.round(n) : Math.round(n * 100) / 100;
+  const step = MONEY_STEP[currency];
+  return Math.round(n / step) * step;
 }
 
 /** Face value of a denomination map: Σ denom × pieces. */
