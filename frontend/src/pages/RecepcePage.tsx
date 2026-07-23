@@ -17,6 +17,7 @@ import WalkinsTab from "./recepce/WalkinsTab";
 import TaxiTab from "./recepce/TaxiTab";
 import LobbyBarTab from "./recepce/LobbyBarTab";
 import TerminalTab from "./recepce/TerminalTab";
+import OdvodyTab from "./recepce/OdvodyTab";
 import styles from "./RecepcePage.module.css";
 
 /** Per-hotel tint class (colours mirror the Shift page's hotel colours). */
@@ -222,6 +223,8 @@ function TabBody({ hotel, tab }: { hotel: Hotel; tab: TabId }) {
       return <LobbyBarTab hotel={hotel} />;
     case "terminal":
       return <TerminalTab hotel={hotel} />;
+    case "odvody":
+      return <OdvodyTab hotel={hotel} />;
     default:
       return null;
   }

@@ -1263,6 +1263,9 @@ function ProtocolEditor({
 
   async function settleOdvod() {
     if (odvodBusy) return;
+    // Close the confirmation first: it stays up for the whole round-trip
+    // otherwise, and its own button would still be live for a second click.
+    setConfirm(null);
     setOdvodBusy(true);
     try {
       await api.post<{ ok: true; lineAmount: number; eurTotal: number }>(`/odvody/${hotel.slug}/settle-eur`, {
@@ -1275,7 +1278,6 @@ function ProtocolEditor({
       const fresh = await api.get<Handover>(`/handovers/${hotel.slug}/${docId}`);
       applyDoc(fresh);
       setPendingOdvod(null);
-      setConfirm(null);
     } catch (err) {
       setConfirm({
         title: "Chyba",

@@ -5,6 +5,7 @@ import WalkinsTab from "./recepce/WalkinsTab";
 import TaxiTab from "./recepce/TaxiTab";
 import LobbyBarTab from "./recepce/LobbyBarTab";
 import TerminalTab from "./recepce/TerminalTab";
+import OdvodyTab from "./recepce/OdvodyTab";
 import styles from "./RecepcePage.module.css";
 
 /**
@@ -46,6 +47,8 @@ export default function RecepceDemoPage({ tab }: { tab: TabId }) {
         return !!h.lobbyBarManagePerm && can(h.lobbyBarManagePerm);
       case "terminal":
         return !!h.terminalManagePerm && can(h.terminalManagePerm);
+      case "odvody":
+        return can(h.odvodyManagePerm);
       default:
         return false;
     }
@@ -64,6 +67,7 @@ export default function RecepceDemoPage({ tab }: { tab: TabId }) {
       {tab === "taxi" && <TaxiTab hotel={hotel} />}
       {tab === "lobbyBar" && <LobbyBarTab hotel={hotel} />}
       {tab === "terminal" && <TerminalTab hotel={hotel} />}
+      {tab === "odvody" && <OdvodyTab hotel={hotel} />}
     </div>
   );
 }
