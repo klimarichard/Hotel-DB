@@ -678,7 +678,21 @@ export default function OdvodyModal({
             ))}
           </div>
         )}
-        {ctx && <div className={styles.printDeadline}>Odvody provést před uzávěrkou {deadlinePhrase(ctx.lastDay)}</div>}
+        {ctx && (
+          <>
+            <div className={styles.printDeadline}>
+              Odvody v Protelu provést před uzávěrkou {deadlinePhrase(ctx.lastDay)}
+            </div>
+            {/* The sheet leaves the building with the cash, so it has to carry
+                the step that closes the loop: booking it in Protel is only half
+                the job, the protokol still holds the money until someone
+                presses Provést odvod. */}
+            <div className={styles.printFollowUp}>
+              Po provedení odvodu v Protelu klikněte na tlačítko „Provést odvod“ v Předávacím protokolu (vedle
+              řádku „odvod + účty“ mezi Účty), aby vám seděly hodnoty v kase a Protelu.
+            </div>
+          </>
+        )}
       </div>
     </>
   );

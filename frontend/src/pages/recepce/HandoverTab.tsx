@@ -1942,7 +1942,12 @@ function ProtocolEditor({
         )}
       </div>
 
-      {/* Print-only layout (B&W, one A4) – visible only via window.print(). */}
+      {/* Print-only layout (B&W, one A4) – visible only via window.print().
+          Withheld while the Odvody dialog is open: that dialog has its own
+          print sheet, and both stylesheets isolate printing the same way
+          ("hide everything, show MY .printArea"). Left mounted, this one would
+          un-hide itself and print underneath the odvod sheet. */}
+      {!odvodOpen && (
       <div className={styles.printArea}>
         <div className={styles.printHeader}>
           Předávací protokol – {hotel.label} – {new Date(`${shiftDate}T00:00:00`).toLocaleDateString("cs-CZ")}{" "}
@@ -2069,6 +2074,7 @@ function ProtocolEditor({
           </div>
         </div>
       </div>
+      )}
 
       {signAction && (
         <SignModal
