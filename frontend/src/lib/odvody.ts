@@ -396,6 +396,16 @@ export function currentMonth(): string {
   return new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Prague" }).format(new Date()).slice(0, 7);
 }
 
+/**
+ * Has this month already ended? A cash transfer is a physical act, so it cannot
+ * be arranged for a month that is over — there is nothing left to carry to the
+ * bank before its deadline. Used to offer no entry form for a past month that
+ * was never prepared; a past month that WAS prepared stays open for correction.
+ */
+export function isPastMonth(month: string): boolean {
+  return month < currentMonth();
+}
+
 /** Shift a "YYYY-MM" by n months. */
 export function addMonths(month: string, n: number): string {
   const y = Number(month.slice(0, 4));

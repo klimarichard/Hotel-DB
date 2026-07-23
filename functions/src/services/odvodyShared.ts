@@ -436,6 +436,16 @@ export function monthOf(date: string): string {
   return date.slice(0, 7);
 }
 
+/**
+ * Has this month already ended, relative to `today` ("YYYY-MM-DD")?
+ *
+ * String comparison is exact here because both sides are zero-padded ISO, and
+ * it sidesteps timezone arithmetic entirely.
+ */
+export function isPastMonth(month: string, today: string): boolean {
+  return month < monthOf(today);
+}
+
 /** Last calendar day of a month, as "YYYY-MM-DD". Local-time arithmetic only. */
 export function lastDayOfMonth(month: string): string {
   const y = Number(month.slice(0, 4));
