@@ -19,6 +19,7 @@ import {
   fmtMoney,
   fmtNum,
   monthTitle,
+  isPastMonth,
   splitAcrossDrawers,
   type OdvodAccount,
   type OdvodContext,
@@ -191,7 +192,15 @@ export default function OdvodyModal({
   const settled = !!saved?.eurSettled;
   const savedCZK = saved?.effect?.lineAmount ?? 0;
   const savedEUR = allocationTotal(saved?.effect?.eurPending, EUR_DENOMS);
-  const readOnly = !canManage || settled;
+  /**
+   * A finished month with nothing prepared offers no form at all. An odvod is an
+   * arrangement to carry cash to the bank before that month's deadline, and the
+   * deadline is gone — a retrospective one would only move today's money under
+   * last month's heading. A past month that WAS prepared still opens normally,
+   * so a mistake can be corrected. Enforced on the server too.
+   */
+  const pastEmpty = !saved && isPastMonth(month);
+  const readOnly = !canManage || settled || pastEmpty;
 
   const plan = values ? planOf(values) : null;
 
@@ -318,6 +327,8 @@ export default function OdvodyModal({
               <div className={styles.empty}>Načítám…</div>
             ) : loadError ? (
               <div className={`${styles.empty} ${styles.statusError}`}>{loadError}</div>
+            ) : pastEmpty ? (
+              <div className={styles.empty}>V tomto měsíci nebyly odvody připraveny.</div>
             ) : ctx && values ? (
               <>
                 {readOnly && (
@@ -582,15 +593,18 @@ export default function OdvodyModal({
 
           <div className={styles.modalFooter}>
             <div className={styles.footerLeft}>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => window.print()}
-                disabled={!ctx}
-                data-tour="odvody-print"
-              >
-                Tisk
-              </Button>
+              {/* Nothing prepared for a finished month means nothing to print. */}
+              {!pastEmpty && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => window.print()}
+                  disabled={!ctx}
+                  data-tour="odvody-print"
+                >
+                  Tisk
+                </Button>
+              )}
               {canManage && saved && !settled && (
                 <Button variant="danger" size="sm" onClick={requestDelete} disabled={saving}>
                   Smazat odvod

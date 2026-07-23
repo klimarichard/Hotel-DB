@@ -235,6 +235,8 @@ Celkový součet CZK v protokolu se tím **nezmění** – peníze se jen přesu
 
 **Provedení odvodu** – na **poslední noční směně v měsíci** se v protokolu u zamčeného řádku objeví tlačítko **Provést odvod**. Po potvrzení řádek z Účtů zmizí a odečtou se **bankovky EUR** ze stejných míst, odkud byly při přípravě vyhrazeny. Teprve tímto krokem peníze z protokolu odejdou. Tlačítko může stisknout **kterákoli recepční**, která smí upravovat protokol.
 
+> 📝 Otevřete-li **měsíc, který už skončil** a odvod za něj nebyl připraven, formulář se nenabídne – uvidíte jen hlášku „V tomto měsíci nebyly odvody připraveny." Zpětné odvody nedávají smysl, protože uzávěrka toho měsíce už proběhla. Odvod, který za minulý měsíc existuje, otevřít a opravit lze.
+
 > ⚠️ **Provedený odvod už nelze upravit ani smazat.** Dokud proveden není, můžete jej kdykoli přepsat nebo tlačítkem **Smazat odvod** zrušit – účty i bankovky se v takovém případě vrátí do protokolu zpět, a to do těch zásuvek, ze kterých byly vzaty.
 
 **Tisk** – tlačítkem **Tisk** přímo v modálu vytisknete podklad na jednu stranu A4: nadpis **ODVODY**, měsíc, čtyři částky (u Amigo & Alqush zvlášť za každý hotel) a řádek s termínem, do kdy je potřeba odvod provést.

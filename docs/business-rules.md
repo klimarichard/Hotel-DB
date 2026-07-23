@@ -440,6 +440,14 @@ Poměr odpovídá **počtu pokojů** (výchozí 70 : 24) a je v modálu **editov
 
 > 🔒 Server. Zdroj: `functions/src/services/odvodyShared.ts:155` (`computeCurrencyPlan`, větev pro víc registrů), výchozí poměr `DEFAULT_SPLIT_WEIGHTS`.
 
+### Za skončený měsíc už odvod nepřipravíte
+
+Otevřete-li **měsíc, který už skončil** a odvod za něj nikdy nevznikl, formulář se vůbec nenabídne – zobrazí se jen hláška **„V tomto měsíci nebyly odvody připraveny."** Odvod je totiž ujednání, že se hotovost odveze do banky **před uzávěrkou daného měsíce**; ta už proběhla a zpětně by se pod hlavičku minulého měsíce jen přesunuly dnešní peníze.
+
+Odvod, který za minulý měsíc **existuje**, se otevře normálně a lze ho opravit i smazat – aby šla napravit chyba.
+
+> 🔒 Server + 🖥️ Rozhraní. Zdroj: `functions/src/routes/odvody.ts` (kontrola v `PUT /:hotel/:month`, `isPastMonth()` z `functions/src/services/odvodyShared.ts`); v rozhraní `frontend/src/pages/recepce/OdvodyModal.tsx` (`pastEmpty`).
+
 ### Na hotel a měsíc připadá jeden odvod
 
 Odvod je uložen pod klíčem měsíce (`hotels/<hotel>/odvody/<RRRR-MM>`), takže **druhé uložení tentýž měsíc přepíše to první** (s vrácením předchozího zásahu, viz výše). Rozdělit měsíc na dva odvody nelze.

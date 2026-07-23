@@ -74,6 +74,7 @@ import {
   normalizeEffect,
   czkNominalTotal,
   isMonthStr,
+  isPastMonth,
   monthOf,
   lastDayOfMonth,
   isLastNightOfMonth,
@@ -654,6 +655,15 @@ odvodyRouter.put(
           throw new Error(
             "Tento odvod už byl proveden – peníze fyzicky odešly, takže ho nelze měnit. " +
               "Případnou opravu proveďte přímo v protokolu."
+          );
+        }
+        // No retrospective odvody: an odvod is an arrangement to carry cash to
+        // the bank before the month's deadline, which a finished month no longer
+        // has. Creating one is refused; an odvod that already EXISTS for a past
+        // month stays editable, so a mistake can still be corrected or removed.
+        if (!existing && isPastMonth(month, todayPrague())) {
+          throw new Error(
+            `Měsíc ${month} už skončil, odvod za něj proto nelze zpětně připravit.`
           );
         }
 
