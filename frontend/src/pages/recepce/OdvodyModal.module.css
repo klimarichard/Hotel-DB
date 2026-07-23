@@ -652,3 +652,11 @@
   margin-top: 16pt;
   font-weight: 600;
 }
+
+/* The follow-up instruction: present but visibly secondary to the deadline. */
+.printFollowUp {
+  margin-top: 8pt;
+  font-size: 0.85em;
+  line-height: 1.4;
+  max-width: 46em;
+}

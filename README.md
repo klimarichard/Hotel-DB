@@ -239,7 +239,7 @@ Celkový součet CZK v protokolu se tím **nezmění** – peníze se jen přesu
 
 > ⚠️ **Provedený odvod už nelze upravit ani smazat.** Dokud proveden není, můžete jej kdykoli přepsat nebo tlačítkem **Smazat odvod** zrušit – účty i bankovky se v takovém případě vrátí do protokolu zpět, a to do těch zásuvek, ze kterých byly vzaty.
 
-**Tisk** – tlačítkem **Tisk** přímo v modálu vytisknete podklad na jednu stranu A4: nadpis **ODVODY**, měsíc, čtyři částky (u Amigo & Alqush zvlášť za každý hotel) a řádek s termínem, do kdy je potřeba odvod provést.
+**Tisk** – tlačítkem **Tisk** přímo v modálu vytisknete podklad na jednu stranu A4: nadpis **ODVODY**, měsíc, čtyři částky (u Amigo & Alqush zvlášť za každý hotel), řádek s termínem, do kdy je potřeba odvody v Protelu provést, a připomínku, že po zaúčtování v Protelu je ještě potřeba v Předávacím protokolu stisknout **Provést odvod** – jinak si hodnoty v kase a v Protelu nebudou odpovídat.
 
 > 📷 *(Místo pro snímek obrazovky: Odvody – formulář a výpočet)*
 
