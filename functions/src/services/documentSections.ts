@@ -14,7 +14,9 @@
  * holding `recepce.amigo.view` grants nothing here.
  */
 
-export const DOCUMENT_SECTION_IDS = ["ambiance", "superior", "amigo", "ankora"] as const;
+// `temp` is not a hotel — a workspace for drafting documents out of everyone
+// else's way. Ordinary section semantics otherwise.
+export const DOCUMENT_SECTION_IDS = ["ambiance", "superior", "amigo", "ankora", "temp"] as const;
 export type DocumentSectionId = (typeof DOCUMENT_SECTION_IDS)[number];
 
 export function isDocumentSectionId(value: unknown): value is DocumentSectionId {
