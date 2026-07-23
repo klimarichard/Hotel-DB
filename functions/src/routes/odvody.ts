@@ -176,7 +176,17 @@ function addPieces(drawer: Record<string, number>, delta: Record<string, number>
  * about, and silently adding cash to a vault count is precisely the kind of
  * "helpful" write that corrupts money. Refuse and let a human look.
  */
-function reverseEffect(content: ProtoContent, effect: OdvodEffect): { error: string } | { content: ProtoContent } {
+function reverseEffect(
+  content: ProtoContent,
+  stored: OdvodEffect
+): { error: string } | { content: ProtoContent } {
+  // Upgrade the legacy shape HERE rather than trusting each caller to do it.
+  // This is the only function that reads the per-drawer allocations, so owning
+  // the invariant in one place is what makes it hold: a call site that forgot
+  // crashed on a pre-till document with "Cannot read properties of undefined".
+  const effect = normalizeEffect(stored);
+  if (!effect) return { error: "Odvod nemá zaznamenaný zápis do protokolu." };
+
   const idx = content.accounts.findIndex((a) => a.id === effect.lineId);
   if (idx === -1) {
     return {
