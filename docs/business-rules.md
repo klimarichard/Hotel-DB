@@ -422,6 +422,8 @@ Amigo a Alqush mají **společnou hotovost, ale oddělené registry v Protelu**,
 
 Poměr odpovídá **počtu pokojů** (výchozí 70 : 24) a je v modálu **editovatelný**, protože se počty pokojů mohou změnit. Zaokrouhlení pohltí poslední hotel v pořadí, takže součet odvedených částek vždy přesně sedí na požadovaný zbytek.
 
+**Všechny částky odvodu jsou celá čísla, a to i v eurech** – v trezoru jsou pouze bankovky (500 až 1 €), žádné centové mince, takže částku s centy by nešlo fyzicky odpočítat. Zadáte-li do hodnot z Protelu desetinné číslo, aplikace ho zaokrouhlí na celé.
+
 *Příklad:* celkem k odvodu 150 000 Kč; Amigo cash 180 000 / depozit 20 000, Alqush cash 60 000 / depozit 5 000. Depozity 25 000 odejdou celé, z hotovosti se bere 125 000. V pokladnách zůstane 115 000, rozdělených 70 : 24 → Amigo 85 638, Alqush 29 362. Odvede se tedy **Amigo 94 362** a **Alqush 30 638**.
 
 > 🔒 Server. Zdroj: `functions/src/services/odvodyShared.ts:155` (`computeCurrencyPlan`, větev pro víc registrů), výchozí poměr `DEFAULT_SPLIT_WEIGHTS`.

@@ -103,10 +103,20 @@ function num(v: unknown): number {
   return typeof v === "number" && Number.isFinite(v) ? v : 0;
 }
 
-/** CZK is whole crowns; EUR keeps cents. */
+/**
+ * Smallest unit an odvod can actually hand over, per currency.
+ *
+ * EUR is 1, not 0.01, and that is a physical fact rather than a preference: the
+ * vault holds banknotes (500…1) and no cent coins, so a cash-out figure with
+ * cents could not be counted out. It matters most in the Amigo/Alqush split,
+ * which would otherwise land on amounts like 1 289,36 €.
+ */
+const MONEY_STEP: Record<OdvodCurrency, number> = { CZK: 1, EUR: 1 };
+
 export function roundMoney(n: number, currency: OdvodCurrency): number {
   if (!Number.isFinite(n)) return 0;
-  return currency === "CZK" ? Math.round(n) : Math.round(n * 100) / 100;
+  const step = MONEY_STEP[currency];
+  return Math.round(n / step) * step;
 }
 
 export function denomTotal(map: Record<string, number> | undefined, allowed: readonly string[]): number {
@@ -123,17 +133,15 @@ export function denomTotal(map: Record<string, number> | undefined, allowed: rea
 export const czkNominalTotal = (m?: Record<string, number>) => denomTotal(m, CZK_DENOMS);
 export const eurNominalTotal = (m?: Record<string, number>) => denomTotal(m, EUR_DENOMS);
 
-/** Display helper: "12 340 Kč" / "1 250,50 €". */
+/** Display helper: "12 340 Kč" / "1 250 €". No decimals in either currency –
+ *  every odvod figure is a whole unit (see MONEY_STEP). */
 export function fmtMoney(n: number, currency: OdvodCurrency): string {
-  const digits = currency === "CZK" ? 0 : 2;
-  const s = n.toLocaleString("cs-CZ", { minimumFractionDigits: digits, maximumFractionDigits: digits });
-  return currency === "CZK" ? `${s} Kč` : `${s} €`;
+  return `${fmtNum(n, currency)} ${currency === "CZK" ? "Kč" : "€"}`;
 }
 
 /** Bare number, for print columns where the unit sits in the label. */
-export function fmtNum(n: number, currency: OdvodCurrency): string {
-  const digits = currency === "CZK" ? 0 : 2;
-  return n.toLocaleString("cs-CZ", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+export function fmtNum(n: number, _currency: OdvodCurrency): string {
+  return n.toLocaleString("cs-CZ", { maximumFractionDigits: 0 });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

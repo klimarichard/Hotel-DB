@@ -64,11 +64,17 @@ function shiftLabel(type: "den" | "noc"): string {
   return type === "noc" ? "noční" : "denní";
 }
 
-function parseDecimal(text: string): number {
+/**
+ * Protel amounts. Whole units only, in BOTH currencies – the vault holds EUR
+ * banknotes and no cent coins, so nothing an odvod moves can carry a fraction
+ * (see MONEY_STEP in lib/odvody.ts). A typed decimal is rounded rather than
+ * rejected, so pasting a Protel figure with a trailing ",00" still works.
+ */
+function parseAmount(text: string): number {
   const t = text.trim().replace(/\s/g, "").replace(",", ".");
   if (t === "") return 0;
   const n = Number(t);
-  return Number.isFinite(n) ? n : 0;
+  return Number.isFinite(n) ? Math.round(n) : 0;
 }
 
 function parsePieces(text: string): number {
@@ -414,14 +420,14 @@ function MoneyInput({
   return (
     <input
       type="text"
-      inputMode="decimal"
+      inputMode="numeric"
       className={`${styles.input} ${styles.inputNumber}`}
       value={text}
       placeholder="0"
       disabled={disabled}
       onChange={(e) => {
         setText(e.target.value);
-        const n = parseDecimal(e.target.value);
+        const n = parseAmount(e.target.value);
         pushed.current = n;
         onChange(n);
       }}
