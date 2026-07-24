@@ -14,9 +14,11 @@ import {
   isComputedVarType,
   resolveComputedVars,
   formatCustomValue,
+  findImageOption,
   missingCustomVars,
   fillTemplate,
   type CustomVarDefs,
+  type CustomVarImageOption,
   type CustomVarType,
 } from "@/lib/contractVariables";
 
@@ -127,7 +129,24 @@ export default function GenerateDocumentModal({ templateId, onClose }: Props) {
     [slots, defs, values]
   );
 
-  const missing = template ? missingCustomVars(template.htmlContent, defs, values) : [];
+  /**
+   * The choices an "image" slot can actually offer: a name to pick, and a
+   * picture to print. A half-configured choice is dropped rather than listed –
+   * picking it would look like an answer and print nothing (the editor warns
+   * about exactly this).
+   */
+  function imageOptions(key: string): CustomVarImageOption[] {
+    return (defs[key]?.images ?? []).filter((o) => o.label.trim() && o.src);
+  }
+
+  // An image slot with no pictures configured is already exempt inside
+  // missingCustomVars – it cannot be answered, so it must not block printing.
+  // That rule lives in the engine rather than here so the contract modals get
+  // it too; a local post-filter would have had to be written three times and
+  // would have drifted the first time one of them changed.
+  const missing = template
+    ? missingCustomVars(template.htmlContent, defs, values)
+    : [];
 
   function setValue(key: string, raw: string) {
     setValues((prev) => ({ ...prev, [key]: raw }));
@@ -148,7 +167,12 @@ export default function GenerateDocumentModal({ templateId, onClose }: Props) {
         // A computed slot has no typed-in value to format; its printed form
         // comes from the resolution merged in below.
         if (isComputedVarType(type)) continue;
-        vars[key] = formatCustomValue(type, values[key] ?? "");
+        // The third argument is mandatory in practice for an "image" slot: the
+        // typed value is only the chosen picture's NAME, and without the slot's
+        // own definition to look it up in, formatCustomValue has no picture to
+        // emit and the document prints an empty space. Passed for every type –
+        // the others ignore it.
+        vars[key] = formatCustomValue(type, values[key] ?? "", defs[key]);
       }
       Object.assign(vars, resolved.formatted);
       // The raw map is the third argument on purpose: {{#case}} matches against
@@ -224,6 +248,55 @@ export default function GenerateDocumentModal({ templateId, onClose }: Props) {
           />
           <span>{label}</span>
         </label>
+      );
+    }
+
+    if (type === "image") {
+      const options = imageOptions(key);
+      // Nothing to pick: state it plainly and move on. Deliberately NOT a
+      // free-text fallback – see isUnfillableImage for why that would be worse
+      // than useless here – and deliberately not hidden either, because the
+      // document has a gap where this picture should be and whoever prints it
+      // is the person who can tell an editor about it.
+      if (options.length === 0) {
+        return (
+          <div key={key} className={styles.imageNotice}>
+            <span className={styles.label}>{label}</span>
+            <span className={styles.imageNoticeText}>
+              Pro tuto proměnnou nejsou nastavené žádné obrázky – v dokumentu zůstane
+              prázdné místo.
+            </span>
+          </div>
+        );
+      }
+      // The picture the current answer will print. Shown live, because a name
+      // in a dropdown is not a picture: "Razítko Praha" and "Razítko Brno" are
+      // indistinguishable until you see them, and the PDF opens in a new tab
+      // with nothing stored, so this is the last chance to notice.
+      const picked = findImageOption(def, raw);
+      return (
+        <div key={key} className={styles.field}>
+          <label className={styles.label} htmlFor={`docvar-${key}`}>
+            {label}
+            {def?.optional && <span className={styles.optional}> (nepovinné)</span>}
+          </label>
+          <select
+            id={`docvar-${key}`}
+            className={isMissing ? `${styles.input} ${styles.inputMissing}` : styles.input}
+            value={raw}
+            onChange={(e) => setValue(key, e.target.value)}
+          >
+            <option value="">– vyberte –</option>
+            {options.map((o, i) => (
+              <option key={`${o.label}-${i}`} value={o.label}>{o.label}</option>
+            ))}
+          </select>
+          {picked && (
+            <div className={styles.imagePreview}>
+              <img src={picked.src} alt={picked.label} className={styles.imagePreviewImg} />
+            </div>
+          )}
+        </div>
       );
     }
 

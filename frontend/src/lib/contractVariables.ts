@@ -776,6 +776,15 @@ export function missingCustomVars(
     // state is an answer, and a condition/math slot is derived rather than
     // typed in at generation.
     if (type === "bool" || isComputedVarType(type)) return false;
+    // An image slot with no pictures configured CANNOT be answered — its value
+    // is only a key into a picture list, and an empty list offers no key. Left
+    // required, one authoring mistake would make the document permanently
+    // unprintable for everyone, with no way to fix it from the fill-in dialog.
+    // The editor warns the author about the empty slot instead; that is where
+    // it is fixable. (A "list" slot differs and stays required: its value IS
+    // the printed text, so the generate form can degrade it to a free-text box
+    // and the document still comes out right.)
+    if (type === "image" && !(def?.images ?? []).some((o) => o.src)) return false;
     // Explicitly allowed to stay blank – see CustomVarDef.optional.
     if (def?.optional) return false;
     return !(rawValues[key] ?? "").trim();

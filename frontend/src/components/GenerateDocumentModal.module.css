@@ -104,3 +104,47 @@
   font-size: 0.8rem;
   color: var(--color-danger);
 }
+
+/*
+ * "Obrázek" slot: a preview of the picture the current choice will print. Capped
+ * in height rather than width, because the pictures behind one variable have
+ * different shapes and a width cap would leave a tall one running down the
+ * modal. Centred on a flat panel so a picture with a transparent background is
+ * still visible in both themes.
+ */
+.imagePreview {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-top: 6px;
+  padding: 8px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+}
+
+.imagePreviewImg {
+  max-width: 100%;
+  max-height: 120px;
+  object-fit: contain;
+}
+
+/*
+ * An image slot the author left with no choices. Not a field and not an error
+ * the person printing can fix – a dashed, muted panel says "nothing to do here"
+ * without shouting, matching the read-only treatment of a computed row.
+ */
+.imageNotice {
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  border-radius: 4px;
+  background: var(--color-bg);
+  border: 1px dashed var(--color-border);
+}
+
+.imageNoticeText {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
