@@ -793,3 +793,23 @@
   margin-left: auto;
   flex-shrink: 0;
 }
+
+/* ── Variable-config dialog sizing ──────────────────────────────────────────
+   Mirrors DokumentyPage.module.css. ConfirmModal's .modal is a flex column
+   with no height bound, so a dialog taller than the viewport overflowed it and
+   put both the lower slot rows and the footer's "Hotovo" button out of reach.
+   Ten slots reach that height easily once a few carry a list's options row or
+   a condition's comparison row.
+
+   Only the BODY scrolls, so the header and the footer button stay pinned. */
+.varModal {
+  max-height: calc(100vh - 4rem);
+}
+
+.varModalBody {
+  overflow-y: auto;
+  /* Required, not defensive: a flex child defaults to min-height:auto, which
+     refuses to shrink below its content height — so max-height on the parent
+     would be ignored and overflow-y would never engage. */
+  min-height: 0;
+}

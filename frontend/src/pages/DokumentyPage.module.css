@@ -928,3 +928,24 @@
   margin-left: auto;
   flex-shrink: 0;
 }
+
+/* ── Variable-config dialog sizing ──────────────────────────────────────────
+   ConfirmModal's .modal is a flex column with NO height bound, so a dialog
+   taller than the viewport simply overflowed it: with 25 slots (and a list
+   slot adding a whole options row each), the rows past the fold and the
+   "Hotovo" button in the footer were both unreachable.
+
+   Bounding the modal and scrolling only the BODY keeps the header and the
+   footer button pinned and always reachable, which scrolling the overlay
+   would not. */
+.varModal {
+  max-height: calc(100vh - 4rem);
+}
+
+.varModalBody {
+  overflow-y: auto;
+  /* Required, not defensive: a flex child defaults to min-height:auto, which
+     refuses to shrink below its content height — so max-height on the parent
+     would be ignored and overflow-y would never engage. */
+  min-height: 0;
+}
