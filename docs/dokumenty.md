@@ -4,7 +4,7 @@ A second, standalone template editor beside **Šablony smluv** for documents tha
 
 An author writes the document in the same TipTap editor Šablony smluv uses and declares which of up to **twenty-five** `{{var1}}..{{var25}}` slots it uses (label, type, optional default). A viewer picks the document, fills the slots in a modal, and gets a PDF in a new tab. Nothing about the fill-in is stored anywhere.
 
-The custom-variable engine itself — the eight slot types, the formula parser, condition evaluation, the `{{#case}}` switch, and how the three validator copies are kept in lockstep — is shared with Šablony smluv and documented once, in **[custom-variable-engine.md](custom-variable-engine.md)**. This page covers only what's specific to Dokumenty.
+The custom-variable engine itself — the nine slot types (including `image`, "Obrázek" — a `list` whose choices each carry a picture), the formula parser, condition evaluation, the `{{#case}}` switch, and how the three validator copies are kept in lockstep — is shared with Šablony smluv and documented once, in **[custom-variable-engine.md](custom-variable-engine.md)**. This page covers only what's specific to Dokumenty.
 
 ## Deliberately not a contract
 
@@ -35,6 +35,8 @@ All in `functions/src/routes/dokumenty.ts`, mounted at `/api/dokumenty` (`functi
 ### Size guard on `PUT /:id`
 
 Firestore caps a document at 1 MiB; `htmlContent` is by far the largest field and balloons when the editor inlines base64 images. `PUT /:id` rejects an oversized payload up front with a Czech 413 (`functions/src/routes/dokumenty.ts:356-366`) rather than letting a raw Firestore error surface, and catches the same failure again around the actual write in case something slips past the pre-check (`:394-407`). Same pattern as the contract-template editor.
+
+⚠️ The pre-check measures `htmlContent` only — an `image` slot's `variableDefs.*.images` is a separate pile of base64 on the same document that this check cannot see (eight choices at the per-picture cap is already ~960 KB on its own). It is still caught, one step later, by the write-time `catch` that pattern-matches Firestore's own oversized-write error — see [custom-variable-engine.md](custom-variable-engine.md#image-slots-obrázek) for why widening the pre-check itself was not done.
 
 ## Duplicating
 
@@ -84,10 +86,16 @@ Two details that matter:
   variableDefs?: {                  // per-slot config, keyed "var1".."var25"
     [slot: string]: {
       label: string,                 // ≤60 chars
-      type: "text" | "longtext" | "date" | "number" | "bool" | "list" | "condition" | "math",
+      type: "text" | "longtext" | "date" | "number" | "bool" | "list" | "image" | "condition" | "math",
       default?: { kind: "literal", value: string },   // ≤200 chars; never "fixedVar" here
       condition?: { leftKey: string, op: CompareOp, right: {kind:"var",key} | {kind:"literal",value} },  // "condition" only; operands are other custom slots
       options?: string[],            // "list" only, ≤30 entries, ≤100 chars each
+      images?: {                     // "image" only, ≤8 entries — see custom-variable-engine.md
+        label: string,                 // the choice's name, and the slot's raw value once picked
+        src: string,                   // "data:image/(png|jpeg|webp|gif);base64,…", ≤120 000 chars
+        width?: "25%" | "50%" | "75%" | "100%",
+        align?: "left" | "center" | "right",
+      }[],
       formula?: string,              // "math" only, ≤200 chars, allowlisted characters only
       decimals?: number,             // "math" only, 0–4, default 0
       optional?: boolean,            // "Nepovinná" — absent = required
@@ -141,15 +149,17 @@ Defined twice, deliberately kept in lockstep: `functions/src/services/documentSe
 
 ## Custom-variable types, `{{#case}}`, math and conditions
 
-The engine mechanics — the eight slot types (`text`, `longtext`, `date`, `number`, `bool`, `list`, `condition`, `math`), the formula parser, `resolveComputedVars`'s fixpoint resolution, condition evaluation, and the `{{#case}}` switch block — are documented once, shared with Šablony smluv, in **[custom-variable-engine.md](custom-variable-engine.md)**. What follows is specific to how Dokumenty surfaces them.
+The engine mechanics — the nine slot types (`text`, `longtext`, `date`, `number`, `bool`, `list`, `image`, `condition`, `math`), the formula parser, `resolveComputedVars`'s fixpoint resolution, condition evaluation, and the `{{#case}}` switch block — are documented once, shared with Šablony smluv, in **[custom-variable-engine.md](custom-variable-engine.md)**. What follows is specific to how Dokumenty surfaces them.
 
-**Authoring-time warnings (`customVarWarning()`, `DokumentyPage.tsx`).** Several slot mistakes still "work" — the document stays producible — but silently print something other than what the author intended, so saving the template computes a warning covering five distinct cases and shows it as a clickable button in the editor header:
+**Authoring-time warnings (`customVarWarning()`, `DokumentyPage.tsx`).** Several slot mistakes still "work" — the document stays producible — but silently print something other than what the author intended, so saving the template computes a warning covering seven distinct cases and shows it as a clickable button in the editor header:
 
 - **Unnamed** — a slot used in the text (or reachable via a formula/condition) with no configured label/type. Falls back to `"text"` and shows the raw key to whoever fills the document in.
 - **Bez možností** — a `list` slot with no choices (see below).
 - **Chybný vzorec** — a `math` slot whose formula is empty or fails to evaluate even with a dummy value of `1` substituted for every operand it names (a formula that can't produce a number from all-ones can't produce one from real input either).
 - **Neznámá proměnná ve vzorci** — a `math` slot whose formula names an identifier that isn't one of this document's own custom slots. Unlike on Šablony smluv, where an unrecognised identifier might legitimately be a built-in (`salary`, `hoursPerWeek`, …) the formula resolves against, Dokumenty has no built-ins at all — so any operand that isn't a custom slot key is *definitely* wrong, and the check can name it explicitly rather than merely flag a broken evaluation.
 - **Bez podmínky** — a `condition` slot with no comparison configured (`leftKey` empty), which is always false and silently drops every `{{#if}}` block it guards.
+- **Bez obrázků** — an `image` slot used in the text (or reachable via a formula/condition) with zero configured choices. Unlike an empty `list`, this is harder to diagnose from the fill-in side alone: a list degrades to a free-text box a viewer can still type into, but an image slot has nothing behind it to fall back on — a typed string names no picture — so the generate modal can only show a plain "no pictures configured" notice and print an empty space. See [custom-variable-engine.md](custom-variable-engine.md#image-slots-obrázek) for why this — unlike an empty `list` — is also exempt from `missingCustomVars` rather than blocking generation.
+- **Neúplná možnost** — an `image` choice with a label but no uploaded picture, or a picture but no label (so it can never be picked by name). Either half alone renders nothing for that choice.
 
 The warning is re-evaluated (and cleared) when the "Vlastní proměnné" modal closes via its primary button, so fixing the last flagged slot makes it disappear without a separate save round-trip. It never blocks saving.
 
@@ -160,12 +170,21 @@ The warning is re-evaluated (and cleared) when the "Vlastní proměnné" modal c
 - A list slot's **default must be one of its own choices** — the config UI renders a `<select>` over `options`, not a free-text box, for a list-typed default, so the stored default can never hold a value the dropdown doesn't offer. Because of this, "Z proměnné" (a `fixedVar` default) was never applicable to list slots anyway — Dokumenty has no fixed variables at all, so the point is moot here, but it holds in Šablony smluv too.
 - **Optionless list is accepted on purpose.** The server's `isValidCustomOptions` allows `options: []` / absent — rejecting it mid-configuration would punish an author for picking the type before typing the first value. The generate form (`GenerateDocumentModal.tsx`) degrades an empty-options list slot to a plain free-text input rather than an unfillable empty `<select>`, so the document stays producible. Because that degradation is invisible to whoever is editing the template, `customVarWarning()` flags it explicitly as "Bez možností: … – seznam nemá žádné hodnoty."
 
+### The `"image"` / "Obrázek" type
+
+Full mechanics — why base64, why `isImageDataUri` is a security boundary, the raw-value-is-the-label design, the `missingCustomVars` asymmetry with `list`, the interaction with the size guard, and the first-`<img>` pagination landmine — are documented once in **[custom-variable-engine.md](custom-variable-engine.md#image-slots-obrázek)**. This is Dokumenty's specific editor surface for it.
+
+- **Per-choice upload.** The "Vlastní proměnné" modal's editor for an `image` slot is shaped like the `list` editor (one row per choice, ordered as entered), because an image slot *is* a list whose choices additionally carry a picture — each row adds a name (the choice's label) plus a file picker. `prepareImageDataUri` (`frontend/src/lib/imageDownscale.ts`) reads the picked file and downscales it if needed; a failure (unreadable file, or too large even after every downscale attempt) surfaces as a plain error modal ("Obrázek se nepodařilo načíst. Zkuste prosím jiný soubor.") rather than silently dropping the choice. A shrunk picture is flagged inline ("Obrázek byl automaticky zmenšen, aby se vešel do dokumentu.") so the author knows the stored file isn't byte-identical to what they uploaded.
+- **Running size total.** The modal computes and shows a combined kB figure across **every** image slot's pictures on the document — including slots whose `{{varN}}` placeholder was since deleted from the text ("orphaned"), because those pictures are still stored on the same document and still count against its 1 MiB ceiling. Unlike Šablony smluv (which additionally flags a hard warning once the running total passes a fixed character threshold — see the engine doc), Dokumenty's editor surfaces the running total as a plain readout with no explicit warning threshold of its own; the same server-side size guard (below) is what ultimately catches an oversized document either way.
+- **Fill-in.** `GenerateDocumentModal.tsx` renders an image slot as a `<select>` over the configured choice labels, with a live thumbnail preview of the picked choice's picture underneath — the last chance to notice a mismatch before the PDF opens (unlabelled/pictureless template mistakes aside, two visually similar pictures are otherwise indistinguishable until seen). A slot with zero usable choices (label **and** picture both present) shows a plain notice instead of an unfillable dropdown, and prints nothing for that slot — see "Bez obrázků" above.
+
 ### Read-only preview for a viewer without `dokumenty.manage`
 
-`readOnlyHtml` (`DokumentyPage.tsx`) renders the stored HTML with every custom slot replaced by its configured label in brackets (`"[Výše pokuty]"` instead of a bare `{{var1}}`), so someone who can only view a document still sees roughly what it says before opening the fill-in modal. The computed types need their own treatment, since the bracketed-label trick describes a *fillable* slot, not a computed one:
+`readOnlyHtml` (`DokumentyPage.tsx`) renders the stored HTML with every custom slot replaced by its configured label in brackets (`"[Výše pokuty]"` instead of a bare `{{var1}}`), so someone who can only view a document still sees roughly what it says before opening the fill-in modal. The computed types, and `image`, need their own treatment, since the bracketed-label trick describes a *fillable text* slot, not these:
 
 - **`condition`** resolves to `"ano"` — the branch it guards is kept, as if the condition had been satisfied, which is the useful default for a document about to be filled in for real.
 - **`math`** keeps the bracketed label (`"[Celkem]"`) — its result is a number nobody has typed the inputs for yet, so there is nothing honest to compute.
+- **`image`** is the one type where the bracketed-label trick would be actively misleading — the document prints a *picture* there, not the label text, so showing `"[Logo hotelu]"` would misrepresent what actually renders. The preview instead picks a stand-in choice (a configured default, else the first `{{#case}}` branch written for the slot, else the slot's first configured choice) and renders that choice's real picture via `renderCustomImage`/`findImageOption`; only with no choice configured at all does it fall back to the bracketed label, which is what the author actually needs to see in that case.
 
 A `{{#case}}` switch needs a **third**, raw-value map to preview correctly — matching it against the bracketed labels would make every `"="` branch miss and every `"!="` branch hit, showing the exact opposite of the real document (and, for a multi-branch switch, several mutually exclusive alternatives stacked on top of each other). The preview instead picks one stand-in answer per slot: the configured default if there is one, otherwise the value of the first `"="` branch written in the text (guaranteeing exactly one branch renders), otherwise a list slot's first choice — with none of those, the answer is blank and every `"="` branch drops, which is what an unanswered switch genuinely prints.
 
@@ -180,7 +199,7 @@ The module also exports **`STARTER_KIT_OPTIONS`**, which both pages pass to `Sta
 
 ### The custom-variable configuration dialog stays unshared
 
-**The custom-variable *configuration dialog* is still not extracted into a shared component**, even though it looks like an obvious candidate now that both pages offer the identical eight-type set (`DOC_VAR_TYPES` in `DokumentyPage.tsx` now lists all eight, same as `CUSTOM_VAR_TYPE_LABELS`'s keys on the contracts side). What used to be the stated reason — that a third of the contracts dialog was `"condition"`-builder machinery Dokumenty had no use for — is **obsolete**: Dokumenty's own condition builder (`renderConditionBuilder` in `DokumentyPage.tsx`) is now exactly that same kind of machinery, just narrower.
+**The custom-variable *configuration dialog* is still not extracted into a shared component**, even though it looks like an obvious candidate now that both pages offer the identical nine-type set (`DOC_VAR_TYPES` in `DokumentyPage.tsx` now lists all nine, same as `CUSTOM_VAR_TYPE_LABELS`'s keys on the contracts side). What used to be the stated reason — that a third of the contracts dialog was `"condition"`-builder machinery Dokumenty had no use for — is **obsolete**: Dokumenty's own condition builder (`renderConditionBuilder` in `DokumentyPage.tsx`) is now exactly that same kind of machinery, just narrower.
 
 What's left to justify keeping them separate is genuinely two different catalogues feeding the *same* dialog shape, not a difference in what the dialog needs to do:
 - **Condition operands.** Šablony smluv's builder offers `COMPARABLE_VARS` (built-in employee/contract fields) *and* the template's own custom slots, in two visually separated groups; Dokumenty's offers only its own custom slots — there is no employee-coupled catalogue to add a second group from.
@@ -197,7 +216,8 @@ Sharing the dialog would mean parameterising it across those two axes (which ope
 - `frontend/src/pages/DokumentyPage.tsx` / `.module.css` — the editor + list page.
 - `frontend/src/components/GenerateDocumentModal.tsx` / `.module.css` — the fill-in-and-print modal.
 - `frontend/src/lib/editor/extensions.ts` — shared TipTap extensions (also used by `ContractTemplatesPage.tsx`).
-- `frontend/src/lib/contractVariables.ts` — the shared custom-variable engine; see **[custom-variable-engine.md](custom-variable-engine.md)** for the full write-up (types, formula parser, conditions, `{{#case}}`).
+- `frontend/src/lib/contractVariables.ts` — the shared custom-variable engine; see **[custom-variable-engine.md](custom-variable-engine.md)** for the full write-up (types, formula parser, conditions, `{{#case}}`, `image` slots).
+- `frontend/src/lib/imageDownscale.ts` — reads a picked file into a base64 data URI and downscales it to fit an `image` slot's per-picture budget; shared with Šablony smluv.
 - `frontend/src/lib/menuItems.ts` (`id: "dokumenty"`, `hideOnMobile: true`) and `functions/src/routes/menuOrder.ts` (`VALID_IDS` already includes `"dokumenty"`).
 - `frontend/src/App.tsx` — `<Route path="dokumenty">` wrapped in `RequirePermission allow={["nav.dokumenty.view"]}`.
 

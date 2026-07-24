@@ -19,11 +19,22 @@ import {
   resolveComputedVars,
   missingCustomVars,
   isCustomVarKey,
+  findImageOption,
   CUSTOM_VAR_TYPE_LABELS,
+  type CustomVarDef,
   type CustomVarDefs,
 } from "@/lib/contractVariables";
 import { formatDateCZ } from "@/lib/dateFormat";
 import { isWeekendOrHoliday } from "@/lib/workingDays";
+
+/**
+ * The choices an "Obrázek" slot can actually offer – a name to pick and a
+ * picture to substitute. A slot with none of them is an authoring mistake the
+ * template editor flags; here it only decides what to show instead of a field.
+ */
+function imageChoicesOf(def: CustomVarDef | undefined): { label: string; src: string }[] {
+  return (def?.images ?? []).filter((o) => o.label.trim() !== "" && !!o.src);
+}
 
 /** True when ISO date `a` is strictly after ISO date `b` (both YYYY-MM-DD). */
 function isDateAfter(a: string | undefined, b: string | undefined): boolean {
@@ -165,7 +176,11 @@ export default function GenerateContractModal({
       // passes through untouched; re-formatting it would corrupt it.
       customVars[key] = customRaw[key] ?? "";
     } else {
-      customVars[key] = formatCustomValue(type, customRaw[key] ?? "");
+      // The third argument is required for "image" slots and harmless for every
+      // other type: the raw value of an image slot is a choice's NAME, and
+      // resolving that to an <img> needs the slot's own picture list. Formatted
+      // without it, an image slot silently prints nothing.
+      customVars[key] = formatCustomValue(type, customRaw[key] ?? "", def);
     }
   }
 
@@ -208,6 +223,11 @@ export default function GenerateContractModal({
   const missing = template
     ? getMissingVariables(template, vars).filter((k) => !isCustomVarKey(k))
     : [];
+  // An image slot with no usable choices is already exempt inside
+  // missingCustomVars: it has nothing to pick, and whoever generates a contract
+  // usually cannot edit the template, so blocking would be a dead end. That
+  // exemption lives in the engine rather than being filtered here, so all three
+  // generate paths share one rule instead of three copies that drift apart.
   const missingCustom = template
     ? missingCustomVars(template, variableDefs, customRaw)
     : [];
@@ -519,6 +539,73 @@ export default function GenerateContractModal({
                                         />
                                         {raw === "true" ? "Ano" : "Ne"}
                                       </label>
+                                    ) : type === "image" ? (
+                                      // Picked by name, shown as a picture: the
+                                      // thumbnail is the only way to be sure the
+                                      // right variant is about to be printed, and
+                                      // it is the one thing that cannot be checked
+                                      // after the PDF is signed.
+                                      (() => {
+                                        const choices = imageChoicesOf(def);
+                                        if (choices.length === 0) {
+                                          // No free-text fallback here, unlike an
+                                          // optionless list: any text at all would
+                                          // name no picture and print nothing, so a
+                                          // box to type it in would only mislead.
+                                          return (
+                                            <span
+                                              className={styles.varInput}
+                                              style={{ border: 0 }}
+                                            >
+                                              <span className={styles.varTableHint}>
+                                                Šablona k této proměnné nemá žádné
+                                                obrázky – v dokumentu se nic nevypíše.
+                                              </span>
+                                            </span>
+                                          );
+                                        }
+                                        const picked = findImageOption(def, raw);
+                                        return (
+                                          <div
+                                            style={{
+                                              display: "flex",
+                                              alignItems: "center",
+                                              gap: 8,
+                                              width: "100%",
+                                            }}
+                                          >
+                                            <select
+                                              className={styles.varInput}
+                                              value={raw}
+                                              onChange={(e) => setRaw(e.target.value)}
+                                            >
+                                              <option value="">– vyberte –</option>
+                                              {choices.map((o, i) => (
+                                                <option key={`${o.label}-${i}`} value={o.label}>
+                                                  {o.label}
+                                                </option>
+                                              ))}
+                                            </select>
+                                            {/* `picked.src`, not just `picked`: a
+                                                pre-filled default may name a
+                                                choice whose picture was never
+                                                uploaded, and an empty src renders
+                                                as a broken-image icon. */}
+                                            {picked?.src && (
+                                              <img
+                                                src={picked.src}
+                                                alt=""
+                                                style={{
+                                                  flex: "0 0 auto",
+                                                  height: 44,
+                                                  maxWidth: 110,
+                                                  objectFit: "contain",
+                                                }}
+                                              />
+                                            )}
+                                          </div>
+                                        );
+                                      })()
                                     ) : type === "list" && (def?.options?.length ?? 0) > 0 ? (
                                       // Fixed choice list. An optionless list slot is
                                       // an authoring mistake (the template editor

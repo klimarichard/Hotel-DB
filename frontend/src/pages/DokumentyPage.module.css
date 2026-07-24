@@ -949,3 +949,99 @@
      would be ignored and overflow-y would never engage. */
   min-height: 0;
 }
+
+/* ── "Obrázek" variable: the per-choice editor ──────────────────────────────
+   One row per picture. The thumbnail and the remove button are fixed-width
+   bookends; everything variable (name, upload button, width, alignment, size)
+   sits in the middle column and wraps there, so a narrow modal never pushes the
+   remove button out of reach. */
+.imageOptionRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+}
+
+.imageOptionMain {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1 1 auto;
+  /* Without this a flex item refuses to shrink below its content, and the long
+     row of controls would widen the whole config table instead of wrapping. */
+  min-width: 0;
+}
+
+.imageOptionControls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* Fixed box, contain-fitted: the pictures behind one variable differ in shape
+   (a wide letterhead next to a square stamp), and letting them size themselves
+   would make the rows jump around. */
+.imageThumb {
+  flex: 0 0 auto;
+  width: 64px;
+  height: 48px;
+  object-fit: contain;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+}
+
+/* Same footprint for a choice with no picture yet, so adding one doesn't
+   re-flow the row it was added to. */
+.imageThumbEmpty {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 48px;
+  font-size: 1.1rem;
+  color: var(--color-text-muted);
+  background: var(--color-bg);
+  border: 1px dashed var(--color-border);
+  border-radius: 4px;
+}
+
+.imageSize {
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Informational, not an error: the picture was stored, just not at the size it
+   was picked at. Muted rather than red for exactly that reason. */
+.imageShrunkNote {
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+}
+
+/* Running total of every stored picture, against the document's 1 MiB ceiling.
+   Three tiers: plain while there is room, amber as the headroom goes, red once a
+   save is genuinely at risk. */
+.imageTotal,
+.imageTotalWarn,
+.imageTotalOver {
+  margin: 0 0 10px;
+  font-size: 0.75rem;
+}
+
+.imageTotal {
+  color: var(--color-text-muted);
+}
+
+.imageTotalWarn {
+  color: var(--color-warning-text);
+}
+
+.imageTotalOver {
+  color: var(--color-danger-text-strong);
+}

@@ -24,6 +24,7 @@ import {
   isComputedVarType,
   resolveComparableRaw,
   resolveComputedVars,
+  type CustomVarDef,
   type CustomVarDefs,
 } from "@/lib/contractVariables";
 import styles from "./BulkGenerateModal.module.css";
@@ -73,6 +74,15 @@ const STATUS_LABELS: Record<BulkEmployee["status"], string> = {
  */
 function legalNameOf(e: BulkEmployee): string {
   return `${e.firstName ?? ""} ${e.lastName ?? ""}`.trim();
+}
+
+/**
+ * The choices an "Obrázek" slot can actually offer – a name to pick and a
+ * picture to substitute. A slot with none of them is an authoring mistake the
+ * template editor flags; here it only decides what to show instead of a field.
+ */
+function imageChoicesOf(def: CustomVarDef | undefined): { label: string; src: string }[] {
+  return (def?.images ?? []).filter((o) => o.label.trim() !== "" && !!o.src);
 }
 
 /** Surname-first, Czech collation – the ordering every other picker uses. */
@@ -266,6 +276,16 @@ export default function BulkGenerateModal({ employees, onClose }: Props) {
     const type = def?.type ?? "text";
     if (type === "bool") return false;
     if (def?.optional) return false;
+    // An image slot with no usable choices has nothing to pick, and the operator
+    // running a batch usually cannot edit the template – blocking on it would be
+    // a dead end. It prints nothing, as an unfilled optional slot does, and the
+    // template editor is where the omission is flagged.
+    //
+    // ⚠️ This repeats a rule that `missingCustomVars` enforces in the engine.
+    // The repetition is unavoidable rather than sloppy: this list is the SHARED
+    // slots only (per-employee ones are excluded above), so the engine's
+    // whole-template answer is the wrong set here. Keep the two in step.
+    if (type === "image" && imageChoicesOf(def).length === 0) return false;
     return !(customRaw[k] ?? "").trim();
   });
 
@@ -379,7 +399,11 @@ export default function BulkGenerateModal({ employees, onClose }: Props) {
             // Already a formatted string – re-formatting it would corrupt it.
             customVars[key] = inputRaw[key] ?? "";
           } else {
-            customVars[key] = formatCustomValue(type, inputRaw[key] ?? "");
+            // The third argument is required for "image" slots and harmless for
+            // every other type: the raw value of an image slot is a choice's
+            // NAME, and resolving that to an <img> needs the slot's own picture
+            // list. Formatted without it, an image slot prints nothing.
+            customVars[key] = formatCustomValue(type, inputRaw[key] ?? "", def);
           }
         }
 
@@ -567,6 +591,32 @@ export default function BulkGenerateModal({ employees, onClose }: Props) {
                                 />
                                 {raw === "true" ? "Ano" : "Ne"}
                               </label>
+                            ) : type === "image" ? (
+                              // Picked by name; the picture it stands for is
+                              // substituted at generation. One choice for the
+                              // whole batch, like every other shared slot here.
+                              imageChoicesOf(def).length === 0 ? (
+                                // No free-text fallback: any text at all would
+                                // name no picture and print nothing, so a box to
+                                // type it in would only mislead.
+                                <span className={styles.hint}>
+                                  Šablona k této proměnné nemá žádné obrázky – v
+                                  dokumentech se nic nevypíše.
+                                </span>
+                              ) : (
+                                <select
+                                  className={styles.select}
+                                  value={raw}
+                                  onChange={(ev) => setRaw(ev.target.value)}
+                                >
+                                  <option value="">– vyberte –</option>
+                                  {imageChoicesOf(def).map((o, i) => (
+                                    <option key={`${o.label}-${i}`} value={o.label}>
+                                      {o.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              )
                             ) : type === "longtext" ? (
                               // Prose with line breaks; a single-line input would
                               // hide everything past the first line and swallow Enter.

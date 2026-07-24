@@ -50,23 +50,38 @@ import {
   customVarKeys,
   CUSTOM_VAR_TYPE_LABELS,
   CUSTOM_VAR_MAX_OPTIONS,
+  CUSTOM_VAR_MAX_IMAGES,
+  CUSTOM_VAR_IMAGE_MAX_CHARS,
+  CUSTOM_VAR_IMAGE_WIDTHS,
+  CUSTOM_VAR_IMAGE_ALIGNS,
+  CUSTOM_VAR_IMAGE_ALIGN_LABELS,
   CUSTOM_VAR_FORMULA_MAX,
   CUSTOM_VAR_DECIMALS_MAX,
   COMPARE_OP_LABELS,
   UNARY_OPS,
   OPS_FOR_COMPARABLE,
   comparableTypeOfCustom,
+  findImageOption,
   formulaDependencies,
   evalMathFormula,
   isCustomVarKey,
+  renderCustomImage,
   usedCustomVars,
   requiredCustomVars,
   fillTemplate,
   type CompareOp,
   type CustomVarCondition,
+  type CustomVarDef,
   type CustomVarDefs,
+  type CustomVarImageAlign,
+  type CustomVarImageOption,
   type CustomVarType,
 } from "@/lib/contractVariables";
+// Shared image handling: read a picked file into a base64 data URI, downscaling
+// it through a canvas until it fits the per-picture budget. Never hand-rolled
+// here – the same ladder has to apply wherever a picture is inlined, or two
+// surfaces end up with two different notions of "too big".
+import { prepareImageDataUri, dataUriKb, IMAGE_MIME_TYPES } from "@/lib/imageDownscale";
 import styles from "./DokumentyPage.module.css";
 
 /**
@@ -82,6 +97,10 @@ import styles from "./DokumentyPage.module.css";
  * custom operands, so the exclusion was buying nothing – it only meant a document
  * had no way to say "print this paragraph only when the amount exceeds the
  * deposit". "math" arrived with the same change and is likewise computed.
+ *
+ * "image" is the ninth and newest: a Seznam whose choices carry a picture each,
+ * so a document can print a different logo / stamp / signature depending on the
+ * answer, instead of needing one {{#case}} block per picture.
  */
 const DOC_VAR_TYPES = [
   "text",
@@ -92,8 +111,25 @@ const DOC_VAR_TYPES = [
   "list",
   "condition",
   "math",
+  "image",
 ] as const;
 type DocVarType = CustomVarType;
+
+// ── Picture budget ───────────────────────────────────────────────────────────
+//
+// Every picture is inlined as base64 into the SAME Firestore document as the
+// HTML, and Firestore caps a document at 1 MiB (≈1024 kB). Nothing warns about
+// that until the save fails, so the editor keeps a running total.
+//
+// The two thresholds leave the document's own content room to exist: at the
+// upper one the pictures alone occupy roughly four fifths of the ceiling, and a
+// page of formatted HTML with an editor-pasted image or two comfortably eats the
+// rest. Deliberately well below 1024 – a threshold that only trips once the save
+// is already doomed would be a readout, not a warning.
+/** Amber from here: still saveable, but the headroom is going. */
+const IMAGE_TOTAL_WARN_KB = 600;
+/** Red from here: a save is likely to be refused once the text grows. */
+const IMAGE_TOTAL_LIMIT_KB = 800;
 
 /** The slot keys this page offers – see DOCUMENT_VAR_COUNT. */
 const DOC_VAR_KEYS = customVarKeys(DOCUMENT_VAR_COUNT);
@@ -210,12 +246,31 @@ function customVarWarning(html: string, defs: CustomVarDefs): string | null {
   const emptyConditions = used.filter(
     (k) => defs[k]?.type === "condition" && !defs[k]?.condition?.leftKey
   );
+  // An "image" slot with no choices at all: the generate form has nothing to
+  // offer, so the slot can never be answered and the document prints without the
+  // picture. Same silent-but-producible fault as the optionless list – and worse
+  // to diagnose, because an image slot cannot fall back to a free-text box the
+  // way a list does (a typed string has no picture behind it).
+  const emptyImages = used.filter(
+    (k) => defs[k]?.type === "image" && (defs[k]?.images ?? []).length === 0
+  );
+  // A choice with a name but no picture (or a picture nobody can pick, because
+  // it has no name). Either half alone renders nothing: the label is what the
+  // user selects, the picture is what gets printed, and one without the other is
+  // a choice that quietly produces an empty space in the document.
+  const incompleteImages = used.filter(
+    (k) =>
+      defs[k]?.type === "image" &&
+      (defs[k]?.images ?? []).some((o) => !!o.label.trim() !== !!o.src)
+  );
   const parts: string[] = [];
   if (unnamed.length > 0) parts.push(`Bez nastavení: ${unnamed.join(", ")} – chybí název a typ.`);
   if (emptyLists.length > 0) parts.push(`Bez možností: ${emptyLists.join(", ")} – seznam nemá žádné hodnoty.`);
   if (brokenMath.length > 0) parts.push(`Chybný vzorec: ${brokenMath.join(", ")} – výpočet nelze vyhodnotit a vypíše se prázdná hodnota.`);
   if (unknownOperands.size > 0) parts.push(`Neznámá proměnná ve vzorci: ${[...unknownOperands].join(", ")} – v dokumentu taková proměnná není a celý výpočet zůstane prázdný.`);
   if (emptyConditions.length > 0) parts.push(`Bez podmínky: ${emptyConditions.join(", ")} – porovnání není nastaveno, podmínka nikdy neplatí.`);
+  if (emptyImages.length > 0) parts.push(`Bez obrázků: ${emptyImages.join(", ")} – proměnná nemá žádnou možnost k výběru a v dokumentu se nevypíše nic.`);
+  if (incompleteImages.length > 0) parts.push(`Neúplná možnost: ${incompleteImages.join(", ")} – u některé možnosti chybí obrázek, nebo název; taková možnost se v dokumentu nevypíše.`);
   return parts.length > 0 ? parts.join(" ") : null;
 }
 
@@ -326,6 +381,20 @@ export default function DokumentyPage() {
   const canManage = can("dokumenty.manage");
 
   const imageInputRef = useRef<HTMLInputElement>(null);
+  // ── "Obrázek" slot uploads ─────────────────────────────────────────────────
+  // One hidden <input type="file"> per option row, keyed "varN:index" and opened
+  // by that row's own button. A file input can't be the shared <Button>, so the
+  // button clicks the input instead of a <label> wrapping it – that keeps every
+  // text-bearing control in this page on the shared component.
+  const optionImageInputs = useRef<Record<string, HTMLInputElement | null>>({});
+  /** The row whose file is being read / downscaled right now, or null. */
+  const [imageBusy, setImageBusy] = useState<string | null>(null);
+  /**
+   * Rows whose last upload had to be shrunk to fit the per-picture budget. Not
+   * an error – the picture IS stored – but the author has to be told, because
+   * the file they picked is not byte-for-byte what the document will print.
+   */
+  const [imageShrunk, setImageShrunk] = useState<Record<string, boolean>>({});
   const [docs, setDocs] = useState<DocumentMeta[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -677,7 +746,18 @@ export default function DokumentyPage() {
       }
       const literal = def?.default?.kind === "literal" ? def.default.value.trim() : "";
       const firstOption = type === "list" ? (def?.options ?? []).find((o) => o.trim()) ?? "" : "";
-      raw[key] = literal || firstCase[key] || firstOption || "";
+      const firstImage =
+        type === "image"
+          ? (def?.images ?? []).find((o) => o.label.trim() && o.src)?.label ?? ""
+          : "";
+      raw[key] = literal || firstCase[key] || firstOption || firstImage || "";
+      // An image slot is the one type whose bracketed label would be actively
+      // misleading: the document prints a picture there, so the preview shows
+      // the stand-in choice's picture instead. Falls back to the bracketed name
+      // when no choice is configured, which is what the author needs to see.
+      if (type === "image") {
+        vars[key] = renderCustomImage(findImageOption(def, String(raw[key] ?? ""))) || vars[key];
+      }
     }
     return fillTemplate(viewHtml, vars, raw);
   }, [viewHtml, variableDefs]);
@@ -850,6 +930,21 @@ export default function DokumentyPage() {
    * that are hard to click between, and the author is meant to select the words
    * and type over them.
    */
+  /**
+   * The values a `{{#case}}` tag can be built from for a slot, so the author
+   * picks one instead of retyping it. A Seznam offers its choices; an Obrázek
+   * offers its choices' NAMES – an image slot's raw value is the chosen label,
+   * which is exactly what a switch compares against.
+   *
+   * Empty for every other type, where the dialog falls back to a text field.
+   */
+  function caseChoicesFor(key: string): string[] {
+    const def = variableDefs[key];
+    if (def?.type === "list") return (def.options ?? []).filter((o) => o.trim());
+    if (def?.type === "image") return (def.images ?? []).map((o) => o.label).filter((l) => l.trim());
+    return [];
+  }
+
   function insertCase() {
     if (!caseDraft || !caseDraft.key) return;
     const { key, op, value } = caseDraft;
@@ -967,6 +1062,7 @@ export default function DokumentyPage() {
       default: LiteralDefault | undefined;
       optional: boolean;
       options: string[] | undefined;
+      images: CustomVarImageOption[] | undefined;
       formula: string | undefined;
       decimals: number | undefined;
       condition: CustomVarCondition | undefined;
@@ -985,6 +1081,12 @@ export default function DokumentyPage() {
       const nextType = patch.type ?? prevDef?.type ?? "text";
       const nextOptions =
         "options" in patch ? patch.options : nextType === "list" ? prevDef?.options : undefined;
+      // Pictures belong to an "image" slot only, and the same rule applies with
+      // more force than anywhere else: an abandoned image list is not just stale
+      // config, it is up to eight base64 pictures still weighing on the 1 MiB
+      // document limit for a slot that no longer prints them.
+      const nextImages =
+        "images" in patch ? patch.images : nextType === "image" ? prevDef?.images : undefined;
       // Same rule, same reason, for the two computed types' configuration: a
       // formula names slots and produces a number, a condition compares two
       // operands – neither means anything on a slot that is now a plain text
@@ -1011,6 +1113,7 @@ export default function DokumentyPage() {
           ...(nextDefault ? { default: nextDefault } : {}),
           ...(nextOptional ? { optional: true } : {}),
           ...(nextOptions && nextOptions.length > 0 ? { options: nextOptions } : {}),
+          ...(nextImages && nextImages.length > 0 ? { images: nextImages } : {}),
           ...(nextFormula ? { formula: nextFormula } : {}),
           ...(nextDecimals !== undefined ? { decimals: nextDecimals } : {}),
           ...(nextCondition ? { condition: nextCondition } : {}),
@@ -1070,6 +1173,209 @@ export default function DokumentyPage() {
             onClick={() => write([...options, ""])}
           >
             + Přidat možnost
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  /**
+   * Combined weight of every picture configured on this document, in kB.
+   *
+   * Sums ALL slots, not just the ones the text uses: an orphaned image slot's
+   * pictures are still stored and still count against the document's 1 MiB
+   * ceiling, so a total that quietly ignored them would understate exactly the
+   * case that causes a surprise failed save.
+   */
+  const imagesTotalKb = useMemo(() => {
+    let total = 0;
+    for (const def of Object.values(variableDefs)) {
+      for (const opt of def.images ?? []) total += dataUriKb(opt.src);
+    }
+    return total;
+  }, [variableDefs]);
+
+  /**
+   * Store a picked file as one image choice's picture.
+   *
+   * Writes through `setVariableDefs` directly rather than through `setDef`,
+   * which is the one place in this page that does. `setDef` takes a fully-formed
+   * replacement array, and the array here would have to be captured BEFORE the
+   * await that reads and downscales the file – so two uploads started in quick
+   * succession would each write a copy of the same pre-upload list and the first
+   * picture would vanish. The functional updater reads the current list at the
+   * moment it writes, which is the only ordering that is actually safe.
+   */
+  async function handleOptionImageFile(
+    key: string,
+    index: number,
+    e: React.ChangeEvent<HTMLInputElement>
+  ) {
+    const file = e.target.files?.[0];
+    // Cleared straight away, and before any early return: without this, picking
+    // the SAME file again fires no change event at all and the upload appears to
+    // do nothing (the classic re-pick trap).
+    e.target.value = "";
+    if (!file) return;
+    const rowId = `${key}:${index}`;
+    setImageBusy(rowId);
+    try {
+      const result = await prepareImageDataUri(file, CUSTOM_VAR_IMAGE_MAX_CHARS);
+      if (!result.ok) {
+        // Its message is already a finished Czech sentence – shown through the
+        // page's error dialog, never a native alert.
+        setErrorModal(result.message);
+        return;
+      }
+      setImageShrunk((prev) => ({ ...prev, [rowId]: result.shrunk }));
+      setVariableDefs((prev) => {
+        const base: CustomVarDef = prev[key] ?? { label: "", type: "image" };
+        const images = [...(base.images ?? [])];
+        images[index] = { ...(images[index] ?? { label: "", src: "" }), src: result.dataUri };
+        return { ...prev, [key]: { ...base, images } };
+      });
+      setIsDirty(true);
+    } catch {
+      setErrorModal("Obrázek se nepodařilo načíst. Zkuste prosím jiný soubor.");
+    } finally {
+      setImageBusy(null);
+    }
+  }
+
+  /**
+   * Editor for an "image" slot's choices: one row per picture, each with the
+   * name that will be offered at fill-in time, the picture itself, and the
+   * width / alignment it prints at.
+   *
+   * Width and alignment are PER CHOICE rather than per slot, because the point
+   * of the type is that the choices differ – a wide letterhead and a small stamp
+   * are a perfectly ordinary pair to put behind one variable, and forcing them
+   * to share a width would make one of them wrong.
+   */
+  function renderImagesEditor(key: string) {
+    const images = variableDefs[key]?.images ?? [];
+    const write = (next: CustomVarImageOption[]) =>
+      setDef(key, { images: next.length > 0 ? next : undefined });
+    const patch = (i: number, p: Partial<CustomVarImageOption>) =>
+      write(images.map((o, j) => (j === i ? { ...o, ...p } : o)));
+    const atLimit = images.length >= CUSTOM_VAR_MAX_IMAGES;
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <span style={{ fontSize: "0.72rem", color: "var(--color-text-muted)" }}>
+          Obrázky k výběru {images.length > 0 && `(${images.length})`}
+        </span>
+        {images.map((opt, i) => {
+          const rowId = `${key}:${i}`;
+          const busy = imageBusy === rowId;
+          return (
+            <div key={i} className={styles.imageOptionRow}>
+              {/* Thumbnail first: it is what the author checks the row by, and a
+                  fixed-size box keeps the rows aligned whether or not a picture
+                  has been uploaded yet. */}
+              {opt.src ? (
+                <img src={opt.src} alt="" className={styles.imageThumb} />
+              ) : (
+                <span className={styles.imageThumbEmpty} aria-hidden="true">
+                  🖼
+                </span>
+              )}
+              <div className={styles.imageOptionMain}>
+                <input
+                  type="text"
+                  style={fieldStyle}
+                  value={opt.label}
+                  maxLength={100}
+                  placeholder={`Název možnosti ${i + 1}`}
+                  aria-label={`Název obrázku ${i + 1}`}
+                  onChange={(e) => patch(i, { label: e.target.value })}
+                />
+                <div className={styles.imageOptionControls}>
+                  <input
+                    ref={(el) => {
+                      optionImageInputs.current[rowId] = el;
+                    }}
+                    type="file"
+                    accept={IMAGE_MIME_TYPES.join(",")}
+                    style={{ display: "none" }}
+                    onChange={(e) => handleOptionImageFile(key, i, e)}
+                  />
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => optionImageInputs.current[rowId]?.click()}
+                  >
+                    {busy ? "Načítám…" : opt.src ? "Změnit obrázek" : "Nahrát obrázek"}
+                  </Button>
+                  <select
+                    style={{ ...fieldStyle, width: "auto" }}
+                    value={opt.width ?? ""}
+                    aria-label={`Šířka obrázku ${i + 1}`}
+                    onChange={(e) => patch(i, { width: e.target.value || undefined })}
+                  >
+                    {/* Absent width = the picture's own size, exactly as an
+                        image pasted into the editor with no width set. */}
+                    <option value="">Původní velikost</option>
+                    {CUSTOM_VAR_IMAGE_WIDTHS.map((w) => (
+                      <option key={w} value={w}>{w}</option>
+                    ))}
+                  </select>
+                  <select
+                    style={{ ...fieldStyle, width: "auto" }}
+                    value={opt.align ?? ""}
+                    aria-label={`Zarovnání obrázku ${i + 1}`}
+                    onChange={(e) =>
+                      patch(i, { align: (e.target.value || undefined) as CustomVarImageAlign | undefined })
+                    }
+                  >
+                    <option value="">Bez zarovnání</option>
+                    {CUSTOM_VAR_IMAGE_ALIGNS.map((a) => (
+                      <option key={a} value={a}>{CUSTOM_VAR_IMAGE_ALIGN_LABELS[a]}</option>
+                    ))}
+                  </select>
+                  {opt.src && (
+                    <span className={styles.imageSize}>{dataUriKb(opt.src)} kB</span>
+                  )}
+                </div>
+                {imageShrunk[rowId] && (
+                  <span className={styles.imageShrunkNote}>
+                    Obrázek byl automaticky zmenšen, aby se vešel do dokumentu.
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                className={styles.optionRemoveBtn}
+                aria-label={`Odebrat obrázek ${i + 1}`}
+                title="Odebrat obrázek"
+                onClick={() => {
+                  write(images.filter((_, j) => j !== i));
+                  // The "byl zmenšen" notes are keyed by row INDEX, and removing
+                  // a row shifts every index below it – so the slot's notes are
+                  // dropped rather than left pointing at the wrong pictures.
+                  setImageShrunk((prev) => {
+                    const next = { ...prev };
+                    for (const id of Object.keys(next)) {
+                      if (id.startsWith(`${key}:`)) delete next[id];
+                    }
+                    return next;
+                  });
+                }}
+              >
+                ✕
+              </button>
+            </div>
+          );
+        })}
+        <div>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={atLimit}
+            title={atLimit ? `Nejvýše ${CUSTOM_VAR_MAX_IMAGES} obrázků` : undefined}
+            onClick={() => write([...images, { label: "", src: "" }])}
+          >
+            + Přidat obrázek
           </Button>
         </div>
       </div>
@@ -1323,6 +1629,21 @@ export default function DokumentyPage() {
           <option value="">– vyberte –</option>
           {options.map((o, i) => (
             <option key={`${o}-${i}`} value={o}>{o}</option>
+          ))}
+        </select>
+      );
+    }
+    if (type === "image") {
+      // Same reasoning as the list above, and the same shape: an image slot's
+      // value IS one of its choices' names, so a free-text default could only
+      // ever name a picture that does not exist – and would print nothing at all
+      // rather than failing visibly.
+      const images = variableDefs[key]?.images ?? [];
+      return (
+        <select style={fieldStyle} value={value} onChange={(e) => set(e.target.value)}>
+          <option value="">– vyberte –</option>
+          {images.map((o, i) => (
+            <option key={`${o.label}-${i}`} value={o.label}>{o.label || `Obrázek ${i + 1}`}</option>
           ))}
         </select>
       );
@@ -2264,6 +2585,35 @@ export default function DokumentyPage() {
                 u typu Seznam si tam hodnotu vyberete, takže se nemůže přepsat jinak,
                 než jak je nastavená.
               </p>
+              <p style={hintStyle}>
+                Typ <strong>Obrázek</strong> funguje jako Seznam, u kterého každá možnost
+                nese svůj obrázek: při vyplňování se vybere název možnosti a do dokumentu
+                se vloží příslušný obrázek v nastavené šířce a zarovnání. Obrázky se
+                ukládají přímo v dokumentu, proto je jich nejvýše {CUSTOM_VAR_MAX_IMAGES}
+                {" "}a velké soubory se automaticky zmenší.
+              </p>
+
+              {/* Running total of every stored picture. Rendered only once a
+                  picture exists – a permanent "0 kB" line would be noise on the
+                  documents (the great majority) that use no images at all. */}
+              {imagesTotalKb > 0 && (
+                <p
+                  className={
+                    imagesTotalKb >= IMAGE_TOTAL_LIMIT_KB
+                      ? styles.imageTotalOver
+                      : imagesTotalKb >= IMAGE_TOTAL_WARN_KB
+                      ? styles.imageTotalWarn
+                      : styles.imageTotal
+                  }
+                >
+                  Obrázky v dokumentu celkem: <strong>{imagesTotalKb} kB</strong>
+                  {imagesTotalKb >= IMAGE_TOTAL_LIMIT_KB
+                    ? " – dokument se nemusí podařit uložit. Odeberte prosím některý obrázek, nebo použijte menší soubory."
+                    : imagesTotalKb >= IMAGE_TOTAL_WARN_KB
+                    ? " – blížíte se hranici velikosti dokumentu. Další velké obrázky už se nemusí vejít."
+                    : ` z přibližně ${IMAGE_TOTAL_LIMIT_KB} kB, které má dokument k dispozici.`}
+                </p>
+              )}
 
               {usedSlots.length === 0 ? (
                 <p style={hintStyle}>
@@ -2402,6 +2752,14 @@ export default function DokumentyPage() {
                               </td>
                             </tr>
                           )}
+                          {type === "image" && (
+                            <tr>
+                              <td />
+                              <td colSpan={4} style={{ padding: "0 0 10px 0" }}>
+                                {renderImagesEditor(key)}
+                              </td>
+                            </tr>
+                          )}
                           </Fragment>
                         );
                       })}
@@ -2490,15 +2848,14 @@ export default function DokumentyPage() {
               </div>
               <div>
                 <label style={createLabelStyle}>Hodnota</label>
-                {variableDefs[caseDraft.key]?.type === "list" &&
-                (variableDefs[caseDraft.key]?.options ?? []).some((o) => o.trim()) ? (
+                {caseChoicesFor(caseDraft.key).length > 0 ? (
                   <select
                     style={createInputStyle}
                     value={caseDraft.value}
                     onChange={(e) => setCaseDraft({ ...caseDraft, value: e.target.value })}
                   >
                     <option value="">– vyberte –</option>
-                    {(variableDefs[caseDraft.key]?.options ?? []).map((o, i) => (
+                    {caseChoicesFor(caseDraft.key).map((o, i) => (
                       <option key={`${o}-${i}`} value={o}>{o}</option>
                     ))}
                   </select>

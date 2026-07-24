@@ -20,6 +20,8 @@ import {
   formatCustomValue,
   isFixedVarPassthrough,
   isComputedVarType,
+  isImageDataUri,
+  findImageOption,
   usedCustomVars,
   requiredCustomVars,
   resolveComputedVars,
@@ -193,6 +195,25 @@ function previewRawFor(
   const type = def?.type ?? "text";
   if (type === "bool") return bools[key] ? "true" : "";
   const d = def?.default;
+  // An image slot previews with a REAL picture: the whole reason the preview
+  // exists is to judge layout, and a picture is the single largest thing a slot
+  // can put on the page. Its configured default first (that is what the generate
+  // dialog will pre-select), otherwise the first choice that can actually
+  // render — a choice with no picture would preview as nothing while a later,
+  // complete one would have shown the true height.
+  //
+  // With NOTHING configured the preview stays blank on purpose, unlike every
+  // other type: there is no mock picture to stand in with, and inventing one
+  // would show a layout the document can never produce. Blank is what the
+  // document will genuinely print, and the editor already warns about the slot.
+  if (type === "image") {
+    const configuredDefault =
+      d?.kind === "literal" ? findImageOption(def, d.value) : undefined;
+    const chosen =
+      configuredDefault ??
+      (def?.images ?? []).find((o) => o.label.trim() && isImageDataUri(o.src));
+    return chosen?.label ?? "";
+  }
   if (d?.kind === "fixedVar" && (fixedVars[d.key] ?? "")) return fixedVars[d.key];
   if (d?.kind === "literal" && d.value.trim()) return d.value;
   // A list slot previews with one of its own choices; generic mock text would
@@ -269,9 +290,13 @@ export function buildPreview(
     }
     // A fixed-variable default is already a printed string; re-formatting it
     // would corrupt it (a date would stop parsing) – same rule as generation.
+    // `def` as the third argument, not for show: an image slot's raw value is a
+    // choice's name, and turning that back into an <img> needs the slot's own
+    // picture list. Without it the preview would render nothing for exactly the
+    // type whose layout you opened the preview to check.
     vars[key] = isFixedVarPassthrough(def)
       ? inputRaw[key] ?? ""
-      : formatCustomValue(type, inputRaw[key] ?? "");
+      : formatCustomValue(type, inputRaw[key] ?? "", def);
   }
 
   return { vars, raw: { ...vars, ...raw } };

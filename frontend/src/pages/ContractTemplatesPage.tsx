@@ -41,6 +41,11 @@ import {
   CUSTOM_VAR_MAX_OPTIONS,
   CUSTOM_VAR_FORMULA_MAX,
   CUSTOM_VAR_DECIMALS_MAX,
+  CUSTOM_VAR_MAX_IMAGES,
+  CUSTOM_VAR_IMAGE_MAX_CHARS,
+  CUSTOM_VAR_IMAGE_WIDTHS,
+  CUSTOM_VAR_IMAGE_ALIGNS,
+  CUSTOM_VAR_IMAGE_ALIGN_LABELS,
   isComputedVarType,
   comparableTypeOfCustom,
   formulaDependencies,
@@ -56,7 +61,10 @@ import {
   type CustomVarDefault,
   type CompareOp,
   type CustomVarCondition,
+  type CustomVarImageOption,
+  type CustomVarImageAlign,
 } from "@/lib/contractVariables";
+import { prepareImageDataUri, dataUriKb, IMAGE_MIME_TYPES } from "@/lib/imageDownscale";
 import {
   buildPreview,
   defaultBools,
@@ -82,6 +90,27 @@ const ALL_TYPES = Object.keys(CONTRACT_TYPE_LABELS) as ContractType[];
  */
 const CONTRACT_SLOT_KEYS = customVarKeys(CONTRACT_VAR_COUNT);
 const CONTRACT_SLOT_SET = new Set(CONTRACT_SLOT_KEYS);
+
+/**
+ * When the pictures on a template's "Obrázek" slots start crowding out the
+ * document itself, in characters of base64 across every such slot.
+ *
+ * Every picture is inlined on the SAME Firestore document as the template's
+ * HTML (see lib/imageDownscale.ts for why it cannot be a Storage URL), and
+ * Firestore refuses a document over 1 MiB. Eight choices at the per-picture cap
+ * would be ~960 000 characters on their own, so the ceiling is genuinely
+ * reachable rather than theoretical. 600 000 is ~60 % of it, which still leaves
+ * roughly 400 kB for the text and for any pictures the author pasted straight
+ * into the document — enough headroom that the warning arrives while there is
+ * still something to do about it, instead of as a failed save after an hour of
+ * editing.
+ */
+const IMAGE_TOTAL_WARN_CHARS = 600_000;
+
+/** A choice that can actually be picked AND rendered: it has both halves. */
+function isUsableImageOption(opt: CustomVarImageOption): boolean {
+  return opt.label.trim() !== "" && !!opt.src;
+}
 
 interface TemplateMeta {
   id: string;
@@ -144,10 +173,26 @@ function customVarWarning(html: string, defs: CustomVarDefs): string | null {
   const emptyFormulas = used.filter(
     (k) => defs[k]?.type === "math" && !(defs[k]?.formula ?? "").trim()
   );
+  // An image slot with no usable choice offers nothing to pick and prints
+  // nothing – the same silent blank as an empty list, but with no free-text
+  // fallback to rescue it, so the generate dialog can only say "not configured".
+  const emptyImages = used.filter(
+    (k) => defs[k]?.type === "image" && !(defs[k]?.images ?? []).some(isUsableImageOption)
+  );
+  // Half-filled choices: a name with no picture would print nothing when picked,
+  // a picture with no name can never be picked at all. Either way the author
+  // sees a choice that looks finished and behaves as if it were missing.
+  const partialImages = used.filter(
+    (k) =>
+      defs[k]?.type === "image" &&
+      (defs[k]?.images ?? []).some((o) => (o.label.trim() !== "") !== !!o.src)
+  );
   const parts: string[] = [];
   if (unnamed.length > 0) parts.push(`Bez nastavení: ${unnamed.join(", ")} – chybí název a typ.`);
   if (emptyLists.length > 0) parts.push(`Bez možností: ${emptyLists.join(", ")} – seznam nemá žádné hodnoty.`);
   if (emptyFormulas.length > 0) parts.push(`Bez vzorce: ${emptyFormulas.join(", ")} – výpočet nic nevypíše.`);
+  if (emptyImages.length > 0) parts.push(`Bez obrázků: ${emptyImages.join(", ")} – žádná možnost nemá název i obrázek.`);
+  if (partialImages.length > 0) parts.push(`Neúplné obrázky: ${partialImages.join(", ")} – možnost má jen název, nebo jen obrázek.`);
   if (overLimit.length > 0) {
     parts.push(
       `Mimo rozsah: ${overLimit.join(", ")} – šablony smluv nabízejí jen ` +
@@ -225,6 +270,13 @@ export default function ContractTemplatesPage() {
   // with the template; the same slot means different things in different ones.
   const [variableDefs, setVariableDefs] = useState<CustomVarDefs>({});
   const [customVarsOpen, setCustomVarsOpen] = useState(false);
+  // "Obrázek" slots: one hidden file input serves every choice's upload button,
+  // with the choice the next pick belongs to held here (a per-row input would be
+  // one DOM node per picture for no gain). `varImageShrunk` remembers which
+  // choices were downscaled on the way in – an inline note, not an error.
+  const varImageInputRef = useRef<HTMLInputElement>(null);
+  const [varImageTarget, setVarImageTarget] = useState<{ key: string; index: number } | null>(null);
+  const [varImageShrunk, setVarImageShrunk] = useState<Record<string, boolean>>({});
   // "Přepínač" – the small dialog that assembles a {{#case varN = …}} block.
   // Retyping the compared value by hand is the main way a switch silently fails
   // to match, so for a "list" slot the dialog picks from the configured choices.
@@ -882,6 +934,42 @@ export default function ContractTemplatesPage() {
     };
     reader.readAsDataURL(file);
     e.target.value = "";
+  }
+
+  /**
+   * A picture picked for one choice of an "Obrázek" slot. Goes through
+   * prepareImageDataUri, which downscales an oversized file rather than
+   * refusing it outright, and refuses only when even that isn't enough – the
+   * message it returns is the one to show, because it says what to do next.
+   */
+  async function handleVarImageFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    const target = varImageTarget;
+    // Reset before the await: without it, picking the SAME file again fires no
+    // change event and the upload silently does nothing.
+    e.target.value = "";
+    if (!file || !target) return;
+    const result = await prepareImageDataUri(file, CUSTOM_VAR_IMAGE_MAX_CHARS);
+    if (!result.ok) {
+      setErrorModal(result.message);
+      return;
+    }
+    setVariableDefs((prev) => {
+      const def = prev[target.key];
+      const images = def?.images ?? [];
+      // The row can be gone if the author removed it while the file dialog was
+      // open; writing the picture back would resurrect a deleted choice.
+      if (!def || !images[target.index]) return prev;
+      const next = images.map((o, i) =>
+        i === target.index ? { ...o, src: result.dataUri } : o
+      );
+      return { ...prev, [target.key]: { ...def, images: next } };
+    });
+    setVarImageShrunk((prev) => ({
+      ...prev,
+      [`${target.key}:${target.index}`]: result.shrunk,
+    }));
+    setIsDirty(true);
   }
 
   if (isPhone) {
@@ -1668,6 +1756,14 @@ export default function ContractTemplatesPage() {
         // undone) but flagged, so the list can't quietly rot.
         const orphaned = Object.keys(variableDefs).filter((k) => !used.includes(k));
 
+        // Running total across EVERY image slot, orphaned ones included: they
+        // are all stored on the same template document, so they all count
+        // against the same 1 MiB ceiling whether the text still uses them or not.
+        const allImages = Object.values(variableDefs).flatMap((d) => d.images ?? []);
+        const imageTotalChars = allImages.reduce((sum, o) => sum + (o.src?.length ?? 0), 0);
+        const imageTotalKb = allImages.reduce((sum, o) => sum + dataUriKb(o.src ?? ""), 0);
+        const imagesOverBudget = imageTotalChars > IMAGE_TOTAL_WARN_CHARS;
+
         const setDef = (
           key: string,
           patch: Partial<{
@@ -1679,6 +1775,7 @@ export default function ContractTemplatesPage() {
             options: string[] | undefined;
             formula: string | undefined;
             decimals: number | undefined;
+            images: CustomVarImageOption[] | undefined;
           }>
         ) => {
           setVariableDefs((prev) => {
@@ -1716,6 +1813,14 @@ export default function ContractTemplatesPage() {
               "options" in patch
                 ? patch.options
                 : nextTypeVal === "list" ? prevDef?.options : undefined;
+            // Same rule for the pictures, with an extra reason of its own: they
+            // are by far the heaviest thing on the document, so keeping them on
+            // a slot that is no longer an image would spend the 1 MiB budget on
+            // data nothing can render.
+            const nextImages =
+              "images" in patch
+                ? patch.images
+                : nextTypeVal === "image" ? prevDef?.images : undefined;
             // Unlike the above, `optional` survives a type change: a plain
             // boolean can't become invalid for the new type, only inapplicable
             // (bool/condition/math ignore it), so the author's intent is kept if
@@ -1732,6 +1837,7 @@ export default function ContractTemplatesPage() {
                 ...(nextCondition ? { condition: nextCondition } : {}),
                 ...(nextOptional ? { optional: true } : {}),
                 ...(nextOptions && nextOptions.length > 0 ? { options: nextOptions } : {}),
+                ...(nextImages && nextImages.length > 0 ? { images: nextImages } : {}),
                 ...(nextFormula ? { formula: nextFormula } : {}),
                 // 0 is a real precision (whole crowns), so test for undefined –
                 // a falsy check would silently drop it.
@@ -1973,12 +2079,188 @@ export default function ContractTemplatesPage() {
           );
         };
 
+        /**
+         * Editor for an "Obrázek" slot's choices. Shaped like the "Seznam"
+         * editor above, because an image slot IS a list – the value picked at
+         * generation is the choice's NAME, and the picture is what that name
+         * substitutes into the document. Each choice therefore carries its own
+         * width and alignment: the point of the type is that different answers
+         * print different pictures, and those pictures rarely share a size.
+         */
+        const renderImagesEditor = (key: string) => {
+          const images = variableDefs[key]?.images ?? [];
+          const write = (next: CustomVarImageOption[]) =>
+            setDef(key, { images: next.length > 0 ? next : undefined });
+          const patch = (i: number, p: Partial<CustomVarImageOption>) =>
+            write(
+              images.map((o, j) => {
+                if (j !== i) return o;
+                const next: CustomVarImageOption = { ...o, ...p };
+                // "No width" means the picture's natural size and "no alignment"
+                // means inline – neither is the same as an empty string, which
+                // renderCustomImage would have to guess at.
+                if (!next.width) delete next.width;
+                if (!next.align) delete next.align;
+                return next;
+              })
+            );
+          /**
+           * Remove one choice, shifting the "was downscaled" notes down with it.
+           * Those are keyed by position, so without the shift the note would move
+           * to whichever picture inherited the index and claim something about it
+           * that isn't true.
+           */
+          const removeAt = (i: number) => {
+            write(images.filter((_, j) => j !== i));
+            setVarImageShrunk((prev) => {
+              const next: Record<string, boolean> = {};
+              for (const [k, v] of Object.entries(prev)) {
+                const [slot, idxStr] = k.split(":");
+                const idx = Number(idxStr);
+                if (slot !== key) next[k] = v;
+                else if (idx < i) next[k] = v;
+                else if (idx > i) next[`${slot}:${idx - 1}`] = v;
+              }
+              return next;
+            });
+          };
+          const atLimit = images.length >= CUSTOM_VAR_MAX_IMAGES;
+          return (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <span style={{ fontSize: "0.72rem", color: "var(--color-text-muted)" }}>
+                Obrázky k výběru {images.length > 0 && `(${images.length})`}
+              </span>
+              {images.map((opt, i) => {
+                const shrunk = varImageShrunk[`${key}:${i}`];
+                return (
+                  <div
+                    key={i}
+                    style={{ display: "flex", alignItems: "flex-start", gap: 6, flexWrap: "wrap" }}
+                  >
+                    <input
+                      type="text"
+                      style={{ ...fieldStyle, flex: "1 1 160px", minWidth: 0 }}
+                      value={opt.label}
+                      maxLength={100}
+                      placeholder={`Název možnosti ${i + 1}`}
+                      aria-label={`Název obrázku ${i + 1}`}
+                      onChange={(e) => patch(i, { label: e.target.value })}
+                    />
+                    {/* The thumbnail doubles as the "is anything uploaded"
+                        readout – a name with no picture prints nothing. */}
+                    {opt.src ? (
+                      <img
+                        src={opt.src}
+                        alt=""
+                        style={{
+                          flex: "0 0 auto",
+                          height: 36,
+                          maxWidth: 90,
+                          objectFit: "contain",
+                          border: "1px solid var(--color-border)",
+                          borderRadius: 4,
+                          background: "var(--color-surface)",
+                        }}
+                      />
+                    ) : (
+                      <span
+                        style={{
+                          flex: "0 0 auto",
+                          fontSize: "0.72rem",
+                          color: "var(--color-text-muted)",
+                          alignSelf: "center",
+                        }}
+                      >
+                        bez obrázku
+                      </span>
+                    )}
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        setVarImageTarget({ key, index: i });
+                        varImageInputRef.current?.click();
+                      }}
+                    >
+                      {opt.src ? "Nahradit…" : "Nahrát…"}
+                    </Button>
+                    <select
+                      style={{ ...fieldStyle, width: "auto", flex: "0 0 auto" }}
+                      value={opt.width ?? ""}
+                      aria-label={`Šířka obrázku ${i + 1}`}
+                      onChange={(e) => patch(i, { width: e.target.value })}
+                    >
+                      <option value="">Původní šířka</option>
+                      {CUSTOM_VAR_IMAGE_WIDTHS.map((w) => (
+                        <option key={w} value={w}>{w}</option>
+                      ))}
+                    </select>
+                    <select
+                      style={{ ...fieldStyle, width: "auto", flex: "0 0 auto" }}
+                      value={opt.align ?? ""}
+                      aria-label={`Zarovnání obrázku ${i + 1}`}
+                      onChange={(e) =>
+                        patch(i, { align: e.target.value as CustomVarImageAlign })
+                      }
+                    >
+                      <option value="">V textu</option>
+                      {CUSTOM_VAR_IMAGE_ALIGNS.map((a) => (
+                        <option key={a} value={a}>{CUSTOM_VAR_IMAGE_ALIGN_LABELS[a]}</option>
+                      ))}
+                    </select>
+                    {opt.src && (
+                      <span
+                        style={{
+                          flex: "0 0 auto",
+                          alignSelf: "center",
+                          fontSize: "0.72rem",
+                          color: "var(--color-text-muted)",
+                        }}
+                      >
+                        {dataUriKb(opt.src)} kB
+                        {shrunk && " – automaticky zmenšeno"}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      className={styles.optionRemoveBtn}
+                      aria-label={`Odebrat obrázek ${i + 1}`}
+                      title="Odebrat obrázek"
+                      onClick={() => removeAt(i)}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                );
+              })}
+              <div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={atLimit}
+                  title={atLimit ? `Nejvýše ${CUSTOM_VAR_MAX_IMAGES} obrázků` : undefined}
+                  onClick={() => write([...images, { label: "", src: "" }])}
+                >
+                  + Přidat obrázek
+                </Button>
+              </div>
+            </div>
+          );
+        };
+
         // Render the literal-value input matching a slot's type.
         const renderLiteralDefault = (key: string, type: CustomVarType, value: string) => {
           const set = (v: string) => setDef(key, { default: { kind: "literal", value: v } });
-          if (type === "list") {
-            // A list slot's default has to BE one of its choices.
-            const opts = variableDefs[key]?.options ?? [];
+          if (type === "list" || type === "image") {
+            // A list slot's default has to BE one of its choices – and so does
+            // an image slot's, whose raw value is likewise a choice's name. A
+            // free-text default would match no picture and print nothing.
+            const opts =
+              type === "image"
+                ? (variableDefs[key]?.images ?? [])
+                    .filter((o) => o.label.trim())
+                    .map((o) => o.label)
+                : variableDefs[key]?.options ?? [];
             return (
               <select style={fieldStyle} value={value} onChange={(e) => set(e.target.value)}>
                 <option value="">– vyberte –</option>
@@ -2172,6 +2454,24 @@ export default function ContractTemplatesPage() {
                   hodnotu vyberete, takže se nemůžete přepsat.
                 </p>
 
+                <p style={hintStyle}>
+                  Typ <strong>Obrázek</strong> je seznam, jehož každá možnost nese
+                  vlastní obrázek: při generování vyberete název možnosti a do
+                  dokumentu se vloží její obrázek v nastavené šířce a zarovnání.
+                  Obrázky se ukládají přímo do šablony, proto jich je nejvýše{" "}
+                  {CUSTOM_VAR_MAX_IMAGES} a velké se automaticky zmenší.
+                </p>
+
+                {/* One hidden input for every upload button in the dialog – the
+                    button sets which choice the pick belongs to, then clicks it. */}
+                <input
+                  ref={varImageInputRef}
+                  type="file"
+                  accept={IMAGE_MIME_TYPES.join(",")}
+                  style={{ display: "none" }}
+                  onChange={handleVarImageFile}
+                />
+
                 {used.length === 0 ? (
                   <p style={hintStyle}>
                     V šabloně zatím není použita žádná vlastní proměnná. Vložte ji
@@ -2273,8 +2573,14 @@ export default function ContractTemplatesPage() {
                                     <option value="literal">Pevná hodnota</option>
                                     {/* A list slot's default must be one of its own
                                         choices, so sourcing it from a built-in
-                                        variable is not offered. */}
-                                    {type !== "list" && <option value="fixedVar">Z proměnné</option>}
+                                        variable is not offered. An image slot is
+                                        the same case, and worse: a built-in
+                                        resolves to text like "Jana", which names
+                                        no picture, so the default would silently
+                                        print nothing. */}
+                                    {type !== "list" && type !== "image" && (
+                                      <option value="fixedVar">Z proměnné</option>
+                                    )}
                                   </select>
                                   {source === "literal" && (
                                     <div style={{ flex: "1 1 auto", minWidth: 0 }}>
@@ -2306,12 +2612,44 @@ export default function ContractTemplatesPage() {
                               </td>
                             </tr>
                           )}
+                          {/* Same reasoning as the choices row above, only more
+                              so: a picture row carries a name, a thumbnail, a
+                              width, an alignment and a size readout. */}
+                          {type === "image" && (
+                            <tr>
+                              <td />
+                              <td colSpan={4} style={{ padding: "0 0 10px 0" }}>
+                                {renderImagesEditor(key)}
+                              </td>
+                            </tr>
+                          )}
                           </Fragment>
                         );
                       })}
                     </tbody>
                   </table>
                   </div>
+                )}
+
+                {/* The wall has to be visible BEFORE a save fails: the pictures
+                    and the document's text share one Firestore document, and
+                    the save that exceeds 1 MiB is rejected whole. */}
+                {allImages.length > 0 && (
+                  <p
+                    style={{
+                      ...hintStyle,
+                      marginTop: 10,
+                      marginBottom: 0,
+                      ...(imagesOverBudget
+                        ? { color: "var(--color-danger-text-strong)" }
+                        : {}),
+                    }}
+                  >
+                    Obrázky celkem: {imageTotalKb} kB.{" "}
+                    {imagesOverBudget
+                      ? "Šablona se blíží limitu 1 MB na dokument – další obrázky už nemusí jít uložit. Odeberte prosím některý z nich, nebo použijte menší soubory."
+                      : "Obrázky se ukládají do šablony spolu s textem, celkem se vejde asi 1 MB."}
+                  </p>
                 )}
 
                 {orphaned.length > 0 && (
@@ -2359,7 +2697,15 @@ export default function ContractTemplatesPage() {
       {canManage && caseModalOpen && (() => {
         const slots = caseSlotKeys();
         const def = variableDefs[caseKey];
-        const listChoices = def?.type === "list" ? (def.options ?? []).filter((o) => o.trim()) : [];
+        // An image slot's raw value is the chosen picture's NAME, so a switch
+        // branches on exactly the same strings a list's does – offer them the
+        // same way rather than making the author retype one.
+        const listChoices =
+          def?.type === "list"
+            ? (def.options ?? []).filter((o) => o.trim())
+            : def?.type === "image"
+              ? (def.images ?? []).map((o) => o.label).filter((o) => o.trim())
+              : [];
         const labelStyle = {
           display: "block",
           fontSize: "0.8125rem",
