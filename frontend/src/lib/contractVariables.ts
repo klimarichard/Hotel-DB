@@ -407,6 +407,27 @@ export function renderCustomImage(opt: CustomVarImageOption | undefined): string
   return `<img src="${opt.src}"${styleAttr}>`;
 }
 
+/**
+ * The choices a slot offers at fill-in time, whatever type stores them: a
+ * "list" keeps plain strings in `options`, an "image" keeps `{label, src}` in
+ * `images`. Both are picked from a dropdown and both substitute by LABEL, so
+ * everything that reasons about "which values can this slot take" — the
+ * {{#case}} value pickers, the hotel pre-selection — wants this one list rather
+ * than a type check at each call site.
+ *
+ * Blank labels are dropped: they cannot be picked or matched, and an image
+ * awaiting its name would otherwise show as an empty dropdown entry.
+ */
+export function customChoiceLabels(def: CustomVarDef | undefined): string[] {
+  if (def?.type === "image") {
+    return (def.images ?? []).map((o) => o.label).filter((l) => l.trim());
+  }
+  if (def?.type === "list") {
+    return (def.options ?? []).filter((o) => o.trim());
+  }
+  return [];
+}
+
 /** The chosen option of an image slot, matched on its label the way a list is. */
 export function findImageOption(
   def: CustomVarDef | undefined,

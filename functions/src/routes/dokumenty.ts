@@ -644,7 +644,7 @@ dokumentyRouter.put(
       if (/maximum|too large|exceeds|size/i.test(message)) {
         res.status(413).json({
           error:
-            "Dokument se nepodařilo uložit — je příliš velký (limit 1 MB). Pravděpodobně obsahuje vložené obrázky (base64). Zmenšete nebo odstraňte obrázky a uložte znovu.",
+            "Dokument se nepodařilo uložit – je příliš velký (limit 1 MB). Pravděpodobně obsahuje vložené obrázky (base64). Zmenšete nebo odstraňte obrázky a uložte znovu.",
         });
         return;
       }

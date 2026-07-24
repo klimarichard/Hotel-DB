@@ -148,3 +148,15 @@
   font-size: 0.8rem;
   color: var(--color-text-muted);
 }
+
+/* Note under a field that this user's own hotel section pre-filled. Muted and
+   small: it explains a value that is already correct for almost everyone, so it
+   must not read as a warning – but it has to be there, because a silently
+   pre-selected hotel is exactly the kind of default that gets printed wrong
+   once and never questioned. */
+.hotelHint {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+}

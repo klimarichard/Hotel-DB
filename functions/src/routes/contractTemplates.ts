@@ -498,7 +498,7 @@ contractTemplatesRouter.put(
       if (/maximum|too large|exceeds|size/i.test(message)) {
         res.status(413).json({
           error:
-            "Šablonu se nepodařilo uložit — je příliš velká (limit 1 MB). Pravděpodobně obsahuje vložené obrázky (base64). Zmenšete nebo odstraňte obrázky a uložte znovu.",
+            "Šablonu se nepodařilo uložit – je příliš velká (limit 1 MB). Pravděpodobně obsahuje vložené obrázky (base64). Zmenšete nebo odstraňte obrázky a uložte znovu.",
         });
         return;
       }
@@ -574,7 +574,7 @@ contractTemplatesRouter.delete(
     const id = req.params.id;
     if (BUILTIN_IDS.has(id)) {
       res.status(409).json({
-        error: "Vestavěnou šablonu nelze smazat — lze ji pouze deaktivovat.",
+        error: "Vestavěnou šablonu nelze smazat – lze ji pouze deaktivovat.",
       });
       return;
     }
