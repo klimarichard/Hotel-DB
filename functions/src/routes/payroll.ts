@@ -59,7 +59,7 @@ async function ensurePeriodUnlocked(
     return false;
   }
   if ((snap.data() as Record<string, unknown>).locked === true) {
-    res.status(409).json({ error: "Mzdové období je uzamčeno — úpravy nejsou povoleny." });
+    res.status(409).json({ error: "Mzdové období je uzamčeno – úpravy nejsou povoleny." });
     return false;
   }
   return true;
@@ -868,7 +868,7 @@ payrollRouter.patch(
       return;
     }
     if ((periodSnap.data() as Record<string, unknown>).locked === true) {
-      res.status(409).json({ error: "Mzdové období je uzamčeno — úpravy nejsou povoleny." });
+      res.status(409).json({ error: "Mzdové období je uzamčeno – úpravy nejsou povoleny." });
       return;
     }
 
@@ -970,7 +970,7 @@ payrollRouter.post(
       sickLeaveHours: newSick,
     });
     if (!ok) {
-      res.status(400).json({ error: "Přepočet se nezdařil — období nemá platný směnný plán." });
+      res.status(400).json({ error: "Přepočet se nezdařil – období nemá platný směnný plán." });
       return;
     }
 
@@ -1003,7 +1003,7 @@ payrollRouter.post(
     }
     const data = snap.data() as Record<string, unknown>;
     if (data.locked === true) {
-      res.status(409).json({ error: "Mzdové období je uzamčeno — přepočet není povolen." });
+      res.status(409).json({ error: "Mzdové období je uzamčeno – přepočet není povolen." });
       return;
     }
     const planId = data.shiftPlanId as string | undefined;
@@ -1042,7 +1042,7 @@ payrollRouter.post(
     }
     const data = snap.data() as Record<string, unknown>;
     if (data.locked === true) {
-      res.status(409).json({ error: "Mzdové období je uzamčeno — přepočet není povolen." });
+      res.status(409).json({ error: "Mzdové období je uzamčeno – přepočet není povolen." });
       return;
     }
     const planId = data.shiftPlanId as string | undefined;
@@ -1083,7 +1083,7 @@ payrollRouter.delete(
     }
     const data = snap.data() as Record<string, unknown>;
     if (data.locked === true) {
-      res.status(409).json({ error: "Mzdové období je uzamčeno — nejprve ho odemkněte." });
+      res.status(409).json({ error: "Mzdové období je uzamčeno – nejprve ho odemkněte." });
       return;
     }
 

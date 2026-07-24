@@ -45,7 +45,7 @@ function passwordPolicyMessage(message: string): string {
     const t = translations.find((x) => x.test.test(r));
     if (t) bits.push(t.cz);
   }
-  if (bits.length) return `Heslo nesplňuje požadavky — musí obsahovat ${bits.join(", ")}.`;
+  if (bits.length) return `Heslo nesplňuje požadavky – musí obsahovat ${bits.join(", ")}.`;
   return "Heslo nesplňuje bezpečnostní požadavky. Použijte delší heslo s velkými i malými písmeny a číslicí.";
 }
 
