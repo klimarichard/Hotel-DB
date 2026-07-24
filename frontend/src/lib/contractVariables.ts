@@ -130,7 +130,8 @@ export type CustomVarType =
   | "bool"
   | "list"
   | "condition"
-  | "math";
+  | "math"
+  | "image";
 
 export const CUSTOM_VAR_TYPE_LABELS: Record<CustomVarType, string> = {
   text: "Text",
@@ -141,6 +142,7 @@ export const CUSTOM_VAR_TYPE_LABELS: Record<CustomVarType, string> = {
   list: "Seznam",
   condition: "Podmínka",
   math: "Výpočet",
+  image: "Obrázek",
 };
 
 /**
@@ -212,6 +214,10 @@ export function comparableTypeOfCustom(type: CustomVarType | undefined): Compara
     case "longtext":
     case "list":
     case "bool":
+    // An image slot's raw value is the chosen LABEL, so it compares as text —
+    // which is what lets a condition or a {{#case}} branch key off which
+    // picture was selected without a second variable holding the same answer.
+    case "image":
       return "text";
     // A condition compared against another condition is a cycle waiting to
     // happen and expresses nothing {{#if}} nesting can't already say.
@@ -298,11 +304,118 @@ export interface CustomVarDef {
    * division would print 15 digits of float noise into a document.
    */
   decimals?: number;
+  /**
+   * Only for type "image": the picture choices, each with its own width and
+   * alignment. Kept separate from `options` (the plain "list" choices) rather
+   * than overloading it — the two carry different shapes, and a slot that
+   * switched type between them would otherwise inherit half-valid data.
+   */
+  images?: CustomVarImageOption[];
 }
 
 /** Upper bounds on a math slot's configuration, shared with the server validators. */
 export const CUSTOM_VAR_FORMULA_MAX = 200;
 export const CUSTOM_VAR_DECIMALS_MAX = 4;
+
+// ── "image" slots ────────────────────────────────────────────────────────────
+//
+// An image slot is a `list` whose choices carry a PICTURE each: the author
+// uploads one per choice, and picking a choice at generation substitutes the
+// corresponding <img> into the document. That is the "different picture per
+// value" case, expressed as one variable instead of one {{#case}} block per
+// image.
+//
+// The picture is stored as a base64 `data:` URI on the template document, for
+// the reason spelled out in lib/imageDownscale.ts: the PDF renderer's SSRF
+// guard aborts every non-data: request, so a Storage URL would render broken in
+// every PDF. That puts every variant inside the same 1 MiB Firestore document
+// as the HTML, which is what the two caps below are defending.
+
+/** Choices an image slot offers. Low because each one carries a whole picture. */
+export const CUSTOM_VAR_MAX_IMAGES = 8;
+/**
+ * Per-picture budget, in characters of base64. ~90 KB of image data. Eight of
+ * them plus the document HTML still has to clear Firestore's 1 MiB ceiling, and
+ * the editor shows a running total so the wall is visible before the save
+ * fails rather than after.
+ */
+export const CUSTOM_VAR_IMAGE_MAX_CHARS = 120_000;
+
+/** Width presets, matching the editor's own image toolbar (IMAGE_WIDTH_PRESETS). */
+export const CUSTOM_VAR_IMAGE_WIDTHS = ["25%", "50%", "75%", "100%"] as const;
+export const CUSTOM_VAR_IMAGE_ALIGNS = ["left", "center", "right"] as const;
+export type CustomVarImageAlign = (typeof CUSTOM_VAR_IMAGE_ALIGNS)[number];
+export const CUSTOM_VAR_IMAGE_ALIGN_LABELS: Record<CustomVarImageAlign, string> = {
+  left: "Vlevo",
+  center: "Na střed",
+  right: "Vpravo",
+};
+
+/** One choice of an image slot: the label picked at generation, and its picture. */
+export interface CustomVarImageOption {
+  /** Shown in the generate-time dropdown, and the slot's raw value once picked. */
+  label: string;
+  /** base64 `data:image/...` URI. Never a remote URL — see above. */
+  src: string;
+  /** CSS width, e.g. "50%". Absent = the image's natural width. */
+  width?: string;
+  /** Absent = inline, exactly as an editor-inserted image with no alignment. */
+  align?: CustomVarImageAlign;
+}
+
+/**
+ * Whether a string is an inline raster image data URI.
+ *
+ * This is a SECURITY check, not a formatting one: the value is interpolated
+ * straight into an `<img src="…">` that both the browser preview and the PDF
+ * renderer will parse. Anything else — `javascript:`, a remote URL, a stray
+ * quote that would break out of the attribute — must never reach that point.
+ *
+ * SVG is deliberately excluded despite being an image: an SVG can carry script,
+ * and while an `<img>` context does not execute it today, allowing it would
+ * make that guarantee a detail of how the file happens to be embedded rather
+ * than something this validator enforces.
+ */
+export function isImageDataUri(src: unknown): src is string {
+  return (
+    typeof src === "string" &&
+    src.length <= CUSTOM_VAR_IMAGE_MAX_CHARS &&
+    /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/.test(src)
+  );
+}
+
+/**
+ * The `<img>` for one image choice, styled to match what the editor's own
+ * ResizableImage extension emits for the same width/align — so a picture that
+ * arrives through a variable is indistinguishable in the PDF from one the
+ * author pasted in by hand. Keep in lockstep with `ResizableImage`'s
+ * renderHTML in `lib/editor/extensions.ts`.
+ *
+ * Returns "" for an option whose src does not validate, rather than emitting a
+ * broken tag.
+ */
+export function renderCustomImage(opt: CustomVarImageOption | undefined): string {
+  if (!opt || !isImageDataUri(opt.src)) return "";
+  const style: string[] = [];
+  // Width is echoed from a closed preset list; the regex is belt-and-braces so
+  // a hand-crafted document can't inject `"` and escape the attribute.
+  if (opt.width && /^\d{1,3}(%|px)$/.test(opt.width)) style.push(`width: ${opt.width}`);
+  if (opt.align === "center") style.push("display: block", "margin-left: auto", "margin-right: auto");
+  else if (opt.align === "right") style.push("display: block", "margin-left: auto", "margin-right: 0");
+  else if (opt.align === "left") style.push("display: block", "margin-left: 0", "margin-right: auto");
+  const styleAttr = style.length > 0 ? ` style="${style.join("; ")}"` : "";
+  return `<img src="${opt.src}"${styleAttr}>`;
+}
+
+/** The chosen option of an image slot, matched on its label the way a list is. */
+export function findImageOption(
+  def: CustomVarDef | undefined,
+  raw: string
+): CustomVarImageOption | undefined {
+  const want = (raw ?? "").trim().toLocaleLowerCase("cs");
+  if (!want) return undefined;
+  return (def?.images ?? []).find((o) => o.label.trim().toLocaleLowerCase("cs") === want);
+}
 
 /** Slot key → its configuration on a given template. Stored on contractTemplates/{id}. */
 export type CustomVarDefs = Record<string, CustomVarDef>;
@@ -557,10 +670,21 @@ function escapeHtml(s: string): string {
  * makes `{{#if var1}}` strip its block. A plain `{{var1}}` of an unchecked bool
  * therefore prints nothing, which is the sane reading of "no".
  */
-export function formatCustomValue(type: CustomVarType, raw: string): string {
+export function formatCustomValue(
+  type: CustomVarType,
+  raw: string,
+  // Only "image" needs it: the raw value is a choice LABEL, and turning that
+  // into an <img> requires the slot's own picture list. Optional so every
+  // existing 2-argument call site keeps compiling and behaving identically —
+  // but an image slot formatted without it renders nothing, which is why the
+  // generate modals must pass it.
+  def?: CustomVarDef
+): string {
   const value = raw.trim();
   if (!value) return "";
   switch (type) {
+    case "image":
+      return renderCustomImage(findImageOption(def, value));
     case "longtext":
       // The substitution target is HTML, so a raw "\n" would collapse to a
       // space and the author's paragraphs would print as one run-on block.
