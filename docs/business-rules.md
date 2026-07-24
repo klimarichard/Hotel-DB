@@ -319,6 +319,22 @@ Seznam **bez jediné hodnoty** je povolený (typ si zvolíte dřív, než hodnot
 
 > 🔒 Server + 🖥️ Jen rozhraní. Zdroj: `functions/src/routes/dokumenty.ts` a `functions/src/routes/contractTemplates.ts` – `isValidCustomOptions()`; upozornění `customVarWarning()` ve `frontend/src/pages/DokumentyPage.tsx`.
 
+### Vlastních proměnných je v dokumentu 25, ve šabloně smlouvy 10
+
+Dokument pojme až **25** vlastních proměnných (`{{var1}}`…`{{var25}}`). Šablona smlouvy jich pojme jen **10** (`{{var1}}`…`{{var10}}`) – jde o podepisovaný právní dokument, kde tolik proměnných není potřeba.
+
+Napíšete-li do šablony smlouvy proměnnou nad tímto rozsahem (např. `{{var15}}`), editor ji sice rozpozná a upozorní na ni („Mimo rozsah"), ale nedovolí jí nastavit název ani typ – při vyplňování se zobrazí jako nepojmenované textové pole. Uložit definici pro takovou proměnnou nelze ani obejitím rozhraní – server ji odmítne.
+
+> 🔒 Server. Zdroj: `functions/src/routes/dokumenty.ts` (`CUSTOM_VAR_KEYS`, 25 položek) a `functions/src/routes/contractTemplates.ts` (`CUSTOM_VAR_KEYS`, 10 položek) – obojí uvnitř `isValidVariableDefs()`; upozornění na šabloně smlouvy `customVarWarning()` ve `frontend/src/pages/ContractTemplatesPage.tsx`.
+
+### Přepínač „podle hodnoty" (např. různý obrázek podle města) má reálný strop 1 MB na celý dokument
+
+Přepínač `{{#case}}` umí pro každou hodnotu proměnné vytisknout jiný text – včetně jiného obrázku. Pro obrázky ale neplatí žádný zvláštní limit počtu ani velikosti; platí jen limit **na celý dokument/šablonu jako celek** – Firestore nedovolí uložit dokument větší než **1 MB**, a obrázky vložené přímo do textu (base64) se do tohoto součtu počítají celé. Přepínač s obrázkem pro každé z několika měst proto dosáhne tohoto stropu dávno předtím, než by došel počet povolených větví (30 hodnot u proměnné typu Seznam).
+
+Uložení dokumentu/šablony, které by tento limit překročilo, aplikace odmítne rovnou s vysvětlující hláškou – neuloží se ani zbytek změn.
+
+> 🔒 Server. Zdroj: `functions/src/routes/dokumenty.ts` a `functions/src/routes/contractTemplates.ts` – kontrola velikosti `htmlContent` (1 048 576 B) před i při zápisu do `PUT /:id`.
+
 ## Faktury
 
 ### Faktura zde je koncept, ne účetní doklad – smazání je tiché a nevratné
@@ -462,10 +478,10 @@ Pravidla, která dřívější dokumentace uváděla, ale která **v současném
 
 **Neplatí.** Šablona odkazující na smazanou proměnnou je zachycena na třech místech: editor zobrazí varování „Bez nastavení: …", generování se **zablokuje** a proměnná se nabídne k vyplnění. Tiché zmizení odstavce nehrozí.
 
-> Zdroj: `frontend/src/lib/contractVariables.ts:205,287`, `frontend/src/pages/ContractTemplatesPage.tsx:506-511`, `frontend/src/components/GenerateContractModal.tsx:199-201`.
+> Zdroj: `frontend/src/lib/contractVariables.ts` – `usedCustomVars()` a `requiredCustomVars()` (:329-367), `missingCustomVars()` (:640-659); varování při uložení `frontend/src/pages/ContractTemplatesPage.tsx:758`; blokace generování `frontend/src/components/GenerateContractModal.tsx:211-212,278`. (Řádková čísla platí ke dni poslední aktualizace tohoto pravidla, 2026-07-24 – engine v souboru od té doby výrazně narostl, viz [custom-variable-engine.md](custom-variable-engine.md).)
 
 **Co platí dál:** nepárové značky `{{#if}}` / `{{/unless}}` se do dokumentu vypíšou jako text. Není to tichá chyba v původním smyslu (jde o záměrné chování šablonovacího jádra a bloky se dnes korektně zanořují), ale kontrola párovosti při ukládání šablony neexistuje.
-> Zdroj: `frontend/src/lib/contractVariables.ts:692-731`, zanoření `:758-760`.
+> Zdroj: `frontend/src/lib/contractVariables.ts` – `parseBlocks()` (:1211-1260, nepárová/chybějící značka jako text na :1236-1241), zanoření přes rekurzi v `renderBlocks()` (:1262-1299).
 
 ### ❌ „Týdenní úvazek u PPP určuje i hranici přesčasu"
 
