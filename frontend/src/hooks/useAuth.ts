@@ -32,7 +32,6 @@ interface AuthState {
    * filtered against `permissions` on read.
    */
   recepceDefaultHotel: string | null;
-  dokumentyDefaultSection: string | null;
   /**
    * True when the user's type is a shared terminal (e.g. Recepce — one login used
    * by many people). Drives the "who is really requesting?" picker on self-service
@@ -72,7 +71,6 @@ export function useAuth(): AuthValue {
     employeeName: null,
     roleTypeName: null,
     recepceDefaultHotel: null,
-    dokumentyDefaultSection: null,
     sharedTerminal: false,
     noSelfLogout: false,
     permissions: EMPTY_PERMS,
@@ -84,8 +82,13 @@ export function useAuth(): AuthValue {
       if (user) {
         const tokenResult = await user.getIdTokenResult();
         const profile = await api
-          .get<{ employeeId: string | null; name?: string | null; employeeName?: string | null; permissions?: string[]; roleTypeName?: string | null; roleType?: string | null; recepceDefaultHotel?: string | null; dokumentyDefaultSection?: string | null; sharedTerminal?: boolean; noSelfLogout?: boolean }>("/auth/me")
-          .catch(() => ({ employeeId: null, name: null, employeeName: null, permissions: [] as string[], roleTypeName: null, roleType: null, recepceDefaultHotel: null, dokumentyDefaultSection: null, sharedTerminal: false, noSelfLogout: false }));
+          // NOTE: /auth/me spreads the whole users/{uid} doc, so accounts that
+          // once set a Dokumenty default section still carry an inert
+          // `dokumentyDefaultSection` field in the response. It is deliberately
+          // left in Firestore (deleting it would be a bulk production write) and
+          // deliberately not typed here — nothing reads it any more.
+          .get<{ employeeId: string | null; name?: string | null; employeeName?: string | null; permissions?: string[]; roleTypeName?: string | null; roleType?: string | null; recepceDefaultHotel?: string | null; sharedTerminal?: boolean; noSelfLogout?: boolean }>("/auth/me")
+          .catch(() => ({ employeeId: null, name: null, employeeName: null, permissions: [] as string[], roleTypeName: null, roleType: null, recepceDefaultHotel: null, sharedTerminal: false, noSelfLogout: false }));
         setState({
           user,
           role: (tokenResult.claims.role as UserRole) ?? null,
@@ -95,14 +98,13 @@ export function useAuth(): AuthValue {
           employeeName: profile.employeeName ?? null,
           roleTypeName: profile.roleTypeName ?? null,
           recepceDefaultHotel: profile.recepceDefaultHotel ?? null,
-          dokumentyDefaultSection: profile.dokumentyDefaultSection ?? null,
           sharedTerminal: profile.sharedTerminal === true,
           noSelfLogout: profile.noSelfLogout === true,
           permissions: new Set(profile.permissions ?? []),
           loading: false,
         });
       } else {
-        setState({ user: null, role: null, roleType: null, employeeId: null, name: null, employeeName: null, roleTypeName: null, recepceDefaultHotel: null, dokumentyDefaultSection: null, sharedTerminal: false, noSelfLogout: false, permissions: EMPTY_PERMS, loading: false });
+        setState({ user: null, role: null, roleType: null, employeeId: null, name: null, employeeName: null, roleTypeName: null, recepceDefaultHotel: null, sharedTerminal: false, noSelfLogout: false, permissions: EMPTY_PERMS, loading: false });
       }
     });
   }, []);

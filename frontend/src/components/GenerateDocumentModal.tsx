@@ -10,13 +10,20 @@ import { openPdfBlob } from "@/lib/pdfMerge";
 // reasons, but the parts imported here (slot discovery, formatting, missing-value
 // detection, {{#if}} substitution) have no employee or contract coupling at all.
 import {
-  usedCustomVars,
+  requiredCustomVars,
+  isComputedVarType,
+  resolveComputedVars,
   formatCustomValue,
+  findImageOption,
+  customChoiceLabels,
   missingCustomVars,
   fillTemplate,
   type CustomVarDefs,
+  type CustomVarImageOption,
   type CustomVarType,
 } from "@/lib/contractVariables";
+import { accessibleHotels, type Hotel } from "@/lib/hotels";
+import type { Permission } from "@/lib/permissions/catalog";
 
 interface PageMargins {
   top: number;
@@ -41,6 +48,39 @@ interface Props {
 }
 
 /**
+ * Which hotel this user "belongs to", for pre-selecting a hotel-valued variable
+ * when a document is filled in. Null means "no single answer" – the user is then
+ * asked, which is the only honest outcome.
+ *
+ *  - Can open exactly ONE hotel in Recepce → that hotel. Someone who only ever
+ *    works Ankora is not going to print an Ambiance document, so asking them
+ *    every time is pure friction.
+ *  - Can open several → their saved Recepce default hotel, when they still hold
+ *    access to it. No saved default yields null: guessing between four would be
+ *    worse than asking.
+ *  - Can open none → null, same reasoning (the `find` below on an empty list).
+ *
+ * This reads the RECEPCE registry rather than a Dokumenty-specific one. Dokumenty
+ * used to keep its own five-value section registry with its own permission keys,
+ * and that is exactly what the public/private flag replaced – but the question
+ * "which hotel is this person at?" outlived it, and Recepce is where the app
+ * already answers it, per hotel, permission-driven.
+ *
+ * This is a CONVENIENCE, never an access decision. It only pre-fills a form field
+ * the user can change; it cannot surface a document, a value, or a choice that
+ * the permission gates would otherwise withhold – which is also why holding no
+ * Recepce permission at all simply means "no pre-fill", not an error.
+ */
+function resolveOwnHotel(
+  can: (perm: Permission) => boolean,
+  defaultHotel: string | null
+): Hotel | null {
+  const visible = accessibleHotels(can);
+  if (visible.length === 1) return visible[0];
+  return visible.find((h) => h.slug === defaultHotel) ?? null;
+}
+
+/**
  * Fill a document template's custom variables and open the rendered PDF in a new
  * tab for printing.
  *
@@ -52,7 +92,7 @@ interface Props {
  *    reconcile and no audit entry.
  */
 export default function GenerateDocumentModal({ templateId, onClose }: Props) {
-  const { user } = useAuth();
+  const { user, can, recepceDefaultHotel } = useAuth();
   const [template, setTemplate] = useState<DocumentTemplate | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -81,12 +121,41 @@ export default function GenerateDocumentModal({ templateId, onClose }: Props) {
     return () => { cancelled = true; };
   }, [templateId]);
 
-  // Slots the document actually uses, in {{var1}}..{{var10}} order.
+  // Memoised so `defs` keeps a stable identity across renders – the computed
+  // resolution below depends on it, and a fresh `{}` every render would rerun it
+  // on every keystroke anywhere in the form.
+  const defs: CustomVarDefs = useMemo(() => template?.variableDefs ?? {}, [template]);
+
+  /**
+   * Slots the form has to deal with, in {{var1}}..{{var25}} order.
+   *
+   * requiredCustomVars, NOT usedCustomVars: a "math" slot's operands may never
+   * appear in the document text – {{var3}} = var1 * var2 with only {{var3}}
+   * printed is the ordinary shape of a total – so scanning the text alone gave
+   * those operands no field, left them empty, and printed a blank where the
+   * total should be, with nothing anywhere explaining why.
+   */
   const slots = useMemo(
-    () => (template ? usedCustomVars(template.htmlContent) : []),
-    [template]
+    () => (template ? requiredCustomVars(template.htmlContent, defs) : []),
+    [template, defs]
   );
-  const defs = template?.variableDefs ?? {};
+
+  /**
+   * The hotel this user belongs to, or null when there is no single answer.
+   * Drives the pre-selection below; see resolveOwnHotel for the rules.
+   */
+  const ownHotel = useMemo(
+    () => resolveOwnHotel(can, recepceDefaultHotel),
+    [can, recepceDefaultHotel]
+  );
+
+  /**
+   * Slots pre-filled with this user's hotel, so the fill-in form can say so.
+   * Kept as state alongside `values` rather than recomputed, because it must
+   * describe how the field was SEEDED — once the user changes the dropdown the
+   * note is no longer true, and a derived version would keep claiming it.
+   */
+  const [hotelSeeded, setHotelSeeded] = useState<Set<string>>(new Set());
 
   // Pre-fill configured defaults exactly once. Guarded by a ref rather than a
   // dependency list because re-running it would overwrite whatever the user has
@@ -94,18 +163,89 @@ export default function GenerateDocumentModal({ templateId, onClose }: Props) {
   useEffect(() => {
     if (!template || prefilledRef.current) return;
     prefilledRef.current = true;
+    const defsNow = template.variableDefs ?? {};
     const seed: Record<string, string> = {};
-    for (const key of usedCustomVars(template.htmlContent)) {
-      const dflt = template.variableDefs?.[key]?.default;
+    const seededByHotel = new Set<string>();
+    // Compared trimmed + case-folded rather than by identity: the author types
+    // the choice by hand into the template, so "ambiance " must still match the
+    // registry's "Ambiance". This is the same leniency {{#case}} matching uses,
+    // for the same reason.
+    const fold = (s: string) => s.trim().toLocaleLowerCase("cs");
+    const wantHotel = ownHotel ? fold(ownHotel.label) : null;
+
+    for (const key of requiredCustomVars(template.htmlContent, defsNow)) {
+      // The user's own hotel outranks the template's configured default: a
+      // default is one statement for everyone, while this is specific to the
+      // person actually printing. Matching by CHOICE LABEL is also what makes
+      // the rule self-limiting — a slot whose choices are unrelated to hotels
+      // simply has nothing to match, so it is never touched, and a slot that
+      // offers only some of the four only pre-fills for users it covers.
+      if (wantHotel) {
+        const hit = customChoiceLabels(defsNow[key]).find((l) => fold(l) === wantHotel);
+        if (hit) {
+          seed[key] = hit;
+          seededByHotel.add(key);
+          continue;
+        }
+      }
+      const dflt = defsNow[key]?.default;
       if (dflt?.kind === "literal" && dflt.value) seed[key] = dflt.value;
     }
     if (Object.keys(seed).length > 0) setValues(seed);
-  }, [template]);
+    if (seededByHotel.size > 0) setHotelSeeded(seededByHotel);
+  }, [template, ownHotel]);
 
-  const missing = template ? missingCustomVars(template.htmlContent, defs, values) : [];
+  /**
+   * The derived slots ("math", "condition"), recomputed on every keystroke so
+   * the read-only rows below update live. This is the feature's whole feedback
+   * loop: a total that only appears on the printed PDF is a total nobody can
+   * check before printing it.
+   */
+  const resolved = useMemo(
+    () => resolveComputedVars(slots, defs, values),
+    [slots, defs, values]
+  );
+
+  /**
+   * The choices an "image" slot can actually offer: a name to pick, and a
+   * picture to print. A half-configured choice is dropped rather than listed –
+   * picking it would look like an answer and print nothing (the editor warns
+   * about exactly this).
+   */
+  function imageOptions(key: string): CustomVarImageOption[] {
+    return (defs[key]?.images ?? []).filter((o) => o.label.trim() && o.src);
+  }
+
+  // An image slot with no pictures configured is already exempt inside
+  // missingCustomVars – it cannot be answered, so it must not block printing.
+  // That rule lives in the engine rather than here so the contract modals get
+  // it too; a local post-filter would have had to be written three times and
+  // would have drifted the first time one of them changed.
+  const missing = template
+    ? missingCustomVars(template.htmlContent, defs, values)
+    : [];
 
   function setValue(key: string, raw: string) {
     setValues((prev) => ({ ...prev, [key]: raw }));
+    // The "pre-filled from your hotel" note describes how the field was
+    // seeded. The moment the user picks something themselves it stops being
+    // true, so it is retired rather than left to contradict the screen.
+    setHotelSeeded((prev) => {
+      if (!prev.has(key)) return prev;
+      const next = new Set(prev);
+      next.delete(key);
+      return next;
+    });
+  }
+
+  /** The note shown under a field this user's own hotel pre-filled. */
+  function hotelHint(key: string) {
+    if (!hotelSeeded.has(key) || !ownHotel) return null;
+    return (
+      <span className={styles.hotelHint}>
+        Předvyplněno podle vašeho hotelu ({ownHotel.label}). Můžete změnit.
+      </span>
+    );
   }
 
   async function handleGenerate() {
@@ -120,9 +260,23 @@ export default function GenerateDocumentModal({ templateId, onClose }: Props) {
       const vars: Record<string, string> = {};
       for (const key of slots) {
         const type: CustomVarType = defs[key]?.type ?? "text";
-        vars[key] = formatCustomValue(type, values[key] ?? "");
+        // A computed slot has no typed-in value to format; its printed form
+        // comes from the resolution merged in below.
+        if (isComputedVarType(type)) continue;
+        // The third argument is mandatory in practice for an "image" slot: the
+        // typed value is only the chosen picture's NAME, and without the slot's
+        // own definition to look it up in, formatCustomValue has no picture to
+        // emit and the document prints an empty space. Passed for every type –
+        // the others ignore it.
+        vars[key] = formatCustomValue(type, values[key] ?? "", defs[key]);
       }
-      const filled = fillTemplate(template.htmlContent, vars);
+      Object.assign(vars, resolved.formatted);
+      // The raw map is the third argument on purpose: {{#case}} matches against
+      // raw values, not printed ones. A number prints with thousands separators
+      // ("1 500") that its raw form doesn't have ("1500"), so matching the
+      // printed strings would make a numeric switch fail for a reason invisible
+      // both here and in the editor.
+      const filled = fillTemplate(template.htmlContent, vars, resolved.raw);
       const margins = template.margins ?? DEFAULT_MARGINS;
 
       const token = await user.getIdToken();
@@ -156,6 +310,30 @@ export default function GenerateDocumentModal({ templateId, onClose }: Props) {
     const raw = values[key] ?? "";
     const isMissing = triedGenerate && missing.includes(key);
 
+    /**
+     * A computed slot ("Výpočet" / "Podmínka") gets no input – it is derived
+     * from the others – but it is NOT hidden either. Showing the live result
+     * here is what lets the user check a total before printing it, which is the
+     * only chance they get: the PDF opens in a new tab and nothing is stored, so
+     * a wrong number is discovered by whoever the document is handed to.
+     */
+    if (isComputedVarType(type)) {
+      // A condition is a yes/no, and printing its raw "ano" / "" would show a
+      // blank for "no" – indistinguishable from "not computed yet".
+      const value =
+        type === "condition"
+          ? (resolved.raw[key] ? "Ano" : "Ne")
+          : resolved.formatted[key] ?? "";
+      return (
+        <div key={key} className={styles.computedRow}>
+          <span className={styles.computedLabel}>{label}</span>
+          <span className={value ? styles.computedValue : styles.computedEmpty}>
+            {value || "– doplňte hodnoty výše –"}
+          </span>
+        </div>
+      );
+    }
+
     if (type === "bool") {
       return (
         <label key={key} className={styles.boolRow}>
@@ -166,6 +344,56 @@ export default function GenerateDocumentModal({ templateId, onClose }: Props) {
           />
           <span>{label}</span>
         </label>
+      );
+    }
+
+    if (type === "image") {
+      const options = imageOptions(key);
+      // Nothing to pick: state it plainly and move on. Deliberately NOT a
+      // free-text fallback – see isUnfillableImage for why that would be worse
+      // than useless here – and deliberately not hidden either, because the
+      // document has a gap where this picture should be and whoever prints it
+      // is the person who can tell an editor about it.
+      if (options.length === 0) {
+        return (
+          <div key={key} className={styles.imageNotice}>
+            <span className={styles.label}>{label}</span>
+            <span className={styles.imageNoticeText}>
+              Pro tuto proměnnou nejsou nastavené žádné obrázky – v dokumentu zůstane
+              prázdné místo.
+            </span>
+          </div>
+        );
+      }
+      // The picture the current answer will print. Shown live, because a name
+      // in a dropdown is not a picture: "Razítko Praha" and "Razítko Brno" are
+      // indistinguishable until you see them, and the PDF opens in a new tab
+      // with nothing stored, so this is the last chance to notice.
+      const picked = findImageOption(def, raw);
+      return (
+        <div key={key} className={styles.field}>
+          <label className={styles.label} htmlFor={`docvar-${key}`}>
+            {label}
+            {def?.optional && <span className={styles.optional}> (nepovinné)</span>}
+          </label>
+          <select
+            id={`docvar-${key}`}
+            className={isMissing ? `${styles.input} ${styles.inputMissing}` : styles.input}
+            value={raw}
+            onChange={(e) => setValue(key, e.target.value)}
+          >
+            <option value="">– vyberte –</option>
+            {options.map((o, i) => (
+              <option key={`${o.label}-${i}`} value={o.label}>{o.label}</option>
+            ))}
+          </select>
+          {hotelHint(key)}
+          {picked && (
+            <div className={styles.imagePreview}>
+              <img src={picked.src} alt={picked.label} className={styles.imagePreviewImg} />
+            </div>
+          )}
+        </div>
       );
     }
 
@@ -205,6 +433,7 @@ export default function GenerateDocumentModal({ templateId, onClose }: Props) {
               <option key={`${o}-${i}`} value={o}>{o}</option>
             ))}
           </select>
+          {hotelHint(key)}
         </div>
       );
     }
@@ -215,13 +444,30 @@ export default function GenerateDocumentModal({ templateId, onClose }: Props) {
           {label}
           {def?.optional && <span className={styles.optional}> (nepovinné)</span>}
         </label>
-        <input
-          id={`docvar-${key}`}
-          type={type === "date" ? "date" : type === "number" ? "number" : "text"}
-          className={isMissing ? `${styles.input} ${styles.inputMissing}` : styles.input}
-          value={raw}
-          onChange={(e) => setValue(key, e.target.value)}
-        />
+        {type === "longtext" ? (
+          // A paragraph of prose in a one-line box is unreviewable, and the line
+          // breaks the author types here become <br> in the printed document –
+          // so they have to be visible while typing.
+          <textarea
+            id={`docvar-${key}`}
+            rows={5}
+            className={
+              isMissing
+                ? `${styles.input} ${styles.textarea} ${styles.inputMissing}`
+                : `${styles.input} ${styles.textarea}`
+            }
+            value={raw}
+            onChange={(e) => setValue(key, e.target.value)}
+          />
+        ) : (
+          <input
+            id={`docvar-${key}`}
+            type={type === "date" ? "date" : type === "number" ? "number" : "text"}
+            className={isMissing ? `${styles.input} ${styles.inputMissing}` : styles.input}
+            value={raw}
+            onChange={(e) => setValue(key, e.target.value)}
+          />
+        )}
       </div>
     );
   }

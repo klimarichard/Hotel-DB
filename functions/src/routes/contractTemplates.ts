@@ -179,12 +179,47 @@ function isValidMargins(m: unknown): m is Margins {
  * different templates, which is why this lives on the template document rather
  * than in a global catalog.
  *
- * Shape: { var1: { label: string, type: "text"|"date"|"number"|"bool" }, … }
+ * ⚠️ These constants are a hand-maintained mirror of the shared engine in
+ * `frontend/src/lib/contractVariables.ts` (CONTRACT_VAR_COUNT, CustomVarType,
+ * CUSTOM_VAR_FORMULA_MAX, CUSTOM_VAR_DECIMALS_MAX, CUSTOM_VAR_MAX_IMAGES,
+ * CUSTOM_VAR_IMAGE_MAX_CHARS, CUSTOM_VAR_IMAGE_WIDTHS,
+ * CUSTOM_VAR_IMAGE_ALIGNS). Cloud Functions cannot
+ * import from `frontend/src`, so the duplication is deliberate — but the two
+ * must be changed TOGETHER, or the server silently rejects definitions the
+ * editor happily produces. `dokumenty.ts` keeps a third copy; keep all three in
+ * lockstep, the slot count below being the one intended difference.
+ *
+ * Shape: { var1: { label: string, type: "text"|"longtext"|"date"|"number"|
+ *                        "bool"|"list"|"condition"|"math"|"image",
+ *                  default?, condition?, options?, images?, formula?,
+ *                  decimals?, optional? }, … }
+ *
+ * where images (only meaningful on an "image" slot) is
+ *   [{ label: string, src: "data:image/…;base64,…", width?: "25%"|"50%"|"75%"|
+ *      "100%", align?: "left"|"center"|"right" }, …]
  */
+// Stays at 10 (= CONTRACT_VAR_COUNT) while Dokumenty offers 25. The asymmetry
+// is intentional, not an oversight: a contract template ends up as a signed
+// legal document, where more slots buy nothing. Note the engine RECOGNISES
+// var1..var25 everywhere on purpose, so a stray "{{var15}}" in a contract is
+// visible to the editor instead of printing as literal braces — this validator
+// is the gate that keeps a def for it from ever being stored.
 const CUSTOM_VAR_KEYS = new Set(
   Array.from({ length: 10 }, (_, i) => `var${i + 1}`)
 );
-const CUSTOM_VAR_TYPES = new Set(["text", "date", "number", "bool", "list", "condition"]);
+const CUSTOM_VAR_TYPES = new Set([
+  "text",
+  "longtext",
+  "date",
+  "number",
+  "bool",
+  "list",
+  "condition",
+  "math",
+  // "Obrázek" — a list whose choices each carry a picture. See
+  // `isValidCustomImages` below for what may be stored in `images`.
+  "image",
+]);
 const COMPARE_OPS = new Set(["lt", "lte", "gt", "gte", "eq", "neq", "empty", "notEmpty"]);
 // Unary operators test the left operand alone — no right operand required.
 const UNARY_COMPARE_OPS = new Set(["empty", "notEmpty"]);
@@ -244,6 +279,113 @@ function isValidCustomOptions(v: unknown): boolean {
   return v.every((o) => typeof o === "string" && o.length <= CUSTOM_VAR_OPTION_MAX);
 }
 
+/**
+ * Picture choices of an "image" slot: a `list` where picking a choice
+ * substitutes that choice's PICTURE into the contract instead of its text.
+ *
+ * The counts are low on purpose. Every picture is stored inline as base64 on
+ * THIS Firestore document, because the PDF renderer's SSRF guard aborts every
+ * non-`data:` request — a Storage URL would render as a broken image in every
+ * PDF. Eight choices × 120 000 characters is already ~960 KB inside a 1 MiB
+ * document; see the size note on the write guard in `PUT /:id` below.
+ */
+const CUSTOM_VAR_MAX_IMAGES = 8;
+const CUSTOM_VAR_IMAGE_MAX_CHARS = 120_000;
+const CUSTOM_VAR_IMAGE_WIDTHS = new Set(["25%", "50%", "75%", "100%"]);
+const CUSTOM_VAR_IMAGE_ALIGNS = new Set(["left", "center", "right"]);
+/** The only keys an image choice may carry — see the allowlist rationale below. */
+const CUSTOM_VAR_IMAGE_FIELDS = new Set(["label", "src", "width", "align"]);
+
+/**
+ * Whether a value is an inline raster image `data:` URI.
+ *
+ * This is the SECURITY check of this file, not a formatting one. The stored
+ * string is interpolated verbatim into an `<img src="…">` that gets parsed
+ * TWICE: by the browser in the generate preview, and by Puppeteer when the
+ * contract is rendered to PDF. Everything that is not an inline raster image is
+ * therefore refused:
+ *  - a remote URL (`https://…`) — an outbound fetch from the renderer, which its
+ *    SSRF guard aborts anyway, leaving a broken picture in a signed contract;
+ *  - `javascript:` and `data:text/html` — script, not a picture;
+ *  - anything containing `"` or `>` — it would close the `src="` attribute and
+ *    turn the remainder of the string into markup. The base64 alphabet baked
+ *    into the pattern is what makes a breakout impossible, rather than escaping
+ *    after the fact;
+ *  - SVG, despite genuinely being an image: an SVG can carry `<script>` and
+ *    event handlers. An `<img>` context does not execute those today, but
+ *    permitting SVG would make that guarantee an accident of how the file
+ *    happens to be embedded instead of something this validator enforces.
+ *
+ * This is deliberately NOT "the same check the client already does". The
+ * client's `isImageDataUri` is a convenience for the editor; anyone can skip it
+ * by calling this endpoint directly. THIS check is the one that actually holds,
+ * and it is the last gate before the string is persisted and later rendered.
+ */
+const IMAGE_DATA_URI_RE = /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/;
+function isImageDataUri(v: unknown): boolean {
+  return (
+    typeof v === "string" &&
+    v.length <= CUSTOM_VAR_IMAGE_MAX_CHARS &&
+    IMAGE_DATA_URI_RE.test(v)
+  );
+}
+
+/**
+ * Validate the `images` array. Unknown keys and out-of-range width/align values
+ * are REJECTED rather than quietly dropped: a def carrying fields this
+ * validator does not understand is a def the renderer has never been checked
+ * against, and silently storing it would let the next reader of the template
+ * assume it had been vetted.
+ */
+function isValidCustomImages(v: unknown): boolean {
+  if (v === undefined) return true;
+  if (!Array.isArray(v)) return false;
+  if (v.length > CUSTOM_VAR_MAX_IMAGES) return false;
+  return v.every((o) => {
+    if (!o || typeof o !== "object" || Array.isArray(o)) return false;
+    const img = o as Record<string, unknown>;
+    if (Object.keys(img).some((k) => !CUSTOM_VAR_IMAGE_FIELDS.has(k))) return false;
+    // The label doubles as the slot's raw value (what a condition or a
+    // {{#case}} compares against), so it is bounded like a list option.
+    if (typeof img.label !== "string" || img.label.length > CUSTOM_VAR_OPTION_MAX) return false;
+    if (!isImageDataUri(img.src)) return false;
+    if (img.width !== undefined && !CUSTOM_VAR_IMAGE_WIDTHS.has(img.width as string)) return false;
+    if (img.align !== undefined && !CUSTOM_VAR_IMAGE_ALIGNS.has(img.align as string)) return false;
+    return true;
+  });
+}
+
+/**
+ * Arithmetic formula of a "math" slot, e.g. "var1 + var2" or
+ * "(var1 - var2) * 0,21". The real grammar lives in the shared frontend engine
+ * (`tokenizeFormula`); reproducing a parser here would be a second thing to
+ * keep in sync. What the server does instead is a character allowlist — only
+ * identifiers, digits, `+ - * / ( )`, and the two decimal separators. That is
+ * defence in depth: whatever the client sends, nothing that even resembles
+ * code (quotes, brackets, semicolons, backticks, `$`) can ever be persisted,
+ * so a formula string is inert no matter who later evaluates it.
+ */
+const CUSTOM_VAR_FORMULA_MAX = 200;
+const FORMULA_ALLOWED_RE = /^[A-Za-z0-9_+\-*/(),.\s]*$/;
+function isValidCustomFormula(v: unknown): boolean {
+  if (v === undefined) return true;
+  if (typeof v !== "string") return false;
+  if (v.length > CUSTOM_VAR_FORMULA_MAX) return false;
+  return FORMULA_ALLOWED_RE.test(v);
+}
+
+/**
+ * Decimal places a "math" result is rounded to. Bounded rather than free so a
+ * hand-crafted request cannot ask for a formatting width that the renderer
+ * would have to cope with (or a fractional/negative one that `toFixed` throws
+ * on).
+ */
+const CUSTOM_VAR_DECIMALS_MAX = 4;
+function isValidCustomDecimals(v: unknown): boolean {
+  if (v === undefined) return true;
+  return Number.isInteger(v) && (v as number) >= 0 && (v as number) <= CUSTOM_VAR_DECIMALS_MAX;
+}
+
 function isValidVariableDefs(v: unknown): boolean {
   if (!v || typeof v !== "object" || Array.isArray(v)) return false;
   return Object.entries(v as Record<string, unknown>).every(([key, def]) => {
@@ -258,6 +400,9 @@ function isValidVariableDefs(v: unknown): boolean {
       isValidCustomDefault(d.default) &&
       isValidCondition(d.condition) &&
       isValidCustomOptions(d.options) &&
+      isValidCustomImages(d.images) &&
+      isValidCustomFormula(d.formula) &&
+      isValidCustomDecimals(d.decimals) &&
       // "Nepovinná" – absent means required, so only a real boolean is
       // accepted; a truthy string would silently make a slot optional.
       (d.optional === undefined || typeof d.optional === "boolean")
@@ -291,7 +436,7 @@ contractTemplatesRouter.put(
     if (variableDefs !== undefined && !isValidVariableDefs(variableDefs)) {
       res.status(400).json({
         error:
-          "variableDefs musí být objekt {var1..var10: {label, type, optional?, options?}}, kde type je text|date|number|bool|list|condition, optional je true|false a options je seznam nejvýše 30 textových hodnot.",
+          "variableDefs musí být objekt {var1..var10: {label, type, optional?, options?, images?, formula?, decimals?}}, kde type je text|longtext|date|number|bool|list|condition|math|image, optional je true|false, options je seznam nejvýše 30 textových hodnot, images je seznam nejvýše 8 položek {label, src, width?, align?}, kde src musí být vložený obrázek (data:image/png|jpeg|webp|gif;base64, nejvýše 120 000 znaků – SVG ani odkaz na web nejsou povoleny), width je 25%|50%|75%|100% a align je left|center|right, formula je vzorec do 200 znaků (jen písmena, číslice, _ + - * / ( ) , .) a decimals je celé číslo 0–4.",
       });
       return;
     }
@@ -301,6 +446,18 @@ contractTemplatesRouter.put(
     // too-large template is the usual cause of a silent write failure. Reject
     // it up front with a clear Czech message rather than letting the Firestore
     // error bubble up as an opaque 500.
+    //
+    // ⚠️ This pre-check measures htmlContent ONLY, and `variableDefs.images`
+    // now puts a second pile of base64 in the same document: eight pictures at
+    // CUSTOM_VAR_IMAGE_MAX_CHARS each is ~960 KB, enough to blow the 1 MiB
+    // ceiling on its own even with modest HTML. That case slips past here — but
+    // it does NOT surface as a raw error: `ref.set` below is wrapped in a
+    // try/catch whose /maximum|too large|exceeds|size/i test matches Firestore's
+    // rejection ("…cannot be written because its size (N bytes) exceeds the
+    // maximum allowed size of 1048576 bytes"), so the author still gets the same
+    // Czech 413, just after a round-trip instead of before it. Widening this
+    // pre-check to serialize variableDefs would only move the message earlier,
+    // at the cost of JSON.stringify-ing ~1 MB on every single save.
     const FIRESTORE_DOC_LIMIT = 1_048_576; // 1 MiB
     // Leave headroom for the other fields + Firestore's own per-field overhead.
     const HTML_LIMIT = FIRESTORE_DOC_LIMIT - 64 * 1024;
@@ -334,11 +491,14 @@ contractTemplatesRouter.put(
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       // Firestore rejects oversized writes (e.g. exceeds the maximum allowed
-      // size) — surface a clear Czech message instead of a generic 500.
+      // size) — surface a clear Czech message instead of a generic 500. This is
+      // also the net that catches a document pushed over 1 MiB by its
+      // `variableDefs.images` rather than by its HTML, which the
+      // htmlContent-only pre-check above cannot see.
       if (/maximum|too large|exceeds|size/i.test(message)) {
         res.status(413).json({
           error:
-            "Šablonu se nepodařilo uložit — je příliš velká (limit 1 MB). Pravděpodobně obsahuje vložené obrázky (base64). Zmenšete nebo odstraňte obrázky a uložte znovu.",
+            "Šablonu se nepodařilo uložit – je příliš velká (limit 1 MB). Pravděpodobně obsahuje vložené obrázky (base64). Zmenšete nebo odstraňte obrázky a uložte znovu.",
         });
         return;
       }
@@ -414,7 +574,7 @@ contractTemplatesRouter.delete(
     const id = req.params.id;
     if (BUILTIN_IDS.has(id)) {
       res.status(409).json({
-        error: "Vestavěnou šablonu nelze smazat — lze ji pouze deaktivovat.",
+        error: "Vestavěnou šablonu nelze smazat – lze ji pouze deaktivovat.",
       });
       return;
     }

@@ -34,21 +34,39 @@ import {
   ContractType,
   CONTRACT_TYPE_LABELS,
   VARIABLE_GROUPS,
-  CUSTOM_VAR_KEYS,
+  CONTRACT_VAR_COUNT,
+  customVarKeys,
+  isCustomVarKey,
   CUSTOM_VAR_TYPE_LABELS,
   CUSTOM_VAR_MAX_OPTIONS,
+  CUSTOM_VAR_FORMULA_MAX,
+  CUSTOM_VAR_DECIMALS_MAX,
+  CUSTOM_VAR_MAX_IMAGES,
+  CUSTOM_VAR_IMAGE_MAX_CHARS,
+  CUSTOM_VAR_IMAGE_WIDTHS,
+  CUSTOM_VAR_IMAGE_ALIGNS,
+  CUSTOM_VAR_IMAGE_ALIGN_LABELS,
+  isComputedVarType,
+  comparableTypeOfCustom,
+  formulaDependencies,
+  evalMathFormula,
+  OPS_FOR_COMPARABLE,
   usedCustomVars,
   fillTemplate,
   COMPARABLE_VARS,
   COMPARE_OP_LABELS,
+  type ComparableType,
   type CustomVarDefs,
   type CustomVarType,
   type CustomVarDefault,
   type CompareOp,
   type CustomVarCondition,
+  type CustomVarImageOption,
+  type CustomVarImageAlign,
 } from "@/lib/contractVariables";
+import { prepareImageDataUri, dataUriKb, IMAGE_MIME_TYPES } from "@/lib/imageDownscale";
 import {
-  buildPreviewVars,
+  buildPreview,
   defaultBools,
   usedConditionals,
   usedConditionOperands,
@@ -60,6 +78,39 @@ import styles from "./ContractTemplatesPage.module.css";
 
 
 const ALL_TYPES = Object.keys(CONTRACT_TYPE_LABELS) as ContractType[];
+
+/**
+ * The custom slots a CONTRACT template offers: {{var1}}…{{var10}}.
+ *
+ * Deliberately NOT `CUSTOM_VAR_KEYS`, which is the engine's recognition ceiling
+ * (25 since v5.2.0, when Dokumenty needed the wider space). A contract is a
+ * signed legal document and stays at CONTRACT_VAR_COUNT — and the contracts
+ * server validator refuses to store a def beyond it, so a picker offering 25
+ * would hand out eleven slots that silently lose their configuration on save.
+ */
+const CONTRACT_SLOT_KEYS = customVarKeys(CONTRACT_VAR_COUNT);
+const CONTRACT_SLOT_SET = new Set(CONTRACT_SLOT_KEYS);
+
+/**
+ * When the pictures on a template's "Obrázek" slots start crowding out the
+ * document itself, in characters of base64 across every such slot.
+ *
+ * Every picture is inlined on the SAME Firestore document as the template's
+ * HTML (see lib/imageDownscale.ts for why it cannot be a Storage URL), and
+ * Firestore refuses a document over 1 MiB. Eight choices at the per-picture cap
+ * would be ~960 000 characters on their own, so the ceiling is genuinely
+ * reachable rather than theoretical. 600 000 is ~60 % of it, which still leaves
+ * roughly 400 kB for the text and for any pictures the author pasted straight
+ * into the document — enough headroom that the warning arrives while there is
+ * still something to do about it, instead of as a failed save after an hour of
+ * editing.
+ */
+const IMAGE_TOTAL_WARN_CHARS = 600_000;
+
+/** A choice that can actually be picked AND rendered: it has both halves. */
+function isUsableImageOption(opt: CustomVarImageOption): boolean {
+  return opt.label.trim() !== "" && !!opt.src;
+}
 
 interface TemplateMeta {
   id: string;
@@ -102,7 +153,13 @@ function marginsEqual(a: PageMargins, b: PageMargins): boolean {
  * Returns null when there is nothing to warn about.
  */
 function customVarWarning(html: string, defs: CustomVarDefs): string | null {
-  const used = usedCustomVars(html);
+  const allUsed = usedCustomVars(html);
+  // Slots the ENGINE recognises but this page does not offer ({{var11}}+, typed
+  // by hand or pasted in from a Dokumenty template). They cannot be configured
+  // here – the server would reject the def – so they get their own message
+  // instead of "chybí název a typ", which the user could never act on.
+  const overLimit = allUsed.filter((k) => !CONTRACT_SLOT_SET.has(k));
+  const used = allUsed.filter((k) => CONTRACT_SLOT_SET.has(k));
   const unnamed = used.filter((k) => !defs[k]?.label?.trim());
   // A "list" slot with no choices renders an empty dropdown that can never be
   // satisfied, so the generate form falls back to a free-text box for it. That
@@ -111,9 +168,38 @@ function customVarWarning(html: string, defs: CustomVarDefs): string | null {
   const emptyLists = used.filter(
     (k) => defs[k]?.type === "list" && !(defs[k]?.options ?? []).some((o) => o.trim())
   );
+  // A math slot with no formula prints nothing at all – the same silent blank a
+  // missing value would leave, but with no field anywhere to notice it in.
+  const emptyFormulas = used.filter(
+    (k) => defs[k]?.type === "math" && !(defs[k]?.formula ?? "").trim()
+  );
+  // An image slot with no usable choice offers nothing to pick and prints
+  // nothing – the same silent blank as an empty list, but with no free-text
+  // fallback to rescue it, so the generate dialog can only say "not configured".
+  const emptyImages = used.filter(
+    (k) => defs[k]?.type === "image" && !(defs[k]?.images ?? []).some(isUsableImageOption)
+  );
+  // Half-filled choices: a name with no picture would print nothing when picked,
+  // a picture with no name can never be picked at all. Either way the author
+  // sees a choice that looks finished and behaves as if it were missing.
+  const partialImages = used.filter(
+    (k) =>
+      defs[k]?.type === "image" &&
+      (defs[k]?.images ?? []).some((o) => (o.label.trim() !== "") !== !!o.src)
+  );
   const parts: string[] = [];
   if (unnamed.length > 0) parts.push(`Bez nastavení: ${unnamed.join(", ")} – chybí název a typ.`);
   if (emptyLists.length > 0) parts.push(`Bez možností: ${emptyLists.join(", ")} – seznam nemá žádné hodnoty.`);
+  if (emptyFormulas.length > 0) parts.push(`Bez vzorce: ${emptyFormulas.join(", ")} – výpočet nic nevypíše.`);
+  if (emptyImages.length > 0) parts.push(`Bez obrázků: ${emptyImages.join(", ")} – žádná možnost nemá název i obrázek.`);
+  if (partialImages.length > 0) parts.push(`Neúplné obrázky: ${partialImages.join(", ")} – možnost má jen název, nebo jen obrázek.`);
+  if (overLimit.length > 0) {
+    parts.push(
+      `Mimo rozsah: ${overLimit.join(", ")} – šablony smluv nabízejí jen ` +
+        `${CONTRACT_VAR_COUNT} vlastních proměnných (var1–var${CONTRACT_VAR_COUNT}), ` +
+        `nastavit je nelze.`
+    );
+  }
   return parts.length > 0 ? parts.join(" ") : null;
 }
 
@@ -184,6 +270,20 @@ export default function ContractTemplatesPage() {
   // with the template; the same slot means different things in different ones.
   const [variableDefs, setVariableDefs] = useState<CustomVarDefs>({});
   const [customVarsOpen, setCustomVarsOpen] = useState(false);
+  // "Obrázek" slots: one hidden file input serves every choice's upload button,
+  // with the choice the next pick belongs to held here (a per-row input would be
+  // one DOM node per picture for no gain). `varImageShrunk` remembers which
+  // choices were downscaled on the way in – an inline note, not an error.
+  const varImageInputRef = useRef<HTMLInputElement>(null);
+  const [varImageTarget, setVarImageTarget] = useState<{ key: string; index: number } | null>(null);
+  const [varImageShrunk, setVarImageShrunk] = useState<Record<string, boolean>>({});
+  // "Přepínač" – the small dialog that assembles a {{#case varN = …}} block.
+  // Retyping the compared value by hand is the main way a switch silently fails
+  // to match, so for a "list" slot the dialog picks from the configured choices.
+  const [caseModalOpen, setCaseModalOpen] = useState(false);
+  const [caseKey, setCaseKey] = useState("");
+  const [caseOp, setCaseOp] = useState<"=" | "!=">("=");
+  const [caseValue, setCaseValue] = useState("");
   // Set on save: custom slots used in the text that have no name/type yet.
   // Persists (unlike the "Uloženo" toast) until they are configured.
   const [varWarning, setVarWarning] = useState<string | null>(null);
@@ -308,7 +408,10 @@ export default function ContractTemplatesPage() {
   const previewHtml = useMemo(() => {
     if (!previewOpen || !editor) return "";
     const html = editor.getHTML();
-    return fillTemplate(html, buildPreviewVars(html, variableDefs, previewBools, previewRaw));
+    // The raw map is fillTemplate's third argument and is what {{#case}} matches
+    // on; without it a switch could never pick a branch in the preview.
+    const { vars, raw } = buildPreview(html, variableDefs, previewBools, previewRaw);
+    return fillTemplate(html, vars, raw);
   }, [previewOpen, editor, variableDefs, previewBools, previewRaw, editorDoc]);
 
   function openPreview() {
@@ -339,7 +442,8 @@ export default function ContractTemplatesPage() {
     setPdfPreviewLoading(true);
     try {
       const html = editor.getHTML();
-      const filled = fillTemplate(html, buildPreviewVars(html, variableDefs, previewBools, previewRaw));
+      const { vars, raw } = buildPreview(html, variableDefs, previewBools, previewRaw);
+      const filled = fillTemplate(html, vars, raw);
       const token = await user.getIdToken();
       const resp = await fetch("/api/contracts/render-pdf", {
         method: "POST",
@@ -623,6 +727,41 @@ export default function ContractTemplatesPage() {
     editor.chain().focus().insertContent(`{{${key}}}`).run();
   }
 
+  /** Custom slots this template already uses – what the switch can branch on. */
+  function caseSlotKeys(): string[] {
+    if (!editor) return [];
+    return usedCustomVars(editor.getHTML()).filter((k) => CONTRACT_SLOT_SET.has(k));
+  }
+
+  function openCaseModal() {
+    const keys = caseSlotKeys();
+    // Keep the previous pick when it is still a slot of this template, so
+    // inserting a second branch of the same switch needs no re-selection.
+    setCaseKey((prev) => (keys.includes(prev) ? prev : keys[0] ?? ""));
+    setCaseValue("");
+    setCaseOp("=");
+    setCaseModalOpen(true);
+  }
+
+  /**
+   * Insert `{{#case varN = value}}…{{/case}}` with the caret between the tags, so
+   * the branch's text can be typed straight in. Mirrors insertVariable's
+   * {{#if}} handling.
+   */
+  function insertCaseBlock() {
+    if (!editor || !caseKey) return;
+    const left = `{{#case ${caseKey} ${caseOp} ${caseValue.trim()}}}`;
+    const right = "{{/case}}";
+    const from = editor.state.selection.from;
+    editor
+      .chain()
+      .focus()
+      .insertContent(left + right)
+      .setTextSelection(from + left.length)
+      .run();
+    setCaseModalOpen(false);
+  }
+
   async function handleSave() {
     if (!editor || !user) return;
     setSaving(true);
@@ -795,6 +934,42 @@ export default function ContractTemplatesPage() {
     };
     reader.readAsDataURL(file);
     e.target.value = "";
+  }
+
+  /**
+   * A picture picked for one choice of an "Obrázek" slot. Goes through
+   * prepareImageDataUri, which downscales an oversized file rather than
+   * refusing it outright, and refuses only when even that isn't enough – the
+   * message it returns is the one to show, because it says what to do next.
+   */
+  async function handleVarImageFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    const target = varImageTarget;
+    // Reset before the await: without it, picking the SAME file again fires no
+    // change event and the upload silently does nothing.
+    e.target.value = "";
+    if (!file || !target) return;
+    const result = await prepareImageDataUri(file, CUSTOM_VAR_IMAGE_MAX_CHARS);
+    if (!result.ok) {
+      setErrorModal(result.message);
+      return;
+    }
+    setVariableDefs((prev) => {
+      const def = prev[target.key];
+      const images = def?.images ?? [];
+      // The row can be gone if the author removed it while the file dialog was
+      // open; writing the picture back would resurrect a deleted choice.
+      if (!def || !images[target.index]) return prev;
+      const next = images.map((o, i) =>
+        i === target.index ? { ...o, src: result.dataUri } : o
+      );
+      return { ...prev, [target.key]: { ...def, images: next } };
+    });
+    setVarImageShrunk((prev) => ({
+      ...prev,
+      [`${target.key}:${target.index}`]: result.shrunk,
+    }));
+    setIsDirty(true);
   }
 
   if (isPhone) {
@@ -1527,11 +1702,12 @@ export default function ContractTemplatesPage() {
             </div>
           ))}
 
-          {/* Ten free slots this template configures itself. A slot shows its
-              configured label once it has one, otherwise the bare {{varN}}. */}
+          {/* Ten free slots this template configures itself (CONTRACT_SLOT_KEYS –
+              NOT the engine's 25-slot ceiling). A slot shows its configured label
+              once it has one, otherwise the bare {{varN}}. */}
           <div className={styles.varGroup}>
             <p className={styles.varGroupLabel}>Vlastní proměnné</p>
-            {CUSTOM_VAR_KEYS.map((key) => {
+            {CONTRACT_SLOT_KEYS.map((key) => {
               const def = variableDefs[key];
               return (
                 <button
@@ -1544,6 +1720,13 @@ export default function ContractTemplatesPage() {
                 </button>
               );
             })}
+            <button
+              className={styles.varBtn}
+              onClick={openCaseModal}
+              title="Vložit přepínač {{#case varN = hodnota}}…{{/case}}"
+            >
+              ⇄ Přepínač…
+            </button>
             <button
               className={styles.varBtn}
               onClick={() => setCustomVarsOpen(true)}
@@ -1560,11 +1743,26 @@ export default function ContractTemplatesPage() {
         // Which slots this template actually uses, read straight from the live
         // editor content — so a slot appears here the moment it is inserted and
         // disappears when deleted, with no bookkeeping.
-        const used = usedCustomVars(editor.getHTML());
+        //
+        // Restricted to the slots a contract template actually offers: the engine
+        // recognises {{var11}}+ so that a stray one can be SEEN (customVarWarning
+        // flags it), but it must not get a configuration row here — the server
+        // would drop the def and the author would never learn why.
+        const allUsed = usedCustomVars(editor.getHTML());
+        const used = allUsed.filter((k) => CONTRACT_SLOT_SET.has(k));
+        const overLimit = allUsed.filter((k) => !CONTRACT_SLOT_SET.has(k));
         // Slots configured earlier whose placeholder is no longer in the text.
         // Their config is kept (harmless, and lets an accidental deletion be
         // undone) but flagged, so the list can't quietly rot.
         const orphaned = Object.keys(variableDefs).filter((k) => !used.includes(k));
+
+        // Running total across EVERY image slot, orphaned ones included: they
+        // are all stored on the same template document, so they all count
+        // against the same 1 MiB ceiling whether the text still uses them or not.
+        const allImages = Object.values(variableDefs).flatMap((d) => d.images ?? []);
+        const imageTotalChars = allImages.reduce((sum, o) => sum + (o.src?.length ?? 0), 0);
+        const imageTotalKb = allImages.reduce((sum, o) => sum + dataUriKb(o.src ?? ""), 0);
+        const imagesOverBudget = imageTotalChars > IMAGE_TOTAL_WARN_CHARS;
 
         const setDef = (
           key: string,
@@ -1575,52 +1773,117 @@ export default function ContractTemplatesPage() {
             condition: CustomVarCondition | undefined;
             optional: boolean;
             options: string[] | undefined;
+            formula: string | undefined;
+            decimals: number | undefined;
+            images: CustomVarImageOption[] | undefined;
           }>
         ) => {
           setVariableDefs((prev) => {
             const prevDef = prev[key];
-            // Changing the type can invalidate an existing default/condition (a
-            // literal date for a now-number slot, a condition on a text slot), so
-            // drop both unless the same patch re-supplies them.
+            const nextTypeVal = patch.type ?? prevDef?.type ?? "text";
+            // Changing the type can invalidate an existing default (a literal date
+            // for a now-number slot), so drop it unless the same patch re-supplies
+            // one. A COMPUTED slot never has a default at all – its value is
+            // derived, so a pre-filled input would be a lie.
             const typeChanged = patch.type !== undefined && patch.type !== prevDef?.type;
             const nextDefault =
-              "default" in patch ? patch.default : typeChanged ? undefined : prevDef?.default;
+              "default" in patch
+                ? patch.default
+                : typeChanged || isComputedVarType(nextTypeVal)
+                  ? undefined
+                  : prevDef?.default;
+            // Each of the three type-specific configs is kept only while its own
+            // type is selected, and dropped the moment the slot becomes something
+            // else — otherwise a slot switched away and back would silently
+            // resurrect a comparison / formula / choice list the author had
+            // replaced, which on a contract is a wrong clause, not a cosmetic bug.
             const nextCondition =
-              "condition" in patch ? patch.condition : typeChanged ? undefined : prevDef?.condition;
-            // Unlike default/condition, `optional` survives a type change: a plain
-            // boolean can't become invalid for the new type, only inapplicable
-            // (bool/condition ignore it), so the author's intent is kept if they
-            // switch back.
-            const nextOptional = "optional" in patch ? patch.optional : prevDef?.optional;
-            // Choices belong to a "list" slot only; switching the type away drops
-            // them, for the same reason a now-invalid default is dropped.
-            const nextTypeVal = patch.type ?? prevDef?.type ?? "text";
+              "condition" in patch
+                ? patch.condition
+                : nextTypeVal === "condition" ? prevDef?.condition : undefined;
+            const nextFormula =
+              "formula" in patch
+                ? patch.formula
+                : nextTypeVal === "math" ? prevDef?.formula : undefined;
+            const nextDecimals =
+              "decimals" in patch
+                ? patch.decimals
+                : nextTypeVal === "math" ? prevDef?.decimals : undefined;
             const nextOptions =
               "options" in patch
                 ? patch.options
                 : nextTypeVal === "list" ? prevDef?.options : undefined;
+            // Same rule for the pictures, with an extra reason of its own: they
+            // are by far the heaviest thing on the document, so keeping them on
+            // a slot that is no longer an image would spend the 1 MiB budget on
+            // data nothing can render.
+            const nextImages =
+              "images" in patch
+                ? patch.images
+                : nextTypeVal === "image" ? prevDef?.images : undefined;
+            // Unlike the above, `optional` survives a type change: a plain
+            // boolean can't become invalid for the new type, only inapplicable
+            // (bool/condition/math ignore it), so the author's intent is kept if
+            // they switch back.
+            const nextOptional = "optional" in patch ? patch.optional : prevDef?.optional;
             return {
               ...prev,
               [key]: {
                 label: patch.label ?? prevDef?.label ?? "",
-                type: patch.type ?? prevDef?.type ?? "text",
+                type: nextTypeVal,
                 // Omit when absent so we never persist `default/condition: undefined`
                 // (or a no-op `optional: false`).
                 ...(nextDefault ? { default: nextDefault } : {}),
                 ...(nextCondition ? { condition: nextCondition } : {}),
                 ...(nextOptional ? { optional: true } : {}),
                 ...(nextOptions && nextOptions.length > 0 ? { options: nextOptions } : {}),
+                ...(nextImages && nextImages.length > 0 ? { images: nextImages } : {}),
+                ...(nextFormula ? { formula: nextFormula } : {}),
+                // 0 is a real precision (whole crowns), so test for undefined –
+                // a falsy check would silently drop it.
+                ...(nextDecimals !== undefined ? { decimals: nextDecimals } : {}),
               },
             };
           });
           setIsDirty(true);
         };
 
-        // Comparable variables of a given raw type (date / number), for the
-        // condition builder's operand dropdowns.
-        const comparableOf = (t: "date" | "number") => COMPARABLE_VARS.filter((v) => v.type === t);
-        const leftType = (cond: CustomVarCondition | undefined) =>
-          COMPARABLE_VARS.find((v) => v.key === cond?.leftKey)?.type ?? "date";
+        // ── Condition operands ──────────────────────────────────────────────
+        // Two sources, kept visually apart in their own <optgroup>s: the
+        // employee/contract BUILT-INS (COMPARABLE_VARS, the only source until
+        // v5.2.0) and this template's OTHER custom slots. The built-in path is
+        // untouched — a stored condition over built-ins resolves, renders and
+        // evaluates exactly as before; custom slots are purely additional.
+
+        /** The raw type an operand compares on, whichever source it comes from. */
+        const operandType = (opKey: string): ComparableType | null =>
+          COMPARABLE_VARS.find((v) => v.key === opKey)?.type ??
+          (isCustomVarKey(opKey) ? comparableTypeOfCustom(variableDefs[opKey]?.type) : null);
+        /** Built-in comparables of one raw type. */
+        const comparableOf = (t: ComparableType) => COMPARABLE_VARS.filter((v) => v.type === t);
+        /**
+         * This template's custom slots usable as an operand. `t` narrows to one
+         * raw type (right-hand operand); omit it to list every comparable slot
+         * (left-hand operand). `exclude` drops the slot being configured — a
+         * condition comparing itself is a cycle. Slots typed "condition" never
+         * appear: comparableTypeOfCustom returns null for them, for the same reason.
+         */
+        const customComparables = (exclude: string, t?: ComparableType) =>
+          used
+            .filter((k) => k !== exclude)
+            .map((k) => ({
+              key: k,
+              label: variableDefs[k]?.label?.trim()
+                ? `${variableDefs[k]!.label} (${k})`
+                : k,
+              type: operandType(k),
+            }))
+            .filter(
+              (v): v is { key: string; label: string; type: ComparableType } =>
+                v.type !== null && (t === undefined || v.type === t)
+            );
+        const leftType = (cond: CustomVarCondition | undefined): ComparableType =>
+          (cond ? operandType(cond.leftKey) : null) ?? "date";
         // A starter condition when a slot is switched to type "condition".
         const starterCondition = (): CustomVarCondition => ({
           leftKey: COMPARABLE_VARS[0].key,
@@ -1631,12 +1894,38 @@ export default function ContractTemplatesPage() {
         const renderConditionBuilder = (key: string, cond: CustomVarCondition | undefined) => {
           const c = cond ?? starterCondition();
           const lt = leftType(c);
+          // Operators that make sense for this left operand. For date/number this
+          // is the full list the dropdown always showed, so nothing changes for an
+          // existing condition; only the new "text" operands are narrowed (see
+          // OPS_FOR_COMPARABLE — ordering free text answers no real question).
+          const ops = OPS_FOR_COMPARABLE[lt];
           // Unary operators (je prázdné / není prázdné) compare nothing on the right.
           const needsRight = c.op !== "empty" && c.op !== "notEmpty";
           const setCond = (next: CustomVarCondition) => setDef(key, { condition: next });
           const opt = (v: { key: string; label: string }) => (
             <option key={v.key} value={v.key}>{v.label}</option>
           );
+          /**
+           * Keep a STORED operand selected even when its slot is no longer in
+           * the template's text. The condition still resolves at generation
+           * (requiredCustomVars walks condition operands transitively), so a
+           * <select> silently falling back to its first option would misreport
+           * the comparison — and the next edit to any other field would then
+           * write that wrong operand back onto a contract template.
+           */
+          const withStored = <T extends { key: string; label: string }>(
+            list: T[],
+            storedKey: string | undefined
+          ): { key: string; label: string }[] =>
+            storedKey && isCustomVarKey(storedKey) && !list.some((v) => v.key === storedKey)
+              ? [...list, { key: storedKey, label: `${storedKey} (v textu nepoužita)` }]
+              : list;
+          const customLeft = withStored(customComparables(key), c.leftKey);
+          const customRight = withStored(
+            customComparables(key, lt),
+            c.right.kind === "var" ? c.right.key : undefined
+          );
+          const builtinRight = comparableOf(lt).filter((v) => v.key !== c.leftKey);
           // nowrap: the operands stay on the slot's single table row – the modal
           // is sized for it and the table scrolls horizontally if the viewport is
           // too narrow, rather than wrapping the row in two.
@@ -1647,28 +1936,38 @@ export default function ContractTemplatesPage() {
                 value={c.leftKey}
                 onChange={(e) => {
                   const newLeft = e.target.value;
-                  const newType = COMPARABLE_VARS.find((v) => v.key === newLeft)?.type ?? "date";
+                  const newType = operandType(newLeft) ?? "date";
                   // Keep the right operand only if it stays type-compatible; a now
                   // mismatched variable operand resets to an empty literal.
                   const rightVarKey = c.right.kind === "var" ? c.right.key : null;
                   const rightStillOk =
-                    rightVarKey === null ||
-                    COMPARABLE_VARS.find((v) => v.key === rightVarKey)?.type === newType;
+                    rightVarKey === null || operandType(rightVarKey) === newType;
+                  // The operator has to stay legal for the new left type – picking
+                  // a text slot while "<" is selected would otherwise leave a
+                  // comparison that silently evaluates to false forever.
+                  const newOps = OPS_FOR_COMPARABLE[newType];
                   setCond({
                     leftKey: newLeft,
-                    op: c.op,
+                    op: newOps.includes(c.op) ? c.op : newOps[0],
                     right: rightStillOk ? c.right : { kind: "literal", value: "" },
                   });
                 }}
               >
-                {COMPARABLE_VARS.map(opt)}
+                <optgroup label="Zabudované proměnné">
+                  {COMPARABLE_VARS.map(opt)}
+                </optgroup>
+                {customLeft.length > 0 && (
+                  <optgroup label="Vlastní proměnné">
+                    {customLeft.map(opt)}
+                  </optgroup>
+                )}
               </select>
               <select
                 style={{ ...fieldStyle, width: "auto", flex: "0 0 auto" }}
                 value={c.op}
                 onChange={(e) => setCond({ ...c, op: e.target.value as CompareOp })}
               >
-                {(Object.keys(COMPARE_OP_LABELS) as CompareOp[]).map((op) => (
+                {ops.map((op) => (
                   <option key={op} value={op}>{COMPARE_OP_LABELS[op]}</option>
                 ))}
               </select>
@@ -1680,7 +1979,7 @@ export default function ContractTemplatesPage() {
                     onChange={(e) => {
                       const kind = e.target.value as "var" | "literal";
                       if (kind === "var") {
-                        const first = comparableOf(lt).find((v) => v.key !== c.leftKey) ?? comparableOf(lt)[0];
+                        const first = builtinRight[0] ?? customRight[0];
                         setCond({ ...c, right: { kind: "var", key: first?.key ?? "" } });
                       } else {
                         setCond({ ...c, right: { kind: "literal", value: "" } });
@@ -1696,13 +1995,19 @@ export default function ContractTemplatesPage() {
                       value={c.right.key}
                       onChange={(e) => setCond({ ...c, right: { kind: "var", key: e.target.value } })}
                     >
-                      {comparableOf(lt).filter((v) => v.key !== c.leftKey).map(opt)}
+                      {builtinRight.length > 0 && (
+                        <optgroup label="Zabudované proměnné">{builtinRight.map(opt)}</optgroup>
+                      )}
+                      {customRight.length > 0 && (
+                        <optgroup label="Vlastní proměnné">{customRight.map(opt)}</optgroup>
+                      )}
                     </select>
                   ) : (
                     <input
-                      type={lt === "date" ? "date" : "number"}
+                      type={lt === "date" ? "date" : lt === "number" ? "number" : "text"}
                       style={{ ...fieldStyle, width: "auto", flex: "1 1 110px", minWidth: 0 }}
                       value={c.right.value}
+                      placeholder={lt === "text" ? "Porovnávaná hodnota" : undefined}
                       onChange={(e) => setCond({ ...c, right: { kind: "literal", value: e.target.value } })}
                     />
                   )}
@@ -1774,12 +2079,188 @@ export default function ContractTemplatesPage() {
           );
         };
 
+        /**
+         * Editor for an "Obrázek" slot's choices. Shaped like the "Seznam"
+         * editor above, because an image slot IS a list – the value picked at
+         * generation is the choice's NAME, and the picture is what that name
+         * substitutes into the document. Each choice therefore carries its own
+         * width and alignment: the point of the type is that different answers
+         * print different pictures, and those pictures rarely share a size.
+         */
+        const renderImagesEditor = (key: string) => {
+          const images = variableDefs[key]?.images ?? [];
+          const write = (next: CustomVarImageOption[]) =>
+            setDef(key, { images: next.length > 0 ? next : undefined });
+          const patch = (i: number, p: Partial<CustomVarImageOption>) =>
+            write(
+              images.map((o, j) => {
+                if (j !== i) return o;
+                const next: CustomVarImageOption = { ...o, ...p };
+                // "No width" means the picture's natural size and "no alignment"
+                // means inline – neither is the same as an empty string, which
+                // renderCustomImage would have to guess at.
+                if (!next.width) delete next.width;
+                if (!next.align) delete next.align;
+                return next;
+              })
+            );
+          /**
+           * Remove one choice, shifting the "was downscaled" notes down with it.
+           * Those are keyed by position, so without the shift the note would move
+           * to whichever picture inherited the index and claim something about it
+           * that isn't true.
+           */
+          const removeAt = (i: number) => {
+            write(images.filter((_, j) => j !== i));
+            setVarImageShrunk((prev) => {
+              const next: Record<string, boolean> = {};
+              for (const [k, v] of Object.entries(prev)) {
+                const [slot, idxStr] = k.split(":");
+                const idx = Number(idxStr);
+                if (slot !== key) next[k] = v;
+                else if (idx < i) next[k] = v;
+                else if (idx > i) next[`${slot}:${idx - 1}`] = v;
+              }
+              return next;
+            });
+          };
+          const atLimit = images.length >= CUSTOM_VAR_MAX_IMAGES;
+          return (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <span style={{ fontSize: "0.72rem", color: "var(--color-text-muted)" }}>
+                Obrázky k výběru {images.length > 0 && `(${images.length})`}
+              </span>
+              {images.map((opt, i) => {
+                const shrunk = varImageShrunk[`${key}:${i}`];
+                return (
+                  <div
+                    key={i}
+                    style={{ display: "flex", alignItems: "flex-start", gap: 6, flexWrap: "wrap" }}
+                  >
+                    <input
+                      type="text"
+                      style={{ ...fieldStyle, flex: "1 1 160px", minWidth: 0 }}
+                      value={opt.label}
+                      maxLength={100}
+                      placeholder={`Název možnosti ${i + 1}`}
+                      aria-label={`Název obrázku ${i + 1}`}
+                      onChange={(e) => patch(i, { label: e.target.value })}
+                    />
+                    {/* The thumbnail doubles as the "is anything uploaded"
+                        readout – a name with no picture prints nothing. */}
+                    {opt.src ? (
+                      <img
+                        src={opt.src}
+                        alt=""
+                        style={{
+                          flex: "0 0 auto",
+                          height: 36,
+                          maxWidth: 90,
+                          objectFit: "contain",
+                          border: "1px solid var(--color-border)",
+                          borderRadius: 4,
+                          background: "var(--color-surface)",
+                        }}
+                      />
+                    ) : (
+                      <span
+                        style={{
+                          flex: "0 0 auto",
+                          fontSize: "0.72rem",
+                          color: "var(--color-text-muted)",
+                          alignSelf: "center",
+                        }}
+                      >
+                        bez obrázku
+                      </span>
+                    )}
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        setVarImageTarget({ key, index: i });
+                        varImageInputRef.current?.click();
+                      }}
+                    >
+                      {opt.src ? "Nahradit…" : "Nahrát…"}
+                    </Button>
+                    <select
+                      style={{ ...fieldStyle, width: "auto", flex: "0 0 auto" }}
+                      value={opt.width ?? ""}
+                      aria-label={`Šířka obrázku ${i + 1}`}
+                      onChange={(e) => patch(i, { width: e.target.value })}
+                    >
+                      <option value="">Původní šířka</option>
+                      {CUSTOM_VAR_IMAGE_WIDTHS.map((w) => (
+                        <option key={w} value={w}>{w}</option>
+                      ))}
+                    </select>
+                    <select
+                      style={{ ...fieldStyle, width: "auto", flex: "0 0 auto" }}
+                      value={opt.align ?? ""}
+                      aria-label={`Zarovnání obrázku ${i + 1}`}
+                      onChange={(e) =>
+                        patch(i, { align: e.target.value as CustomVarImageAlign })
+                      }
+                    >
+                      <option value="">V textu</option>
+                      {CUSTOM_VAR_IMAGE_ALIGNS.map((a) => (
+                        <option key={a} value={a}>{CUSTOM_VAR_IMAGE_ALIGN_LABELS[a]}</option>
+                      ))}
+                    </select>
+                    {opt.src && (
+                      <span
+                        style={{
+                          flex: "0 0 auto",
+                          alignSelf: "center",
+                          fontSize: "0.72rem",
+                          color: "var(--color-text-muted)",
+                        }}
+                      >
+                        {dataUriKb(opt.src)} kB
+                        {shrunk && " – automaticky zmenšeno"}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      className={styles.optionRemoveBtn}
+                      aria-label={`Odebrat obrázek ${i + 1}`}
+                      title="Odebrat obrázek"
+                      onClick={() => removeAt(i)}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                );
+              })}
+              <div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={atLimit}
+                  title={atLimit ? `Nejvýše ${CUSTOM_VAR_MAX_IMAGES} obrázků` : undefined}
+                  onClick={() => write([...images, { label: "", src: "" }])}
+                >
+                  + Přidat obrázek
+                </Button>
+              </div>
+            </div>
+          );
+        };
+
         // Render the literal-value input matching a slot's type.
         const renderLiteralDefault = (key: string, type: CustomVarType, value: string) => {
           const set = (v: string) => setDef(key, { default: { kind: "literal", value: v } });
-          if (type === "list") {
-            // A list slot's default has to BE one of its choices.
-            const opts = variableDefs[key]?.options ?? [];
+          if (type === "list" || type === "image") {
+            // A list slot's default has to BE one of its choices – and so does
+            // an image slot's, whose raw value is likewise a choice's name. A
+            // free-text default would match no picture and print nothing.
+            const opts =
+              type === "image"
+                ? (variableDefs[key]?.images ?? [])
+                    .filter((o) => o.label.trim())
+                    .map((o) => o.label)
+                : variableDefs[key]?.options ?? [];
             return (
               <select style={fieldStyle} value={value} onChange={(e) => set(e.target.value)}>
                 <option value="">– vyberte –</option>
@@ -1797,6 +2278,20 @@ export default function ContractTemplatesPage() {
               </select>
             );
           }
+          if (type === "longtext") {
+            // A "Dlouhý text" default is prose with line breaks; a single-line
+            // <input> would hide everything past the first line and swallow the
+            // Enter key, which is the whole point of the type.
+            return (
+              <textarea
+                style={{ ...fieldStyle, resize: "vertical", minHeight: 64, fontFamily: "inherit" }}
+                rows={3}
+                value={value}
+                placeholder="Výchozí hodnota"
+                onChange={(e) => set(e.target.value)}
+              />
+            );
+          }
           return (
             <input
               type={type === "date" ? "date" : type === "number" ? "number" : "text"}
@@ -1805,6 +2300,80 @@ export default function ContractTemplatesPage() {
               placeholder="Výchozí hodnota"
               onChange={(e) => set(e.target.value)}
             />
+          );
+        };
+
+        /**
+         * Editor for a "math" slot: the formula plus the precision its result
+         * prints at. Both live hints exist because a formula fails SILENTLY —
+         * evalMathFormula returns null for a malformed expression and the document
+         * simply prints nothing, with no field anywhere to notice the gap in.
+         */
+        const renderFormulaEditor = (key: string) => {
+          const def = variableDefs[key];
+          const formula = def?.formula ?? "";
+          const deps = formulaDependencies(formula);
+          // Probe the parser with a distinct dummy value per operand, so a
+          // syntax error is told apart from operands that simply have no value
+          // yet. Distinct rather than all-1 because "var1 - var2" would then be
+          // zero and a division by it would read as a parse failure.
+          const probe: Record<string, number> = {};
+          deps.forEach((d, i) => { probe[d] = i + 1; });
+          const parseOk = !formula.trim() || evalMathFormula(formula, probe) !== null;
+          const depLabel = (d: string) =>
+            variableDefs[d]?.label?.trim() ? `${variableDefs[d]!.label} (${d})` : d;
+          return (
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "nowrap" }}>
+                <input
+                  type="text"
+                  style={{ ...fieldStyle, flex: "1 1 auto", minWidth: 0, fontFamily: "monospace" }}
+                  value={formula}
+                  maxLength={CUSTOM_VAR_FORMULA_MAX}
+                  placeholder="var1 + var2"
+                  aria-label={`Vzorec pro ${def?.label || key}`}
+                  onChange={(e) => setDef(key, { formula: e.target.value })}
+                />
+                <label
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 4,
+                    flex: "0 0 auto",
+                    fontSize: "0.72rem",
+                    color: "var(--color-text-muted)",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  Desetinná místa
+                  <select
+                    style={{ ...fieldStyle, width: "auto" }}
+                    value={String(def?.decimals ?? 0)}
+                    onChange={(e) => setDef(key, { decimals: Number(e.target.value) })}
+                  >
+                    {Array.from({ length: CUSTOM_VAR_DECIMALS_MAX + 1 }, (_, i) => (
+                      <option key={i} value={i}>{i}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              {!parseOk && (
+                <span style={{ fontSize: "0.72rem", color: "var(--color-danger-text-strong)" }}>
+                  Vzorci nerozumím – zkontrolujte závorky a operátory (+ − * / a čísla).
+                </span>
+              )}
+              {parseOk && deps.length > 0 && (
+                <span style={{ fontSize: "0.72rem", color: "var(--color-text-muted)" }}>
+                  Počítá z: {deps.map(depLabel).join(", ")}
+                </span>
+              )}
+              {parseOk && formula.trim() && deps.length === 0 && (
+                <span style={{ fontSize: "0.72rem", color: "var(--color-text-muted)" }}>
+                  Vzorec neodkazuje na žádnou vlastní proměnnou – výsledek bude
+                  u každého dokumentu stejný.
+                </span>
+              )}
+            </div>
           );
         };
 
@@ -1829,7 +2398,10 @@ export default function ContractTemplatesPage() {
                 and a "condition" slot's row carries four controls (left operand,
                 operator, right kind, right value) beside the name/type/optional
                 columns. Below this width they used to wrap onto a second line. */}
-            <div className={modalStyles.modal} style={{ width: "min(1100px, 96vw)", maxWidth: "96vw" }}>
+            <div
+              className={modalStyles.modal}
+              style={{ width: "min(1100px, 96vw)", maxWidth: "96vw" }}
+            >
               <div className={modalStyles.header}>
                 <h2 className={modalStyles.title}>Vlastní proměnné</h2>
               </div>
@@ -1849,15 +2421,56 @@ export default function ContractTemplatesPage() {
                   <strong>Nepovinná</strong> proměnná se při generování nemusí
                   vyplnit – v dokumentu se pak nevypíše nic. Bez zaškrtnutí je
                   vyplnění povinné a generování bez hodnoty neproběhne. Typy
-                  Ano/Ne a Podmínka vyplnění nevyžadují nikdy.
+                  Ano/Ne, Podmínka a Výpočet vyplnění nevyžadují nikdy.
                 </p>
                 <p style={hintStyle}>
                   Typ <strong>Podmínka</strong> proměnnou nevyplňujete – její hodnota
                   (Ano/Ne) se <strong>vypočítá</strong> z porovnání dvou hodnot
-                  (např. <em>Datum podpisu &lt; Datum nástupu</em>). Používá se stejně
-                  jako Ano/Ne v blocích <code>{"{{#if var1}}…{{/if}}"}</code> /{" "}
+                  (např. <em>Datum podpisu &lt; Datum nástupu</em>). Porovnávat lze
+                  zabudované proměnné i ostatní vlastní proměnné této šablony.
+                  Používá se stejně jako Ano/Ne v blocích{" "}
+                  <code>{"{{#if var1}}…{{/if}}"}</code> /{" "}
                   <code>{"{{#unless var1}}…{{/unless}}"}</code>.
                 </p>
+                <p style={hintStyle}>
+                  Typ <strong>Výpočet</strong> se také nevyplňuje – spočítá se ze
+                  vzorce nad ostatními vlastními proměnnými, např.{" "}
+                  {/* ASCII operators on purpose: the tokenizer accepts "-" but
+                      not the typographic minus, and an example is what people copy. */}
+                  <code>var1 * var2</code> nebo <code>(var1 - var2) / 3</code>.
+                  Povolené jsou jen <code>+ - * /</code>, závorky, čísla, vlastní
+                  proměnné <code>var1</code>…<code>var{CONTRACT_VAR_COUNT}</code> a
+                  číselné zabudované proměnné (např. <code>salary</code>{" "}
+                  nebo <code>hoursPerWeek</code>) – takže <code>salary * 0,15</code>{" "}
+                  spočítá provizi ze mzdy. Desetinná místa určují, na kolik míst se
+                  výsledek vypíše.
+                </p>
+                <p style={hintStyle}>
+                  <strong>Přepínač</strong> <code>{"{{#case var1 = Praha}}…{{/case}}"}</code>{" "}
+                  vypíše svůj obsah jen tehdy, když má proměnná právě tuto hodnotu;{" "}
+                  <code>{"{{#case var1 != Praha}}"}</code> naopak když ji nemá. Porovnává
+                  se bez ohledu na velikost písmen a mezery. Blok vložíte tlačítkem
+                  <strong> ⇄ Přepínač…</strong> v panelu vpravo – u typu Seznam si tam
+                  hodnotu vyberete, takže se nemůžete přepsat.
+                </p>
+
+                <p style={hintStyle}>
+                  Typ <strong>Obrázek</strong> je seznam, jehož každá možnost nese
+                  vlastní obrázek: při generování vyberete název možnosti a do
+                  dokumentu se vloží její obrázek v nastavené šířce a zarovnání.
+                  Obrázky se ukládají přímo do šablony, proto jich je nejvýše{" "}
+                  {CUSTOM_VAR_MAX_IMAGES} a velké se automaticky zmenší.
+                </p>
+
+                {/* One hidden input for every upload button in the dialog – the
+                    button sets which choice the pick belongs to, then clicks it. */}
+                <input
+                  ref={varImageInputRef}
+                  type="file"
+                  accept={IMAGE_MIME_TYPES.join(",")}
+                  style={{ display: "none" }}
+                  onChange={handleVarImageFile}
+                />
 
                 {used.length === 0 ? (
                   <p style={hintStyle}>
@@ -1875,7 +2488,7 @@ export default function ContractTemplatesPage() {
                         <th style={{ textAlign: "left", fontSize: "0.75rem", color: "var(--color-text-muted)", padding: "0 6px 4px 0", whiteSpace: "nowrap" }}>Název (co se zobrazí)</th>
                         <th style={{ textAlign: "left", fontSize: "0.75rem", color: "var(--color-text-muted)", padding: "0 10px 4px 0", whiteSpace: "nowrap" }}>Typ</th>
                         <th style={{ textAlign: "center", fontSize: "0.75rem", color: "var(--color-text-muted)", padding: "0 10px 4px 0", whiteSpace: "nowrap" }}>Nepovinná</th>
-                        <th style={{ textAlign: "left", fontSize: "0.75rem", color: "var(--color-text-muted)", padding: "0 0 4px 0", whiteSpace: "nowrap" }}>Výchozí hodnota / podmínka</th>
+                        <th style={{ textAlign: "left", fontSize: "0.75rem", color: "var(--color-text-muted)", padding: "0 0 4px 0", whiteSpace: "nowrap" }}>Výchozí hodnota / podmínka / vzorec</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1915,11 +2528,12 @@ export default function ContractTemplatesPage() {
                               </select>
                             </td>
                             {/* "Nepovinná" only applies to slots that are typed in
-                                at generation. bool + condition never block it
-                                anyway (see missingCustomVars), so they show a dash
-                                rather than a checkbox that does nothing. */}
+                                at generation. bool + the computed types (Podmínka,
+                                Výpočet) never block it anyway (see
+                                missingCustomVars), so they show a dash rather than
+                                a checkbox that does nothing. */}
                             <td style={{ padding: "3px 10px 3px 0", textAlign: "center" }}>
-                              {type === "bool" || type === "condition" ? (
+                              {type === "bool" || isComputedVarType(type) ? (
                                 <span style={{ color: "var(--color-text-muted)" }}>–</span>
                               ) : (
                                 <input
@@ -1930,13 +2544,17 @@ export default function ContractTemplatesPage() {
                                 />
                               )}
                             </td>
-                            {/* A "condition" slot shows the comparison builder;
-                                every other type shows its default-value control
-                                (pre-filled + editable at generation, shown in the
-                                preview). */}
+                            {/* The computed types show how they are computed – a
+                                "condition" its comparison builder, a "math" its
+                                formula. Every other type shows its default-value
+                                control (pre-filled + editable at generation, shown
+                                in the preview); a computed slot has no default,
+                                because nobody ever fills it in. */}
                             <td style={{ padding: "3px 0" }}>
                               {type === "condition" ? (
                                 renderConditionBuilder(key, def?.condition)
+                              ) : type === "math" ? (
+                                renderFormulaEditor(key)
                               ) : (
                                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                                   <select
@@ -1955,8 +2573,14 @@ export default function ContractTemplatesPage() {
                                     <option value="literal">Pevná hodnota</option>
                                     {/* A list slot's default must be one of its own
                                         choices, so sourcing it from a built-in
-                                        variable is not offered. */}
-                                    {type !== "list" && <option value="fixedVar">Z proměnné</option>}
+                                        variable is not offered. An image slot is
+                                        the same case, and worse: a built-in
+                                        resolves to text like "Jana", which names
+                                        no picture, so the default would silently
+                                        print nothing. */}
+                                    {type !== "list" && type !== "image" && (
+                                      <option value="fixedVar">Z proměnné</option>
+                                    )}
                                   </select>
                                   {source === "literal" && (
                                     <div style={{ flex: "1 1 auto", minWidth: 0 }}>
@@ -1988,6 +2612,17 @@ export default function ContractTemplatesPage() {
                               </td>
                             </tr>
                           )}
+                          {/* Same reasoning as the choices row above, only more
+                              so: a picture row carries a name, a thumbnail, a
+                              width, an alignment and a size readout. */}
+                          {type === "image" && (
+                            <tr>
+                              <td />
+                              <td colSpan={4} style={{ padding: "0 0 10px 0" }}>
+                                {renderImagesEditor(key)}
+                              </td>
+                            </tr>
+                          )}
                           </Fragment>
                         );
                       })}
@@ -1996,10 +2631,44 @@ export default function ContractTemplatesPage() {
                   </div>
                 )}
 
+                {/* The wall has to be visible BEFORE a save fails: the pictures
+                    and the document's text share one Firestore document, and
+                    the save that exceeds 1 MiB is rejected whole. */}
+                {allImages.length > 0 && (
+                  <p
+                    style={{
+                      ...hintStyle,
+                      marginTop: 10,
+                      marginBottom: 0,
+                      ...(imagesOverBudget
+                        ? { color: "var(--color-danger-text-strong)" }
+                        : {}),
+                    }}
+                  >
+                    Obrázky celkem: {imageTotalKb} kB.{" "}
+                    {imagesOverBudget
+                      ? "Šablona se blíží limitu 1 MB na dokument – další obrázky už nemusí jít uložit. Odeberte prosím některý z nich, nebo použijte menší soubory."
+                      : "Obrázky se ukládají do šablony spolu s textem, celkem se vejde asi 1 MB."}
+                  </p>
+                )}
+
                 {orphaned.length > 0 && (
                   <p style={{ ...hintStyle, marginTop: 10, marginBottom: 0 }}>
                     Nastavené, ale v textu nepoužité: {orphaned.join(", ")}. Nastavení
                     zůstává uložené pro případ, že proměnnou vrátíte zpět.
+                  </p>
+                )}
+
+                {/* Slots past this page's limit cannot be configured here at all –
+                    the server refuses to store a def for them – so they are named
+                    plainly instead of silently missing from the table above. */}
+                {overLimit.length > 0 && (
+                  <p style={{ ...hintStyle, marginTop: 10, marginBottom: 0 }}>
+                    V textu je použito {overLimit.join(", ")}, ale šablony smluv
+                    nabízejí jen {CONTRACT_VAR_COUNT} vlastních proměnných
+                    (var1–var{CONTRACT_VAR_COUNT}). Název ani typ jim nastavit
+                    nelze – při generování se objeví jako nepojmenované textové
+                    pole. Nahraďte je prosím některou z proměnných výše.
                   </p>
                 )}
               </div>
@@ -2015,6 +2684,128 @@ export default function ContractTemplatesPage() {
                   }}
                 >
                   Hotovo
+                </Button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* "Přepínač" – assembles a {{#case}} block. Top level (not inside the
+          Vlastní proměnné modal) so it keeps its own state and can be opened
+          straight from the variable panel. Closes only via its buttons. */}
+      {canManage && caseModalOpen && (() => {
+        const slots = caseSlotKeys();
+        const def = variableDefs[caseKey];
+        // An image slot's raw value is the chosen picture's NAME, so a switch
+        // branches on exactly the same strings a list's does – offer them the
+        // same way rather than making the author retype one.
+        const listChoices =
+          def?.type === "list"
+            ? (def.options ?? []).filter((o) => o.trim())
+            : def?.type === "image"
+              ? (def.images ?? []).map((o) => o.label).filter((o) => o.trim())
+              : [];
+        const labelStyle = {
+          display: "block",
+          fontSize: "0.8125rem",
+          fontWeight: 500,
+          color: "var(--color-text-secondary)",
+          marginBottom: 4,
+        } as const;
+        const controlStyle = {
+          width: "100%",
+          padding: "8px 10px",
+          fontSize: "0.875rem",
+          border: "1px solid var(--color-border)",
+          borderRadius: "6px",
+          background: "var(--color-surface)",
+          color: "var(--color-text)",
+        } as const;
+        return (
+          <div className={modalStyles.overlay}>
+            <div className={modalStyles.modal}>
+              <div className={modalStyles.header}>
+                <h2 className={modalStyles.title}>Vložit přepínač</h2>
+              </div>
+              <div className={modalStyles.body}>
+                {slots.length === 0 ? (
+                  <p style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)", margin: 0 }}>
+                    Přepínač porovnává hodnotu vlastní proměnné, ale v šabloně
+                    zatím žádná není. Vložte ji nejdřív kliknutím v panelu vpravo
+                    (např. <code>{"{{var1}}"}</code>).
+                  </p>
+                ) : (
+                  <>
+                    <div style={{ marginBottom: 12 }}>
+                      <label style={labelStyle}>Proměnná</label>
+                      <select
+                        style={controlStyle}
+                        value={caseKey}
+                        onChange={(e) => { setCaseKey(e.target.value); setCaseValue(""); }}
+                      >
+                        {slots.map((k) => (
+                          <option key={k} value={k}>
+                            {variableDefs[k]?.label?.trim() ? `${variableDefs[k]!.label} (${k})` : k}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div style={{ marginBottom: 12 }}>
+                      <label style={labelStyle}>Porovnání</label>
+                      <select
+                        style={controlStyle}
+                        value={caseOp}
+                        onChange={(e) => setCaseOp(e.target.value as "=" | "!=")}
+                      >
+                        <option value="=">= (rovná se)</option>
+                        <option value="!=">≠ (nerovná se)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Hodnota</label>
+                      {/* A list slot's choices are picked, never retyped: retyping
+                          the value is the main way a switch silently stops
+                          matching, and the mismatch is invisible in the editor. */}
+                      {listChoices.length > 0 ? (
+                        <select
+                          style={controlStyle}
+                          value={caseValue}
+                          onChange={(e) => setCaseValue(e.target.value)}
+                        >
+                          <option value="">– vyberte –</option>
+                          {listChoices.map((o, i) => (
+                            <option key={`${o}-${i}`} value={o}>{o}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          type="text"
+                          style={controlStyle}
+                          value={caseValue}
+                          maxLength={100}
+                          placeholder="např. Praha"
+                          onChange={(e) => setCaseValue(e.target.value)}
+                        />
+                      )}
+                      <p style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", margin: "6px 0 0" }}>
+                        Vloží se <code>{`{{#case ${caseKey || "var1"} ${caseOp} ${caseValue.trim() || "hodnota"}}}`}</code>
+                        {" … "}<code>{"{{/case}}"}</code> a kurzor se postaví dovnitř.
+                        Porovnává se bez ohledu na velikost písmen a mezery.
+                        Hodnota nesmí obsahovat <code>{"}"}</code>.
+                      </p>
+                    </div>
+                  </>
+                )}
+              </div>
+              <div className={modalStyles.footer}>
+                <Button variant="secondary" onClick={() => setCaseModalOpen(false)}>Zrušit</Button>
+                <Button
+                  variant="primary"
+                  disabled={slots.length === 0}
+                  onClick={insertCaseBlock}
+                >
+                  Vložit
                 </Button>
               </div>
             </div>

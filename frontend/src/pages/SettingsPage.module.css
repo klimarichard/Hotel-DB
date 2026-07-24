@@ -22,7 +22,16 @@
   z-index: 100;
 }
 
+/* All 14 dialogs on this page share this box, and none of them has a body
+   wrapper – the title, the fields and .formActions are plain siblings. So this
+   composes the whole-box variant: the buttons scroll along with the content
+   rather than staying pinned, which is the trade for not having to re-shape 14
+   pieces of markup. Restructuring one dialog would have left the other 13 able
+   to trap a user, and several already run 620–680px tall (the „Změna hodinové
+   sazby" cascade grows an unbounded <ul> of affected payroll periods on top of
+   its 240px employee table), so they clip at a ~700px viewport or at 125% zoom. */
 .modalBox {
+  composes: shellScroll from "../styles/modalShell.module.css";
   background: var(--color-surface);
   border-radius: 10px;
   padding: 2rem;

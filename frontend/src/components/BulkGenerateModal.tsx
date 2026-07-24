@@ -17,12 +17,14 @@ import {
   CompanyData,
   resolveVariables,
   fillTemplate,
-  usedCustomVars,
+  requiredCustomVars,
   formatCustomValue,
   customDefaultRaw,
   isFixedVarPassthrough,
+  isComputedVarType,
   resolveComparableRaw,
-  evalCondition,
+  resolveComputedVars,
+  type CustomVarDef,
   type CustomVarDefs,
 } from "@/lib/contractVariables";
 import styles from "./BulkGenerateModal.module.css";
@@ -72,6 +74,15 @@ const STATUS_LABELS: Record<BulkEmployee["status"], string> = {
  */
 function legalNameOf(e: BulkEmployee): string {
   return `${e.firstName ?? ""} ${e.lastName ?? ""}`.trim();
+}
+
+/**
+ * The choices an "Obrázek" slot can actually offer – a name to pick and a
+ * picture to substitute. A slot with none of them is an authoring mistake the
+ * template editor flags; here it only decides what to show instead of a field.
+ */
+function imageChoicesOf(def: CustomVarDef | undefined): { label: string; src: string }[] {
+  return (def?.images ?? []).filter((o) => o.label.trim() !== "" && !!o.src);
 }
 
 /** Surname-first, Czech collation – the ordering every other picker uses. */
@@ -236,24 +247,45 @@ export default function BulkGenerateModal({ employees, onClose }: Props) {
     });
   }, [candidates]);
 
-  const customKeys = template ? usedCustomVars(template) : [];
+  // requiredCustomVars, NOT usedCustomVars: a `math` slot's operands may appear
+  // nowhere in the document's text, and without a field they get no value – the
+  // total would then print blank on every document in the batch.
+  const customKeys = template ? requiredCustomVars(template, variableDefs) : [];
 
-  // Slots the operator types once for the whole batch. A `condition` slot is
-  // computed per employee, and a slot defaulting to a fixed variable (e.g.
-  // {{firstName}}) RESOLVES per employee – neither is a shared input, so both
-  // are excluded here and shown read-only instead.
+  // Slots the operator types once for the whole batch. The computed slots
+  // (`condition`, `math`) are derived per employee, and a slot defaulting to a
+  // fixed variable (e.g. {{firstName}}) RESOLVES per employee – none of them is
+  // a shared input, so all are excluded here and shown read-only instead.
   const sharedKeys = customKeys.filter((k) => {
     const def = variableDefs[k];
-    if ((def?.type ?? "text") === "condition") return false;
+    if (isComputedVarType(def?.type ?? "text")) return false;
     return def?.default?.kind !== "fixedVar";
   });
   const perEmployeeKeys = customKeys.filter((k) => !sharedKeys.includes(k));
+
+  /** Why a slot is not typed in here – shown in place of its input. */
+  function autoFillNote(key: string): string {
+    const type = variableDefs[key]?.type ?? "text";
+    if (type === "math") return "Vypočítá se ze vzorce.";
+    if (type === "condition") return "Vyhodnotí se u každého zaměstnance.";
+    return "Vyplní se automaticky u každého zaměstnance.";
+  }
 
   const missingShared = sharedKeys.filter((k) => {
     const def = variableDefs[k];
     const type = def?.type ?? "text";
     if (type === "bool") return false;
     if (def?.optional) return false;
+    // An image slot with no usable choices has nothing to pick, and the operator
+    // running a batch usually cannot edit the template – blocking on it would be
+    // a dead end. It prints nothing, as an unfilled optional slot does, and the
+    // template editor is where the omission is flagged.
+    //
+    // ⚠️ This repeats a rule that `missingCustomVars` enforces in the engine.
+    // The repetition is unavoidable rather than sloppy: this list is the SHARED
+    // slots only (per-employee ones are excluded above), so the engine's
+    // whole-template answer is the wrong set here. Keep the two in step.
+    if (type === "image" && imageChoicesOf(def).length === 0) return false;
     return !(customRaw[k] ?? "").trim();
   });
 
@@ -342,26 +374,44 @@ export default function BulkGenerateModal({ employees, onClose }: Props) {
         const autoVars = resolveVariables(data, companyData);
         const rawComparable = resolveComparableRaw(data);
 
-        // Per-employee slot values: conditions evaluate against THIS employee,
-        // fixed-variable defaults resolve to THIS employee's value, and the
-        // shared typed values apply to everyone.
+        // Per-employee slot INPUTS: the shared typed values, with any
+        // fixed-variable default resolved to THIS employee's value on top.
+        const inputRaw: Record<string, string> = { ...customRaw };
+        for (const key of customKeys) {
+          const def = variableDefs[key];
+          if (def?.default?.kind === "fixedVar") {
+            inputRaw[key] = customDefaultRaw(def, autoVars) ?? "";
+          }
+        }
+        // Computed slots derived from those inputs, per employee: a condition
+        // evaluates against THIS employee's comparables (rawComparable), and a
+        // formula over the shared inputs is resolved through the same fixpoint
+        // the single-generate dialog uses.
+        const computed = resolveComputedVars(customKeys, variableDefs, inputRaw, rawComparable);
+
         const customVars: Record<string, string> = {};
         for (const key of customKeys) {
           const def = variableDefs[key];
           const type = def?.type ?? "text";
-          if (type === "condition") {
-            customVars[key] = evalCondition(def?.condition, rawComparable) ? "ano" : "";
-          } else if (def?.default?.kind === "fixedVar") {
-            const resolved = customDefaultRaw(def, autoVars) ?? "";
-            customVars[key] = isFixedVarPassthrough(def) ? resolved : formatCustomValue(type, resolved);
+          if (isComputedVarType(type)) {
+            customVars[key] = computed.formatted[key] ?? "";
           } else if (isFixedVarPassthrough(def)) {
-            customVars[key] = customRaw[key] ?? "";
+            // Already a formatted string – re-formatting it would corrupt it.
+            customVars[key] = inputRaw[key] ?? "";
           } else {
-            customVars[key] = formatCustomValue(type, customRaw[key] ?? "");
+            // The third argument is required for "image" slots and harmless for
+            // every other type: the raw value of an image slot is a choice's
+            // NAME, and resolving that to an <img> needs the slot's own picture
+            // list. Formatted without it, an image slot prints nothing.
+            customVars[key] = formatCustomValue(type, inputRaw[key] ?? "", def);
           }
         }
 
-        const filled = fillTemplate(template, { ...autoVars, ...customVars });
+        const vars = { ...autoVars, ...customVars };
+        // Third argument = the RAW map {{#case}} matches on, layered over the
+        // printed values so a switch on a key with no raw form still matches on
+        // its display string, exactly as it did before a raw map was passed.
+        const filled = fillTemplate(template, vars, { ...vars, ...computed.raw });
         const blob = await generatePdf(filled, margins);
         blobs.push(blob);
 
@@ -541,6 +591,42 @@ export default function BulkGenerateModal({ employees, onClose }: Props) {
                                 />
                                 {raw === "true" ? "Ano" : "Ne"}
                               </label>
+                            ) : type === "image" ? (
+                              // Picked by name; the picture it stands for is
+                              // substituted at generation. One choice for the
+                              // whole batch, like every other shared slot here.
+                              imageChoicesOf(def).length === 0 ? (
+                                // No free-text fallback: any text at all would
+                                // name no picture and print nothing, so a box to
+                                // type it in would only mislead.
+                                <span className={styles.hint}>
+                                  Šablona k této proměnné nemá žádné obrázky – v
+                                  dokumentech se nic nevypíše.
+                                </span>
+                              ) : (
+                                <select
+                                  className={styles.select}
+                                  value={raw}
+                                  onChange={(ev) => setRaw(ev.target.value)}
+                                >
+                                  <option value="">– vyberte –</option>
+                                  {imageChoicesOf(def).map((o, i) => (
+                                    <option key={`${o.label}-${i}`} value={o.label}>
+                                      {o.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              )
+                            ) : type === "longtext" ? (
+                              // Prose with line breaks; a single-line input would
+                              // hide everything past the first line and swallow Enter.
+                              <textarea
+                                className={styles.input}
+                                style={{ resize: "vertical", minHeight: 92, fontFamily: "inherit" }}
+                                rows={5}
+                                value={raw}
+                                onChange={(ev) => setRaw(ev.target.value)}
+                              />
                             ) : (
                               <input
                                 className={styles.input}
@@ -554,13 +640,13 @@ export default function BulkGenerateModal({ employees, onClose }: Props) {
                       );
                     })}
                     {/* Slots that cannot be shared: a condition is computed from
-                        this employee's own data, and a fixed-variable default
-                        resolves to this employee's value. Listed so it is clear
-                        they are handled, not forgotten. */}
+                        this employee's own data, a math slot from its formula, and
+                        a fixed-variable default resolves to this employee's value.
+                        Listed so it is clear they are handled, not forgotten. */}
                     {perEmployeeKeys.map((key) => (
                       <tr key={key}>
                         <td className={styles.varKey}>{variableDefs[key]?.label || key}</td>
-                        <td className={styles.hint}>Vyplní se automaticky u každého zaměstnance.</td>
+                        <td className={styles.hint}>{autoFillNote(key)}</td>
                       </tr>
                     ))}
                   </tbody>

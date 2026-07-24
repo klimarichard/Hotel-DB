@@ -287,21 +287,15 @@ Tabulky jsou široké a na telefonu se nedají rozumně vyplňovat, proto se pol
 
 ## Dokumenty
 
-### Kdo dokument uvidí, určuje jeho sekce
+### Kdo dokument uvidí, určuje příznak Veřejný
 
-Dokument **bez sekce** vidí každý, kdo má přístup do Dokumentů. Dokument **zařazený do sekce** (Ambiance, Superior, Amigo & Alqush, Ankora, TEMP) vidí jen ten, kdo má oprávnění pro tuto sekci – ostatním se v seznamu vůbec nezobrazí a nelze jej otevřít ani přímým odkazem. Sekce tedy okruh lidí vždy **zužuje, nikdy nerozšiřuje**.
+Dokument je buď **Veřejný**, nebo **Neveřejný** – nový dokument je vždy Neveřejný, dokud ho autor sám neoznačí jako veřejný. Veřejný dokument vidí každý, kdo má přístup do Dokumentů. Neveřejný vidí jen ten, kdo může dokumenty spravovat – ostatním se v seznamu vůbec nezobrazí a nelze jej otevřít ani přímým odkazem.
 
-Kdo má oprávnění **Spravovat dokumenty**, vidí všechny sekce – jinak by nemohl opravit ani smazat to, co je v nich zařazené.
+Kdo má oprávnění **Spravovat dokumenty**, vidí i neveřejné dokumenty – jinak by je nemohl opravit ani smazat.
 
-**Zařazení dokumentu do sekce (nebo jeho vyřazení) je změna toho, kdo ho uvidí**, ne jen štítek. Přesunutím dokumentu do sekce ho skryjete všem, kdo na ni nemají oprávnění; vyjmutím ze sekce ho naopak zpřístupníte všem, kdo mají přístup do Dokumentů.
+U dokumentů, které vznikly ještě před zavedením tohoto rozlišení, příznak v databázi chybí úplně – to se počítá jako **Neveřejný**, ne jako chyba, a žádná stará data se kvůli tomu nijak neupravovala.
 
-> 🔒 Server. Zdroj: `functions/src/services/documentSections.ts` – `maySeeDocumentSection()`; `functions/src/routes/dokumenty.ts` – filtr seznamu a kontrola v `GET /:id`.
-
-### Výchozí sekce mění jen pořadí, nikdy přístup
-
-Volba **Výchozí sekce** je osobní nastavení každého uživatele: dokumenty ze zvolené sekce se zobrazí na začátku seznamu, zbytek za oddělovačem. **Nezpřístupní ani neskryje žádný dokument** – seznam filtruje server podle oprávnění bez ohledu na toto nastavení.
-
-> 🔒 Server. Zdroj: `functions/src/routes/auth.ts` – `PUT /me/dokumenty-default`; pořadí se skládá v `frontend/src/pages/DokumentyPage.tsx`.
+> 🔒 Server. Zdroj: `functions/src/routes/dokumenty.ts` – `maySeeDocument()`, `isValidPublic()`; filtr seznamu v `GET /` a kontrola v `GET /:id`.
 
 ### Vytištěné dokumenty se nikde neukládají
 
@@ -318,6 +312,38 @@ U vlastní proměnné typu **Seznam** zadáte hodnoty, ze kterých se pak při v
 Seznam **bez jediné hodnoty** je povolený (typ si zvolíte dřív, než hodnoty vypíšete), ale v takovém případě se při vyplňování místo nabídky zobrazí **obyčejné textové pole**, aby dokument šlo i tak vytisknout. Editor na to upozorňuje hláškou „Bez možností".
 
 > 🔒 Server + 🖥️ Jen rozhraní. Zdroj: `functions/src/routes/dokumenty.ts` a `functions/src/routes/contractTemplates.ts` – `isValidCustomOptions()`; upozornění `customVarWarning()` ve `frontend/src/pages/DokumentyPage.tsx`.
+
+### Vlastní proměnná typu „Obrázek" pojme nejvýše 8 obrázků, každý zmenšený na cca 90 kB
+
+Vlastní proměnná typu **Obrázek** funguje jako Seznam, jehož každá možnost navíc nese obrázek – při vyplňování se podle vybrané možnosti do dokumentu vytiskne odpovídající obrázek místo textu. Jedna proměnná pojme nejvýše **8** možností/obrázků.
+
+Nahraný obrázek aplikace **sama zmenší**, pokud je příliš velký – postupně zkusí menší rozlišení a převod do formátu JPEG, dokud se obrázek nevejde na přibližně **90 kB**. Pokud se nevejde ani po největším zmenšení, aplikace nahrání **rovnou odmítne** a vyzve k výběru menšího souboru – obrázek se nikdy neuloží oříznutý nebo poškozený.
+
+> 🔒 Server + ⚙️ Automatika. Zdroj: `frontend/src/lib/imageDownscale.ts` – `prepareImageDataUri()` (zmenšovací žebříček, odmítnutí při neúspěchu); limity `CUSTOM_VAR_MAX_IMAGES` (8) a `CUSTOM_VAR_IMAGE_MAX_CHARS` (≈120 000 znaků base64) vynucené i na serveru ve `functions/src/routes/dokumenty.ts` a `functions/src/routes/contractTemplates.ts` (`isValidCustomImages()`).
+
+### Proměnná typu „Obrázek" bez nastavených obrázků nezablokuje vyplnění dokumentu
+
+Na rozdíl od typu Seznam, kde prázdný seznam možností při vyplňování nahradí obyčejné textové pole, u typu **Obrázek** žádná taková náhrada nedává smysl – napsaný text by neoznačoval žádný konkrétní obrázek. Proto se u proměnné tohoto typu bez jediné (kompletní) možnosti při vyplňování jen zobrazí upozornění a v dokumentu zůstane na jejím místě prázdno; **vyplnění dokumentu to nezastaví**. Chybu je potřeba opravit přímo v editoru šablony, který na ni upozorňuje hláškou „Bez obrázků" (případně „Neúplná možnost", má-li některá volba jen název, nebo jen obrázek).
+
+> 🔒 Server + 🖥️ Jen rozhraní. Zdroj: `frontend/src/lib/contractVariables.ts` – `missingCustomVars()` (výjimka pro prázdný typ „image"); upozornění `customVarWarning()` v `frontend/src/pages/DokumentyPage.tsx` / `frontend/src/pages/ContractTemplatesPage.tsx`.
+
+### Vlastních proměnných je v dokumentu 25, ve šabloně smlouvy 10
+
+Dokument pojme až **25** vlastních proměnných (`{{var1}}`…`{{var25}}`). Šablona smlouvy jich pojme jen **10** (`{{var1}}`…`{{var10}}`) – jde o podepisovaný právní dokument, kde tolik proměnných není potřeba.
+
+Napíšete-li do šablony smlouvy proměnnou nad tímto rozsahem (např. `{{var15}}`), editor ji sice rozpozná a upozorní na ni („Mimo rozsah"), ale nedovolí jí nastavit název ani typ – při vyplňování se zobrazí jako nepojmenované textové pole. Uložit definici pro takovou proměnnou nelze ani obejitím rozhraní – server ji odmítne.
+
+> 🔒 Server. Zdroj: `functions/src/routes/dokumenty.ts` (`CUSTOM_VAR_KEYS`, 25 položek) a `functions/src/routes/contractTemplates.ts` (`CUSTOM_VAR_KEYS`, 10 položek) – obojí uvnitř `isValidVariableDefs()`; upozornění na šabloně smlouvy `customVarWarning()` ve `frontend/src/pages/ContractTemplatesPage.tsx`.
+
+### Přepínač „podle hodnoty" (např. jiný text i obrázek podle města) má reálný strop 1 MB na celý dokument
+
+Přepínač `{{#case}}` umí pro každou hodnotu proměnné vytisknout jiný text – klidně i s vlastním obrázkem vloženým přímo do dané větve. Pro takto vložené obrázky neplatí žádný zvláštní limit počtu ani velikosti; platí jen limit **na celý dokument/šablonu jako celek** – Firestore nedovolí uložit dokument větší než **1 MB**, a obrázky vložené přímo do textu (base64) se do tohoto součtu počítají celé. Přepínač s vlastním obrázkem pro každé z několika měst proto dosáhne tohoto stropu dávno předtím, než by došel počet povolených větví (30 hodnot u proměnné typu Seznam).
+
+⚠️ **Mění-li se mezi větvemi jen obrázek** (text zůstává stejný), je vhodnějším nástrojem proměnná typu **Obrázek** (viz výše) – má sice svůj vlastní, mnohem nižší strop (8 obrázků, každý ≈90 kB), ale právě proto se ke sdílenému 1MB limitu prakticky nikdy nepřiblíží, na rozdíl od několika obrázků nafocených přímo do `{{#case}}` větví. Přepínač `{{#case}}` zůstává správnou volbou tam, kde se mezi větvemi liší víc než jen obrázek – jinou proměnnou nebo obrázek do něj vložit i nadále lze, jen si to nese tento sdílený strop.
+
+Uložení dokumentu/šablony, které by tento limit překročilo, aplikace odmítne rovnou s vysvětlující hláškou – neuloží se ani zbytek změn.
+
+> 🔒 Server. Zdroj: `functions/src/routes/dokumenty.ts` a `functions/src/routes/contractTemplates.ts` – kontrola velikosti `htmlContent` (1 048 576 B) před i při zápisu do `PUT /:id`. ⚠️ Tato kontrola měří jen `htmlContent` – obrázky uložené na proměnné typu Obrázek (`variableDefs.*.images`) do ní nevstupují, ale nadlimitní zápis i tak zachytí druhá kontrola přímo při ukládání (stejný soubor, `PUT /:id`).
 
 ## Faktury
 
@@ -462,10 +488,10 @@ Pravidla, která dřívější dokumentace uváděla, ale která **v současném
 
 **Neplatí.** Šablona odkazující na smazanou proměnnou je zachycena na třech místech: editor zobrazí varování „Bez nastavení: …", generování se **zablokuje** a proměnná se nabídne k vyplnění. Tiché zmizení odstavce nehrozí.
 
-> Zdroj: `frontend/src/lib/contractVariables.ts:205,287`, `frontend/src/pages/ContractTemplatesPage.tsx:506-511`, `frontend/src/components/GenerateContractModal.tsx:199-201`.
+> Zdroj: `frontend/src/lib/contractVariables.ts` – `usedCustomVars()` a `requiredCustomVars()` (:329-367), `missingCustomVars()` (:640-659); varování při uložení `frontend/src/pages/ContractTemplatesPage.tsx:758`; blokace generování `frontend/src/components/GenerateContractModal.tsx:211-212,278`. (Řádková čísla platí ke dni poslední aktualizace tohoto pravidla, 2026-07-24 – engine v souboru od té doby výrazně narostl, viz [custom-variable-engine.md](custom-variable-engine.md).)
 
 **Co platí dál:** nepárové značky `{{#if}}` / `{{/unless}}` se do dokumentu vypíšou jako text. Není to tichá chyba v původním smyslu (jde o záměrné chování šablonovacího jádra a bloky se dnes korektně zanořují), ale kontrola párovosti při ukládání šablony neexistuje.
-> Zdroj: `frontend/src/lib/contractVariables.ts:692-731`, zanoření `:758-760`.
+> Zdroj: `frontend/src/lib/contractVariables.ts` – `parseBlocks()` (:1211-1260, nepárová/chybějící značka jako text na :1236-1241), zanoření přes rekurzi v `renderBlocks()` (:1262-1299).
 
 ### ❌ „Týdenní úvazek u PPP určuje i hranici přesčasu"
 
@@ -474,3 +500,15 @@ Pravidla, která dřívější dokumentace uváděla, ale která **v současném
 ### ❌ „Datum nástupu vyžaduje zcela nepřerušenou návaznost smluv"
 
 **Nepřesné** – tolerance je až jeden kalendářní měsíc, ne nula. Viz „Datum nástupu je začátek souvislého poměru" výše.
+
+### ❌ „Kdo dokument uvidí, určuje jeho sekce"
+
+**Neplatí.** Dokumenty už nemají sekce (Ambiance/Superior/Amigo & Alqush/Ankora/TEMP) – nahradil je jediný příznak **Veřejný/Neveřejný**, protože jedna sada čtyř hotelových sekcí přestala mít smysl ve chvíli, kdy jeden dokument dokáže obsloužit všechny čtyři hotely sám (proměnná typu Seznam/Obrázek + `{{#case}}`). Aktuální pravidlo viz „Kdo dokument uvidí, určuje příznak Veřejný" výše.
+
+> Zdroj: `functions/src/routes/dokumenty.ts` – `maySeeDocument()` nahradilo smazané `functions/src/services/documentSections.ts` (`maySeeDocumentSection()`).
+
+### ❌ „Výchozí sekce mění jen pořadí, nikdy přístup"
+
+**Neplatí, protože už nic takového neexistuje.** Osobní „Výchozí sekce" zanikla spolu se sekcemi samotnými – `PUT /api/auth/me/dokumenty-default` byl smazán. Uložená hodnota `users/{uid}.dokumentyDefaultSection` u starých účtů v databázi zůstává, ale nic ji už nečte. Dokumenty mají místo toho jinou drobnost: při vyplňování dokumentu se hotelová proměnná (Seznam/Obrázek s volbami podle hotelů) sama předvyplní hotelem přihlášeného uživatele (podle stejného výběru hotelu jako v Recepci) – jde ale jen o předvyplnění pole, ne o řazení seznamu ani o přístup.
+
+> Zdroj: `functions/src/routes/auth.ts` – komentář na místě smazaného `PUT /me/dokumenty-default`; předvyplnění hotelu `frontend/src/components/GenerateDocumentModal.tsx` (`resolveOwnHotel`).

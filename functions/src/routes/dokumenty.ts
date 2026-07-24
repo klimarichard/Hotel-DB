@@ -2,9 +2,10 @@
  * Dokumenty — standalone printable document templates.
  *
  * A `documentTemplates/{id}` doc is a TipTap-authored HTML document with up to
- * ten custom variable slots ({{var1}}..{{var10}}). A viewer fills the slots in
- * and prints; the filled document is rendered to PDF by the SAME Puppeteer
- * service the contracts use and streamed straight back to the browser.
+ * twenty-five custom variable slots ({{var1}}..{{var25}}). A viewer fills the
+ * slots in and prints; the filled document is rendered to PDF by the SAME
+ * Puppeteer service the contracts use and streamed straight back to the
+ * browser.
  *
  * NOTHING is persisted from a render: no Storage upload, no Firestore record,
  * no history. That is why `render-pdf` writes no audit entry (matching
@@ -23,10 +24,6 @@ import { requireAuth, AuthRequest } from "../middleware/auth";
 import { requirePermission } from "../auth/permissions";
 import { ctxFromReq, logCreate, logUpdate, logDelete } from "../services/auditLog";
 import { renderPdf, RenderMargins } from "../services/pdfRenderer";
-import {
-  isDocumentSectionId,
-  maySeeDocumentSection,
-} from "../services/documentSections";
 
 export const dokumentyRouter = Router();
 
@@ -42,9 +39,49 @@ function extractVariables(html: string): string[] {
   return Array.from(keys);
 }
 
-/** Section access for THIS request. Thin wrapper so call sites stay readable. */
-function maySeeSection(req: AuthRequest, section: unknown): boolean {
-  return maySeeDocumentSection(req.permissions ?? new Set<string>(), section);
+/**
+ * Whether this request may see a given document at all.
+ *
+ * This replaced the five per-hotel "sections", each with its own permission key.
+ * Sections existed to gate a document per hotel, and the custom-variable work
+ * removed the need: one document now serves all four hotels through a
+ * Seznam/Obrázek slot plus {{#case}} blocks, so there is no per-hotel audience
+ * left to gate. What remains is a single public/private flag.
+ *
+ * ⚠️ `public` is OPTIONAL and ABSENT MEANS PRIVATE — read it as `=== true`,
+ * never for truthiness, and never default it to public. Every document written
+ * before the field existed therefore reads as private the moment this ships,
+ * which is precisely the intended migration ("everything → private") achieved
+ * with ZERO writes to production. Do not add a backfill and do not "tidy" this
+ * into an absent-means-public read.
+ *
+ * Compare `active` on this same collection, where absent means ACTIVE: same
+ * shape, opposite default, both deliberate.
+ *
+ * `dokumenty.manage` short-circuits to seeing everything, exactly as it did for
+ * sections: an editor who could not see a private document could neither fix nor
+ * delete it.
+ *
+ * `system.admin` is checked EXPLICITLY even though the permission resolver
+ * already expands it to the full static permission set (so an admin does hold
+ * `dokumenty.manage` anyway). The explicit check exists so this gate does not
+ * rest on a coincidence of how the resolver happens to expand wildcards — a
+ * resolver change could otherwise silently open or close every private document
+ * for admins. The reasoning is unchanged from the section gate it replaces.
+ */
+function maySeeDocument(req: AuthRequest, data: Record<string, unknown> | undefined): boolean {
+  const perms = req.permissions ?? new Set<string>();
+  if (perms.has("system.admin") || perms.has("dokumenty.manage")) return true;
+  return data?.public === true;
+}
+
+/**
+ * `Veřejný` – validated as a REAL boolean, never coerced, exactly like `active`
+ * on PATCH below. A truthy string ("false", "0", "ano") must not be able to
+ * publish a document to everyone holding `nav.dokumenty.view`.
+ */
+function isValidPublic(v: unknown): boolean {
+  return v === undefined || typeof v === "boolean";
 }
 
 const SLUG_RE = /^[a-z][a-z0-9_]{1,39}$/;
@@ -69,20 +106,52 @@ function isValidMargins(m: unknown): m is Margins {
 }
 
 /**
- * Per-template configuration of the ten custom variable slots
- * {{var1}}..{{var10}}. Each slot a template uses gets a display label and a
+ * Per-template configuration of the twenty-five custom variable slots
+ * {{var1}}..{{var25}}. Each slot a template uses gets a display label and a
  * value type here; the same slot means different things in different
  * templates, which is why this lives on the template document.
  *
- * Shape: { var1: { label, type: "text"|"date"|"number"|"bool"|"condition",
- *                  default?, condition?, optional? }, … }
+ * ⚠️ These constants are a hand-maintained mirror of the shared engine in
+ * `frontend/src/lib/contractVariables.ts` (DOCUMENT_VAR_COUNT, CustomVarType,
+ * CUSTOM_VAR_FORMULA_MAX, CUSTOM_VAR_DECIMALS_MAX, CUSTOM_VAR_MAX_IMAGES,
+ * CUSTOM_VAR_IMAGE_MAX_CHARS, CUSTOM_VAR_IMAGE_WIDTHS,
+ * CUSTOM_VAR_IMAGE_ALIGNS). Cloud Functions cannot
+ * import from `frontend/src`, so the duplication is deliberate — but the two
+ * must be changed TOGETHER, or the server silently rejects definitions the
+ * editor happily produces. `contractTemplates.ts` keeps a third copy; keep all
+ * three in lockstep (see the note on its CUSTOM_VAR_KEYS about the slot-count
+ * asymmetry, which is the one intended difference).
+ *
+ * Shape: { var1: { label, type: "text"|"longtext"|"date"|"number"|"bool"|
+ *                        "list"|"condition"|"math"|"image",
+ *                  default?, condition?, options?, images?, formula?,
+ *                  decimals?, optional? }, … }
+ *
+ * where images (only meaningful on an "image" slot) is
+ *   [{ label: string, src: "data:image/…;base64,…", width?: "25%"|"50%"|"75%"|
+ *      "100%", align?: "left"|"center"|"right" }, …]
  */
-const CUSTOM_VAR_KEYS = new Set(Array.from({ length: 10 }, (_, i) => `var${i + 1}`));
-// No "condition" here, unlike contractTemplates: a condition slot is computed
-// by comparing built-in employee variables, and documents have none. The
-// Dokumenty editor never offers it, so the server refuses it too rather than
-// accepting a type that could only ever have arrived by hand-crafted request.
-const CUSTOM_VAR_TYPES = new Set(["text", "date", "number", "bool", "list"]);
+const CUSTOM_VAR_KEYS = new Set(Array.from({ length: 25 }, (_, i) => `var${i + 1}`));
+// "condition" used to be refused here, unlike contractTemplates, on the
+// grounds that a condition slot is computed by comparing built-in employee
+// variables and a document binds no employee. That reasoning is obsolete: a
+// document condition compares custom slots against each other or against a
+// literal, which needs no employee at all, and the Dokumenty editor now offers
+// the type. `isValidCondition` below was already written for exactly this case
+// (its operands can only be other custom slots), so it needs no change.
+const CUSTOM_VAR_TYPES = new Set([
+  "text",
+  "longtext",
+  "date",
+  "number",
+  "bool",
+  "list",
+  "condition",
+  "math",
+  // "Obrázek" — a list whose choices each carry a picture. See
+  // `isValidCustomImages` below for what may be stored in `images`.
+  "image",
+]);
 const COMPARE_OPS = new Set(["lt", "lte", "gt", "gte", "eq", "neq", "empty", "notEmpty"]);
 // Unary operators test the left operand alone — no right operand required.
 const UNARY_COMPARE_OPS = new Set(["empty", "notEmpty"]);
@@ -136,6 +205,113 @@ function isValidCustomOptions(v: unknown): boolean {
   return v.every((o) => typeof o === "string" && o.length <= CUSTOM_VAR_OPTION_MAX);
 }
 
+/**
+ * Picture choices of an "image" slot: a `list` where picking a choice
+ * substitutes that choice's PICTURE into the document instead of its text.
+ *
+ * The counts are low on purpose. Every picture is stored inline as base64 on
+ * THIS Firestore document, because the PDF renderer's SSRF guard aborts every
+ * non-`data:` request — a Storage URL would render as a broken image in every
+ * PDF. Eight choices × 120 000 characters is already ~960 KB inside a 1 MiB
+ * document; see the size note on the write guard in `PUT /:id` below.
+ */
+const CUSTOM_VAR_MAX_IMAGES = 8;
+const CUSTOM_VAR_IMAGE_MAX_CHARS = 120_000;
+const CUSTOM_VAR_IMAGE_WIDTHS = new Set(["25%", "50%", "75%", "100%"]);
+const CUSTOM_VAR_IMAGE_ALIGNS = new Set(["left", "center", "right"]);
+/** The only keys an image choice may carry — see the allowlist rationale below. */
+const CUSTOM_VAR_IMAGE_FIELDS = new Set(["label", "src", "width", "align"]);
+
+/**
+ * Whether a value is an inline raster image `data:` URI.
+ *
+ * This is the SECURITY check of this file, not a formatting one. The stored
+ * string is interpolated verbatim into an `<img src="…">` that gets parsed
+ * TWICE: by the browser in the fill-in preview, and by Puppeteer when the
+ * document is rendered to PDF. Everything that is not an inline raster image is
+ * therefore refused:
+ *  - a remote URL (`https://…`) — an outbound fetch from the renderer, which its
+ *    SSRF guard aborts anyway, leaving a broken picture in the PDF;
+ *  - `javascript:` and `data:text/html` — script, not a picture;
+ *  - anything containing `"` or `>` — it would close the `src="` attribute and
+ *    turn the remainder of the string into markup. The base64 alphabet baked
+ *    into the pattern is what makes a breakout impossible, rather than escaping
+ *    after the fact;
+ *  - SVG, despite genuinely being an image: an SVG can carry `<script>` and
+ *    event handlers. An `<img>` context does not execute those today, but
+ *    permitting SVG would make that guarantee an accident of how the file
+ *    happens to be embedded instead of something this validator enforces.
+ *
+ * This is deliberately NOT "the same check the client already does". The
+ * client's `isImageDataUri` is a convenience for the editor; anyone can skip it
+ * by calling this endpoint directly. THIS check is the one that actually holds,
+ * and it is the last gate before the string is persisted and later rendered.
+ */
+const IMAGE_DATA_URI_RE = /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/;
+function isImageDataUri(v: unknown): boolean {
+  return (
+    typeof v === "string" &&
+    v.length <= CUSTOM_VAR_IMAGE_MAX_CHARS &&
+    IMAGE_DATA_URI_RE.test(v)
+  );
+}
+
+/**
+ * Validate the `images` array. Unknown keys and out-of-range width/align values
+ * are REJECTED rather than quietly dropped: a def carrying fields this
+ * validator does not understand is a def the renderer has never been checked
+ * against, and silently storing it would let the next reader of the document
+ * assume it had been vetted.
+ */
+function isValidCustomImages(v: unknown): boolean {
+  if (v === undefined) return true;
+  if (!Array.isArray(v)) return false;
+  if (v.length > CUSTOM_VAR_MAX_IMAGES) return false;
+  return v.every((o) => {
+    if (!o || typeof o !== "object" || Array.isArray(o)) return false;
+    const img = o as Record<string, unknown>;
+    if (Object.keys(img).some((k) => !CUSTOM_VAR_IMAGE_FIELDS.has(k))) return false;
+    // The label doubles as the slot's raw value (what a condition or a
+    // {{#case}} compares against), so it is bounded like a list option.
+    if (typeof img.label !== "string" || img.label.length > CUSTOM_VAR_OPTION_MAX) return false;
+    if (!isImageDataUri(img.src)) return false;
+    if (img.width !== undefined && !CUSTOM_VAR_IMAGE_WIDTHS.has(img.width as string)) return false;
+    if (img.align !== undefined && !CUSTOM_VAR_IMAGE_ALIGNS.has(img.align as string)) return false;
+    return true;
+  });
+}
+
+/**
+ * Arithmetic formula of a "math" slot, e.g. "var1 + var2" or
+ * "(var1 - var2) * 0,21". The real grammar lives in the shared frontend engine
+ * (`tokenizeFormula`); reproducing a parser here would be a second thing to
+ * keep in sync. What the server does instead is a character allowlist — only
+ * identifiers, digits, `+ - * / ( )`, and the two decimal separators. That is
+ * defence in depth: whatever the client sends, nothing that even resembles
+ * code (quotes, brackets, semicolons, backticks, `$`) can ever be persisted,
+ * so a formula string is inert no matter who later evaluates it.
+ */
+const CUSTOM_VAR_FORMULA_MAX = 200;
+const FORMULA_ALLOWED_RE = /^[A-Za-z0-9_+\-*/(),.\s]*$/;
+function isValidCustomFormula(v: unknown): boolean {
+  if (v === undefined) return true;
+  if (typeof v !== "string") return false;
+  if (v.length > CUSTOM_VAR_FORMULA_MAX) return false;
+  return FORMULA_ALLOWED_RE.test(v);
+}
+
+/**
+ * Decimal places a "math" result is rounded to. Bounded rather than free so a
+ * hand-crafted request cannot ask for a formatting width that the renderer
+ * would have to cope with (or a fractional/negative one that `toFixed` throws
+ * on).
+ */
+const CUSTOM_VAR_DECIMALS_MAX = 4;
+function isValidCustomDecimals(v: unknown): boolean {
+  if (v === undefined) return true;
+  return Number.isInteger(v) && (v as number) >= 0 && (v as number) <= CUSTOM_VAR_DECIMALS_MAX;
+}
+
 function isValidVariableDefs(v: unknown): boolean {
   if (!v || typeof v !== "object" || Array.isArray(v)) return false;
   return Object.entries(v as Record<string, unknown>).every(([key, def]) => {
@@ -150,6 +326,9 @@ function isValidVariableDefs(v: unknown): boolean {
       isValidCustomDefault(d.default) &&
       isValidCondition(d.condition) &&
       isValidCustomOptions(d.options) &&
+      isValidCustomImages(d.images) &&
+      isValidCustomFormula(d.formula) &&
+      isValidCustomDecimals(d.decimals) &&
       // "Nepovinná" – absent means required, so only a real boolean is
       // accepted; a truthy string would silently make a slot optional.
       (d.optional === undefined || typeof d.optional === "boolean")
@@ -208,13 +387,15 @@ dokumentyRouter.get(
     const docs = snap.docs
       // Filtered server-side, not just hidden in the UI — the list is the only
       // place a document's existence is disclosed.
-      .filter((d) => maySeeSection(req, d.data().section))
+      .filter((d) => maySeeDocument(req, d.data()))
       .map((d) => {
       const data = d.data();
       return {
         id: d.id,
         name: data.name,
-        section: data.section ?? null,
+        // Absent = PRIVATE (see maySeeDocument). Normalised to a real boolean
+        // here so the client never has to know that, and never sees `undefined`.
+        public: data.public === true,
         // Absent = active. Only an explicit `active:false` marks a template
         // inactive — see PATCH /:id below.
         active: data.active !== false,
@@ -229,18 +410,23 @@ dokumentyRouter.get(
 
 /**
  * POST /api/dokumenty
- * Create an empty document template. Body: { id, name }.
+ * Create an empty document template. Body: { id, name, public? }.
  * `id` must be a snake_case slug not already in use.
+ *
+ * A new document is NOT public unless the author says so — the safe default,
+ * and the one the create dialog's unticked "Veřejný" checkbox sends.
  */
 dokumentyRouter.post(
   "/",
   requireAuth,
   requirePermission("dokumenty.manage"),
   async (req: AuthRequest, res: Response) => {
-    const { id, name, section } = req.body as {
+    // `public` is a reserved word, hence the rename. Typed `unknown` so the
+    // boolean check below is the only thing that can let a value through.
+    const { id, name, public: isPublic } = req.body as {
       id?: string;
       name?: string;
-      section?: unknown;
+      public?: unknown;
     };
     if (!id || !name || !name.trim()) {
       res.status(400).json({ error: "id a name jsou povinné." });
@@ -258,16 +444,18 @@ dokumentyRouter.post(
       res.status(409).json({ error: "Dokument s tímto id již existuje." });
       return;
     }
-    // null (not absent) so the field always exists: "unfiled" is a real state,
-    // and a missing field would be indistinguishable from a doc written before
-    // sections existed.
-    if (section !== undefined && section !== null && section !== "" && !isDocumentSectionId(section)) {
-      res.status(400).json({ error: "Neplatná sekce." });
+    if (!isValidPublic(isPublic)) {
+      res.status(400).json({ error: "public musí být boolean." });
       return;
     }
+    // Written explicitly (even when false) because this is a NEW document: the
+    // author has just answered the question, so "private" here is a decision
+    // rather than the absence of one. Existing documents are never touched —
+    // their missing `public` is what makes them private, and backfilling it
+    // would be a production write for no gain. See maySeeDocument.
     await ref.set({
       name: name.trim(),
-      section: isDocumentSectionId(section) ? section : null,
+      public: isPublic === true,
       htmlContent: "",
       variables: [],
       margins: { top: 15, bottom: 15, left: 15, right: 15 },
@@ -279,19 +467,19 @@ dokumentyRouter.post(
     await logCreate(ctxFromReq(req), {
       collection: COLLECTION,
       resourceId: id,
-      summary: { name: name.trim(), section: isDocumentSectionId(section) ? section : null },
+      summary: { name: name.trim(), public: isPublic === true },
     });
     res.status(201).json({
       id,
       name: name.trim(),
-      section: isDocumentSectionId(section) ? section : null,
+      public: isPublic === true,
     });
   }
 );
 
 /**
  * POST /api/dokumenty/:id/duplicate
- * Copy an existing document under a new id. Body: { id, name, section }.
+ * Copy an existing document under a new id. Body: { id, name, public? }.
  *
  * Server-side rather than a client-orchestrated GET + POST + PUT because those
  * three calls are not atomic: a failure between them leaves an empty document
@@ -302,19 +490,20 @@ dokumentyRouter.post(
  * Deliberately NOT copied:
  *  - `active` — a duplicate always starts active, even if the source was
  *    deactivated; you copy a document in order to use it.
- *  - `section` — taken from the body, not the source. Duplicating is the moment
+ *  - `public` — taken from the body, not the source. Duplicating is the moment
  *    you decide who the copy is for, and silently inheriting the source's
- *    audience is the kind of default that quietly leaks a document.
+ *    audience is the kind of default that quietly publishes a document. The UI
+ *    pre-fills the source's value as a visible, editable suggestion.
  */
 dokumentyRouter.post(
   "/:id/duplicate",
   requireAuth,
   requirePermission("dokumenty.manage"),
   async (req: AuthRequest, res: Response) => {
-    const { id: newId, name, section } = req.body as {
+    const { id: newId, name, public: isPublic } = req.body as {
       id?: string;
       name?: string;
-      section?: unknown;
+      public?: unknown;
     };
     if (!newId || !name || !name.trim()) {
       res.status(400).json({ error: "id a name jsou povinné." });
@@ -326,8 +515,8 @@ dokumentyRouter.post(
       });
       return;
     }
-    if (section !== undefined && section !== null && section !== "" && !isDocumentSectionId(section)) {
-      res.status(400).json({ error: "Neplatná sekce." });
+    if (!isValidPublic(isPublic)) {
+      res.status(400).json({ error: "public musí být boolean." });
       return;
     }
 
@@ -346,7 +535,9 @@ dokumentyRouter.post(
 
     const payload: Record<string, unknown> = {
       name: name.trim(),
-      section: isDocumentSectionId(section) ? section : null,
+      // Same as POST / above: a brand-new document records the answer either
+      // way. Absent would also read as private, but here the author was asked.
+      public: isPublic === true,
       htmlContent: source.htmlContent ?? "",
       variables: source.variables ?? [],
       createdAt: FieldValue.serverTimestamp(),
@@ -366,14 +557,14 @@ dokumentyRouter.post(
       resourceId: newId,
       summary: {
         name: name.trim(),
-        section: isDocumentSectionId(section) ? section : null,
+        public: isPublic === true,
         duplicatedFrom: req.params.id,
       },
     });
     res.status(201).json({
       id: newId,
       name: name.trim(),
-      section: isDocumentSectionId(section) ? section : null,
+      public: isPublic === true,
     });
   }
 );
@@ -393,30 +584,39 @@ dokumentyRouter.get(
       return;
     }
     // 404 rather than 403: a document the caller may not see should not have its
-    // existence confirmed by the status code.
-    if (!maySeeSection(req, doc.data()?.section)) {
+    // existence confirmed by the status code. A private document is therefore
+    // indistinguishable from one that was never created.
+    if (!maySeeDocument(req, doc.data())) {
       res.status(404).json({ error: "Dokument neexistuje." });
       return;
     }
-    res.json({ id: doc.id, ...doc.data() });
+    // `public` normalised the same way the list does, so an old document
+    // (no field at all) arrives at the client as an explicit `false`.
+    //
+    // The spread may still carry a stale `section` string on documents written
+    // before sections were removed. Nothing reads it — on either side — and it
+    // is left in place deliberately: stripping the field from every stored
+    // document would be a bulk production write bought for tidiness alone.
+    res.json({ id: doc.id, ...doc.data(), public: doc.data()?.public === true });
   }
 );
 
 /**
  * PUT /api/dokumenty/:id
- * Upsert a template. Body: { name, htmlContent, margins?, variableDefs? }.
+ * Upsert a template. Body: { name, htmlContent, margins?, variableDefs?,
+ * public? }.
  */
 dokumentyRouter.put(
   "/:id",
   requireAuth,
   requirePermission("dokumenty.manage"),
   async (req: AuthRequest, res: Response) => {
-    const { name, htmlContent, margins, variableDefs, section } = req.body as {
+    const { name, htmlContent, margins, variableDefs, public: isPublic } = req.body as {
       name?: string;
       htmlContent?: string;
       margins?: unknown;
       variableDefs?: unknown;
-      section?: unknown;
+      public?: unknown;
     };
 
     if (!name || htmlContent === undefined) {
@@ -432,7 +632,7 @@ dokumentyRouter.put(
     if (variableDefs !== undefined && !isValidVariableDefs(variableDefs)) {
       res.status(400).json({
         error:
-          "variableDefs musí být objekt {var1..var10: {label, type, optional?, options?}}, kde type je text|date|number|bool|list, optional je true|false a options je seznam nejvýše 30 textových hodnot.",
+          "variableDefs musí být objekt {var1..var25: {label, type, optional?, options?, images?, formula?, decimals?}}, kde type je text|longtext|date|number|bool|list|condition|math|image, optional je true|false, options je seznam nejvýše 30 textových hodnot, images je seznam nejvýše 8 položek {label, src, width?, align?}, kde src musí být vložený obrázek (data:image/png|jpeg|webp|gif;base64, nejvýše 120 000 znaků – SVG ani odkaz na web nejsou povoleny), width je 25%|50%|75%|100% a align je left|center|right, formula je vzorec do 200 znaků (jen písmena, číslice, _ + - * / ( ) , .) a decimals je celé číslo 0–4.",
       });
       return;
     }
@@ -442,6 +642,18 @@ dokumentyRouter.put(
     // too-large template is the usual cause of a silent write failure. Reject
     // it up front with a clear Czech message rather than letting the Firestore
     // error bubble up as an opaque 500.
+    //
+    // ⚠️ This pre-check measures htmlContent ONLY, and `variableDefs.images`
+    // now puts a second pile of base64 in the same document: eight pictures at
+    // CUSTOM_VAR_IMAGE_MAX_CHARS each is ~960 KB, enough to blow the 1 MiB
+    // ceiling on its own even with modest HTML. That case slips past here — but
+    // it does NOT surface as a raw error: `ref.set` below is wrapped in a
+    // try/catch whose /maximum|too large|exceeds|size/i test matches Firestore's
+    // rejection ("…cannot be written because its size (N bytes) exceeds the
+    // maximum allowed size of 1048576 bytes"), so the author still gets the same
+    // Czech 413, just after a round-trip instead of before it. Widening this
+    // pre-check to serialize variableDefs would only move the message earlier,
+    // at the cost of JSON.stringify-ing ~1 MB on every single save.
     const FIRESTORE_DOC_LIMIT = 1_048_576; // 1 MiB
     // Leave headroom for the other fields + Firestore's own per-field overhead.
     const HTML_LIMIT = FIRESTORE_DOC_LIMIT - 64 * 1024;
@@ -465,14 +677,17 @@ dokumentyRouter.put(
     };
     if (margins !== undefined) payload.margins = margins;
     if (variableDefs !== undefined) payload.variableDefs = variableDefs;
-    // Explicit null clears the section (back to visible-to-everyone); omitting
-    // the field leaves the current one untouched.
-    if (section !== undefined) {
-      if (section !== null && section !== "" && !isDocumentSectionId(section)) {
-        res.status(400).json({ error: "Neplatná sekce." });
+    // Publishing / unpublishing is an audience change in disguise, so it travels
+    // with the same Uložit as the text. Omitting the field leaves the current
+    // value untouched (the write is a merge) — which is what keeps a document
+    // that predates the field private: nothing writes it until an editor
+    // deliberately ticks the box.
+    if (isPublic !== undefined) {
+      if (typeof isPublic !== "boolean") {
+        res.status(400).json({ error: "public musí být boolean." });
         return;
       }
-      payload.section = isDocumentSectionId(section) ? section : null;
+      payload.public = isPublic;
     }
 
     const ref = db().collection(COLLECTION).doc(req.params.id);
@@ -483,11 +698,13 @@ dokumentyRouter.put(
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       // Firestore rejects oversized writes — surface a clear Czech message
-      // instead of a generic 500.
+      // instead of a generic 500. This is also the net that catches a document
+      // pushed over 1 MiB by its `variableDefs.images` rather than by its HTML,
+      // which the htmlContent-only pre-check above cannot see.
       if (/maximum|too large|exceeds|size/i.test(message)) {
         res.status(413).json({
           error:
-            "Dokument se nepodařilo uložit — je příliš velký (limit 1 MB). Pravděpodobně obsahuje vložené obrázky (base64). Zmenšete nebo odstraňte obrázky a uložte znovu.",
+            "Dokument se nepodařilo uložit – je příliš velký (limit 1 MB). Pravděpodobně obsahuje vložené obrázky (base64). Zmenšete nebo odstraňte obrázky a uložte znovu.",
         });
         return;
       }
@@ -505,12 +722,16 @@ dokumentyRouter.put(
         name: before.name,
         variables: before.variables,
         margins: before.margins,
+        // Normalised, so an old document's missing field logs as `false`
+        // rather than as an empty diff against an explicit `false` after.
+        public: before.public === true,
         htmlContentLength: typeof before.htmlContent === "string" ? before.htmlContent.length : 0,
       },
       after: {
         name,
         variables,
         margins: payload.margins ?? before.margins,
+        public: payload.public !== undefined ? payload.public : before.public === true,
         htmlContentLength: htmlContent.length,
       },
     });

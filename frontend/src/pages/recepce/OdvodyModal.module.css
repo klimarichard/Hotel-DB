@@ -170,15 +170,13 @@
 }
 
 .modal {
+  composes: shell from "../../styles/modalShell.module.css";
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   width: 720px;
   max-width: calc(100vw - 2rem);
-  max-height: calc(100vh - 3rem);
   box-shadow: 0 20px 60px var(--shadow-md);
-  display: flex;
-  flex-direction: column;
 }
 
 .modalHeader {
@@ -205,11 +203,11 @@
 }
 
 .modalBody {
+  composes: shellBody from "../../styles/modalShell.module.css";
   padding: 16px 20px;
   display: flex;
   flex-direction: column;
   gap: 18px;
-  overflow-y: auto;
 }
 
 .modalFooter {
@@ -479,18 +477,22 @@
   z-index: 1100;
 }
 
+/* One label + input + hint per hotel register, so the height grows with the
+   hotel's register count. This dialog sits on top of the already-fixed odvod
+   modal, so there is no page-scroll fallback at all – without the cap the
+   Uložit button is simply gone once the list is long enough. */
 .ratioModal {
+  composes: shell from "../../styles/modalShell.module.css";
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   width: 380px;
   max-width: calc(100vw - 2rem);
   box-shadow: 0 20px 60px var(--shadow-md);
-  display: flex;
-  flex-direction: column;
 }
 
 .ratioBody {
+  composes: shellBody from "../../styles/modalShell.module.css";
   padding: 16px 20px;
   display: flex;
   flex-direction: column;

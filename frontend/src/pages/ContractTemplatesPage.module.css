@@ -793,3 +793,9 @@
   margin-left: auto;
   flex-shrink: 0;
 }
+
+/* The variable-config dialog's height cap used to live here. It now comes from
+   `styles/modalShell.module.css`, which ConfirmModal's own .modal/.body
+   compose — so every dialog built on that shell is bounded, not just this one.
+   Keeping a local copy would have meant two max-heights on the same element,
+   with bundle order deciding which won. */

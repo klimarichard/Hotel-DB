@@ -542,6 +542,26 @@
   margin-bottom: 10px;
 }
 
+/*
+ * The 25 slot buttons scroll inside the panel rather than lengthening it.
+ * .varPanel is a 200 px grid column that already scrolls, so without this the
+ * two action buttons below the list ("+ Přepínač…", "⚙ Nastavit…") sat 25 rows
+ * down and were off-screen on a laptop until the panel was scrolled – which is
+ * exactly the height the slot count grew to in v5.2.0 (10 → 25).
+ */
+.varList {
+  max-height: 46vh;
+  overflow-y: auto;
+  /* Keeps the buttons' hover outline off the scrollbar. */
+  padding-right: 2px;
+}
+
+.varActions {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--color-border);
+}
+
 .varGroupLabel {
   font-size: 0.7rem;
   font-weight: 600;
@@ -820,12 +840,12 @@
   border-color: var(--color-danger);
 }
 
-/* Section badge on a sidebar row. Only rendered for filed documents – an unfiled
-   one shows nothing rather than a "Bez sekce" chip, because unfiled is the
-   default and labelling the default is noise. */
-/* Sits on its own line under the document name (.templateName is display:block).
+/* "Neveřejný" badge on a sidebar row. Only rendered for a PRIVATE document, and
+   only for an editor - everyone else is shown public documents exclusively, so a
+   chip on every row would label the norm and say nothing.
+   Sits on its own line under the document name (.templateName is display:block).
    .templateItem is a plain block, not flex - no align-self here. */
-.sectionBadge {
+.privateBadge {
   display: inline-block;
   margin-top: 3px;
   padding: 1px 6px;
@@ -836,67 +856,44 @@
   border-radius: 8px;
 }
 
-/* Section switcher in the editor header. */
-.sectionPicker {
+/* "Veřejný" checkbox in the editor header, standing exactly where the section
+   picker used to. Text size matches the neighbouring buttons rather than the
+   muted sidebar scale - it is an editable property of the open document, not a
+   caption. */
+.publicToggle {
   display: flex;
   align-items: center;
   gap: 6px;
   font-size: 0.8rem;
   color: var(--color-text-muted);
   white-space: nowrap;
+  cursor: pointer;
 }
 
-.sectionPicker select {
-  padding: 4px 6px;
-  font-size: 0.8rem;
-  font-family: inherit;
-  color: var(--color-text);
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
+.publicToggle input {
+  margin: 0;
+  cursor: pointer;
 }
 
-/* Per-user "Výchozí sekce" picker above the document list.
-   .sidebar has no padding of its own - the horizontal rhythm comes from
-   .templateItem's 14px - so this control has to supply its own, or it sits flush
-   against the header and the sidebar edge. The bottom border separates it from
-   the list it reorders. */
-.defaultPicker {
+/* Same control in the create / duplicate dialog, where it replaced the section
+   <select>. Sized to the dialog's own label scale (createLabelStyle) so it reads
+   as the third field rather than as a footnote under the second. */
+.publicCreateToggle {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--color-border);
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-  white-space: nowrap;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  cursor: pointer;
 }
 
-.defaultPicker select {
-  flex: 1 1 auto;
-  min-width: 0;
-  padding: 3px 6px;
-  font-size: 0.75rem;
-  font-family: inherit;
-  color: var(--color-text);
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
+.publicCreateToggle input {
+  margin: 0;
+  cursor: pointer;
 }
 
-/* Divider between the default section's documents and everything else. Purely a
-   rule - unlike the "Neaktivní" divider it carries no label, because the group
-   above it is already identified by the picker the user just set. */
-.preferredDivider {
-  height: 0;
-  /* 14px inset matches .inactiveDivider and the .templateItem text rhythm. */
-  margin: 8px 14px;
-  padding: 0;
-  border-top: 1px solid var(--color-border);
-  list-style: none;
-}
-
-/* The always-present editor controls (Sekce, Duplikovat, Uložit dokument).
+/* The always-present editor controls (Veřejný, Duplikovat, Uložit dokument).
    margin-left:auto pins them to the right edge so they keep their position when
    the optional warning / save message appear beside them - those render BEFORE
    this group in the DOM, and .varWarn is flex:1, so without this the controls
@@ -907,4 +904,106 @@
   gap: 12px;
   margin-left: auto;
   flex-shrink: 0;
+}
+
+/* The variable-config dialog's height cap used to live here. It now comes from
+   `styles/modalShell.module.css`, which ConfirmModal's own .modal/.body
+   compose — so every dialog built on that shell is bounded, not just this one.
+   Keeping a local copy would have meant two max-heights on the same element,
+   with bundle order deciding which won. */
+
+/* ── "Obrázek" variable: the per-choice editor ──────────────────────────────
+   One row per picture. The thumbnail and the remove button are fixed-width
+   bookends; everything variable (name, upload button, width, alignment, size)
+   sits in the middle column and wraps there, so a narrow modal never pushes the
+   remove button out of reach. */
+.imageOptionRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+}
+
+.imageOptionMain {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1 1 auto;
+  /* Without this a flex item refuses to shrink below its content, and the long
+     row of controls would widen the whole config table instead of wrapping. */
+  min-width: 0;
+}
+
+.imageOptionControls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* Fixed box, contain-fitted: the pictures behind one variable differ in shape
+   (a wide letterhead next to a square stamp), and letting them size themselves
+   would make the rows jump around. */
+.imageThumb {
+  flex: 0 0 auto;
+  width: 64px;
+  height: 48px;
+  object-fit: contain;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+}
+
+/* Same footprint for a choice with no picture yet, so adding one doesn't
+   re-flow the row it was added to. */
+.imageThumbEmpty {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 48px;
+  font-size: 1.1rem;
+  color: var(--color-text-muted);
+  background: var(--color-bg);
+  border: 1px dashed var(--color-border);
+  border-radius: 4px;
+}
+
+.imageSize {
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Informational, not an error: the picture was stored, just not at the size it
+   was picked at. Muted rather than red for exactly that reason. */
+.imageShrunkNote {
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+}
+
+/* Running total of every stored picture, against the document's 1 MiB ceiling.
+   Three tiers: plain while there is room, amber as the headroom goes, red once a
+   save is genuinely at risk. */
+.imageTotal,
+.imageTotalWarn,
+.imageTotalOver {
+  margin: 0 0 10px;
+  font-size: 0.75rem;
+}
+
+.imageTotal {
+  color: var(--color-text-muted);
+}
+
+.imageTotalWarn {
+  color: var(--color-warning-text);
+}
+
+.imageTotalOver {
+  color: var(--color-danger-text-strong);
 }
