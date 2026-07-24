@@ -2216,7 +2216,10 @@ export default function DokumentyPage() {
       {/* Variable-config dialog */}
       {canManage && customVarsOpen && (
         <div className={modalStyles.overlay}>
-          <div className={modalStyles.modal} style={{ width: "min(920px, 96vw)", maxWidth: "96vw" }}>
+          <div
+            className={`${modalStyles.modal} ${styles.varModal}`}
+            style={{ width: "min(920px, 96vw)", maxWidth: "96vw" }}
+          >
             <div className={`${modalStyles.header} ${styles.modalHeader}`}>
               <h2 className={modalStyles.title}>Vlastní proměnné</h2>
               <IconButton
@@ -2230,7 +2233,7 @@ export default function DokumentyPage() {
               </IconButton>
             </div>
 
-            <div className={modalStyles.body}>
+            <div className={`${modalStyles.body} ${styles.varModalBody}`}>
               <p style={hintStyle}>
                 Název se zobrazí při vyplňování hodnot. Nastavení platí jen pro tento
                 dokument – stejná proměnná může mít v jiném dokumentu jiný význam.
