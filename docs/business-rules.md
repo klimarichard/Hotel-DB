@@ -319,6 +319,20 @@ Seznam **bez jediné hodnoty** je povolený (typ si zvolíte dřív, než hodnot
 
 > 🔒 Server + 🖥️ Jen rozhraní. Zdroj: `functions/src/routes/dokumenty.ts` a `functions/src/routes/contractTemplates.ts` – `isValidCustomOptions()`; upozornění `customVarWarning()` ve `frontend/src/pages/DokumentyPage.tsx`.
 
+### Vlastní proměnná typu „Obrázek" pojme nejvýše 8 obrázků, každý zmenšený na cca 90 kB
+
+Vlastní proměnná typu **Obrázek** funguje jako Seznam, jehož každá možnost navíc nese obrázek – při vyplňování se podle vybrané možnosti do dokumentu vytiskne odpovídající obrázek místo textu. Jedna proměnná pojme nejvýše **8** možností/obrázků.
+
+Nahraný obrázek aplikace **sama zmenší**, pokud je příliš velký – postupně zkusí menší rozlišení a převod do formátu JPEG, dokud se obrázek nevejde na přibližně **90 kB**. Pokud se nevejde ani po největším zmenšení, aplikace nahrání **rovnou odmítne** a vyzve k výběru menšího souboru – obrázek se nikdy neuloží oříznutý nebo poškozený.
+
+> 🔒 Server + ⚙️ Automatika. Zdroj: `frontend/src/lib/imageDownscale.ts` – `prepareImageDataUri()` (zmenšovací žebříček, odmítnutí při neúspěchu); limity `CUSTOM_VAR_MAX_IMAGES` (8) a `CUSTOM_VAR_IMAGE_MAX_CHARS` (≈120 000 znaků base64) vynucené i na serveru ve `functions/src/routes/dokumenty.ts` a `functions/src/routes/contractTemplates.ts` (`isValidCustomImages()`).
+
+### Proměnná typu „Obrázek" bez nastavených obrázků nezablokuje vyplnění dokumentu
+
+Na rozdíl od typu Seznam, kde prázdný seznam možností při vyplňování nahradí obyčejné textové pole, u typu **Obrázek** žádná taková náhrada nedává smysl – napsaný text by neoznačoval žádný konkrétní obrázek. Proto se u proměnné tohoto typu bez jediné (kompletní) možnosti při vyplňování jen zobrazí upozornění a v dokumentu zůstane na jejím místě prázdno; **vyplnění dokumentu to nezastaví**. Chybu je potřeba opravit přímo v editoru šablony, který na ni upozorňuje hláškou „Bez obrázků" (případně „Neúplná možnost", má-li některá volba jen název, nebo jen obrázek).
+
+> 🔒 Server + 🖥️ Jen rozhraní. Zdroj: `frontend/src/lib/contractVariables.ts` – `missingCustomVars()` (výjimka pro prázdný typ „image"); upozornění `customVarWarning()` v `frontend/src/pages/DokumentyPage.tsx` / `frontend/src/pages/ContractTemplatesPage.tsx`.
+
 ### Vlastních proměnných je v dokumentu 25, ve šabloně smlouvy 10
 
 Dokument pojme až **25** vlastních proměnných (`{{var1}}`…`{{var25}}`). Šablona smlouvy jich pojme jen **10** (`{{var1}}`…`{{var10}}`) – jde o podepisovaný právní dokument, kde tolik proměnných není potřeba.
@@ -327,13 +341,15 @@ Napíšete-li do šablony smlouvy proměnnou nad tímto rozsahem (např. `{{var1
 
 > 🔒 Server. Zdroj: `functions/src/routes/dokumenty.ts` (`CUSTOM_VAR_KEYS`, 25 položek) a `functions/src/routes/contractTemplates.ts` (`CUSTOM_VAR_KEYS`, 10 položek) – obojí uvnitř `isValidVariableDefs()`; upozornění na šabloně smlouvy `customVarWarning()` ve `frontend/src/pages/ContractTemplatesPage.tsx`.
 
-### Přepínač „podle hodnoty" (např. různý obrázek podle města) má reálný strop 1 MB na celý dokument
+### Přepínač „podle hodnoty" (např. jiný text i obrázek podle města) má reálný strop 1 MB na celý dokument
 
-Přepínač `{{#case}}` umí pro každou hodnotu proměnné vytisknout jiný text – včetně jiného obrázku. Pro obrázky ale neplatí žádný zvláštní limit počtu ani velikosti; platí jen limit **na celý dokument/šablonu jako celek** – Firestore nedovolí uložit dokument větší než **1 MB**, a obrázky vložené přímo do textu (base64) se do tohoto součtu počítají celé. Přepínač s obrázkem pro každé z několika měst proto dosáhne tohoto stropu dávno předtím, než by došel počet povolených větví (30 hodnot u proměnné typu Seznam).
+Přepínač `{{#case}}` umí pro každou hodnotu proměnné vytisknout jiný text – klidně i s vlastním obrázkem vloženým přímo do dané větve. Pro takto vložené obrázky neplatí žádný zvláštní limit počtu ani velikosti; platí jen limit **na celý dokument/šablonu jako celek** – Firestore nedovolí uložit dokument větší než **1 MB**, a obrázky vložené přímo do textu (base64) se do tohoto součtu počítají celé. Přepínač s vlastním obrázkem pro každé z několika měst proto dosáhne tohoto stropu dávno předtím, než by došel počet povolených větví (30 hodnot u proměnné typu Seznam).
+
+⚠️ **Mění-li se mezi větvemi jen obrázek** (text zůstává stejný), je vhodnějším nástrojem proměnná typu **Obrázek** (viz výše) – má sice svůj vlastní, mnohem nižší strop (8 obrázků, každý ≈90 kB), ale právě proto se ke sdílenému 1MB limitu prakticky nikdy nepřiblíží, na rozdíl od několika obrázků nafocených přímo do `{{#case}}` větví. Přepínač `{{#case}}` zůstává správnou volbou tam, kde se mezi větvemi liší víc než jen obrázek – jinou proměnnou nebo obrázek do něj vložit i nadále lze, jen si to nese tento sdílený strop.
 
 Uložení dokumentu/šablony, které by tento limit překročilo, aplikace odmítne rovnou s vysvětlující hláškou – neuloží se ani zbytek změn.
 
-> 🔒 Server. Zdroj: `functions/src/routes/dokumenty.ts` a `functions/src/routes/contractTemplates.ts` – kontrola velikosti `htmlContent` (1 048 576 B) před i při zápisu do `PUT /:id`.
+> 🔒 Server. Zdroj: `functions/src/routes/dokumenty.ts` a `functions/src/routes/contractTemplates.ts` – kontrola velikosti `htmlContent` (1 048 576 B) před i při zápisu do `PUT /:id`. ⚠️ Tato kontrola měří jen `htmlContent` – obrázky uložené na proměnné typu Obrázek (`variableDefs.*.images`) do ní nevstupují, ale nadlimitní zápis i tak zachytí druhá kontrola přímo při ukládání (stejný soubor, `PUT /:id`).
 
 ## Faktury
 
