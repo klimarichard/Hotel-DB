@@ -58,6 +58,7 @@ import {
   comparableTypeOfCustom,
   formulaDependencies,
   evalMathFormula,
+  isCustomVarKey,
   usedCustomVars,
   requiredCustomVars,
   fillTemplate,
@@ -189,6 +190,21 @@ function customVarWarning(html: string, defs: CustomVarDefs): string | null {
     for (const dep of formulaDependencies(formula)) dummy[dep] = 1;
     return evalMathFormula(formula, dummy) === null;
   });
+  // A formula naming something that ISN'T one of this document's slots. On the
+  // contracts side an identifier like `salary` resolves against the employee
+  // record, and the shared engine supports that on purpose — but a document
+  // binds no record, so here the name resolves to nothing and, because a single
+  // unusable operand invalidates the whole expression, the entire result prints
+  // blank. Indistinguishable from a working formula in the editor, hence the
+  // explicit warning rather than relying on the parse check above (which probes
+  // with a dummy value for EVERY name and so cannot see this).
+  const unknownOperands = new Set<string>();
+  for (const k of used) {
+    if (defs[k]?.type !== "math") continue;
+    for (const dep of formulaDependencies(defs[k]?.formula ?? "")) {
+      if (!isCustomVarKey(dep)) unknownOperands.add(dep);
+    }
+  }
   // A "condition" slot with no comparison configured is always false, so every
   // {{#if}} block it guards silently vanishes from the printed document.
   const emptyConditions = used.filter(
@@ -198,6 +214,7 @@ function customVarWarning(html: string, defs: CustomVarDefs): string | null {
   if (unnamed.length > 0) parts.push(`Bez nastavení: ${unnamed.join(", ")} – chybí název a typ.`);
   if (emptyLists.length > 0) parts.push(`Bez možností: ${emptyLists.join(", ")} – seznam nemá žádné hodnoty.`);
   if (brokenMath.length > 0) parts.push(`Chybný vzorec: ${brokenMath.join(", ")} – výpočet nelze vyhodnotit a vypíše se prázdná hodnota.`);
+  if (unknownOperands.size > 0) parts.push(`Neznámá proměnná ve vzorci: ${[...unknownOperands].join(", ")} – v dokumentu taková proměnná není a celý výpočet zůstane prázdný.`);
   if (emptyConditions.length > 0) parts.push(`Bez podmínky: ${emptyConditions.join(", ")} – porovnání není nastaveno, podmínka nikdy neplatí.`);
   return parts.length > 0 ? parts.join(" ") : null;
 }

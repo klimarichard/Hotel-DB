@@ -422,15 +422,23 @@ function tokenizeFormula(src: string): MathToken[] | null {
 }
 
 /**
- * Slot keys a formula references, in first-appearance order. Used to decide
- * which slots a math slot depends on (resolution order, and which fields the
- * generate form must ask for).
+ * Every identifier a formula references, in first-appearance order — custom
+ * slots AND built-ins alike.
+ *
+ * Deliberately NOT filtered to custom slots. `resolveComputedVars` looks each
+ * dependency up in the raw value map, which on the contracts side already holds
+ * the employee comparables, so returning built-ins here is what lets a contract
+ * formula say `salary * 0,15`. Filtering them out instead made the lookup miss,
+ * which `evalMathFormula` correctly reads as an unusable operand — collapsing
+ * the WHOLE formula to null and printing an empty string, silently, on a
+ * contract. Callers that need slots only (`requiredCustomVars`) filter at their
+ * own end, where the intent is explicit.
  */
 export function formulaDependencies(formula: string): string[] {
   const tokens = tokenizeFormula(formula) ?? [];
   const out: string[] = [];
   for (const t of tokens) {
-    if (t.t === "var" && isCustomVarKey(t.v) && !out.includes(t.v)) out.push(t.v);
+    if (t.t === "var" && !out.includes(t.v)) out.push(t.v);
   }
   return out;
 }
@@ -1269,7 +1277,14 @@ function renderBlocks(
       continue;
     }
     if (n.type === "case") {
-      const actual = normaliseCaseValue(String(rawVars[n.key] ?? ""));
+      // Fall back to the printed value only when the key is ABSENT from the raw
+      // map — not when it is null or "", which are real answers a computed slot
+      // legitimately produces. Without this, passing a pure raw map (the obvious
+      // thing to do) makes {{#case firstName = Jana}} never match, because
+      // built-ins have no raw form: the switch fails silently and forever, on a
+      // contract, for a reason invisible in the editor.
+      const rv = rawVars[n.key];
+      const actual = normaliseCaseValue(String((rv === undefined ? vars[n.key] : rv) ?? ""));
       const expected = normaliseCaseValue(n.value);
       const hit = actual === expected;
       const keep = n.op === "=" ? hit : !hit;
