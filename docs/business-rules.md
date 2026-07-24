@@ -287,21 +287,15 @@ Tabulky jsou široké a na telefonu se nedají rozumně vyplňovat, proto se pol
 
 ## Dokumenty
 
-### Kdo dokument uvidí, určuje jeho sekce
+### Kdo dokument uvidí, určuje příznak Veřejný
 
-Dokument **bez sekce** vidí každý, kdo má přístup do Dokumentů. Dokument **zařazený do sekce** (Ambiance, Superior, Amigo & Alqush, Ankora, TEMP) vidí jen ten, kdo má oprávnění pro tuto sekci – ostatním se v seznamu vůbec nezobrazí a nelze jej otevřít ani přímým odkazem. Sekce tedy okruh lidí vždy **zužuje, nikdy nerozšiřuje**.
+Dokument je buď **Veřejný**, nebo **Neveřejný** – nový dokument je vždy Neveřejný, dokud ho autor sám neoznačí jako veřejný. Veřejný dokument vidí každý, kdo má přístup do Dokumentů. Neveřejný vidí jen ten, kdo může dokumenty spravovat – ostatním se v seznamu vůbec nezobrazí a nelze jej otevřít ani přímým odkazem.
 
-Kdo má oprávnění **Spravovat dokumenty**, vidí všechny sekce – jinak by nemohl opravit ani smazat to, co je v nich zařazené.
+Kdo má oprávnění **Spravovat dokumenty**, vidí i neveřejné dokumenty – jinak by je nemohl opravit ani smazat.
 
-**Zařazení dokumentu do sekce (nebo jeho vyřazení) je změna toho, kdo ho uvidí**, ne jen štítek. Přesunutím dokumentu do sekce ho skryjete všem, kdo na ni nemají oprávnění; vyjmutím ze sekce ho naopak zpřístupníte všem, kdo mají přístup do Dokumentů.
+U dokumentů, které vznikly ještě před zavedením tohoto rozlišení, příznak v databázi chybí úplně – to se počítá jako **Neveřejný**, ne jako chyba, a žádná stará data se kvůli tomu nijak neupravovala.
 
-> 🔒 Server. Zdroj: `functions/src/services/documentSections.ts` – `maySeeDocumentSection()`; `functions/src/routes/dokumenty.ts` – filtr seznamu a kontrola v `GET /:id`.
-
-### Výchozí sekce mění jen pořadí, nikdy přístup
-
-Volba **Výchozí sekce** je osobní nastavení každého uživatele: dokumenty ze zvolené sekce se zobrazí na začátku seznamu, zbytek za oddělovačem. **Nezpřístupní ani neskryje žádný dokument** – seznam filtruje server podle oprávnění bez ohledu na toto nastavení.
-
-> 🔒 Server. Zdroj: `functions/src/routes/auth.ts` – `PUT /me/dokumenty-default`; pořadí se skládá v `frontend/src/pages/DokumentyPage.tsx`.
+> 🔒 Server. Zdroj: `functions/src/routes/dokumenty.ts` – `maySeeDocument()`, `isValidPublic()`; filtr seznamu v `GET /` a kontrola v `GET /:id`.
 
 ### Vytištěné dokumenty se nikde neukládají
 
@@ -506,3 +500,15 @@ Pravidla, která dřívější dokumentace uváděla, ale která **v současném
 ### ❌ „Datum nástupu vyžaduje zcela nepřerušenou návaznost smluv"
 
 **Nepřesné** – tolerance je až jeden kalendářní měsíc, ne nula. Viz „Datum nástupu je začátek souvislého poměru" výše.
+
+### ❌ „Kdo dokument uvidí, určuje jeho sekce"
+
+**Neplatí.** Dokumenty už nemají sekce (Ambiance/Superior/Amigo & Alqush/Ankora/TEMP) – nahradil je jediný příznak **Veřejný/Neveřejný**, protože jedna sada čtyř hotelových sekcí přestala mít smysl ve chvíli, kdy jeden dokument dokáže obsloužit všechny čtyři hotely sám (proměnná typu Seznam/Obrázek + `{{#case}}`). Aktuální pravidlo viz „Kdo dokument uvidí, určuje příznak Veřejný" výše.
+
+> Zdroj: `functions/src/routes/dokumenty.ts` – `maySeeDocument()` nahradilo smazané `functions/src/services/documentSections.ts` (`maySeeDocumentSection()`).
+
+### ❌ „Výchozí sekce mění jen pořadí, nikdy přístup"
+
+**Neplatí, protože už nic takového neexistuje.** Osobní „Výchozí sekce" zanikla spolu se sekcemi samotnými – `PUT /api/auth/me/dokumenty-default` byl smazán. Uložená hodnota `users/{uid}.dokumentyDefaultSection` u starých účtů v databázi zůstává, ale nic ji už nečte. Dokumenty mají místo toho jinou drobnost: při vyplňování dokumentu se hotelová proměnná (Seznam/Obrázek s volbami podle hotelů) sama předvyplní hotelem přihlášeného uživatele (podle stejného výběru hotelu jako v Recepci) – jde ale jen o předvyplnění pole, ne o řazení seznamu ani o přístup.
+
+> Zdroj: `functions/src/routes/auth.ts` – komentář na místě smazaného `PUT /me/dokumenty-default`; předvyplnění hotelu `frontend/src/components/GenerateDocumentModal.tsx` (`resolveOwnHotel`).
