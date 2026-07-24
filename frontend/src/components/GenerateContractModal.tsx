@@ -10,12 +10,13 @@ import {
   resolveVariables,
   fillTemplate,
   getMissingVariables,
-  usedCustomVars,
+  requiredCustomVars,
   formatCustomValue,
   customDefaultRaw,
   isFixedVarPassthrough,
+  isComputedVarType,
   resolveComparableRaw,
-  evalCondition,
+  resolveComputedVars,
   missingCustomVars,
   isCustomVarKey,
   CUSTOM_VAR_TYPE_LABELS,
@@ -141,19 +142,27 @@ export default function GenerateContractModal({
     : employeeData;
   const autoVars = resolveVariables(effectiveEmployeeData, companyData);
 
-  // Custom slots this template uses, and the values they resolve to. A
-  // `condition` slot is COMPUTED from its comparison (raw typed values). A slot
-  // whose default references a fixed variable passes its already-formatted value
-  // through untouched (isFixedVarPassthrough); everything else is formatted.
-  const customKeys = template ? usedCustomVars(template) : [];
+  // Custom slots this template needs, and the values they resolve to.
+  //
+  // requiredCustomVars, NOT usedCustomVars: a `math` slot's operands may appear
+  // nowhere in the document's text, and a slot with no field gets no value — the
+  // total would then print blank on a signed contract with nothing to notice.
+  const customKeys = template ? requiredCustomVars(template, variableDefs) : [];
   const rawComparable = resolveComparableRaw(effectiveEmployeeData);
+  // One call resolves both computed types: the `math` fixpoint first, then the
+  // `condition` comparisons over the result. Passing rawComparable as the fixed
+  // operands is what keeps a condition over a built-in (Datum podpisu < Datum
+  // nástupu) evaluating exactly as it did before this became one call.
+  const computed = resolveComputedVars(customKeys, variableDefs, customRaw, rawComparable);
   const customVars: Record<string, string> = {};
   for (const key of customKeys) {
     const def = variableDefs[key];
     const type = def?.type ?? "text";
-    if (type === "condition") {
-      customVars[key] = evalCondition(def?.condition, rawComparable) ? "ano" : "";
+    if (isComputedVarType(type)) {
+      customVars[key] = computed.formatted[key] ?? "";
     } else if (isFixedVarPassthrough(def)) {
+      // A fixed-variable default resolves to an already-formatted string, so it
+      // passes through untouched; re-formatting it would corrupt it.
       customVars[key] = customRaw[key] ?? "";
     } else {
       customVars[key] = formatCustomValue(type, customRaw[key] ?? "");
@@ -166,9 +175,12 @@ export default function GenerateContractModal({
   const prefilledRef = useRef(false);
   useEffect(() => {
     if (prefilledRef.current || loadingTemplate || loadingCompany || !template) return;
-    const keys = usedCustomVars(template);
+    const keys = requiredCustomVars(template, variableDefs);
     const seed: Record<string, string> = {};
     for (const key of keys) {
+      // A computed slot has no input to seed – its value comes from its formula
+      // or comparison, and it never gets a field.
+      if (isComputedVarType(variableDefs[key]?.type ?? "text")) continue;
       const init = customDefaultRaw(variableDefs[key], autoVars);
       if (init) seed[key] = init;
     }
@@ -270,7 +282,12 @@ export default function GenerateContractModal({
     setStep("generating");
 
     try {
-      const filled = fillTemplate(template, vars);
+      // Third argument = the RAW map that {{#case}} matches on. Layered over the
+      // printed values on purpose: a switch on a key with no raw form (say
+      // {{#case firstName = Jana}}) then still matches on its display string,
+      // exactly as it did when fillTemplate was called with no raw map at all.
+      // Handing it the bare raw map would silently stop such a switch matching.
+      const filled = fillTemplate(template, vars, { ...vars, ...computed.raw });
       const blob = await generatePdf(filled, margins);
       let id: string;
       if (existingContractId) {
@@ -454,7 +471,7 @@ export default function GenerateContractModal({
                                       ones – otherwise the only way to find out is
                                       to try generating. bool/condition are never
                                       typed in, so the hint would be noise there. */}
-                                  {def?.optional && type !== "bool" && type !== "condition" && (
+                                  {def?.optional && type !== "bool" && !isComputedVarType(type) && (
                                     <>
                                       {" "}
                                       <span className={styles.varTableHint}>(nepovinné)</span>
@@ -475,12 +492,23 @@ export default function GenerateContractModal({
                                 </td>
                                 <td className={styles.varVal}>
                                   <div className={styles.varValRow}>
-                                    {type === "condition" ? (
-                                      // Computed from a comparison — read-only, shown
-                                      // so the user sees which branch will apply.
+                                    {isComputedVarType(type) ? (
+                                      // Derived, never typed in — read-only, but
+                                      // shown live so the user watches the total (or
+                                      // which branch applies) change as they fill the
+                                      // slots it is computed from. A blank result is
+                                      // rendered as an en dash rather than as nothing,
+                                      // so "the formula produced no value" can't be
+                                      // mistaken for "there is no such field".
                                       <span className={styles.varInput} style={{ border: 0, display: "flex", alignItems: "center", gap: 6 }}>
-                                        {customVars[key] ? "Ano" : "Ne"}
-                                        <span className={styles.varTableHint}>(vypočteno z podmínky)</span>
+                                        {type === "condition"
+                                          ? customVars[key] ? "Ano" : "Ne"
+                                          : customVars[key] || "–"}
+                                        <span className={styles.varTableHint}>
+                                          {type === "condition"
+                                            ? "(vypočteno z podmínky)"
+                                            : "(vypočteno ze vzorce)"}
+                                        </span>
                                       </span>
                                     ) : type === "bool" ? (
                                       <label className={styles.varInput} style={{ border: 0, display: "flex", alignItems: "center", gap: 6 }}>
@@ -507,6 +535,19 @@ export default function GenerateContractModal({
                                           <option key={`${o}-${i}`} value={o}>{o}</option>
                                         ))}
                                       </select>
+                                    ) : type === "longtext" && !isFixedVarPassthrough(def) ? (
+                                      // Several paragraphs of prose. A single-line
+                                      // input would hide everything past the first
+                                      // line and swallow Enter, so the author could
+                                      // not enter the line breaks the type exists for.
+                                      <textarea
+                                        className={styles.varInput}
+                                        style={{ resize: "vertical", minHeight: 88, lineHeight: 1.45 }}
+                                        rows={5}
+                                        value={raw}
+                                        placeholder={CUSTOM_VAR_TYPE_LABELS[type]}
+                                        onChange={(e) => setRaw(e.target.value)}
+                                      />
                                     ) : (
                                       <input
                                         // A fixed-variable default resolves to an

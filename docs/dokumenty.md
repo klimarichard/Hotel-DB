@@ -2,13 +2,16 @@
 
 A second, standalone template editor beside **Šablony smluv** for documents that have nothing to do with a contract — protocols, checklists, anything printable. Introduced in **v4.15.0**. Route `/dokumenty`, backed by `documentTemplates/{id}` (`functions/src/routes/dokumenty.ts`).
 
-An author writes the document in the same TipTap editor Šablony smluv uses and declares which of the ten `{{var1}}..{{var10}}` slots it uses (label, type, optional default). A viewer picks the document, fills the slots in a modal, and gets a PDF in a new tab. Nothing about the fill-in is stored anywhere.
+An author writes the document in the same TipTap editor Šablony smluv uses and declares which of up to **twenty-five** `{{var1}}..{{var25}}` slots it uses (label, type, optional default). A viewer picks the document, fills the slots in a modal, and gets a PDF in a new tab. Nothing about the fill-in is stored anywhere.
+
+The custom-variable engine itself — the eight slot types, the formula parser, condition evaluation, the `{{#case}}` switch, and how the three validator copies are kept in lockstep — is shared with Šablony smluv and documented once, in **[custom-variable-engine.md](custom-variable-engine.md)**. This page covers only what's specific to Dokumenty.
 
 ## Deliberately not a contract
 
 Dokumenty shares the editor and the PDF pipeline with Contracts, but the two are shaped very differently, and the gap is intentional rather than a gap to close later:
 
-- **Custom variables only — no employee.** A document template has no bound employee/company record, so there is nothing for `VARIABLE_GROUPS` or `COMPARABLE_VARS` (`frontend/src/lib/contractVariables.ts`) to resolve against. The `"condition"` custom-var type — a slot computed by comparing two built-in employee/contract variables — is therefore meaningless here: the Dokumenty editor never offers it (`DOC_VAR_TYPES` in `DokumentyPage.tsx` omits `"condition"`), and `functions/src/routes/dokumenty.ts:80-85` refuses it server-side too, so a hand-crafted request can't sneak one in either. The same absence rules out a `fixedVar` default source (a default sourced from a resolved employee field) — every default a document stores is a `{kind:"literal"}`.
+- **Custom variables only — no employee.** A document template has no bound employee/company record, so there is nothing for `VARIABLE_GROUPS` or `COMPARABLE_VARS` (`frontend/src/lib/contractVariables.ts`) to resolve against — every default a document stores is a `{kind:"literal"}`; the `fixedVar` default source (a value sourced from a resolved employee field) is meaningless here and never offered.
+  - ⚠️ **Reasoning partially overturned in v5.2.0.** Until then, the `"condition"` custom-var type was refused here entirely, on the grounds that a condition compares two built-in employee/contract variables and a document binds no employee. That specific reasoning was wrong rather than merely restrictive: a document condition can compare **custom slots** against each other or against a literal (`{{var1}} > {{var2}}`, `{{var3}} = Praha`), which needs no employee record at all — the comparison engine already accepted custom operands (`comparableTypeOfCustom`), so excluding the type here only meant a document had no way to say "print this paragraph only when the amount exceeds the deposit." `functions/src/routes/dokumenty.ts`'s `isValidCondition` was already written for exactly this case (its operands can only be other custom slots, unlike the contracts version) and needed no change to accept it. `"math"` arrived in the same release and is likewise computed, and likewise restricted to custom-slot operands (naming anything else — a built-in that doesn't exist here — silently blanks the whole formula; see the engine doc). What's still true: no `fixedVar` default, and no `COMPARABLE_VARS`-sourced condition operand — both require an employee/company record this page never has.
 - **Nothing is persisted from a render.** `POST /api/dokumenty/render-pdf` streams a PDF straight back and writes no Storage blob, no Firestore record, no history, no audit entry — matching `POST /contracts/render-pdf`'s own render-only path. That is also why there is no `usage` endpoint (nothing downstream ever references a filled document to report on).
 - **No built-ins to protect.** Every `documentTemplates/{id}` is user-created, so `DELETE /api/dokumenty/:id` is a plain hard delete — there is no seeded/system template to guard against deletion the way some contract templates are.
 
@@ -78,12 +81,15 @@ Two details that matter:
   section: "ambiance" | "superior" | "amigo" | "ankora" | null,
   htmlContent: string,
   variables: string[],              // {{varN}} keys found in htmlContent, server-derived
-  variableDefs?: {                  // per-slot config, keyed "var1".."var10"
+  variableDefs?: {                  // per-slot config, keyed "var1".."var25"
     [slot: string]: {
       label: string,                 // ≤60 chars
-      type: "text" | "date" | "number" | "bool" | "list",
+      type: "text" | "longtext" | "date" | "number" | "bool" | "list" | "condition" | "math",
       default?: { kind: "literal", value: string },   // ≤200 chars; never "fixedVar" here
+      condition?: { leftKey: string, op: CompareOp, right: {kind:"var",key} | {kind:"literal",value} },  // "condition" only; operands are other custom slots
       options?: string[],            // "list" only, ≤30 entries, ≤100 chars each
+      formula?: string,              // "math" only, ≤200 chars, allowlisted characters only
+      decimals?: number,             // "math" only, 0–4, default 0
       optional?: boolean,            // "Nepovinná" — absent = required
     }
   },
@@ -97,7 +103,7 @@ Two details that matter:
 
 ## Sections
 
-Four hard-coded values, mirroring the Recepce hotel stems but an **independent** registry — holding `recepce.amigo.view` grants nothing here, and vice versa:
+Five hard-coded values, mirroring the Recepce hotel stems but an **independent** registry — holding `recepce.amigo.view` grants nothing here, and vice versa:
 
 | id | Label | View permission |
 |---|---|---|
@@ -109,7 +115,7 @@ Four hard-coded values, mirroring the Recepce hotel stems but an **independent**
 
 Defined twice, deliberately kept in lockstep: `functions/src/services/documentSections.ts` (server) and `frontend/src/lib/documentSections.ts` (client, typed as `Permission` so a key missing from `catalog.ts` fails the build). A document filed under a section is visible only to holders of that section's key (plus the two short-circuits below); a document with **no** section is visible to anyone with `nav.dokumenty.view` — a section only ever narrows the audience.
 
-**Why hard-coded and not admin-creatable**, unlike the fully configurable user-type/permission system elsewhere in the app: a section's audience gate *is* a permission key, and permission keys must exist in the static catalogue to be grantable. `sanitizePermissionList` filters every grant through the static `ALL_SET` and silently drops anything it doesn't recognise — a runtime-created key would show up as grantable in the matrix UI and simply never stick on save. Adding a fifth section is therefore a code change (new id in both `documentSections.ts` files, new key in both permission catalogues), not an admin action.
+**Why hard-coded and not admin-creatable**, unlike the fully configurable user-type/permission system elsewhere in the app: a section's audience gate *is* a permission key, and permission keys must exist in the static catalogue to be grantable. `sanitizePermissionList` filters every grant through the static `ALL_SET` and silently drops anything it doesn't recognise — a runtime-created key would show up as grantable in the matrix UI and simply never stick on save. Adding a new section is therefore a code change (new id in both `documentSections.ts` files, new key in both permission catalogues), not an admin action — as happened when `temp` (TEMP) was added as the fifth section.
 
 ### Enforcement (`maySeeDocumentSection`, `functions/src/services/documentSections.ts`)
 
@@ -133,14 +139,35 @@ Defined twice, deliberately kept in lockstep: `functions/src/services/documentSe
 
 `DokumentyPage.tsx:190-206` reads `dokumentyDefaultSection` directly off `useAuth()` into a local `pendingDefault` override, explicitly **not** via `useEffect(() => setState(authValue), [authValue])`. The code comment spells out why: an effect runs *after* the render that would consume it, so the very first render once `authLoading` clears would sort with a `null` default and only settle a frame later — invisible on a fresh browser (nothing to sort yet) but visibly wrong for every returning user with a saved default. This is the same trap already documented for the Recepce default hotel; Dokumenty repeats the same fix rather than the same bug.
 
-## The `"list"` / "Seznam" custom-variable type
+## Custom-variable types, `{{#case}}`, math and conditions
 
-Added to the **shared** custom-variable engine in `frontend/src/lib/contractVariables.ts`, so it exists in both Šablony smluv and Dokumenty simultaneously — it is not Dokumenty-specific, it just shipped alongside this feature.
+The engine mechanics — the eight slot types (`text`, `longtext`, `date`, `number`, `bool`, `list`, `condition`, `math`), the formula parser, `resolveComputedVars`'s fixpoint resolution, condition evaluation, and the `{{#case}}` switch block — are documented once, shared with Šablony smluv, in **[custom-variable-engine.md](custom-variable-engine.md)**. What follows is specific to how Dokumenty surfaces them.
 
-- `CustomVarDef.options?: string[]` — the dropdown's choices, in author-entered order, **stored as the display strings themselves** (no separate code/label pair, since the picked value is substituted verbatim). Capped at `CUSTOM_VAR_MAX_OPTIONS = 30` entries, ≤100 chars each — validated both client-side (`renderOptionsEditor`) and server-side (`isValidCustomOptions`, `functions/src/routes/dokumenty.ts:130-137`).
+**Authoring-time warnings (`customVarWarning()`, `DokumentyPage.tsx`).** Several slot mistakes still "work" — the document stays producible — but silently print something other than what the author intended, so saving the template computes a warning covering five distinct cases and shows it as a clickable button in the editor header:
+
+- **Unnamed** — a slot used in the text (or reachable via a formula/condition) with no configured label/type. Falls back to `"text"` and shows the raw key to whoever fills the document in.
+- **Bez možností** — a `list` slot with no choices (see below).
+- **Chybný vzorec** — a `math` slot whose formula is empty or fails to evaluate even with a dummy value of `1` substituted for every operand it names (a formula that can't produce a number from all-ones can't produce one from real input either).
+- **Neznámá proměnná ve vzorci** — a `math` slot whose formula names an identifier that isn't one of this document's own custom slots. Unlike on Šablony smluv, where an unrecognised identifier might legitimately be a built-in (`salary`, `hoursPerWeek`, …) the formula resolves against, Dokumenty has no built-ins at all — so any operand that isn't a custom slot key is *definitely* wrong, and the check can name it explicitly rather than merely flag a broken evaluation.
+- **Bez podmínky** — a `condition` slot with no comparison configured (`leftKey` empty), which is always false and silently drops every `{{#if}}` block it guards.
+
+The warning is re-evaluated (and cleared) when the "Vlastní proměnné" modal closes via its primary button, so fixing the last flagged slot makes it disappear without a separate save round-trip. It never blocks saving.
+
+### The `"list"` / "Seznam" type
+
+- `CustomVarDef.options?: string[]` — the dropdown's choices, in author-entered order, **stored as the display strings themselves** (no separate code/label pair, since the picked value is substituted verbatim). Capped at `CUSTOM_VAR_MAX_OPTIONS = 30` entries, ≤100 chars each — validated both client-side (`renderOptionsEditor`) and server-side (`isValidCustomOptions`, `functions/src/routes/dokumenty.ts`).
 - Behaves like `"text"` for required/optional purposes: required until a choice is picked, released the same way by "Nepovinná" (`optional: true`).
-- A list slot's **default must be one of its own choices** — `renderLiteralDefault` renders a `<select>` over `options`, not a free-text box, for a list-typed default, so the stored default can never hold a value the dropdown doesn't offer. Because of this, "Z proměnné" (a `fixedVar` default) was never applicable to list slots anyway — Dokumenty has no fixed variables at all, so the point is moot here, but it holds in Šablony smluv too.
-- **Optionless list is accepted on purpose.** The server's `isValidCustomOptions` allows `options: []` / absent — rejecting it mid-configuration would punish an author for picking the type before typing the first value. The generate form (`GenerateDocumentModal.tsx:172-190`) degrades an empty-options list slot to a plain free-text input rather than an unfillable empty `<select>`, so the document stays producible. Because that degradation is invisible to whoever is editing the template, `customVarWarning()` (`DokumentyPage.tsx:118-132`) flags it explicitly as "Bez možností: … – seznam nemá žádné hodnoty."
+- A list slot's **default must be one of its own choices** — the config UI renders a `<select>` over `options`, not a free-text box, for a list-typed default, so the stored default can never hold a value the dropdown doesn't offer. Because of this, "Z proměnné" (a `fixedVar` default) was never applicable to list slots anyway — Dokumenty has no fixed variables at all, so the point is moot here, but it holds in Šablony smluv too.
+- **Optionless list is accepted on purpose.** The server's `isValidCustomOptions` allows `options: []` / absent — rejecting it mid-configuration would punish an author for picking the type before typing the first value. The generate form (`GenerateDocumentModal.tsx`) degrades an empty-options list slot to a plain free-text input rather than an unfillable empty `<select>`, so the document stays producible. Because that degradation is invisible to whoever is editing the template, `customVarWarning()` flags it explicitly as "Bez možností: … – seznam nemá žádné hodnoty."
+
+### Read-only preview for a viewer without `dokumenty.manage`
+
+`readOnlyHtml` (`DokumentyPage.tsx`) renders the stored HTML with every custom slot replaced by its configured label in brackets (`"[Výše pokuty]"` instead of a bare `{{var1}}`), so someone who can only view a document still sees roughly what it says before opening the fill-in modal. The computed types need their own treatment, since the bracketed-label trick describes a *fillable* slot, not a computed one:
+
+- **`condition`** resolves to `"ano"` — the branch it guards is kept, as if the condition had been satisfied, which is the useful default for a document about to be filled in for real.
+- **`math`** keeps the bracketed label (`"[Celkem]"`) — its result is a number nobody has typed the inputs for yet, so there is nothing honest to compute.
+
+A `{{#case}}` switch needs a **third**, raw-value map to preview correctly — matching it against the bracketed labels would make every `"="` branch miss and every `"!="` branch hit, showing the exact opposite of the real document (and, for a multi-branch switch, several mutually exclusive alternatives stacked on top of each other). The preview instead picks one stand-in answer per slot: the configured default if there is one, otherwise the value of the first `"="` branch written in the text (guaranteeing exactly one branch renders), otherwise a list slot's first choice — with none of those, the answer is blank and every `"="` branch drops, which is what an unanswered switch genuinely prints.
 
 ## `lib/editor/extensions.ts`
 
@@ -151,7 +178,15 @@ The module also exports **`STARTER_KIT_OPTIONS`**, which both pages pass to `Sta
 - `paragraph: false` — replaced by `TabParagraph`.
 - `link: { autolink: false, linkOnPaste: false, openOnClick: false }` — **StarterKit v3 bundles the Link extension**, whose defaults hyperlink anything URL- or e-mail-shaped on their own (while typing, and when pasting over a selection). Neither editor has a link button, so such a link could never be removed again. ⚠️ The extension is deliberately **not** disabled with `link: false`: ProseMirror silently drops marks missing from the schema, so that would make every `<a>` in an already-saved template or document vanish on load — rewriting stored content to fix a typing annoyance. Keeping the mark and disabling only its automatic creation leaves existing documents byte-identical. Note this is preventative only: links created before v5.0.4 are still in those documents, and there is still no UI to remove one.
 
-**The custom-variable *configuration dialog* was deliberately not extracted**, even though it looks like an obvious second candidate. Roughly a third of that dialog in `ContractTemplatesPage.tsx` is the `"condition"` slot's comparison builder plus the `fixedVar` default-source picker — both built directly on employee-coupled catalogues (`COMPARABLE_VARS`, the fixed-variable list) that Dokumenty has none of. Sharing it would mean parameterising the dialog across three independent axes (available types, available comparison operands, available default sources) for a component that would then be more complex than either of the two call sites it replaces. The two editors share a *shape* (a table of slot → label/type/default/optional), not code — `DokumentyPage.tsx` implements its own smaller dialog restricted to `DOC_VAR_TYPES = ["text","date","number","bool","list"]`.
+### The custom-variable configuration dialog stays unshared
+
+**The custom-variable *configuration dialog* is still not extracted into a shared component**, even though it looks like an obvious candidate now that both pages offer the identical eight-type set (`DOC_VAR_TYPES` in `DokumentyPage.tsx` now lists all eight, same as `CUSTOM_VAR_TYPE_LABELS`'s keys on the contracts side). What used to be the stated reason — that a third of the contracts dialog was `"condition"`-builder machinery Dokumenty had no use for — is **obsolete**: Dokumenty's own condition builder (`renderConditionBuilder` in `DokumentyPage.tsx`) is now exactly that same kind of machinery, just narrower.
+
+What's left to justify keeping them separate is genuinely two different catalogues feeding the *same* dialog shape, not a difference in what the dialog needs to do:
+- **Condition operands.** Šablony smluv's builder offers `COMPARABLE_VARS` (built-in employee/contract fields) *and* the template's own custom slots, in two visually separated groups; Dokumenty's offers only its own custom slots — there is no employee-coupled catalogue to add a second group from.
+- **Default source.** Šablony smluv's "Z proměnné" (`fixedVar`) option resolves a slot's default from a built-in variable; Dokumenty has no built-ins to resolve one from, so its default source is always `"literal"`.
+
+Sharing the dialog would mean parameterising it across those two axes (which operand catalogues exist, whether a `fixedVar` source is offered) for a component that would then carry conditional logic neither call site needs on its own. The two editors share a *shape* — a table of slot → label/type/default/optional, plus the same math-formula and `{{#case}}` authoring UI — not code.
 
 ## Related files
 
@@ -162,7 +197,7 @@ The module also exports **`STARTER_KIT_OPTIONS`**, which both pages pass to `Sta
 - `frontend/src/pages/DokumentyPage.tsx` / `.module.css` — the editor + list page.
 - `frontend/src/components/GenerateDocumentModal.tsx` / `.module.css` — the fill-in-and-print modal.
 - `frontend/src/lib/editor/extensions.ts` — shared TipTap extensions (also used by `ContractTemplatesPage.tsx`).
-- `frontend/src/lib/contractVariables.ts` — the shared custom-variable engine, incl. the `"list"` type.
+- `frontend/src/lib/contractVariables.ts` — the shared custom-variable engine; see **[custom-variable-engine.md](custom-variable-engine.md)** for the full write-up (types, formula parser, conditions, `{{#case}}`).
 - `frontend/src/lib/menuItems.ts` (`id: "dokumenty"`, `hideOnMobile: true`) and `functions/src/routes/menuOrder.ts` (`VALID_IDS` already includes `"dokumenty"`).
 - `frontend/src/App.tsx` — `<Route path="dokumenty">` wrapped in `RequirePermission allow={["nav.dokumenty.view"]}`.
 

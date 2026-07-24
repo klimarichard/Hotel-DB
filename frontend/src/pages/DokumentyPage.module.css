@@ -542,6 +542,26 @@
   margin-bottom: 10px;
 }
 
+/*
+ * The 25 slot buttons scroll inside the panel rather than lengthening it.
+ * .varPanel is a 200 px grid column that already scrolls, so without this the
+ * two action buttons below the list ("+ Přepínač…", "⚙ Nastavit…") sat 25 rows
+ * down and were off-screen on a laptop until the panel was scrolled – which is
+ * exactly the height the slot count grew to in v5.2.0 (10 → 25).
+ */
+.varList {
+  max-height: 46vh;
+  overflow-y: auto;
+  /* Keeps the buttons' hover outline off the scrollbar. */
+  padding-right: 2px;
+}
+
+.varActions {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--color-border);
+}
+
 .varGroupLabel {
   font-size: 0.7rem;
   font-weight: 600;

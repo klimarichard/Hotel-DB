@@ -46,23 +46,68 @@ import { formatTimestampCZ } from "@/lib/dateFormat";
 // the same file and are deliberately NOT imported: a document template has
 // custom variables only.
 import {
-  CUSTOM_VAR_KEYS,
+  DOCUMENT_VAR_COUNT,
+  customVarKeys,
   CUSTOM_VAR_TYPE_LABELS,
   CUSTOM_VAR_MAX_OPTIONS,
+  CUSTOM_VAR_FORMULA_MAX,
+  CUSTOM_VAR_DECIMALS_MAX,
+  COMPARE_OP_LABELS,
+  UNARY_OPS,
+  OPS_FOR_COMPARABLE,
+  comparableTypeOfCustom,
+  formulaDependencies,
+  evalMathFormula,
+  isCustomVarKey,
   usedCustomVars,
+  requiredCustomVars,
   fillTemplate,
+  type CompareOp,
+  type CustomVarCondition,
   type CustomVarDefs,
   type CustomVarType,
 } from "@/lib/contractVariables";
 import styles from "./DokumentyPage.module.css";
 
 /**
- * The custom-variable types a DOCUMENT template may use. "condition" is
- * excluded on purpose: a derived condition compares built-in employee/contract
- * variables, and this page has none – there would be nothing to compare.
+ * The custom-variable types a DOCUMENT template may use – all eight, since
+ * v5.2.0.
+ *
+ * "condition" used to be excluded here, on the grounds that a derived condition
+ * compares built-in employee/contract variables and this page binds no employee,
+ * so there would be nothing to compare. That reasoning turned out to be wrong
+ * rather than merely restrictive: a document condition compares CUSTOM slots
+ * against each other or against a literal ({{var1}} > {{var2}}, {{var3}} = Praha),
+ * which needs no employee record at all. The comparison engine already accepted
+ * custom operands, so the exclusion was buying nothing – it only meant a document
+ * had no way to say "print this paragraph only when the amount exceeds the
+ * deposit". "math" arrived with the same change and is likewise computed.
  */
-const DOC_VAR_TYPES = ["text", "date", "number", "bool", "list"] as const;
-type DocVarType = Exclude<CustomVarType, "condition">;
+const DOC_VAR_TYPES = [
+  "text",
+  "longtext",
+  "date",
+  "number",
+  "bool",
+  "list",
+  "condition",
+  "math",
+] as const;
+type DocVarType = CustomVarType;
+
+/** The slot keys this page offers – see DOCUMENT_VAR_COUNT. */
+const DOC_VAR_KEYS = customVarKeys(DOCUMENT_VAR_COUNT);
+
+/** Decimal-place choices offered for a "math" slot's printed result. */
+const DECIMALS_CHOICES = Array.from({ length: CUSTOM_VAR_DECIMALS_MAX + 1 }, (_, i) => i);
+
+/**
+ * A `{{#case key = value}}` / `{{#case key != value}}` switch tag. The engine
+ * has its own copy of this pattern for parsing; this one exists only so the
+ * read-only preview can find the FIRST branch an author wrote for a slot (see
+ * `readOnlyHtml`), which is a question the engine has no reason to answer.
+ */
+const CASE_TAG_RE = /\{\{#case\s+(\w+)\s*(!=|=)\s*([^}]*?)\s*\}\}/g;
 
 /** A literal default value for a slot. Documents never use `fixedVar` defaults
  *  ("Z proměnné"), because there is no built-in variable to source them from. */
@@ -117,7 +162,11 @@ function marginsEqual(a: PageMargins, b: PageMargins): boolean {
  * Returns null when there is nothing to warn about.
  */
 function customVarWarning(html: string, defs: CustomVarDefs): string | null {
-  const used = usedCustomVars(html);
+  // requiredCustomVars, not usedCustomVars: a slot that only feeds a formula or
+  // a condition never appears in the text, yet the generate form still asks for
+  // it – so an unnamed one is exactly as confusing there as any other, and has
+  // to be flagged here too.
+  const used = requiredCustomVars(html, defs);
   const unnamed = used.filter((k) => !defs[k]?.label?.trim());
   // A "list" slot with no choices renders an empty dropdown that can never be
   // satisfied, so the generate form falls back to a free-text box for it. That
@@ -126,9 +175,47 @@ function customVarWarning(html: string, defs: CustomVarDefs): string | null {
   const emptyLists = used.filter(
     (k) => defs[k]?.type === "list" && !(defs[k]?.options ?? []).some((o) => o.trim())
   );
+  // A "math" slot whose formula is missing or malformed resolves to an empty
+  // string – the document still prints, just with a blank where the total should
+  // be, and nothing anywhere says why. Same class of silent-but-producible fault
+  // as the optionless list above, so it gets the same treatment. Detected by
+  // evaluating the formula with a dummy value of 1 for every slot it names: a
+  // formula that can't produce a number from all-ones can't produce one from
+  // real input either.
+  const brokenMath = used.filter((k) => {
+    if (defs[k]?.type !== "math") return false;
+    const formula = defs[k]?.formula ?? "";
+    if (!formula.trim()) return true;
+    const dummy: Record<string, number | null> = {};
+    for (const dep of formulaDependencies(formula)) dummy[dep] = 1;
+    return evalMathFormula(formula, dummy) === null;
+  });
+  // A formula naming something that ISN'T one of this document's slots. On the
+  // contracts side an identifier like `salary` resolves against the employee
+  // record, and the shared engine supports that on purpose — but a document
+  // binds no record, so here the name resolves to nothing and, because a single
+  // unusable operand invalidates the whole expression, the entire result prints
+  // blank. Indistinguishable from a working formula in the editor, hence the
+  // explicit warning rather than relying on the parse check above (which probes
+  // with a dummy value for EVERY name and so cannot see this).
+  const unknownOperands = new Set<string>();
+  for (const k of used) {
+    if (defs[k]?.type !== "math") continue;
+    for (const dep of formulaDependencies(defs[k]?.formula ?? "")) {
+      if (!isCustomVarKey(dep)) unknownOperands.add(dep);
+    }
+  }
+  // A "condition" slot with no comparison configured is always false, so every
+  // {{#if}} block it guards silently vanishes from the printed document.
+  const emptyConditions = used.filter(
+    (k) => defs[k]?.type === "condition" && !defs[k]?.condition?.leftKey
+  );
   const parts: string[] = [];
   if (unnamed.length > 0) parts.push(`Bez nastavení: ${unnamed.join(", ")} – chybí název a typ.`);
   if (emptyLists.length > 0) parts.push(`Bez možností: ${emptyLists.join(", ")} – seznam nemá žádné hodnoty.`);
+  if (brokenMath.length > 0) parts.push(`Chybný vzorec: ${brokenMath.join(", ")} – výpočet nelze vyhodnotit a vypíše se prázdná hodnota.`);
+  if (unknownOperands.size > 0) parts.push(`Neznámá proměnná ve vzorci: ${[...unknownOperands].join(", ")} – v dokumentu taková proměnná není a celý výpočet zůstane prázdný.`);
+  if (emptyConditions.length > 0) parts.push(`Bez podmínky: ${emptyConditions.join(", ")} – porovnání není nastaveno, podmínka nikdy neplatí.`);
   return parts.length > 0 ? parts.join(" ") : null;
 }
 
@@ -277,6 +364,15 @@ export default function DokumentyPage() {
   // different documents.
   const [variableDefs, setVariableDefs] = useState<CustomVarDefs>({});
   const [customVarsOpen, setCustomVarsOpen] = useState(false);
+  /**
+   * The "+ Přepínač…" helper: null = closed. A `{{#case}}` tag matches its value
+   * by TEXT, so the one way it silently fails is a retyped choice that differs
+   * from the configured one by a character. The dialog exists to remove the
+   * retyping – for a "list" slot it offers the configured choices as a dropdown.
+   */
+  const [caseDraft, setCaseDraft] = useState<
+    { key: string; op: "=" | "!="; value: string } | null
+  >(null);
   // Custom slots used in the text that have no name/type yet. Set on load and
   // kept current while editing – it is not a transient toast.
   const [varWarning, setVarWarning] = useState<string | null>(null);
@@ -533,14 +629,57 @@ export default function DokumentyPage() {
    * its configured name in brackets, so a viewer sees "[Výše pokuty]" instead of
    * a bare "{{var1}}". Conditional blocks resolve as "filled in", which is the
    * useful default for a document that is about to be filled in for real.
+   *
+   * The two slot kinds that carry no fill-in value need their own treatment,
+   * because the bracketed-label trick doesn't describe them:
+   *
+   *  - "condition" resolves to "ano" here. A condition exists to drive
+   *    {{#if}}, and the whole point of this preview is to show the document's
+   *    content, so the branch is kept – the same "as if filled in" reading every
+   *    other conditional gets. As a bonus, the rare bare {{varN}} of a condition
+   *    then prints what it really would print when true, instead of a bracketed
+   *    name that is not a value the slot can ever hold.
+   *  - "math" keeps the bracketed label: its result is a number nobody has typed
+   *    the inputs for yet, and "[Celkem]" says that honestly.
+   *
+   * {{#case}} switches need a THIRD map, the raw one, and they are the reason
+   * this got more careful. Matching a switch against the bracketed labels made
+   * every "=" branch miss and every "!=" branch hit, so a viewer saw the exact
+   * opposite of the document plus, for a multi-branch switch, several mutually
+   * exclusive alternatives stacked on top of each other. The preview instead
+   * picks ONE stand-in answer per slot – the configured default if there is one
+   * (the most faithful preview: it is the author's own statement of the typical
+   * answer), otherwise the value of the first "=" branch written in the text,
+   * which guarantees exactly one branch renders, otherwise a list's first
+   * choice. With none of those the answer is blank and the "=" branches drop,
+   * which is what an unanswered switch genuinely prints.
    */
   const readOnlyHtml = useMemo(() => {
     if (!viewHtml) return "";
-    const vars: Record<string, string> = {};
-    for (const key of usedCustomVars(viewHtml)) {
-      vars[key] = `[${variableDefs[key]?.label?.trim() || key}]`;
+    const firstCase: Record<string, string> = {};
+    for (const m of viewHtml.matchAll(CASE_TAG_RE)) {
+      if (m[2] === "=" && firstCase[m[1]] === undefined) firstCase[m[1]] = m[3];
     }
-    return fillTemplate(viewHtml, vars);
+    const vars: Record<string, string> = {};
+    const raw: Record<string, string | number | null> = {};
+    for (const key of usedCustomVars(viewHtml)) {
+      const def = variableDefs[key];
+      const type: CustomVarType = def?.type ?? "text";
+      if (type === "condition") {
+        vars[key] = "ano";
+        raw[key] = "ano";
+        continue;
+      }
+      vars[key] = `[${def?.label?.trim() || key}]`;
+      if (type === "math") {
+        raw[key] = "";
+        continue;
+      }
+      const literal = def?.default?.kind === "literal" ? def.default.value.trim() : "";
+      const firstOption = type === "list" ? (def?.options ?? []).find((o) => o.trim()) ?? "" : "";
+      raw[key] = literal || firstCase[key] || firstOption || "";
+    }
+    return fillTemplate(viewHtml, vars, raw);
   }, [viewHtml, variableDefs]);
 
   // ── Actions ────────────────────────────────────────────────────────────────
@@ -705,6 +844,23 @@ export default function DokumentyPage() {
     editor?.chain().focus().insertContent(`{{${key}}}`).run();
   }
 
+  /**
+   * Insert a `{{#case}}` switch skeleton at the cursor. The placeholder text
+   * between the tags is deliberate: an empty block would leave two adjacent tags
+   * that are hard to click between, and the author is meant to select the words
+   * and type over them.
+   */
+  function insertCase() {
+    if (!caseDraft || !caseDraft.key) return;
+    const { key, op, value } = caseDraft;
+    editor
+      ?.chain()
+      .focus()
+      .insertContent(`{{#case ${key} ${op} ${value.trim()}}}sem napište text{{/case}}`)
+      .run();
+    setCaseDraft(null);
+  }
+
   // ── Find & replace ─────────────────────────────────────────────────────────
 
   function applySearch(query: string) {
@@ -811,6 +967,9 @@ export default function DokumentyPage() {
       default: LiteralDefault | undefined;
       optional: boolean;
       options: string[] | undefined;
+      formula: string | undefined;
+      decimals: number | undefined;
+      condition: CustomVarCondition | undefined;
     }>
   ) {
     setVariableDefs((prev) => {
@@ -826,16 +985,35 @@ export default function DokumentyPage() {
       const nextType = patch.type ?? prevDef?.type ?? "text";
       const nextOptions =
         "options" in patch ? patch.options : nextType === "list" ? prevDef?.options : undefined;
+      // Same rule, same reason, for the two computed types' configuration: a
+      // formula names slots and produces a number, a condition compares two
+      // operands – neither means anything on a slot that is now a plain text
+      // box, and a resurrected one would be an invisible leftover the author
+      // never re-approved. Keyed on the RESULTING type rather than on
+      // `typeChanged`, so a patch that only edits the label leaves them alone.
+      const nextFormula =
+        "formula" in patch ? patch.formula : nextType === "math" ? prevDef?.formula : undefined;
+      const nextDecimals =
+        "decimals" in patch ? patch.decimals : nextType === "math" ? prevDef?.decimals : undefined;
+      const nextCondition =
+        "condition" in patch
+          ? patch.condition
+          : nextType === "condition" ? prevDef?.condition : undefined;
       return {
         ...prev,
         [key]: {
           label: patch.label ?? prevDef?.label ?? "",
           type: patch.type ?? prevDef?.type ?? "text",
           // Omitted when absent, so we never persist `default: undefined` or a
-          // no-op `optional: false`.
+          // no-op `optional: false`. `decimals` is compared against undefined
+          // rather than tested for truthiness – 0 is both falsy and the most
+          // common answer (whole crowns).
           ...(nextDefault ? { default: nextDefault } : {}),
           ...(nextOptional ? { optional: true } : {}),
           ...(nextOptions && nextOptions.length > 0 ? { options: nextOptions } : {}),
+          ...(nextFormula ? { formula: nextFormula } : {}),
+          ...(nextDecimals !== undefined ? { decimals: nextDecimals } : {}),
+          ...(nextCondition ? { condition: nextCondition } : {}),
         },
       };
     });
@@ -898,9 +1076,243 @@ export default function DokumentyPage() {
     );
   }
 
+  /**
+   * Slots offered as an operand of a condition: everything the author has either
+   * used in the text or configured earlier (an orphaned slot still holds a valid
+   * type), minus the slot being configured, minus the types that cannot be
+   * compared – which is exactly "condition", because comparing a condition
+   * against a condition is a cycle waiting to happen and says nothing that
+   * nesting {{#if}} can't already say.
+   */
+  function operandSlots(selfKey: string): { key: string; label: string }[] {
+    return DOC_VAR_KEYS.filter(
+      (k) =>
+        k !== selfKey &&
+        (usedSlots.includes(k) || variableDefs[k] !== undefined) &&
+        comparableTypeOfCustom(variableDefs[k]?.type ?? "text") !== null
+    ).map((k) => ({
+      key: k,
+      label: variableDefs[k]?.label?.trim() ? `${variableDefs[k].label} (${k})` : k,
+    }));
+  }
+
+  /**
+   * Editor for a "math" slot: the formula plus the precision its result prints
+   * at. The two live readouts underneath are the whole point – a formula is
+   * typed blind (there is no employee record to preview it against), so the
+   * author is told which slots it actually reached and whether it parses at all,
+   * rather than finding out from a blank space in a printed document.
+   */
+  function renderFormulaEditor(key: string) {
+    const def = variableDefs[key];
+    const formula = def?.formula ?? "";
+    const deps = formulaDependencies(formula);
+    // Evaluate with a dummy 1 for every slot the formula names: that isolates
+    // "the expression is malformed" from "the values aren't filled in yet",
+    // which is the only distinction useful at authoring time.
+    const dummy: Record<string, number | null> = {};
+    for (const dep of deps) dummy[dep] = 1;
+    const broken = formula.trim() !== "" && evalMathFormula(formula, dummy) === null;
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          <input
+            type="text"
+            style={{ ...fieldStyle, flex: "1 1 260px", minWidth: 0, fontFamily: "monospace" }}
+            value={formula}
+            maxLength={CUSTOM_VAR_FORMULA_MAX}
+            placeholder="např. var1 * var2"
+            aria-label={`Vzorec proměnné ${def?.label || key}`}
+            onChange={(e) => setDef(key, { formula: e.target.value })}
+          />
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              fontSize: "0.72rem",
+              color: "var(--color-text-muted)",
+              flex: "0 0 auto",
+            }}
+          >
+            Desetinná místa
+            <select
+              style={{ ...fieldStyle, width: "auto" }}
+              value={def?.decimals ?? 0}
+              onChange={(e) => setDef(key, { decimals: Number(e.target.value) })}
+            >
+              {DECIMALS_CHOICES.map((d) => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <span style={{ fontSize: "0.72rem", color: "var(--color-text-muted)" }}>
+          Sčítání, odčítání, násobení, dělení a závorky nad ostatními proměnnými
+          (např. <code>var1 * var2</code>). Desetinnou čárku i tečku lze psát obojí.
+        </span>
+        {deps.length > 0 && (
+          <span style={{ fontSize: "0.72rem", color: "var(--color-text-muted)" }}>
+            Používá:{" "}
+            {deps
+              .map((d) => (variableDefs[d]?.label?.trim() ? `${variableDefs[d].label} (${d})` : d))
+              .join(", ")}
+          </span>
+        )}
+        {broken && (
+          <span style={{ fontSize: "0.72rem", color: "var(--color-danger-text-strong)" }}>
+            ⚠ Vzorec nelze vyhodnotit – zkontrolujte závorky, operátory a dělení nulou.
+            Proměnná se vypíše prázdná.
+          </span>
+        )}
+        {!broken && !formula.trim() && (
+          <span style={{ fontSize: "0.72rem", color: "var(--color-danger-text-strong)" }}>
+            ⚠ Bez vzorce se proměnná vypíše prázdná.
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  /**
+   * Comparison builder for a "condition" slot: left operand, operator, and –
+   * unless the operator is unary – a right operand that is either another slot
+   * or a fixed value.
+   *
+   * Nothing is written until a left operand is chosen. An incomplete condition is
+   * not merely useless, it is unsavable: the server rejects a condition with an
+   * empty `leftKey`, so persisting a half-built one would fail the whole
+   * document's save with an error about a field the author is still filling in.
+   */
+  function renderConditionBuilder(key: string) {
+    const def = variableDefs[key];
+    const c: CustomVarCondition =
+      def?.condition ?? { leftKey: "", op: "eq", right: { kind: "literal", value: "" } };
+    const candidates = operandSlots(key);
+    const leftType = comparableTypeOfCustom(variableDefs[c.leftKey]?.type) ?? "text";
+    const ops = OPS_FOR_COMPARABLE[leftType];
+    const needsRight = !UNARY_OPS.includes(c.op);
+    const write = (next: CustomVarCondition) =>
+      setDef(key, { condition: next.leftKey ? next : undefined });
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          <select
+            style={{ ...fieldStyle, width: "auto", flex: "1 1 150px", minWidth: 0 }}
+            value={c.leftKey}
+            aria-label={`Porovnávaná proměnná pro ${def?.label || key}`}
+            onChange={(e) => {
+              const nextLeft = e.target.value;
+              const nextType = comparableTypeOfCustom(variableDefs[nextLeft]?.type) ?? "text";
+              // The operator list narrows with the operand's type (text can only
+              // test equality), so an operator that no longer applies falls back
+              // to the first one that does instead of silently staying invalid.
+              const nextOps = OPS_FOR_COMPARABLE[nextType];
+              const nextOp = nextOps.includes(c.op) ? c.op : nextOps[0];
+              // A variable right operand that is no longer type-compatible would
+              // compare two different kinds of value; reset it to a blank literal.
+              const rightOk =
+                c.right.kind !== "var" ||
+                comparableTypeOfCustom(variableDefs[c.right.key]?.type) === nextType;
+              write({
+                leftKey: nextLeft,
+                op: nextOp,
+                right: rightOk ? c.right : { kind: "literal", value: "" },
+              });
+            }}
+          >
+            <option value="">– vyberte proměnnou –</option>
+            {candidates.map((o) => (
+              <option key={o.key} value={o.key}>{o.label}</option>
+            ))}
+          </select>
+          <select
+            style={{ ...fieldStyle, width: "auto", flex: "0 0 auto" }}
+            value={c.op}
+            aria-label={`Operátor porovnání pro ${def?.label || key}`}
+            onChange={(e) => write({ ...c, op: e.target.value as CompareOp })}
+          >
+            {ops.map((op) => (
+              <option key={op} value={op}>{COMPARE_OP_LABELS[op]}</option>
+            ))}
+          </select>
+          {needsRight && (
+            <>
+              <select
+                style={{ ...fieldStyle, width: "auto", flex: "0 0 auto" }}
+                value={c.right.kind}
+                aria-label={`Druhá strana porovnání pro ${def?.label || key}`}
+                onChange={(e) => {
+                  if (e.target.value === "var") {
+                    const first = candidates.find(
+                      (o) => comparableTypeOfCustom(variableDefs[o.key]?.type) === leftType
+                    );
+                    write({ ...c, right: { kind: "var", key: first?.key ?? "" } });
+                  } else {
+                    write({ ...c, right: { kind: "literal", value: "" } });
+                  }
+                }}
+              >
+                <option value="literal">Pevná hodnota</option>
+                <option value="var">Proměnná</option>
+              </select>
+              {c.right.kind === "var" ? (
+                <select
+                  style={{ ...fieldStyle, width: "auto", flex: "1 1 150px", minWidth: 0 }}
+                  value={c.right.key}
+                  aria-label={`Porovnávaná druhá proměnná pro ${def?.label || key}`}
+                  onChange={(e) => write({ ...c, right: { kind: "var", key: e.target.value } })}
+                >
+                  <option value="">– vyberte proměnnou –</option>
+                  {candidates
+                    .filter((o) => comparableTypeOfCustom(variableDefs[o.key]?.type) === leftType)
+                    .map((o) => (
+                      <option key={o.key} value={o.key}>{o.label}</option>
+                    ))}
+                </select>
+              ) : (
+                <input
+                  // Typed to match the left operand, so a date comparison gets a
+                  // date picker and a number comparison a numeric field – the
+                  // engine compares raw values, and a hand-typed "1.5.2026"
+                  // would never order against an ISO date.
+                  type={leftType === "date" ? "date" : leftType === "number" ? "number" : "text"}
+                  style={{ ...fieldStyle, width: "auto", flex: "1 1 130px", minWidth: 0 }}
+                  value={c.right.value}
+                  placeholder="Hodnota"
+                  aria-label={`Porovnávaná hodnota pro ${def?.label || key}`}
+                  onChange={(e) => write({ ...c, right: { kind: "literal", value: e.target.value } })}
+                />
+              )}
+            </>
+          )}
+        </div>
+        <span style={{ fontSize: "0.72rem", color: "var(--color-text-muted)" }}>
+          Podmínka se nevyplňuje – vypočítá se z ostatních proměnných. Používá se
+          v textu jako <code>{"{{#if varX}}…{{/if}}"}</code>.
+          {candidates.length === 0 &&
+            " Nejprve nastavte alespoň jednu další proměnnou, kterou lze porovnávat."}
+        </span>
+      </div>
+    );
+  }
+
   /** The literal-default input matching a slot's type. */
   function renderLiteralDefault(key: string, type: DocVarType, value: string) {
     const set = (v: string) => setDef(key, { default: { kind: "literal", value: v } });
+    if (type === "longtext") {
+      // A long free text needs room to see what was typed; a single-line input
+      // would show the tail of a paragraph and hide the rest.
+      return (
+        <textarea
+          style={{ ...fieldStyle, minHeight: 60, resize: "vertical", fontFamily: "inherit" }}
+          value={value}
+          placeholder="Výchozí hodnota"
+          rows={3}
+          onChange={(e) => set(e.target.value)}
+        />
+      );
+    }
     if (type === "list") {
       // The default of a list slot has to BE one of its choices, so this is a
       // select over them rather than a free-text box that could hold a value the
@@ -961,7 +1373,13 @@ export default function DokumentyPage() {
   // Which slots the document actually uses, read from the live editor content –
   // so a slot appears the moment it is inserted and disappears when deleted,
   // with no bookkeeping. Falls back to the loaded HTML for a view-only user.
-  const usedSlots = usedCustomVars(editor?.getHTML() ?? viewHtml);
+  //
+  // requiredCustomVars, not usedCustomVars: a slot named only by a formula or a
+  // condition never appears in the text, yet the generate form asks for it. If
+  // the config table listed only the text's slots, that operand would have no
+  // row to give it a name or a type in – and the "chybí název" warning about it
+  // would point at something the author had no way to fix.
+  const usedSlots = requiredCustomVars(editor?.getHTML() ?? viewHtml, variableDefs);
   const orphanedSlots = Object.keys(variableDefs).filter((k) => !usedSlots.includes(k));
 
   const renderItem = (doc: DocumentMeta, isFirst: boolean) => {
@@ -1754,26 +2172,42 @@ export default function DokumentyPage() {
             <p className={styles.varPanelTitle}>Vlastní proměnné</p>
             <p className={styles.varPanelHint}>Kliknutím vložíte do dokumentu</p>
             <div className={styles.varGroup}>
-              {CUSTOM_VAR_KEYS.map((key) => {
-                const def = variableDefs[key];
-                return (
-                  <button
-                    key={key}
-                    className={styles.varBtn}
-                    onClick={() => insertVariable(key)}
-                    title={`{{${key}}}`}
-                  >
-                    {def?.label ? `${def.label} (${key})` : key}
-                  </button>
-                );
-              })}
-              <button
-                className={styles.varBtn}
-                onClick={() => setCustomVarsOpen(true)}
-                title="Nastavit název a typ použitých vlastních proměnných"
-              >
-                ⚙ Nastavit…
-              </button>
+              {/* The slot list scrolls on its own: 25 rows do not fit the
+                  200px column, and letting them push would put the two action
+                  buttons below off-screen on a short viewport. */}
+              <div className={styles.varList}>
+                {DOC_VAR_KEYS.map((key) => {
+                  const def = variableDefs[key];
+                  return (
+                    <button
+                      key={key}
+                      className={styles.varBtn}
+                      onClick={() => insertVariable(key)}
+                      title={`{{${key}}}`}
+                    >
+                      {def?.label ? `${def.label} (${key})` : key}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className={styles.varActions}>
+                <button
+                  className={styles.varBtn}
+                  onClick={() =>
+                    setCaseDraft({ key: usedSlots[0] ?? DOC_VAR_KEYS[0], op: "=", value: "" })
+                  }
+                  title="Vložit přepínač – část textu, která se vypíše jen pro určitou hodnotu"
+                >
+                  + Přepínač…
+                </button>
+                <button
+                  className={styles.varBtn}
+                  onClick={() => setCustomVarsOpen(true)}
+                  title="Nastavit název a typ použitých vlastních proměnných"
+                >
+                  ⚙ Nastavit…
+                </button>
+              </div>
             </div>
           </aside>
         )}
@@ -1811,6 +2245,22 @@ export default function DokumentyPage() {
                 pak nevypíše nic. Bez zaškrtnutí je vyplnění povinné. Typ Ano/Ne
                 vyplnění nevyžaduje nikdy.
               </p>
+              <p style={hintStyle}>
+                Typy <strong>Výpočet</strong> a <strong>Podmínka</strong> se nevyplňují –
+                spočítají se z ostatních proměnných, proto nemají výchozí hodnotu ani
+                volbu Nepovinná. Výpočet vypíše číslo, podmínka slouží k zobrazení či
+                skrytí části textu zápisem <code>{"{{#if varX}}…{{/if}}"}</code>.
+              </p>
+              <p style={hintStyle}>
+                <strong>Přepínač</strong> vypíše část textu jen pro určitou hodnotu:
+                <code>{"{{#case var1 = Praha}}…{{/case}}"}</code> vypíše text jen tehdy,
+                když je ve var1 hodnota „Praha", zápis
+                <code>{" {{#case var1 != Praha}}…{{/case}}"}</code> naopak pro všechny
+                ostatní hodnoty. Na velikost písmen ani na mezery navíc nezáleží.
+                Přepínač vložíte tlačítkem <strong>+ Přepínač…</strong> v panelu vpravo –
+                u typu Seznam si tam hodnotu vyberete, takže se nemůže přepsat jinak,
+                než jak je nastavená.
+              </p>
 
               {usedSlots.length === 0 ? (
                 <p style={hintStyle}>
@@ -1835,6 +2285,9 @@ export default function DokumentyPage() {
                       {usedSlots.map((key) => {
                         const def = variableDefs[key];
                         const type = (def?.type ?? "text") as DocVarType;
+                        // Výpočet / Podmínka: derived from the other slots, so
+                        // neither "Nepovinná" nor a default means anything.
+                        const computed = type === "math" || type === "condition";
                         // Documents only ever store literal defaults; the
                         // `fixedVar` shape exists in the shared type for
                         // contracts and is never written here.
@@ -1872,9 +2325,11 @@ export default function DokumentyPage() {
                             {/* "Nepovinná" only applies to slots that are typed in
                                 when the document is filled. A bool is a checkbox –
                                 unticked is an answer, not an omission – so it can
-                                never be "missing" and shows a dash instead. */}
+                                never be "missing" and shows a dash instead. The
+                                computed types (Výpočet, Podmínka) are never typed
+                                in at all, so the same dash applies to them. */}
                             <td style={{ padding: "3px 10px 3px 0", textAlign: "center" }}>
-                              {type === "bool" ? (
+                              {type === "bool" || computed ? (
                                 <span style={{ color: "var(--color-text-muted)" }}>–</span>
                               ) : (
                                 <input
@@ -1885,40 +2340,62 @@ export default function DokumentyPage() {
                                 />
                               )}
                             </td>
+                            {/* Likewise no default: pre-filling an input the user
+                                never sees would be a value the slot then ignores. */}
                             <td style={{ padding: "3px 0" }}>
-                              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                <select
-                                  style={{ ...fieldStyle, width: "auto", flex: "0 0 auto" }}
-                                  value={dflt ? "literal" : "none"}
-                                  aria-label={`Výchozí hodnota proměnné ${def?.label || key}`}
-                                  onChange={(e) =>
-                                    setDef(key, {
-                                      default:
-                                        e.target.value === "literal"
-                                          ? { kind: "literal", value: "" }
-                                          : undefined,
-                                    })
-                                  }
-                                >
-                                  <option value="none">Žádná</option>
-                                  <option value="literal">Pevná hodnota</option>
-                                </select>
-                                {dflt && (
-                                  <div style={{ flex: "1 1 auto", minWidth: 0 }}>
-                                    {renderLiteralDefault(key, type, dflt.value)}
-                                  </div>
-                                )}
-                              </div>
+                              {computed ? (
+                                <span style={{ color: "var(--color-text-muted)" }}>–</span>
+                              ) : (
+                                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                  <select
+                                    style={{ ...fieldStyle, width: "auto", flex: "0 0 auto" }}
+                                    value={dflt ? "literal" : "none"}
+                                    aria-label={`Výchozí hodnota proměnné ${def?.label || key}`}
+                                    onChange={(e) =>
+                                      setDef(key, {
+                                        default:
+                                          e.target.value === "literal"
+                                            ? { kind: "literal", value: "" }
+                                            : undefined,
+                                      })
+                                    }
+                                  >
+                                    <option value="none">Žádná</option>
+                                    <option value="literal">Pevná hodnota</option>
+                                  </select>
+                                  {dflt && (
+                                    <div style={{ flex: "1 1 auto", minWidth: 0 }}>
+                                      {renderLiteralDefault(key, type, dflt.value)}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                             </td>
                           </tr>
-                          {/* Choices live on their own row: they are a variable
-                              length list and would blow up the fixed column
-                              widths the other four cells rely on. */}
+                          {/* Choices, a formula and a comparison each live on their
+                              own row: they are variable-width editors and would blow
+                              up the fixed column widths the other four cells rely on. */}
                           {type === "list" && (
                             <tr>
                               <td />
                               <td colSpan={4} style={{ padding: "0 0 10px 0" }}>
                                 {renderOptionsEditor(key)}
+                              </td>
+                            </tr>
+                          )}
+                          {type === "math" && (
+                            <tr>
+                              <td />
+                              <td colSpan={4} style={{ padding: "0 0 10px 0" }}>
+                                {renderFormulaEditor(key)}
+                              </td>
+                            </tr>
+                          )}
+                          {type === "condition" && (
+                            <tr>
+                              <td />
+                              <td colSpan={4} style={{ padding: "0 0 10px 0" }}>
+                                {renderConditionBuilder(key)}
                               </td>
                             </tr>
                           )}
@@ -1949,6 +2426,108 @@ export default function DokumentyPage() {
                 }}
               >
                 Hotovo
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* "+ Přepínač…" – build one {{#case}} tag without retyping the value.
+          A switch matches by text, so a choice typed by hand that differs from
+          the configured one by a single character makes the branch silently
+          never render; for a "list" slot the value is therefore PICKED from the
+          slot's own choices rather than typed. */}
+      {canManage && caseDraft && (
+        <div className={modalStyles.overlay}>
+          <div className={modalStyles.modal} style={{ width: "min(520px, 96vw)" }}>
+            <div className={`${modalStyles.header} ${styles.modalHeader}`}>
+              <h2 className={modalStyles.title}>Vložit přepínač</h2>
+              <IconButton aria-label="Zavřít" onClick={() => setCaseDraft(null)}>
+                ✕
+              </IconButton>
+            </div>
+            <div className={modalStyles.body}>
+              <p style={hintStyle}>
+                Přepínač vypíše vložený text jen pro zvolenou hodnotu proměnné.
+                Do dokumentu se vloží dvojice značek – text mezi nimi přepište.
+              </p>
+              <div style={{ marginBottom: 12 }}>
+                <label style={createLabelStyle}>Proměnná</label>
+                <select
+                  style={createInputStyle}
+                  value={caseDraft.key}
+                  onChange={(e) =>
+                    // The value belongs to the previous slot's choices, so it is
+                    // cleared rather than carried over to a different slot.
+                    setCaseDraft({ ...caseDraft, key: e.target.value, value: "" })
+                  }
+                >
+                  {DOC_VAR_KEYS.map((k) => {
+                    const label = variableDefs[k]?.label?.trim();
+                    return (
+                      <option key={k} value={k}>
+                        {label ? `${label} (${k})` : k}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+              <div style={{ marginBottom: 12 }}>
+                <label style={createLabelStyle}>Platí, když je hodnota</label>
+                <select
+                  style={createInputStyle}
+                  value={caseDraft.op}
+                  onChange={(e) =>
+                    setCaseDraft({ ...caseDraft, op: e.target.value as "=" | "!=" })
+                  }
+                >
+                  <option value="=">rovna (=)</option>
+                  <option value="!=">různá od (≠)</option>
+                </select>
+              </div>
+              <div>
+                <label style={createLabelStyle}>Hodnota</label>
+                {variableDefs[caseDraft.key]?.type === "list" &&
+                (variableDefs[caseDraft.key]?.options ?? []).some((o) => o.trim()) ? (
+                  <select
+                    style={createInputStyle}
+                    value={caseDraft.value}
+                    onChange={(e) => setCaseDraft({ ...caseDraft, value: e.target.value })}
+                  >
+                    <option value="">– vyberte –</option>
+                    {(variableDefs[caseDraft.key]?.options ?? []).map((o, i) => (
+                      <option key={`${o}-${i}`} value={o}>{o}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    style={createInputStyle}
+                    value={caseDraft.value}
+                    maxLength={100}
+                    placeholder="např. Praha"
+                    onChange={(e) => setCaseDraft({ ...caseDraft, value: e.target.value })}
+                  />
+                )}
+                <p style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", margin: "4px 0 0" }}>
+                  {/* A "}" would end the tag early – the engine has no way to tell
+                      where the value stops otherwise – so it is the one character
+                      a switch can never match, and the author is told here. */}
+                  Hodnota nesmí obsahovat znak <code>{"}"}</code>. Na velikosti písmen
+                  ani na mezerách navíc nezáleží.
+                </p>
+              </div>
+            </div>
+            <div className={modalStyles.footer}>
+              <Button variant="secondary" onClick={() => setCaseDraft(null)}>
+                Zrušit
+              </Button>
+              <Button
+                variant="primary"
+                disabled={!caseDraft.value.trim() || caseDraft.value.includes("}")}
+                onClick={insertCase}
+              >
+                Vložit
               </Button>
             </div>
           </div>

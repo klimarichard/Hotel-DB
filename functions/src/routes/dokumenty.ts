@@ -2,9 +2,10 @@
  * Dokumenty — standalone printable document templates.
  *
  * A `documentTemplates/{id}` doc is a TipTap-authored HTML document with up to
- * ten custom variable slots ({{var1}}..{{var10}}). A viewer fills the slots in
- * and prints; the filled document is rendered to PDF by the SAME Puppeteer
- * service the contracts use and streamed straight back to the browser.
+ * twenty-five custom variable slots ({{var1}}..{{var25}}). A viewer fills the
+ * slots in and prints; the filled document is rendered to PDF by the SAME
+ * Puppeteer service the contracts use and streamed straight back to the
+ * browser.
  *
  * NOTHING is persisted from a render: no Storage upload, no Firestore record,
  * no history. That is why `render-pdf` writes no audit entry (matching
@@ -69,20 +70,43 @@ function isValidMargins(m: unknown): m is Margins {
 }
 
 /**
- * Per-template configuration of the ten custom variable slots
- * {{var1}}..{{var10}}. Each slot a template uses gets a display label and a
+ * Per-template configuration of the twenty-five custom variable slots
+ * {{var1}}..{{var25}}. Each slot a template uses gets a display label and a
  * value type here; the same slot means different things in different
  * templates, which is why this lives on the template document.
  *
- * Shape: { var1: { label, type: "text"|"date"|"number"|"bool"|"condition",
- *                  default?, condition?, optional? }, … }
+ * ⚠️ These constants are a hand-maintained mirror of the shared engine in
+ * `frontend/src/lib/contractVariables.ts` (DOCUMENT_VAR_COUNT, CustomVarType,
+ * CUSTOM_VAR_FORMULA_MAX, CUSTOM_VAR_DECIMALS_MAX). Cloud Functions cannot
+ * import from `frontend/src`, so the duplication is deliberate — but the two
+ * must be changed TOGETHER, or the server silently rejects definitions the
+ * editor happily produces. `contractTemplates.ts` keeps a third copy; keep all
+ * three in lockstep (see the note on its CUSTOM_VAR_KEYS about the slot-count
+ * asymmetry, which is the one intended difference).
+ *
+ * Shape: { var1: { label, type: "text"|"longtext"|"date"|"number"|"bool"|
+ *                        "list"|"condition"|"math",
+ *                  default?, condition?, options?, formula?, decimals?,
+ *                  optional? }, … }
  */
-const CUSTOM_VAR_KEYS = new Set(Array.from({ length: 10 }, (_, i) => `var${i + 1}`));
-// No "condition" here, unlike contractTemplates: a condition slot is computed
-// by comparing built-in employee variables, and documents have none. The
-// Dokumenty editor never offers it, so the server refuses it too rather than
-// accepting a type that could only ever have arrived by hand-crafted request.
-const CUSTOM_VAR_TYPES = new Set(["text", "date", "number", "bool", "list"]);
+const CUSTOM_VAR_KEYS = new Set(Array.from({ length: 25 }, (_, i) => `var${i + 1}`));
+// "condition" used to be refused here, unlike contractTemplates, on the
+// grounds that a condition slot is computed by comparing built-in employee
+// variables and a document binds no employee. That reasoning is obsolete: a
+// document condition compares custom slots against each other or against a
+// literal, which needs no employee at all, and the Dokumenty editor now offers
+// the type. `isValidCondition` below was already written for exactly this case
+// (its operands can only be other custom slots), so it needs no change.
+const CUSTOM_VAR_TYPES = new Set([
+  "text",
+  "longtext",
+  "date",
+  "number",
+  "bool",
+  "list",
+  "condition",
+  "math",
+]);
 const COMPARE_OPS = new Set(["lt", "lte", "gt", "gte", "eq", "neq", "empty", "notEmpty"]);
 // Unary operators test the left operand alone — no right operand required.
 const UNARY_COMPARE_OPS = new Set(["empty", "notEmpty"]);
@@ -136,6 +160,37 @@ function isValidCustomOptions(v: unknown): boolean {
   return v.every((o) => typeof o === "string" && o.length <= CUSTOM_VAR_OPTION_MAX);
 }
 
+/**
+ * Arithmetic formula of a "math" slot, e.g. "var1 + var2" or
+ * "(var1 - var2) * 0,21". The real grammar lives in the shared frontend engine
+ * (`tokenizeFormula`); reproducing a parser here would be a second thing to
+ * keep in sync. What the server does instead is a character allowlist — only
+ * identifiers, digits, `+ - * / ( )`, and the two decimal separators. That is
+ * defence in depth: whatever the client sends, nothing that even resembles
+ * code (quotes, brackets, semicolons, backticks, `$`) can ever be persisted,
+ * so a formula string is inert no matter who later evaluates it.
+ */
+const CUSTOM_VAR_FORMULA_MAX = 200;
+const FORMULA_ALLOWED_RE = /^[A-Za-z0-9_+\-*/(),.\s]*$/;
+function isValidCustomFormula(v: unknown): boolean {
+  if (v === undefined) return true;
+  if (typeof v !== "string") return false;
+  if (v.length > CUSTOM_VAR_FORMULA_MAX) return false;
+  return FORMULA_ALLOWED_RE.test(v);
+}
+
+/**
+ * Decimal places a "math" result is rounded to. Bounded rather than free so a
+ * hand-crafted request cannot ask for a formatting width that the renderer
+ * would have to cope with (or a fractional/negative one that `toFixed` throws
+ * on).
+ */
+const CUSTOM_VAR_DECIMALS_MAX = 4;
+function isValidCustomDecimals(v: unknown): boolean {
+  if (v === undefined) return true;
+  return Number.isInteger(v) && (v as number) >= 0 && (v as number) <= CUSTOM_VAR_DECIMALS_MAX;
+}
+
 function isValidVariableDefs(v: unknown): boolean {
   if (!v || typeof v !== "object" || Array.isArray(v)) return false;
   return Object.entries(v as Record<string, unknown>).every(([key, def]) => {
@@ -150,6 +205,8 @@ function isValidVariableDefs(v: unknown): boolean {
       isValidCustomDefault(d.default) &&
       isValidCondition(d.condition) &&
       isValidCustomOptions(d.options) &&
+      isValidCustomFormula(d.formula) &&
+      isValidCustomDecimals(d.decimals) &&
       // "Nepovinná" – absent means required, so only a real boolean is
       // accepted; a truthy string would silently make a slot optional.
       (d.optional === undefined || typeof d.optional === "boolean")
@@ -432,7 +489,7 @@ dokumentyRouter.put(
     if (variableDefs !== undefined && !isValidVariableDefs(variableDefs)) {
       res.status(400).json({
         error:
-          "variableDefs musí být objekt {var1..var10: {label, type, optional?, options?}}, kde type je text|date|number|bool|list, optional je true|false a options je seznam nejvýše 30 textových hodnot.",
+          "variableDefs musí být objekt {var1..var25: {label, type, optional?, options?, formula?, decimals?}}, kde type je text|longtext|date|number|bool|list|condition|math, optional je true|false, options je seznam nejvýše 30 textových hodnot, formula je vzorec do 200 znaků (jen písmena, číslice, _ + - * / ( ) , .) a decimals je celé číslo 0–4.",
       });
       return;
     }
