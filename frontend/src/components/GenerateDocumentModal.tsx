@@ -15,12 +15,14 @@ import {
   resolveComputedVars,
   formatCustomValue,
   findImageOption,
+  customChoiceLabels,
   missingCustomVars,
   fillTemplate,
   type CustomVarDefs,
   type CustomVarImageOption,
   type CustomVarType,
 } from "@/lib/contractVariables";
+import { resolveOwnHotelSection } from "@/lib/documentSections";
 
 interface PageMargins {
   top: number;
@@ -56,7 +58,7 @@ interface Props {
  *    reconcile and no audit entry.
  */
 export default function GenerateDocumentModal({ templateId, onClose }: Props) {
-  const { user } = useAuth();
+  const { user, can, dokumentyDefaultSection } = useAuth();
   const [template, setTemplate] = useState<DocumentTemplate | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -104,19 +106,60 @@ export default function GenerateDocumentModal({ templateId, onClose }: Props) {
     [template, defs]
   );
 
+  /**
+   * The hotel this user belongs to, or null when there is no single answer.
+   * Drives the pre-selection below; see resolveOwnHotelSection for the rules.
+   */
+  const ownHotel = useMemo(
+    () => resolveOwnHotelSection(can, dokumentyDefaultSection),
+    [can, dokumentyDefaultSection]
+  );
+
+  /**
+   * Slots pre-filled with this user's hotel, so the fill-in form can say so.
+   * Kept as state alongside `values` rather than recomputed, because it must
+   * describe how the field was SEEDED — once the user changes the dropdown the
+   * note is no longer true, and a derived version would keep claiming it.
+   */
+  const [hotelSeeded, setHotelSeeded] = useState<Set<string>>(new Set());
+
   // Pre-fill configured defaults exactly once. Guarded by a ref rather than a
   // dependency list because re-running it would overwrite whatever the user has
   // typed since – the same guard GenerateContractModal uses.
   useEffect(() => {
     if (!template || prefilledRef.current) return;
     prefilledRef.current = true;
+    const defsNow = template.variableDefs ?? {};
     const seed: Record<string, string> = {};
-    for (const key of requiredCustomVars(template.htmlContent, template.variableDefs ?? {})) {
-      const dflt = template.variableDefs?.[key]?.default;
+    const seededByHotel = new Set<string>();
+    // Compared trimmed + case-folded rather than by identity: the author types
+    // the choice by hand into the template, so "ambiance " must still match the
+    // section's "Ambiance". This is the same leniency {{#case}} matching uses,
+    // for the same reason.
+    const fold = (s: string) => s.trim().toLocaleLowerCase("cs");
+    const wantHotel = ownHotel ? fold(ownHotel.label) : null;
+
+    for (const key of requiredCustomVars(template.htmlContent, defsNow)) {
+      // The user's own hotel outranks the template's configured default: a
+      // default is one statement for everyone, while this is specific to the
+      // person actually printing. Matching by CHOICE LABEL is also what makes
+      // the rule self-limiting — a slot whose choices are unrelated to hotels
+      // simply has nothing to match, so it is never touched, and a slot that
+      // offers only some of the four only pre-fills for users it covers.
+      if (wantHotel) {
+        const hit = customChoiceLabels(defsNow[key]).find((l) => fold(l) === wantHotel);
+        if (hit) {
+          seed[key] = hit;
+          seededByHotel.add(key);
+          continue;
+        }
+      }
+      const dflt = defsNow[key]?.default;
       if (dflt?.kind === "literal" && dflt.value) seed[key] = dflt.value;
     }
     if (Object.keys(seed).length > 0) setValues(seed);
-  }, [template]);
+    if (seededByHotel.size > 0) setHotelSeeded(seededByHotel);
+  }, [template, ownHotel]);
 
   /**
    * The derived slots ("math", "condition"), recomputed on every keystroke so
@@ -150,6 +193,25 @@ export default function GenerateDocumentModal({ templateId, onClose }: Props) {
 
   function setValue(key: string, raw: string) {
     setValues((prev) => ({ ...prev, [key]: raw }));
+    // The "pre-filled from your section" note describes how the field was
+    // seeded. The moment the user picks something themselves it stops being
+    // true, so it is retired rather than left to contradict the screen.
+    setHotelSeeded((prev) => {
+      if (!prev.has(key)) return prev;
+      const next = new Set(prev);
+      next.delete(key);
+      return next;
+    });
+  }
+
+  /** The note shown under a field this user's own hotel pre-filled. */
+  function hotelHint(key: string) {
+    if (!hotelSeeded.has(key) || !ownHotel) return null;
+    return (
+      <span className={styles.hotelHint}>
+        Předvyplněno podle vaší sekce ({ownHotel.label}). Můžete změnit.
+      </span>
+    );
   }
 
   async function handleGenerate() {
@@ -291,6 +353,7 @@ export default function GenerateDocumentModal({ templateId, onClose }: Props) {
               <option key={`${o.label}-${i}`} value={o.label}>{o.label}</option>
             ))}
           </select>
+          {hotelHint(key)}
           {picked && (
             <div className={styles.imagePreview}>
               <img src={picked.src} alt={picked.label} className={styles.imagePreviewImg} />
@@ -336,6 +399,7 @@ export default function GenerateDocumentModal({ templateId, onClose }: Props) {
               <option key={`${o}-${i}`} value={o}>{o}</option>
             ))}
           </select>
+          {hotelHint(key)}
         </div>
       );
     }

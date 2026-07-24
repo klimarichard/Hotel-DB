@@ -56,3 +56,45 @@ export function documentSectionLabel(id: string | null | undefined): string | nu
   if (!id) return null;
   return DOCUMENT_SECTIONS.find((s) => s.id === id)?.label ?? null;
 }
+
+/**
+ * The four sections that are actual hotels. TEMP is a drafting workspace, not a
+ * property, so it never stands in as "the user's hotel" — a document's
+ * hotel-specific content has no TEMP variant to pick.
+ */
+export const HOTEL_SECTIONS: readonly DocumentSection[] = DOCUMENT_SECTIONS.filter(
+  (s) => s.id !== "temp"
+);
+
+/**
+ * Which hotel this user "belongs to", for pre-selecting a hotel-valued variable
+ * when a document is filled in. Null means "no single answer" — the user is then
+ * asked, which is the only honest outcome.
+ *
+ *  - Sees exactly ONE hotel section → that hotel. Someone who can only reach
+ *    Ankora's documents is not going to print an Ambiance one, so asking them
+ *    every time is pure friction.
+ *  - Sees several → their saved default section, when that default is a hotel.
+ *    A default of TEMP (or none) yields null: it names no hotel, so there is
+ *    nothing to pre-select and guessing would be worse than asking.
+ *  - Sees none → null, same reasoning.
+ *
+ * `dokumenty.manage` short-circuits to seeing every section, exactly as it does
+ * on the server and in the section picker, so an editor falls through to the
+ * default-section branch rather than being pinned to a hotel they merely happen
+ * to be able to edit.
+ *
+ * This is a CONVENIENCE, never an access decision. It only pre-fills a form
+ * field the user can change; it cannot surface a document, a section, or a
+ * choice that the permission gates would otherwise withhold.
+ */
+export function resolveOwnHotelSection(
+  can: (perm: Permission) => boolean,
+  defaultSection: string | null | undefined
+): DocumentSection | null {
+  const visible = can("dokumenty.manage")
+    ? HOTEL_SECTIONS
+    : HOTEL_SECTIONS.filter((sec) => can(sec.viewPerm));
+  if (visible.length === 1) return visible[0];
+  return HOTEL_SECTIONS.find((s) => s.id === defaultSection) ?? null;
+}
