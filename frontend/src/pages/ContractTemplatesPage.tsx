@@ -2399,14 +2399,14 @@ export default function ContractTemplatesPage() {
                 operator, right kind, right value) beside the name/type/optional
                 columns. Below this width they used to wrap onto a second line. */}
             <div
-              className={`${modalStyles.modal} ${styles.varModal}`}
+              className={modalStyles.modal}
               style={{ width: "min(1100px, 96vw)", maxWidth: "96vw" }}
             >
               <div className={modalStyles.header}>
                 <h2 className={modalStyles.title}>Vlastní proměnné</h2>
               </div>
 
-              <div className={`${modalStyles.body} ${styles.varModalBody}`}>
+              <div className={modalStyles.body}>
                 <p style={hintStyle}>
                   Název se zobrazí při vyplňování hodnot během generování dokumentu.
                   Nastavení platí jen pro tuto šablonu – stejná proměnná může mít

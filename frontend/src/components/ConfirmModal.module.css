@@ -8,14 +8,18 @@
   z-index: 1000;
 }
 
+/* `composes` supplies the viewport cap + column layout — see
+   styles/modalShell.module.css. Every consumer of this file (ConfirmModal
+   itself plus the five pages that reuse .overlay/.modal/.header/.body/.footer
+   as a shell) therefore gets the "tall dialog scrolls instead of running off
+   the screen" behaviour for free. */
 .modal {
+  composes: shell from "../styles/modalShell.module.css";
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   width: min(380px, 100vw - 2rem); /* keep a gutter on phones */
   box-shadow: 0 20px 60px var(--shadow-md);
-  display: flex;
-  flex-direction: column;
 }
 
 .header {
@@ -31,6 +35,7 @@
 }
 
 .body {
+  composes: shellBody from "../styles/modalShell.module.css";
   padding: 16px 20px;
   font-size: 0.875rem;
   color: var(--color-text-secondary);

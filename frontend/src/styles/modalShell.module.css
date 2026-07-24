@@ -1,0 +1,50 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   Shared modal-shell behaviour: never taller than the viewport.
+
+   A modal box has no natural height limit, so a dialog whose content outgrows
+   the screen simply hangs off both ends. The overlay is `position: fixed`, so
+   the page behind it cannot scroll either — the lower half of the form AND the
+   footer's action buttons become permanently unreachable. This has bitten a
+   real user, and every bespoke modal in the app re-invents the shell, so the
+   bug is one copy-paste away at all times.
+
+   Compose one of the two shapes below into any new modal instead of writing
+   the height rules by hand:
+
+     .myModal { composes: shell from "../styles/modalShell.module.css"; … }
+     .myBody  { composes: shellBody from "../styles/modalShell.module.css"; … }
+
+   (`composes` must be the first declaration in the rule, and the path is
+   relative to the composing file — CSS Modules resolves it, not Vite's "@"
+   alias.)
+   ───────────────────────────────────────────────────────────────────────── */
+
+/* Preferred shape — for a modal built as header / body / footer.
+   Caps the box and turns it into a column so the body is the only part that
+   gives way; the header and the footer buttons stay pinned and reachable.
+   Pair it with .shellBody on the middle element — without a scrolling body the
+   cap would clip content instead of revealing it. */
+.shell {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 3rem);
+}
+
+/* The scrolling middle section. `overflow-y: auto` is what lets this flex item
+   shrink below its content at all (per spec a flex item's automatic minimum
+   size is zero once its overflow is not `visible`), which is exactly why the
+   header and footer — overflow `visible`, so floored at their own content
+   height — end up pinned. */
+.shellBody {
+  overflow-y: auto;
+}
+
+/* Fallback shape — for a dialog whose title, fields and actions are plain
+   siblings with no body wrapper to scroll. The whole box scrolls, so the
+   buttons travel with the content rather than staying pinned; everything is
+   still reachable, which is the point. Prefer .shell + .shellBody when the
+   markup allows it. */
+.shellScroll {
+  max-height: calc(100vh - 3rem);
+  overflow-y: auto;
+}

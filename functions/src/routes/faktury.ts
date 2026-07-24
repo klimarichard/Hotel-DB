@@ -439,7 +439,7 @@ fakturyRouter.put(
     if (bytes > 900_000) {
       res.status(413).json({
         error:
-          "Nastavení je příliš velké (limit 1 MB). Nejčastější příčinou jsou vložená loga hotelů — zmenšete je a uložte znovu.",
+          "Nastavení je příliš velké (limit 1 MB). Nejčastější příčinou jsou vložená loga hotelů – zmenšete je a uložte znovu.",
       });
       return;
     }

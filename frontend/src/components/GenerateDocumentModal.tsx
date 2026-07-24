@@ -22,7 +22,8 @@ import {
   type CustomVarImageOption,
   type CustomVarType,
 } from "@/lib/contractVariables";
-import { resolveOwnHotelSection } from "@/lib/documentSections";
+import { accessibleHotels, type Hotel } from "@/lib/hotels";
+import type { Permission } from "@/lib/permissions/catalog";
 
 interface PageMargins {
   top: number;
@@ -47,6 +48,39 @@ interface Props {
 }
 
 /**
+ * Which hotel this user "belongs to", for pre-selecting a hotel-valued variable
+ * when a document is filled in. Null means "no single answer" – the user is then
+ * asked, which is the only honest outcome.
+ *
+ *  - Can open exactly ONE hotel in Recepce → that hotel. Someone who only ever
+ *    works Ankora is not going to print an Ambiance document, so asking them
+ *    every time is pure friction.
+ *  - Can open several → their saved Recepce default hotel, when they still hold
+ *    access to it. No saved default yields null: guessing between four would be
+ *    worse than asking.
+ *  - Can open none → null, same reasoning (the `find` below on an empty list).
+ *
+ * This reads the RECEPCE registry rather than a Dokumenty-specific one. Dokumenty
+ * used to keep its own five-value section registry with its own permission keys,
+ * and that is exactly what the public/private flag replaced – but the question
+ * "which hotel is this person at?" outlived it, and Recepce is where the app
+ * already answers it, per hotel, permission-driven.
+ *
+ * This is a CONVENIENCE, never an access decision. It only pre-fills a form field
+ * the user can change; it cannot surface a document, a value, or a choice that
+ * the permission gates would otherwise withhold – which is also why holding no
+ * Recepce permission at all simply means "no pre-fill", not an error.
+ */
+function resolveOwnHotel(
+  can: (perm: Permission) => boolean,
+  defaultHotel: string | null
+): Hotel | null {
+  const visible = accessibleHotels(can);
+  if (visible.length === 1) return visible[0];
+  return visible.find((h) => h.slug === defaultHotel) ?? null;
+}
+
+/**
  * Fill a document template's custom variables and open the rendered PDF in a new
  * tab for printing.
  *
@@ -58,7 +92,7 @@ interface Props {
  *    reconcile and no audit entry.
  */
 export default function GenerateDocumentModal({ templateId, onClose }: Props) {
-  const { user, can, dokumentyDefaultSection } = useAuth();
+  const { user, can, recepceDefaultHotel } = useAuth();
   const [template, setTemplate] = useState<DocumentTemplate | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -108,11 +142,11 @@ export default function GenerateDocumentModal({ templateId, onClose }: Props) {
 
   /**
    * The hotel this user belongs to, or null when there is no single answer.
-   * Drives the pre-selection below; see resolveOwnHotelSection for the rules.
+   * Drives the pre-selection below; see resolveOwnHotel for the rules.
    */
   const ownHotel = useMemo(
-    () => resolveOwnHotelSection(can, dokumentyDefaultSection),
-    [can, dokumentyDefaultSection]
+    () => resolveOwnHotel(can, recepceDefaultHotel),
+    [can, recepceDefaultHotel]
   );
 
   /**
@@ -134,7 +168,7 @@ export default function GenerateDocumentModal({ templateId, onClose }: Props) {
     const seededByHotel = new Set<string>();
     // Compared trimmed + case-folded rather than by identity: the author types
     // the choice by hand into the template, so "ambiance " must still match the
-    // section's "Ambiance". This is the same leniency {{#case}} matching uses,
+    // registry's "Ambiance". This is the same leniency {{#case}} matching uses,
     // for the same reason.
     const fold = (s: string) => s.trim().toLocaleLowerCase("cs");
     const wantHotel = ownHotel ? fold(ownHotel.label) : null;
@@ -193,7 +227,7 @@ export default function GenerateDocumentModal({ templateId, onClose }: Props) {
 
   function setValue(key: string, raw: string) {
     setValues((prev) => ({ ...prev, [key]: raw }));
-    // The "pre-filled from your section" note describes how the field was
+    // The "pre-filled from your hotel" note describes how the field was
     // seeded. The moment the user picks something themselves it stops being
     // true, so it is retired rather than left to contradict the screen.
     setHotelSeeded((prev) => {
@@ -209,7 +243,7 @@ export default function GenerateDocumentModal({ templateId, onClose }: Props) {
     if (!hotelSeeded.has(key) || !ownHotel) return null;
     return (
       <span className={styles.hotelHint}>
-        Předvyplněno podle vaší sekce ({ownHotel.label}). Můžete změnit.
+        Předvyplněno podle vašeho hotelu ({ownHotel.label}). Můžete změnit.
       </span>
     );
   }
