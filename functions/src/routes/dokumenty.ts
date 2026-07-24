@@ -24,10 +24,6 @@ import { requireAuth, AuthRequest } from "../middleware/auth";
 import { requirePermission } from "../auth/permissions";
 import { ctxFromReq, logCreate, logUpdate, logDelete } from "../services/auditLog";
 import { renderPdf, RenderMargins } from "../services/pdfRenderer";
-import {
-  isDocumentSectionId,
-  maySeeDocumentSection,
-} from "../services/documentSections";
 
 export const dokumentyRouter = Router();
 
@@ -43,9 +39,49 @@ function extractVariables(html: string): string[] {
   return Array.from(keys);
 }
 
-/** Section access for THIS request. Thin wrapper so call sites stay readable. */
-function maySeeSection(req: AuthRequest, section: unknown): boolean {
-  return maySeeDocumentSection(req.permissions ?? new Set<string>(), section);
+/**
+ * Whether this request may see a given document at all.
+ *
+ * This replaced the five per-hotel "sections", each with its own permission key.
+ * Sections existed to gate a document per hotel, and the custom-variable work
+ * removed the need: one document now serves all four hotels through a
+ * Seznam/Obrázek slot plus {{#case}} blocks, so there is no per-hotel audience
+ * left to gate. What remains is a single public/private flag.
+ *
+ * ⚠️ `public` is OPTIONAL and ABSENT MEANS PRIVATE — read it as `=== true`,
+ * never for truthiness, and never default it to public. Every document written
+ * before the field existed therefore reads as private the moment this ships,
+ * which is precisely the intended migration ("everything → private") achieved
+ * with ZERO writes to production. Do not add a backfill and do not "tidy" this
+ * into an absent-means-public read.
+ *
+ * Compare `active` on this same collection, where absent means ACTIVE: same
+ * shape, opposite default, both deliberate.
+ *
+ * `dokumenty.manage` short-circuits to seeing everything, exactly as it did for
+ * sections: an editor who could not see a private document could neither fix nor
+ * delete it.
+ *
+ * `system.admin` is checked EXPLICITLY even though the permission resolver
+ * already expands it to the full static permission set (so an admin does hold
+ * `dokumenty.manage` anyway). The explicit check exists so this gate does not
+ * rest on a coincidence of how the resolver happens to expand wildcards — a
+ * resolver change could otherwise silently open or close every private document
+ * for admins. The reasoning is unchanged from the section gate it replaces.
+ */
+function maySeeDocument(req: AuthRequest, data: Record<string, unknown> | undefined): boolean {
+  const perms = req.permissions ?? new Set<string>();
+  if (perms.has("system.admin") || perms.has("dokumenty.manage")) return true;
+  return data?.public === true;
+}
+
+/**
+ * `Veřejný` – validated as a REAL boolean, never coerced, exactly like `active`
+ * on PATCH below. A truthy string ("false", "0", "ano") must not be able to
+ * publish a document to everyone holding `nav.dokumenty.view`.
+ */
+function isValidPublic(v: unknown): boolean {
+  return v === undefined || typeof v === "boolean";
 }
 
 const SLUG_RE = /^[a-z][a-z0-9_]{1,39}$/;
@@ -351,13 +387,15 @@ dokumentyRouter.get(
     const docs = snap.docs
       // Filtered server-side, not just hidden in the UI — the list is the only
       // place a document's existence is disclosed.
-      .filter((d) => maySeeSection(req, d.data().section))
+      .filter((d) => maySeeDocument(req, d.data()))
       .map((d) => {
       const data = d.data();
       return {
         id: d.id,
         name: data.name,
-        section: data.section ?? null,
+        // Absent = PRIVATE (see maySeeDocument). Normalised to a real boolean
+        // here so the client never has to know that, and never sees `undefined`.
+        public: data.public === true,
         // Absent = active. Only an explicit `active:false` marks a template
         // inactive — see PATCH /:id below.
         active: data.active !== false,
@@ -372,18 +410,23 @@ dokumentyRouter.get(
 
 /**
  * POST /api/dokumenty
- * Create an empty document template. Body: { id, name }.
+ * Create an empty document template. Body: { id, name, public? }.
  * `id` must be a snake_case slug not already in use.
+ *
+ * A new document is NOT public unless the author says so — the safe default,
+ * and the one the create dialog's unticked "Veřejný" checkbox sends.
  */
 dokumentyRouter.post(
   "/",
   requireAuth,
   requirePermission("dokumenty.manage"),
   async (req: AuthRequest, res: Response) => {
-    const { id, name, section } = req.body as {
+    // `public` is a reserved word, hence the rename. Typed `unknown` so the
+    // boolean check below is the only thing that can let a value through.
+    const { id, name, public: isPublic } = req.body as {
       id?: string;
       name?: string;
-      section?: unknown;
+      public?: unknown;
     };
     if (!id || !name || !name.trim()) {
       res.status(400).json({ error: "id a name jsou povinné." });
@@ -401,16 +444,18 @@ dokumentyRouter.post(
       res.status(409).json({ error: "Dokument s tímto id již existuje." });
       return;
     }
-    // null (not absent) so the field always exists: "unfiled" is a real state,
-    // and a missing field would be indistinguishable from a doc written before
-    // sections existed.
-    if (section !== undefined && section !== null && section !== "" && !isDocumentSectionId(section)) {
-      res.status(400).json({ error: "Neplatná sekce." });
+    if (!isValidPublic(isPublic)) {
+      res.status(400).json({ error: "public musí být boolean." });
       return;
     }
+    // Written explicitly (even when false) because this is a NEW document: the
+    // author has just answered the question, so "private" here is a decision
+    // rather than the absence of one. Existing documents are never touched —
+    // their missing `public` is what makes them private, and backfilling it
+    // would be a production write for no gain. See maySeeDocument.
     await ref.set({
       name: name.trim(),
-      section: isDocumentSectionId(section) ? section : null,
+      public: isPublic === true,
       htmlContent: "",
       variables: [],
       margins: { top: 15, bottom: 15, left: 15, right: 15 },
@@ -422,19 +467,19 @@ dokumentyRouter.post(
     await logCreate(ctxFromReq(req), {
       collection: COLLECTION,
       resourceId: id,
-      summary: { name: name.trim(), section: isDocumentSectionId(section) ? section : null },
+      summary: { name: name.trim(), public: isPublic === true },
     });
     res.status(201).json({
       id,
       name: name.trim(),
-      section: isDocumentSectionId(section) ? section : null,
+      public: isPublic === true,
     });
   }
 );
 
 /**
  * POST /api/dokumenty/:id/duplicate
- * Copy an existing document under a new id. Body: { id, name, section }.
+ * Copy an existing document under a new id. Body: { id, name, public? }.
  *
  * Server-side rather than a client-orchestrated GET + POST + PUT because those
  * three calls are not atomic: a failure between them leaves an empty document
@@ -445,19 +490,20 @@ dokumentyRouter.post(
  * Deliberately NOT copied:
  *  - `active` — a duplicate always starts active, even if the source was
  *    deactivated; you copy a document in order to use it.
- *  - `section` — taken from the body, not the source. Duplicating is the moment
+ *  - `public` — taken from the body, not the source. Duplicating is the moment
  *    you decide who the copy is for, and silently inheriting the source's
- *    audience is the kind of default that quietly leaks a document.
+ *    audience is the kind of default that quietly publishes a document. The UI
+ *    pre-fills the source's value as a visible, editable suggestion.
  */
 dokumentyRouter.post(
   "/:id/duplicate",
   requireAuth,
   requirePermission("dokumenty.manage"),
   async (req: AuthRequest, res: Response) => {
-    const { id: newId, name, section } = req.body as {
+    const { id: newId, name, public: isPublic } = req.body as {
       id?: string;
       name?: string;
-      section?: unknown;
+      public?: unknown;
     };
     if (!newId || !name || !name.trim()) {
       res.status(400).json({ error: "id a name jsou povinné." });
@@ -469,8 +515,8 @@ dokumentyRouter.post(
       });
       return;
     }
-    if (section !== undefined && section !== null && section !== "" && !isDocumentSectionId(section)) {
-      res.status(400).json({ error: "Neplatná sekce." });
+    if (!isValidPublic(isPublic)) {
+      res.status(400).json({ error: "public musí být boolean." });
       return;
     }
 
@@ -489,7 +535,9 @@ dokumentyRouter.post(
 
     const payload: Record<string, unknown> = {
       name: name.trim(),
-      section: isDocumentSectionId(section) ? section : null,
+      // Same as POST / above: a brand-new document records the answer either
+      // way. Absent would also read as private, but here the author was asked.
+      public: isPublic === true,
       htmlContent: source.htmlContent ?? "",
       variables: source.variables ?? [],
       createdAt: FieldValue.serverTimestamp(),
@@ -509,14 +557,14 @@ dokumentyRouter.post(
       resourceId: newId,
       summary: {
         name: name.trim(),
-        section: isDocumentSectionId(section) ? section : null,
+        public: isPublic === true,
         duplicatedFrom: req.params.id,
       },
     });
     res.status(201).json({
       id: newId,
       name: name.trim(),
-      section: isDocumentSectionId(section) ? section : null,
+      public: isPublic === true,
     });
   }
 );
@@ -536,30 +584,39 @@ dokumentyRouter.get(
       return;
     }
     // 404 rather than 403: a document the caller may not see should not have its
-    // existence confirmed by the status code.
-    if (!maySeeSection(req, doc.data()?.section)) {
+    // existence confirmed by the status code. A private document is therefore
+    // indistinguishable from one that was never created.
+    if (!maySeeDocument(req, doc.data())) {
       res.status(404).json({ error: "Dokument neexistuje." });
       return;
     }
-    res.json({ id: doc.id, ...doc.data() });
+    // `public` normalised the same way the list does, so an old document
+    // (no field at all) arrives at the client as an explicit `false`.
+    //
+    // The spread may still carry a stale `section` string on documents written
+    // before sections were removed. Nothing reads it — on either side — and it
+    // is left in place deliberately: stripping the field from every stored
+    // document would be a bulk production write bought for tidiness alone.
+    res.json({ id: doc.id, ...doc.data(), public: doc.data()?.public === true });
   }
 );
 
 /**
  * PUT /api/dokumenty/:id
- * Upsert a template. Body: { name, htmlContent, margins?, variableDefs? }.
+ * Upsert a template. Body: { name, htmlContent, margins?, variableDefs?,
+ * public? }.
  */
 dokumentyRouter.put(
   "/:id",
   requireAuth,
   requirePermission("dokumenty.manage"),
   async (req: AuthRequest, res: Response) => {
-    const { name, htmlContent, margins, variableDefs, section } = req.body as {
+    const { name, htmlContent, margins, variableDefs, public: isPublic } = req.body as {
       name?: string;
       htmlContent?: string;
       margins?: unknown;
       variableDefs?: unknown;
-      section?: unknown;
+      public?: unknown;
     };
 
     if (!name || htmlContent === undefined) {
@@ -620,14 +677,17 @@ dokumentyRouter.put(
     };
     if (margins !== undefined) payload.margins = margins;
     if (variableDefs !== undefined) payload.variableDefs = variableDefs;
-    // Explicit null clears the section (back to visible-to-everyone); omitting
-    // the field leaves the current one untouched.
-    if (section !== undefined) {
-      if (section !== null && section !== "" && !isDocumentSectionId(section)) {
-        res.status(400).json({ error: "Neplatná sekce." });
+    // Publishing / unpublishing is an audience change in disguise, so it travels
+    // with the same Uložit as the text. Omitting the field leaves the current
+    // value untouched (the write is a merge) — which is what keeps a document
+    // that predates the field private: nothing writes it until an editor
+    // deliberately ticks the box.
+    if (isPublic !== undefined) {
+      if (typeof isPublic !== "boolean") {
+        res.status(400).json({ error: "public musí být boolean." });
         return;
       }
-      payload.section = isDocumentSectionId(section) ? section : null;
+      payload.public = isPublic;
     }
 
     const ref = db().collection(COLLECTION).doc(req.params.id);
@@ -662,12 +722,16 @@ dokumentyRouter.put(
         name: before.name,
         variables: before.variables,
         margins: before.margins,
+        // Normalised, so an old document's missing field logs as `false`
+        // rather than as an empty diff against an explicit `false` after.
+        public: before.public === true,
         htmlContentLength: typeof before.htmlContent === "string" ? before.htmlContent.length : 0,
       },
       after: {
         name,
         variables,
         margins: payload.margins ?? before.margins,
+        public: payload.public !== undefined ? payload.public : before.public === true,
         htmlContentLength: htmlContent.length,
       },
     });

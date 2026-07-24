@@ -840,12 +840,12 @@
   border-color: var(--color-danger);
 }
 
-/* Section badge on a sidebar row. Only rendered for filed documents – an unfiled
-   one shows nothing rather than a "Bez sekce" chip, because unfiled is the
-   default and labelling the default is noise. */
-/* Sits on its own line under the document name (.templateName is display:block).
+/* "Neveřejný" badge on a sidebar row. Only rendered for a PRIVATE document, and
+   only for an editor - everyone else is shown public documents exclusively, so a
+   chip on every row would label the norm and say nothing.
+   Sits on its own line under the document name (.templateName is display:block).
    .templateItem is a plain block, not flex - no align-self here. */
-.sectionBadge {
+.privateBadge {
   display: inline-block;
   margin-top: 3px;
   padding: 1px 6px;
@@ -856,67 +856,44 @@
   border-radius: 8px;
 }
 
-/* Section switcher in the editor header. */
-.sectionPicker {
+/* "Veřejný" checkbox in the editor header, standing exactly where the section
+   picker used to. Text size matches the neighbouring buttons rather than the
+   muted sidebar scale - it is an editable property of the open document, not a
+   caption. */
+.publicToggle {
   display: flex;
   align-items: center;
   gap: 6px;
   font-size: 0.8rem;
   color: var(--color-text-muted);
   white-space: nowrap;
+  cursor: pointer;
 }
 
-.sectionPicker select {
-  padding: 4px 6px;
-  font-size: 0.8rem;
-  font-family: inherit;
-  color: var(--color-text);
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
+.publicToggle input {
+  margin: 0;
+  cursor: pointer;
 }
 
-/* Per-user "Výchozí sekce" picker above the document list.
-   .sidebar has no padding of its own - the horizontal rhythm comes from
-   .templateItem's 14px - so this control has to supply its own, or it sits flush
-   against the header and the sidebar edge. The bottom border separates it from
-   the list it reorders. */
-.defaultPicker {
+/* Same control in the create / duplicate dialog, where it replaced the section
+   <select>. Sized to the dialog's own label scale (createLabelStyle) so it reads
+   as the third field rather than as a footnote under the second. */
+.publicCreateToggle {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--color-border);
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-  white-space: nowrap;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  cursor: pointer;
 }
 
-.defaultPicker select {
-  flex: 1 1 auto;
-  min-width: 0;
-  padding: 3px 6px;
-  font-size: 0.75rem;
-  font-family: inherit;
-  color: var(--color-text);
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
+.publicCreateToggle input {
+  margin: 0;
+  cursor: pointer;
 }
 
-/* Divider between the default section's documents and everything else. Purely a
-   rule - unlike the "Neaktivní" divider it carries no label, because the group
-   above it is already identified by the picker the user just set. */
-.preferredDivider {
-  height: 0;
-  /* 14px inset matches .inactiveDivider and the .templateItem text rhythm. */
-  margin: 8px 14px;
-  padding: 0;
-  border-top: 1px solid var(--color-border);
-  list-style: none;
-}
-
-/* The always-present editor controls (Sekce, Duplikovat, Uložit dokument).
+/* The always-present editor controls (Veřejný, Duplikovat, Uložit dokument).
    margin-left:auto pins them to the right edge so they keep their position when
    the optional warning / save message appear beside them - those render BEFORE
    this group in the DOM, and .varWarn is flex:1, so without this the controls
@@ -929,26 +906,11 @@
   flex-shrink: 0;
 }
 
-/* ── Variable-config dialog sizing ──────────────────────────────────────────
-   ConfirmModal's .modal is a flex column with NO height bound, so a dialog
-   taller than the viewport simply overflowed it: with 25 slots (and a list
-   slot adding a whole options row each), the rows past the fold and the
-   "Hotovo" button in the footer were both unreachable.
-
-   Bounding the modal and scrolling only the BODY keeps the header and the
-   footer button pinned and always reachable, which scrolling the overlay
-   would not. */
-.varModal {
-  max-height: calc(100vh - 4rem);
-}
-
-.varModalBody {
-  overflow-y: auto;
-  /* Required, not defensive: a flex child defaults to min-height:auto, which
-     refuses to shrink below its content height — so max-height on the parent
-     would be ignored and overflow-y would never engage. */
-  min-height: 0;
-}
+/* The variable-config dialog's height cap used to live here. It now comes from
+   `styles/modalShell.module.css`, which ConfirmModal's own .modal/.body
+   compose — so every dialog built on that shell is bounded, not just this one.
+   Keeping a local copy would have meant two max-heights on the same element,
+   with bundle order deciding which won. */
 
 /* ── "Obrázek" variable: the per-choice editor ──────────────────────────────
    One row per picture. The thumbnail and the remove button are fixed-width

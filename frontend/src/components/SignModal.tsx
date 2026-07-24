@@ -74,7 +74,9 @@ export default function SignModal({
           </div>
           <IconButton variant="close" aria-label="Zavřít" onClick={onCancel} />
         </div>
-        <form onSubmit={handleSubmit}>
+        {/* Classed so the modal's height cap can pass through the form to the
+            scrolling body – see .form in SignModal.module.css. */}
+        <form className={styles.form} onSubmit={handleSubmit}>
           <div className={styles.body}>
             {note && <div className={styles.note}>{note}</div>}
             <label className={styles.label}>

@@ -252,15 +252,18 @@
   z-index: 1000;
 }
 
+/* Shared by the payment dialog and the "Typy plateb" catalogue editor. The
+   catalogue grows one row per user-added type and has an "+ Přidat typ" button
+   under the list, so it is the one that actually outgrows the screen – matches
+   what TaxiTab/LobbyBarTab already do for their own ceník editors. */
 .modal {
+  composes: shell from "../../styles/modalShell.module.css";
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   width: 440px;
   max-width: calc(100vw - 2rem);
   box-shadow: 0 20px 60px var(--shadow-md);
-  display: flex;
-  flex-direction: column;
 }
 
 .modalHeader {
@@ -279,6 +282,7 @@
 }
 
 .modalBody {
+  composes: shellBody from "../../styles/modalShell.module.css";
   padding: 16px 20px;
   display: flex;
   flex-direction: column;

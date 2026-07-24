@@ -31,11 +31,6 @@ import IconButton from "@/components/IconButton";
 import ConfirmModal from "@/components/ConfirmModal";
 import modalStyles from "@/components/ConfirmModal.module.css";
 import GenerateDocumentModal from "@/components/GenerateDocumentModal";
-import {
-  DOCUMENT_SECTIONS,
-  documentSectionLabel,
-  type DocumentSectionId,
-} from "@/lib/documentSections";
 import { useAuth } from "@/hooks/useAuth";
 import { api, errorMessage } from "@/lib/api";
 import { formatTimestampCZ } from "@/lib/dateFormat";
@@ -156,10 +151,18 @@ interface DocumentMeta {
   variables?: string[];
   /** Absent = active. `false` = deactivated (sorted last, visually muted). */
   active?: boolean;
-  /** Section the document is filed under; null = visible to everyone with page
-   *  access. Server filters the list by this, so an entry arriving here is one
-   *  the caller is allowed to see. */
-  section?: DocumentSectionId | null;
+  /**
+   * True = visible to everyone holding `nav.dokumenty.view`; false = only to
+   * holders of `dokumenty.manage`.
+   *
+   * ⚠️ Absent means PRIVATE, not public – documents written before the flag
+   * existed carry no field at all, and that is exactly how they stay private
+   * without a single write to the database. The server normalises it to a real
+   * boolean on the way out, so this is only ever undefined on a locally
+   * constructed object. The server also FILTERS the list, so an entry arriving
+   * here is one the caller is allowed to see either way.
+   */
+  public?: boolean;
   updatedAt?: { seconds: number } | null;
 }
 
@@ -330,51 +333,7 @@ const createInputStyle = {
 } as const;
 
 export default function DokumentyPage() {
-  const { can, dokumentyDefaultSection } = useAuth();
-  /**
-   * Local override of the saved default, so the list re-sorts the instant the
-   * user picks one instead of waiting for /auth/me to be refetched.
-   * `undefined` = no local change yet, use the server value.
-   *
-   * Read the server value STRAIGHT from useAuth – never mirrored into state via
-   * an effect. An effect runs after the render that would read it, so the first
-   * render once authLoading clears would sort with a null default and only
-   * settle a frame later: fine on a fresh browser, visibly wrong for every
-   * returning user. Same trap as the Recepce default hotel.
-   */
-  const [pendingDefault, setPendingDefault] = useState<DocumentSectionId | null | undefined>(undefined);
-  const [savingDefault, setSavingDefault] = useState(false);
-  const defaultSection = (pendingDefault !== undefined
-    ? pendingDefault
-    : (dokumentyDefaultSection as DocumentSectionId | null)) ?? null;
-
-  /**
-   * Sections whose documents this user can see. `dokumenty.manage` sees every
-   * section (it short-circuits the server-side gate too), so the picker offers
-   * all four to an editor.
-   */
-  const visibleSections = useMemo(
-    () =>
-      can("dokumenty.manage")
-        ? DOCUMENT_SECTIONS
-        : DOCUMENT_SECTIONS.filter((sec) => can(sec.viewPerm)),
-    [can]
-  );
-
-  /** Persist the default. Failure is silent-but-reverted: a view preference is
-   *  not worth an error dialog, but the UI must not claim it saved. */
-  async function saveDefaultSection(next: DocumentSectionId | null) {
-    const previous = defaultSection;
-    setPendingDefault(next);
-    setSavingDefault(true);
-    try {
-      await api.put("/auth/me/dokumenty-default", { section: next });
-    } catch {
-      setPendingDefault(previous);
-    } finally {
-      setSavingDefault(false);
-    }
-  }
+  const { can } = useAuth();
   // Editing is gated by dokumenty.manage; a view-only user (route permission
   // nav.dokumenty.view) sees the document list plus "Vyplnit a vytisknout" and
   // a read-only rendering – no toolbar, no Save, no create, no variable config.
@@ -414,7 +373,9 @@ export default function DokumentyPage() {
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [createIdDraft, setCreateIdDraft] = useState("");
   const [createNameDraft, setCreateNameDraft] = useState("");
-  const [createSectionDraft, setCreateSectionDraft] = useState<DocumentSectionId | "">("");
+  /** "Veřejný" in the create / duplicate dialog. Starts unticked: a new document
+   *  is private until its author says otherwise. */
+  const [createPublicDraft, setCreatePublicDraft] = useState(false);
   /** Non-null = the create modal is acting as "duplicate this document". */
   const [duplicateSource, setDuplicateSource] = useState<DocumentMeta | null>(null);
   const [createSaving, setCreateSaving] = useState(false);
@@ -675,23 +636,22 @@ export default function DokumentyPage() {
 
   /**
    * Active documents first, deactivated ones last; alphabetical within a group.
-   * When the user has picked a default section, the active group splits again:
-   * that section's documents float to the top, the rest follow after a divider.
-   * With no default (or none of its documents present) `preferred` is empty and
-   * the list reads exactly as it did before.
+   *
+   * There used to be a third group on top – the documents of the user's chosen
+   * default section – which went away with sections themselves. Public and
+   * private documents are deliberately NOT split the same way: the split would
+   * only ever be visible to an editor (nobody else is shown a private document
+   * at all), and it would reorder their list for a distinction they can already
+   * read off the checkbox.
    */
   const sortedDocs = useMemo(() => {
     const activeOf = (d: DocumentMeta) => d.active !== false;
     const byName = (a: DocumentMeta, b: DocumentMeta) => a.name.localeCompare(b.name, "cs");
-    const active = docs.filter(activeOf).sort(byName);
-    const inactive = docs.filter((d) => !activeOf(d)).sort(byName);
-    if (!defaultSection) return { preferred: [], active, inactive };
     return {
-      preferred: active.filter((d) => d.section === defaultSection),
-      active: active.filter((d) => d.section !== defaultSection),
-      inactive,
+      active: docs.filter(activeOf).sort(byName),
+      inactive: docs.filter((d) => !activeOf(d)).sort(byName),
     };
-  }, [docs, defaultSection]);
+  }, [docs]);
 
   /**
    * The read-only rendering: the stored HTML with every custom slot replaced by
@@ -828,8 +788,11 @@ export default function DokumentyPage() {
         htmlContent,
         margins,
         variableDefs,
-        // Explicit null clears it; omitting the key would leave the old section.
-        section: meta?.section ?? null,
+        // Always sent explicitly. Omitting the key would leave the stored value
+        // untouched, and the header checkbox edits it optimistically – so a
+        // freshly unticked box has to travel with this save to mean anything.
+        // `=== true` because a document that predates the flag has none.
+        public: meta?.public === true,
       });
       setSaveMsg("Uloženo");
       setIsDirty(false);
@@ -860,7 +823,11 @@ export default function DokumentyPage() {
     // limit, so a long source id can't produce an id the server would reject.
     setCreateIdDraft(`${doc.id}_kopie`.slice(0, 40));
     setCreateNameDraft(`${doc.name} (kopie)`);
-    setCreateSectionDraft(doc.section ?? "");
+    // The source's audience is a visible, editable SUGGESTION – the server does
+    // not inherit it. Duplicating is the moment the author decides who the copy
+    // is for, and a silently inherited "Veřejný" is how a copy gets published
+    // without anyone deciding to publish it.
+    setCreatePublicDraft(doc.public === true);
     setCreateError(null);
     setDuplicateSource(doc);
     setCreateModalOpen(true);
@@ -873,7 +840,7 @@ export default function DokumentyPage() {
       const body = {
         id: createIdDraft.trim(),
         name: createNameDraft.trim(),
-        section: createSectionDraft || null,
+        public: createPublicDraft,
       };
       const created = duplicateSource
         ? await api.post<{ id: string }>(`/dokumenty/${duplicateSource.id}/duplicate`, body)
@@ -1719,8 +1686,13 @@ export default function DokumentyPage() {
             <span className={styles.dirtyDot} title="Neuložené změny">•</span>
           )}
         </span>
-        {documentSectionLabel(doc.section) && (
-          <span className={styles.sectionBadge}>{documentSectionLabel(doc.section)}</span>
+        {/* Only private documents are badged, and only an editor ever sees one –
+            everyone else is shown public documents exclusively, so a "Veřejný"
+            chip on every row would label the norm and say nothing. */}
+        {doc.public !== true && canManage && (
+          <span className={styles.privateBadge} title="Vidí jen ti, kdo mohou spravovat dokumenty">
+            Neveřejný
+          </span>
         )}
         <div className={styles.templateItemFooter}>
           <span className={styles.templateDate}>{formatTimestampCZ(doc.updatedAt)}</span>
@@ -1775,6 +1747,9 @@ export default function DokumentyPage() {
               onClick={() => {
                 setCreateIdDraft("");
                 setCreateNameDraft("");
+                // Reset explicitly: a previous duplicate may have left it ticked,
+                // and "new document" must always start from private.
+                setCreatePublicDraft(false);
                 setCreateError(null);
                 setCreateModalOpen(true);
               }}
@@ -1809,28 +1784,28 @@ export default function DokumentyPage() {
                 and disappear, and .varWarn is flex:1, so with the group before
                 them the controls slid left whenever a warning showed. */}
             <div className={styles.headerActionsFixed}>
-              {/* Refiling a document is a permission change in disguise – moving it
-                  into a section hides it from everyone without that section's key,
-                  and clearing the section exposes it to everyone with page access.
-                  Saved with the document, so it follows the same Uložit as the text. */}
+              {/* Publishing a document is an audience change in disguise: ticking
+                  this shows it to everyone holding nav.dokumenty.view, unticking
+                  it takes it back to editors only. Saved with the document, so it
+                  follows the same Uložit as the text – hence marking the page
+                  dirty rather than writing straight away. Sits exactly where the
+                  section picker used to. */}
               {selected && (
-                <label className={styles.sectionPicker}>
-                  <span>Sekce</span>
-                  <select
-                    value={docs.find((d) => d.id === selected)?.section ?? ""}
+                <label className={styles.publicToggle}>
+                  <input
+                    type="checkbox"
+                    checked={docs.find((d) => d.id === selected)?.public === true}
                     onChange={(e) => {
-                      const next = (e.target.value || null) as DocumentSectionId | null;
+                      const next = e.target.checked;
                       setDocs((prev) =>
-                        prev.map((d) => (d.id === selected ? { ...d, section: next } : d))
+                        prev.map((d) => (d.id === selected ? { ...d, public: next } : d))
                       );
                       setIsDirty(true);
                     }}
-                  >
-                    <option value="">Bez sekce</option>
-                    {DOCUMENT_SECTIONS.map((sec) => (
-                      <option key={sec.id} value={sec.id}>{sec.label}</option>
-                    ))}
-                  </select>
+                  />
+                  <span title="Veřejný dokument uvidí každý, kdo má přístup do Dokumentů. Neveřejný jen ti, kdo mohou dokumenty spravovat.">
+                    Veřejný
+                  </span>
                 </label>
               )}
               {selected && (
@@ -1864,26 +1839,6 @@ export default function DokumentyPage() {
       <div className={`${styles.workspace} ${canManage ? "" : styles.workspaceView}`}>
         {/* Left: document list */}
         <aside className={styles.sidebar}>
-          {/* Only offered when there is something to choose between. With one
-              visible section (or none) a default would reorder nothing. */}
-          {visibleSections.length > 1 && (
-            <label className={styles.defaultPicker}>
-              <span>Výchozí sekce</span>
-              <select
-                value={defaultSection ?? ""}
-                disabled={savingDefault}
-                title="Dokumenty z této sekce se zobrazí na začátku seznamu."
-                onChange={(e) =>
-                  saveDefaultSection((e.target.value || null) as DocumentSectionId | null)
-                }
-              >
-                <option value="">Žádná</option>
-                {visibleSections.map((sec) => (
-                  <option key={sec.id} value={sec.id}>{sec.label}</option>
-                ))}
-              </select>
-            </label>
-          )}
           {loading ? (
             <p className={styles.loadingText}>Načítám…</p>
           ) : docs.length === 0 ? (
@@ -1893,25 +1848,16 @@ export default function DokumentyPage() {
             </p>
           ) : (
             <ul className={styles.templateList}>
-              {/* Default-section documents, then a divider. The tour anchor rides
-                  the very first row on screen, wherever that ends up. */}
-              {sortedDocs.preferred.map((d, i) => renderItem(d, i === 0))}
-              {sortedDocs.preferred.length > 0 && sortedDocs.active.length > 0 && (
-                <li key="__preferred_sep__" className={styles.preferredDivider} aria-hidden="true" />
-              )}
-              {sortedDocs.active.map((d, i) =>
-                renderItem(d, sortedDocs.preferred.length === 0 && i === 0)
-              )}
+              {/* The tour anchor rides the very first row on screen, wherever
+                  that ends up. */}
+              {sortedDocs.active.map((d, i) => renderItem(d, i === 0))}
               {sortedDocs.inactive.length > 0 && (
                 <li key="__inactive_sep__" className={styles.inactiveDivider}>
                   Neaktivní
                 </li>
               )}
               {sortedDocs.inactive.map((d, i) =>
-                renderItem(
-                  d,
-                  sortedDocs.preferred.length === 0 && sortedDocs.active.length === 0 && i === 0
-                )
+                renderItem(d, sortedDocs.active.length === 0 && i === 0)
               )}
             </ul>
           )}
@@ -2538,7 +2484,7 @@ export default function DokumentyPage() {
       {canManage && customVarsOpen && (
         <div className={modalStyles.overlay}>
           <div
-            className={`${modalStyles.modal} ${styles.varModal}`}
+            className={modalStyles.modal}
             style={{ width: "min(920px, 96vw)", maxWidth: "96vw" }}
           >
             <div className={`${modalStyles.header} ${styles.modalHeader}`}>
@@ -2554,7 +2500,7 @@ export default function DokumentyPage() {
               </IconButton>
             </div>
 
-            <div className={`${modalStyles.body} ${styles.varModalBody}`}>
+            <div className={modalStyles.body}>
               <p style={hintStyle}>
                 Název se zobrazí při vyplňování hodnot. Nastavení platí jen pro tento
                 dokument – stejná proměnná může mít v jiném dokumentu jiný význam.
@@ -2914,8 +2860,8 @@ export default function DokumentyPage() {
               {duplicateSource && (
                 <p style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)", margin: "0 0 14px" }}>
                   Zkopíruje se obsah dokumentu „{duplicateSource.name}" včetně nastavení
-                  vlastních proměnných a okrajů stránky. Zadejte id, název a sekci nového
-                  dokumentu.
+                  vlastních proměnných a okrajů stránky. Zadejte id a název nového
+                  dokumentu a zvolte, zda má být veřejný.
                   {selected === duplicateSource.id && isDirty && (
                     <>
                       {" "}
@@ -2950,20 +2896,19 @@ export default function DokumentyPage() {
                 />
               </div>
               <div>
-                <label style={createLabelStyle}>Sekce</label>
-                <select
-                  value={createSectionDraft}
-                  onChange={(e) => setCreateSectionDraft(e.target.value as DocumentSectionId | "")}
-                  style={createInputStyle}
-                >
-                  <option value="">Bez sekce – pro všechny</option>
-                  {DOCUMENT_SECTIONS.map((sec) => (
-                    <option key={sec.id} value={sec.id}>{sec.label}</option>
-                  ))}
-                </select>
+                {/* Same place the section picker stood, and unticked by default:
+                    a new document is private until someone decides otherwise. */}
+                <label className={styles.publicCreateToggle}>
+                  <input
+                    type="checkbox"
+                    checked={createPublicDraft}
+                    onChange={(e) => setCreatePublicDraft(e.target.checked)}
+                  />
+                  <span>Veřejný</span>
+                </label>
                 <p style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", margin: "4px 0 0" }}>
-                  Dokument v sekci uvidí jen ti, kdo mají oprávnění pro danou sekci.
-                  Bez sekce jej uvidí každý, kdo má přístup do Dokumentů.
+                  Veřejný dokument uvidí každý, kdo má přístup do Dokumentů.
+                  Neveřejný uvidí jen ti, kdo mohou dokumenty spravovat.
                 </p>
               </div>
               {createError && (

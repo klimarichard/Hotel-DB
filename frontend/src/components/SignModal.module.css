@@ -9,13 +9,29 @@
   padding: 1rem;
 }
 
+/* `overflow: hidden` stays — it clips the header/footer rules to the rounded
+   corners. On its own it was actively harmful though: with no height cap the
+   dialog just ran off the screen, and adding a cap without a scrolling body
+   would have hidden the buttons with no scrollbar at all. The cap comes from
+   .shell, and .body below is the part that scrolls. */
 .modal {
+  composes: shell from "../styles/modalShell.module.css";
   background: var(--color-surface);
   border-radius: 8px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
   width: 100%;
   max-width: 26rem;
   overflow: hidden;
+}
+
+/* The <form> sits between .modal and the body/footer pair, so the cap has to be
+   handed down through it: as a plain block it would size to its content and the
+   body's max-height would never bind. Column flex makes .body a flex item that
+   can shrink; `min-height: 0` keeps the form itself shrinkable inside .modal. */
+.form {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .header {
@@ -41,6 +57,7 @@
 }
 
 .body {
+  composes: shellBody from "../styles/modalShell.module.css";
   padding: 1.25rem;
   display: flex;
   flex-direction: column;

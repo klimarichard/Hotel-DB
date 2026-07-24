@@ -1090,15 +1090,16 @@
   z-index: 1000;
 }
 
+/* Around 600–750px tall for a user with sm.manage, so it clips on a short
+   laptop or a phone held sideways even though it is fine at 800px. */
 .smModal {
+  composes: shell from "../../styles/modalShell.module.css";
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   width: 420px;
   max-width: calc(100vw - 2rem);
   box-shadow: 0 20px 60px var(--shadow-md);
-  display: flex;
-  flex-direction: column;
 }
 
 .modalHeader {
@@ -1117,6 +1118,7 @@
 }
 
 .modalBody {
+  composes: shellBody from "../../styles/modalShell.module.css";
   padding: 16px 20px;
   display: flex;
   flex-direction: column;

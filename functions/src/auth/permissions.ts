@@ -221,16 +221,12 @@ export const PERMISSION_CATALOG = [
     // the unrelated per-employee "Další dokumenty" file uploads.
     group: "Dokumenty",
     items: [
+      // Also the key that sees PRIVATE documents. There were five per-hotel
+      // section keys here until sections were dropped: one document now serves
+      // all four hotels through a Seznam/Obrázek slot, so the only audience
+      // question left is public (everyone with nav.dokumenty.view) vs private
+      // (editors only), and that is a flag on the document, not a permission.
       { key: "dokumenty.manage", label: "Spravovat dokumenty" },
-      // Section keys. A document filed under a section is visible only to
-      // holders of that key (plus dokumenty.manage); a document with no section
-      // is visible to anyone with nav.dokumenty.view. Stems mirror the Recepce
-      // hotel keys but are independent of them.
-      { key: "dokumenty.ambiance.view", label: "Sekce Ambiance" },
-      { key: "dokumenty.superior.view", label: "Sekce Superior" },
-      { key: "dokumenty.amigo.view", label: "Sekce Amigo & Alqush" },
-      { key: "dokumenty.ankora.view", label: "Sekce Ankora" },
-      { key: "dokumenty.temp.view", label: "Sekce TEMP" },
     ],
   },
   {
