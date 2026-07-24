@@ -10,7 +10,9 @@ import { openPdfBlob } from "@/lib/pdfMerge";
 // reasons, but the parts imported here (slot discovery, formatting, missing-value
 // detection, {{#if}} substitution) have no employee or contract coupling at all.
 import {
-  usedCustomVars,
+  requiredCustomVars,
+  isComputedVarType,
+  resolveComputedVars,
   formatCustomValue,
   missingCustomVars,
   fillTemplate,
@@ -81,12 +83,24 @@ export default function GenerateDocumentModal({ templateId, onClose }: Props) {
     return () => { cancelled = true; };
   }, [templateId]);
 
-  // Slots the document actually uses, in {{var1}}..{{var10}} order.
+  // Memoised so `defs` keeps a stable identity across renders – the computed
+  // resolution below depends on it, and a fresh `{}` every render would rerun it
+  // on every keystroke anywhere in the form.
+  const defs: CustomVarDefs = useMemo(() => template?.variableDefs ?? {}, [template]);
+
+  /**
+   * Slots the form has to deal with, in {{var1}}..{{var25}} order.
+   *
+   * requiredCustomVars, NOT usedCustomVars: a "math" slot's operands may never
+   * appear in the document text – {{var3}} = var1 * var2 with only {{var3}}
+   * printed is the ordinary shape of a total – so scanning the text alone gave
+   * those operands no field, left them empty, and printed a blank where the
+   * total should be, with nothing anywhere explaining why.
+   */
   const slots = useMemo(
-    () => (template ? usedCustomVars(template.htmlContent) : []),
-    [template]
+    () => (template ? requiredCustomVars(template.htmlContent, defs) : []),
+    [template, defs]
   );
-  const defs = template?.variableDefs ?? {};
 
   // Pre-fill configured defaults exactly once. Guarded by a ref rather than a
   // dependency list because re-running it would overwrite whatever the user has
@@ -95,12 +109,23 @@ export default function GenerateDocumentModal({ templateId, onClose }: Props) {
     if (!template || prefilledRef.current) return;
     prefilledRef.current = true;
     const seed: Record<string, string> = {};
-    for (const key of usedCustomVars(template.htmlContent)) {
+    for (const key of requiredCustomVars(template.htmlContent, template.variableDefs ?? {})) {
       const dflt = template.variableDefs?.[key]?.default;
       if (dflt?.kind === "literal" && dflt.value) seed[key] = dflt.value;
     }
     if (Object.keys(seed).length > 0) setValues(seed);
   }, [template]);
+
+  /**
+   * The derived slots ("math", "condition"), recomputed on every keystroke so
+   * the read-only rows below update live. This is the feature's whole feedback
+   * loop: a total that only appears on the printed PDF is a total nobody can
+   * check before printing it.
+   */
+  const resolved = useMemo(
+    () => resolveComputedVars(slots, defs, values),
+    [slots, defs, values]
+  );
 
   const missing = template ? missingCustomVars(template.htmlContent, defs, values) : [];
 
@@ -120,9 +145,18 @@ export default function GenerateDocumentModal({ templateId, onClose }: Props) {
       const vars: Record<string, string> = {};
       for (const key of slots) {
         const type: CustomVarType = defs[key]?.type ?? "text";
+        // A computed slot has no typed-in value to format; its printed form
+        // comes from the resolution merged in below.
+        if (isComputedVarType(type)) continue;
         vars[key] = formatCustomValue(type, values[key] ?? "");
       }
-      const filled = fillTemplate(template.htmlContent, vars);
+      Object.assign(vars, resolved.formatted);
+      // The raw map is the third argument on purpose: {{#case}} matches against
+      // raw values, not printed ones. A number prints with thousands separators
+      // ("1 500") that its raw form doesn't have ("1500"), so matching the
+      // printed strings would make a numeric switch fail for a reason invisible
+      // both here and in the editor.
+      const filled = fillTemplate(template.htmlContent, vars, resolved.raw);
       const margins = template.margins ?? DEFAULT_MARGINS;
 
       const token = await user.getIdToken();
@@ -155,6 +189,30 @@ export default function GenerateDocumentModal({ templateId, onClose }: Props) {
     const label = def?.label?.trim() || `{{${key}}}`;
     const raw = values[key] ?? "";
     const isMissing = triedGenerate && missing.includes(key);
+
+    /**
+     * A computed slot ("Výpočet" / "Podmínka") gets no input – it is derived
+     * from the others – but it is NOT hidden either. Showing the live result
+     * here is what lets the user check a total before printing it, which is the
+     * only chance they get: the PDF opens in a new tab and nothing is stored, so
+     * a wrong number is discovered by whoever the document is handed to.
+     */
+    if (isComputedVarType(type)) {
+      // A condition is a yes/no, and printing its raw "ano" / "" would show a
+      // blank for "no" – indistinguishable from "not computed yet".
+      const value =
+        type === "condition"
+          ? (resolved.raw[key] ? "Ano" : "Ne")
+          : resolved.formatted[key] ?? "";
+      return (
+        <div key={key} className={styles.computedRow}>
+          <span className={styles.computedLabel}>{label}</span>
+          <span className={value ? styles.computedValue : styles.computedEmpty}>
+            {value || "– doplňte hodnoty výše –"}
+          </span>
+        </div>
+      );
+    }
 
     if (type === "bool") {
       return (
@@ -215,13 +273,30 @@ export default function GenerateDocumentModal({ templateId, onClose }: Props) {
           {label}
           {def?.optional && <span className={styles.optional}> (nepovinné)</span>}
         </label>
-        <input
-          id={`docvar-${key}`}
-          type={type === "date" ? "date" : type === "number" ? "number" : "text"}
-          className={isMissing ? `${styles.input} ${styles.inputMissing}` : styles.input}
-          value={raw}
-          onChange={(e) => setValue(key, e.target.value)}
-        />
+        {type === "longtext" ? (
+          // A paragraph of prose in a one-line box is unreviewable, and the line
+          // breaks the author types here become <br> in the printed document –
+          // so they have to be visible while typing.
+          <textarea
+            id={`docvar-${key}`}
+            rows={5}
+            className={
+              isMissing
+                ? `${styles.input} ${styles.textarea} ${styles.inputMissing}`
+                : `${styles.input} ${styles.textarea}`
+            }
+            value={raw}
+            onChange={(e) => setValue(key, e.target.value)}
+          />
+        ) : (
+          <input
+            id={`docvar-${key}`}
+            type={type === "date" ? "date" : type === "number" ? "number" : "text"}
+            className={isMissing ? `${styles.input} ${styles.inputMissing}` : styles.input}
+            value={raw}
+            onChange={(e) => setValue(key, e.target.value)}
+          />
+        )}
       </div>
     );
   }

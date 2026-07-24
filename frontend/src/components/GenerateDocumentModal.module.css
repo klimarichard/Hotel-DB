@@ -46,6 +46,50 @@
   border-color: var(--color-danger);
 }
 
+/* "Dlouhý text" – vertical resize only, so dragging it can't break the modal's
+   width. min-height covers ~4 rows even if the browser ignores the rows attr. */
+.textarea {
+  min-height: 90px;
+  resize: vertical;
+  line-height: 1.4;
+}
+
+/*
+ * A computed slot (Výpočet / Podmínka): a read-only readout, not a field. Styled
+ * as a distinctly non-editable row – flat background, no border on the value –
+ * so nobody tries to type into the total.
+ */
+.computedRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  border-radius: 4px;
+  background: var(--color-bg);
+  border: 1px dashed var(--color-border);
+}
+
+.computedLabel {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.computedValue {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--color-text);
+}
+
+.computedEmpty {
+  font-size: 0.8rem;
+  text-align: right;
+  color: var(--color-text-muted);
+}
+
 .boolRow {
   display: flex;
   align-items: center;
