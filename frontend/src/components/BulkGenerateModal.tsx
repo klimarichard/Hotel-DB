@@ -630,7 +630,15 @@ export default function BulkGenerateModal({ employees, onClose }: Props) {
                             ) : (
                               <input
                                 className={styles.input}
-                                type={type === "date" ? "date" : type === "number" ? "number" : "text"}
+                                type={
+                                  type === "date"
+                                    ? "date"
+                                    : type === "time"
+                                      ? "time"
+                                      : type === "number"
+                                        ? "number"
+                                        : "text"
+                                }
                                 value={raw}
                                 onChange={(ev) => setRaw(ev.target.value)}
                               />

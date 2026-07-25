@@ -462,7 +462,15 @@ export default function GenerateDocumentModal({ templateId, onClose }: Props) {
         ) : (
           <input
             id={`docvar-${key}`}
-            type={type === "date" ? "date" : type === "number" ? "number" : "text"}
+            type={
+              type === "date"
+                ? "date"
+                : type === "time"
+                  ? "time"
+                  : type === "number"
+                    ? "number"
+                    : "text"
+            }
             className={isMissing ? `${styles.input} ${styles.inputMissing}` : styles.input}
             value={raw}
             onChange={(e) => setValue(key, e.target.value)}
