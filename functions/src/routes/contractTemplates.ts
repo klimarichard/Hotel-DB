@@ -189,10 +189,10 @@ function isValidMargins(m: unknown): m is Margins {
  * editor happily produces. `dokumenty.ts` keeps a third copy; keep all three in
  * lockstep, the slot count below being the one intended difference.
  *
- * Shape: { var1: { label: string, type: "text"|"longtext"|"date"|"number"|
- *                        "bool"|"list"|"condition"|"math"|"image",
+ * Shape: { var1: { label: string, type: "text"|"longtext"|"date"|"time"|
+ *                        "number"|"bool"|"list"|"condition"|"math"|"image",
  *                  default?, condition?, options?, images?, formula?,
- *                  decimals?, optional? }, … }
+ *                  decimals?, fontSize?, lineHeight?, optional? }, … }
  *
  * where images (only meaningful on an "image" slot) is
  *   [{ label: string, src: "data:image/…;base64,…", width?: "25%"|"50%"|"75%"|
@@ -211,6 +211,9 @@ const CUSTOM_VAR_TYPES = new Set([
   "text",
   "longtext",
   "date",
+  // "Čas" — an <input type="time"> value ("HH:MM"), printed verbatim. Needs no
+  // extra per-slot config, so it only has to be an accepted type here.
+  "time",
   "number",
   "bool",
   "list",
@@ -386,6 +389,30 @@ function isValidCustomDecimals(v: unknown): boolean {
   return Number.isInteger(v) && (v as number) >= 0 && (v as number) <= CUSTOM_VAR_DECIMALS_MAX;
 }
 
+/**
+ * Optional typography of a "longtext" slot: the font size and line spacing the
+ * substituted prose prints at. Both are echoed into an inline `style="…"` that
+ * Puppeteer renders, so — like the image width/align presets — they are gated
+ * against a CLOSED set rather than length-checked: a value the renderer has
+ * never been checked against must never be persisted, and a strict membership
+ * test is also what makes an attribute breakout impossible. The sets mirror
+ * CUSTOM_VAR_LONGTEXT_FONT_SIZES / CUSTOM_VAR_LONGTEXT_LINE_HEIGHTS in the shared
+ * frontend engine.
+ */
+const CUSTOM_VAR_LONGTEXT_FONT_SIZES = new Set([
+  "8pt", "9pt", "10pt", "11pt", "12pt", "14pt", "16pt", "18pt",
+  "20pt", "22pt", "24pt", "28pt", "32pt", "36pt", "48pt", "72pt",
+]);
+const CUSTOM_VAR_LONGTEXT_LINE_HEIGHTS = new Set(["1", "1.15", "1.5", "2", "3"]);
+function isValidCustomFontSize(v: unknown): boolean {
+  if (v === undefined) return true;
+  return typeof v === "string" && CUSTOM_VAR_LONGTEXT_FONT_SIZES.has(v);
+}
+function isValidCustomLineHeight(v: unknown): boolean {
+  if (v === undefined) return true;
+  return typeof v === "string" && CUSTOM_VAR_LONGTEXT_LINE_HEIGHTS.has(v);
+}
+
 function isValidVariableDefs(v: unknown): boolean {
   if (!v || typeof v !== "object" || Array.isArray(v)) return false;
   return Object.entries(v as Record<string, unknown>).every(([key, def]) => {
@@ -403,6 +430,8 @@ function isValidVariableDefs(v: unknown): boolean {
       isValidCustomImages(d.images) &&
       isValidCustomFormula(d.formula) &&
       isValidCustomDecimals(d.decimals) &&
+      isValidCustomFontSize(d.fontSize) &&
+      isValidCustomLineHeight(d.lineHeight) &&
       // "Nepovinná" – absent means required, so only a real boolean is
       // accepted; a truthy string would silently make a slot optional.
       (d.optional === undefined || typeof d.optional === "boolean")

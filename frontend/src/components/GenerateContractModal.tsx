@@ -646,9 +646,11 @@ export default function GenerateContractModal({
                                             ? "text"
                                             : type === "date"
                                               ? "date"
-                                              : type === "number"
-                                                ? "number"
-                                                : "text"
+                                              : type === "time"
+                                                ? "time"
+                                                : type === "number"
+                                                  ? "number"
+                                                  : "text"
                                         }
                                         className={styles.varInput}
                                         value={raw}

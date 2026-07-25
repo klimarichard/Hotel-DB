@@ -52,6 +52,8 @@ import {
   CUSTOM_VAR_IMAGE_ALIGN_LABELS,
   CUSTOM_VAR_FORMULA_MAX,
   CUSTOM_VAR_DECIMALS_MAX,
+  CUSTOM_VAR_LONGTEXT_FONT_SIZES,
+  CUSTOM_VAR_LONGTEXT_LINE_HEIGHTS,
   COMPARE_OP_LABELS,
   UNARY_OPS,
   OPS_FOR_COMPARABLE,
@@ -101,6 +103,7 @@ const DOC_VAR_TYPES = [
   "text",
   "longtext",
   "date",
+  "time",
   "number",
   "bool",
   "list",
@@ -1033,6 +1036,8 @@ export default function DokumentyPage() {
       formula: string | undefined;
       decimals: number | undefined;
       condition: CustomVarCondition | undefined;
+      fontSize: string | undefined;
+      lineHeight: string | undefined;
     }>
   ) {
     setVariableDefs((prev) => {
@@ -1068,6 +1073,12 @@ export default function DokumentyPage() {
         "condition" in patch
           ? patch.condition
           : nextType === "condition" ? prevDef?.condition : undefined;
+      // Typography belongs to a "longtext" slot only, and is dropped when the
+      // slot becomes anything else — same rule as the choices/formula above.
+      const nextFontSize =
+        "fontSize" in patch ? patch.fontSize : nextType === "longtext" ? prevDef?.fontSize : undefined;
+      const nextLineHeight =
+        "lineHeight" in patch ? patch.lineHeight : nextType === "longtext" ? prevDef?.lineHeight : undefined;
       return {
         ...prev,
         [key]: {
@@ -1084,6 +1095,8 @@ export default function DokumentyPage() {
           ...(nextFormula ? { formula: nextFormula } : {}),
           ...(nextDecimals !== undefined ? { decimals: nextDecimals } : {}),
           ...(nextCondition ? { condition: nextCondition } : {}),
+          ...(nextFontSize ? { fontSize: nextFontSize } : {}),
+          ...(nextLineHeight ? { lineHeight: nextLineHeight } : {}),
         },
       };
     });
@@ -1625,12 +1638,69 @@ export default function DokumentyPage() {
     }
     return (
       <input
-        type={type === "date" ? "date" : type === "number" ? "number" : "text"}
+        type={
+          type === "date"
+            ? "date"
+            : type === "time"
+              ? "time"
+              : type === "number"
+                ? "number"
+                : "text"
+        }
         style={fieldStyle}
         value={value}
         placeholder="Výchozí hodnota"
         onChange={(e) => set(e.target.value)}
       />
+    );
+  }
+
+  /**
+   * Typography row for a "longtext" slot: the font size and line spacing the
+   * substituted prose prints at, chosen HERE (at configuration) rather than at
+   * generation — the fill-in dialog offers only a plain textarea. Both optional;
+   * "Výchozí" clears them back to the template's own styling. The option sets
+   * mirror the editor toolbar's own.
+   */
+  function renderLongtextStyle(key: string) {
+    const def = variableDefs[key];
+    const labelStyle = {
+      display: "flex",
+      alignItems: "center",
+      gap: 4,
+      fontSize: "0.72rem",
+      color: "var(--color-text-muted)",
+      whiteSpace: "nowrap",
+    } as const;
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <label style={labelStyle}>
+          Velikost písma
+          <select
+            style={{ ...fieldStyle, width: "auto" }}
+            value={def?.fontSize ?? ""}
+            onChange={(e) => setDef(key, { fontSize: e.target.value || undefined })}
+          >
+            <option value="">Výchozí</option>
+            {CUSTOM_VAR_LONGTEXT_FONT_SIZES.map((s) => (
+              <option key={s} value={s}>{s.replace("pt", "")}</option>
+            ))}
+          </select>
+        </label>
+        <label style={labelStyle}>
+          Řádkování
+          <select
+            style={{ ...fieldStyle, width: "auto" }}
+            value={def?.lineHeight ?? ""}
+            onChange={(e) => setDef(key, { lineHeight: e.target.value || undefined })}
+          >
+            <option value="">Výchozí</option>
+            {CUSTOM_VAR_LONGTEXT_LINE_HEIGHTS.map((h) => (
+              <option key={h} value={h}>{h.replace(".", ",")}</option>
+            ))}
+          </select>
+        </label>
+      </div>
     );
   }
 
@@ -2703,6 +2773,17 @@ export default function DokumentyPage() {
                               <td />
                               <td colSpan={4} style={{ padding: "0 0 10px 0" }}>
                                 {renderImagesEditor(key)}
+                              </td>
+                            </tr>
+                          )}
+                          {/* A "Dlouhý text" slot's own font size + line spacing:
+                              its own row so the two labelled selects don't blow up
+                              the fixed column widths the other cells rely on. */}
+                          {type === "longtext" && (
+                            <tr>
+                              <td />
+                              <td colSpan={4} style={{ padding: "0 0 10px 0" }}>
+                                {renderLongtextStyle(key)}
                               </td>
                             </tr>
                           )}

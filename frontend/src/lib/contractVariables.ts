@@ -126,6 +126,7 @@ export type CustomVarType =
   | "text"
   | "longtext"
   | "date"
+  | "time"
   | "number"
   | "bool"
   | "list"
@@ -137,6 +138,7 @@ export const CUSTOM_VAR_TYPE_LABELS: Record<CustomVarType, string> = {
   text: "Text",
   longtext: "Dlouhý text",
   date: "Datum",
+  time: "Čas",
   number: "Číslo",
   bool: "Ano/Ne",
   list: "Seznam",
@@ -214,6 +216,11 @@ export function comparableTypeOfCustom(type: CustomVarType | undefined): Compara
     case "longtext":
     case "list":
     case "bool":
+    // A time is stored as its raw "HH:MM" string. That form happens to order
+    // lexicographically, but the condition engine only has date/number/text
+    // coercions, and a time is neither an ISO date nor a number — so it compares
+    // as text (equality / emptiness), which is what {{#if var1 = 08:00}} needs.
+    case "time":
     // An image slot's raw value is the chosen LABEL, so it compares as text —
     // which is what lets a condition or a {{#case}} branch key off which
     // picture was selected without a second variable holding the same answer.
@@ -311,11 +318,43 @@ export interface CustomVarDef {
    * switched type between them would otherwise inherit half-valid data.
    */
   images?: CustomVarImageOption[];
+  /**
+   * Only for type "longtext": the font size ("12pt") and line spacing ("1.5")
+   * the substituted prose prints at, both from the closed preset sets above.
+   * Absent = inherit the template's own text styling (the previous behaviour, so
+   * existing longtext slots are unaffected). Applied by `formatCustomValue`,
+   * which wraps the value in an inline-styled <span>.
+   */
+  fontSize?: string;
+  lineHeight?: string;
 }
 
 /** Upper bounds on a math slot's configuration, shared with the server validators. */
 export const CUSTOM_VAR_FORMULA_MAX = 200;
 export const CUSTOM_VAR_DECIMALS_MAX = 4;
+
+// ── "longtext" typography ─────────────────────────────────────────────────────
+//
+// A "Dlouhý text" slot may carry its own font size and line spacing, chosen when
+// the variable is CONFIGURED (not at generation): a block of prose substituted
+// into a document often wants to read a size smaller and tighter — or larger —
+// than the surrounding template, and there is nowhere else to set that (the
+// value is typed into a plain textarea at fill-in time, with no formatting UI).
+//
+// Both are echoed into an inline `style="…"` that Puppeteer renders, so — exactly
+// like the image width/align presets — they are CLOSED preset sets, not free
+// strings: the frontend `formatCustomValue` re-checks each with a strict regex
+// and the server validators refuse anything outside these sets, so a value can
+// never break out of the attribute. The sets mirror the editor's own toolbar
+// (see the font-size / line-spacing selects in ContractTemplatesPage) so the
+// choices an author sees here match the ones they set on ordinary text.
+export const CUSTOM_VAR_LONGTEXT_FONT_SIZES = [
+  "8pt", "9pt", "10pt", "11pt", "12pt", "14pt", "16pt", "18pt",
+  "20pt", "22pt", "24pt", "28pt", "32pt", "36pt", "48pt", "72pt",
+] as const;
+export const CUSTOM_VAR_LONGTEXT_LINE_HEIGHTS = ["1", "1.15", "1.5", "2", "3"] as const;
+const CUSTOM_VAR_LONGTEXT_FONT_SIZE_SET: Set<string> = new Set(CUSTOM_VAR_LONGTEXT_FONT_SIZES);
+const CUSTOM_VAR_LONGTEXT_LINE_HEIGHT_SET: Set<string> = new Set(CUSTOM_VAR_LONGTEXT_LINE_HEIGHTS);
 
 // ── "image" slots ────────────────────────────────────────────────────────────
 //
@@ -720,7 +759,30 @@ export function formatCustomValue(
       // because templates in production already rely on passing small HTML
       // fragments through it, and silently escaping those would change what
       // signed contracts render.
-      return escapeHtml(value).replace(/\r\n|\r|\n/g, "<br>");
+      //
+      // Optional per-slot typography (fontSize / lineHeight, set when the
+      // variable is configured) is applied by wrapping the escaped body in an
+      // inline-styled <span>. A <span> rather than a block wrapper because the
+      // placeholder sits INSIDE the template's <p> — emitting a block element
+      // here would nest block-in-inline and lose the paragraph's styling. Each
+      // value is re-checked against its closed preset set (belt-and-braces: the
+      // set membership is already enforced server-side) so nothing but a vetted
+      // "12pt" / "1.5" can ever reach the style attribute.
+      {
+        const body = escapeHtml(value).replace(/\r\n|\r|\n/g, "<br>");
+        const style: string[] = [];
+        if (def?.fontSize && CUSTOM_VAR_LONGTEXT_FONT_SIZE_SET.has(def.fontSize)) {
+          style.push(`font-size: ${def.fontSize}`);
+        }
+        if (def?.lineHeight && CUSTOM_VAR_LONGTEXT_LINE_HEIGHT_SET.has(def.lineHeight)) {
+          style.push(`line-height: ${def.lineHeight}`);
+        }
+        return style.length > 0 ? `<span style="${style.join("; ")}">${body}</span>` : body;
+      }
+    case "time":
+      // An <input type="time"> value, "HH:MM" in 24-hour form. Printed verbatim:
+      // it is already unambiguous and matches how the field was entered.
+      return value;
     case "date":
       // raw is an <input type="date"> ISO string; formatDateCZ splits the string
       // rather than parsing a Date, so there is no timezone off-by-one here.

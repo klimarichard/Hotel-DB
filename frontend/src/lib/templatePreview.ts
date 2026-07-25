@@ -104,6 +104,7 @@ const MOCK_CUSTOM_RAW_BY_TYPE: Partial<Record<CustomVarType, string>> = {
     "vyplývajících z právních předpisů vztahujících se k zaměstnancem vykonávané " +
     "práci.",
   date: "2026-08-01",
+  time: "08:00",
   number: "1500",
 };
 
