@@ -43,6 +43,8 @@ import {
   CUSTOM_VAR_DECIMALS_MAX,
   CUSTOM_VAR_LONGTEXT_FONT_SIZES,
   CUSTOM_VAR_LONGTEXT_LINE_HEIGHTS,
+  CUSTOM_VAR_THOUSANDS_SEPARATORS,
+  CUSTOM_VAR_THOUSANDS_SEPARATOR_LABELS,
   CUSTOM_VAR_MAX_IMAGES,
   CUSTOM_VAR_IMAGE_MAX_CHARS,
   CUSTOM_VAR_IMAGE_WIDTHS,
@@ -65,6 +67,7 @@ import {
   type CustomVarCondition,
   type CustomVarImageOption,
   type CustomVarImageAlign,
+  type CustomVarThousandsSeparator,
 } from "@/lib/contractVariables";
 import { prepareImageDataUri, dataUriKb, IMAGE_MIME_TYPES } from "@/lib/imageDownscale";
 import {
@@ -1780,6 +1783,7 @@ export default function ContractTemplatesPage() {
             images: CustomVarImageOption[] | undefined;
             fontSize: string | undefined;
             lineHeight: string | undefined;
+            thousandsSeparator: CustomVarThousandsSeparator | undefined;
           }>
         ) => {
           setVariableDefs((prev) => {
@@ -1837,6 +1841,12 @@ export default function ContractTemplatesPage() {
               "lineHeight" in patch
                 ? patch.lineHeight
                 : nextTypeVal === "longtext" ? prevDef?.lineHeight : undefined;
+            // Thousands grouping belongs to a "number" slot only — dropped when
+            // the slot becomes anything else, same rule as the typography above.
+            const nextThousandsSeparator =
+              "thousandsSeparator" in patch
+                ? patch.thousandsSeparator
+                : nextTypeVal === "number" ? prevDef?.thousandsSeparator : undefined;
             // Unlike the above, `optional` survives a type change: a plain
             // boolean can't become invalid for the new type, only inapplicable
             // (bool/condition/math ignore it), so the author's intent is kept if
@@ -1860,6 +1870,7 @@ export default function ContractTemplatesPage() {
                 ...(nextDecimals !== undefined ? { decimals: nextDecimals } : {}),
                 ...(nextFontSize ? { fontSize: nextFontSize } : {}),
                 ...(nextLineHeight ? { lineHeight: nextLineHeight } : {}),
+                ...(nextThousandsSeparator ? { thousandsSeparator: nextThousandsSeparator } : {}),
               },
             };
           });
@@ -2380,6 +2391,40 @@ export default function ContractTemplatesPage() {
         };
 
         /**
+         * Thousands-grouping control for a "number" slot: whether the printed
+         * value groups thousands with a space ("1 500") or not ("1500"). Absent
+         * on the def means grouped, so the select defaults there.
+         */
+        const renderNumberFormat = (key: string) => {
+          const def = variableDefs[key];
+          return (
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 4,
+                fontSize: "0.72rem",
+                color: "var(--color-text-muted)",
+                whiteSpace: "nowrap",
+              }}
+            >
+              Oddělovat tisíce
+              <select
+                style={{ ...fieldStyle, width: "auto" }}
+                value={def?.thousandsSeparator ?? "space"}
+                onChange={(e) =>
+                  setDef(key, { thousandsSeparator: e.target.value as CustomVarThousandsSeparator })
+                }
+              >
+                {CUSTOM_VAR_THOUSANDS_SEPARATORS.map((s) => (
+                  <option key={s} value={s}>{CUSTOM_VAR_THOUSANDS_SEPARATOR_LABELS[s]}</option>
+                ))}
+              </select>
+            </label>
+          );
+        };
+
+        /**
          * Editor for a "math" slot: the formula plus the precision its result
          * prints at. Both live hints exist because a formula fails SILENTLY —
          * evalMathFormula returns null for a malformed expression and the document
@@ -2707,6 +2752,17 @@ export default function ContractTemplatesPage() {
                               <td />
                               <td colSpan={4} style={{ padding: "0 0 10px 0" }}>
                                 {renderLongtextStyle(key)}
+                              </td>
+                            </tr>
+                          )}
+                          {/* A "Číslo" slot's thousands-grouping choice — its own
+                              row so the labelled select doesn't crowd the fixed
+                              columns, matching the longtext row above. */}
+                          {type === "number" && (
+                            <tr>
+                              <td />
+                              <td colSpan={4} style={{ padding: "0 0 10px 0" }}>
+                                {renderNumberFormat(key)}
                               </td>
                             </tr>
                           )}

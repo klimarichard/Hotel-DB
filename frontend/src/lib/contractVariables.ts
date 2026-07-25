@@ -327,7 +327,25 @@ export interface CustomVarDef {
    */
   fontSize?: string;
   lineHeight?: string;
+  /**
+   * Only for type "number": whether the printed value groups thousands. "space"
+   * (or absent) keeps the Czech grouping ("1 500"); "none" prints the digits
+   * ungrouped ("1500"). The decimal comma is unaffected either way — only the
+   * thousands separator toggles. Absent = "space" so existing number slots are
+   * unchanged. A string rather than a boolean because the reconstruction in
+   * `setDef` omits falsy values, which would drop a `false` and lose the "off"
+   * state; a truthy string also leaves room for other separators later.
+   */
+  thousandsSeparator?: CustomVarThousandsSeparator;
 }
+
+/** How a "number" slot groups thousands. Absent on a def = "space". */
+export const CUSTOM_VAR_THOUSANDS_SEPARATORS = ["space", "none"] as const;
+export type CustomVarThousandsSeparator = (typeof CUSTOM_VAR_THOUSANDS_SEPARATORS)[number];
+export const CUSTOM_VAR_THOUSANDS_SEPARATOR_LABELS: Record<CustomVarThousandsSeparator, string> = {
+  space: "Mezerou (1 500)",
+  none: "Bez oddělení (1500)",
+};
 
 /** Upper bounds on a math slot's configuration, shared with the server validators. */
 export const CUSTOM_VAR_FORMULA_MAX = 200;
@@ -790,7 +808,12 @@ export function formatCustomValue(
     case "number": {
       const n = Number(value.replace(",", "."));
       if (!Number.isFinite(n)) return value;
-      return new Intl.NumberFormat("cs-CZ").format(n);
+      // Czech grouping ("1 500") by default; "none" prints ungrouped ("1500").
+      // The decimal comma is untouched either way — only the thousands separator
+      // toggles, which is exactly `useGrouping`.
+      return new Intl.NumberFormat("cs-CZ", {
+        useGrouping: def?.thousandsSeparator !== "none",
+      }).format(n);
     }
     case "bool":
       return value === "true" ? "ano" : "";

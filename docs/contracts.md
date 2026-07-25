@@ -367,7 +367,7 @@ Ten free slots — `{{var1}}` … `{{var10}}` — that a template can use for va
 - `formatCustomValue(type, raw)` — turns the raw form input into the string that lands in the PDF:
   - `date` — `formatDateCZ(raw)`. `raw` is an `<input type="date">` ISO string; `formatDateCZ` splits the string rather than parsing a `Date`, so there's no UTC-offset day-shift (see the date-arithmetic gotcha in `CLAUDE.md`).
   - `time` — the raw `"HH:MM"` (`<input type="time">`) value, printed verbatim.
-  - `number` — `Intl.NumberFormat("cs-CZ")`, i.e. Czech thousands grouping ("5 000"), consistent with every other numeric value in a contract.
+  - `number` — `Intl.NumberFormat("cs-CZ")`, i.e. Czech thousands grouping ("5 000"), consistent with every other numeric value in a contract. Optional per-slot `thousandsSeparator: "none"` disables the grouping ("5000"), keeping the Czech decimal comma.
   - `bool` — resolves to `"ano"` / `""`, **not** `"ano"`/`"ne"` — deliberately matching the built-in `kind: "if"` variables, where an empty string is what makes `{{#if var1}}` strip its block. A plain `{{var1}}` of an unchecked box therefore renders nothing.
   - `text` — passed through as typed.
 - `missingCustomVars(html, defs, rawValues)` — slots still needing a value before generation may proceed. `bool` is **never** "missing" (unchecked is a legitimate answer, not an omission); `text`/`date`/`number` are required **unless the slot sets `optional: true`**.
