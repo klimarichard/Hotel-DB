@@ -246,7 +246,7 @@ export const APP_TOUR_STEPS: TourStep[] = [
   // point at and no way to reach the page - the steps must go too, or the tour
   // advertises a section the user cannot open. Same for Faktury below.
   { section: SECTIONS.dokumenty, hideOnMobile: true, permission: "nav.dokumenty.view", addedInVersion: 18, anchor: "nav-dokumenty", title: "Dokumenty", body: "V sekci Dokumenty najdete dokumenty připravené k vyplnění a tisku.", placement: "right" },
-  { hideOnMobile: true, permission: "nav.dokumenty.view", addedInVersion: 18, anchor: "dokumenty-generate", route: "/dokumenty", title: "Vyplnění a tisk dokumentu", body: "Vyberte dokument, tlačítkem Vyplnit a vytisknout doplňte údaje, které dokument potřebuje, a otevře se vám jako PDF v nové záložce, odkud jej vytisknete. Nic se nikam neukládá.", placement: "bottom" },
+  { hideOnMobile: true, permission: "nav.dokumenty.view", addedInVersion: 18, anchor: "dokumenty-generate", route: "/dokumenty", title: "Vyplnění a tisk dokumentu", body: "Vyberte dokument, který chcete vytvořit a doplňte údaje. Dokument se vám otevře jako PDF v nové záložce, odkud jej vytisknete.", placement: "bottom" },
   { hideOnMobile: true, permission: "dokumenty.manage", addedInVersion: 21, anchor: "dokumenty-manage", route: "/dokumenty", title: "Správa dokumentů", body: "Tlačítkem Nový dokument vytvoříte dokument a jeho obsah napíšete v editoru. Nový dokument je vždy neveřejný, dokud jej nezveřejníte.", placement: "bottom" },
 
   // ── Faktury (/faktury) ────────────────────────────────────────────────────────
