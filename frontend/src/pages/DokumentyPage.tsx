@@ -54,6 +54,8 @@ import {
   CUSTOM_VAR_DECIMALS_MAX,
   CUSTOM_VAR_LONGTEXT_FONT_SIZES,
   CUSTOM_VAR_LONGTEXT_LINE_HEIGHTS,
+  CUSTOM_VAR_THOUSANDS_SEPARATORS,
+  CUSTOM_VAR_THOUSANDS_SEPARATOR_LABELS,
   COMPARE_OP_LABELS,
   UNARY_OPS,
   OPS_FOR_COMPARABLE,
@@ -72,6 +74,7 @@ import {
   type CustomVarDefs,
   type CustomVarImageAlign,
   type CustomVarImageOption,
+  type CustomVarThousandsSeparator,
   type CustomVarType,
 } from "@/lib/contractVariables";
 // Shared image handling: read a picked file into a base64 data URI, downscaling
@@ -1038,6 +1041,7 @@ export default function DokumentyPage() {
       condition: CustomVarCondition | undefined;
       fontSize: string | undefined;
       lineHeight: string | undefined;
+      thousandsSeparator: CustomVarThousandsSeparator | undefined;
     }>
   ) {
     setVariableDefs((prev) => {
@@ -1079,6 +1083,12 @@ export default function DokumentyPage() {
         "fontSize" in patch ? patch.fontSize : nextType === "longtext" ? prevDef?.fontSize : undefined;
       const nextLineHeight =
         "lineHeight" in patch ? patch.lineHeight : nextType === "longtext" ? prevDef?.lineHeight : undefined;
+      // Thousands grouping belongs to a "number" slot only — dropped on a type
+      // change, same rule as the longtext typography above.
+      const nextThousandsSeparator =
+        "thousandsSeparator" in patch
+          ? patch.thousandsSeparator
+          : nextType === "number" ? prevDef?.thousandsSeparator : undefined;
       return {
         ...prev,
         [key]: {
@@ -1097,6 +1107,7 @@ export default function DokumentyPage() {
           ...(nextCondition ? { condition: nextCondition } : {}),
           ...(nextFontSize ? { fontSize: nextFontSize } : {}),
           ...(nextLineHeight ? { lineHeight: nextLineHeight } : {}),
+          ...(nextThousandsSeparator ? { thousandsSeparator: nextThousandsSeparator } : {}),
         },
       };
     });
@@ -1701,6 +1712,40 @@ export default function DokumentyPage() {
           </select>
         </label>
       </div>
+    );
+  }
+
+  /**
+   * Thousands-grouping control for a "number" slot: space-grouped ("1 500") or
+   * ungrouped ("1500"). Absent on the def means grouped, so the select defaults
+   * there.
+   */
+  function renderNumberFormat(key: string) {
+    const def = variableDefs[key];
+    return (
+      <label
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 4,
+          fontSize: "0.72rem",
+          color: "var(--color-text-muted)",
+          whiteSpace: "nowrap",
+        }}
+      >
+        Oddělovat tisíce
+        <select
+          style={{ ...fieldStyle, width: "auto" }}
+          value={def?.thousandsSeparator ?? "space"}
+          onChange={(e) =>
+            setDef(key, { thousandsSeparator: e.target.value as CustomVarThousandsSeparator })
+          }
+        >
+          {CUSTOM_VAR_THOUSANDS_SEPARATORS.map((s) => (
+            <option key={s} value={s}>{CUSTOM_VAR_THOUSANDS_SEPARATOR_LABELS[s]}</option>
+          ))}
+        </select>
+      </label>
     );
   }
 
@@ -2784,6 +2829,17 @@ export default function DokumentyPage() {
                               <td />
                               <td colSpan={4} style={{ padding: "0 0 10px 0" }}>
                                 {renderLongtextStyle(key)}
+                              </td>
+                            </tr>
+                          )}
+                          {/* A "Číslo" slot's thousands-grouping choice — its own
+                              row so the labelled select doesn't crowd the fixed
+                              columns, matching the longtext row above. */}
+                          {type === "number" && (
+                            <tr>
+                              <td />
+                              <td colSpan={4} style={{ padding: "0 0 10px 0" }}>
+                                {renderNumberFormat(key)}
                               </td>
                             </tr>
                           )}

@@ -192,7 +192,8 @@ function isValidMargins(m: unknown): m is Margins {
  * Shape: { var1: { label: string, type: "text"|"longtext"|"date"|"time"|
  *                        "number"|"bool"|"list"|"condition"|"math"|"image",
  *                  default?, condition?, options?, images?, formula?,
- *                  decimals?, fontSize?, lineHeight?, optional? }, … }
+ *                  decimals?, fontSize?, lineHeight?, thousandsSeparator?,
+ *                  optional? }, … }
  *
  * where images (only meaningful on an "image" slot) is
  *   [{ label: string, src: "data:image/…;base64,…", width?: "25%"|"50%"|"75%"|
@@ -413,6 +414,18 @@ function isValidCustomLineHeight(v: unknown): boolean {
   return typeof v === "string" && CUSTOM_VAR_LONGTEXT_LINE_HEIGHTS.has(v);
 }
 
+/**
+ * Thousands-grouping choice of a "number" slot ("space" = grouped, "none" =
+ * ungrouped). Absent means grouped, the previous behaviour. Allowlisted so only
+ * a value the frontend engine (CUSTOM_VAR_THOUSANDS_SEPARATORS) understands can
+ * be stored.
+ */
+const CUSTOM_VAR_THOUSANDS_SEPARATORS = new Set(["space", "none"]);
+function isValidThousandsSeparator(v: unknown): boolean {
+  if (v === undefined) return true;
+  return typeof v === "string" && CUSTOM_VAR_THOUSANDS_SEPARATORS.has(v);
+}
+
 function isValidVariableDefs(v: unknown): boolean {
   if (!v || typeof v !== "object" || Array.isArray(v)) return false;
   return Object.entries(v as Record<string, unknown>).every(([key, def]) => {
@@ -432,6 +445,7 @@ function isValidVariableDefs(v: unknown): boolean {
       isValidCustomDecimals(d.decimals) &&
       isValidCustomFontSize(d.fontSize) &&
       isValidCustomLineHeight(d.lineHeight) &&
+      isValidThousandsSeparator(d.thousandsSeparator) &&
       // "Nepovinná" – absent means required, so only a real boolean is
       // accepted; a truthy string would silently make a slot optional.
       (d.optional === undefined || typeof d.optional === "boolean")
