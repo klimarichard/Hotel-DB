@@ -41,6 +41,8 @@ import {
   CUSTOM_VAR_MAX_OPTIONS,
   CUSTOM_VAR_FORMULA_MAX,
   CUSTOM_VAR_DECIMALS_MAX,
+  CUSTOM_VAR_LONGTEXT_FONT_SIZES,
+  CUSTOM_VAR_LONGTEXT_LINE_HEIGHTS,
   CUSTOM_VAR_MAX_IMAGES,
   CUSTOM_VAR_IMAGE_MAX_CHARS,
   CUSTOM_VAR_IMAGE_WIDTHS,
@@ -1776,6 +1778,8 @@ export default function ContractTemplatesPage() {
             formula: string | undefined;
             decimals: number | undefined;
             images: CustomVarImageOption[] | undefined;
+            fontSize: string | undefined;
+            lineHeight: string | undefined;
           }>
         ) => {
           setVariableDefs((prev) => {
@@ -1821,6 +1825,18 @@ export default function ContractTemplatesPage() {
               "images" in patch
                 ? patch.images
                 : nextTypeVal === "image" ? prevDef?.images : undefined;
+            // Typography belongs to a "longtext" slot only — dropped when the
+            // slot becomes anything else, for the same reason a stale choice
+            // list is: it would sit invisibly in the config and reappear if the
+            // author switched back long after it stopped meaning anything.
+            const nextFontSize =
+              "fontSize" in patch
+                ? patch.fontSize
+                : nextTypeVal === "longtext" ? prevDef?.fontSize : undefined;
+            const nextLineHeight =
+              "lineHeight" in patch
+                ? patch.lineHeight
+                : nextTypeVal === "longtext" ? prevDef?.lineHeight : undefined;
             // Unlike the above, `optional` survives a type change: a plain
             // boolean can't become invalid for the new type, only inapplicable
             // (bool/condition/math ignore it), so the author's intent is kept if
@@ -1842,6 +1858,8 @@ export default function ContractTemplatesPage() {
                 // 0 is a real precision (whole crowns), so test for undefined –
                 // a falsy check would silently drop it.
                 ...(nextDecimals !== undefined ? { decimals: nextDecimals } : {}),
+                ...(nextFontSize ? { fontSize: nextFontSize } : {}),
+                ...(nextLineHeight ? { lineHeight: nextLineHeight } : {}),
               },
             };
           });
@@ -2294,12 +2312,70 @@ export default function ContractTemplatesPage() {
           }
           return (
             <input
-              type={type === "date" ? "date" : type === "number" ? "number" : "text"}
+              type={
+                type === "date"
+                  ? "date"
+                  : type === "time"
+                    ? "time"
+                    : type === "number"
+                      ? "number"
+                      : "text"
+              }
               style={fieldStyle}
               value={value}
               placeholder="Výchozí hodnota"
               onChange={(e) => set(e.target.value)}
             />
+          );
+        };
+
+        /**
+         * Typography row for a "longtext" slot: the font size and line spacing
+         * the substituted prose prints at, chosen HERE (at configuration) rather
+         * than at generation — the fill-in dialog offers only a plain textarea.
+         * Both are optional; "Výchozí" clears them back to the template's own
+         * styling. The option sets mirror the editor toolbar's own so an author
+         * sees the same choices they set on ordinary text.
+         */
+        const renderLongtextStyle = (key: string) => {
+          const def = variableDefs[key];
+          const labelStyle = {
+            display: "flex",
+            alignItems: "center",
+            gap: 4,
+            fontSize: "0.72rem",
+            color: "var(--color-text-muted)",
+            whiteSpace: "nowrap",
+          } as const;
+          return (
+            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+              <label style={labelStyle}>
+                Velikost písma
+                <select
+                  style={{ ...fieldStyle, width: "auto" }}
+                  value={def?.fontSize ?? ""}
+                  onChange={(e) => setDef(key, { fontSize: e.target.value || undefined })}
+                >
+                  <option value="">Výchozí</option>
+                  {CUSTOM_VAR_LONGTEXT_FONT_SIZES.map((s) => (
+                    <option key={s} value={s}>{s.replace("pt", "")}</option>
+                  ))}
+                </select>
+              </label>
+              <label style={labelStyle}>
+                Řádkování
+                <select
+                  style={{ ...fieldStyle, width: "auto" }}
+                  value={def?.lineHeight ?? ""}
+                  onChange={(e) => setDef(key, { lineHeight: e.target.value || undefined })}
+                >
+                  <option value="">Výchozí</option>
+                  {CUSTOM_VAR_LONGTEXT_LINE_HEIGHTS.map((h) => (
+                    <option key={h} value={h}>{h.replace(".", ",")}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
           );
         };
 
@@ -2620,6 +2696,17 @@ export default function ContractTemplatesPage() {
                               <td />
                               <td colSpan={4} style={{ padding: "0 0 10px 0" }}>
                                 {renderImagesEditor(key)}
+                              </td>
+                            </tr>
+                          )}
+                          {/* A "Dlouhý text" slot's own font size + line spacing:
+                              its own row for the same reason as the choices row —
+                              two labelled selects would not fit the fixed columns. */}
+                          {type === "longtext" && (
+                            <tr>
+                              <td />
+                              <td colSpan={4} style={{ padding: "0 0 10px 0" }}>
+                                {renderLongtextStyle(key)}
                               </td>
                             </tr>
                           )}
