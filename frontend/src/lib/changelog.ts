@@ -27,6 +27,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "5.3.0",
+    date: "2026-08-02",
+    changes: [
+      "Směny: Možnost rozdělit hodiny jedné směny mezi více zaměstnanců.",
+    ],
+  },
+  {
     version: "5.2.1",
     date: "2026-07-25",
     changes: [
