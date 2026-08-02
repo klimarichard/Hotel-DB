@@ -2545,7 +2545,7 @@ employeesRouter.delete(
       db().collection("payrollPeriods").get(),
       db().collection("shiftPlans").get(),
     ]);
-    const [payrollEntries, planMembers, planCells] = await Promise.all([
+    const [payrollEntries, planMembers, planCells, planSplits] = await Promise.all([
       Promise.all(periodsSnap.docs.map((p) => p.ref.collection("entries").doc(id).get())),
       Promise.all(plansSnap.docs.map((pl) =>
         pl.ref.collection("planEmployees").where("employeeId", "==", id).limit(1).get()
@@ -2557,11 +2557,19 @@ employeesRouter.delete(
       Promise.all(plansSnap.docs.map((pl) =>
         pl.ref.collection("shifts").where("employeeId", "==", id).limit(1).get()
       )),
+      // …and on manual hour SPLITS (shiftPlans/*/shiftSplits), for exactly the
+      // same reason: a split survives the employee's removal from the plan, and a
+      // dangling one keeps crediting shifts (and money) to a deleted id on the
+      // Recepce summary. `employeeIds` is the array-contains mirror of `entries`.
+      Promise.all(plansSnap.docs.map((pl) =>
+        pl.ref.collection("shiftSplits").where("employeeIds", "array-contains", id).limit(1).get()
+      )),
     ]);
     const hasHistory =
       payrollEntries.some((e) => e.exists) ||
       planMembers.some((m) => !m.empty) ||
-      planCells.some((c) => !c.empty);
+      planCells.some((c) => !c.empty) ||
+      planSplits.some((s) => !s.empty);
     if (hasHistory) {
       res.status(400).json({
         error:

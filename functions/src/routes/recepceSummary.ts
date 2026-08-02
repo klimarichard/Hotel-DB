@@ -12,11 +12,16 @@
  *                           granularity in both the per-employee and per-hotel
  *                           views (their grand totals then match by construction).
  *
- * SHIFT COUNTING RULES:
+ * SHIFT COUNTING RULES (implemented once, in `services/shiftCounting.ts`):
  *   - Only DESK day/night codes count, keyed by hotel: DA NA DS NS DQ NQ DK NK.
  *     Porter (DP/NP → …) and trainee (ZD/ZN) codes never count.
  *   - A DOUBLE cell (`DA²`, `isDouble`) counts as 0.
  *   - A numeric cell TAGGED with a counted desk type counts hoursComputed / 12.
+ *   - MANUAL SPLITS (`shiftPlans/{planId}/shiftSplits/{date}__{TYPE}`) count on
+ *     top: when someone works only part of a 12h shift, a manager assigns the
+ *     leftover hours to other employees, and each entry counts hours / 12. The
+ *     endpoint that writes them caps cell hours + assigned hours at 12, so a day
+ *     can never sum above one whole shift per type.
  *
  * Also hosts the persistent "Provize minus" table (a small cross-hotel
  * collection of manual per-employee deductions) and a range-wide employee
@@ -38,7 +43,13 @@ import { HOTEL_SLUGS, HotelSlug, HOTEL_LABELS, SLUG_TO_CODE } from "../services/
 import { walkinCol, WalkinDoc, isDateStr } from "../services/walkinShared";
 import { taxiRideCol, TaxiRideDoc } from "../services/taxiShared";
 import { resolveEmployeeDisplays, listRecepceEmployees, RecepceEmployee } from "../services/recepceEmployees";
-import { sanitizeTypeTag } from "../services/shiftParser";
+import {
+  COUNTED_TAGS,
+  FULL_SHIFT_HOURS,
+  ShiftCellLike,
+  cellHoursForType,
+  isCountedTag,
+} from "../services/shiftCounting";
 import {
   requireSummaryKey,
   isKeyConfigured,
@@ -59,12 +70,6 @@ const SUMMARY_PERM = "recepce.summary.view";
 const CODE_TO_SLUG: Record<string, HotelSlug> = Object.fromEntries(
   HOTEL_SLUGS.map((slug) => [SLUG_TO_CODE[slug], slug])
 ) as Record<string, HotelSlug>;
-
-/** The only type-tags that count toward a hotel (desk day/night; no porters/trainees). */
-const COUNTED_TAGS = new Set(["DA", "DS", "DQ", "DK", "NA", "NS", "NQ", "NK"]);
-
-/** A full reception shift is 12h; a tagged numeric cell counts as hours/12 of one. */
-const FULL_SHIFT_HOURS = 12;
 
 /** Manual per-employee deductions ("Provize minus"), cross-hotel. */
 function provizeMinusCol(): admin.firestore.CollectionReference {
@@ -227,30 +232,31 @@ recepceSummaryRouter.get("/", requireAuth, requirePermission(SUMMARY_PERM), requ
   // ── Shift counts per employee per hotel (all monthly plans in range) ────────
   const shiftSnap = await db.collectionGroup("shifts").where("date", ">=", from).where("date", "<=", to).get();
   for (const doc of shiftSnap.docs) {
-    const d = doc.data() as {
-      employeeId?: unknown;
-      segments?: Array<{ code?: unknown; hotel?: unknown }>;
-      isDouble?: unknown;
-      typeTag?: unknown;
-      hoursComputed?: unknown;
-    };
+    const d = doc.data() as ShiftCellLike & { employeeId?: unknown };
     const empId = typeof d.employeeId === "string" ? d.employeeId : "";
     if (empId === "") continue;
 
-    if (d.isDouble !== true && Array.isArray(d.segments)) {
-      for (const seg of d.segments) {
-        if ((seg.code === "D" || seg.code === "N") && typeof seg.hotel === "string") {
-          const slug = CODE_TO_SLUG[seg.hotel];
-          if (slug) ensure(empId).byHotel[slug] += 1;
-        }
-      }
+    for (const type of COUNTED_TAGS) {
+      const hrs = cellHoursForType(d, type);
+      if (hrs <= 0) continue;
+      const slug = CODE_TO_SLUG[type[type.length - 1]];
+      if (slug) ensure(empId).byHotel[slug] += hrs / FULL_SHIFT_HOURS;
     }
+  }
 
-    const tag = sanitizeTypeTag(d.typeTag);
-    if (tag && COUNTED_TAGS.has(tag)) {
-      const slug = CODE_TO_SLUG[tag[tag.length - 1]];
-      const hrs = typeof d.hoursComputed === "number" && Number.isFinite(d.hoursComputed) ? d.hoursComputed : 0;
-      if (slug && hrs > 0) ensure(empId).byHotel[slug] += hrs / FULL_SHIFT_HOURS;
+  // ── Manually assigned leftover hours (Přehled obsazení → rozdělení směny) ────
+  const splitSnap = await db.collectionGroup("shiftSplits").where("date", ">=", from).where("date", "<=", to).get();
+  for (const doc of splitSnap.docs) {
+    const d = doc.data() as { type?: unknown; entries?: unknown };
+    if (!isCountedTag(d.type)) continue;
+    const slug = CODE_TO_SLUG[d.type[d.type.length - 1]];
+    if (!slug) continue;
+    if (!Array.isArray(d.entries)) continue;
+    for (const raw of d.entries) {
+      const e = raw as { employeeId?: unknown; hours?: unknown };
+      if (typeof e?.employeeId !== "string" || e.employeeId === "") continue;
+      if (typeof e.hours !== "number" || !Number.isFinite(e.hours) || e.hours <= 0) continue;
+      ensure(e.employeeId).byHotel[slug] += e.hours / FULL_SHIFT_HOURS;
     }
   }
 
