@@ -47,13 +47,24 @@ export interface ShiftCellLike {
  *   counts as 0.
  * - Tagged numeric cells: add `hoursComputed` when the tag equals `type`.
  * Both branches sum, because a cell can in principle be both.
+ *
+ * `includeDouble` counts a DOUBLE cell as its full hours instead of 0. Nothing
+ * on the server passes it — this side is the payout accounting, where the
+ * historical rule is that a double credits nothing. It exists so the frontend
+ * mirror can stay a verbatim copy: the occupancy tally DOES pass it, because
+ * that table answers "is this shift covered", and a double is covered.
  */
-export function cellHoursForType(cell: ShiftCellLike, type: CountedTag): number {
+export function cellHoursForType(
+  cell: ShiftCellLike,
+  type: CountedTag,
+  opts?: { includeDouble?: boolean }
+): number {
   const code = type.slice(0, -1); // "D" | "N"
   const hotel = type.slice(-1); // "A" | "S" | "Q" | "K"
   let hours = 0;
 
-  if (cell.isDouble !== true && Array.isArray(cell.segments)) {
+  const countSegments = opts?.includeDouble === true || cell.isDouble !== true;
+  if (countSegments && Array.isArray(cell.segments)) {
     for (const seg of cell.segments as Array<{ code?: unknown; hotel?: unknown }>) {
       if (seg && seg.code === code && seg.hotel === hotel) hours += FULL_SHIFT_HOURS;
     }

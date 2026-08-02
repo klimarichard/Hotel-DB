@@ -169,7 +169,7 @@ A bare-number cell (e.g. `8`) records *worked hours* but carries no shift type, 
   - **Annotation-only (4, v3.4.4):** `R HO ZD ZN`, as `EXTRA_TYPE_TAGS`. Pickable on a numeric cell purely as a note — they have **no counter key**, so they add no tally row, are never counted, and never affect free-shift coverage. `ZD`/`ZN` (trainee) deliberately carry no hotel appropriation.
   - The picker offers `ALL_TYPE_TAGS = [...SHIFT_TYPE_TAGS, ...EXTRA_TYPE_TAGS]`; only the 12 are ever counted. The "no tally for the 4" guarantee falls out of `typeTagToCounterKey` returning `null` for any label not in `SHIFT_TYPE_TAGS`.
 - **Storage:** optional `typeTag: string | null` on the `shifts/{employeeId}_{date}` doc. The cell upsert (`PUT /shifts/plans/:planId/shifts/:employeeId/:date`) accepts an optional `typeTag` in the body and persists it **only when the expression is pure-numeric** (`isPureNumericExpression` — every segment a bare number). It is auto-cleared when the cell stops being numeric, and **preserved across numeric→numeric edits** when the request omits `typeTag` (a plain rawInput edit). Validated against the allowed list via `sanitizeTypeTag` (unknown → `null`). Audit-logged with the Czech label "Typ směny (štítek)", and the cell-edit log now records only the fields that actually changed.
-- **Tally:** `ShiftGrid`'s `shiftCounts` adds a tagged numeric cell to its type's count via `typeTagToCounterKey(label)` → `"<code>_<hotel>"`.
+- **Tally:** a tagged numeric cell contributes its *hours* to its type — `ShiftGrid`'s `counterStats` calls `cellHoursForType(cell, row.label)`, matching `typeTag` against the row label directly. (Before the split feature this was `shiftCounts` bumping `typeTagToCounterKey(label)` → `"<code>_<hotel>"` by one; `typeTagToCounterKey` now serves free-shift coverage only.) See "The occupancy number is WHOLE SHIFTS, not people" below.
 - **Free-shift coverage (v3.4.1):** a tagged numeric cell also *covers* the matching Volné směny slot, so it stops showing as claimable. Both layers honor the tag: the frontend `freeShiftCoverage` map adds `typeTagToCounterKey(typeTag)`, and the backend `isSlotCovered` matches `sanitizeTypeTag(typeTag) === code + hotel` (the tag label equals `code+hotel` for all 12 types) so a stale free-claim approval 409s. Keep all three consumers (tally, frontend coverage, backend coverage) in sync when changing the tag model.
 - **UI / gating:** in `ShiftCell`, a numeric cell shows an **absolutely-positioned corner badge** (top-right) — the tag label, or a faint `+` when untagged. For the 12 occupancy types the badge wears that shift type's own colour (`getCellColor(parseShiftExpression(label))`, gated on a non-null `typeTagToCounterKey`); the 4 annotation tags keep the neutral translucent badge (v3.4.4). Clicking it opens a 4-column picker popover (4×4 with the annotation tags; `createPortal` to `document.body` to escape the cell's `overflow:hidden`; portal clicks `stopPropagation` so selecting a type doesn't fall through to the cell's number editor). The badge is out of normal flow so a long number (e.g. `10.5`) plus a 3-letter tag never widens the fixed 40px column (v3.4.2; was an inline `<sup>`). The affordance is shown **only to users who can edit shifts in every plan state** — `onCellTagSave` is passed only when `!selfServiceOnly && can("shifts.cells.edit")`, and `showTag === tagEditable`, so read-only viewers and self-service employees see nothing. No new permission key; no tour step.
 
@@ -232,7 +232,17 @@ The split affordance and its two markers apply **only** to the 8 counted desk ty
 - **Clickable cell** — when `onOpenSplitCell` is supplied (wired only for `shifts.counterTable.view` holders), a counted-type cell in the occupancy table opens `ShiftSplitModal` on click/Enter/Space, showing the day's real cell contributors (read-only) and the current manual entries (editable when the caller also has `shifts.cells.edit`).
 - **`!` shortfall marker** — shown when the day already has *some* real cell hours for that type (`cellHours > 0`) but the total (`cellHours + splitHours`) is still under 12. A day with **no** cell contribution at all is left blank rather than flagged — otherwise every empty day would light up.
 - **`•` split marker** — shown whenever `splitHours > 0`, i.e. a manual split is recorded for that day+type, independent of whether it closed the shortfall.
-- The displayed **people-count** in that same table cell (`count`, from `shiftCounts`) is unchanged by any of this — see the three-tallies note below.
+#### The occupancy number is WHOLE SHIFTS, not people (changed with this feature)
+
+The displayed number was a head count: one bump per matching code segment or `typeTag`, hours ignored. That overstated coverage as soon as a shift was split — `8` + `4`, both tagged `DS`, is **one** DS shift covered but read as `2`.
+
+It is now derived from hours: `shiftsFromHours(occupancyHours)` = `max(1, round(hours / 12))`, and `0` for no hours. So **anything under 18 h reads as 1**, 18 h and up as 2, and so on. All 12 rows use this, porter types included.
+
+`occupancyHours` differs from the 4D credit in exactly one way: it passes `includeDouble: true`, so a **double cell (`DA²`) contributes its full 12 h** instead of 0. The occupancy table answers *"is this shift covered"*, where a double plainly is; the 4D summary answers *"who gets credited"*, where the historical rule is that a double credits nothing. Without the flag a day covered only by a double would render `0` and colour as uncovered.
+
+It also falls back to `parseShiftExpression(rawInput)` when a cell carries no stored `segments` (pre-schema docs), so old cells cannot silently vanish from the table. The 4D credit path deliberately does **not** do this — it must agree with the server byte for byte.
+
+Because the write endpoint caps cell + assigned hours at 12, adding a split can never push a day's `occupancyHours` past one shift, so **a split never changes the displayed number**. It only clears the `!`.
 
 #### Three different tallies over the same grid — the actual source of the original bug
 
@@ -240,11 +250,11 @@ The grid computes **three separate counts** that look similar but answer differe
 
 | Tally | What it counts | Where |
 |---|---|---|
-| Occupancy people-count ("Přehled obsazení") | **Presence** — one bump per matching code segment or `typeTag`, regardless of hours | `ShiftGrid.tsx`'s `shiftCounts` |
+| Occupancy number ("Přehled obsazení") | **Whole shifts**, hours ÷ 12 rounded, min 1; doubles count their full hours | `ShiftGrid.tsx`'s `counterStats.occupancyHours` + `shiftsFromHours` |
 | Per-employee "Směny" column | **Rows**, one per cell where `hoursComputed > 6`, regardless of shift *type* | `ShiftGrid.tsx`'s `employeeMonthShifts` (`shift.hoursComputed > 6`) |
-| 4D Recepce summary + shortfall/split markers | **Hours**, hour-accurate via `cellHoursForType` (÷12 for a shift-equivalent) | `services/shiftCounting.ts`, `recepceSummary.ts`, `ShiftGrid.tsx`'s `counterHours` |
+| 4D Recepce summary + shortfall/split markers | **Hours**, hour-accurate via `cellHoursForType` (÷12 for a shift-equivalent); doubles count 0 | `services/shiftCounting.ts`, `recepceSummary.ts`, `ShiftGrid.tsx`'s `counterStats.cellHours` |
 
-Manually assigned split hours feed **only** the third tally (and, by extension, the money share the 4D summary derives from shift totals) — they never change the occupancy people-count, the "Směny" column, or free-shift coverage. User-facing rule (Czech): [`business-rules.md`](business-rules.md), section "Směny".
+Manually assigned split hours feed **only** the third tally (and, by extension, the money share the 4D summary derives from shift totals) — they never change the occupancy number, the "Směny" column, or free-shift coverage. User-facing rule (Czech): [`business-rules.md`](business-rules.md), section "Směny".
 
 #### Employee-delete guard extension
 
