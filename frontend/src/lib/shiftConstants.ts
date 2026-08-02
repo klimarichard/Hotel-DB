@@ -391,6 +391,11 @@ export const FULL_SHIFT_HOURS = 12;
  *
  * Reads the STORED parse result (segments / isDouble / typeTag / hoursComputed),
  * never a re-parse of rawInput, so it agrees with the server exactly.
+ *
+ * `includeDouble` counts a DOUBLE cell (`DA²`) as its full hours instead of 0.
+ * Only the occupancy tally passes it: that table answers "is this shift covered",
+ * where a double is covered, while the 4D summary credits a double nothing.
+ * The server never passes it — its only caller is the payout-side accounting.
  */
 export function cellHoursForType(
   cell: {
@@ -399,12 +404,14 @@ export function cellHoursForType(
     typeTag?: string | null;
     hoursComputed?: number;
   },
-  type: string
+  type: string,
+  opts?: { includeDouble?: boolean }
 ): number {
   const code = type.slice(0, -1);
   const hotel = type.slice(-1);
   let hours = 0;
-  if (cell.isDouble !== true && Array.isArray(cell.segments)) {
+  const countSegments = opts?.includeDouble === true || cell.isDouble !== true;
+  if (countSegments && Array.isArray(cell.segments)) {
     for (const seg of cell.segments) {
       if (seg.code === code && seg.hotel === hotel) hours += FULL_SHIFT_HOURS;
     }

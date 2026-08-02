@@ -140,9 +140,17 @@ Zaměstnanec, který **v daný den a typ směny už má vlastní buňku** v rozp
 
 ### Ručně přiřazené hodiny se počítají jen do souhrnu Recepce, nikam jinam
 
-Ručně přiřazené hodiny (viz pravidlo výše) se přičítají výhradně k **měsíčním součtům směn** v interním souhrnu Recepce (stránka „4D") – a tedy i k podílu na penězích, který se z těchto součtů odvozuje. Neovlivňují **nic jiného**: ani mzdu, ani počet lidí zobrazený v tabulce obsazenosti „Přehled obsazení", ani sloupec „Směny" u jednotlivého zaměstnance v plánu směn, ani pokrytí volných směn.
+Ručně přiřazené hodiny (viz pravidlo výše) se přičítají výhradně k **měsíčním součtům směn** v interním souhrnu Recepce (stránka „4D") – a tedy i k podílu na penězích, který se z těchto součtů odvozuje. Neovlivňují **nic jiného**: ani mzdu, ani číslo v tabulce obsazenosti „Přehled obsazení", ani sloupec „Směny" u jednotlivého zaměstnance v plánu směn, ani pokrytí volných směn.
 
-> 🔒 Server. Zdroj: `functions/src/routes/recepceSummary.ts:247-260` (jediné místo, které rozdělení čte a přičítá k součtům); mzdy (`functions/src/services/payrollCalculator.ts`) ani tabulka obsazenosti/sloupec „Směny" (`frontend/src/components/ShiftGrid.tsx`) rozdělení vůbec nečtou.
+> 🔒 Server. Zdroj: `functions/src/routes/recepceSummary.ts:247-260` (jediné místo, které rozdělení čte a přičítá k součtům); mzdy (`functions/src/services/payrollCalculator.ts`) rozdělení vůbec nečtou. Číslo v tabulce obsazenosti se ručním přiřazením nezmění už z podstaty stropu 12 h (viz pravidlo níže).
+
+### Tabulka obsazenosti ukazuje počet celých směn, ne počet lidí
+
+Číslo v tabulce **Přehled obsazení** vyjadřuje, **kolik celých směn** je daný den na daném typu pokryto – ne kolik lidí tam je zapsáno. Odpracované hodiny se sečtou a zaokrouhlí na celé směny (12 h): **méně než 18 h se zobrazí jako 1**, 18 h a více jako 2 a tak dál. Rozdělí-li se tedy jedna 12hodinová směna mezi dva lidi (8 h + 4 h), tabulka správně ukáže **1**, nikoli 2.
+
+Dvojitá směna („DA²") se zde počítá jako plných 12 h – tabulka odpovídá na otázku „je směna pokrytá", a dvojitá směna pokrytá je. (V souhrnu Recepce se naproti tomu dvojitá směna nezapočítává vůbec; to je starší pravidlo, které tato změna nemění.)
+
+> 🖥️ Jen rozhraní (výpočet v prohlížeči, nikde se neukládá). Zdroj: `frontend/src/components/ShiftGrid.tsx` – `shiftsFromHours()` a `counterStats.occupancyHours`.
 
 ### Rozdělení hodin lze upravit i po uzavření nebo publikaci plánu
 
