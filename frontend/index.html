@@ -7,6 +7,56 @@
     <link rel="preconnect" href="https://fonts.bunny.net" crossorigin />
     <link rel="stylesheet" href="https://fonts.bunny.net/css?family=inter:400,500,600,700&display=swap" />
     <title>HPM Intranet</title>
+
+    <!--
+      FIRST-PAINT THEME. Without this the app always painted LIGHT first and
+      flipped to dark once React mounted: index.css puts the light palette in
+      `:root` and dark behind `[data-theme="dark"]`, and nothing set that
+      attribute until ThemeProvider's effect ran. On top of that App.tsx returns
+      its "Načítám…" screen BEFORE <ThemeProvider>, so the whole Firebase Auth
+      round-trip (the slow part on a phone) happened with no theme applied.
+
+      Both the style and the script below must stay ahead of the bundle and be
+      render-blocking, so the very first frame is already correct.
+
+      `color-scheme` is the part no stylesheet can replace: it decides what the
+      browser paints as the canvas BEFORE any CSS applies, plus the default
+      scrollbar and form-control rendering. Text colour is left to index.css —
+      there is no text on screen this early anyway.
+
+      ⚠️ The two colours here are literals duplicated from --color-bg in
+      src/index.css (light and dark). Change them in both places.
+    -->
+    <meta name="theme-color" content="#0f172a" />
+    <style>
+      :root { color-scheme: dark; background: #0f172a; }
+      :root[data-theme="light"] { color-scheme: light; background: #f9fafb; }
+    </style>
+    <script>
+      (function () {
+        var theme = "dark"; // the app's own default when nothing is stored
+        try {
+          var saved = localStorage.getItem("hotel_hr_theme_last");
+          if (saved !== "light" && saved !== "dark") {
+            // First load after this fix shipped (or after a login): no uid-independent
+            // key yet, so fall back to any per-user cache already in this browser.
+            for (var i = 0; i < localStorage.length; i++) {
+              var key = localStorage.key(i);
+              if (key && key.lastIndexOf("hotel_hr_theme_", 0) === 0) {
+                var value = localStorage.getItem(key);
+                if (value === "light" || value === "dark") { saved = value; break; }
+              }
+            }
+          }
+          if (saved === "light") theme = "light";
+        } catch (e) {
+          /* localStorage can throw in private mode — fall through to the default. */
+        }
+        document.documentElement.setAttribute("data-theme", theme);
+        var meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.setAttribute("content", theme === "light" ? "#f9fafb" : "#0f172a");
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
