@@ -128,6 +128,28 @@ Ukazatel je pouze informativní: nic neblokuje, do ničeho se nepočítá a v ji
 
 > ⚙️ Automatika (počítá server). Zdroj: `functions/src/routes/shifts.ts:513` (endpoint `GET /shifts/prev-month-gap`), výpočet `prevMonthGap()` na `:492`, definice „skutečné směny" `:479-482`; pravidlo pro Vedoucí `frontend/src/pages/ShiftPlannerPage.tsx:1861`, stav plánu `:385`.
 
+### Ruční rozdělení hodin směny nesmí přesáhnout 12 hodin na den a typ
+
+Klikne-li vedoucí (s příslušným oprávněním) v tabulce **Přehled obsazení** na buňku některého z osmi počítaných typů recepčních směn (DA DS DQ DK NA NS NQ NK), může zbývající hodiny 12hodinové směny **ručně přiřadit** jinému zaměstnanci – typicky když někdo odpracoval jen část směny (např. 8 z 12 hodin, zapsáno jako číslo se štítkem typu) a zbylé hodiny odsloužil někdo jiný, aniž by měl v rozpisu vlastní buňku.
+
+Součet hodin, které danému dni a typu směny už přidávají buňky v rozpisu, a hodin ručně přiřazených, **nesmí přesáhnout 12** – server uložení nad tento součet odmítne. Počítá se přesně **12 hodin dané směny, a nic navíc**.
+
+Zaměstnanec, který **v daný den a typ směny už má vlastní buňku** v rozpisu (byť jen částečnou), nemůže navíc dostat i ruční přiřazení – server takový pokus odmítne hláškou „Zaměstnanec už na tento den má tuto směnu v rozpisu". Stejné hodiny by se tak jinak počítaly dvakrát.
+
+> 🔒 Server. Zdroj: `functions/src/routes/shifts.ts:1862-1877` (obě kontroly, uvnitř `PUT /shifts/plans/:planId/splits/:date/:type`), strop `FULL_SHIFT_HOURS = 12` v `functions/src/services/shiftCounting.ts:26`.
+
+### Ručně přiřazené hodiny se počítají jen do souhrnu Recepce, nikam jinam
+
+Ručně přiřazené hodiny (viz pravidlo výše) se přičítají výhradně k **měsíčním součtům směn** v interním souhrnu Recepce (stránka „4D") – a tedy i k podílu na penězích, který se z těchto součtů odvozuje. Neovlivňují **nic jiného**: ani mzdu, ani počet lidí zobrazený v tabulce obsazenosti „Přehled obsazení", ani sloupec „Směny" u jednotlivého zaměstnance v plánu směn, ani pokrytí volných směn.
+
+> 🔒 Server. Zdroj: `functions/src/routes/recepceSummary.ts:247-260` (jediné místo, které rozdělení čte a přičítá k součtům); mzdy (`functions/src/services/payrollCalculator.ts`) ani tabulka obsazenosti/sloupec „Směny" (`frontend/src/components/ShiftGrid.tsx`) rozdělení vůbec nečtou.
+
+### Rozdělení hodin lze upravit i po uzavření nebo publikaci plánu
+
+Na rozdíl od běžné úpravy buňky v rozpisu směn není ruční rozdělení hodin (viz pravidla výše) vázáno na stav plánu – jde o dodatečnou opravu evidence, která musí jít provést i na už **uzavřeném** nebo **publikovaném** plánu.
+
+> 🔒 Server. Zdroj: `functions/src/routes/shifts.ts:1779-1782` (endpoint `PUT .../splits/:date/:type`, komentář o záměrné výjimce v kódu) – handler neobsahuje žádnou kontrolu `plan.status`.
+
 ---
 
 ## Dovolená

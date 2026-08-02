@@ -1,0 +1,171 @@
+/* Content styles only – the overlay / panel / header / body / footer shell is
+   shared with AddEmployeeToPlanModal.module.css (same as ShiftChangeRequestModal). */
+
+.subtitle {
+  margin-top: 2px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.sectionLabel {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  margin: 0.9rem 0 0.35rem;
+}
+
+.sectionLabel:first-child {
+  margin-top: 0;
+}
+
+.empty {
+  font-size: 0.8125rem;
+  color: var(--color-text-subtle);
+  margin: 0 0 0.25rem;
+}
+
+.list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.staticRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: var(--color-surface-2);
+  font-size: 0.875rem;
+  color: var(--color-text);
+}
+
+.staticRow + .staticRow {
+  margin-top: 4px;
+}
+
+.rowName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowHours {
+  flex-shrink: 0;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.editRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.select {
+  flex: 1;
+  min-width: 0;
+  padding: 8px;
+  border-radius: 4px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.hoursInput {
+  width: 4.5rem;
+  flex-shrink: 0;
+  padding: 8px;
+  border-radius: 4px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 0.875rem;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.removeBtn {
+  flex-shrink: 0;
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 6px 8px;
+  font-size: 0.8rem;
+  line-height: 1;
+  color: var(--color-text-subtle);
+}
+
+.removeBtn:hover:not(:disabled) {
+  background: var(--color-danger-bg);
+  color: var(--color-danger-text);
+  border-color: var(--color-danger-border);
+}
+
+.addRow {
+  margin-top: 2px;
+}
+
+.summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-top: 0.9rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--color-border-subtle);
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+}
+
+.remainingOk {
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+/* Hours still credited to nobody – same warning tone as the grid marker. */
+.remainingWarn {
+  font-weight: 700;
+  color: #b45309;
+}
+
+[data-theme="dark"] .remainingWarn {
+  color: #fcd34d;
+}
+
+.error {
+  color: var(--color-danger-text);
+  font-size: 0.8125rem;
+  margin: 0.5rem 0 0;
+}
+
+/* Phones – the shared shell caps width/height and scrolls .body; only the touch
+   targets grow here. 16px inputs stop iOS auto-zooming on focus. */
+@media (max-width: 559.98px), (orientation: landscape) and (max-height: 480px) {
+  .select {
+    min-height: 44px;
+    padding: 10px 8px;
+    font-size: 1rem;
+  }
+
+  .hoursInput {
+    min-height: 44px;
+    width: 4.75rem;
+    padding: 11px 6px;
+    font-size: 1rem;
+  }
+
+  .removeBtn {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}

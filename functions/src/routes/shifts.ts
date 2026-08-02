@@ -7,6 +7,13 @@ import { HOTEL_SLUGS, hotelViewPerm } from "../services/hotels";
 import { scheduledEmployeeId } from "../services/scheduleLookup";
 import { currentReceptionShiftPrague } from "../services/recepceEmployees";
 import { parseShiftExpression, HOTEL_CODES, isPureNumericExpression, sanitizeTypeTag } from "../services/shiftParser";
+import {
+  CountedTag,
+  FULL_SHIFT_HOURS,
+  ShiftCellLike,
+  cellHoursForType,
+  isCountedTag,
+} from "../services/shiftCounting";
 import { snapshotShifts, deleteCollection, autoFillManagerRShifts } from "../services/planTransitions";
 import { createOrUpdatePayrollPeriod } from "../services/payrollCalculator";
 import {
@@ -1715,6 +1722,191 @@ shiftsRouter.put(
       },
     });
     res.json({ ok: true });
+  }
+);
+
+// ─── Rozdělení směn (shiftSplits) ────────────────────────────────────────────
+// A cell can be a bare number ("8") tagged with a shift type, i.e. only part of
+// the 12h shift. The leftover hours belong to whoever actually covered them, but
+// the grid has no place to record that. `shiftPlans/{planId}/shiftSplits/
+// {date}__{TYPE}` holds those manual assignments; the 4D Recepce summary adds
+// them on top of the cell-derived counts (hours / 12 of a shift each).
+
+const SPLIT_TYPE_SEP = "__";
+
+interface SplitEntry {
+  employeeId: string;
+  hours: number;
+}
+
+/** Coerce a stored `entries` value to well-formed members, dropping the rest. */
+function readSplitEntries(value: unknown): SplitEntry[] {
+  if (!Array.isArray(value)) return [];
+  const out: SplitEntry[] = [];
+  for (const raw of value) {
+    const e = raw as { employeeId?: unknown; hours?: unknown };
+    if (typeof e?.employeeId !== "string" || e.employeeId === "") continue;
+    if (typeof e.hours !== "number" || !Number.isFinite(e.hours)) continue;
+    out.push({ employeeId: e.employeeId, hours: e.hours });
+  }
+  return out;
+}
+
+// GET /shifts/plans/:planId/splits — every manual split of the plan
+shiftsRouter.get(
+  "/plans/:planId/splits",
+  requireAuth,
+  requirePermission("shifts.counterTable.view"),
+  async (req, res) => {
+    const { planId } = req.params;
+    const snap = await db()
+      .collection("shiftPlans")
+      .doc(planId)
+      .collection("shiftSplits")
+      .get();
+    const splits = snap.docs
+      .map((d) => d.data() as { date?: unknown; type?: unknown; entries?: unknown })
+      .filter((d) => typeof d.date === "string" && isCountedTag(d.type))
+      .map((d) => ({
+        date: d.date as string,
+        type: d.type as CountedTag,
+        entries: readSplitEntries(d.entries),
+      }));
+    res.json({ splits });
+  }
+);
+
+// PUT /shifts/plans/:planId/splits/:date/:type — full replacement of one split list.
+// Deliberately NOT gated on plan status: a split is a retroactive reporting
+// correction and must stay editable on closed/published plans.
+shiftsRouter.put(
+  "/plans/:planId/splits/:date/:type",
+  requireAuth,
+  requirePermission("shifts.cells.edit"),
+  async (req: AuthRequest, res) => {
+    const { planId, date, type } = req.params;
+    const planRef = db().collection("shiftPlans").doc(planId);
+    const planDoc = await planRef.get();
+    if (!planDoc.exists) {
+      res.status(404).json({ error: "Plán nenalezen" });
+      return;
+    }
+
+    // Month prefix from the plan's own year/month when present, else from the id.
+    const planData = planDoc.data() as { year?: unknown; month?: unknown };
+    const monthPrefix =
+      typeof planData.year === "number" && typeof planData.month === "number"
+        ? `${planData.year}-${String(planData.month).padStart(2, "0")}`
+        : planId.slice(0, 7);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !date.startsWith(`${monthPrefix}-`)) {
+      res.status(400).json({ error: "Datum nepatří do tohoto plánu" });
+      return;
+    }
+
+    if (!isCountedTag(type)) {
+      res.status(400).json({ error: "Neplatný typ směny" });
+      return;
+    }
+
+    const body = req.body as Record<string, unknown>;
+    if (!Array.isArray(body.entries)) {
+      res.status(400).json({ error: "entries musí být pole" });
+      return;
+    }
+
+    const entries: SplitEntry[] = [];
+    for (const raw of body.entries) {
+      const e = raw as { employeeId?: unknown; hours?: unknown };
+      const employeeId = typeof e?.employeeId === "string" ? e.employeeId.trim() : "";
+      if (employeeId === "") {
+        res.status(400).json({ error: "Vyberte zaměstnance" });
+        return;
+      }
+      const hours = e?.hours;
+      if (
+        typeof hours !== "number" ||
+        !Number.isFinite(hours) ||
+        hours <= 0 ||
+        hours > FULL_SHIFT_HOURS ||
+        Math.abs(hours * 100 - Math.round(hours * 100)) > 1e-6 // max 2 decimals
+      ) {
+        res.status(400).json({ error: "Neplatný počet hodin" });
+        return;
+      }
+      entries.push({ employeeId, hours });
+    }
+
+    if (new Set(entries.map((e) => e.employeeId)).size !== entries.length) {
+      res.status(400).json({ error: "Zaměstnanec je uveden vícekrát" });
+      return;
+    }
+
+    const [planEmployeesSnap, dayShiftsSnap] = await Promise.all([
+      planRef.collection("planEmployees").get(),
+      planRef.collection("shifts").where("date", "==", date).get(),
+    ]);
+
+    const rosterIds = new Set<string>();
+    for (const d of planEmployeesSnap.docs) {
+      const id = (d.data() as { employeeId?: unknown }).employeeId;
+      if (typeof id === "string" && id !== "") rosterIds.add(id);
+    }
+    if (entries.some((e) => !rosterIds.has(e.employeeId))) {
+      res.status(400).json({ error: "Zaměstnanec není v tomto plánu" });
+      return;
+    }
+
+    // Hours this (date, type) already gets from the grid itself, plus the set of
+    // employees who earn them — those must not be assigned again here.
+    let cellHours = 0;
+    const alreadyCovering = new Set<string>();
+    for (const d of dayShiftsSnap.docs) {
+      const cell = d.data() as ShiftCellLike & { employeeId?: unknown };
+      const hrs = cellHoursForType(cell, type);
+      if (hrs <= 0) continue;
+      cellHours += hrs;
+      if (typeof cell.employeeId === "string" && cell.employeeId !== "") alreadyCovering.add(cell.employeeId);
+    }
+    if (entries.some((e) => alreadyCovering.has(e.employeeId))) {
+      res.status(400).json({ error: "Zaměstnanec už na tento den má tuto směnu v rozpisu" });
+      return;
+    }
+
+    const assignedHours = entries.reduce((sum, e) => sum + e.hours, 0);
+    if (cellHours + assignedHours > FULL_SHIFT_HOURS + 1e-9) {
+      res.status(400).json({ error: "Součet hodin přesahuje 12 h" });
+      return;
+    }
+
+    const splitRef = planRef.collection("shiftSplits").doc(`${date}${SPLIT_TYPE_SEP}${type}`);
+    if (entries.length === 0) {
+      await splitRef.delete();
+    } else {
+      // `employeeIds` mirrors `entries` purely so the employee-delete guard can
+      // find a split with array-contains (Firestore cannot match inside objects).
+      await splitRef.set({
+        date,
+        type,
+        entries,
+        employeeIds: entries.map((e) => e.employeeId),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    }
+
+    await writeAudit(ctxFromReq(req as AuthRequest), {
+      action: "update",
+      collection: "shiftPlans/shiftSplits",
+      resourceId: `${planId}/${date}/${type}`,
+      extra: { date, type, entries },
+    });
+
+    res.json({
+      ok: true,
+      entries,
+      cellHours,
+      assignedHours,
+      remaining: FULL_SHIFT_HOURS - cellHours - assignedHours,
+    });
   }
 );
 

@@ -1301,3 +1301,15 @@ non-obvious constraints a maintainer must not break. Code: `RecepceSummaryPage`
 - **No audit logging, ever** — `recepceSummary.ts` imports no audit helper; an
   `auditLog/` entry would advertise the page. `auditLog` read routes also hide
   any historical entry (`isHiddenEntry`). Do not reintroduce logging here.
+- **Shift-count aggregation now runs through the shared counting rule.** The
+  per-employee/per-hotel shift tally reads every `shifts/*` cell via
+  `cellHoursForType` (`functions/src/services/shiftCounting.ts`) instead of its
+  own inline copy of the two counting branches, then adds a second pass over
+  `shiftPlans/*/shiftSplits` — manually assigned leftover hours from a tagged
+  numeric cell that only covered part of a 12h shift ("Rozdělení směny" in the
+  Směny occupancy table). Both passes are `collectionGroup` queries filtered on
+  `date`, so **both need their `COLLECTION_GROUP` index in
+  `firestore.indexes.json`** — the `shiftSplits` one specifically is easy to
+  miss since the page works fine until a split actually exists in the queried
+  range, then 500s. Full write-up (schema, endpoints, validation, the three
+  different tallies over the same grid): [Shifts — Manual hour splits](shifts.md).
