@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { api, ApiError } from "../lib/api";
 import * as clock from "../lib/clock";
 import { useAuth } from "../hooks/useAuth";
-import { parseShiftExpression, getCellColor, SECTIONS, SECTION_LABELS, getCzechHolidays, sortSectionEmployees, isPureNumericExpression } from "../lib/shiftConstants";
+import { parseShiftExpression, getCellColor, SECTIONS, SECTION_LABELS, getCzechHolidays, sortSectionEmployees, isPureNumericExpression, cellHoursForType, type ShiftSegment } from "../lib/shiftConstants";
 import { modLettersByEmployeeId } from "../lib/modPersons";
-import { employeeDisplayName } from "../lib/employeeName";
+import { employeeDisplayName, employeeSurnameFirst } from "../lib/employeeName";
 import { formatIsoDatetimeCZ } from "../lib/dateFormat";
 import { escapeHtml } from "../lib/escapeHtml";
 import ShiftGrid from "../components/ShiftGrid";
@@ -18,6 +18,7 @@ import ShiftChangeRequestPanel from "../components/ShiftChangeRequestPanel";
 import MyRequestsPanel from "../components/MyRequestsPanel";
 import ShiftChangeRequestModal from "../components/ShiftChangeRequestModal";
 import FreeClaimModal from "../components/FreeClaimModal";
+import ShiftSplitModal from "../components/ShiftSplitModal";
 import Button from "../components/Button";
 import { useShiftOverridesContext } from "../context/ShiftOverridesContext";
 import { useShiftChangeRequestsContext } from "../context/ShiftChangeRequestsContext";
@@ -70,6 +71,17 @@ export interface ShiftDoc {
   status: "assigned" | "day_off" | "unassigned";
   source?: string | null; // "vacation" for auto-applied vacation Xs; absent for manual
   typeTag?: string | null; // #29: shift-type tag on a numeric "worked hours" cell (tally only, no pay effect)
+  /** Stored parse result of rawInput. The server writes it on every cell upsert and
+   *  reads it back for hour accounting — cellHoursForType must use THIS, not a
+   *  re-parse, or the grid and the 4D summary can disagree. Absent on very old docs. */
+  segments?: ShiftSegment[];
+}
+
+/** Manually assigned leftover hours for one date + counted shift type. */
+export interface ShiftSplit {
+  date: string;
+  type: string;
+  entries: { employeeId: string; hours: number }[];
 }
 
 export interface ModShiftDoc {
@@ -403,6 +415,61 @@ export default function ShiftPlannerPage() {
       cancelled = true;
     };
   }, [showPrevGap, selectedYear, selectedMonth]);
+
+  // ── Rozdělení směny (hour splits) ──────────────────────────────────────────
+  // Leftover hours of a shift (a tagged numeric cell credits only its own hours,
+  // not the whole 12) handed to other employees. Fetched alongside the plan for
+  // holders of shifts.counterTable.view — the same gate the occupancy table
+  // renders under, so an unauthorised page never makes the call. Editing inside
+  // the modal is separately gated by shifts.cells.edit.
+  const [splits, setSplits] = useState<ShiftSplit[]>([]);
+  const [splitTarget, setSplitTarget] = useState<{ date: string; type: string } | null>(null);
+  const canViewCounter = can("shifts.counterTable.view");
+  const planId = plan?.id ?? null;
+  const loadSplits = useCallback(() => {
+    if (!planId || !canViewCounter) {
+      setSplits([]);
+      return;
+    }
+    api
+      .get<{ splits: ShiftSplit[] }>(`/shifts/plans/${planId}/splits`)
+      .then((r) => setSplits(r.splits ?? []))
+      .catch(() => setSplits([]));
+  }, [planId, canViewCounter]);
+  useEffect(() => {
+    loadSplits();
+  }, [loadSplits]);
+
+  // Keyed "YYYY-MM-DD|TYPE" for the grid's per-cell lookup.
+  const splitsByKey = useMemo(() => {
+    const rec: Record<string, { employeeId: string; hours: number }[]> = {};
+    for (const s of splits) rec[`${s.date}|${s.type}`] = s.entries ?? [];
+    return rec;
+  }, [splits]);
+
+  // Who already covers this date+type from real shift cells, and who is still
+  // assignable (the plan roster minus those contributors).
+  function splitModalData(target: { date: string; type: string }) {
+    const cellContributors = (plan?.shifts ?? [])
+      .filter((s) => s.date === target.date && cellHoursForType(s, target.type) > 0)
+      .map((s) => {
+        const emp = plan?.employees.find((e) => e.employeeId === s.employeeId);
+        return {
+          employeeId: s.employeeId,
+          name: emp ? employeeDisplayName(emp) : s.employeeId,
+          hours: cellHoursForType(s, target.type),
+        };
+      });
+    const contributorIds = new Set(cellContributors.map((c) => c.employeeId));
+    const employees = (plan?.employees ?? [])
+      .filter((e) => !contributorIds.has(e.employeeId))
+      .map((e) => ({
+        employeeId: e.employeeId,
+        name: employeeDisplayName(e),
+        sortKey: employeeSurnameFirst(e),
+      }));
+    return { cellContributors, employees };
+  }
 
   // External-change detection. The plan has no realtime channel (firestore.rules
   // block client SDK reads, so an onSnapshot is impossible), so we poll the plan
@@ -1857,7 +1924,11 @@ export default function ShiftPlannerPage() {
               readOnly={selfServiceOnly ? plan.status !== "opened" : !canEdit}
               alwaysReadOnlySections={selfServiceOnly ? ["vedoucí"] : []}
               currentEmployeeId={currentEmployeeId}
-              showCounterTable={can("shifts.counterTable.view")}
+              showCounterTable={canViewCounter}
+              splits={splitsByKey}
+              onOpenSplitCell={
+                canViewCounter ? (date, type) => setSplitTarget({ date, type }) : undefined
+              }
               prevMonthGapFor={
                 showPrevGap && prevGap
                   ? (emp) => {
@@ -1962,6 +2033,42 @@ export default function ShiftPlannerPage() {
           }}
         />
       )}
+      {/* Rendered BEFORE ConfirmModal on purpose: both overlays sit at z-index
+          1000, so the later one wins the stacking order and a save error must
+          appear ON TOP of the still-open split modal. */}
+      {splitTarget && plan && (() => {
+        const { cellContributors, employees } = splitModalData(splitTarget);
+        return (
+          <ShiftSplitModal
+            date={splitTarget.date}
+            type={splitTarget.type}
+            cellContributors={cellContributors}
+            entries={splitsByKey[`${splitTarget.date}|${splitTarget.type}`] ?? []}
+            employees={employees}
+            canEdit={canEdit}
+            onSave={async (entries) => {
+              try {
+                await api.put(
+                  `/shifts/plans/${plan.id}/splits/${splitTarget.date}/${splitTarget.type}`,
+                  { entries }
+                );
+                setSplitTarget(null);
+                loadSplits();
+              } catch (e) {
+                setConfirmModal({
+                  title: "Chyba",
+                  message: e instanceof Error ? e.message : "Rozdělení se nepodařilo uložit.",
+                  confirmLabel: "OK",
+                  showCancel: false,
+                  onConfirm: () => setConfirmModal(null),
+                });
+                throw e;
+              }
+            }}
+            onClose={() => setSplitTarget(null)}
+          />
+        );
+      })()}
       {confirmModal && (
         <ConfirmModal
           title={confirmModal.title}

@@ -370,6 +370,59 @@ export function typeTagToCounterKey(label: string | null | undefined): string | 
   return t ? `${t.code}_${t.hotel}` : null;
 }
 
+// ─── Hour-level occupancy (shift splits) ─────────────────────────────────────
+// The per-type tally counts PEOPLE, so a numeric cell tagged "DS" (e.g. "8")
+// reads as one whole DS shift there — but the 4D summary credits it only
+// 8/12 of a shift, leaving 4 h attributed to nobody. Those leftover hours can
+// be handed to other employees manually (shiftSplits); the helpers below mirror
+// the server's hour accounting so the grid can flag the shortfall.
+
+/** The 8 desk tags that count toward a hotel on the 4D summary (no porters/trainees). */
+export const COUNTED_TAGS = ["DA", "DS", "DQ", "DK", "NA", "NS", "NQ", "NK"] as const;
+
+export const COUNTED_TAG_SET: Set<string> = new Set(COUNTED_TAGS);
+
+/** A full reception shift is 12 h. */
+export const FULL_SHIFT_HOURS = 12;
+
+/**
+ * Hours of shift-type `type` that this cell credits (12 = a whole shift).
+ * MIRROR of cellHoursForType in functions/src/services/shiftCounting.ts — keep in sync.
+ *
+ * Reads the STORED parse result (segments / isDouble / typeTag / hoursComputed),
+ * never a re-parse of rawInput, so it agrees with the server exactly.
+ *
+ * `includeDouble` counts a DOUBLE cell (`DA²`) as its full hours instead of 0.
+ * Only the occupancy tally passes it: that table answers "is this shift covered",
+ * where a double is covered, while the 4D summary credits a double nothing.
+ * The server never passes it — its only caller is the payout-side accounting.
+ */
+export function cellHoursForType(
+  cell: {
+    segments?: { code: string; hotel: string | null }[];
+    isDouble?: boolean;
+    typeTag?: string | null;
+    hoursComputed?: number;
+  },
+  type: string,
+  opts?: { includeDouble?: boolean }
+): number {
+  const code = type.slice(0, -1);
+  const hotel = type.slice(-1);
+  let hours = 0;
+  const countSegments = opts?.includeDouble === true || cell.isDouble !== true;
+  if (countSegments && Array.isArray(cell.segments)) {
+    for (const seg of cell.segments) {
+      if (seg.code === code && seg.hotel === hotel) hours += FULL_SHIFT_HOURS;
+    }
+  }
+  if (cell.typeTag === type) {
+    const h = cell.hoursComputed;
+    if (typeof h === "number" && Number.isFinite(h) && h > 0) hours += h;
+  }
+  return hours;
+}
+
 /** A "worked hours" cell: valid, non-empty, every segment a bare number (no hotel). */
 export function isPureNumericExpression(parsed: ParseResult): boolean {
   return (

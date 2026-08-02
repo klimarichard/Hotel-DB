@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as clock from "../lib/clock";
 import type { PlanDetail, PlanEmployee, ShiftDoc, ModShiftDoc } from "../pages/ShiftPlannerPage";
-import { SECTION_LABELS, SECTIONS, type Section, getCzechHolidays, parseShiftExpression, getCellColor, isNightShiftType, sortSectionEmployees, SHIFT_TYPE_TAGS, typeTagToCounterKey } from "../lib/shiftConstants";
+import { SECTION_LABELS, SECTIONS, type Section, getCzechHolidays, parseShiftExpression, getCellColor, isNightShiftType, sortSectionEmployees, SHIFT_TYPE_TAGS, typeTagToCounterKey, COUNTED_TAG_SET, FULL_SHIFT_HOURS, cellHoursForType } from "../lib/shiftConstants";
 import { modLettersByEmployeeId } from "../lib/modPersons";
 import { employeeDisplayName } from "../lib/employeeName";
 import { useTheme } from "../context/ThemeContext";
@@ -25,6 +25,10 @@ interface Props {
   canSeeInactiveFlag: boolean;
   readOnly: boolean;
   showCounterTable?: boolean;
+  /** Manually assigned leftover hours per "date|TYPE" (see ShiftSplitModal). */
+  splits?: Record<string, { employeeId: string; hours: number }[]>;
+  /** Click a counted occupancy cell to open the hour-split modal. Undefined = disabled. */
+  onOpenSplitCell?: (date: string, type: string) => void;
   showModCounts?: boolean;
   onModPersonChange?: (employeeId: string, oldLetter: string | null, newLetter: string | null) => Promise<void>;
   onCellRequestChange?: (employeeId: string, date: string, currentRawInput: string) => void;
@@ -61,6 +65,21 @@ function czDays(n: number): string {
   if (n === 1) return "1 den";
   if (n >= 2 && n <= 4) return `${n} dny`;
   return `${n} dní`;
+}
+
+/** Hours with a Czech decimal comma and no trailing zeros: 8 → "8", 7.5 → "7,5". */
+function czHours(n: number): string {
+  return String(Math.round(n * 100) / 100).replace(".", ",");
+}
+
+/**
+ * Whole shifts covered by `h` hours: anything under 18 h is 1, 18 h and up is 2,
+ * and so on (0 h is 0). A 12h shift split 8 + 4 between two people is ONE shift
+ * covered — the tally would otherwise read 2 and overstate the day's coverage.
+ */
+function shiftsFromHours(h: number): number {
+  if (h <= 0) return 0;
+  return Math.max(1, Math.round(h / FULL_SHIFT_HOURS));
 }
 
 /** Tooltip for the previous-month gap badge. */
@@ -122,6 +141,8 @@ export default function ShiftGrid({
   canSeeInactiveFlag,
   readOnly,
   showCounterTable = false,
+  splits,
+  onOpenSplitCell,
   showModCounts = false,
   onModPersonChange,
   onCellRequestChange,
@@ -206,26 +227,54 @@ export default function ShiftGrid({
     return list;
   }, [grouped]);
 
-  const shiftCounts = useMemo(() => {
+  // The occupancy tally is an HOUR view, not a head count. Two people who each
+  // worked half of the same 12h shift are ONE shift covered, not two, so the
+  // displayed number is the hours rounded to the nearest whole shift (see
+  // shiftsFromHours). Per date and type it carries:
+  //   occupancyHours – what the grid covers. DOUBLES (`DA²`) count their full
+  //     hours here: the table answers "is this shift covered", so a double must
+  //     not read as an empty day. All 12 rows.
+  //   cellHours      – what the 4D summary actually CREDITS (doubles count 0),
+  //     which is what the shortfall marker is about. The 8 counted types only.
+  //   splitHours     – hours handed to other employees manually.
+  // Both hour figures read the STORED parse result, never a re-parse, so they
+  // agree with the server exactly; rawInput is only a fallback for pre-schema
+  // cells that carry no `segments` at all.
+  const counterStats = useMemo(() => {
     if (!showCounterTable) return null;
-    const counts: Record<string, Record<string, number>> = {};
-    const bump = (date: string, key: string) => {
-      if (!counts[date]) counts[date] = {};
-      counts[date][key] = (counts[date][key] ?? 0) + 1;
+    const m: Record<string, Record<string, { occupancyHours: number; cellHours: number; splitHours: number }>> = {};
+    const bucket = (date: string, type: string) => {
+      if (!m[date]) m[date] = {};
+      if (!m[date][type]) m[date][type] = { occupancyHours: 0, cellHours: 0, splitHours: 0 };
+      return m[date][type];
     };
     for (const shift of plan.shifts) {
-      const parsed = parseShiftExpression(shift.rawInput);
-      if (!parsed.isValid) continue;
-      for (const seg of parsed.segments) {
-        if (!seg.hotel) continue;
-        bump(shift.date, `${seg.code}_${seg.hotel}`);
+      const cell = shift.segments
+        ? shift
+        : { ...shift, segments: parseShiftExpression(shift.rawInput).segments };
+      for (const row of COUNTER_ROWS) {
+        const occ = cellHoursForType(cell, row.label, { includeDouble: true });
+        if (occ > 0) bucket(shift.date, row.label).occupancyHours += occ;
+        if (COUNTED_TAG_SET.has(row.label)) {
+          const credited = cellHoursForType(cell, row.label);
+          if (credited > 0) bucket(shift.date, row.label).cellHours += credited;
+        }
       }
-      // #29: a numeric "worked hours" cell tagged with a type counts toward it.
-      const tagKey = typeTagToCounterKey(shift.typeTag);
-      if (tagKey) bump(shift.date, tagKey);
     }
-    return counts;
-  }, [showCounterTable, plan.shifts]);
+    for (const [key, entries] of Object.entries(splits ?? {})) {
+      const sep = key.indexOf("|");
+      if (sep < 0) continue;
+      const date = key.slice(0, sep);
+      const type = key.slice(sep + 1);
+      if (!COUNTED_TAG_SET.has(type)) continue;
+      let sum = 0;
+      for (const e of entries ?? []) {
+        if (typeof e.hours === "number" && Number.isFinite(e.hours)) sum += e.hours;
+      }
+      if (sum > 0) bucket(date, type).splitHours += sum;
+    }
+    return m;
+  }, [showCounterTable, plan.shifts, splits]);
 
   // Volné směny: per-date set of "code_hotel" slots covered by some employee.
   const freeShiftCoverage = useMemo(() => {
@@ -673,7 +722,7 @@ export default function ShiftGrid({
             return rows;
           })}
         </tbody>
-        {shiftCounts && (
+        {counterStats && (
           <tbody data-tour="shift-counter">
               <tr className={styles.counterSeparatorRow}>
                 <td className={styles.counterSeparatorCell}>Přehled obsazení</td>
@@ -684,14 +733,57 @@ export default function ShiftGrid({
                   <td className={styles.counterLabelCell}>{row.label}</td>
                   {days.map((d) => {
                     const dateStr = formatDate(d);
-                    const count = shiftCounts[dateStr]?.[`${row.code}_${row.hotel}`] ?? 0;
+                    const h = counterStats[dateStr]?.[row.label];
+                    const count = shiftsFromHours(h?.occupancyHours ?? 0);
                     const cls =
                       count === 0 ? styles.counterCell0 :
                       count === 1 ? styles.counterCell1 :
                                    styles.counterCell2;
+                    // The split affordance applies to the 8 counted desk types
+                    // only; the porter rows (DPQ/NPQ/DPA/NPA) stay plain cells.
+                    if (!COUNTED_TAG_SET.has(row.label)) {
+                      return (
+                        <td key={dateStr} className={`${cls} ${dayClass(d)}`}>
+                          {count}
+                        </td>
+                      );
+                    }
+                    const cellHours = h?.cellHours ?? 0;
+                    const splitHours = h?.splitHours ?? 0;
+                    const assigned = cellHours + splitHours;
+                    // A day with nothing at all is simply empty, not a shortfall –
+                    // flagging those would light up the whole table.
+                    const shortfall = cellHours > 0 && assigned < FULL_SHIFT_HOURS - 1e-9;
+                    const clickable = !!onOpenSplitCell;
+                    let title = `Odpracováno ${czHours(assigned)} z ${FULL_SHIFT_HOURS} h`;
+                    if (splitHours > 0) title += ` (z toho ${czHours(splitHours)} h přiřazeno ručně)`;
+                    if (shortfall) title += ` – ${czHours(FULL_SHIFT_HOURS - assigned)} h nepřiřazeno`;
+                    if (clickable) title += " – kliknutím rozdělíte hodiny";
+                    const open = onOpenSplitCell
+                      ? () => onOpenSplitCell(dateStr, row.label)
+                      : undefined;
                     return (
-                      <td key={dateStr} className={`${cls} ${dayClass(d)}`}>
+                      <td
+                        key={dateStr}
+                        className={`${cls} ${styles.counterCellCounted} ${dayClass(d)}${clickable ? ` ${styles.counterCellClickable}` : ""}`}
+                        title={title}
+                        onClick={open}
+                        role={clickable ? "button" : undefined}
+                        tabIndex={clickable ? 0 : undefined}
+                        onKeyDown={
+                          open
+                            ? (e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  open();
+                                }
+                              }
+                            : undefined
+                        }
+                      >
                         {count}
+                        {shortfall && <span className={styles.counterShortfall}>!</span>}
+                        {splitHours > 0 && <span className={styles.counterSplitDot}>•</span>}
                       </td>
                     );
                   })}

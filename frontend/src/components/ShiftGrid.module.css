@@ -355,6 +355,57 @@
   padding: 2px 0;
 }
 
+/* The 8 counted desk types carry corner markers (hour shortfall / manual split),
+   so they need a positioning context. The porter rows keep the plain cell. */
+.counterCellCounted {
+  position: relative;
+}
+
+.counterCellClickable {
+  cursor: pointer;
+}
+
+/* Hover/focus affordance that survives every counterCell0/1/2 background. */
+.counterCellClickable:hover,
+.counterCellClickable:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: -2px;
+}
+
+/* Shortfall marker – hours of this shift credited to nobody. Amber, and dark
+   enough for the pastel light-mode backgrounds / light enough for the saturated
+   dark-mode ones (see the counterCell swap below). */
+.counterShortfall {
+  position: absolute;
+  top: 0;
+  right: 1px;
+  font-size: 0.55rem;
+  font-weight: 800;
+  line-height: 1;
+  pointer-events: none;
+  color: #b45309;
+}
+
+[data-theme="dark"] .counterShortfall {
+  color: #fcd34d;
+}
+
+/* Manual split recorded on this cell – neutral marker, deliberately NOT the
+   amber warning tone. */
+.counterSplitDot {
+  position: absolute;
+  bottom: 0;
+  right: 1px;
+  font-size: 0.6rem;
+  line-height: 0.6;
+  pointer-events: none;
+  color: var(--color-text-muted);
+}
+
+[data-theme="dark"] .counterSplitDot {
+  color: #e2e8f0;
+}
+
 /* Dark mode: swap – saturated bg + light text */
 [data-theme="dark"] .counterCell0 { background: #dc2626; color: #fee2e2; }
 [data-theme="dark"] .counterCell1 { background: #15803d; color: #dcfce7; }
