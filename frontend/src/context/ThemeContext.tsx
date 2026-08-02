@@ -11,6 +11,18 @@ interface ThemeContextValue {
 
 const GUEST_THEME_KEY = "hotel_hr_theme_guest";
 
+/**
+ * uid-INDEPENDENT mirror of whichever theme is currently applied. The real keys
+ * are per-user (`hotel_hr_theme_<uid>`), but the first-paint script in
+ * index.html runs long before auth resolves and cannot know the uid — so it
+ * reads this one instead. Written on every apply; never read by this module.
+ * Renaming it here means renaming it in index.html too.
+ */
+const LAST_THEME_KEY = "hotel_hr_theme_last";
+
+/** Browser chrome colour on mobile. Mirrors --color-bg in index.css. */
+const THEME_COLORS: Record<Theme, string> = { light: "#f9fafb", dark: "#0f172a" };
+
 const ThemeContext = createContext<ThemeContextValue>({
   theme: "dark",
   toggleTheme: () => {},
@@ -55,9 +67,17 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     };
   }, [storageKey, user]);
 
-  // Apply the theme attribute to <html> so CSS variables take effect
+  // Apply the theme attribute to <html> so CSS variables take effect, and leave
+  // a uid-independent trace for the first-paint script in index.html to read on
+  // the next load (see LAST_THEME_KEY).
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
+    try {
+      localStorage.setItem(LAST_THEME_KEY, theme);
+    } catch {
+      /* private mode — the next boot just falls back to the default. */
+    }
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", THEME_COLORS[theme]);
   }, [theme]);
 
   function toggleTheme() {
