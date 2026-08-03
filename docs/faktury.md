@@ -194,6 +194,23 @@ The editor's **Vystavil** field defaults from `employeeName` on `/auth/me`, whic
 
 `invoiceHtml.ts` is pure — no Firestore, no I/O, no async, no clock, no randomness; the same `InvoiceDraft` + `FakturyConfig` + `CompanyInfo | null` always yields the same HTML bytes. It lays out the page with tables and explicit column widths rather than flexbox, because print pagination across a page break is more predictable that way and the line-item table is the one region allowed to overflow onto a second page.
 
+### Diacritics are folded out of the guest and payer fields — at print time only
+
+The document has always been written **without diacritics** ("Danovy Doklad", "Jmeno Hosta", "Zaklad dane"): Protel prints ASCII and this page reproduces Protel. Until v5.4.0 the user-entered fields were the one exception, so a payer block could read `František Dvořák` in the middle of an otherwise accent-free page. `deaccent()` closes that gap for the **guest name** and the **whole payer block** (name, address slots, IČ, DIČ).
+
+**This happens at render time and nowhere else.** The draft in Firestore keeps whatever was typed, the editor shows the real spelling, and reopening a saved invoice shows it unchanged. Folding on save would quietly destroy the payer's actual name in the database to satisfy a property of one printed document — and there is no way back from that.
+
+`resolveBillTo()` is the single fold point for the payer. Both surfaces that print it — the meta grid's Correspondence Address column and the Billed To band — read from that one function, so a field added to `ResolvedParty` is folded by construction rather than by remembering to. The guest name is folded at its one use site in `metaRows`.
+
+How the fold works, and what it deliberately does not do:
+
+- **NFD normalisation** splits an accented letter into base + combining mark, and the `U+0300–U+036F` block is then dropped. That covers the entire Czech set plus German, French, Polish, Hungarian and the rest of the combining-form world in one rule.
+- **`DEACCENT_EXTRA` covers what NFD cannot.** `ł ø đ æ œ ß þ ð` carry their stroke or ligature *inside* the code point and decompose to nothing. Do not add anything to this map that has a combining form — the normalisation already handles it, and a duplicate entry is a second place to keep correct.
+- **Typographic punctuation folds too** — dashes of every width to `-`, curly quotes to `'`/`"`, `…` to `...`, and four kinds of non-breaking space to a plain space. These are not accents, but they are exactly as non-ASCII and arrive by the same route (an address pasted out of a booking system). The non-breaking space is the one that actually bites: Czech postcodes are routinely written `120 00` with `U+00A0`, invisible in the editor and indistinguishable in the PDF until something downstream treats it as a different character.
+- **Non-Latin scripts pass through UNCHANGED, not deleted.** A guest name in Cyrillic or Greek has no ASCII fold, and dropping the characters would render an empty name field. A mangled name is recoverable by eye; a blank one is not.
+
+⚠️ **Scope is the guest name and payer block only.** Line descriptions still print as the catalogue stores them, and the seeded catalogue *does* contain accents (`Škody`, `Zaokrouhlení`, `Ubytování`), as do the hotel footer, `issuedBy`, `note` and admin-edited VAT labels. That is the current intended behaviour, not an oversight — but it does mean the document is not uniformly ASCII, so do not describe it as such.
+
 ### The payer's address is compacted, and laid out column-major
 
 `addressSlots()` drops empty lines instead of printing them (zip and city always share one line, as on an envelope), so an unused *Ulice 3* closes up rather than punching an empty row through the block. This was long believed unsafe — the blanks supposedly kept IC / DIC level with Tax Charged / Payable On in the meta grid. They do not: that grid's row heights come from the **left** column, which is ten fixed labels regardless of the address. Verified by rendering both a 3-line and a 5-line address; IC / DIC stay on rows 9–10 either way.

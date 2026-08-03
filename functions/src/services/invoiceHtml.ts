@@ -16,7 +16,10 @@
  *  - Labels are NOT bold. Only the title, "Billed To:", "Invoice No. /
  *    Faktura Cislo", the payer name and the Total row are.
  *  - The document is written WITHOUT diacritics throughout ("Danovy Doklad",
- *    "Vystaveno"). Reproduced verbatim so a copy reads like the original.
+ *    "Vystaveno"). Reproduced verbatim so a copy reads like the original, and
+ *    since v5.4.0 that extends to the user-entered guest name and payer block,
+ *    which `deaccent()` folds AT PRINT TIME — the stored draft keeps the real
+ *    spelling and the editor still shows it.
  *  - Dates are DD/MM/YY in the line table and in Arrival/Departure, but
  *    DD/MM/YYYY in Issued / Tax Charged / Payable On.
  *  - Amounts carry a " CZK" suffix in the line table and totals, but NOT in
@@ -238,6 +241,86 @@ function escMultiline(value: string): string {
 }
 
 /**
+ * The characters NFD cannot fold, in two groups.
+ *
+ * FIRST, Latin letters that carry their mark INSIDE the code point and so
+ * decompose to nothing. Everything with a combining form — the whole Czech set,
+ * German umlauts, French accents, Polish ogoneks — is handled by the
+ * normalisation in `deaccent()` and must NOT be listed here.
+ *
+ * SECOND, typographic punctuation. These are not accents, but they are exactly
+ * as non-ASCII as `ř` is and reach the document by the same route: an address
+ * pasted out of a booking system arrives full of en dashes, curly quotes and
+ * non-breaking spaces. Leaving them would defeat the point — a payer block
+ * reading "Praha – Vinohrady" is no closer to the ASCII original than one
+ * reading "Praha - Vinohradý".
+ *
+ * The non-breaking space matters most in practice: Czech postcodes are
+ * routinely written "120 00" with U+00A0, which is invisible in the editor and
+ * indistinguishable from a normal space in the PDF — until something downstream
+ * treats it as a different character.
+ */
+const DEACCENT_EXTRA: Record<string, string> = {
+  // Letters with no decomposition.
+  ł: "l", Ł: "L",
+  đ: "d", Đ: "D",
+  ø: "o", Ø: "O",
+  æ: "ae", Æ: "AE",
+  œ: "oe", Œ: "OE",
+  ß: "ss",
+  þ: "th", Þ: "Th",
+  ð: "d", Ð: "D",
+  ı: "i", ŉ: "n",
+  // Punctuation. Dashes and hyphens of every width collapse to "-".
+  " ": " ", " ": " ", " ": " ", " ": " ",
+  "‐": "-", "‑": "-", "‒": "-", "–": "-",
+  "—": "-", "―": "-", "−": "-",
+  "‘": "'", "’": "'", "‚": "'", "‛": "'",
+  "“": '"', "”": '"', "„": '"', "‟": '"',
+  "…": "...", "•": "-", "·": ".",
+};
+
+/**
+ * Fold accented Latin letters to their base form — `í`→`i`, `ř`→`r`, `ö`→`o`.
+ *
+ * The rest of this document is already diacritic-free by design ("Jmeno Hosta",
+ * "Datum zdanit. plneni", "Zaklad dane"): Protel prints ASCII and this page
+ * reproduces Protel. Only the user-entered payer and guest fields still carried
+ * accents, which is the gap this closes.
+ *
+ * PRINT-TIME ONLY. The draft keeps whatever was typed — the editor shows the
+ * real spelling, and a saved invoice reopened later is unchanged. Folding on
+ * save would quietly destroy the payer's actual name in Firestore, and there is
+ * no reason to: the ASCII form is a property of this printed document, not of
+ * the data.
+ *
+ * NFD splits an accented letter into base + combining mark, so stripping the
+ * combining range does the work generically; `DEACCENT_EXTRA` then covers the
+ * letters that have no decomposition. Anything still non-ASCII after that — a
+ * name in Cyrillic or Greek, say — is passed through UNCHANGED rather than
+ * deleted: a mangled name is recoverable by eye, a blank one is not.
+ */
+function deaccent(value: string): string {
+  if (!value) return "";
+  let out = "";
+  // Iterated by code POINT (for...of on a string), not by UTF-16 unit, so an
+  // astral character is never split into a lone surrogate pair half.
+  for (const ch of value.normalize("NFD")) {
+    const cp = ch.codePointAt(0) as number;
+    // U+0300-U+036F, Combining Diacritical Marks: precisely what NFD split off
+    // a moment ago. Dropping them IS the fold.
+    if (cp >= 0x0300 && cp <= 0x036f) continue;
+    // Plain ASCII, the overwhelmingly common case.
+    if (cp < 0x80) {
+      out += ch;
+      continue;
+    }
+    out += DEACCENT_EXTRA[ch] ?? ch;
+  }
+  return out;
+}
+
+/**
  * Czech money formatting — `12 003,75`. Hand-rolled on purpose: the Functions
  * runtime may ship a trimmed ICU, in which case `toLocaleString("cs-CZ")`
  * silently degrades to the C locale.
@@ -412,6 +495,12 @@ function addressSlots(p: PartyAddress): string[] {
  * `billTo` is either a pointer into the agency address book or an inline
  * person. An agency id that no longer resolves degrades to a nameless block
  * rather than throwing — the PDF must still render.
+ *
+ * Every field is `deaccent()`-ed here, and this is the ONLY place it needs to
+ * happen for the payer: both surfaces that print the payer — the meta grid's
+ * Correspondence Address column and the Billed To band — read the party from
+ * this one function, so a new payer field added to `ResolvedParty` is folded by
+ * construction rather than by remembering to.
  */
 function resolveBillTo(draft: InvoiceDraft, config: FakturyConfig): ResolvedParty {
   const billTo = draft.billTo;
@@ -419,17 +508,17 @@ function resolveBillTo(draft: InvoiceDraft, config: FakturyConfig): ResolvedPart
     const agency = config.agencies.find((a) => a.id === billTo.agencyId);
     if (!agency) return { name: "", slots: [], ic: "", dic: "" };
     return {
-      name: agency.name,
-      slots: addressSlots(agency),
-      ic: agency.ic,
-      dic: agency.dic,
+      name: deaccent(agency.name),
+      slots: addressSlots(agency).map(deaccent),
+      ic: deaccent(agency.ic),
+      dic: deaccent(agency.dic),
     };
   }
   return {
-    name: billTo.name,
-    slots: addressSlots(billTo),
-    ic: billTo.ic,
-    dic: billTo.dic,
+    name: deaccent(billTo.name),
+    slots: addressSlots(billTo).map(deaccent),
+    ic: deaccent(billTo.ic),
+    dic: deaccent(billTo.dic),
   };
 }
 
@@ -475,7 +564,9 @@ export function buildInvoiceHtml(
    * labels, not from the address.
    */
   const metaRows: [string, string, string, string][] = [
-    ["Guest Name / Jmeno Hosta:", draft.guestName, "Correspondence Address", ""],
+    // The payer's fields are already folded by `resolveBillTo`; the guest name
+    // is the only other user-entered string this document prints.
+    ["Guest Name / Jmeno Hosta:", deaccent(draft.guestName), "Correspondence Address", ""],
     ["Room Number / Cislo Pokoje:", draft.roomNo, `<span class="bold">${esc(party.name)}</span>`, ""],
     ["Arrival / Prijezd:", fmtShort(draft.arrival), esc(party.slots[0]), ""],
     ["Departure / Odjezd:", fmtShort(draft.departure), esc(party.slots[1]), ""],
