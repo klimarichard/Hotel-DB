@@ -2043,11 +2043,41 @@ employeesRouter.delete(
 );
 
 /**
+ * The Multisport fields living on the benefits sub-doc. They are the ONLY part
+ * of it that is a "benefit"; everything else (pojišťovna, bankovní účet, home
+ * office, zaučování, příplatky) is ordinary HR data that belongs to the employee
+ * form.
+ *
+ * That split is why this list exists. The benefits doc is reachable through two
+ * gates with different audiences — `employees.edit` for the HR fields (the
+ * employee form writes them) and `benefits.edit` for Multisport (the dedicated
+ * editor writes them) — so the wider gate must not be able to touch these keys,
+ * or `employees.edit` would silently become a way around `benefits.edit`.
+ *
+ * ⚠️ Keep in lockstep with the strip list in `EmployeeFormPage.handleSubmit`.
+ * The client already omits these; this is the check that actually holds.
+ */
+const MULTISPORT_FIELDS = [
+  "multisport",
+  "multisportFrom",
+  "multisportTo",
+  "multisportPeriods",
+  "multisportCompanions",
+] as const;
+
+/**
  * GET /api/employees/:id/benefits
+ *
+ * Two audiences, one document. `benefits.view` sees all of it. Someone who may
+ * only edit the employee record sees the HR fields WITHOUT the Multisport ones —
+ * they need this endpoint because the employee form loads its "Další údaje"
+ * section from here, and gating the read on `benefits.view` alone meant a user
+ * with `employees.edit` but no benefits permission could not open the edit form
+ * at all (the form's parallel load rejected as a whole).
  */
 employeesRouter.get(
   "/:id/benefits",
-  requirePermission("benefits.view"),
+  requirePermission("benefits.view", "employees.edit"),
   async (req: AuthRequest, res) => {
     const snap = await db()
       .collection("employees")
@@ -2057,7 +2087,13 @@ employeesRouter.get(
       .get();
     if (snap.empty) { res.json(null); return; }
     const data = snap.docs[0].data() as Record<string, unknown>;
-    res.json({ id: snap.docs[0].id, ...redactFields(data, [...BENEFITS_SENSITIVE_FIELDS]) });
+    const out = redactFields(data, [...BENEFITS_SENSITIVE_FIELDS]) as Record<string, unknown>;
+    // Multisport is withheld from a caller who only holds the employee-edit
+    // gate: they reached this document for its HR fields, not for the benefit.
+    const maySeeBenefit =
+      req.permissions?.has("benefits.view") || req.permissions?.has("system.admin");
+    if (!maySeeBenefit) for (const f of MULTISPORT_FIELDS) delete out[f];
+    res.json({ id: snap.docs[0].id, ...out });
   }
 );
 
@@ -2065,15 +2101,33 @@ employeesRouter.get(
  * PUT /api/employees/:id/benefits
  * Encrypts insuranceNumber and bankAccount before writing.
  * Blank sensitive fields are omitted so existing encrypted values are preserved.
+ *
+ * ⚠️ Gated on `employees.edit` OR `benefits.edit`, NOT on `benefits.edit` alone.
+ * The employee form saves this section as part of one Uložit, so requiring the
+ * benefit permission here meant a user granted `employees.create`/`employees.edit`
+ * could create an employee, have the contact + documents sections saved, and then
+ * get a 403 from this call — with the record already created. Retrying created a
+ * second one. That happened in production on 2026-07-30 (three records for one
+ * person) and is what this split fixes.
+ *
+ * Multisport keys are stripped below, so widening this gate does not widen access
+ * to the benefit itself — `PUT /:id/multisport` still requires `benefits.edit`.
  */
 employeesRouter.put(
   "/:id/benefits",
-  requirePermission("benefits.edit"),
+  requirePermission("employees.edit", "benefits.edit"),
   async (req: AuthRequest, res) => {
     const body = req.body as Record<string, unknown>;
     const clearFields = Array.isArray(body.clearFields) ? body.clearFields as string[] : [];
     const payload: Record<string, unknown> = { ...body };
     delete payload.clearFields;
+    // Multisport lives on this document but is NOT part of it as far as this
+    // endpoint is concerned: it is owned by PUT /:id/multisport, behind
+    // benefits.edit. Dropped unconditionally rather than only for callers
+    // lacking that permission — the employee form never sends these, so a body
+    // carrying them is either a stale client or a crafted request, and in both
+    // cases the dedicated endpoint is the one place that may write them.
+    for (const f of MULTISPORT_FIELDS) delete payload[f];
     // Drop blank or still-masked sensitive fields so update() preserves the
     // stored encrypted value and a round-tripped mask isn't re-encrypted.
     for (const f of BENEFITS_SENSITIVE_FIELDS) { if (!payload[f] || payload[f] === REDACTION_MASK) delete payload[f]; }

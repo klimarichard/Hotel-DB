@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { api } from "@/lib/api";
+import { api, errorMessage } from "@/lib/api";
 import Button from "@/components/Button";
 import ConfirmModal from "@/components/ConfirmModal";
 import PhoneFormatModal from "@/components/PhoneFormatModal";
@@ -178,6 +178,14 @@ export default function EmployeeFormPage() {
   // Previously-stored phone, to detect a changed non-+420 number on save (then
   // prompt for its display format). Empty for a brand-new employee.
   const initialPhone = useRef("");
+  /**
+   * Id of the employee THIS form created, once it has. Only ever set in create
+   * mode, and only after the POST returns. Its whole job is to make a retry
+   * after a partial save idempotent — see the comment in doSave(). A ref, not
+   * state, because nothing renders from it and it must be readable by the very
+   * next submit without waiting for a re-render.
+   */
+  const createdId = useRef<string | null>(null);
   const [phonePrompt, setPhonePrompt] = useState(false);
 
   const [educationOptions, setEducationOptions] = useState<string[]>([]);
@@ -318,7 +326,15 @@ export default function EmployeeFormPage() {
     setError(null);
 
     try {
-      let empId = id;
+      // ⚠️ `createdId` is what makes a retry safe. This handler creates the
+      // employee and THEN writes three sections; if any section fails, the
+      // record already exists, and re-submitting used to POST a second one.
+      // That is exactly what happened in production on 2026-07-30: a 403 on the
+      // benefits section left the form open, and three records were created for
+      // one person before anyone realised. Once we hold an id, every later
+      // attempt PATCHes it — the create happens at most once per form.
+      let empId = id ?? createdId.current ?? undefined;
+      const alreadyCreated = !isEdit && createdId.current !== null;
 
       // ── Personal + job assignment ──────────────────────────────────────────
       const personalPayload: Record<string, unknown> = { ...personal };
@@ -326,11 +342,12 @@ export default function EmployeeFormPage() {
       const personalClearFields = ["birthNumber"].filter((f) => cleared.has(f));
       if (personalClearFields.length) personalPayload.clearFields = personalClearFields;
 
-      if (isEdit) {
+      if (isEdit || alreadyCreated) {
         await api.patch(`/employees/${empId}`, personalPayload);
       } else {
         const res = await api.post<{ id: string }>("/employees", personalPayload);
         empId = res.id;
+        createdId.current = res.id;
       }
 
       // ── Contact ───────────────────────────────────────────────────────────
@@ -370,7 +387,19 @@ export default function EmployeeFormPage() {
 
       navigate(`/zamestnanci/${empId}`);
     } catch (err: unknown) {
-      setError((err as Error).message ?? "Chyba při ukládání.");
+      // errorMessage(), not err.message: the raw string is the backend's own,
+      // and for a 403 that is the unlocalised "Insufficient permissions" — which
+      // is precisely what a user saw in production. The helper turns a 403 into
+      // Czech and logs the real reason to the console.
+      const base = errorMessage(err, "Chyba při ukládání.");
+      // A create that got as far as the section writes has already produced a
+      // record. Saying only "save failed" invites the retry that duplicated it,
+      // so say what actually exists — the retry is now safe either way.
+      setError(
+        !isEdit && createdId.current
+          ? `${base} Záznam zaměstnance už byl založen – po opravě uložte znovu, nový se nevytvoří.`
+          : base
+      );
     } finally {
       setSaving(false);
     }
