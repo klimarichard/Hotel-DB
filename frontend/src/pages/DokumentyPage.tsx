@@ -159,7 +159,7 @@ interface DocumentMeta {
   active?: boolean;
   /**
    * True = visible to everyone holding `nav.dokumenty.view`; false = only to
-   * holders of `dokumenty.manage`.
+   * holders of `dokumenty.viewAll` (read + print) or `dokumenty.manage` (edit).
    *
    * ⚠️ Absent means PRIVATE, not public – documents written before the flag
    * existed carry no field at all, and that is exactly how they stay private
@@ -1801,9 +1801,15 @@ export default function DokumentyPage() {
             <span className={styles.dirtyDot} title="Neuložené změny">•</span>
           )}
         </span>
-        {/* Only private documents are badged, and only an editor ever sees one –
-            everyone else is shown public documents exclusively, so a "Veřejný"
-            chip on every row would label the norm and say nothing. */}
+        {/* Only private documents are badged, and only an EDITOR is shown the
+            badge – a plain nav.dokumenty.view user is served public documents
+            exclusively, so a "Veřejný" chip on every row would label the norm
+            and say nothing.
+
+            A `dokumenty.viewAll` holder does see private documents but is
+            deliberately NOT badged: the flag decides who an editor publishes to,
+            and it is the editor's concern, not the reader's. Gate stays on
+            canManage alone – do not widen it to the view-all key. */}
         {doc.public !== true && canManage && (
           <span className={styles.privateBadge} title="Vidí jen ti, kdo mohou spravovat dokumenty">
             Neveřejný

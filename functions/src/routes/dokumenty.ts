@@ -58,9 +58,20 @@ function extractVariables(html: string): string[] {
  * Compare `active` on this same collection, where absent means ACTIVE: same
  * shape, opposite default, both deliberate.
  *
+ * `dokumenty.viewAll` is the read-only counterpart: it widens the audience to
+ * every document and grants nothing else. Filling a document in and printing it
+ * already comes with `nav.dokumenty.view` (that is what `render-pdf` is gated
+ * on), so a holder of this key can read and print everything and still cannot
+ * create, edit, duplicate, deactivate or delete anything — every write route
+ * below requires `dokumenty.manage`. That separation is the whole point of the
+ * key: the audience of an internal document is a wider group than the set of
+ * people who should be able to rewrite it.
+ *
  * `dokumenty.manage` short-circuits to seeing everything, exactly as it did for
  * sections: an editor who could not see a private document could neither fix nor
- * delete it.
+ * delete it. It therefore does NOT require `viewAll` to be granted alongside —
+ * the implication lives here, not in the permission matrix, so an editor cannot
+ * be locked out of their own drafts by an un-ticked box.
  *
  * `system.admin` is checked EXPLICITLY even though the permission resolver
  * already expands it to the full static permission set (so an admin does hold
@@ -71,7 +82,13 @@ function extractVariables(html: string): string[] {
  */
 function maySeeDocument(req: AuthRequest, data: Record<string, unknown> | undefined): boolean {
   const perms = req.permissions ?? new Set<string>();
-  if (perms.has("system.admin") || perms.has("dokumenty.manage")) return true;
+  if (
+    perms.has("system.admin") ||
+    perms.has("dokumenty.manage") ||
+    perms.has("dokumenty.viewAll")
+  ) {
+    return true;
+  }
   return data?.public === true;
 }
 

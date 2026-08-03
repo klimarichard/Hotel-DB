@@ -221,11 +221,21 @@ export const PERMISSION_CATALOG = [
     // the unrelated per-employee "Další dokumenty" file uploads.
     group: "Dokumenty",
     items: [
-      // Also the key that sees PRIVATE documents. There were five per-hotel
-      // section keys here until sections were dropped: one document now serves
-      // all four hotels through a Seznam/Obrázek slot, so the only audience
-      // question left is public (everyone with nav.dokumenty.view) vs private
-      // (editors only), and that is a flag on the document, not a permission.
+      // Audience, without authorship. `nav.dokumenty.view` sees public documents
+      // only; this key widens that to every document, and stops there — filling
+      // a document in and printing it already comes with the nav key, so a
+      // holder gains reading and printing and nothing else. It exists because
+      // "may read the private ones" and "may rewrite them" turned out to be
+      // different populations: the audience of an internal document is wider
+      // than the set of people who should be able to edit it.
+      { key: "dokumenty.viewAll", label: "Zobrazit i neveřejné dokumenty" },
+      // Editing — and, incidentally, seeing PRIVATE documents too: an editor who
+      // could not see a private document could neither fix nor delete it, so
+      // `manage` implies `viewAll` in `maySeeDocument` rather than depending on
+      // it being granted alongside. There were five per-hotel section keys here
+      // until sections were dropped: one document now serves all four hotels
+      // through a Seznam/Obrázek slot, so the only audience question left is
+      // public vs private, and that is a flag on the document.
       { key: "dokumenty.manage", label: "Spravovat dokumenty" },
     ],
   },
