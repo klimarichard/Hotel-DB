@@ -84,6 +84,27 @@ const contractTemplates: FieldLabelMap = {
   updatedBy: "Upravil",
 };
 
+// ── Dokumenty (functions/src/routes/dokumenty.ts) ──
+// The standalone printable templates (`documentTemplates`), NOT the per-employee
+// "Další dokumenty" uploads. Shares most of its shape with contractTemplates
+// above, minus the contract-only type/kind and plus the audience field.
+const documentTemplates: FieldLabelMap = {
+  name: "Název",
+  // Values are rendered by renderValue.ts (DOCUMENT_VISIBILITY_LABELS), which
+  // is what keeps "public"/"private"/"hidden" out of the change log.
+  visibility: "Viditelnost",
+  active: "Aktivní",
+  duplicatedFrom: "Duplikováno z",
+  htmlContent: "Obsah dokumentu",
+  htmlContentLength: "Délka obsahu",
+  variables: "Proměnné",
+  margins: "Okraje",
+  createdAt: "Vytvořeno",
+  createdBy: "Vytvořil",
+  updatedAt: "Upraveno",
+  updatedBy: "Upravil",
+};
+
 // ── Společnost (functions/src/routes/companies.ts) ──
 const companies: FieldLabelMap = {
   abbreviation: "Zkratka",
@@ -218,6 +239,7 @@ export const MISC_FIELDS: Record<string, FieldLabelMap> = {
   employeeChangeRequests,
   contracts,
   contractTemplates,
+  documentTemplates,
   companies,
   users,
   jobPositions,
