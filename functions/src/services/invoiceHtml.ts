@@ -16,7 +16,10 @@
  *  - Labels are NOT bold. Only the title, "Billed To:", "Invoice No. /
  *    Faktura Cislo", the payer name and the Total row are.
  *  - The document is written WITHOUT diacritics throughout ("Danovy Doklad",
- *    "Vystaveno"). Reproduced verbatim so a copy reads like the original.
+ *    "Vystaveno"). Reproduced verbatim so a copy reads like the original, and
+ *    since v5.4.0 that extends to the user-entered guest name and payer block,
+ *    which `deaccent()` folds AT PRINT TIME — the stored draft keeps the real
+ *    spelling and the editor still shows it.
  *  - Dates are DD/MM/YY in the line table and in Arrival/Departure, but
  *    DD/MM/YYYY in Issued / Tax Charged / Payable On.
  *  - Amounts carry a " CZK" suffix in the line table and totals, but NOT in
@@ -38,6 +41,8 @@ import {
   PartyAddress,
   RecapRow,
   computeTotals,
+  eftColumnWidths,
+  eftGrid,
   lineTotal,
   taxDateFrom,
   dueDateFrom,
@@ -161,10 +166,24 @@ export const INVOICE_CSS = `
   .inv-recap td { padding: 0.35mm 0; }
   .inv-recap tr.total td { padding-top: 2mm; }
 
-  /* Monospace, matching the original export. The value is intentionally
-     absent: these invoices never have an EFT receipt, so the editor has no
-     field for it, but the heading remains part of the document. */
+  /* Monospace, matching the original export. The heading prints whether or not
+     the invoice carries a slip - it is part of the document, and most of these
+     invoices have no EFT receipt at all. */
   .inv-eft { margin-top: 2.5mm; font-family: "Courier New", Courier, monospace; }
+  /* The pasted terminal slip. "white-space: pre" is what makes this a COLUMN
+     layout: buildEft() pads every cell to its column width, and in a monospace
+     face equal character counts are equal widths, so the columns line up
+     without a table. Deliberately not a table - a nested table straddling a
+     page break renders its rows on both pages in Chrome (see .inv-bank).
+     font-size is set per document by buildEft(), sized so the widest row fits
+     the page; there is no useful default here. */
+  .inv-eft-slip {
+    margin-top: 1mm;
+    font-family: "Courier New", Courier, monospace;
+    white-space: pre;
+    line-height: 1.15;
+    break-inside: avoid;
+  }
   .inv-issued { margin-top: 2mm; text-align: right; }
   /* break-inside on the OUTER table: its cells hold nested tables, and a
      nested table straddling a page break renders its rows on BOTH pages in
@@ -219,6 +238,86 @@ function esc(value: unknown): string {
 /** `esc()` plus newline → `<br>`, for the multi-line hotel footer. */
 function escMultiline(value: string): string {
   return esc(value).replace(/\r?\n/g, "<br>");
+}
+
+/**
+ * The characters NFD cannot fold, in two groups.
+ *
+ * FIRST, Latin letters that carry their mark INSIDE the code point and so
+ * decompose to nothing. Everything with a combining form — the whole Czech set,
+ * German umlauts, French accents, Polish ogoneks — is handled by the
+ * normalisation in `deaccent()` and must NOT be listed here.
+ *
+ * SECOND, typographic punctuation. These are not accents, but they are exactly
+ * as non-ASCII as `ř` is and reach the document by the same route: an address
+ * pasted out of a booking system arrives full of en dashes, curly quotes and
+ * non-breaking spaces. Leaving them would defeat the point — a payer block
+ * reading "Praha – Vinohrady" is no closer to the ASCII original than one
+ * reading "Praha - Vinohradý".
+ *
+ * The non-breaking space matters most in practice: Czech postcodes are
+ * routinely written "120 00" with U+00A0, which is invisible in the editor and
+ * indistinguishable from a normal space in the PDF — until something downstream
+ * treats it as a different character.
+ */
+const DEACCENT_EXTRA: Record<string, string> = {
+  // Letters with no decomposition.
+  ł: "l", Ł: "L",
+  đ: "d", Đ: "D",
+  ø: "o", Ø: "O",
+  æ: "ae", Æ: "AE",
+  œ: "oe", Œ: "OE",
+  ß: "ss",
+  þ: "th", Þ: "Th",
+  ð: "d", Ð: "D",
+  ı: "i", ŉ: "n",
+  // Punctuation. Dashes and hyphens of every width collapse to "-".
+  " ": " ", " ": " ", " ": " ", " ": " ",
+  "‐": "-", "‑": "-", "‒": "-", "–": "-",
+  "—": "-", "―": "-", "−": "-",
+  "‘": "'", "’": "'", "‚": "'", "‛": "'",
+  "“": '"', "”": '"', "„": '"', "‟": '"',
+  "…": "...", "•": "-", "·": ".",
+};
+
+/**
+ * Fold accented Latin letters to their base form — `í`→`i`, `ř`→`r`, `ö`→`o`.
+ *
+ * The rest of this document is already diacritic-free by design ("Jmeno Hosta",
+ * "Datum zdanit. plneni", "Zaklad dane"): Protel prints ASCII and this page
+ * reproduces Protel. Only the user-entered payer and guest fields still carried
+ * accents, which is the gap this closes.
+ *
+ * PRINT-TIME ONLY. The draft keeps whatever was typed — the editor shows the
+ * real spelling, and a saved invoice reopened later is unchanged. Folding on
+ * save would quietly destroy the payer's actual name in Firestore, and there is
+ * no reason to: the ASCII form is a property of this printed document, not of
+ * the data.
+ *
+ * NFD splits an accented letter into base + combining mark, so stripping the
+ * combining range does the work generically; `DEACCENT_EXTRA` then covers the
+ * letters that have no decomposition. Anything still non-ASCII after that — a
+ * name in Cyrillic or Greek, say — is passed through UNCHANGED rather than
+ * deleted: a mangled name is recoverable by eye, a blank one is not.
+ */
+function deaccent(value: string): string {
+  if (!value) return "";
+  let out = "";
+  // Iterated by code POINT (for...of on a string), not by UTF-16 unit, so an
+  // astral character is never split into a lone surrogate pair half.
+  for (const ch of value.normalize("NFD")) {
+    const cp = ch.codePointAt(0) as number;
+    // U+0300-U+036F, Combining Diacritical Marks: precisely what NFD split off
+    // a moment ago. Dropping them IS the fold.
+    if (cp >= 0x0300 && cp <= 0x036f) continue;
+    // Plain ASCII, the overwhelmingly common case.
+    if (cp < 0x80) {
+      out += ch;
+      continue;
+    }
+    out += DEACCENT_EXTRA[ch] ?? ch;
+  }
+  return out;
 }
 
 /**
@@ -317,6 +416,73 @@ interface ResolvedParty {
   dic: string;
 }
 
+/* ------------------------------------------------------------------ */
+/* EFT receipt                                                         */
+/* ------------------------------------------------------------------ */
+
+/** Two spaces between columns — enough to read as a gutter, cheap in width. */
+const EFT_GUTTER = "  ";
+/**
+ * Printable width. A4 is 210 mm and INVOICE_MARGINS takes 6 mm off each side,
+ * leaving 198 mm; 194 keeps a safety margin against rounding in Chrome's own
+ * layout, since overshooting clips the right-hand column silently.
+ */
+const EFT_WIDTH_MM = 194;
+/** Courier's advance width is exactly 0.6 em, and 1 pt is 25.4/72 mm. */
+const EFT_ADVANCE_EM = 0.6;
+const MM_PER_PT = 25.4 / 72;
+/**
+ * Below ~3.6 pt the slip stops being legible in print, so an absurdly wide
+ * paste is allowed to overflow instead of shrinking into a grey smear — a
+ * visibly-too-wide block tells the user to fix the paste, an unreadable one
+ * does not. The ceiling matches the recap's 8 pt so the slip never looks
+ * larger than the document around it.
+ */
+const EFT_MIN_PT = 3.6;
+const EFT_MAX_PT = 8;
+
+/**
+ * The pasted terminal slip → a preformatted, column-aligned monospace block,
+ * or "" when the draft carries no receipt.
+ *
+ * Every cell is padded to its column's widest value, which in a monospace face
+ * IS the column layout — no table involved, deliberately: a nested table
+ * straddling a page break renders its rows twice in Chrome (see `.inv-bank`).
+ *
+ * The font size is DERIVED from the widest row rather than fixed, because the
+ * column count is a property of the paste, not of the document: a single slip
+ * is 4 columns wide and prints comfortably at 8 pt, while a merchant copy and
+ * cardholder copy pasted together push one row to 6 columns and must shrink to
+ * fit. A fixed size would either overflow the page on the wide case or waste
+ * half the width on the common one.
+ */
+function buildEft(raw: string): string {
+  const rows = eftGrid(raw);
+  if (rows.length === 0) return "";
+
+  const widths = eftColumnWidths(rows);
+  const pad = (s: string, w: number): string => s + " ".repeat(Math.max(0, w - s.length));
+  const body = rows
+    .map((cells) =>
+      esc(
+        cells
+          .map((c, i) => pad(c, widths[i]))
+          .join(EFT_GUTTER)
+          // Trailing padding is invisible under white-space: pre, but carrying
+          // it into the HTML bloats the payload for no gain.
+          .replace(/\s+$/, "")
+      )
+    )
+    .join("\n");
+
+  const chars =
+    widths.reduce((sum, w) => sum + w, 0) + EFT_GUTTER.length * Math.max(0, widths.length - 1);
+  const fitted = EFT_WIDTH_MM / (chars * EFT_ADVANCE_EM * MM_PER_PT);
+  const size = Math.min(EFT_MAX_PT, Math.max(EFT_MIN_PT, fitted));
+
+  return `<div class="inv-eft-slip" style="font-size:${size.toFixed(2)}pt">${body}</div>`;
+}
+
 /** Zip and city share one line, as they do when written on an envelope. */
 function addressSlots(p: PartyAddress): string[] {
   const zipCity = [p.zip, p.city].filter((s) => !!s && !!s.trim()).join(" ");
@@ -329,6 +495,12 @@ function addressSlots(p: PartyAddress): string[] {
  * `billTo` is either a pointer into the agency address book or an inline
  * person. An agency id that no longer resolves degrades to a nameless block
  * rather than throwing — the PDF must still render.
+ *
+ * Every field is `deaccent()`-ed here, and this is the ONLY place it needs to
+ * happen for the payer: both surfaces that print the payer — the meta grid's
+ * Correspondence Address column and the Billed To band — read the party from
+ * this one function, so a new payer field added to `ResolvedParty` is folded by
+ * construction rather than by remembering to.
  */
 function resolveBillTo(draft: InvoiceDraft, config: FakturyConfig): ResolvedParty {
   const billTo = draft.billTo;
@@ -336,17 +508,17 @@ function resolveBillTo(draft: InvoiceDraft, config: FakturyConfig): ResolvedPart
     const agency = config.agencies.find((a) => a.id === billTo.agencyId);
     if (!agency) return { name: "", slots: [], ic: "", dic: "" };
     return {
-      name: agency.name,
-      slots: addressSlots(agency),
-      ic: agency.ic,
-      dic: agency.dic,
+      name: deaccent(agency.name),
+      slots: addressSlots(agency).map(deaccent),
+      ic: deaccent(agency.ic),
+      dic: deaccent(agency.dic),
     };
   }
   return {
-    name: billTo.name,
-    slots: addressSlots(billTo),
-    ic: billTo.ic,
-    dic: billTo.dic,
+    name: deaccent(billTo.name),
+    slots: addressSlots(billTo).map(deaccent),
+    ic: deaccent(billTo.ic),
+    dic: deaccent(billTo.dic),
   };
 }
 
@@ -360,7 +532,7 @@ export function buildInvoiceHtml(
   company: CompanyInfo | null
 ): string {
   const hotel = config.hotels.find((h) => h.id === draft.hotelId) ?? null;
-  const totals = computeTotals(draft.lines, config.vatRates);
+  const totals = computeTotals(draft.lines, config.vatRates, draft.deposit);
   const rate = draft.eurRate;
   const party = resolveBillTo(draft, config);
 
@@ -392,7 +564,9 @@ export function buildInvoiceHtml(
    * labels, not from the address.
    */
   const metaRows: [string, string, string, string][] = [
-    ["Guest Name / Jmeno Hosta:", draft.guestName, "Correspondence Address", ""],
+    // The payer's fields are already folded by `resolveBillTo`; the guest name
+    // is the only other user-entered string this document prints.
+    ["Guest Name / Jmeno Hosta:", deaccent(draft.guestName), "Correspondence Address", ""],
     ["Room Number / Cislo Pokoje:", draft.roomNo, `<span class="bold">${esc(party.name)}</span>`, ""],
     ["Arrival / Prijezd:", fmtShort(draft.arrival), esc(party.slots[0]), ""],
     ["Departure / Odjezd:", fmtShort(draft.departure), esc(party.slots[1]), ""],
@@ -562,8 +736,10 @@ export function buildInvoiceHtml(
       </tr>
     </tbody></table>`;
 
-  /* 9 — EFT receipt, issued-by, then the two bank blocks. */
+  /* 9 — EFT receipt, issued-by, then the two bank blocks. The heading prints
+     unconditionally; the slip below it only when the draft carries one. */
   const eft = `<div class="inv-eft">EFT Receipt:</div>
+    ${buildEft(draft.eftReceipt)}
     <div class="inv-issued">Issued By:&nbsp;&nbsp;&nbsp;${esc(draft.issuedBy)}</div>`;
 
   const bankRows = (

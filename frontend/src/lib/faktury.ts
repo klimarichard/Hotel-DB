@@ -131,6 +131,12 @@ export interface InvoiceDraft {
   issuedBy: string;
   /** Free note, printed in italics under the invoice number. */
   note: string;
+  /**
+   * The card-terminal slip, pasted verbatim out of the Protel invoice in its
+   * native pipe-separated form. Stored raw and re-parsed at render time — see
+   * `eftGrid()`.
+   */
+  eftReceipt: string;
 }
 
 /*
@@ -186,6 +192,42 @@ export interface InvoiceSummary {
 }
 
 /* ------------------------------------------------------------------ */
+/* EFT receipt — keep in lockstep with services/invoiceTypes.ts        */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The pasted terminal slip → a rectangular grid of cells. One source line is
+ * one receipt row, each `|`-separated segment one cell; the grid is as wide as
+ * the widest row and short rows are padded, because a merchant copy and a
+ * cardholder copy are routinely pasted with no line break between them (so one
+ * row carries the tail of the first slip and the head of the second). Trailing
+ * blank cells are dropped — a slip ending `...|` would otherwise invent a
+ * phantom column — while interior blanks are kept, being real empty fields.
+ *
+ * The client needs this only to tell the user what it parsed; the printed
+ * layout is built server-side from the same function in `invoiceTypes.ts`.
+ */
+export function eftGrid(raw: string): string[][] {
+  const text = (raw ?? "").replace(/\r\n?/g, "\n");
+  if (!text.trim()) return [];
+
+  const rows: string[][] = [];
+  for (const line of text.split("\n")) {
+    const cells = line.split("|").map((c) => c.trim());
+    while (cells.length > 0 && cells[cells.length - 1] === "") cells.pop();
+    if (cells.length > 0) rows.push(cells);
+  }
+  if (rows.length === 0) return [];
+
+  const width = rows.reduce((w, r) => Math.max(w, r.length), 0);
+  return rows.map((r) => {
+    const padded = r.slice();
+    while (padded.length < width) padded.push("");
+    return padded;
+  });
+}
+
+/* ------------------------------------------------------------------ */
 /* Arithmetic — keep in lockstep with services/invoiceTypes.ts         */
 /* ------------------------------------------------------------------ */
 
@@ -217,9 +259,17 @@ export interface InvoiceTotals {
   recapTotal: number;
 }
 
+/**
+ * `deposit` is `InvoiceDraft.deposit` and selects which buckets are recapped —
+ * a deposit invoice shows only those carrying money, a normal one shows every
+ * active bucket including zeros. See the branch below. Required, not defaulted,
+ * on purpose: a call site that forgot it would show a deposit invoice's full
+ * normal recap silently.
+ */
 export function computeTotals(
   lines: InvoiceLine[],
-  vatRates: VatRate[]
+  vatRates: VatRate[],
+  deposit: boolean
 ): InvoiceTotals {
   let total = 0;
   let payments = 0;
@@ -242,7 +292,23 @@ export function computeTotals(
     // Every active bucket is listed, zeros included, matching the printed
     // document. An inactive rate appears only if it is flagged "Zobrazit při
     // tisku" or a draft still posts to it.
-    if (!rate.active && !rate.showInPrint && gross === 0) continue;
+    // The two invoice kinds answer "which buckets print?" completely
+    // differently, so this is a branch, not two filters stacked.
+    if (deposit) {
+      // A zálohová (deposit) invoice prints ONLY buckets that carry money: it
+      // reports one received advance, and an empty Deposit 21.00 % under a
+      // Deposit 12.00 % that holds the whole invoice reads as though the
+      // advance had been split across two rates.
+      //
+      // Money decides, never the block — this subsumes a block filter. A
+      // deposit draft that does post to a normal-block rate still prints that
+      // row, or recapTotal would silently disagree with Total above it.
+      if (gross === 0) continue;
+    } else {
+      // A normal invoice lists every active bucket, zeros included, matching
+      // the printed original. Deliberately NOT symmetric with the above.
+      if (!rate.active && !rate.showInPrint && gross === 0) continue;
+    }
     const base = round2(gross / (1 + rate.percent / 100));
     recap.push({
       rateId: rate.id,

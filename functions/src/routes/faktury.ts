@@ -125,6 +125,8 @@ const MAX_LINES = 200;
 const LOGO_RE = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/;
 const LOGO_MAX = 150_000;
 const FOOTER_MAX = 500;
+/** Room for roughly three pasted terminal slips; see `sanitizeDraft`. */
+const EFT_MAX = 8_000;
 
 /* ------------------------------------------------------------------ */
 /* Draft sanitizer                                                     */
@@ -253,6 +255,12 @@ function sanitizeDraft(raw: unknown): InvoiceDraft {
     // Free note, printed in italics under the invoice number. Allowed more
     // room than the 200-char default — it is prose, not an identifier.
     note: str(d.note, 500),
+    // A pasted terminal slip is a whole block of text, not a field: the
+    // reference paste (a merchant copy plus a cardholder copy) is already
+    // ~2 300 characters, so the cap leaves room for a few more without letting
+    // a runaway paste near Firestore's 1 MiB document ceiling. `str()` trims
+    // only the ends, so the slip's own internal padding survives intact.
+    eftReceipt: str(d.eftReceipt, EFT_MAX),
   };
 }
 
@@ -558,14 +566,19 @@ fakturyRouter.get(
       const data = d.data() as Record<string, unknown>;
       const lines = Array.isArray(data.lines) ? (data.lines as InvoiceLine[]) : [];
       const editorUid = typeof data.updatedBy === "string" ? data.updatedBy : "";
+      const deposit = data.deposit === true;
       return {
         id: d.id,
         invoiceNo: (data.invoiceNo as string) ?? "",
         hotelId: (data.hotelId as string) ?? "",
-        deposit: data.deposit === true,
+        deposit,
         guestName: (data.guestName as string) ?? "",
         billToName: billToName(data.billTo as BillTo | undefined, config),
-        total: computeTotals(lines, config.vatRates).total,
+        // The list only reads `.total`, which is the sum of the charge lines
+        // and so is unaffected by the recap's block filter. `deposit` is
+        // threaded through regardless, so this stays right if that ever
+        // changes.
+        total: computeTotals(lines, config.vatRates, deposit).total,
         // ISO string, never the raw Firestore Timestamp. `InvoiceSummary`
         // declares `string | null` and the client formats it as a date; a
         // Timestamp serialises to `{_seconds,_nanoseconds}`, which the
@@ -578,11 +591,23 @@ fakturyRouter.get(
         updatedBy: editors.get(editorUid) || (data.updatedByName as string) || "",
       };
     });
+    // Last edited first — the order the list is ALWAYS shown in; the page has
+    // no column sorting, so this is the only thing that decides it.
+    //
     // Sorted in memory rather than via orderBy: a legacy doc without
     // `updatedAt` would be silently dropped by Firestore's missing-field
     // exclusion, and losing a saved invoice from the list is worse than an
-    // in-memory sort of a small collection.
-    list.sort((a, b) => tsMillis(b.updatedAt) - tsMillis(a.updatedAt));
+    // in-memory sort of a small collection. Those undated docs read as 0 and
+    // therefore sink to the bottom, which is where an invoice nobody has
+    // touched since before the field existed belongs.
+    //
+    // `id` breaks ties so the order is deterministic across requests rather
+    // than merely stable within one: several drafts saved in the same second
+    // (a bulk retype) would otherwise be free to swap places on every reload.
+    list.sort((a, b) => {
+      const diff = tsMillis(b.updatedAt) - tsMillis(a.updatedAt);
+      return diff !== 0 ? diff : a.id.localeCompare(b.id);
+    });
     // Wrapped in an object, NOT returned as a bare array — the client reads
     // `list.invoices`. `api.get<T>()` is an unchecked cast over `res.json()`,
     // so a shape mismatch here type-checks on both sides and surfaces only as
@@ -635,9 +660,32 @@ function tsToIso(v: unknown): string | null {
   return typeof v === "string" ? v : null;
 }
 
+/**
+ * Anything date-shaped → epoch millis, or 0 when there is nothing to read.
+ *
+ * ⚠️ **The ISO-string case is the one that matters**, not the Timestamp one.
+ * The only caller sorts the mapped summary list, whose `updatedAt` has already
+ * been through `tsToIso()` and is therefore a STRING. Handling only Timestamps
+ * — as this did originally — made every comparison `0 - 0`, so the sort was a
+ * silent no-op and the list came back in Firestore's document-id order. Both
+ * helpers were individually correct; only their meeting point was wrong.
+ *
+ * Raw Timestamps and Dates are still accepted so the function stays usable on
+ * unmapped document data, and `{ _seconds }` covers a Timestamp that has been
+ * through JSON.
+ */
 function tsMillis(v: unknown): number {
-  if (v && typeof v === "object" && typeof (v as { toMillis?: () => number }).toMillis === "function") {
-    return (v as { toMillis: () => number }).toMillis();
+  if (!v) return 0;
+  if (typeof v === "string") {
+    const ms = Date.parse(v);
+    return Number.isNaN(ms) ? 0 : ms;
+  }
+  if (typeof v === "number") return Number.isFinite(v) ? v : 0;
+  if (typeof v === "object") {
+    const o = v as { toMillis?: () => number; getTime?: () => number; _seconds?: unknown };
+    if (typeof o.toMillis === "function") return o.toMillis();
+    if (typeof o.getTime === "function") return o.getTime();
+    if (typeof o._seconds === "number") return o._seconds * 1000;
   }
   return 0;
 }

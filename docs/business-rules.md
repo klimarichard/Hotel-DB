@@ -406,6 +406,32 @@ Faktura vytvořená na této stránce je **vizuální kopie** dokladu, který vy
 
 > 🔒 Server + ⚙️ Automatika. Zdroj: `functions/src/services/invoiceTypes.ts` – blok jako součást sazby (`VatBlock`) a `computeTotals()` (řádky se sčítají podle `vatRateId`, blok se nese dál); vykreslení rekapitulace `functions/src/services/invoiceHtml.ts` (`recapBlock`). Stejná pravidla platí i pro živý náhled v prohlížeči, `frontend/src/lib/faktury.ts`.
 
+### Zálohová faktura vykazuje v rekapitulaci DPH jen sazby, na které něco účtuje
+
+Je-li u faktury zaškrtnuto **Zálohová faktura**, objeví se v rekapitulaci DPH **pouze sazby, na kterých je nějaká částka**. Nulové řádky se na zálohové faktuře netisknou nikdy – zálohová faktura vykazuje jednu přijatou zálohu a prázdný řádek „Deposit 21.00 %" pod řádkem „Deposit 12.00 %", na kterém je celá částka, by vypadal, jako by se záloha dělila mezi dvě sazby.
+
+Rozhoduje **částka, nikoli blok sazby**. Účtuje-li řádek zálohové faktury výjimečně na běžnou sazbu, v rekapitulaci se objeví – jinak by součet rekapitulace nesouhlasil s částkou „Total / Celkem" vytištěnou přímo nad ní.
+
+**Neplatí to obráceně:** běžná faktura vypisuje **všechny** sazby včetně zálohových a včetně nulových, protože přesně tak vypadá původní doklad, který tato stránka reprodukuje.
+
+Zálohová faktura bez řádků nemá v rekapitulaci nic – to je záměr, ne chyba.
+
+**Přepnutí zaškrtávátka „Zálohová faktura" mění vytištěnou rekapitulaci** – u již uložených faktur také, protože rekapitulace se počítá až při tisku, neukládá se.
+
+> 🔒 Server + ⚙️ Automatika. Zdroj: `functions/src/services/invoiceTypes.ts` – `computeTotals(lines, vatRates, deposit)`, větev `if (deposit) { if (gross === 0) continue; }`; zrcadleno v `frontend/src/lib/faktury.ts` pro živý náhled. Argument `deposit` je povinný, aby překladač odhalil volání, které by ho zapomnělo předat.
+
+### Na vytištěné faktuře se ze jména hosta a odběratele odstraní diakritika
+
+Vytištěná faktura je **bez diakritiky** – stejně jako doklad z Protelu, který reprodukuje („Danovy Doklad", „Jmeno Hosta"). U **jména hosta** a celého bloku **odběratele** (název, adresa, IČ, DIČ) se proto při tisku převedou písmena s diakritikou na základní tvar: `Dvořák` → `Dvorak`, `Müller` → `Muller`. Převedou se i typografické znaky – pomlčky všech šířek na `-`, „české uvozovky" na `"`, nezlomitelná mezera na obyčejnou.
+
+**Uložená faktura se tím nemění.** Ve formuláři i po opětovném otevření zůstává jméno tak, jak bylo zapsáno – diakritika mizí pouze ve vytištěném PDF.
+
+Jméno v nelatinkovém písmu (azbuka, řečtina) se **nepřevádí ani nemaže** a vytiskne se tak, jak bylo zadáno – prázdné jméno by bylo horší než jméno v původním písmu.
+
+Diakritika **zůstává** v popisech řádků (katalog položek obsahuje např. „Škody", „Zaokrouhlení"), v patičce hotelu, v poli Vystavil a v poznámce.
+
+> 🔒 Server. Zdroj: `functions/src/services/invoiceHtml.ts` – `deaccent()`, volané v `resolveBillTo()` (celý odběratel) a na `draft.guestName` v `metaRows`. Vykresluje se jen při tisku PDF; `sanitizeDraft()` v `functions/src/routes/faktury.ts` ukládaná data nijak neupravuje.
+
 ### „Aktivní" a „Zobrazit při tisku" u sazby DPH nejsou totéž
 
 U sazby DPH v Číselnících rozhodují **dvě nezávislá zaškrtávátka**:

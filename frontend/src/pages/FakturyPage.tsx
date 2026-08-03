@@ -24,6 +24,7 @@ import {
   LINE_GROUP_LABELS,
   addressLines,
   computeTotals,
+  eftGrid,
   emptyLine,
   formatDateCZ,
   formatMoney,
@@ -104,6 +105,7 @@ function emptyDraft(issuedBy: string): InvoiceDraft {
     eurRate: 0,
     issuedBy,
     note: "",
+    eftReceipt: "",
   };
 }
 
@@ -342,7 +344,11 @@ export default function FakturyPage() {
         loaded.billTo.kind === "agency" ? loaded.billTo : { kind: "agency", agencyId: "" };
       lastPersonRef.current =
         loaded.billTo.kind === "person" ? loaded.billTo : { kind: "person", name: "", ...EMPTY_ADDRESS };
-      setDraft({ ...loaded, lines: loaded.lines ?? [] });
+      // `eftReceipt` post-dates the first drafts, so a stored document may
+      // simply not have the field. It backs a controlled <textarea>, and
+      // `value={undefined}` would silently switch that input to uncontrolled —
+      // React then warns and the field stops accepting input on first keypress.
+      setDraft({ ...loaded, lines: loaded.lines ?? [], eftReceipt: loaded.eftReceipt ?? "" });
       setDraftId(id);
       setCustomLines(deriveCustomLines(loaded.lines ?? [], config.items));
       setPriceText({});
@@ -688,9 +694,22 @@ export default function FakturyPage() {
   /* ---------------------------------------------------------------- */
 
   const totals = useMemo(
-    () => computeTotals(draft?.lines ?? [], config.vatRates),
+    // `draft.deposit` narrows the recap to the advance block — the on-screen
+    // Rekapitulace DPH has to agree with the PDF, which passes the same flag.
+    () => computeTotals(draft?.lines ?? [], config.vatRates, draft?.deposit === true),
     [draft, config.vatRates]
   );
+
+  /**
+   * What the printed slip will be laid out as. Shown back to the user because
+   * the paste is the one input here nobody can eyeball for correctness — the
+   * pipes are what define the columns, and a slip that lost them on the way
+   * through the clipboard parses as one tall single column with no other clue.
+   */
+  const eftShape = useMemo(() => {
+    const rows = eftGrid(draft?.eftReceipt ?? "");
+    return { rows: rows.length, cols: rows.length > 0 ? rows[0].length : 0 };
+  }, [draft?.eftReceipt]);
 
   /* ---------------------------------------------------------------- */
   /* Render                                                            */
@@ -1356,6 +1375,49 @@ export default function FakturyPage() {
                     </tfoot>
                   </table>
                 </div>
+              )}
+            </section>
+
+            {/* ── EFT účtenka ────────────────────────────────────────── */}
+            {/* Placed last because that is where it prints: after the VAT
+                recap, above Issued By. */}
+            <section className={styles.card}>
+              <h2 className={styles.cardTitle}>EFT účtenka</h2>
+              <label className={styles.field}>
+                <span>Účtenka z platebního terminálu (nepovinné)</span>
+                <textarea
+                  className={`${styles.textarea} ${styles.eftInput}`}
+                  rows={10}
+                  spellCheck={false}
+                  // Soft wrap OFF, belt and braces with the CSS: a wrapped
+                  // line breaks the very column alignment the user is here to
+                  // check, and `wrap` is the attribute browsers honour most
+                  // reliably on a textarea.
+                  wrap="off"
+                  value={draft.eftReceipt}
+                  onChange={(e) => patchDraft({ eftReceipt: e.target.value })}
+                  placeholder={
+                    "Hotel Ankora Instore CZK    |SALE                        |TERMINAL ID:  39364815\n" +
+                    "Katerinska 465 42           |CARD TYPE: MASTERCARD       |MERCHANT ID:  852420111"
+                  }
+                />
+              </label>
+              <p className={styles.hint}>
+                Zkopírujte účtenku z faktury v Protelu i se svislými čárkami – právě ty určují
+                sloupce. Každý řádek účtenky patří na jeden řádek zde. Sloupce se na faktuře
+                zarovnají samy a velikost písma se přizpůsobí tak, aby se účtenka vešla na šířku
+                stránky. Ponecháte-li pole prázdné, vytiskne se pouze nadpis „EFT Receipt:“ jako
+                dosud.
+              </p>
+              {eftShape.rows > 0 && (
+                <p className={styles.hint}>
+                  Rozpoznáno: {eftShape.rows}{" "}
+                  {eftShape.rows === 1 ? "řádek" : eftShape.rows < 5 ? "řádky" : "řádků"} ×{" "}
+                  {eftShape.cols}{" "}
+                  {eftShape.cols === 1 ? "sloupec" : eftShape.cols < 5 ? "sloupce" : "sloupců"}.
+                  {eftShape.cols === 1 &&
+                    " Nenašly se žádné svislé čárky – zkontrolujte, zda se zkopírovaly."}
+                </p>
               )}
             </section>
           </div>

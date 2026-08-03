@@ -166,6 +166,16 @@ export interface InvoiceDraft {
   issuedBy: string;
   /** Free note, printed in italics under the invoice number. */
   note: string;
+  /**
+   * The card-terminal slip, pasted verbatim out of the Protel invoice, in its
+   * native pipe-separated form (one receipt row per line, `|` between cells).
+   * Empty on the invoices that carry no receipt — which used to be all of them,
+   * hence the `EFT Receipt:` heading that printed permanently without a value.
+   * Stored raw, never pre-parsed: the paste is the record, and `eftGrid()`
+   * re-derives the layout at render time so a parsing change can never have
+   * already destroyed the source text.
+   */
+  eftReceipt: string;
 }
 
 /*
@@ -216,6 +226,59 @@ export function supplierRefLine(availProNo: string, partnerResNo: string): strin
 }
 
 /* ------------------------------------------------------------------ */
+/* EFT receipt                                                         */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The pasted terminal slip → a rectangular grid of cells.
+ *
+ * Protel prints the slip as pipe-separated columns, so one source LINE is one
+ * receipt row and each `|`-separated segment is one cell. Two things about
+ * real pastes drive the shape of this:
+ *
+ *  - **Rows disagree on width.** A merchant copy and a cardholder copy are
+ *    routinely glued together with no line break between them, so the row
+ *    where the second slip starts carries the tail of one receipt AND the head
+ *    of the next (6 cells where its neighbours have 4). The grid is therefore
+ *    as wide as the WIDEST row and short rows are padded, rather than each row
+ *    being laid out on its own terms — that is what keeps every cell in a
+ *    column instead of letting one long row stretch past the page edge.
+ *  - **Trailing separators are noise.** A slip commonly ends `...|` or `...| `,
+ *    which would otherwise invent a phantom empty column for the whole grid.
+ *    Trailing blank cells are dropped per row, leading/interior ones are not
+ *    (an interior blank is a genuinely empty field, e.g. `AVN:`).
+ *
+ * Returns `[]` for blank input, which is the signal to print the bare
+ * `EFT Receipt:` heading exactly as before this field existed.
+ */
+export function eftGrid(raw: string): string[][] {
+  const text = (raw ?? "").replace(/\r\n?/g, "\n");
+  if (!text.trim()) return [];
+
+  const rows: string[][] = [];
+  for (const line of text.split("\n")) {
+    const cells = line.split("|").map((c) => c.trim());
+    while (cells.length > 0 && cells[cells.length - 1] === "") cells.pop();
+    // A wholly blank line is spacing in the paste, not a receipt row.
+    if (cells.length > 0) rows.push(cells);
+  }
+  if (rows.length === 0) return [];
+
+  const width = rows.reduce((w, r) => Math.max(w, r.length), 0);
+  return rows.map((r) => {
+    const padded = r.slice();
+    while (padded.length < width) padded.push("");
+    return padded;
+  });
+}
+
+/** Per-column character width — the widest cell in each column. */
+export function eftColumnWidths(rows: string[][]): number[] {
+  if (rows.length === 0) return [];
+  return rows[0].map((_, i) => rows.reduce((w, r) => Math.max(w, r[i].length), 0));
+}
+
+/* ------------------------------------------------------------------ */
 /* Arithmetic                                                          */
 /* ------------------------------------------------------------------ */
 
@@ -253,10 +316,17 @@ export interface InvoiceTotals {
  * Base is derived by stripping VAT out of the gross line total
  * (`gross / (1 + rate)`), matching the source workbook — prices are entered
  * VAT-inclusive, exactly as Protel posts them.
+ *
+ * `deposit` is `InvoiceDraft.deposit` and selects which buckets are recapped —
+ * a deposit invoice prints only those carrying money, a normal one prints every
+ * active bucket including zeros. See the branch below. Deliberately REQUIRED
+ * rather than defaulted: a call site that forgot it would render a deposit
+ * invoice with the full normal recap and report no error anywhere.
  */
 export function computeTotals(
   lines: InvoiceLine[],
-  vatRates: VatRate[]
+  vatRates: VatRate[],
+  deposit: boolean
 ): InvoiceTotals {
   let total = 0;
   let payments = 0;
@@ -277,13 +347,33 @@ export function computeTotals(
   const recap: RecapRow[] = [];
   for (const rate of vatRates) {
     const gross = byRate.get(rate.id) ?? 0;
-    // The printed document lists EVERY active bucket, zeros included — see
-    // excels/excel_invoice.pdf, where 10 %, 15 % and all four Deposit rows
-    // show 0,00. A deactivated rate is skipped unless it is flagged
-    // "Zobrazit při tisku" (the retired-but-still-printed rates) or an
-    // existing draft still posts to it, so retiring a rate never silently
-    // drops money off an invoice that already used it.
-    if (!rate.active && !rate.showInPrint && gross === 0) continue;
+    // The two invoice kinds answer "which buckets print?" completely
+    // differently, so this is a branch, not two filters stacked.
+    if (deposit) {
+      // A ZÁLOHOVÁ (deposit) invoice prints ONLY buckets that carry money.
+      // It reports one received advance, so a recap padded out with empty
+      // rates says nothing — and an empty Deposit 21.00 % sitting under a
+      // Deposit 12.00 % that holds the whole invoice reads as though the
+      // advance had been split across two rates.
+      //
+      // This subsumes the block filter rather than adding to it: a
+      // normal-block rate is empty on a deposit invoice in every case that
+      // matters, and the one case where it is NOT — a deposit draft that
+      // posts a line to a normal-block rate — must still print, or recapTotal
+      // would silently disagree with the Total shown directly above it.
+      // Money is what decides, never the block.
+      if (gross === 0) continue;
+    } else {
+      // A normal invoice lists EVERY active bucket, zeros included — see
+      // excels/excel_invoice.pdf, where 10 %, 15 % and all four Deposit rows
+      // show 0,00. Deliberately NOT symmetric with the branch above: this
+      // page reproduces that document, empty rows and all. A deactivated rate
+      // is skipped unless it is flagged "Zobrazit při tisku" (the
+      // retired-but-still-printed rates) or an existing draft still posts to
+      // it, so retiring a rate never silently drops money off an invoice that
+      // already used it.
+      if (!rate.active && !rate.showInPrint && gross === 0) continue;
+    }
     const base = round2(gross / (1 + rate.percent / 100));
     recap.push({
       rateId: rate.id,
