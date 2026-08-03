@@ -186,11 +186,23 @@ All in `functions/src/routes/faktury.ts`, mounted at `/api/faktury`. Config rout
 | `GET /config` | `nav.faktury.view` | Current číselníky, or the shipped defaults if `settings/fakturyConfig` doesn't exist yet. |
 | `PUT /config` | `faktury.manage` | Whole-document replace of the four arrays. **Audited** (`logUpdate`, counts only). 413 above 900 kB. |
 | `POST /render-pdf` | `nav.faktury.view` | Body `{ draft }`. Renders via `buildInvoiceHtml()` + `renderPdf()` and streams `application/pdf` straight back — nothing persisted, no audit entry. The draft need not be saved first; this is what makes "print whatever is on screen" work. |
-| `GET /` | `nav.faktury.view` | Saved-draft summaries, newest-first by `updatedAt`, sorted **in memory** (not Firestore `orderBy`) so a legacy doc missing `updatedAt` isn't silently excluded by Firestore's missing-field behaviour. ⚠️ **returns a bare JSON array** — see the frontend mismatch note below. |
+| `GET /` | `nav.faktury.view` | Saved-draft summaries, **newest-edited first** by `updatedAt`, ties broken by `id`. Sorted **in memory** (not Firestore `orderBy`) so a legacy doc missing `updatedAt` isn't silently excluded by Firestore's missing-field behaviour; undated docs read as `0` and sink to the bottom. See the ordering note below. |
 | `POST /` | `nav.faktury.view` | Create a new draft, Firestore auto-id. Gated on the **view** permission, not manage: retyping an invoice is the job of anyone who can open the page. Returns `{ id }`. |
 | `GET /:id` | `nav.faktury.view` | Full draft, `{ id, ...docData }`. |
 | `PUT /:id` | `nav.faktury.view` | Whole-draft replace (see above). |
 | `DELETE /:id` | `nav.faktury.view` | Hard delete, no soft-delete, no audit. |
+
+### List ordering — and why it silently wasn't ordered
+
+The list is **always** newest-edited first. The page has no column sorting and the frontend never reorders what it receives (`setInvoices(list.invoices ?? [])`, three call sites, all verbatim), so this one `sort` in `GET /` decides the order the user sees.
+
+⚠️ **It was a no-op until v5.4.0, and nothing revealed that.** The map converts the Firestore Timestamp to an ISO string (`updatedAt: tsToIso(data.updatedAt)`), and the sort then called `tsMillis()` on that already-converted **string**. `tsMillis` only recognised objects carrying `.toMillis()`, so it returned `0` for every row, every comparison evaluated `0 - 0`, and the list came back in Firestore's document-id order while the docs claimed it was date-ordered.
+
+Both helpers were individually correct — the defect existed only where they met, which is why reading either one in isolation looks fine. `tsMillis` now accepts strings, `Date`, `{ _seconds }` and numbers as well as Timestamps, and its doc comment names the string case as the one that matters, since that is its only real caller.
+
+**Ties break on `id`**, which makes the order deterministic *across requests* rather than merely stable within one. Several drafts saved in the same second — a bulk retype — would otherwise be free to swap places on every reload, since the pre-sort order is Firestore's and not guaranteed.
+
+If a date-shaped field is ever added to this list, sort it through `tsMillis` too rather than comparing ISO strings directly: they only compare correctly while every value is UTC with identical precision, which is true of `toISOString()` output but not of anything a user or a legacy document might supply.
 
 ### `GET /faktury` response shape + the editor name
 
