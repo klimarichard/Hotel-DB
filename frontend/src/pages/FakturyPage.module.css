@@ -159,6 +159,20 @@
   resize: vertical;
 }
 
+/* The pasted EFT slip. Monospace and NOT wrapped, because the whole point of
+   this field is that the user can see their columns line up before printing —
+   a proportional or soft-wrapped rendering shows them a jumble and gives no
+   clue whether the paste survived the clipboard. It scrolls sideways instead;
+   the printed invoice sizes its own font to fit, so the width here is purely
+   an editing convenience and need not match the page. */
+.eftInput {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 0.6875rem;
+  line-height: 1.35;
+  white-space: pre;
+  overflow-x: auto;
+}
+
 .input:focus,
 .textarea:focus {
   outline: none;

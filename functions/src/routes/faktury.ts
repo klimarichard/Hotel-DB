@@ -125,6 +125,8 @@ const MAX_LINES = 200;
 const LOGO_RE = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/;
 const LOGO_MAX = 150_000;
 const FOOTER_MAX = 500;
+/** Room for roughly three pasted terminal slips; see `sanitizeDraft`. */
+const EFT_MAX = 8_000;
 
 /* ------------------------------------------------------------------ */
 /* Draft sanitizer                                                     */
@@ -253,6 +255,12 @@ function sanitizeDraft(raw: unknown): InvoiceDraft {
     // Free note, printed in italics under the invoice number. Allowed more
     // room than the 200-char default — it is prose, not an identifier.
     note: str(d.note, 500),
+    // A pasted terminal slip is a whole block of text, not a field: the
+    // reference paste (a merchant copy plus a cardholder copy) is already
+    // ~2 300 characters, so the cap leaves room for a few more without letting
+    // a runaway paste near Firestore's 1 MiB document ceiling. `str()` trims
+    // only the ends, so the slip's own internal padding survives intact.
+    eftReceipt: str(d.eftReceipt, EFT_MAX),
   };
 }
 
@@ -558,14 +566,19 @@ fakturyRouter.get(
       const data = d.data() as Record<string, unknown>;
       const lines = Array.isArray(data.lines) ? (data.lines as InvoiceLine[]) : [];
       const editorUid = typeof data.updatedBy === "string" ? data.updatedBy : "";
+      const deposit = data.deposit === true;
       return {
         id: d.id,
         invoiceNo: (data.invoiceNo as string) ?? "",
         hotelId: (data.hotelId as string) ?? "",
-        deposit: data.deposit === true,
+        deposit,
         guestName: (data.guestName as string) ?? "",
         billToName: billToName(data.billTo as BillTo | undefined, config),
-        total: computeTotals(lines, config.vatRates).total,
+        // The list only reads `.total`, which is the sum of the charge lines
+        // and so is unaffected by the recap's block filter. `deposit` is
+        // threaded through regardless, so this stays right if that ever
+        // changes.
+        total: computeTotals(lines, config.vatRates, deposit).total,
         // ISO string, never the raw Firestore Timestamp. `InvoiceSummary`
         // declares `string | null` and the client formats it as a date; a
         // Timestamp serialises to `{_seconds,_nanoseconds}`, which the

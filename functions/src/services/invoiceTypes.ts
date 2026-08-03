@@ -166,6 +166,16 @@ export interface InvoiceDraft {
   issuedBy: string;
   /** Free note, printed in italics under the invoice number. */
   note: string;
+  /**
+   * The card-terminal slip, pasted verbatim out of the Protel invoice, in its
+   * native pipe-separated form (one receipt row per line, `|` between cells).
+   * Empty on the invoices that carry no receipt — which used to be all of them,
+   * hence the `EFT Receipt:` heading that printed permanently without a value.
+   * Stored raw, never pre-parsed: the paste is the record, and `eftGrid()`
+   * re-derives the layout at render time so a parsing change can never have
+   * already destroyed the source text.
+   */
+  eftReceipt: string;
 }
 
 /*
@@ -216,6 +226,59 @@ export function supplierRefLine(availProNo: string, partnerResNo: string): strin
 }
 
 /* ------------------------------------------------------------------ */
+/* EFT receipt                                                         */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The pasted terminal slip → a rectangular grid of cells.
+ *
+ * Protel prints the slip as pipe-separated columns, so one source LINE is one
+ * receipt row and each `|`-separated segment is one cell. Two things about
+ * real pastes drive the shape of this:
+ *
+ *  - **Rows disagree on width.** A merchant copy and a cardholder copy are
+ *    routinely glued together with no line break between them, so the row
+ *    where the second slip starts carries the tail of one receipt AND the head
+ *    of the next (6 cells where its neighbours have 4). The grid is therefore
+ *    as wide as the WIDEST row and short rows are padded, rather than each row
+ *    being laid out on its own terms — that is what keeps every cell in a
+ *    column instead of letting one long row stretch past the page edge.
+ *  - **Trailing separators are noise.** A slip commonly ends `...|` or `...| `,
+ *    which would otherwise invent a phantom empty column for the whole grid.
+ *    Trailing blank cells are dropped per row, leading/interior ones are not
+ *    (an interior blank is a genuinely empty field, e.g. `AVN:`).
+ *
+ * Returns `[]` for blank input, which is the signal to print the bare
+ * `EFT Receipt:` heading exactly as before this field existed.
+ */
+export function eftGrid(raw: string): string[][] {
+  const text = (raw ?? "").replace(/\r\n?/g, "\n");
+  if (!text.trim()) return [];
+
+  const rows: string[][] = [];
+  for (const line of text.split("\n")) {
+    const cells = line.split("|").map((c) => c.trim());
+    while (cells.length > 0 && cells[cells.length - 1] === "") cells.pop();
+    // A wholly blank line is spacing in the paste, not a receipt row.
+    if (cells.length > 0) rows.push(cells);
+  }
+  if (rows.length === 0) return [];
+
+  const width = rows.reduce((w, r) => Math.max(w, r.length), 0);
+  return rows.map((r) => {
+    const padded = r.slice();
+    while (padded.length < width) padded.push("");
+    return padded;
+  });
+}
+
+/** Per-column character width — the widest cell in each column. */
+export function eftColumnWidths(rows: string[][]): number[] {
+  if (rows.length === 0) return [];
+  return rows[0].map((_, i) => rows.reduce((w, r) => Math.max(w, r[i].length), 0));
+}
+
+/* ------------------------------------------------------------------ */
 /* Arithmetic                                                          */
 /* ------------------------------------------------------------------ */
 
@@ -253,10 +316,16 @@ export interface InvoiceTotals {
  * Base is derived by stripping VAT out of the gross line total
  * (`gross / (1 + rate)`), matching the source workbook — prices are entered
  * VAT-inclusive, exactly as Protel posts them.
+ *
+ * `deposit` is `InvoiceDraft.deposit` and selects which buckets are recapped;
+ * see the block filter below. It is deliberately REQUIRED rather than
+ * defaulted: a call site that forgot it would render a deposit invoice with
+ * the full normal recap and report no error anywhere.
  */
 export function computeTotals(
   lines: InvoiceLine[],
-  vatRates: VatRate[]
+  vatRates: VatRate[],
+  deposit: boolean
 ): InvoiceTotals {
   let total = 0;
   let payments = 0;
@@ -284,6 +353,17 @@ export function computeTotals(
     // existing draft still posts to it, so retiring a rate never silently
     // drops money off an invoice that already used it.
     if (!rate.active && !rate.showInPrint && gross === 0) continue;
+    // A ZÁLOHOVÁ (deposit) invoice recaps the advance block ONLY: it reports a
+    // received advance, so the normal-supply buckets have nothing to say on it
+    // and printing them as 0,00 was noise. The reverse is NOT true — a normal
+    // invoice still lists all eleven buckets, Deposit rows included, because
+    // that is what excels/excel_invoice.pdf prints and this page reproduces it.
+    //
+    // `gross === 0` guards the filter for the same reason it guards the one
+    // above: a bucket that actually carries money is never dropped. Were a
+    // deposit draft to post a line to a normal-block rate, hiding the row would
+    // leave recapTotal silently disagreeing with the Total above it.
+    if (deposit && rate.block !== "advance" && gross === 0) continue;
     const base = round2(gross / (1 + rate.percent / 100));
     recap.push({
       rateId: rate.id,
