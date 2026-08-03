@@ -150,6 +150,34 @@ const CASE_TAG_RE = /\{\{#case\s+(\w+)\s*(!=|=)\s*([^}]*?)\s*\}\}/g;
  *  ("Z proměnné"), because there is no built-in variable to source them from. */
 type LiteralDefault = { kind: "literal"; value: string };
 
+/**
+ * How wide a document's audience is — mirrors `DocumentVisibility` in
+ * `functions/src/routes/dokumenty.ts`, which is the authority (the server
+ * validates against the same closed set and resolves the legacy `public` flag).
+ */
+type DocumentVisibility = "public" | "private" | "hidden";
+
+/**
+ * The picker's options, ordered WIDEST FIRST so the list reads as a scale rather
+ * than three unrelated states. The descriptions name the audience in the same
+ * words the permission matrix uses, because "Neveřejný" vs "Skrytý" is otherwise
+ * a distinction an author has to guess at.
+ */
+const VISIBILITY_OPTIONS: { value: DocumentVisibility; label: string; hint: string }[] = [
+  { value: "public", label: "Veřejný", hint: "Uvidí každý, kdo má přístup do Dokumentů." },
+  {
+    value: "private",
+    label: "Neveřejný",
+    hint: "Uvidí jen ti, kdo mají oprávnění zobrazit i neveřejné dokumenty (a správci).",
+  },
+  { value: "hidden", label: "Skrytý", hint: "Uvidí jen ti, kdo mohou dokumenty spravovat." },
+];
+const VISIBILITY_LABELS: Record<DocumentVisibility, string> = {
+  public: "Veřejný",
+  private: "Neveřejný",
+  hidden: "Skrytý",
+};
+
 interface DocumentMeta {
   id: string;
   name: string;
@@ -158,17 +186,20 @@ interface DocumentMeta {
   /** Absent = active. `false` = deactivated (sorted last, visually muted). */
   active?: boolean;
   /**
-   * True = visible to everyone holding `nav.dokumenty.view`; false = only to
-   * holders of `dokumenty.viewAll` (read + print) or `dokumenty.manage` (edit).
+   * How wide this document's audience is. See `visibilityOf` on the server for
+   * the authoritative definition:
+   *   "public"  – everyone holding `nav.dokumenty.view`
+   *   "private" – additionally requires `dokumenty.viewAll` (read + print)
+   *   "hidden"  – `dokumenty.manage` only
    *
-   * ⚠️ Absent means PRIVATE, not public – documents written before the flag
-   * existed carry no field at all, and that is exactly how they stay private
-   * without a single write to the database. The server normalises it to a real
-   * boolean on the way out, so this is only ever undefined on a locally
-   * constructed object. The server also FILTERS the list, so an entry arriving
+   * ⚠️ The server always sends a RESOLVED value, including for documents written
+   * before the field existed (those read as "hidden", never "private" – see the
+   * migration note on `visibilityOf`). It is therefore only ever undefined on a
+   * locally constructed object, and the legacy `public` boolean it replaces must
+   * never be read here. The server also FILTERS the list, so an entry arriving
    * here is one the caller is allowed to see either way.
    */
-  public?: boolean;
+  visibility?: DocumentVisibility;
   updatedAt?: { seconds: number } | null;
 }
 
@@ -379,9 +410,10 @@ export default function DokumentyPage() {
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [createIdDraft, setCreateIdDraft] = useState("");
   const [createNameDraft, setCreateNameDraft] = useState("");
-  /** "Veřejný" in the create / duplicate dialog. Starts unticked: a new document
-   *  is private until its author says otherwise. */
-  const [createPublicDraft, setCreatePublicDraft] = useState(false);
+  /** "Viditelnost" in the create / duplicate dialog. Starts at the STRICTEST
+   *  rung: a new document is a draft, and it acquires an audience only when its
+   *  author picks one. Matches the server's default for an omitted field. */
+  const [createVisibilityDraft, setCreateVisibilityDraft] = useState<DocumentVisibility>("hidden");
   /** Non-null = the create modal is acting as "duplicate this document". */
   const [duplicateSource, setDuplicateSource] = useState<DocumentMeta | null>(null);
   const [createSaving, setCreateSaving] = useState(false);
@@ -795,10 +827,10 @@ export default function DokumentyPage() {
         margins,
         variableDefs,
         // Always sent explicitly. Omitting the key would leave the stored value
-        // untouched, and the header checkbox edits it optimistically – so a
-        // freshly unticked box has to travel with this save to mean anything.
-        // `=== true` because a document that predates the flag has none.
-        public: meta?.public === true,
+        // untouched, and the header picker edits it optimistically – so a freshly
+        // changed rung has to travel with this save to mean anything. The `??`
+        // is for a locally constructed entry only; the server always resolves it.
+        visibility: meta?.visibility ?? "hidden",
       });
       setSaveMsg("Uloženo");
       setIsDirty(false);
@@ -833,7 +865,7 @@ export default function DokumentyPage() {
     // not inherit it. Duplicating is the moment the author decides who the copy
     // is for, and a silently inherited "Veřejný" is how a copy gets published
     // without anyone deciding to publish it.
-    setCreatePublicDraft(doc.public === true);
+    setCreateVisibilityDraft(doc.visibility ?? "hidden");
     setCreateError(null);
     setDuplicateSource(doc);
     setCreateModalOpen(true);
@@ -846,7 +878,7 @@ export default function DokumentyPage() {
       const body = {
         id: createIdDraft.trim(),
         name: createNameDraft.trim(),
-        public: createPublicDraft,
+        visibility: createVisibilityDraft,
       };
       const created = duplicateSource
         ? await api.post<{ id: string }>(`/dokumenty/${duplicateSource.id}/duplicate`, body)
@@ -1801,18 +1833,31 @@ export default function DokumentyPage() {
             <span className={styles.dirtyDot} title="Neuložené změny">•</span>
           )}
         </span>
-        {/* Only private documents are badged, and only an EDITOR is shown the
+        {/* Only the two narrower rungs are badged, and only an EDITOR is shown a
             badge – a plain nav.dokumenty.view user is served public documents
             exclusively, so a "Veřejný" chip on every row would label the norm
             and say nothing.
 
-            A `dokumenty.viewAll` holder does see private documents but is
-            deliberately NOT badged: the flag decides who an editor publishes to,
-            and it is the editor's concern, not the reader's. Gate stays on
-            canManage alone – do not widen it to the view-all key. */}
-        {doc.public !== true && canManage && (
-          <span className={styles.privateBadge} title="Vidí jen ti, kdo mohou spravovat dokumenty">
-            Neveřejný
+            A `dokumenty.viewAll` holder does see "Neveřejný" documents but is
+            deliberately NOT badged: visibility decides who an editor publishes
+            to, and it is the editor's concern, not the reader's. Gate stays on
+            canManage alone – do not widen it to the view-all key.
+
+            Both narrow rungs get their own chip rather than one shared "not
+            public" chip: an editor's whole reason to look is telling them apart,
+            and "Skrytý" is the one nobody but them can reach. */}
+        {canManage && doc.visibility !== "public" && (
+          <span
+            className={`${styles.privateBadge} ${
+              doc.visibility === "hidden" ? styles.hiddenBadge : ""
+            }`}
+            title={
+              doc.visibility === "hidden"
+                ? "Vidí jen ti, kdo mohou spravovat dokumenty"
+                : "Vidí jen ti, kdo mohou zobrazit i neveřejné dokumenty (a správci)"
+            }
+          >
+            {VISIBILITY_LABELS[doc.visibility ?? "hidden"]}
           </span>
         )}
         <div className={styles.templateItemFooter}>
@@ -1868,9 +1913,10 @@ export default function DokumentyPage() {
               onClick={() => {
                 setCreateIdDraft("");
                 setCreateNameDraft("");
-                // Reset explicitly: a previous duplicate may have left it ticked,
-                // and "new document" must always start from private.
-                setCreatePublicDraft(false);
+                // Reset explicitly: a previous duplicate may have left the picker
+                // on the source's rung, and "new document" must always start from
+                // the strictest one.
+                setCreateVisibilityDraft("hidden");
                 setCreateError(null);
                 setCreateModalOpen(true);
               }}
@@ -1905,28 +1951,35 @@ export default function DokumentyPage() {
                 and disappear, and .varWarn is flex:1, so with the group before
                 them the controls slid left whenever a warning showed. */}
             <div className={styles.headerActionsFixed}>
-              {/* Publishing a document is an audience change in disguise: ticking
-                  this shows it to everyone holding nav.dokumenty.view, unticking
-                  it takes it back to editors only. Saved with the document, so it
-                  follows the same Uložit as the text – hence marking the page
-                  dirty rather than writing straight away. Sits exactly where the
-                  section picker used to. */}
+              {/* Visibility is an audience change in disguise: moving a document
+                  up this scale shows it to more people, moving it down takes it
+                  back. Saved with the document, so it follows the same Uložit as
+                  the text – hence marking the page dirty rather than writing
+                  straight away. Sits exactly where the section picker used to.
+
+                  A <select> rather than the checkbox it replaces: there are three
+                  rungs now, and the control has to fit the fixed header group
+                  without pushing Duplikovat / Uložit around. */}
               {selected && (
-                <label className={styles.publicToggle}>
-                  <input
-                    type="checkbox"
-                    checked={docs.find((d) => d.id === selected)?.public === true}
+                <label className={styles.visibilityPicker}>
+                  <span className={styles.visibilityPickerLabel}>Viditelnost</span>
+                  <select
+                    value={docs.find((d) => d.id === selected)?.visibility ?? "hidden"}
+                    title={VISIBILITY_OPTIONS.map((o) => `${o.label}: ${o.hint}`).join("\n")}
                     onChange={(e) => {
-                      const next = e.target.checked;
+                      const next = e.target.value as DocumentVisibility;
                       setDocs((prev) =>
-                        prev.map((d) => (d.id === selected ? { ...d, public: next } : d))
+                        prev.map((d) => (d.id === selected ? { ...d, visibility: next } : d))
                       );
                       setIsDirty(true);
                     }}
-                  />
-                  <span title="Veřejný dokument uvidí každý, kdo má přístup do Dokumentů. Neveřejný jen ti, kdo mohou dokumenty spravovat.">
-                    Veřejný
-                  </span>
+                  >
+                    {VISIBILITY_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
                 </label>
               )}
               {selected && (
@@ -3039,19 +3092,27 @@ export default function DokumentyPage() {
                 />
               </div>
               <div>
-                {/* Same place the section picker stood, and unticked by default:
-                    a new document is private until someone decides otherwise. */}
-                <label className={styles.publicCreateToggle}>
-                  <input
-                    type="checkbox"
-                    checked={createPublicDraft}
-                    onChange={(e) => setCreatePublicDraft(e.target.checked)}
-                  />
-                  <span>Veřejný</span>
-                </label>
+                {/* Same place the section picker stood, and at the STRICTEST rung
+                    by default: a new document is a draft until someone decides
+                    who it is for. In duplicate mode openDuplicate() overrides
+                    this with the source's rung as a visible suggestion. */}
+                <label style={createLabelStyle}>Viditelnost</label>
+                <select
+                  value={createVisibilityDraft}
+                  onChange={(e) => setCreateVisibilityDraft(e.target.value as DocumentVisibility)}
+                  style={createInputStyle}
+                >
+                  {VISIBILITY_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+                {/* The hint tracks the selection instead of listing all three:
+                    the question an author has here is "who sees THIS one?", and
+                    three parallel sentences answer a question nobody asked. */}
                 <p style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", margin: "4px 0 0" }}>
-                  Veřejný dokument uvidí každý, kdo má přístup do Dokumentů.
-                  Neveřejný uvidí jen ti, kdo mohou dokumenty spravovat.
+                  {VISIBILITY_OPTIONS.find((o) => o.value === createVisibilityDraft)?.hint}
                 </p>
               </div>
               {createError && (

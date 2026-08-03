@@ -43,6 +43,14 @@ const DOC_TYPE_LABELS: Record<string, string> = {
   taxDeclaration: "Prohlášení poplatníka",
   questionnaire: "Osobní dotazník",
 };
+// Dokumenty audience rungs (documentTemplates.visibility) – mirrors the picker
+// in DokumentyPage. The stored values are English because the server validates
+// them against a closed set; the change log must show the Czech the author saw.
+const DOCUMENT_VISIBILITY_LABELS: Record<string, string> = {
+  public: "Veřejný",
+  private: "Neveřejný",
+  hidden: "Skrytý",
+};
 // Manual-trigger job codes (audit extra.trigger) – mirrors Settings → Úlohy titles.
 const TRIGGER_LABELS: Record<string, string> = {
   refreshDocumentAlerts: "Upozornění na doklady",
@@ -204,6 +212,12 @@ export function renderAuditFieldValue(
     case "shift":
       // Handover shift code → Czech.
       return value === "den" ? "Denní" : value === "noc" ? "Noční" : formatAuditValue(value);
+    case "visibility":
+      // Dokumenty audience rung → the same word the picker shows. Stored in
+      // English so the server can validate a closed set; never displayed that way.
+      return typeof value === "string"
+        ? DOCUMENT_VISIBILITY_LABELS[value] ?? value
+        : formatAuditValue(value);
     case "changeLabels":
       // The element-level change list of a protocol save – already human text.
       return Array.isArray(value) && value.length

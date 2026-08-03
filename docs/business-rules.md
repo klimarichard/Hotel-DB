@@ -317,20 +317,30 @@ Tabulky jsou široké a na telefonu se nedají rozumně vyplňovat, proto se pol
 
 ## Dokumenty
 
-### Kdo dokument uvidí, určuje příznak Veřejný
+### Kdo dokument uvidí, určuje jeho Viditelnost
 
-Dokument je buď **Veřejný**, nebo **Neveřejný** – nový dokument je vždy Neveřejný, dokud ho autor sám neoznačí jako veřejný. Veřejný dokument vidí každý, kdo má přístup do Dokumentů. Neveřejný se ostatním v seznamu vůbec nezobrazí a nelze jej otevřít ani přímým odkazem.
+Každý dokument má jednu ze **tří viditelností**. Autor ji volí při založení dokumentu a kdykoli později ji může změnit – ukládá se stejným tlačítkem Uložit jako text dokumentu.
 
-Neveřejné dokumenty vidí dvě skupiny lidí:
+| Viditelnost | Kdo dokument uvidí |
+|---|---|
+| **Veřejný** | každý, kdo má přístup do Dokumentů |
+| **Neveřejný** | jen ten, kdo má oprávnění **Zobrazit i neveřejné dokumenty** (a správci) |
+| **Skrytý** | **jen ten, kdo může dokumenty spravovat** |
 
-- kdo má oprávnění **Spravovat dokumenty** – jinak by je nemohl opravit ani smazat;
-- kdo má oprávnění **Zobrazit i neveřejné dokumenty** – ten je smí číst, vyplnit a vytisknout, ale **nesmí je zakládat, upravovat ani mazat**. Toto oprávnění existuje právě proto, že okruh lidí, kteří dokument potřebují číst, bývá širší než okruh těch, kdo do něj smí zasahovat.
+Komu se dokument nezobrazuje, ten se o něm nedozví vůbec – v seznamu není a nejde otevřít ani přímým odkazem.
 
-Kdo má jen oprávnění „Zobrazit i neveřejné dokumenty", nepozná v seznamu, který dokument je veřejný a který ne – **štítek „Neveřejný" se ukazuje pouze tomu, kdo dokumenty spravuje**. Příznak Veřejný je informace pro autora o tom, komu dokument zveřejňuje, ne pro čtenáře.
+Rozdíl mezi Neveřejným a Skrytým je v tom, kdo dokument smí **číst**:
 
-U dokumentů, které vznikly ještě před zavedením tohoto rozlišení, příznak v databázi chybí úplně – to se počítá jako **Neveřejný**, ne jako chyba, a žádná stará data se kvůli tomu nijak neupravovala.
+- **Neveřejný** je pro dokumenty, které má číst, vyplňovat a tisknout širší okruh lidí, než kdo je smí upravovat. Kdo má oprávnění „Zobrazit i neveřejné dokumenty", je smí číst, vyplnit a vytisknout, ale **nesmí je zakládat, upravovat ani mazat**.
+- **Skrytý** je pro rozpracované nebo interní dokumenty, které nemá vidět nikdo kromě správců. Neexistuje žádné oprávnění, kterým by se Skrytý dokument dal zpřístupnit někomu jinému – právě tím je Skrytý definován.
 
-> 🔒 Server. Zdroj: `functions/src/routes/dokumenty.ts` – `maySeeDocument()`, `isValidPublic()`; filtr seznamu v `GET /` a kontrola v `GET /:id`. Zápisové trasy (`POST`, `PUT`, `PATCH`, `DELETE`) vyžadují `dokumenty.manage`, takže „Zobrazit i neveřejné dokumenty" (`dokumenty.viewAll`) opravdu nic upravit nedokáže. Štítek „Neveřejný" – 🖥️ Jen rozhraní: `frontend/src/pages/DokumentyPage.tsx`.
+**Nový dokument je vždy Skrytý**, dokud mu autor sám nezvolí jinou viditelnost. Při duplikování se předvyplní viditelnost původního dokumentu, ale je to jen návrh – autor ji může před vytvořením kopie změnit.
+
+Kdo nemá oprávnění dokumenty spravovat, nepozná v seznamu, jakou viditelnost dokument má – **štítky „Neveřejný" a „Skrytý" se ukazují pouze správcům**. Viditelnost je informace pro autora o tom, komu dokument zpřístupňuje, ne pro čtenáře.
+
+U dokumentů, které vznikly ještě před zavedením tohoto rozlišení, údaj v databázi chybí úplně – takový dokument se počítá jako **Skrytý** (pokud nebyl dříve označen jako veřejný, pak zůstává Veřejný). Není to chyba: přesně tak byly tyto dokumenty dostupné i dosud, a žádná stará data se kvůli tomu nijak neupravovala. Dokument se zpřístupní širšímu okruhu lidí jedině tak, že mu autor viditelnost sám změní.
+
+> 🔒 Server. Zdroj: `functions/src/routes/dokumenty.ts` – `visibilityOf()`, `maySeeDocument()`, `isValidVisibility()`; filtr seznamu v `GET /` a kontrola v `GET /:id`. Zápisové trasy (`POST`, `PUT`, `PATCH`, `DELETE`) vyžadují `dokumenty.manage`, takže „Zobrazit i neveřejné dokumenty" (`dokumenty.viewAll`) opravdu nic upravit nedokáže. Štítky „Neveřejný"/„Skrytý" – 🖥️ Jen rozhraní: `frontend/src/pages/DokumentyPage.tsx`.
 
 ### Vytištěné dokumenty se nikde neukládají
 
@@ -538,9 +548,17 @@ Pravidla, která dřívější dokumentace uváděla, ale která **v současném
 
 ### ❌ „Kdo dokument uvidí, určuje jeho sekce"
 
-**Neplatí.** Dokumenty už nemají sekce (Ambiance/Superior/Amigo & Alqush/Ankora/TEMP) – nahradil je jediný příznak **Veřejný/Neveřejný**, protože jedna sada čtyř hotelových sekcí přestala mít smysl ve chvíli, kdy jeden dokument dokáže obsloužit všechny čtyři hotely sám (proměnná typu Seznam/Obrázek + `{{#case}}`). Aktuální pravidlo viz „Kdo dokument uvidí, určuje příznak Veřejný" výše.
+**Neplatí.** Dokumenty už nemají sekce (Ambiance/Superior/Amigo & Alqush/Ankora/TEMP) – nahradil je údaj o viditelnosti přímo na dokumentu, protože jedna sada čtyř hotelových sekcí přestala mít smysl ve chvíli, kdy jeden dokument dokáže obsloužit všechny čtyři hotely sám (proměnná typu Seznam/Obrázek + `{{#case}}`). Aktuální pravidlo viz „Kdo dokument uvidí, určuje jeho Viditelnost" výše.
 
 > Zdroj: `functions/src/routes/dokumenty.ts` – `maySeeDocument()` nahradilo smazané `functions/src/services/documentSections.ts` (`maySeeDocumentSection()`).
+
+### ❌ „Dokument je buď Veřejný, nebo Neveřejný"
+
+**Už neplatí – viditelnosti jsou tři, ne dvě.** Mezi Veřejný a Skrytý přibyl stupeň **Neveřejný**: dokument, který smí číst a tisknout i ten, kdo má oprávnění „Zobrazit i neveřejné dokumenty", ale nesmí ho upravovat. Dvoustavové dělení přestalo stačit ve chvíli, kdy toto oprávnění vzniklo – do té doby „neveřejný" znamenalo v praxi „jen pro správce", což je dnes **Skrytý**.
+
+Dvě věci, které se tím prakticky mění: **nový dokument se zakládá jako Skrytý** (dřív jako Neveřejný), a **dokumenty založené před touto změnou se počítají jako Skryté**, ne jako Neveřejné – aby se udělením nového oprávnění nikomu naráz nezpřístupnily. Aktuální pravidlo viz „Kdo dokument uvidí, určuje jeho Viditelnost" výše.
+
+> Zdroj: `functions/src/routes/dokumenty.ts` – `visibilityOf()` nahradilo dřívější čtení příznaku `public`, který na starých dokumentech v databázi zůstává a už se nepoužívá.
 
 ### ❌ „Výchozí sekce mění jen pořadí, nikdy přístup"
 

@@ -40,65 +40,102 @@ function extractVariables(html: string): string[] {
 }
 
 /**
+ * A document's audience, in one field. Three values, widest first:
+ *
+ *  - `public`  — everyone holding `nav.dokumenty.view`.
+ *  - `private` — additionally requires `dokumenty.viewAll` (read + print) — the
+ *                middle rung, for a document a wider audience must be able to
+ *                read but only an editor may change.
+ *  - `hidden`  — `dokumenty.manage` only. Nobody else learns it exists.
+ *
+ * This replaced the five per-hotel "sections", each with its own permission key,
+ * and then the boolean `public` flag that briefly replaced those. Sections
+ * existed to gate a document per hotel, and the custom-variable work removed the
+ * need: one document now serves all four hotels through a Seznam/Obrázek slot
+ * plus {{#case}} blocks, so there is no per-hotel audience left to gate. What
+ * remains is how *wide* the audience is, which is this scale.
+ */
+export type DocumentVisibility = "public" | "private" | "hidden";
+const VISIBILITIES = new Set<string>(["public", "private", "hidden"]);
+
+/**
+ * Resolve a stored document's audience. **This is the only place `public` may be
+ * read**, and the only place `visibility` may be defaulted — every caller goes
+ * through here so the legacy fallback can never be applied inconsistently.
+ *
+ * ⚠️ The FALLBACK IS THE ENTIRE MIGRATION, and it is deliberately the strictest
+ * reading:
+ *
+ *   no `visibility` + `public === true`  → "public"   (was published, stays published)
+ *   no `visibility` + anything else      → "hidden"   (NOT "private")
+ *
+ * "hidden", not "private", because that is what those documents have always
+ * actually been: before `dokumenty.viewAll` existed, "not public" meant
+ * "editors only", and mapping them onto the new middle rung would silently widen
+ * their audience the first time somebody is granted `viewAll`. Documents move up
+ * the scale only when an author deliberately moves them. As with the boolean it
+ * replaces, this costs ZERO writes to production — there is no backfill script
+ * and none is needed.
+ *
+ * A stale `public: true` therefore survives on old documents forever, and once
+ * an editor saves one, `visibility` sits beside it and WINS. That is why nothing
+ * outside this function may read `public`: the two disagree by design after the
+ * first save, and only the order below resolves them. Compare the equally stale
+ * `section` field, left in place for the same reason.
+ *
+ * Compare `active` on this same collection, where absent means ACTIVE — same
+ * shape (an optional field with a meaningful absent-state), opposite polarity,
+ * both deliberate.
+ */
+function visibilityOf(data: Record<string, unknown> | undefined): DocumentVisibility {
+  const v = data?.visibility;
+  if (typeof v === "string" && VISIBILITIES.has(v)) return v as DocumentVisibility;
+  return data?.public === true ? "public" : "hidden";
+}
+
+/**
+ * Validated against a CLOSED set, never coerced. An unrecognised string must not
+ * fall through to a default: `visibilityOf` would then read the stored garbage
+ * as "hidden", so a typo'd request would quietly bury a document instead of
+ * failing. Same posture as the boolean `isValidPublic` it replaces, where a
+ * truthy string like "false" must not have been able to publish anything.
+ */
+function isValidVisibility(v: unknown): boolean {
+  return v === undefined || (typeof v === "string" && VISIBILITIES.has(v));
+}
+
+/**
  * Whether this request may see a given document at all.
  *
- * This replaced the five per-hotel "sections", each with its own permission key.
- * Sections existed to gate a document per hotel, and the custom-variable work
- * removed the need: one document now serves all four hotels through a
- * Seznam/Obrázek slot plus {{#case}} blocks, so there is no per-hotel audience
- * left to gate. What remains is a single public/private flag.
- *
- * ⚠️ `public` is OPTIONAL and ABSENT MEANS PRIVATE — read it as `=== true`,
- * never for truthiness, and never default it to public. Every document written
- * before the field existed therefore reads as private the moment this ships,
- * which is precisely the intended migration ("everything → private") achieved
- * with ZERO writes to production. Do not add a backfill and do not "tidy" this
- * into an absent-means-public read.
- *
- * Compare `active` on this same collection, where absent means ACTIVE: same
- * shape, opposite default, both deliberate.
- *
- * `dokumenty.viewAll` is the read-only counterpart: it widens the audience to
- * every document and grants nothing else. Filling a document in and printing it
- * already comes with `nav.dokumenty.view` (that is what `render-pdf` is gated
- * on), so a holder of this key can read and print everything and still cannot
- * create, edit, duplicate, deactivate or delete anything — every write route
- * below requires `dokumenty.manage`. That separation is the whole point of the
- * key: the audience of an internal document is a wider group than the set of
- * people who should be able to rewrite it.
- *
  * `dokumenty.manage` short-circuits to seeing everything, exactly as it did for
- * sections: an editor who could not see a private document could neither fix nor
- * delete it. It therefore does NOT require `viewAll` to be granted alongside —
- * the implication lives here, not in the permission matrix, so an editor cannot
- * be locked out of their own drafts by an un-ticked box.
+ * sections: an editor who could not see a document could neither fix nor delete
+ * it. It therefore does NOT require `viewAll` to be granted alongside — the
+ * implication lives here, not in the permission matrix, so an editor cannot be
+ * locked out of their own drafts by an un-ticked box. This short-circuit is also
+ * what makes "hidden" meaningful: it is the only rung no non-editor can reach.
+ *
+ * `dokumenty.viewAll` is the read-only counterpart, and it stops at `private`.
+ * Filling a document in and printing it already comes with `nav.dokumenty.view`
+ * (that is what `render-pdf` is gated on), so a holder of this key can read and
+ * print what it reaches and still cannot create, edit, duplicate, deactivate or
+ * delete anything — every write route below requires `dokumenty.manage`. That
+ * separation is the whole point of the key: the audience of an internal document
+ * is a wider group than the set of people who should be able to rewrite it.
  *
  * `system.admin` is checked EXPLICITLY even though the permission resolver
  * already expands it to the full static permission set (so an admin does hold
  * `dokumenty.manage` anyway). The explicit check exists so this gate does not
  * rest on a coincidence of how the resolver happens to expand wildcards — a
- * resolver change could otherwise silently open or close every private document
+ * resolver change could otherwise silently open or close every hidden document
  * for admins. The reasoning is unchanged from the section gate it replaces.
  */
 function maySeeDocument(req: AuthRequest, data: Record<string, unknown> | undefined): boolean {
   const perms = req.permissions ?? new Set<string>();
-  if (
-    perms.has("system.admin") ||
-    perms.has("dokumenty.manage") ||
-    perms.has("dokumenty.viewAll")
-  ) {
-    return true;
-  }
-  return data?.public === true;
-}
-
-/**
- * `Veřejný` – validated as a REAL boolean, never coerced, exactly like `active`
- * on PATCH below. A truthy string ("false", "0", "ano") must not be able to
- * publish a document to everyone holding `nav.dokumenty.view`.
- */
-function isValidPublic(v: unknown): boolean {
-  return v === undefined || typeof v === "boolean";
+  if (perms.has("system.admin") || perms.has("dokumenty.manage")) return true;
+  const vis = visibilityOf(data);
+  if (vis === "public") return true;
+  if (vis === "private") return perms.has("dokumenty.viewAll");
+  return false;
 }
 
 const SLUG_RE = /^[a-z][a-z0-9_]{1,39}$/;
@@ -453,9 +490,10 @@ dokumentyRouter.get(
       return {
         id: d.id,
         name: data.name,
-        // Absent = PRIVATE (see maySeeDocument). Normalised to a real boolean
-        // here so the client never has to know that, and never sees `undefined`.
-        public: data.public === true,
+        // Always the RESOLVED audience (see visibilityOf), never the raw stored
+        // field: the client must never have to know that an old document has no
+        // `visibility` at all, nor which of the two fields wins.
+        visibility: visibilityOf(data),
         // Absent = active. Only an explicit `active:false` marks a template
         // inactive — see PATCH /:id below.
         active: data.active !== false,
@@ -470,23 +508,24 @@ dokumentyRouter.get(
 
 /**
  * POST /api/dokumenty
- * Create an empty document template. Body: { id, name, public? }.
+ * Create an empty document template. Body: { id, name, visibility? }.
  * `id` must be a snake_case slug not already in use.
  *
- * A new document is NOT public unless the author says so — the safe default,
- * and the one the create dialog's unticked "Veřejný" checkbox sends.
+ * A new document is HIDDEN unless the author says otherwise — the strictest
+ * rung, and the one the create dialog preselects. A brand-new document is a
+ * draft; it acquires an audience when its author picks one.
  */
 dokumentyRouter.post(
   "/",
   requireAuth,
   requirePermission("dokumenty.manage"),
   async (req: AuthRequest, res: Response) => {
-    // `public` is a reserved word, hence the rename. Typed `unknown` so the
-    // boolean check below is the only thing that can let a value through.
-    const { id, name, public: isPublic } = req.body as {
+    // Typed `unknown` so the closed-set check below is the only thing that can
+    // let a value through.
+    const { id, name, visibility } = req.body as {
       id?: string;
       name?: string;
-      public?: unknown;
+      visibility?: unknown;
     };
     if (!id || !name || !name.trim()) {
       res.status(400).json({ error: "id a name jsou povinné." });
@@ -504,18 +543,21 @@ dokumentyRouter.post(
       res.status(409).json({ error: "Dokument s tímto id již existuje." });
       return;
     }
-    if (!isValidPublic(isPublic)) {
-      res.status(400).json({ error: "public musí být boolean." });
+    if (!isValidVisibility(visibility)) {
+      res.status(400).json({ error: "visibility musí být public, private nebo hidden." });
       return;
     }
-    // Written explicitly (even when false) because this is a NEW document: the
-    // author has just answered the question, so "private" here is a decision
-    // rather than the absence of one. Existing documents are never touched —
-    // their missing `public` is what makes them private, and backfilling it
-    // would be a production write for no gain. See maySeeDocument.
+    const vis: DocumentVisibility = (visibility as DocumentVisibility) ?? "hidden";
+    // Written explicitly (even for "hidden") because this is a NEW document: the
+    // author has just answered the question, so the strictest rung here is a
+    // decision rather than the absence of one. Existing documents are never
+    // touched — their missing `visibility` is what makes them hidden, and
+    // backfilling it would be a production write for no gain. See visibilityOf.
+    // `public` is NOT written: it is a legacy field this route has stopped
+    // producing, read only as a fallback for documents that predate `visibility`.
     await ref.set({
       name: name.trim(),
-      public: isPublic === true,
+      visibility: vis,
       htmlContent: "",
       variables: [],
       margins: { top: 15, bottom: 15, left: 15, right: 15 },
@@ -527,19 +569,19 @@ dokumentyRouter.post(
     await logCreate(ctxFromReq(req), {
       collection: COLLECTION,
       resourceId: id,
-      summary: { name: name.trim(), public: isPublic === true },
+      summary: { name: name.trim(), visibility: vis },
     });
     res.status(201).json({
       id,
       name: name.trim(),
-      public: isPublic === true,
+      visibility: vis,
     });
   }
 );
 
 /**
  * POST /api/dokumenty/:id/duplicate
- * Copy an existing document under a new id. Body: { id, name, public? }.
+ * Copy an existing document under a new id. Body: { id, name, visibility? }.
  *
  * Server-side rather than a client-orchestrated GET + POST + PUT because those
  * three calls are not atomic: a failure between them leaves an empty document
@@ -550,8 +592,8 @@ dokumentyRouter.post(
  * Deliberately NOT copied:
  *  - `active` — a duplicate always starts active, even if the source was
  *    deactivated; you copy a document in order to use it.
- *  - `public` — taken from the body, not the source. Duplicating is the moment
- *    you decide who the copy is for, and silently inheriting the source's
+ *  - `visibility` — taken from the body, not the source. Duplicating is the
+ *    moment you decide who the copy is for, and silently inheriting the source's
  *    audience is the kind of default that quietly publishes a document. The UI
  *    pre-fills the source's value as a visible, editable suggestion.
  */
@@ -560,10 +602,10 @@ dokumentyRouter.post(
   requireAuth,
   requirePermission("dokumenty.manage"),
   async (req: AuthRequest, res: Response) => {
-    const { id: newId, name, public: isPublic } = req.body as {
+    const { id: newId, name, visibility } = req.body as {
       id?: string;
       name?: string;
-      public?: unknown;
+      visibility?: unknown;
     };
     if (!newId || !name || !name.trim()) {
       res.status(400).json({ error: "id a name jsou povinné." });
@@ -575,10 +617,11 @@ dokumentyRouter.post(
       });
       return;
     }
-    if (!isValidPublic(isPublic)) {
-      res.status(400).json({ error: "public musí být boolean." });
+    if (!isValidVisibility(visibility)) {
+      res.status(400).json({ error: "visibility musí být public, private nebo hidden." });
       return;
     }
+    const vis: DocumentVisibility = (visibility as DocumentVisibility) ?? "hidden";
 
     const sourceSnap = await db().collection(COLLECTION).doc(req.params.id).get();
     if (!sourceSnap.exists) {
@@ -596,8 +639,8 @@ dokumentyRouter.post(
     const payload: Record<string, unknown> = {
       name: name.trim(),
       // Same as POST / above: a brand-new document records the answer either
-      // way. Absent would also read as private, but here the author was asked.
-      public: isPublic === true,
+      // way. Absent would also read as hidden, but here the author was asked.
+      visibility: vis,
       htmlContent: source.htmlContent ?? "",
       variables: source.variables ?? [],
       createdAt: FieldValue.serverTimestamp(),
@@ -617,14 +660,14 @@ dokumentyRouter.post(
       resourceId: newId,
       summary: {
         name: name.trim(),
-        public: isPublic === true,
+        visibility: vis,
         duplicatedFrom: req.params.id,
       },
     });
     res.status(201).json({
       id: newId,
       name: name.trim(),
-      public: isPublic === true,
+      visibility: vis,
     });
   }
 );
@@ -650,33 +693,37 @@ dokumentyRouter.get(
       res.status(404).json({ error: "Dokument neexistuje." });
       return;
     }
-    // `public` normalised the same way the list does, so an old document
-    // (no field at all) arrives at the client as an explicit `false`.
+    // `visibility` resolved the same way the list does, so an old document (no
+    // such field) arrives at the client already on the right rung.
     //
-    // The spread may still carry a stale `section` string on documents written
-    // before sections were removed. Nothing reads it — on either side — and it
-    // is left in place deliberately: stripping the field from every stored
+    // ⚠️ The resolved value must come AFTER the spread, or the raw stored field
+    // would win for old documents and hand the client `undefined`.
+    //
+    // The spread may still carry a stale `section` string, and now also a stale
+    // `public` boolean, on documents written before those were superseded.
+    // Nothing reads either — the client is typed on `visibility` alone — and
+    // both are left in place deliberately: stripping fields from every stored
     // document would be a bulk production write bought for tidiness alone.
-    res.json({ id: doc.id, ...doc.data(), public: doc.data()?.public === true });
+    res.json({ id: doc.id, ...doc.data(), visibility: visibilityOf(doc.data()) });
   }
 );
 
 /**
  * PUT /api/dokumenty/:id
  * Upsert a template. Body: { name, htmlContent, margins?, variableDefs?,
- * public? }.
+ * visibility? }.
  */
 dokumentyRouter.put(
   "/:id",
   requireAuth,
   requirePermission("dokumenty.manage"),
   async (req: AuthRequest, res: Response) => {
-    const { name, htmlContent, margins, variableDefs, public: isPublic } = req.body as {
+    const { name, htmlContent, margins, variableDefs, visibility } = req.body as {
       name?: string;
       htmlContent?: string;
       margins?: unknown;
       variableDefs?: unknown;
-      public?: unknown;
+      visibility?: unknown;
     };
 
     if (!name || htmlContent === undefined) {
@@ -737,17 +784,24 @@ dokumentyRouter.put(
     };
     if (margins !== undefined) payload.margins = margins;
     if (variableDefs !== undefined) payload.variableDefs = variableDefs;
-    // Publishing / unpublishing is an audience change in disguise, so it travels
-    // with the same Uložit as the text. Omitting the field leaves the current
-    // value untouched (the write is a merge) — which is what keeps a document
-    // that predates the field private: nothing writes it until an editor
-    // deliberately ticks the box.
-    if (isPublic !== undefined) {
-      if (typeof isPublic !== "boolean") {
-        res.status(400).json({ error: "public musí být boolean." });
+    // Moving a document up or down the visibility scale is an audience change in
+    // disguise, so it travels with the same Uložit as the text. Omitting the
+    // field leaves the current value untouched (the write is a merge) — which is
+    // what keeps a document that predates the field hidden: nothing writes it
+    // until an editor deliberately picks a rung.
+    //
+    // ⚠️ Writing `visibility` does NOT clear a legacy `public: true` sitting on
+    // the same document — after this save the two disagree, and `visibilityOf`
+    // resolves that by preferring `visibility`. Deleting the stale field here
+    // would be correct in spirit and is deliberately not done: it turns every
+    // ordinary save into a field-delete on production data for no behavioural
+    // gain. Read the audience through `visibilityOf`, never off the raw doc.
+    if (visibility !== undefined) {
+      if (!isValidVisibility(visibility)) {
+        res.status(400).json({ error: "visibility musí být public, private nebo hidden." });
         return;
       }
-      payload.public = isPublic;
+      payload.visibility = visibility;
     }
 
     const ref = db().collection(COLLECTION).doc(req.params.id);
@@ -782,16 +836,16 @@ dokumentyRouter.put(
         name: before.name,
         variables: before.variables,
         margins: before.margins,
-        // Normalised, so an old document's missing field logs as `false`
-        // rather than as an empty diff against an explicit `false` after.
-        public: before.public === true,
+        // Resolved, so an old document's missing field logs as the rung it
+        // actually sat on rather than as an empty diff against the value after.
+        visibility: visibilityOf(before),
         htmlContentLength: typeof before.htmlContent === "string" ? before.htmlContent.length : 0,
       },
       after: {
         name,
         variables,
         margins: payload.margins ?? before.margins,
-        public: payload.public !== undefined ? payload.public : before.public === true,
+        visibility: payload.visibility ?? visibilityOf(before),
         htmlContentLength: htmlContent.length,
       },
     });

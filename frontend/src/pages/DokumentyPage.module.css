@@ -856,11 +856,26 @@
   border-radius: 8px;
 }
 
-/* "Veřejný" checkbox in the editor header, standing exactly where the section
-   picker used to. Text size matches the neighbouring buttons rather than the
-   muted sidebar scale - it is an editable property of the open document, not a
-   caption. */
-.publicToggle {
+/* "Skrytý" - the strictest rung, and the one an editor most needs to spot at a
+   glance, since nobody else can see the document at all. Composes on top of
+   .privateBadge (both classes are applied together), so it only overrides the
+   colours; keep it that way rather than duplicating the box metrics. */
+.hiddenBadge {
+  color: var(--color-warning-text);
+  background: var(--color-info-bg, rgba(127, 127, 127, 0.12));
+  border: 1px solid var(--color-border);
+}
+
+/* Visibility picker in the editor header, standing exactly where the section
+   picker used to (and where the "Veřejný" checkbox that briefly replaced it
+   stood). Text size matches the neighbouring buttons rather than the muted
+   sidebar scale - it is an editable property of the open document, not a
+   caption.
+
+   .headerActionsFixed is a nowrap flex row with gap:12px that must not grow, so
+   the <select> is sized to its content and the caption is what gets dropped
+   first on a narrow window - not the control. */
+.visibilityPicker {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -870,27 +885,26 @@
   cursor: pointer;
 }
 
-.publicToggle input {
-  margin: 0;
+.visibilityPickerLabel {
+  color: var(--color-text-muted);
+}
+
+.visibilityPicker select {
+  font: inherit;
+  padding: 3px 6px;
+  color: var(--color-text);
+  background: var(--color-input-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
   cursor: pointer;
 }
 
-/* Same control in the create / duplicate dialog, where it replaced the section
-   <select>. Sized to the dialog's own label scale (createLabelStyle) so it reads
-   as the third field rather than as a footnote under the second. */
-.publicCreateToggle {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-}
-
-.publicCreateToggle input {
-  margin: 0;
-  cursor: pointer;
+@media (max-width: 1100px) {
+  /* The caption goes before the control does: "Veřejný / Neveřejný / Skrytý"
+     names the property well enough on its own once space is tight. */
+  .visibilityPickerLabel {
+    display: none;
+  }
 }
 
 /* The always-present editor controls (Veřejný, Duplikovat, Uložit dokument).

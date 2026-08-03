@@ -2,7 +2,7 @@
 
 A second, standalone template editor beside **Šablony smluv** for documents that have nothing to do with a contract — protocols, checklists, anything printable. Introduced in **v4.15.0**. Route `/dokumenty`, backed by `documentTemplates/{id}` (`functions/src/routes/dokumenty.ts`).
 
-⚠️ **Access model changed in a later release, after the custom-variable engine grew `{{#case}}`.** Documents used to be filed into one of five hard-coded per-hotel sections, each gating visibility with its own permission key. That model is gone, replaced by a single `public`/private flag — see [Public vs. private](#public-vs-private). If you're reading old notes or an old PR that mention "dokumenty sections," they describe the retired design.
+⚠️ **Access model changed in a later release, after the custom-variable engine grew `{{#case}}`.** Documents used to be filed into one of five hard-coded per-hotel sections, each gating visibility with its own permission key. That model is gone, replaced first by a boolean `public` flag and then by the three-rung `visibility` scale — see [Visibility](#visibility). If you're reading old notes or an old PR that mention "dokumenty sections," they describe the retired design.
 
 An author writes the document in the same TipTap editor Šablony smluv uses and declares which of up to **twenty-five** `{{var1}}..{{var25}}` slots it uses (label, type, optional default). A viewer picks the document, fills the slots in a modal, and gets a PDF in a new tab. Nothing about the fill-in is stored anywhere.
 
@@ -24,15 +24,15 @@ All in `functions/src/routes/dokumenty.ts`, mounted at `/api/dokumenty` (`functi
 | Method & path | Permission | Notes |
 |---|---|---|
 | `POST /render-pdf` | `nav.dokumenty.view` | Registered before the `/:id` routes so the literal path always wins. Reuses `services/pdfRenderer.ts` — the same Puppeteer service `POST /contracts/render-pdf` uses, unchanged by this feature — but gated on `nav.dokumenty.view`, **not** `contracts.generate`: a Dokumenty viewer must not need any contracts permission to print. Body `{ html, margins? }`; returns `application/pdf`. No audit entry (nothing is stored). |
-| `GET /` | `nav.dokumenty.view` | List without `htmlContent` (can approach 1 MB/doc). Filtered server-side to what the caller may see — public documents only, unless the caller also holds `dokumenty.viewAll` or `dokumenty.manage`. See [Public vs. private](#public-vs-private). |
-| `POST /` | `dokumenty.manage` | Creates an empty template. Body `{ id, name, public? }`; `id` is a snake_case slug (`^[a-z][a-z0-9_]{1,39}$`), 409 if it already exists. `public` defaults to `false` when omitted. |
-| `POST /:id/duplicate` | `dokumenty.manage` | Copy an existing template under a new id. Body `{ id, name, public? }`; same slug validation and 409-on-collision as `POST /`. Copies `htmlContent`, `variableDefs` and `margins` from the source — see [Duplicating](#duplicating). |
-| `GET /:id` | `nav.dokumenty.view` | Full template incl. `htmlContent`. Returns **404, not 403**, when the caller may not see the document — see [Public vs. private](#public-vs-private). |
-| `PUT /:id` | `dokumenty.manage` | Upsert. Body `{ name, htmlContent, margins?, variableDefs?, public? }`. Re-extracts `variables` from the HTML server-side. Omitting `public` leaves the stored value untouched (merge write). |
+| `GET /` | `nav.dokumenty.view` | List without `htmlContent` (can approach 1 MB/doc). Filtered server-side to what the caller may see — `public` documents only, widened by `dokumenty.viewAll` (adds `private`) and `dokumenty.manage` (adds `hidden`). Each entry carries the **resolved** `visibility`, never the raw stored field. See [Visibility](#visibility). |
+| `POST /` | `dokumenty.manage` | Creates an empty template. Body `{ id, name, visibility? }`; `id` is a snake_case slug (`^[a-z][a-z0-9_]{1,39}$`), 409 if it already exists. `visibility` defaults to **`"hidden"`** when omitted — a new document is a draft until its author picks an audience. |
+| `POST /:id/duplicate` | `dokumenty.manage` | Copy an existing template under a new id. Body `{ id, name, visibility? }`; same slug validation, 409-on-collision and `"hidden"` default as `POST /`. Copies `htmlContent`, `variableDefs` and `margins` from the source — see [Duplicating](#duplicating). |
+| `GET /:id` | `nav.dokumenty.view` | Full template incl. `htmlContent`. Returns **404, not 403**, when the caller may not see the document — see [Visibility](#visibility). |
+| `PUT /:id` | `dokumenty.manage` | Upsert. Body `{ name, htmlContent, margins?, variableDefs?, visibility? }`. Re-extracts `variables` from the HTML server-side. Omitting `visibility` leaves the stored value untouched (merge write) — which is what keeps a pre-`visibility` document hidden until an editor deliberately picks a rung. |
 | `PATCH /:id` | `dokumenty.manage` | `{ active: boolean }` — deactivate/reactivate. Absent `active` field = active; only an explicit `false` marks it inactive. Reversible. |
 | `DELETE /:id` | `dokumenty.manage` | Hard delete. |
 
-⚠️ **`PUT /api/auth/me/dokumenty-default` is gone.** It used to live on the auth router and set `users/{uid}.dokumentyDefaultSection`, the per-user sort preference described below in the pre-rewrite text this file used to carry. Dokumenty dropped sections entirely — see [Public vs. private](#public-vs-private) — so there is nothing left to prefer, and the endpoint had no meaning left to keep. See [What replaced the per-user default](#what-replaced-the-per-user-default-hotel-valued-slot-pre-fill).
+⚠️ **`PUT /api/auth/me/dokumenty-default` is gone.** It used to live on the auth router and set `users/{uid}.dokumentyDefaultSection`, the per-user sort preference described below in the pre-rewrite text this file used to carry. Dokumenty dropped sections entirely — see [Visibility](#visibility) — so there is nothing left to prefer, and the endpoint had no meaning left to keep. See [What replaced the per-user default](#what-replaced-the-per-user-default-hotel-valued-slot-pre-fill).
 
 ### Size guard on `PUT /:id`
 
@@ -54,7 +54,7 @@ original never had).
 **Deliberately not copied:**
 - `active` — a duplicate always starts active, even when the source is deactivated.
   You copy a document in order to use it.
-- `public` — taken from the request body, not inherited. Duplicating is the moment
+- `visibility` — taken from the request body, not inherited. Duplicating is the moment
   the author decides who the copy is for; silently inheriting the source's audience
   is the kind of default that quietly publishes a document to everyone holding
   `nav.dokumenty.view`. The UI pre-fills the source's value as a visible, editable
@@ -83,7 +83,8 @@ Two details that matter:
 ```
 {
   name: string,
-  public?: boolean,                  // absent = PRIVATE — see "Public vs. private" below
+  visibility?: "public"|"private"|"hidden",  // absent = HIDDEN (unless legacy public:true) — see "Visibility"
+  public?: boolean,                  // LEGACY, superseded by visibility. Read ONLY via visibilityOf()
   htmlContent: string,
   variables: string[],              // {{varN}} keys found in htmlContent, server-derived
   variableDefs?: {                  // per-slot config, keyed "var1".."var25"
@@ -112,30 +113,55 @@ Two details that matter:
 
 ⚠️ A document created before this change may still carry a stale `section: "ambiance" | "superior" | "amigo" | "ankora" | "temp" | null` field. Nothing reads it any more, on either side, and it is left in place deliberately (`functions/src/routes/dokumenty.ts` — see the comment above the spread in `GET /:id`): stripping the field from every stored document would be a bulk production write bought for tidiness alone. Do not "clean it up."
 
-## Public vs. private
+## Visibility
 
-⚠️ **This chapter used to be "Sections."** Until this change, a document was filed into one of five hard-coded sections (Ambiance/Superior/Amigo & Alqush/Ankora/TEMP), each with its own view permission, and the sections did double duty: they gated *who* could see a document and they set the list's sort order. The custom-variable engine's `{{#case}}` block plus the `Seznam`/`Obrázek` slot types removed the reason the gate existed — **one document now serves all four hotels itself** (a `{{#case var1 = "Ambiance"}}…{{/case}}` per hotel, or an `Obrázek` slot whose choice is the hotel), so there was no per-hotel *audience* left to gate. What a document's audience still needs is a single, coarser question: is this for everyone who can open Dokumenty, or only for the people who maintain it? That is the `public` flag.
+⚠️ **This chapter used to be "Sections," then "Public vs. private."** Until v5.2.0 a document was filed into one of five hard-coded sections (Ambiance/Superior/Amigo & Alqush/Ankora/TEMP), each with its own view permission, and the sections did double duty: they gated *who* could see a document and they set the list's sort order. The custom-variable engine's `{{#case}}` block plus the `Seznam`/`Obrázek` slot types removed the reason the gate existed — **one document now serves all four hotels itself** (a `{{#case var1 = "Ambiance"}}…{{/case}}` per hotel, or an `Obrázek` slot whose choice is the hotel), so there was no per-hotel *audience* left to gate. What replaced it was a boolean `public` flag, and what replaced *that* is the three-rung scale below: once `dokumenty.viewAll` existed, "not public" stopped being one audience and became two.
 
-- `nav.dokumenty.view` → the page, the document list, and every document with `public === true`. Anything it can see, it can also fill in and print — that is what `POST /render-pdf` is gated on.
-- `dokumenty.viewAll` → the same, **plus every private document**, and nothing more. Read + print only; every write route still requires `dokumenty.manage`.
-- `dokumenty.manage` → the same, plus create/edit/duplicate/deactivate/delete.
+`visibility: "public" | "private" | "hidden"`, widest first:
 
-⚠️ **`viewAll` and `manage` are siblings in the matrix, not parent and child.** `manage` does *not* require `viewAll` to be ticked alongside it — the implication lives in `maySeeDocument`, not in the hierarchy, so an editor can never be locked out of their own private drafts by an un-ticked box. The reason `viewAll` exists at all is that "may read the private documents" and "may rewrite them" turned out to be different populations: the audience of an internal document is wider than the set of people who should be able to change it.
+| Rung | Czech | Who reaches it |
+|---|---|---|
+| `public` | Veřejný | everyone holding `nav.dokumenty.view` |
+| `private` | Neveřejný | additionally requires `dokumenty.viewAll` (read + print) |
+| `hidden` | Skrytý | `dokumenty.manage` only — nobody else learns it exists |
 
-**The single most important fact about this field: it is optional, and absent means PRIVATE.** Every document written before this change lacks `public` entirely — there was nothing to write it — and the moment this shipped, every one of them started reading as private, with **zero writes to production**. No backfill script exists or was needed; the read path (`maySeeDocument` below) treats "field missing" and "field explicitly `false`" identically. This is also why the create form's `Veřejný` checkbox defaults **unticked**: a brand-new document is private until its author deliberately says otherwise.
+- `nav.dokumenty.view` → the page, the document list, and every `public` document. Anything it can see, it can also fill in and print — that is what `POST /render-pdf` is gated on.
+- `dokumenty.viewAll` → adds `private`, and **stops there**. Read + print only; every write route requires `dokumenty.manage`.
+- `dokumenty.manage` → every rung, plus create/edit/duplicate/deactivate/delete.
 
-Compare `active?: boolean` on this same collection, where absent means **active** — same shape (an optional boolean with a meaningful absent-state), opposite default, both deliberate. Do not "normalise" `public` to match `active`'s polarity, and do not write a migration that backfills `public: false` onto old documents — the backfill would be a real production write that changes nothing a reader can already see, since absent already reads as `false`.
+**`hidden` is defined by the gap, not by a permission of its own.** There is no `dokumenty.viewHidden` key: the rung means "the one no view-only key reaches", which is exactly what the `manage` short-circuit in `maySeeDocument` already produces. Adding a key that grants it would dissolve the rung's meaning.
+
+⚠️ **`viewAll` and `manage` are siblings in the matrix, not parent and child.** `manage` does *not* require `viewAll` to be ticked alongside it — the implication lives in `maySeeDocument`, not in the hierarchy, so an editor can never be locked out of their own drafts by an un-ticked box.
+
+### The fallback IS the migration (`visibilityOf`)
+
+**`visibilityOf()` is the only place `public` may be read and the only place `visibility` may be defaulted.** Every caller goes through it, so the legacy fallback can never be applied inconsistently:
+
+```
+visibility present and valid          → that value
+no visibility + public === true       → "public"
+no visibility + anything else         → "hidden"      ← NOT "private"
+```
+
+The last line is the whole migration, and it is deliberately the strictest reading. Before `dokumenty.viewAll` existed, "not public" meant "editors only" in practice — so mapping those documents onto the new middle rung would silently widen their audience the first time somebody is granted `viewAll`. Documents move *up* the scale only when an author moves them. As with the boolean it replaces, this costs **zero writes to production**; no backfill script exists or is needed.
+
+⚠️ **A stale `public: true` survives on old documents forever, and `visibility` beats it once written.** After an editor first saves such a document the two fields disagree *by design*, and only `visibilityOf`'s ordering resolves them. This is why nothing outside that function may read `public`. Clearing the stale field on save would be correct in spirit and is deliberately not done: it turns every ordinary save into a field delete on production data for no behavioural gain. Compare the equally stale `section` field, left in place for the same reason.
+
+Compare `active?: boolean` on this same collection, where absent means **active** — same shape (an optional field with a meaningful absent-state), opposite polarity, both deliberate.
+
+A **new** document is created at `hidden` (`POST /` defaults an omitted field, and the create dialog preselects it): a brand-new document is a draft, and it acquires an audience when its author picks one.
 
 ### Enforcement (`maySeeDocument`, `functions/src/routes/dokumenty.ts`)
 
-The security posture carries over unchanged from the section gate it replaced — only the predicate got simpler:
+The security posture carries over unchanged from the section gate it replaced, and from the boolean after it — only the predicate changed shape:
 
 - `GET /` filters the list server-side, not just hidden in the UI — the list is the only place a document's existence is disclosed.
-- `GET /:id` returns **404, not 403**, when the caller may not see the document, so the status code itself never confirms that a private document exists — it is indistinguishable from one that was never created.
-- `dokumenty.manage` short-circuits to "sees everything": an editor who couldn't see a private document could neither fix nor delete it. `dokumenty.viewAll` short-circuits the same predicate, but grants only that — it appears in no other gate in the file.
-- The badge is deliberately narrower than the gate: `DokumentyPage.tsx` renders the `Neveřejný` chip for `canManage` only, so a `viewAll` holder sees private documents without them being labelled. `Veřejný` decides who an editor publishes *to*; it is the editor's concern, not the reader's.
-- `system.admin` is checked **explicitly**, even though the permission resolver already expands `system.admin` to the full static permission set (so an admin holds `dokumenty.manage` anyway). The explicit check exists so this gate doesn't rest on a coincidence of how the resolver happens to expand wildcards — a resolver change could otherwise silently open or close every private document for admins.
-- `public` is validated as a **real boolean only** (`isValidPublic`), never coerced — a truthy string (`"false"`, `"0"`) sent by a hand-crafted request must not be able to publish a document to everyone holding `nav.dokumenty.view`.
+- `GET /:id` returns **404, not 403**, when the caller may not see the document, so the status code itself never confirms that a hidden document exists — it is indistinguishable from one that was never created.
+- `dokumenty.manage` short-circuits to "sees everything": an editor who couldn't see a document could neither fix nor delete it. That short-circuit is also what *creates* the `hidden` rung.
+- `dokumenty.viewAll` appears in exactly one branch — the `private` case — and in no other gate in the file.
+- The badges are deliberately narrower than the gate: `DokumentyPage.tsx` renders the `Neveřejný` / `Skrytý` chips for `canManage` only, so a `viewAll` holder sees `private` documents without them being labelled. Visibility decides who an editor publishes *to*; it is the editor's concern, not the reader's.
+- `system.admin` is checked **explicitly**, even though the permission resolver already expands `system.admin` to the full static permission set (so an admin holds `dokumenty.manage` anyway). The explicit check exists so this gate doesn't rest on a coincidence of how the resolver happens to expand wildcards — a resolver change could otherwise silently open or close every hidden document for admins.
+- `visibility` is validated against a **closed set** (`isValidVisibility`), never coerced and never defaulted on write. An unrecognised string must not fall through: `visibilityOf` would read the stored garbage as `hidden`, so a typo'd request would quietly bury a document instead of failing.
 
 **Deleted by this change:** `functions/src/services/documentSections.ts`, `frontend/src/lib/documentSections.ts`, `PUT /api/auth/me/dokumenty-default`, and the five `dokumenty.<section>.view` permission keys (from both `frontend/src/lib/permissions/catalog.ts` and `functions/src/auth/permissions.ts`).
 
@@ -143,11 +169,11 @@ The security posture carries over unchanged from the section gate it replaced �
 
 ### What replaced the per-user default (hotel-valued slot pre-fill)
 
-The old per-user "Výchozí sekce" only ever reordered the list — it never granted or withheld access. There is no replacement for *that* specific behaviour: a public/private split has nothing to sort by preference the same way, since a private document is only ever shown to an editor or a `dokumenty.viewAll` holder at all, and splitting the visible list the way sections did would only ever be visible to those few — for a distinction the `Veřejný` checkbox on the document already shows an editor directly.
+The old per-user "Výchozí sekce" only ever reordered the list — it never granted or withheld access. There is no replacement for *that* specific behaviour: a public/private split has nothing to sort by preference the same way, since a private document is only ever shown to an editor or a `dokumenty.viewAll` holder at all, and splitting the visible list the way sections did would only ever be visible to those few — for a distinction the visibility picker on the document already shows an editor directly.
 
 What Dokumenty gained instead, in the same release, is a **fill-in-time convenience**: `GenerateDocumentModal.tsx` pre-fills a hotel-valued custom slot (a `list`/`Seznam` or `image`/`Obrázek` slot whose choices happen to be the four hotel names) with the hotel the person printing the document actually works at — the same question the old default section answered, but asked at the moment it matters (filling in a specific document) rather than baked into a standing preference.
 
-- `resolveOwnHotel(can, recepceDefaultHotel)` (`GenerateDocumentModal.tsx`) resolves against the **Recepce hotel registry** (`frontend/src/lib/hotels.ts` — `accessibleHotels(can)`), not a Dokumenty-specific one: Dokumenty used to keep its own five-value registry with its own permission keys, and that is exactly what the public/private flag replaced — but "which hotel is this person at?" outlived it, and Recepce is where the app already answers that question, per hotel, permission-driven.
+- `resolveOwnHotel(can, recepceDefaultHotel)` (`GenerateDocumentModal.tsx`) resolves against the **Recepce hotel registry** (`frontend/src/lib/hotels.ts` — `accessibleHotels(can)`), not a Dokumenty-specific one: Dokumenty used to keep its own five-value registry with its own permission keys, and that is exactly what the visibility scale replaced — but "which hotel is this person at?" outlived it, and Recepce is where the app already answers that question, per hotel, permission-driven.
   - Exactly **one** accessible hotel → that hotel.
   - **Several** accessible hotels → the user's `recepceDefaultHotel`, if it's one of the accessible ones.
   - **None accessible, or several with no matching default** → no pre-fill; the user picks. Guessing wrong here would be worse than asking.
@@ -219,10 +245,11 @@ Sharing the dialog would mean parameterising it across those two axes (which ope
 
 ## Related files
 
-- `functions/src/routes/dokumenty.ts` — REST endpoints, validation (incl. `maySeeDocument`/`isValidPublic`), audit-log calls (`logCreate`/`logUpdate`/`logDelete` on every write except the render).
+- `functions/src/routes/dokumenty.ts` — REST endpoints, validation (incl. `visibilityOf`/`maySeeDocument`/`isValidVisibility`), audit-log calls (`logCreate`/`logUpdate`/`logDelete` on every write except the render).
 - `functions/src/services/pdfRenderer.ts` — unchanged, shared Puppeteer renderer (also used by Contracts).
-- `functions/src/routes/auth.ts` — `GET /me` still spreads a legacy `dokumentyDefaultSection` field for accounts that once set one (see [Public vs. private](#public-vs-private)); the endpoint that used to write it is gone.
-- `frontend/src/pages/DokumentyPage.tsx` / `.module.css` — the editor + list page, incl. the `Veřejný` toggle in the header.
+- `functions/src/routes/auth.ts` — `GET /me` still spreads a legacy `dokumentyDefaultSection` field for accounts that once set one (see [Visibility](#visibility)); the endpoint that used to write it is gone.
+- `frontend/src/pages/DokumentyPage.tsx` / `.module.css` — the editor + list page, incl. the **Viditelnost** picker in the header (`VISIBILITY_OPTIONS`, mirroring the server's closed set) and the `Neveřejný` / `Skrytý` row badges.
+- `frontend/src/lib/audit/fields.misc.ts` (`documentTemplates` field labels) and `frontend/src/lib/audit/renderValue.ts` (`DOCUMENT_VISIBILITY_LABELS`) — the change log renders a visibility change in the same Czech the author saw, never the stored `"hidden"`.
 - `frontend/src/components/GenerateDocumentModal.tsx` / `.module.css` — the fill-in-and-print modal, incl. `resolveOwnHotel` (hotel-valued slot pre-fill).
 - `frontend/src/lib/hotels.ts` — `accessibleHotels(can)` / `recepceDefaultHotel`, the Recepce hotel registry the hotel pre-fill resolves against.
 - `frontend/src/lib/editor/extensions.ts` — shared TipTap extensions (also used by `ContractTemplatesPage.tsx`).
@@ -235,8 +262,8 @@ Sharing the dialog would mean parameterising it across those two axes (which ope
 
 | Key | Meaning |
 |---|---|
-| `nav.dokumenty.view` | the page, the document list and every **public** document, reading a template, and rendering a PDF |
-| `dokumenty.viewAll` | see every **private** document too — read + print only, no authorship |
-| `dokumenty.manage` | create/edit/duplicate/deactivate/delete a template; also sees every **private** document, without needing `dokumenty.viewAll` |
+| `nav.dokumenty.view` | the page, the document list and every **Veřejný** document, reading a template, and rendering a PDF |
+| `dokumenty.viewAll` | adds **Neveřejný** — read + print only, no authorship. Does NOT reach Skrytý |
+| `dokumenty.manage` | create/edit/duplicate/deactivate/delete a template; also sees every rung incl. **Skrytý**, without needing `dokumenty.viewAll` |
 
-The five `dokumenty.<section>.view` keys are gone (see [Public vs. private](#public-vs-private)). Own **Dokumenty** section in the permission matrix, registered in both `frontend/src/lib/permissions/catalog.ts` and `functions/src/auth/permissions.ts`. Not granted to any built-in user type by default — `admin` reaches everything via the `system.admin` wildcard (and the explicit check in `maySeeDocument`); everyone else needs an explicit grant, same posture as Recepce and Tabulky.
+The five `dokumenty.<section>.view` keys are gone (see [Visibility](#visibility)). Own **Dokumenty** section in the permission matrix, registered in both `frontend/src/lib/permissions/catalog.ts` and `functions/src/auth/permissions.ts`. Not granted to any built-in user type by default — `admin` reaches everything via the `system.admin` wildcard (and the explicit check in `maySeeDocument`); everyone else needs an explicit grant, same posture as Recepce and Tabulky.
