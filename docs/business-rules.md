@@ -319,13 +319,18 @@ Tabulky jsou široké a na telefonu se nedají rozumně vyplňovat, proto se pol
 
 ### Kdo dokument uvidí, určuje příznak Veřejný
 
-Dokument je buď **Veřejný**, nebo **Neveřejný** – nový dokument je vždy Neveřejný, dokud ho autor sám neoznačí jako veřejný. Veřejný dokument vidí každý, kdo má přístup do Dokumentů. Neveřejný vidí jen ten, kdo může dokumenty spravovat – ostatním se v seznamu vůbec nezobrazí a nelze jej otevřít ani přímým odkazem.
+Dokument je buď **Veřejný**, nebo **Neveřejný** – nový dokument je vždy Neveřejný, dokud ho autor sám neoznačí jako veřejný. Veřejný dokument vidí každý, kdo má přístup do Dokumentů. Neveřejný se ostatním v seznamu vůbec nezobrazí a nelze jej otevřít ani přímým odkazem.
 
-Kdo má oprávnění **Spravovat dokumenty**, vidí i neveřejné dokumenty – jinak by je nemohl opravit ani smazat.
+Neveřejné dokumenty vidí dvě skupiny lidí:
+
+- kdo má oprávnění **Spravovat dokumenty** – jinak by je nemohl opravit ani smazat;
+- kdo má oprávnění **Zobrazit i neveřejné dokumenty** – ten je smí číst, vyplnit a vytisknout, ale **nesmí je zakládat, upravovat ani mazat**. Toto oprávnění existuje právě proto, že okruh lidí, kteří dokument potřebují číst, bývá širší než okruh těch, kdo do něj smí zasahovat.
+
+Kdo má jen oprávnění „Zobrazit i neveřejné dokumenty", nepozná v seznamu, který dokument je veřejný a který ne – **štítek „Neveřejný" se ukazuje pouze tomu, kdo dokumenty spravuje**. Příznak Veřejný je informace pro autora o tom, komu dokument zveřejňuje, ne pro čtenáře.
 
 U dokumentů, které vznikly ještě před zavedením tohoto rozlišení, příznak v databázi chybí úplně – to se počítá jako **Neveřejný**, ne jako chyba, a žádná stará data se kvůli tomu nijak neupravovala.
 
-> 🔒 Server. Zdroj: `functions/src/routes/dokumenty.ts` – `maySeeDocument()`, `isValidPublic()`; filtr seznamu v `GET /` a kontrola v `GET /:id`.
+> 🔒 Server. Zdroj: `functions/src/routes/dokumenty.ts` – `maySeeDocument()`, `isValidPublic()`; filtr seznamu v `GET /` a kontrola v `GET /:id`. Zápisové trasy (`POST`, `PUT`, `PATCH`, `DELETE`) vyžadují `dokumenty.manage`, takže „Zobrazit i neveřejné dokumenty" (`dokumenty.viewAll`) opravdu nic upravit nedokáže. Štítek „Neveřejný" – 🖥️ Jen rozhraní: `frontend/src/pages/DokumentyPage.tsx`.
 
 ### Vytištěné dokumenty se nikde neukládají
 

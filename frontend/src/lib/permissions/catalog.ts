@@ -289,13 +289,19 @@ export const PERMISSION_SECTIONS = [
     subsections: [
       {
         items: [
-          // nav.dokumenty.view sees the page and every PUBLIC document;
-          // dokumenty.manage adds create/edit/delete AND seeing private ones.
-          // Five per-hotel section keys used to sit under these two — they went
-          // away with sections themselves, once one document could serve all
-          // four hotels through a Seznam/Obrázek slot. The audience is now a
-          // flag on the document ("Veřejný"), not a permission per hotel.
+          // nav.dokumenty.view sees the page and every PUBLIC document, and can
+          // fill any document it sees in and print it. dokumenty.viewAll widens
+          // that to the private ones WITHOUT granting any authorship;
+          // dokumenty.manage adds create/edit/delete and also sees everything.
+          // The two are siblings, not parent and child, on purpose: an editor
+          // does not need viewAll ticked (manage implies it server-side), and a
+          // reader of everything is deliberately grantable on its own.
+          // Five per-hotel section keys used to sit under these — they went away
+          // with sections themselves, once one document could serve all four
+          // hotels through a Seznam/Obrázek slot. The audience is now a flag on
+          // the document ("Veřejný"), not a permission per hotel.
           { key: "nav.dokumenty.view", label: "Zobrazit Dokumenty", level: 0 },
+          { key: "dokumenty.viewAll", label: "Zobrazit i neveřejné dokumenty", level: 1 },
           { key: "dokumenty.manage", label: "Spravovat dokumenty", level: 1 },
         ],
       },
