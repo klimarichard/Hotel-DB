@@ -247,7 +247,7 @@ export const APP_TOUR_STEPS: TourStep[] = [
   // advertises a section the user cannot open. Same for Faktury below.
   { section: SECTIONS.dokumenty, hideOnMobile: true, permission: "nav.dokumenty.view", addedInVersion: 18, anchor: "nav-dokumenty", title: "Dokumenty", body: "V sekci Dokumenty najdete dokumenty připravené k vyplnění a tisku.", placement: "right" },
   { hideOnMobile: true, permission: "nav.dokumenty.view", addedInVersion: 18, anchor: "dokumenty-generate", route: "/dokumenty", title: "Vyplnění a tisk dokumentu", body: "Vyberte dokument, který chcete vytvořit a doplňte údaje. Dokument se vám otevře jako PDF v nové záložce, odkud jej vytisknete.", placement: "bottom" },
-  { hideOnMobile: true, permission: "dokumenty.manage", addedInVersion: 21, anchor: "dokumenty-manage", route: "/dokumenty", title: "Správa dokumentů", body: "Tlačítkem Nový dokument vytvoříte dokument a jeho obsah napíšete v editoru. Nový dokument je vždy neveřejný, dokud jej nezveřejníte.", placement: "bottom" },
+  { hideOnMobile: true, permission: "dokumenty.manage", addedInVersion: 21, anchor: "dokumenty-manage", route: "/dokumenty", title: "Správa dokumentů", body: "Tlačítkem Nový dokument vytvoříte dokument a jeho obsah napíšete v editoru. U každého dokumentu volíte viditelnost. Nový dokument je vždy skrytý, dokud jeho viditelnost nezměníte.", placement: "bottom" },
 
   // ── Faktury (/faktury) ────────────────────────────────────────────────────────
   // Runs against the REAL page, like Dokumenty above: it mounts on GET /config

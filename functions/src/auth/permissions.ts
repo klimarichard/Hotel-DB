@@ -221,11 +221,25 @@ export const PERMISSION_CATALOG = [
     // the unrelated per-employee "Další dokumenty" file uploads.
     group: "Dokumenty",
     items: [
-      // Also the key that sees PRIVATE documents. There were five per-hotel
-      // section keys here until sections were dropped: one document now serves
-      // all four hotels through a Seznam/Obrázek slot, so the only audience
-      // question left is public (everyone with nav.dokumenty.view) vs private
-      // (editors only), and that is a flag on the document, not a permission.
+      // Audience, without authorship. A document sits on one of three rungs
+      // (Veřejný / Neveřejný / Skrytý — `visibility` in routes/dokumenty.ts).
+      // `nav.dokumenty.view` reaches the first; this key adds the second and
+      // STOPS THERE — "Skrytý" is editors-only and no view key reaches it.
+      // Filling a document in and printing it already comes with the nav key, so
+      // a holder gains reading and printing and nothing else. It exists because
+      // "may read the non-public ones" and "may rewrite them" turned out to be
+      // different populations: the audience of an internal document is wider
+      // than the set of people who should be able to edit it.
+      { key: "dokumenty.viewAll", label: "Zobrazit i neveřejné dokumenty" },
+      // Editing — and, incidentally, seeing every rung including "Skrytý": an
+      // editor who could not see a document could neither fix nor delete it, so
+      // `manage` implies `viewAll` in `maySeeDocument` rather than depending on
+      // it being granted alongside. That short-circuit is also what gives
+      // "Skrytý" its meaning: it is the rung only this key reaches. There were
+      // five per-hotel section keys here until sections were dropped: one
+      // document now serves all four hotels through a Seznam/Obrázek slot, so
+      // the audience question is how WIDE, not which hotel — and the answer is
+      // a field on the document.
       { key: "dokumenty.manage", label: "Spravovat dokumenty" },
     ],
   },
