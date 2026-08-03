@@ -39,22 +39,32 @@ Czech VAT law requires a **received advance** to be recapped on its own line, se
 
 **On a normal invoice, every *active* rate gets a row, including ones that carry no money** — the real printed export (`excels/excel_invoice.pdf`) lists all eleven buckets with `0,00` against the unused ones, so a reproduction that printed only the used ones would be visibly different from the original. An *inactive* rate is skipped unless an existing draft still posts to it, so deactivating a rate never silently drops money off an invoice that already used it.
 
-### A deposit invoice recaps the advance block only
+### A deposit invoice recaps only the buckets that carry money
 
-`computeTotals()` takes `deposit` (i.e. `InvoiceDraft.deposit`) as a third argument and, when it is set, skips every `block: "normal"` bucket:
+`computeTotals()` takes `deposit` (i.e. `InvoiceDraft.deposit`) as a third argument, and the two invoice kinds then answer "which buckets print?" in completely different ways. It is a **branch, not two filters stacked**:
 
 ```ts
-if (deposit && rate.block !== "advance" && gross === 0) continue;
+if (deposit) {
+  if (gross === 0) continue;                                   // money decides, full stop
+} else {
+  if (!rate.active && !rate.showInPrint && gross === 0) continue;   // the original rule
+}
 ```
 
-A zálohová faktura reports a *received advance*, so the normal-supply buckets have nothing to say on it and the seven of them printed as `0,00` were noise. This is the **one** place the two invoice kinds differ beyond the header title — before this, a normal and a deposit invoice differed *only* in the two title lines (`invoiceHtml.ts:401-405`), and that sentence is repeated further down this file; keep both in step.
+A zálohová faktura reports **one received advance**. A recap padded out with empty rates says nothing, and an empty `Deposit 21.00 %` sitting under a `Deposit 12.00 %` that holds the entire invoice actively misleads — it reads as though the advance had been split across two rates. So a deposit invoice prints a row only where money actually landed, and never shows a `0,00` line.
 
-Two things about this filter are deliberate and easy to "fix" wrongly:
+**Money is what decides, never the block.** An earlier version of this filter tested `rate.block !== "advance"` instead, which was the wrong shape twice over: it let empty *advance* rates through (`Deposit 21.00 %` is `active: true` in the seed config, so nothing else skipped it either — this shipped as a bug), and it needed a `gross === 0` escape hatch bolted on to avoid dropping money. Testing `gross` alone subsumes both. The normal-block rates are empty on a deposit invoice in every case that matters, and in the one case where they are not — a deposit draft that posts a line to a normal-block rate — the row **must** print, or `recapTotal` would silently disagree with the Total shown directly above it. **Do not reintroduce a block test here.**
 
-- **It is not symmetric.** A normal invoice still lists all eleven buckets, Deposit rows included, because that is what the source export prints and this page reproduces it. Only the deposit direction filters.
-- **`gross === 0` guards it**, exactly as it guards the `active`/`showInPrint` skip above. A bucket that actually carries money is never dropped, so a deposit draft that posts a line to a normal-block rate still shows that row. Without the guard the money would vanish from the recap while remaining in Total, leaving `recapTotal` silently disagreeing with the figure printed directly above it.
+The consequence is that a deposit invoice with no charge lines recaps to nothing at all. That is intended: the on-screen panel says "Zatím není co rekapitulovat" and the PDF prints the recap headings above a bare `Total: 0,00`. An invoice with no lines is not a document anyone prints.
 
-The argument is **required, not defaulted**. A call site that omitted it would render a deposit invoice with the full normal recap and raise no error anywhere — the same silent-wrong-output failure mode as `logoOffset` and the `GET /` response shape elsewhere in this file. There are three call sites (`invoiceHtml.ts`, the `GET /` list route, and the page's `totals` memo); making it required means the compiler names any that is missed. The list route only reads `.total`, which the filter cannot affect, but threads `deposit` through anyway so it stays correct if that changes.
+Two further properties, deliberate and easy to "fix" wrongly:
+
+- **It is not symmetric.** A normal invoice still lists all eleven buckets, Deposit rows and zeros included, because that is what the source export prints and this page reproduces it. Only the deposit direction filters on money.
+- **The argument is required, not defaulted.** A call site that omitted it would render a deposit invoice with the full normal recap and raise no error anywhere — the same silent-wrong-output failure mode as `logoOffset` and the `GET /` response shape elsewhere in this file. There are three call sites (`invoiceHtml.ts`, the `GET /` list route, and the page's `totals` memo); making it required means the compiler names any that is missed. The list route only reads `.total`, which the filter cannot affect, but threads `deposit` through anyway so it stays correct if that changes.
+
+This is the **one** place the two invoice kinds differ beyond the header title. Before it, a normal and a deposit invoice differed *only* in the two title lines (`invoiceHtml.ts:401-405`), a sentence repeated further down this file; keep both in step.
+
+⚠️ Unrelated to the deposit flag, and **pre-existing**: an `item` line whose `vatRateId` is `null` counts toward `total` but lands in no bucket, so `recapTotal` under-reports it on *both* invoice kinds (`if (key) byRate.set(...)`). A fresh empty row is exactly that shape, though it carries no money until priced. Not addressed here.
 
 **`active` and `showInPrint` answer two different questions**, and conflating them is what made the printed recap wrong before v5.0.1. `active` decides whether a receptionist may *post* to a rate (it drives the Sazba DPH dropdown); `showInPrint` (the "Zobrazit při tisku" tickbox in Číselníky) decides whether the bucket *appears* in the recap while inactive and empty. The retired 10 % / 15 % rates and their Deposit twins need the second without the first — they must never be postable again, yet the original prints all four as `0,00`. The recap skip is therefore `if (!rate.active && !rate.showInPrint && gross === 0) continue;`, mirrored in both `computeTotals()` implementations.
 

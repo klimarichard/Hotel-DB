@@ -260,9 +260,11 @@ export interface InvoiceTotals {
 }
 
 /**
- * `deposit` is `InvoiceDraft.deposit` and selects which buckets are recapped;
- * see the block filter below. Required, not defaulted, on purpose: a call site
- * that forgot it would show a deposit invoice's full normal recap silently.
+ * `deposit` is `InvoiceDraft.deposit` and selects which buckets are recapped —
+ * a deposit invoice shows only those carrying money, a normal one shows every
+ * active bucket including zeros. See the branch below. Required, not defaulted,
+ * on purpose: a call site that forgot it would show a deposit invoice's full
+ * normal recap silently.
  */
 export function computeTotals(
   lines: InvoiceLine[],
@@ -290,13 +292,23 @@ export function computeTotals(
     // Every active bucket is listed, zeros included, matching the printed
     // document. An inactive rate appears only if it is flagged "Zobrazit při
     // tisku" or a draft still posts to it.
-    if (!rate.active && !rate.showInPrint && gross === 0) continue;
-    // A zálohová (deposit) invoice recaps the advance block ONLY — it reports a
-    // received advance, so the normal-supply buckets have nothing to say on it.
-    // Not symmetric: a normal invoice still lists every bucket, Deposit rows
-    // included, matching the printed original. `gross === 0` keeps a bucket
-    // that carries money, so recapTotal can never silently drift from Total.
-    if (deposit && rate.block !== "advance" && gross === 0) continue;
+    // The two invoice kinds answer "which buckets print?" completely
+    // differently, so this is a branch, not two filters stacked.
+    if (deposit) {
+      // A zálohová (deposit) invoice prints ONLY buckets that carry money: it
+      // reports one received advance, and an empty Deposit 21.00 % under a
+      // Deposit 12.00 % that holds the whole invoice reads as though the
+      // advance had been split across two rates.
+      //
+      // Money decides, never the block — this subsumes a block filter. A
+      // deposit draft that does post to a normal-block rate still prints that
+      // row, or recapTotal would silently disagree with Total above it.
+      if (gross === 0) continue;
+    } else {
+      // A normal invoice lists every active bucket, zeros included, matching
+      // the printed original. Deliberately NOT symmetric with the above.
+      if (!rate.active && !rate.showInPrint && gross === 0) continue;
+    }
     const base = round2(gross / (1 + rate.percent / 100));
     recap.push({
       rateId: rate.id,

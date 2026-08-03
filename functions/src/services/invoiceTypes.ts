@@ -317,10 +317,11 @@ export interface InvoiceTotals {
  * (`gross / (1 + rate)`), matching the source workbook — prices are entered
  * VAT-inclusive, exactly as Protel posts them.
  *
- * `deposit` is `InvoiceDraft.deposit` and selects which buckets are recapped;
- * see the block filter below. It is deliberately REQUIRED rather than
- * defaulted: a call site that forgot it would render a deposit invoice with
- * the full normal recap and report no error anywhere.
+ * `deposit` is `InvoiceDraft.deposit` and selects which buckets are recapped —
+ * a deposit invoice prints only those carrying money, a normal one prints every
+ * active bucket including zeros. See the branch below. Deliberately REQUIRED
+ * rather than defaulted: a call site that forgot it would render a deposit
+ * invoice with the full normal recap and report no error anywhere.
  */
 export function computeTotals(
   lines: InvoiceLine[],
@@ -346,24 +347,33 @@ export function computeTotals(
   const recap: RecapRow[] = [];
   for (const rate of vatRates) {
     const gross = byRate.get(rate.id) ?? 0;
-    // The printed document lists EVERY active bucket, zeros included — see
-    // excels/excel_invoice.pdf, where 10 %, 15 % and all four Deposit rows
-    // show 0,00. A deactivated rate is skipped unless it is flagged
-    // "Zobrazit při tisku" (the retired-but-still-printed rates) or an
-    // existing draft still posts to it, so retiring a rate never silently
-    // drops money off an invoice that already used it.
-    if (!rate.active && !rate.showInPrint && gross === 0) continue;
-    // A ZÁLOHOVÁ (deposit) invoice recaps the advance block ONLY: it reports a
-    // received advance, so the normal-supply buckets have nothing to say on it
-    // and printing them as 0,00 was noise. The reverse is NOT true — a normal
-    // invoice still lists all eleven buckets, Deposit rows included, because
-    // that is what excels/excel_invoice.pdf prints and this page reproduces it.
-    //
-    // `gross === 0` guards the filter for the same reason it guards the one
-    // above: a bucket that actually carries money is never dropped. Were a
-    // deposit draft to post a line to a normal-block rate, hiding the row would
-    // leave recapTotal silently disagreeing with the Total above it.
-    if (deposit && rate.block !== "advance" && gross === 0) continue;
+    // The two invoice kinds answer "which buckets print?" completely
+    // differently, so this is a branch, not two filters stacked.
+    if (deposit) {
+      // A ZÁLOHOVÁ (deposit) invoice prints ONLY buckets that carry money.
+      // It reports one received advance, so a recap padded out with empty
+      // rates says nothing — and an empty Deposit 21.00 % sitting under a
+      // Deposit 12.00 % that holds the whole invoice reads as though the
+      // advance had been split across two rates.
+      //
+      // This subsumes the block filter rather than adding to it: a
+      // normal-block rate is empty on a deposit invoice in every case that
+      // matters, and the one case where it is NOT — a deposit draft that
+      // posts a line to a normal-block rate — must still print, or recapTotal
+      // would silently disagree with the Total shown directly above it.
+      // Money is what decides, never the block.
+      if (gross === 0) continue;
+    } else {
+      // A normal invoice lists EVERY active bucket, zeros included — see
+      // excels/excel_invoice.pdf, where 10 %, 15 % and all four Deposit rows
+      // show 0,00. Deliberately NOT symmetric with the branch above: this
+      // page reproduces that document, empty rows and all. A deactivated rate
+      // is skipped unless it is flagged "Zobrazit při tisku" (the
+      // retired-but-still-printed rates) or an existing draft still posts to
+      // it, so retiring a rate never silently drops money off an invoice that
+      // already used it.
+      if (!rate.active && !rate.showInPrint && gross === 0) continue;
+    }
     const base = round2(gross / (1 + rate.percent / 100));
     recap.push({
       rateId: rate.id,
