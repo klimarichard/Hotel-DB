@@ -194,6 +194,13 @@ export const PERMISSION_SECTIONS = [
         items: [
           { key: "employees.view.all", label: "Zobrazit všechny zaměstnance", level: 1, exclusiveGroup: "employees.view" },
           { key: "employees.view.nonManagement", label: "Zobrazit zaměstnance (kromě vedení)", level: 1, exclusiveGroup: "employees.view" },
+          // Scope narrowed 2026-08-03: these guard MULTISPORT, not the whole
+          // benefits sub-document. The HR fields stored beside it (pojišťovna,
+          // bankovní účet, home office, zaučování) are part of the employee form
+          // and follow employees.edit — requiring benefits.edit for them meant a
+          // user who could create an employee got a 403 halfway through the save,
+          // with the record already written. The server strips the Multisport
+          // keys from the employee-form write, so this pair still owns them.
           { key: "benefits.view", label: "Zobrazit benefity", level: 1 },
           { key: "benefits.edit", label: "Upravit benefity / Multisport", level: 2 },
           { key: "employees.edit", label: "Upravit zaměstnance", level: 1 },

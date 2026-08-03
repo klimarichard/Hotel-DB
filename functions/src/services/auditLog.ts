@@ -189,12 +189,52 @@ function isSensitive(fieldPath: string, extraSensitive?: readonly string[]): boo
   return false;
 }
 
+/**
+ * Is this a plain `{}` object we may safely walk into? Timestamps, FieldValue
+ * sentinels, Dates, Buffers, GeoPoints and DocumentReferences all reach the
+ * audit writer inside `before`/`after` snapshots and must be passed through
+ * untouched — recursing into one would rebuild it as a bag of its internals.
+ */
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  if (v === null || typeof v !== "object" || Array.isArray(v)) return false;
+  const proto = Object.getPrototypeOf(v);
+  return proto === Object.prototype || proto === null;
+}
+
+/**
+ * Remove `undefined` ANYWHERE in the entry, not just at the top level.
+ *
+ * ⚠️ This was a shallow strip until 2026-08-03, and the shallowness silently
+ * cost us every employee-creation record the app has ever made. Firestore
+ * rejects `undefined` at any depth (the Admin SDK is initialised without
+ * `ignoreUndefinedProperties`), `POST /employees` builds its `summary` straight
+ * from optional body fields, and `writeEntry` deliberately swallows audit
+ * failures so they can never break a user-facing write. The three together mean
+ * one `undefined` in a nested summary made the whole entry vanish with nothing
+ * but a console line — a real production duplicate-record incident left no
+ * trace in the change log because of it.
+ *
+ * Nested `undefined` inside an ARRAY becomes `null` rather than being dropped:
+ * removing an element would silently renumber the rest, and a diff that shifts
+ * indices is worse than one that shows an empty slot.
+ */
 function stripUndefined<T extends Record<string, unknown>>(obj: T): T {
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(obj)) {
-    if (v !== undefined) out[k] = v;
+  return stripDeep(obj) as T;
+}
+
+function stripDeep(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((v) => (v === undefined ? null : stripDeep(v)));
   }
-  return out as T;
+  if (isPlainObject(value)) {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value)) {
+      if (v === undefined) continue;
+      out[k] = stripDeep(v);
+    }
+    return out;
+  }
+  return value;
 }
 
 // Strip sensitive fields from a snapshot before writing it to the audit log.
@@ -223,8 +263,15 @@ async function writeEntry(entry: Omit<AuditEntry, "timestamp">): Promise<void> {
       timestamp: FieldValue.serverTimestamp(),
     });
   } catch (err) {
-    // Audit failures must never abort the user-facing write.
-    console.error("[auditLog] failed to write entry", err);
+    // Audit failures must never abort the user-facing write — but they must be
+    // identifiable afterwards. The old message logged only the error, so the
+    // years-long gap in employee-creation entries was invisible in the logs
+    // unless you already knew what you were looking for. Name the entry.
+    console.error(
+      `[auditLog] FAILED to write entry: action=${entry.action} collection=${entry.collection} ` +
+        `resourceId=${entry.resourceId ?? "-"} actor=${entry.userEmail ?? entry.userId ?? "-"}`,
+      err
+    );
   }
 }
 
