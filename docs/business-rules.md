@@ -406,6 +406,18 @@ Faktura vytvořená na této stránce je **vizuální kopie** dokladu, který vy
 
 > 🔒 Server + ⚙️ Automatika. Zdroj: `functions/src/services/invoiceTypes.ts` – blok jako součást sazby (`VatBlock`) a `computeTotals()` (řádky se sčítají podle `vatRateId`, blok se nese dál); vykreslení rekapitulace `functions/src/services/invoiceHtml.ts` (`recapBlock`). Stejná pravidla platí i pro živý náhled v prohlížeči, `frontend/src/lib/faktury.ts`.
 
+### Zálohová faktura vykazuje v rekapitulaci DPH pouze zálohové sazby
+
+Je-li u faktury zaškrtnuto **Zálohová faktura**, objeví se v rekapitulaci DPH **jen sazby z bloku „Záloha"** (např. „Deposit 12.00 %"). Běžné sazby se na ní netisknou – zálohová faktura vykazuje přijatou zálohu, k běžnému plnění se nevyjadřuje, a jejich řádky s `0,00` byly jen balast.
+
+**Neplatí to obráceně:** běžná faktura vypisuje **všechny** sazby včetně zálohových, protože přesně tak vypadá původní doklad, který tato stránka reprodukuje.
+
+Sazba, na kterou nějaký řádek faktury skutečně účtuje, se v rekapitulaci objeví **vždy** – i na zálohové faktuře, i když patří do běžného bloku. Kdyby se skryla, nesouhlasil by součet rekapitulace s částkou „Total / Celkem" vytištěnou přímo nad ní.
+
+**Přepnutí zaškrtávátka „Zálohová faktura" mění vytištěnou rekapitulaci** – u již uložených faktur také, protože rekapitulace se počítá až při tisku, neukládá se.
+
+> 🔒 Server + ⚙️ Automatika. Zdroj: `functions/src/services/invoiceTypes.ts` – `computeTotals(lines, vatRates, deposit)` a podmínka `deposit && rate.block !== "advance" && gross === 0` → řádek se vynechá; zrcadleno v `frontend/src/lib/faktury.ts` pro živý náhled. Argument `deposit` je povinný, aby překladač odhalil volání, které by ho zapomnělo předat.
+
 ### „Aktivní" a „Zobrazit při tisku" u sazby DPH nejsou totéž
 
 U sazby DPH v Číselnících rozhodují **dvě nezávislá zaškrtávátka**:

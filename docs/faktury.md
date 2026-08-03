@@ -37,7 +37,24 @@ Czech VAT law requires a **received advance** to be recapped on its own line, se
 
 `computeTotals()` (mirrored in `frontend/src/lib/faktury.ts`) groups line amounts by `vatRateId` and produces one `RecapRow` (`base`, `vat`, `total`) per rate, keeping `block` on the row.
 
-**Every *active* rate gets a row, including ones that carry no money** — the real printed export (`excels/excel_invoice.pdf`) lists all eleven buckets with `0,00` against the unused ones, so a reproduction that printed only the used ones would be visibly different from the original. An *inactive* rate is skipped unless an existing draft still posts to it, so deactivating a rate never silently drops money off an invoice that already used it.
+**On a normal invoice, every *active* rate gets a row, including ones that carry no money** — the real printed export (`excels/excel_invoice.pdf`) lists all eleven buckets with `0,00` against the unused ones, so a reproduction that printed only the used ones would be visibly different from the original. An *inactive* rate is skipped unless an existing draft still posts to it, so deactivating a rate never silently drops money off an invoice that already used it.
+
+### A deposit invoice recaps the advance block only
+
+`computeTotals()` takes `deposit` (i.e. `InvoiceDraft.deposit`) as a third argument and, when it is set, skips every `block: "normal"` bucket:
+
+```ts
+if (deposit && rate.block !== "advance" && gross === 0) continue;
+```
+
+A zálohová faktura reports a *received advance*, so the normal-supply buckets have nothing to say on it and the seven of them printed as `0,00` were noise. This is the **one** place the two invoice kinds differ beyond the header title — before this, a normal and a deposit invoice differed *only* in the two title lines (`invoiceHtml.ts:401-405`), and that sentence is repeated further down this file; keep both in step.
+
+Two things about this filter are deliberate and easy to "fix" wrongly:
+
+- **It is not symmetric.** A normal invoice still lists all eleven buckets, Deposit rows included, because that is what the source export prints and this page reproduces it. Only the deposit direction filters.
+- **`gross === 0` guards it**, exactly as it guards the `active`/`showInPrint` skip above. A bucket that actually carries money is never dropped, so a deposit draft that posts a line to a normal-block rate still shows that row. Without the guard the money would vanish from the recap while remaining in Total, leaving `recapTotal` silently disagreeing with the figure printed directly above it.
+
+The argument is **required, not defaulted**. A call site that omitted it would render a deposit invoice with the full normal recap and raise no error anywhere — the same silent-wrong-output failure mode as `logoOffset` and the `GET /` response shape elsewhere in this file. There are three call sites (`invoiceHtml.ts`, the `GET /` list route, and the page's `totals` memo); making it required means the compiler names any that is missed. The list route only reads `.total`, which the filter cannot affect, but threads `deposit` through anyway so it stays correct if that changes.
 
 **`active` and `showInPrint` answer two different questions**, and conflating them is what made the printed recap wrong before v5.0.1. `active` decides whether a receptionist may *post* to a rate (it drives the Sazba DPH dropdown); `showInPrint` (the "Zobrazit při tisku" tickbox in Číselníky) decides whether the bucket *appears* in the recap while inactive and empty. The retired 10 % / 15 % rates and their Deposit twins need the second without the first — they must never be postable again, yet the original prints all four as `0,00`. The recap skip is therefore `if (!rate.active && !rate.showInPrint && gross === 0) continue;`, mirrored in both `computeTotals()` implementations.
 
@@ -105,13 +122,50 @@ The supplier reference is **two** fields, `availProNo` (optional) and `partnerRe
 
 The bill-to **country** is stored in the form it prints: the English name in capitals (`CZECH REPUBLIC`, `GREAT BRITAIN`). The editor's Země field searches Czech names against `frontend/src/lib/countriesEn.ts` — a pure data module keyed 1:1 by alpha-3 code with `lib/nationalities.ts`, same 249 codes in the same order — and stores the English value on an exact match, keeping free text otherwise, since the field is printed verbatim and refusing an unlisted country would be worse than printing it. `GBR` and `CZE` deliberately deviate from the ISO English short name; the file header says so, so nobody "corrects" them.
 
-There is no `eftReceipt` field: these invoices never carry one. The printed document keeps the `EFT Receipt:` heading (in monospace, as the original has it), permanently without a value.
+`eftReceipt` is stored **raw and never pre-parsed** — the paste is the record, and the printed grid is re-derived from it on every render. See [The EFT receipt](#the-eft-receipt-is-a-verbatim-paste-re-parsed-at-render-time) below.
 
 ### `invoiceDrafts/{autoId}` — one document per saved reproduction
 
 Shape is `InvoiceDraft` plus bookkeeping fields (`createdAt`/`createdBy`/`createdByName`, `updatedAt`/`updatedBy`/`updatedByName`). The id is always a Firestore auto-id (`faktury.ts:588` — `db().collection(COLLECTION).add(...)`), **never** the invoice number, precisely because the invoice number carries no uniqueness guarantee. `PUT /:id` is a whole-document `.set()` (not a merge) since the client always holds the complete draft and a merge would leave orphaned fields behind after an edit that clears something (`faktury.ts:622-657`) — it does preserve `createdAt`/`createdBy`/`createdByName` from the existing doc across the replace.
 
-`MAX_LINES = 200` per draft (`faktury.ts:117`).
+`MAX_LINES = 200` per draft (`faktury.ts:117`), and `EFT_MAX = 8_000` characters of pasted receipt.
+
+## The EFT receipt is a verbatim paste, re-parsed at render time
+
+`eftReceipt` is a free-text field holding the card-terminal slip **exactly as it was copied out of the Protel invoice**, pipes and all. (It did not always exist: until v5.4.0 the document carried an `EFT Receipt:` heading that could never have a value. The heading still prints on its own whenever the field is empty, which is most invoices.)
+
+Storing the paste rather than a parsed structure is the point: `eftGrid()` re-derives the layout on every render, so a change to the parsing rules can never discover that it has already destroyed the source text.
+
+### `eftGrid()` — why the grid is rectangular
+
+One source line is one receipt row, and each `|`-separated segment is one cell. Two properties of real pastes shape the function (`invoiceTypes.ts`, mirrored in `frontend/src/lib/faktury.ts`):
+
+- **Rows disagree on width.** A merchant copy and a cardholder copy come out of Protel glued together with **no line break between them**, so the row where the second slip begins carries the tail of the first *and* the head of the second — 6 cells where its neighbours have 4. The grid is therefore as wide as the widest row and short rows are padded, rather than each row being laid out on its own terms. That is what keeps every cell in a column instead of letting one long row stretch past the page edge.
+- **Trailing separators are noise.** Slips routinely end `...|` or `...| `, which would otherwise invent a phantom empty column across the whole grid. Trailing blank cells are dropped per row; leading and interior ones are kept, being genuinely empty fields (`AVN:`, `CVMR:`).
+
+Blank input returns `[]`, the signal to print the bare heading.
+
+### Laid out as preformatted monospace, deliberately not a table
+
+`buildEft()` (`invoiceHtml.ts`) pads each cell to its column's widest value and joins with a two-space gutter. **In a monospace face, equal character counts are equal widths — the padding *is* the column layout**, with no table involved. That is on purpose: `.inv-bank` documents the Chrome bug where a nested table straddling a page break renders its rows on *both* pages, and a 13-row slip is exactly the size that would hit it.
+
+**The font size is computed, not fixed** (`.inv-eft-slip` carries an inline `font-size`, and the stylesheet deliberately sets no default). Column count is a property of the paste, not of the document: a single slip is 4 columns wide and prints comfortably at the 8pt ceiling, while a merchant-plus-cardholder paste pushes one row to 6 columns and must shrink. Courier's advance width is exactly 0.6 em, so the largest size that fits is arithmetic:
+
+```
+fontPt = 194mm / (widestRowChars × 0.6 × 25.4/72)   clamped to [3.6, 8]
+```
+
+194 mm is the 198 mm printable width (A4 less `INVOICE_MARGINS`' 6 mm sides) with a safety margin — overshooting clips the right-hand column silently. The reference two-slip paste is 139 characters wide and lands at **6.59 pt**. The 3.6 pt floor lets an absurdly wide paste overflow visibly rather than shrink into an illegible smear: a too-wide block tells the user to fix the paste, an unreadable one does not.
+
+This keeps `invoiceHtml.ts`'s purity contract — it is arithmetic on the string, not a measurement of the rendered DOM.
+
+### Editor
+
+A monospace, **unwrapped** textarea (`wrap="off"` plus `white-space: pre`, belt and braces) that scrolls sideways, because the field exists so the user can see their columns line up before printing — a soft-wrapped or proportional rendering shows them a jumble. Below it, the parsed row × column count is echoed back, with an explicit warning when only one column was found: the pipes are what define the columns, and a paste that lost them on the way through the clipboard looks like perfectly ordinary text with no other clue that it will print wrong.
+
+Capped at `EFT_MAX = 8_000` characters in `sanitizeDraft` (the reference paste is ~2 300), leaving room for a few more slips without letting a runaway paste approach Firestore's 1 MiB document ceiling. `str()` trims only the ends, so the slip's own internal padding survives.
+
+⚠️ `eftReceipt` post-dates the earliest drafts, so a stored document may not have the field at all. `openInvoice()` coalesces it to `""` on load — it backs a controlled `<textarea>`, and `value={undefined}` would flip that input to uncontrolled, at which point React warns and the field stops accepting input.
 
 ## Endpoints
 
@@ -157,7 +211,7 @@ The **Billed To** band pours the same lines (name first) into a 3 × 2 grid **co
 - **`extraCss`** — appended after the shared `RENDER_CSS`, because that stylesheet's defaults (a 1px border on every `td`/`th`, a 0.5cm margin on every `table`) are right for a contract and wrong for an invoice. `INVOICE_CSS` (`invoiceHtml.ts:53-162`) undoes both before laying out its own borders and spacing.
 - **`logoOffset: false`** — **must** be passed by Faktury. Without it, `renderPdf()` measures the first `<img>`'s rendered bottom edge and bumps the page-2+ top margin by that amount, a behaviour that exists because a *contract* template's logo is part of the flowing document body (so page 2 must start lower, level with where page-1 text resumes after the logo). The Faktury header logo is part of a **fixed** layout that repeats by its own rules, not a flowing image — measuring it would silently inflate the top margin of every page after the first. `faktury.ts:501-507` sets this explicitly; **any new Faktury render call that forgets it will get a wrong page-2+ margin with no error anywhere.**
 
-A normal and a deposit invoice differ **only** in the header title ("INVOICE"/"Faktura – daňový doklad" vs. "DEPOSIT INVOICE"/"Zálohová faktura", `invoiceHtml.ts:401-405`), matching the source workbook.
+A normal and a deposit invoice differ in exactly **two** places: the header title ("INVOICE"/"Faktura – daňový doklad" vs. "DEPOSIT INVOICE"/"Zálohová faktura", `invoiceHtml.ts:401-405`, matching the source workbook) and the VAT recap, which a deposit invoice narrows to the advance block — see [above](#a-deposit-invoice-recaps-the-advance-block-only). The title was the only difference until v5.4.0; nothing else keys off `draft.deposit` in the renderer.
 
 Money is formatted by a hand-rolled `fmt()` (`invoiceHtml.ts:192-205`, mirrored by `formatMoney()` in the client lib) rather than `toLocaleString("cs-CZ")`, because the Cloud Functions runtime may ship a trimmed ICU that silently degrades locale formatting to the C locale. Dates go through `fmtDate()`/`formatDateCZ()`, string surgery on the `YYYY-MM-DD` prefix — **never** `new Date(iso)`, which lands on the previous day in UTC+2 (the same date-arithmetic pitfall documented project-wide).
 
@@ -175,7 +229,7 @@ Own **Faktury** section in the permission matrix (`frontend/src/lib/permissions/
 ## Related files
 
 - `functions/src/routes/faktury.ts` — endpoints, validators, size guards.
-- `functions/src/services/invoiceTypes.ts` — types, seed defaults, `computeTotals`, `decodeBookNo`/`matchHotelByInvoiceNo`.
+- `functions/src/services/invoiceTypes.ts` — types, seed defaults, `computeTotals`, `eftGrid`/`eftColumnWidths`, `decodeBookNo`/`matchHotelByInvoiceNo`.
 - `functions/src/services/invoiceHtml.ts` — the A4 print layout.
 - `functions/src/services/pdfRenderer.ts` — shared Puppeteer renderer; `extraCss`/`logoOffset` options added for this feature.
 - `frontend/src/lib/countriesEn.ts` — alpha-3 → printed English country name, paired 1:1 with `lib/nationalities.ts`.
