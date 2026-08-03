@@ -130,16 +130,67 @@ function displayGendered(value: string, gender: string): string {
 }
 
 /**
- * Walk an employee's employment rows in chronological order, find the latest
- * session (last Nástup → Dodatek* → Ukončení? group), fold each Dodatek's
- * `changes[]` into the Nástup's fields, and write the resulting effective
- * state to the employee root doc.
+ * The date an employment session actually ENDS, or null for open-ended.
  *
- * Returns the patched fields (for audit logging) or null if no Nástup row
- * exists yet, or if the latest session has been terminated (we leave root
- * fields alone on Ukončení — the employee.status flow handles deactivation).
+ * Three things can end a session, in increasing precedence:
+ *   1. a fixed-term `endDate` on the Nástup row (a DPP/fixed HPP simply expires);
+ *   2. a "délka smlouvy" Dodatek already in effect (an empty value means the
+ *      contract became doba neurčitá, which CLEARS the end date — don't drop
+ *      the null);
+ *   3. an explicit Ukončení row, which always wins.
+ *
+ * ⚠️ **Shared on purpose.** `computeEffectiveStatus` and
+ * `computeEffectiveRootFields` both need this, and until 2026-08-03 they each
+ * had their own idea of it: status used all three rules, while the root-fields
+ * walker recognised only rule 3. A session that merely expired was therefore
+ * invisible to the latter, so it stayed "not terminated" forever and could win
+ * the most-recent-active contest against genuinely later sessions. That is how a
+ * terminated employee's Zaměstnanci row came to show a 2023 fixed-term DPP
+ * instead of the PPP they actually left from. Keep this the single definition.
  */
-async function computeEffectiveRootFields(
+function sessionEndDate(
+  nastup: Record<string, unknown>,
+  dodatky: Array<Record<string, unknown>>,
+  ukonceniDate: string | null,
+  today: string
+): string | null {
+  let endDate = (nastup.endDate as string | null | undefined) ?? null;
+  for (const d of dodatky) {
+    if (((d.startDate as string | undefined) ?? "") > today) continue;
+    const changes = (d.changes as Array<{ changeKind?: string; value?: string }> | undefined) ?? [];
+    for (const ch of changes) {
+      if (ch.changeKind === "délka smlouvy") endDate = ch.value || null;
+    }
+  }
+  if (ukonceniDate) endDate = ukonceniDate;
+  return endDate;
+}
+
+/** Has this session's end date passed? The end date is the last ACTIVE day. */
+function sessionIsOver(
+  nastup: Record<string, unknown>,
+  dodatky: Array<Record<string, unknown>>,
+  ukonceniDate: string | null,
+  today: string
+): boolean {
+  const end = sessionEndDate(nastup, dodatky, ukonceniDate, today);
+  return !!(end && end < today);
+}
+
+/**
+ * Walk an employee's employment rows in chronological order, pick the session
+ * whose contract is currently in force, fold each Dodatek's `changes[]` into the
+ * Nástup's fields, and write the resulting effective state to the employee root
+ * doc.
+ *
+ * For an employee with no session in force, this falls back to their LAST
+ * session so the Ukončení tab shows the job they actually left from rather than
+ * an empty row. Returns null only when there is no Nástup row at all.
+ */
+// Exported for read-only diagnostics: it performs no writes (its callers do),
+// so a script can fold every employee in production and diff the result against
+// their stored root fields before a change to this logic is deployed.
+export async function computeEffectiveRootFields(
   empRef: admin.firestore.DocumentReference,
   positionDeptMap?: Map<string, string>
 ): Promise<Record<string, unknown> | null> {
@@ -153,25 +204,37 @@ async function computeEffectiveRootFields(
   // Build the chronological session list. Every `nástup` opens a session;
   // `změna smlouvy` / `ukončení` attach to the most recently opened one, and
   // `rodičovská` rows are collected on their session (informational).
-  type Session = { nastup: Row; dodatky: Row[]; rodicovska: Row[]; terminated: boolean };
+  type Session = {
+    nastup: Row;
+    dodatky: Row[];
+    rodicovska: Row[];
+    ukonceniDate: string | null;
+    terminated: boolean;
+  };
   const sessions: Session[] = [];
   let current: Session | null = null;
   for (const r of rows) {
     const ct = r.changeType as string | undefined;
     if (ct === "nástup") {
       if (current) sessions.push(current);
-      current = { nastup: r, dodatky: [], rodicovska: [], terminated: false };
+      current = { nastup: r, dodatky: [], rodicovska: [], ukonceniDate: null, terminated: false };
     } else if (current && ct === "změna smlouvy") {
       current.dodatky.push(r);
     } else if (current && ct === "rodičovská") {
       current.rodicovska.push(r);
     } else if (current && ct === "ukončení") {
-      // Date-based: a future-dated Ukončení leaves the employee active (and
-      // still showing their current position) until the day after the end date.
-      if (((r.startDate as string | undefined) ?? "") < today) current.terminated = true;
+      current.ukonceniDate = (r.startDate as string | undefined) ?? null;
     }
   }
   if (current) sessions.push(current);
+  // `terminated` is resolved AFTER the walk, from the full end-date rule rather
+  // than from the Ukončení row alone — a fixed-term session that simply expired
+  // is just as over as one that was explicitly ended. Date-based either way: a
+  // future-dated Ukončení (or end date) leaves the session in force, and the
+  // employee still showing that position, until the day after it.
+  for (const s of sessions) {
+    s.terminated = sessionIsOver(s.nastup, s.dodatky, s.ukonceniDate, today);
+  }
 
   // A position-change Dodatek can move the employee to a position that belongs
   // to a DIFFERENT department, so currentDepartment (→ Oddělení column + detail
@@ -227,12 +290,19 @@ async function computeEffectiveRootFields(
   for (let i = sessions.length - 1; i >= 0; i--) {
     if (isStarted(sessions[i]) && !sessions[i].terminated) { chosen = sessions[i]; break; }
   }
+  // Nothing in force. Fall back to the LAST session either way:
+  //  • not started yet → an upcoming contract, shown so a before-start employee
+  //    displays what they are joining as;
+  //  • already over → the job they LEFT from, which is what the Ukončení tab
+  //    should show. It used to return null here, and the two callers disagreed
+  //    about what that meant — resyncRootFields blanked the fields while the
+  //    nightly refresh skipped the employee entirely, so a terminated row showed
+  //    either nothing or whatever happened to be there last. Now it shows their
+  //    final contract, and both callers write the same thing.
+  const terminatedFallback = !chosen;
   if (!chosen) {
-    // No active session: surface a future (before-start) latest session so the
-    // upcoming contract still shows; a terminated tail clears current* (null).
-    const last = sessions[sessions.length - 1] ?? null;
-    if (last && !last.terminated && !isStarted(last)) chosen = last;
-    else return null;
+    chosen = sessions[sessions.length - 1] ?? null;
+    if (!chosen) return null;
   }
 
   // currentContractDuringLeave: an active rodičovská sits on a DIFFERENT (earlier)
@@ -245,7 +315,13 @@ async function computeEffectiveRootFields(
     const end = rd.endDate as string | undefined;
     return !end || end >= today; // open-ended → ongoing
   };
-  const leaveSession = sessions.find((s) => s !== chosen && s.rodicovska.some(rodActive)) ?? null;
+  // Skipped entirely on the terminated fallback: "this contract is a second job
+  // worked while on leave from another one" is a statement about someone who is
+  // currently working. For a past employee it would put a RODIČOVSKÁ label on a
+  // row in the Ukončení tab, describing a leave that ended with the job.
+  const leaveSession = terminatedFallback
+    ? null
+    : sessions.find((s) => s !== chosen && s.rodicovska.some(rodActive)) ?? null;
   const currentContractDuringLeave = !!leaveSession;
   // The on-leave (main) contract's type, so the Zaměstnanci list can show its
   // badge alongside the current (concurrent) contract's — e.g. [HPP] [DPP].
@@ -355,21 +431,11 @@ export function computeEffectiveStatus(
     // Not started yet — a future Nástup only activates ON its day.
     const start = (s.nastup.startDate as string | undefined) ?? "";
     if (start > today) return false;
-    // Effective end date: the Nástup's endDate, overridden by any "délka
-    // smlouvy" Dodatek already in effect, then by the Ukončení row's startDate.
-    let endDate = (s.nastup.endDate as string | null | undefined) ?? null;
-    for (const d of s.dodatky) {
-      if (((d.startDate as string | undefined) ?? "") > today) continue;
-      const changes = (d.changes as Array<{ changeKind?: string; value?: string }> | undefined) ?? [];
-      for (const ch of changes) {
-        // Empty value = change to doba neurčitá: a Dodatek clears a fixed end
-        // date, so the session is no longer terminated (don't drop the null).
-        if (ch.changeKind === "délka smlouvy") endDate = ch.value || null;
-      }
-    }
-    if (s.ukonceniDate) endDate = s.ukonceniDate;
-    // The end date is the last active day; only the day AFTER is terminated.
-    return !(endDate && endDate < today);
+    // Effective end date via the SHARED rule (Nástup endDate → "délka smlouvy"
+    // Dodatek → Ukončení row); the end date is the last active day, so only the
+    // day after it counts as over. This used to be an inline copy, and
+    // computeEffectiveRootFields had a narrower one — see sessionEndDate.
+    return !sessionIsOver(s.nastup, s.dodatky, s.ukonceniDate, today);
   };
 
   if (sessions.some(isActive)) return "active";
