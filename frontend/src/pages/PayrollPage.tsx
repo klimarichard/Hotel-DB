@@ -6,7 +6,6 @@ import { Navigate } from "react-router-dom";
 import PayrollNotesModal from "./PayrollNotesModal";
 import PayrollBalanceModal, { type BalanceSavePayload } from "./PayrollBalanceModal";
 import PayrollRecalcModal from "./PayrollRecalcModal";
-import { computeBalance } from "@/lib/payrollBalance";
 import ConfirmModal from "@/components/ConfirmModal";
 import { employeeDisplayName, employeeSurnameFirst } from "@/lib/employeeName";
 import { escapeHtml } from "@/lib/escapeHtml";
@@ -701,48 +700,25 @@ export default function PayrollPage() {
     await loadPeriod();
   }
 
-  // Balance dialog save: Nemoc + (optional) Výkaz/Základ overrides → recomputed
-  // autoOverrides. Local clean fields are refreshed so display + later edits stay
-  // consistent until the next server recalc.
+  // Balance dialog save: Nemoc + (optional) Výkaz/Základ overrides. The PATCH now
+  // recomputes the whole entry server-side, so we RELOAD rather than hand-patching
+  // the row — same pattern as recalcFields above.
+  //
+  // The old code recomputed the cascade here with computeBalance() and wrote the
+  // result into local React state. That was wrong twice over: the server persisted
+  // none of those fields (so a Základ override never reached storage and the PDF
+  // printed the pre-override navíc), and the patched row omitted extraPay, so the
+  // NAVÍC column disagreed with the dialog the user had just confirmed. Reloading
+  // makes the screen show exactly what is stored, and drops one of the two places
+  // the frontend mirror of the payroll cascade was invoked.
   async function saveBalance(entry: PayrollEntry, payload: BalanceSavePayload) {
     if (!period) return;
-    const norm = entry.baseHoursNorm ?? entry.baseHours ?? period.baseHours;
-    const effBase = payload.overrides.baseHours ?? norm;
-    const bal = computeBalance({
-      workedTotal: entry.reportHours + entry.extraHours,
-      cleanHoliday: entry.holidayHours,
-      contractType: entry.contractType,
-      hourlyRate: entry.hourlyRate,
-      base: effBase,
-      hoursPerWeek: entry.hoursPerWeek,
-      nemoc: payload.sickLeaveHours,
-      maxHolidayHours: period.maxHolidayHours,
-      reportOverride: payload.overrides.reportHours,
-      holidayOverride: payload.overrides.holidayHours,
-      extraPayOverride: payload.overrides.extraPay,
-    });
     await api.patch(`/payroll/periods/${period.id}/entries/${entry.id}`, {
       sickLeaveHours: payload.sickLeaveHours,
       overrides: payload.overrides,
       autoOverrides: payload.autoOverrides,
     });
-    setPeriod((prev) => prev ? {
-      ...prev,
-      entries: prev.entries.map((e) =>
-        e.id === entry.id
-          ? {
-              ...e,
-              sickLeaveHours: payload.sickLeaveHours,
-              overrides: payload.overrides,
-              autoOverrides: payload.autoOverrides,
-              baseHours: effBase,
-              reportHours: bal.cleanReport,
-              vacationHours: bal.cleanVacation,
-              extraHours: bal.cleanExtra,
-            }
-          : e
-      ),
-    } : prev);
+    await loadPeriod();
   }
 
   // Group entries by section, sorted by surname (Příjmení Jméno, Czech locale).
