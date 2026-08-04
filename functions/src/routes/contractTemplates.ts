@@ -530,7 +530,15 @@ contractTemplatesRouter.put(
     const beforeSnap = await ref.get();
     const before = beforeSnap.exists ? (beforeSnap.data() as Record<string, unknown>) : {};
     try {
-      await ref.set(payload, { merge: true });
+      // ⚠️ `mergeFields`, NOT `merge: true` — see the twin write in
+      // `routes/dokumenty.ts` for the full reasoning. Short version: a plain merge
+      // masks on LEAF paths, so `variableDefs` was merged slot-key by slot-key and
+      // never replaced. Every slot flag here is encoded absent-means-off, so an
+      // omitted key is a deliberate CLEAR — unticking "Nepovinná" saved nothing
+      // and the flag returned on the next load. `mergeFields` replaces each listed
+      // path wholesale and still leaves unlisted fields (`createdAt`, `active`)
+      // untouched.
+      await ref.set(payload, { mergeFields: Object.keys(payload) });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       // Firestore rejects oversized writes (e.g. exceeds the maximum allowed
