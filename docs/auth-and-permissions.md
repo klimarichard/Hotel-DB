@@ -246,6 +246,20 @@ The endpoint→permission mapping is **aligned to the UI**. Where the API was hi
 - **manager** has no contract access and can't edit MOD or approve shift requests;
 - **director** doesn't self-submit shift requests.
 
+### Field-level scope — stripping pay data from an open list endpoint
+
+`GET /api/jobPositions` is deliberately open to **any** authenticated caller: the position list populates form dropdowns across the app and the names are not sensitive. Its documents, however, also carry **compensation** — `defaultSalary`, `hourlyRate`, `clothingAllowance`, `homeOfficeAllowance` — and the handler used to return them with a blanket `...d.data()`. Every logged-in user, including a shared-terminal Recepce login, could read the full pay table straight off the API while the UI kept those same numbers behind an eye toggle inside a `settings.jobPositions.manage` section (found in the 2026-08-04 audit).
+
+Since 2026-08-04 the handler strips those four fields unless the caller holds **`settings.jobPositions.manage`** (the Nastavení → Pracovní pozice table/form) or **`employment.manage`** (the employee-detail Nástup/Dodatek modal, which prefills salary from `defaultSalary`). Those are the only two surfaces that consume them.
+
+Note the pattern: the *route* stays ungated because the list is genuinely public to logged-in users; the gate moves **inside the handler**, using `hasPermission(req.permissions, …)`. Reach for this whenever one collection mixes reference data with sensitive fields — splitting the endpoint would break every dropdown. Server-side payroll is unaffected either way: `loadPositionHourlyRates` reads Firestore through the Admin SDK, never through this endpoint.
+
+### Read and write on the same setting must not need unrelated keys
+
+`GET /payroll/settings` was gated on `nav.payroll.view` while `PATCH /payroll/settings` requires `settings.payroll.manage`. The two are independent keys in different matrix sections, so a settings/HR type could hold the write key and not the read one — and the failure was silent and destructive rather than a visible 403: the Nastavení → Mzdy tab keeps hard-coded initialisers (`minimumWage` 22400, `foodVoucherRate` 129.5, …), so it rendered fabricated values as if stored, and saving any single field wrote **all** of them over the real `settings/payroll` document, which is then frozen onto every payroll period created afterwards.
+
+The GET now accepts either key. The tab additionally refuses to render editable values it could not read (a network failure produces the same state as the 403). **General rule: whoever may write a setting must be able to read it — check the read gate whenever you add a write gate.**
+
 ### Row-level scope
 
 A second layer is still applied at the router level on `employees.ts` and `contracts.ts` (`enforceEmpAccess` / `enforceContractAccess`):

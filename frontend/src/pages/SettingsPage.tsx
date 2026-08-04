@@ -310,6 +310,8 @@ export default function SettingsPage() {
 
   // Payroll settings
   const [foodVoucherRate, setFoodVoucherRate] = useState<number>(129.5);
+  /** null = still loading, false = the GET failed (never show or save the defaults). */
+  const [payrollSettingsLoaded, setPayrollSettingsLoaded] = useState<boolean | null>(null);
   const [foodVoucherRateDraft, setFoodVoucherRateDraft] = useState<string>("");
   const [showVoucherConfirm, setShowVoucherConfirm] = useState(false);
   const [voucherSaving, setVoucherSaving] = useState(false);
@@ -481,7 +483,17 @@ export default function SettingsPage() {
         setMealAllowanceMinHours(s.mealAllowanceMinHours);
         setMealAllowanceMinHoursDraft(String(s.mealAllowanceMinHours));
       })
-      .catch(() => {});
+      .then(() => setPayrollSettingsLoaded(true))
+      // ⚠️ Do NOT swallow this. Every one of the five values above has a hard-coded
+      // initialiser, so a failed load leaves the Mzdy tab rendering fabricated
+      // defaults that look exactly like stored configuration — and each "Upravit"
+      // seeds its draft from the displayed value, so saving one field writes ALL
+      // of them over the real settings/payroll document. Those values are then
+      // frozen onto every payroll period created afterwards. The 403 case is fixed
+      // at the endpoint (it now accepts settings.payroll.manage), but a network
+      // blip produces the same state, so the tab refuses to show editable values
+      // it could not actually read.
+      .catch(() => setPayrollSettingsLoaded(false));
   }, []);
 
   async function handleCreateDepartment() {
@@ -1831,7 +1843,17 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {settingsTab === "payroll" && can("settings.payroll.manage") && (
+      {settingsTab === "payroll" && can("settings.payroll.manage") && payrollSettingsLoaded !== true && (
+        <div style={{ maxWidth: 480 }}>
+          <p style={{ fontSize: "0.875rem", color: "var(--color-text-muted)" }}>
+            {payrollSettingsLoaded === null
+              ? "Načítám nastavení mezd…"
+              : "Nastavení mezd se nepodařilo načíst. Obnovte stránku – dokud se hodnoty nenačtou, nelze je upravovat (uložením by se přepsaly výchozími hodnotami)."}
+          </p>
+        </div>
+      )}
+
+      {settingsTab === "payroll" && can("settings.payroll.manage") && payrollSettingsLoaded === true && (
         <div style={{ maxWidth: 480 }}>
           <h2 style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--color-text-heading)", marginBottom: "1rem" }}>
             Sazba stravenek

@@ -1915,6 +1915,11 @@ export default function ShiftPlannerPage() {
               onCellSave={handleCellSave}
               onCellTagSave={!selfServiceOnly && canEdit ? handleCellTagSave : undefined}
               onModSave={handleModSave}
+              // The MOD row's write endpoints require shifts.mod.manage; the grid
+              // previously offered it to anyone who could edit cells at all (and,
+              // via the missing section guard, to plain employees on an opened
+              // plan). The sibling onModPersonChange below was already gated.
+              canEditMod={can("shifts.mod.manage")}
               onEditEmployee={(emp) => setEditingEmployee(emp)}
               onDeleteEmployee={handleDeleteEmployee}
               canEditEmployees={

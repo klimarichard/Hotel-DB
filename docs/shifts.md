@@ -48,6 +48,7 @@ A read-only badge over the **1st-of-month cell** of every employee row, shown **
 - Editable badge: click → inline text input (1 char, any A–Z not taken by another manager in the plan). `PATCH /shifts/plans/:planId/mod-persons` batch-renames all `modRow` entries for the old letter. The handler wraps the read + modPersons-map update + modRow renames in a **`runTransaction`** (v3.2.1) so concurrent letter reassignments cannot clobber each other's map entries.
 - `VALID_MOD_CODE = /^[A-Z]$/` in `shifts.ts`.
 - Badge only shown for `vedoucí` section (not recepce/portýři).
+- **MOD-row editing is gated on `shifts.mod.manage`** (`canEditMod` prop, added 2026-08-04). Before that the grid passed `onModSave` unconditionally and `<ModCell>` received a bare `readOnly={readOnly}` — unlike `<ShiftCell>`, which has always been `readOnly={readOnly || alwaysReadOnlySections.includes(emp.section)}`. Two consequences: any holder of `shifts.cells.edit` could type in the MOD row and get a raw English "Insufficient permissions" inside the cell (the write endpoints require `shifts.mod.manage`), and a **plain employee** could edit it too — `selfServiceOnly` leaves `readOnly` false on an opened plan, and the MOD row belongs to the `vedoucí` section that `alwaysReadOnlySections` was supposed to protect. The sibling `onModPersonChange` (the letter badge) was already correctly gated; only the row was missed.
 - Name cell layout: `[nameLines: name + MOD count] [badge] [edit/delete actions on hover]`.
 
 #### `MOD_PERSONS` removal (v4.7.1)
