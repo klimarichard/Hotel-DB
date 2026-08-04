@@ -55,3 +55,21 @@ export const SELF_EDIT_FIELDS: SelfEditField[] = [
 ];
 
 export const SELF_EDIT_SECTIONS: SelfEditSection[] = ["root", "contact", "documents", "benefits"];
+
+/**
+ * Czech display label for a change-request field, resolved from the field KEY.
+ *
+ * This list is the only place those labels live — the backend whitelist has none.
+ * Until 2026-08-04 the label shown to an approver was whatever string the
+ * submitting client had sent, stored verbatim on the request document: an
+ * employee could label a `bankAccount` change "Telefon", and since a sensitive
+ * value renders masked, the approver could not see what they were approving.
+ * The server now stores the field key and the reviewer resolves the label here,
+ * which fixes the forgery WITHOUT adding a fourth hand-synced copy of the labels.
+ *
+ * The fallback covers requests stored before that change (whose `label` holds a
+ * real Czech string) and any field key this build doesn't know.
+ */
+export function selfEditLabel(field: string, fallback?: string): string {
+  return SELF_EDIT_FIELDS.find((f) => f.key === field)?.label || fallback || field;
+}

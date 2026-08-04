@@ -4,6 +4,7 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { formatDatetimeCZ } from "@/lib/dateFormat";
 import { employeeDisplayName } from "@/lib/employeeName";
+import { selfEditLabel } from "@/lib/selfEditFields";
 import { useEmployeeChangeRequestsContext } from "@/context/EmployeeChangeRequestsContext";
 import Button from "@/components/Button";
 import card from "../EmployeeSelfPage.module.css";
@@ -120,7 +121,7 @@ export default function EmployeeDataChangeRequestsTab() {
           <div className={card.changeList}>
             {req.changes.map((c, i) => (
               <div className={card.changeItem} key={i}>
-                <span className={card.changeFieldLabel}>{c.label}:</span>
+                <span className={card.changeFieldLabel}>{selfEditLabel(c.field, c.label)}:</span>
                 {c.oldValue ? (
                   <>
                     <span className={card.muted}>{c.oldValue}</span>

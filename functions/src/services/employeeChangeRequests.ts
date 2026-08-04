@@ -62,12 +62,27 @@ export interface StoredChange {
   field: string;
   section: Section;
   sensitive: boolean;
+  /**
+   * ⚠️ The FIELD KEY, not a display label — despite the name, which is kept for
+   * back-compat with requests stored before 2026-08-04. It used to be whatever
+   * string the submitting client sent, stored verbatim and rendered raw to the
+   * approver: an employee could submit a `bankAccount` change labelled "Telefon",
+   * and because a sensitive value renders masked, the approver had no way to see
+   * what they were approving. The reviewer UI now resolves the Czech label from
+   * the field key itself (`selfEditLabel`), so nothing user-facing depends on
+   * this string any more. Never populate it from request input.
+   */
   label: string;
   /** Non-sensitive: the proposed plaintext value (or null to clear). Sensitive: always null. */
   newValue: string | null;
   /** Sensitive only: the proposed value encrypted with the same key as the live field (null to clear). */
   newValueEnc?: string | null;
-  /** Non-sensitive only: the value at submit time, kept for reviewer context. Omitted for sensitive fields. */
+  /**
+   * Non-sensitive only: the value at submit time, kept for reviewer context.
+   * Omitted for sensitive fields. Read from the LIVE record server-side — never
+   * from request input, for the same reason as `label` above (a forged "before"
+   * makes a large change read as a trivial correction).
+   */
   oldValue?: string | null;
 }
 
@@ -92,14 +107,18 @@ export async function getUserName(uid: string): Promise<string> {
  * never rests on the change-request document. Returns [] if nothing valid.
  */
 export function buildStoredChanges(
-  raw: Array<{ field?: unknown; newValue?: unknown; label?: unknown; oldValue?: unknown }>
+  raw: Array<{ field?: unknown; newValue?: unknown; label?: unknown; oldValue?: unknown }>,
+  current?: Record<string, string | null>
 ): StoredChange[] {
   const out: StoredChange[] = [];
   for (const item of raw) {
     const field = typeof item.field === "string" ? item.field : "";
     const def = EDITABLE_FIELDS[field];
     if (!def) continue;
-    const label = typeof item.label === "string" && item.label ? item.label : field;
+    // `item.label` and `item.oldValue` are IGNORED — the only thing this function
+    // trusts from the caller is `field` (whitelisted above) and `newValue` (the
+    // whole point of the request). See the StoredChange doc comments.
+    const label = field;
     const newRaw = item.newValue == null ? null : String(item.newValue);
     const newValue = newRaw === "" ? null : newRaw;
 
@@ -119,9 +138,54 @@ export function buildStoredChanges(
         sensitive: false,
         label,
         newValue,
-        oldValue: item.oldValue == null ? null : String(item.oldValue),
+        oldValue: current?.[field] ?? null,
       });
     }
+  }
+  return out;
+}
+
+/**
+ * Read the CURRENT values of the given fields straight off the live employee
+ * record, so `oldValue` on a change request is the record's own truth rather
+ * than something the submitting client asserted.
+ *
+ * Sensitive fields are skipped: their stored value is ciphertext, `StoredChange`
+ * omits `oldValue` for them by design, and the reviewer has a separate
+ * audit-logged reveal endpoint for the proposed value.
+ *
+ * Reads at most four documents, and only the sections actually touched.
+ */
+export async function currentValuesForFields(
+  employeeId: string,
+  fields: string[]
+): Promise<Record<string, string | null>> {
+  const out: Record<string, string | null> = {};
+  const sections = new Set<Section>();
+  for (const f of fields) {
+    const def = EDITABLE_FIELDS[f];
+    if (def && !def.sensitive) sections.add(def.section);
+  }
+  if (!sections.size) return out;
+
+  const empRef = db().collection("employees").doc(employeeId);
+  const data: Partial<Record<Section, Record<string, unknown>>> = {};
+  if (sections.has("root")) {
+    const snap = await empRef.get();
+    data.root = snap.exists ? (snap.data() as Record<string, unknown>) : {};
+  }
+  // Same single-doc-per-subcollection shape `applySubcollection` writes back to.
+  for (const s of ["contact", "documents", "benefits"] as const) {
+    if (!sections.has(s)) continue;
+    const snap = await empRef.collection(s).limit(1).get();
+    data[s] = snap.empty ? {} : (snap.docs[0].data() as Record<string, unknown>);
+  }
+
+  for (const f of fields) {
+    const def = EDITABLE_FIELDS[f];
+    if (!def || def.sensitive) continue;
+    const v = data[def.section]?.[f];
+    out[f] = v == null || v === "" ? null : String(v);
   }
   return out;
 }

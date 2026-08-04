@@ -9,6 +9,7 @@ import {
   getCallerEmployeeId,
   getUserName,
   buildStoredChanges,
+  currentValuesForFields,
   redactChangeForResponse,
   StoredChange,
 } from "../services/employeeChangeRequests";
@@ -241,14 +242,26 @@ selfServiceRouter.post("/employee/reveal", requirePermission("sensitive.reveal.s
 
 // ─── Change requests (own) ───────────────────────────────────────────────────
 
-selfServiceRouter.post("/change-requests", async (req: AuthRequest, res) => {
+// `self.profile.requestEdit` was enforced on the FRONTEND ONLY until 2026-08-04,
+// even though both siblings on this router (vacation-ledger, reveal) carry a
+// requirePermission — so revoking it hid the "Navrhnout úpravu" button and
+// nothing else, and the endpoint stayed open to any linked account. Gated here on
+// the same key the UI gates on, no wider: the GET below stays open because the
+// self page loads the caller's own request history unconditionally, and seeing
+// your own history is not "requesting an edit".
+selfServiceRouter.post("/change-requests", requirePermission("self.profile.requestEdit"), async (req: AuthRequest, res) => {
   const empId = await getCallerEmployeeId(req.uid!);
   if (!empId) { res.status(400).json({ error: "Váš účet není propojen se zaměstnaneckým záznamem." }); return; }
 
   const rawChanges = Array.isArray((req.body as { changes?: unknown }).changes)
     ? (req.body as { changes: Array<Record<string, unknown>> }).changes
     : [];
-  const changes = buildStoredChanges(rawChanges);
+  // `oldValue` is read off the live record, never taken from the request body.
+  const fields = rawChanges
+    .map((c) => (typeof c.field === "string" ? c.field : ""))
+    .filter((f): f is string => !!f);
+  const current = await currentValuesForFields(empId, fields);
+  const changes = buildStoredChanges(rawChanges, current);
   if (!changes.length) { res.status(400).json({ error: "Žádné platné změny k odeslání." }); return; }
 
   const ref = await db().collection("employeeChangeRequests").add({
@@ -296,7 +309,9 @@ selfServiceRouter.get("/change-requests", async (req: AuthRequest, res) => {
   res.json(rows);
 });
 
-selfServiceRouter.delete("/change-requests/:id", async (req: AuthRequest, res) => {
+// Same key as the POST: the self page gates its "Zrušit" button on
+// `canRequestEdit` too, so this takes away nothing that was reachable in the UI.
+selfServiceRouter.delete("/change-requests/:id", requirePermission("self.profile.requestEdit"), async (req: AuthRequest, res) => {
   const ref = db().collection("employeeChangeRequests").doc(req.params.id);
   const snap = await ref.get();
   if (!snap.exists) { res.status(404).json({ error: "Žádost nenalezena." }); return; }
