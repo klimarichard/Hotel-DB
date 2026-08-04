@@ -55,6 +55,19 @@ export const PERMISSION_SECTIONS = [
       {
         items: [
           { key: "nav.shifts.view", label: "Zobrazit Směny", level: 0 },
+          // ⚠️ INVARIANT — nothing nested under `shifts.view.self` can ever be
+          // held by a type that has `shifts.view.all`, because the two view keys
+          // are an `exclusiveGroup`. `normalize()` (run on every user-type save)
+          // adds a present item's missing ancestors, so holding BOTH a child of
+          // `.self` and `.all` puts two members of the group in the set; the
+          // loser is dropped WITH ITS WHOLE SUBTREE. That is what silently
+          // demoted FOM to a self-service employee on any Uložit until
+          // 2026-08-04 — the seeded `manager` set held `.all` together with two
+          // of the request keys below.
+          //
+          // So this nesting is correct ONLY for genuinely self-service actions:
+          // things a person does about their OWN shifts, in the table they can
+          // see. Never put a capability a planner/manager type needs under here.
           { key: "shifts.view.self", label: "Zobrazit tabulku směn", level: 1, exclusiveGroup: "shifts.view" },
           { key: "shifts.cells.editOwnX", label: "Zadávat X", level: 2 },
           { key: "shifts.override.submit", label: "Zažádat o výjimku X", level: 2 },

@@ -410,7 +410,17 @@ payrollRouter.delete(
 payrollRouter.get(
   "/settings",
   requireAuth,
-  requirePermission("nav.payroll.view"),
+  // `settings.payroll.manage` is accepted alongside `nav.payroll.view` because
+  // whoever may WRITE these values must be able to READ them first. The PATCH
+  // below is gated on the manage key alone, and the two are independent keys in
+  // the matrix (one lives in the Mzdy section, the other in Nastavení), so an
+  // HR/settings type could hold the write key and not the read one. That user got
+  // a 403 here, the Nastavení → Mzdy tab silently kept its hard-coded initialisers
+  // (minimumWage 22400, foodVoucherRate 129.5, …), rendered them as though they
+  // were stored, and writing any single field back saved ALL of those fabricated
+  // defaults over the real settings/payroll document — which is then frozen onto
+  // every payroll period created afterwards.
+  requirePermission("nav.payroll.view", "settings.payroll.manage"),
   async (_req: AuthRequest, res: Response) => {
     const snap = await db().collection("settings").doc("payroll").get();
     const data = snap.exists ? snap.data() : undefined;
@@ -913,6 +923,43 @@ payrollRouter.patch(
         autoOverrides: update.autoOverrides ?? before.autoOverrides,
       },
     });
+
+    // ⚠️ This endpoint used to write ONLY the three fields above, which made a
+    // Základ override (overrides.baseHours) invisible to everything that reads the
+    // stored entry. The balance dialog recomputes the cascade in the browser and
+    // patched baseHours/reportHours/vacationHours/extraHours into local React state
+    // only — nothing persisted them, and extraPay was not even in that list. A pure
+    // base change also emits NO autoOverride (the balanced and clean values move
+    // together), so there was no signal for the server to act on either.
+    //
+    // The visible damage: the entry kept its pre-override reportHours/extraPay, so
+    // the PDF printed the OLD navíc (3 300 where 6 000 + 1 000 was correct) until
+    // the nightly refreshPayroll silently corrected it. And because the dialog
+    // seeds its input from `entry.baseHours` rather than `overrides.baseHours`, the
+    // reopened dialog showed the un-overridden base and the NEXT save deleted the
+    // override entirely.
+    //
+    // Recomputing here is the fix rather than persisting the browser's numbers:
+    // calculateEntry already honours overrides.baseHours as `effBase` (see its
+    // effBase line) and stores it back as entry.baseHours, so this reuses the exact
+    // code path the nightly job and the ↻ button already run. It therefore cannot
+    // produce a value the system did not already converge to overnight.
+    //
+    // Failure is non-fatal on purpose: a false return means the period has no
+    // usable shift plan, and the override the user just saved must still stick.
+    const effOverrides =
+      (update.overrides as Record<string, number> | undefined) ??
+      (before.overrides as Record<string, number> | undefined) ??
+      {};
+    const effSick =
+      (update.sickLeaveHours as number | undefined) ??
+      (before.sickLeaveHours as number | undefined) ??
+      0;
+    await recomputeEntryForEmployee(req.params.id, req.params.employeeId, {
+      overrides: effOverrides,
+      sickLeaveHours: effSick,
+    });
+
     res.json({ ok: true });
   }
 );
