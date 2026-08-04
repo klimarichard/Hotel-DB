@@ -145,6 +145,24 @@ The engine's shape (`CustomVarType`, `CUSTOM_VAR_FORMULA_MAX`, `CUSTOM_VAR_DECIM
 
 Cloud Functions cannot `import` from `frontend/src`, so the duplication is deliberate rather than an oversight — but **all three must change together**. Adding a slot type, widening a limit, or changing the formula-allowlist regex in the frontend engine without updating both server copies means the editor happily produces a definition the server then silently rejects on save (400, with a Czech message naming the exact constraint it failed).
 
+## How a def is persisted — `mergeFields`, never `merge: true`
+
+A `CustomVarDef` encodes **every optional flag as absent-means-off**. Both config dialogs' `setDef` emit `...(nextOptional ? { optional: true } : {})` and the same omission for `default`, `options`, `images`, `formula`, `condition`, `fontSize`, `lineHeight` and `thousandsSeparator` — a slot that is not optional simply has no `optional` key, rather than `optional: false`. The server validators agree (`d.optional === undefined || typeof d.optional === "boolean"`), and the renderer reads the absence as the off-state.
+
+That convention is **incompatible with a plain Firestore merge**, and the two `PUT` handlers get this wrong at their peril. `ref.set(payload, { merge: true })` derives its field mask from the **leaf paths** of the input, so a nested map like `variableDefs` is merged key-by-key and *never replaced*: an omitted nested key reads as "leave that leaf untouched", which is the exact opposite of the intended "clear it". Until v5.4.1 both routes did this, and the symptom was that unticking **"Nepovinná"** saved without error but the flag reappeared the next time the template was loaded — the stored `optional: true` had survived every save. The same was true of clearing a default, deleting the last list choice, or removing an image; `optional` was just the one a user happened to report.
+
+Both routes now write with:
+
+```ts
+await ref.set(payload, { mergeFields: Object.keys(payload) });
+```
+
+`mergeFields` **replaces each listed field path wholesale** while still leaving unlisted fields untouched (`active`, `createdAt`, `visibility` when a save doesn't carry one, the legacy `public`/`section`) — which is the semantics the conditional `if (x !== undefined) payload.x = x` lines above each write were always assuming. This is safe precisely because both editors send a **complete `variableDefs` snapshot** on every save: they load `doc.variableDefs` wholesale into state and post it back wholesale, so replacement loses nothing. Any future endpoint that sends a *partial patch* of a map must keep `merge: true` instead.
+
+No migration was needed: a stored `optional: true` clears itself the next time an author unticks the box and saves.
+
+⚠️ Both server copies must keep this write shape — it is the fourth thing (after the three validator copies above) that has to stay in lockstep between `dokumenty.ts` and `contractTemplates.ts`.
+
 ## What differs per page
 
 | | Dokumenty (25 slots) | Šablony smluv (10 slots) |
