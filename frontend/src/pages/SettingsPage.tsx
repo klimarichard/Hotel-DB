@@ -819,7 +819,22 @@ export default function SettingsPage() {
       await authApi.reactivateUser(target.uid);
       const ops: Promise<unknown>[] = [];
       if (form.name && form.name !== target.name) ops.push(authApi.updateUser(target.uid, { name: form.name }));
-      if (form.roleType && form.roleType !== (target.roleType ?? target.role)) ops.push(authApi.setUserPermissions(target.uid, { roleType: form.roleType }));
+      // ⚠️ The `can()` guard here is not cosmetic. reactivateUser above has ALREADY
+      // committed — the account is enabled and can log in — so a 403 from any call
+      // below leaves a live account that this dialog still reports as failed, with
+      // no rollback and a retry that 409s on the create path. Setting the type
+      // needs users.permissions.manage / users.setType, which a users.manage-only
+      // admin does not have; without this guard that admin hit the 403 every time,
+      // because the type <select> 403s empty and form.roleType stays at its
+      // "employee" default, so it always differed from the target's type.
+      // The linkEmployee call below has always been guarded — this one was the gap.
+      if (
+        (can("users.permissions.manage") || can("users.setType")) &&
+        form.roleType &&
+        form.roleType !== (target.roleType ?? target.role)
+      ) {
+        ops.push(authApi.setUserPermissions(target.uid, { roleType: form.roleType }));
+      }
       const newEmp = form.employeeId || null;
       if (can("users.linkEmployee") && newEmp !== (target.employeeId ?? null)) ops.push(authApi.linkEmployee(target.uid, newEmp));
       await Promise.all(ops);
