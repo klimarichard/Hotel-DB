@@ -808,7 +808,19 @@ dokumentyRouter.put(
     const beforeSnap = await ref.get();
     const before = beforeSnap.exists ? (beforeSnap.data() as Record<string, unknown>) : {};
     try {
-      await ref.set(payload, { merge: true });
+      // ⚠️ `mergeFields`, NOT `merge: true` — the difference is load-bearing for
+      // `variableDefs`. A plain merge builds its field mask from the LEAF paths of
+      // the input, so a nested map is merged key by key and never replaced: a slot
+      // arriving without `optional` left the stored `optional: true` in place, and
+      // unticking "Nepovinná" appeared to save but came back on the next load.
+      // The editor encodes every slot flag as absent-means-off (see the omissions
+      // in `setDef` on DokumentyPage), so an omitted key is a deliberate CLEAR,
+      // not "leave alone" — deep-merging it is exactly wrong. `mergeFields`
+      // replaces each listed path wholesale while still leaving unlisted fields
+      // (`active`, `visibility` when this save doesn't carry one, `createdAt`,
+      // the legacy `public`/`section`) untouched, which is the semantics every
+      // conditional `payload.x = …` above was written to expect.
+      await ref.set(payload, { mergeFields: Object.keys(payload) });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       // Firestore rejects oversized writes — surface a clear Czech message
