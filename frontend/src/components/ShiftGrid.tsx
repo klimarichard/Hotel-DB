@@ -54,6 +54,8 @@ interface Props {
    *  row when the plan is not closed). See prevMonthGapFor in ShiftPlannerPage. */
   prevMonthGapFor?: (emp: PlanEmployee) => string | null;
   alwaysReadOnlySections?: string[];
+  /** Whether the viewer holds `shifts.mod.manage`. Absent = allowed (legacy callers). */
+  canEditMod?: boolean;
   currentEmployeeId?: string | null;
   /** Reports whether the grid's internal scroll is at the top. Used on mobile to
    *  collapse the page chrome (month nav + plan bar) for a full-screen grid. */
@@ -155,6 +157,7 @@ export default function ShiftGrid({
   onToggleDpaDay,
   prevMonthGapFor,
   alwaysReadOnlySections = [],
+  canEditMod = true,
   currentEmployeeId,
   onAtTopChange,
 }: Props) {
@@ -702,7 +705,20 @@ export default function ShiftGrid({
                           code={modDoc?.code ?? ""}
                           validCodes={modValidCodes}
                           letterNames={modLetterNames}
-                          readOnly={readOnly}
+                          // ⚠️ Two guards the ShiftCell above has always had and
+                          // this one was missing. `canEditMod` is the permission
+                          // the SERVER requires (shifts.mod.manage) — without it
+                          // any cell-editor could type in the MOD row and get a
+                          // raw "Insufficient permissions" inside the cell. The
+                          // alwaysReadOnlySections check is the same one applied
+                          // to ShiftCell: the MOD row belongs to the vedoucí
+                          // section, so a self-service employee — for whom
+                          // `readOnly` is false on an opened plan — could edit it.
+                          readOnly={
+                            readOnly ||
+                            !canEditMod ||
+                            alwaysReadOnlySections.includes("vedoucí")
+                          }
                           onSave={(code) => onModSave(dateStr, code)}
                           focused={focusedModCol === colIdx}
                           onNavigate={(dir) => handleModNavigate(colIdx, dir)}

@@ -2,7 +2,7 @@ import { Router, Response } from "express";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { requireAuth, AuthRequest } from "../middleware/auth";
-import { requirePermission } from "../auth/permissions";
+import { requirePermission, hasPermission } from "../auth/permissions";
 import { ctxFromReq, logCreate, logUpdate, logDelete } from "../services/auditLog";
 import { isReferencedByLiveEmployee } from "../services/lookupGuard";
 
@@ -15,11 +15,35 @@ const db = () => admin.firestore();
  * List all job positions, ordered by displayOrder ascending.
  * Optional query: ?departmentId=xxx
  */
+/**
+ * Pay-bearing fields on a jobPosition. These are compensation data, not list
+ * metadata, and are stripped for callers who have no business seeing them.
+ */
+const JOB_POSITION_PAY_FIELDS = [
+  "defaultSalary",
+  "hourlyRate",
+  "clothingAllowance",
+  "homeOfficeAllowance",
+] as const;
+
 jobPositionsRouter.get(
   "/",
   requireAuth,
-  // Read is open to any authenticated user — the position list populates form
-  // dropdowns. Mutations below stay admin/director (mirrors educationLevels).
+  // Read stays open to any authenticated user — the position list populates form
+  // dropdowns all over the app, and the NAMES are not sensitive. Mutations below
+  // stay behind settings.jobPositions.manage (mirrors educationLevels).
+  //
+  // ⚠️ What is NOT open is the pay data. This handler used to `...d.data()` the
+  // whole document, so every logged-in user — including a shared-terminal Recepce
+  // login — could read defaultSalary / hourlyRate / clothingAllowance /
+  // homeOfficeAllowance for every position straight off the API, while the UI kept
+  // those same numbers behind an eye toggle inside a settings.jobPositions.manage
+  // section. Only the two surfaces that genuinely need them get them:
+  //   • settings.jobPositions.manage → the Nastavení → Pracovní pozice table/form
+  //   • employment.manage           → the employee-detail Nástup/Dodatek modal,
+  //                                    which prefills salary from defaultSalary
+  // Server-side payroll is unaffected: `loadPositionHourlyRates` reads Firestore
+  // through the Admin SDK, never through this endpoint.
   async (req: AuthRequest, res: Response) => {
     const { departmentId } = req.query as { departmentId?: string };
     let query: FirebaseFirestore.Query = db().collection("jobPositions");
@@ -27,7 +51,21 @@ jobPositionsRouter.get(
       query = query.where("departmentId", "==", departmentId);
     }
     const snap = await query.orderBy("displayOrder", "asc").get();
-    res.json(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+
+    const perms = req.permissions ?? new Set<string>();
+    const maySeePay =
+      hasPermission(perms, "settings.jobPositions.manage") ||
+      hasPermission(perms, "employment.manage");
+
+    res.json(
+      snap.docs.map((d) => {
+        const data = d.data() as Record<string, unknown>;
+        if (!maySeePay) {
+          for (const f of JOB_POSITION_PAY_FIELDS) delete data[f];
+        }
+        return { id: d.id, ...data };
+      })
+    );
   }
 );
 

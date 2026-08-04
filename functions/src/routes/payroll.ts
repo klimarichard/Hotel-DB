@@ -410,7 +410,17 @@ payrollRouter.delete(
 payrollRouter.get(
   "/settings",
   requireAuth,
-  requirePermission("nav.payroll.view"),
+  // `settings.payroll.manage` is accepted alongside `nav.payroll.view` because
+  // whoever may WRITE these values must be able to READ them first. The PATCH
+  // below is gated on the manage key alone, and the two are independent keys in
+  // the matrix (one lives in the Mzdy section, the other in Nastavení), so an
+  // HR/settings type could hold the write key and not the read one. That user got
+  // a 403 here, the Nastavení → Mzdy tab silently kept its hard-coded initialisers
+  // (minimumWage 22400, foodVoucherRate 129.5, …), rendered them as though they
+  // were stored, and writing any single field back saved ALL of those fabricated
+  // defaults over the real settings/payroll document — which is then frozen onto
+  // every payroll period created afterwards.
+  requirePermission("nav.payroll.view", "settings.payroll.manage"),
   async (_req: AuthRequest, res: Response) => {
     const snap = await db().collection("settings").doc("payroll").get();
     const data = snap.exists ? snap.data() : undefined;
