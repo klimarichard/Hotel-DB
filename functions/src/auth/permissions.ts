@@ -396,12 +396,27 @@ export const BUILTIN_TYPE_PERMISSIONS: Record<BuiltinTypeId, Permission[]> = {
   ],
 
   // FOM — shift oversight; today's UI lets FOM fill shifts + manage plan staffing.
+  //
+  // ⚠️ Must contain NOTHING nested under `shifts.view.self` — see the invariant on
+  // that key in frontend/src/lib/permissions/catalog.ts. Until 2026-08-04 this set
+  // also carried `shifts.changeRequest.submit` + `shifts.override.submit`, which
+  // are children of `.self` and therefore mutually exclusive with the
+  // `shifts.view.all` on the line above. That made the set impossible to express
+  // in the matrix, so `normalize()` on any user-type save resolved the conflict by
+  // deleting `shifts.view.all` AND ITS WHOLE SUBTREE — one Uložit turned every FOM
+  // into a self-service employee.
+  //
+  // The two keys are gone rather than the nesting changed because FOM does not
+  // need them: they are self-service REQUEST permissions (ask for an X exception /
+  // a shift change on your own shifts). Filling in the table is `shifts.cells.edit`
+  // + `shifts.mod.manage`. Prod's roleTypes/manager already held neither, so this
+  // aligns the seed with what production has actually been running.
   manager: [
     ...BASE_SELF,
     "nav.shifts.view", "nav.vacation.view",
     "dashboard.staffing.view",
-    "shifts.view.all", "shifts.cells.edit", "shifts.planEmployees.manage",
-    "shifts.changeRequest.submit", "shifts.override.submit",
+    "shifts.view.all", "shifts.cells.edit", "shifts.mod.manage",
+    "shifts.planEmployees.manage",
     "vacation.view.approvedUpcoming",
   ],
 

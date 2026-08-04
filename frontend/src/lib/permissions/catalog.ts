@@ -55,33 +55,25 @@ export const PERMISSION_SECTIONS = [
       {
         items: [
           { key: "nav.shifts.view", label: "Zobrazit Směny", level: 0 },
-          // ── What a person may do about their OWN shifts ────────────────────
-          // These four were level-2 children of `shifts.view.self` until
-          // 2026-08-04, which made them mutually exclusive with
-          // `shifts.view.all` — the matrix could not express "sees every plan
-          // state AND submits their own requests", which is exactly what FOM is.
-          // The seeded `manager` set held that impossible combination, so
-          // `normalize()` on save added the missing ancestor `shifts.view.self`,
-          // found two members of the `shifts.view` exclusive group, kept the
-          // first in order and deleted `shifts.view.all` WITH ITS WHOLE SUBTREE.
-          // Renaming FOM and pressing Uložit silently demoted it to a
-          // self-service employee. Promoting these to level 1 parents them to
-          // the section master instead, so "may I submit?" is now independent of
-          // "which plan states do I see?" — and the already-stored FOM document
-          // becomes valid as-is, with no Firestore repair.
+          // ⚠️ INVARIANT — nothing nested under `shifts.view.self` can ever be
+          // held by a type that has `shifts.view.all`, because the two view keys
+          // are an `exclusiveGroup`. `normalize()` (run on every user-type save)
+          // adds a present item's missing ancestors, so holding BOTH a child of
+          // `.self` and `.all` puts two members of the group in the set; the
+          // loser is dropped WITH ITS WHOLE SUBTREE. That is what silently
+          // demoted FOM to a self-service employee on any Uložit until
+          // 2026-08-04 — the seeded `manager` set held `.all` together with two
+          // of the request keys below.
           //
-          // ⚠️ ORDER IS LOAD-BEARING: they sit BEFORE the exclusive pair on
-          // purpose. A level-2 item's parent is the nearest preceding level-1
-          // item, so putting these between `shifts.view.all` and
-          // `shifts.cells.edit` would re-parent the entire admin subtree onto
-          // `shifts.freeShift.claim`. Keep the `view.all` block contiguous.
-          { key: "shifts.cells.editOwnX", label: "Zadávat X", level: 1 },
-          { key: "shifts.override.submit", label: "Zažádat o výjimku X", level: 1 },
-          { key: "shifts.changeRequest.submit", label: "Zažádat o změnu směny", level: 1 },
-          { key: "shifts.freeShift.claim", label: "Zažádat o volnou směnu", level: 1 },
-          // ── Which plan states the table shows (pick one) ───────────────────
-          { key: "shifts.view.self", label: "Zobrazit tabulku směn", level: 1, exclusiveGroup: "shifts.view", spaceBefore: true },
-          { key: "shifts.view.all", label: "Zobrazit tabulku směn (všechny stavy)", level: 1, exclusiveGroup: "shifts.view" },
+          // So this nesting is correct ONLY for genuinely self-service actions:
+          // things a person does about their OWN shifts, in the table they can
+          // see. Never put a capability a planner/manager type needs under here.
+          { key: "shifts.view.self", label: "Zobrazit tabulku směn", level: 1, exclusiveGroup: "shifts.view" },
+          { key: "shifts.cells.editOwnX", label: "Zadávat X", level: 2 },
+          { key: "shifts.override.submit", label: "Zažádat o výjimku X", level: 2 },
+          { key: "shifts.changeRequest.submit", label: "Zažádat o změnu směny", level: 2 },
+          { key: "shifts.freeShift.claim", label: "Zažádat o volnou směnu", level: 2 },
+          { key: "shifts.view.all", label: "Zobrazit tabulku směn (všechny stavy)", level: 1, exclusiveGroup: "shifts.view", spaceBefore: true },
           { key: "shifts.cells.edit", label: "Vyplňovat libovolné buňky", level: 2 },
           { key: "shifts.mod.manage", label: "Spravovat MOD", level: 3 },
           { key: "shifts.planEmployees.manage", label: "Spravovat zaměstnance v plánu", level: 2 },
