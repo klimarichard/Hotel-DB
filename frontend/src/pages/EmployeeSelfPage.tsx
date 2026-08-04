@@ -19,6 +19,7 @@ import {
   SELF_EDIT_FIELDS,
   SELF_EDIT_SECTIONS,
   SELF_EDIT_SECTION_LABELS,
+  selfEditLabel,
   type SelfEditSection,
   type SelfEditField,
 } from "@/lib/selfEditFields";
@@ -663,7 +664,7 @@ export default function EmployeeSelfPage() {
               <div className={styles.changeList}>
                 {r.changes.map((c, i) => (
                   <div className={styles.changeItem} key={i}>
-                    <span className={styles.changeFieldLabel}>{c.label}:</span>
+                    <span className={styles.changeFieldLabel}>{selfEditLabel(c.field, c.label)}:</span>
                     {c.oldValue ? (
                       <>
                         <span className={styles.muted}>{c.oldValue}</span>
