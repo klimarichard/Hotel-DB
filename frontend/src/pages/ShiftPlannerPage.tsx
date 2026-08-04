@@ -1943,7 +1943,20 @@ export default function ShiftPlannerPage() {
                     }
                   : undefined
               }
-              showModCounts={canPublish && (plan.status === "closed" || plan.status === "published")}
+              showModCounts={
+                // "created" was added back deliberately, partly undoing the "at most
+                // one guide line per row" rule from the compact-rows pass: the MOD
+                // tally is what the planner balances the MOD row against while
+                // BUILDING the plan, so hiding it until "closed" withheld it for
+                // exactly the state it is most useful in. The cost is that a
+                // Management row in "created" can now carry both this line and the
+                // X-limit line (still gated to created/opened) — `.nameLines` is a
+                // flex column, so they stack with no layout work, one line taller.
+                // "opened" keeps the X-line alone: that state belongs to employees
+                // entering their own requests, not to MOD balancing.
+                canPublish &&
+                (plan.status === "created" || plan.status === "closed" || plan.status === "published")
+              }
               onModPersonChange={can("shifts.mod.manage") ? handleModPersonChange : undefined}
               onCellRequestChange={
                 can("shifts.changeRequest.submit") && plan.status === "published"
