@@ -1086,7 +1086,14 @@ export async function recomputeEntryForEmployee(
     displayName: names.displayName,
     contractType,
     salary: eff?.salary ?? null,
-    hourlyRate: resolveHourlyRate(contractType, jobTitle, eff?.hourlyRate, positionRates),
+    // ⚠️ The 5th argument is load-bearing and was missing here until 2026-08-04,
+    // while the orchestrator above always passed it. That silently reverted the
+    // TODO-28 position-change fix for anyone who used the per-row ↻: a bell-boy
+    // promoted to recepční got navíc recomputed at the old position's rate, so
+    // the stored (and printed) figure differed depending on whether the row was
+    // last touched by ↻ or by the nightly refreshPayroll. Keep this call
+    // argument-for-argument identical to the one in createOrUpdatePayrollPeriod.
+    hourlyRate: resolveHourlyRate(contractType, jobTitle, eff?.hourlyRate, positionRates, eff?.positionChanged ?? false),
     jobTitle,
     section: (planEmp.section as string) ?? "",
     sickLeaveHours: next.sickLeaveHours,
