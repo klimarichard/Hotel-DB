@@ -72,8 +72,18 @@ export function buildContractName(
   const name = fullName.trim() || "neznámý zaměstnanec";
 
   switch (type) {
-    case "nastup_hpp":
-      return `HPP ${yearOf(row?.startDate)} ${name}`.replace(/\s+/g, " ").trim();
+    case "nastup_hpp": {
+      // HPP *and* PPP nástup rows both generate from this one template now, so
+      // the prefix must come from the ROW, not from the template id — otherwise
+      // a PPP dohoda o pracovní činnosti is filed as "HPP 2026 …", which is
+      // legally misleading and gets persisted as the contract's displayName.
+      // Same pattern as ukonceni_hpp_ppp below.
+      const subtype = row?.contractType || "HPP";
+      return `${subtype} ${yearOf(row?.startDate)} ${name}`.replace(/\s+/g, " ").trim();
+    }
+    // Legacy only: rows generated before the two nástup templates were merged
+    // stored type "nastup_ppp". Kept so regenerating/renaming one of those still
+    // produces the same name it already has on file.
     case "nastup_ppp":
       return `PPP ${yearOf(row?.startDate)} ${name}`.replace(/\s+/g, " ").trim();
     case "nastup_dpp":

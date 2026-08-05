@@ -7,6 +7,17 @@ This document covers the contract module — contract types and their template v
 ## Contract Types
 
 9 contract types: `nastup_hpp`, `nastup_ppp`, `nastup_dpp`, `ukonceni_hpp_ppp`, `ukonceni_dpp`, `ukonceni_zkusebni`, `zmena_smlouvy`, `hmotna_odpovednost`, `multisport`.
+
+> ### ⚠️ `nastup_hpp` and `nastup_ppp` were merged (2026-08-05)
+>
+> **8 of the 9 are editable today.** `nastup_hpp` is now labelled **"Nástup HPP/PPP"** and is generated for **both** HPP and PPP nástup rows; the clause naming the contract type and weekly hours is conditional inside the template (`{{#case contractType = …}}`), authored by the user. `nastup_ppp` was removed from `CONTRACT_TYPE_LABELS`, which is what drives the Šablony smluv list, so it no longer appears there.
+>
+> **The `contractTemplates/nastup_ppp` document is deliberately LEFT IN PLACE** as a backup. Nothing prunes Firestore against that list, so removal was a pure no-op on the data. Three things must stay true:
+> 1. **`expectedContractTypesForRow` returns `["nastup_hpp", "nastup_ppp"]` for a PPP nástup row — widened, never swapped.** 10 signed contracts in production carry `type: "nastup_ppp"` (verified against the 2026-07-15 prod backup: 9 employees, all `status: "signed"`). Drop the legacy id and `mapContractsToRows` stops matching them, which does not merely hide a download button — `EmployeeSelfPage` shows only rows having a matching **signed** contract, so those employees' entire employment history disappears from their own Můj profil, "Generovat" reappears on an already-signed row, and "Upravit" unlocks a row frozen by a signed PDF.
+> 2. **`buildContractName` takes the subtype from `row.contractType`, not from the template id** — otherwise a PPP *dohoda o pracovní činnosti* is filed as `"HPP 2026 …"`. The `case "nastup_ppp"` arm stays for legacy records.
+> 3. **Do not remove `nastup_ppp` from `BUILTIN_IDS`** (`functions/src/routes/contractTemplates.ts`) — that set is the only thing making `DELETE /api/contractTemplates/nastup_ppp` return 409 instead of hard-deleting the backup.
+>
+> ⚠️ Also: **do not run `scripts/seed-templates.js` against prod** after this. It writes with `{ merge: false }` and would overwrite the backup's `htmlContent` and strip `active`/`variableDefs`/`margins`.
 - 7 are history-tied (triggered from employment history rows)
 - 2 are standalone (`hmotna_odpovednost`, `multisport`)
 
@@ -99,7 +110,9 @@ Added under "Zaměstnanec":
 ### Human-readable contract download filenames (2026-04-29)
 Contract storage paths stay short and stable (`contracts/{employeeId}/{contractId}.pdf`) — only the *download* filename is human-readable. The frontend computes a Czech display name at generation time via `frontend/src/lib/contractNaming.ts`'s `buildContractName(type, row, fullName)`:
 
-- `nastup_hpp` / `nastup_ppp` / `nastup_dpp` → `"HPP 2026 Klíma Richard"` (year from `row.startDate`).
+- `nastup_hpp` → `"HPP 2026 Klíma Richard"` / `"PPP 2026 …"` — **subtype from `row.contractType`**, since this one template serves both HPP and PPP rows (year from `row.startDate`).
+- `nastup_ppp` → `"PPP 2026 Klíma Richard"` — legacy arm, kept so contracts generated before the merge keep resolving to the name already on file.
+- `nastup_dpp` → `"DPP 2026 Klíma Richard"`.
 - `ukonceni_hpp_ppp` / `ukonceni_zkusebni` → `"Ukončení HPP Klíma Richard"` (subtype from `row.contractType`).
 - `ukonceni_dpp` → `"Ukončení DPP Klíma Richard"`.
 - `zmena_smlouvy` → `"DODATEK2026 navýšení, změna pozice Klíma Richard"` — a `DODATEK<YEAR>` prefix (year from `row.startDate`), then **every** change's label joined by `", "` (`mzda` → `"navýšení"`, `pracovní pozice` → `"změna pozice"`, `úvazek` and `počet hodin` → `"změna úvazku"`, `délka smlouvy` → `"doba určitá"` / `"doba neurčitá"`).
