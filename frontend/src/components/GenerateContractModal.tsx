@@ -352,7 +352,10 @@ export default function GenerateContractModal({
         </div>
 
         <div className={styles.body}>
-          <p className={styles.contractType}>{CONTRACT_TYPE_LABELS[contractType]}</p>
+          {/* Fallback matters: a retired built-in id (e.g. the legacy
+              `nastup_ppp`) is no longer in the label map, and without `??` this
+              heading would render empty rather than saying anything at all. */}
+          <p className={styles.contractType}>{CONTRACT_TYPE_LABELS[contractType] ?? contractType}</p>
 
           {step === "confirm" && (
             <>

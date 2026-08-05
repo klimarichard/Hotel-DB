@@ -1882,8 +1882,11 @@ export default function EmployeeDetailPage() {
               // display name so all three agree.
               const pickType = (row: EmploymentRow): SmlouvaContractType => {
                 if (row.changeType === "nástup") {
-                  if (row.contractType === "HPP") return "nastup_hpp";
-                  if (row.contractType === "PPP") return "nastup_ppp";
+                  // HPP and PPP share ONE template ("Nástup HPP/PPP"): the clause
+                  // naming the contract type + weekly hours is conditional inside
+                  // it. buildContractName still reads row.contractType, so a PPP
+                  // contract is filed as "PPP <rok> <jméno>", not "HPP …".
+                  if (row.contractType === "HPP" || row.contractType === "PPP") return "nastup_hpp";
                   if (row.contractType === "DPP") return "nastup_dpp";
                   return "";
                 }
