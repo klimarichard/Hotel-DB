@@ -1314,8 +1314,22 @@ non-obvious constraints a maintainer must not break. Code: `RecepceSummaryPage`
   range, then 500s. Full write-up (schema, endpoints, validation, the three
   different tallies over the same grid): [Shifts — Manual hour splits](shifts.md).
 - **Směna nominálů (bottom section, 2026-08-05).** Answers "which notes must I
-  swap so every receptionist can be paid their CELKEM as a physical pile?" You
+  obtain so every receptionist can be paid their CELKEM as a physical pile?" You
   type what is in hand; the section derives the rest.
+  - ⚠️ **The comparison is ASYMMETRIC, and this is the load-bearing detail.** The
+    first version rendered a signed `need − have` delta per denomination, copied
+    from the Směnárna "Změny nominálů" panel. That was wrong: Směnárna compares
+    two piles that must **match**, whereas here the goal is only to **cover** the
+    payouts. The symmetric delta turned "I hold six 2000s and need four" into
+    "hand back two 2000s" — nonsense, because holding more than you need is not a
+    debt, it is change left over. The table therefore has a **`chybí`** row
+    (`max(0, need − have)`, the only actionable figure) and a separate muted
+    **`zbyde`** row (`max(0, have − need)`, information only). Do not collapse
+    these back into one signed row.
+  - Known cosmetic edge: when there is a genuine money shortfall, `zbyde` still
+    lists denominations the composition does not use (those are the notes you
+    would trade in), while its total clamps to 0. The red shortfall warning is
+    what carries the real meaning in that case.
   - **The page has no denomination data and never gets any.** CELKEM is a lump
     sum (`employeeTotal()`), and no summary endpoint returns note counts. The
     target composition is *derived client-side* by running each positive CELKEM
@@ -1323,8 +1337,9 @@ non-obvious constraints a maintainer must not break. Code: `RecepceSummaryPage`
     Tabulky → Směnárna block uses. Nothing new is fetched or persisted server-side.
   - **The 5000 pool is what the user already holds**, so the ideal composition can
     never use more 5000s than are in hand. That is a deliberate guarantee, not a
-    side effect: `need − have ≤ 0` for that denomination, so the section can never
-    tell anyone to *acquire* a 5000 note. Preserve this if you touch the call.
+    side effect: `need ≤ have` for that denomination, so `chybí` is always empty
+    there and the section can never tell anyone to *acquire* a 5000 note.
+    Preserve this if you touch the call.
   - Denominations are cut at 10 Kč (`EXCHANGE_DENOMS`, derived from `CZK_DENOMS`
     by filter so it cannot drift from the canonical list). Safe because every
     CELKEM is `floor10()`-ed, so `decompose()` provably never reaches 5/2/1.

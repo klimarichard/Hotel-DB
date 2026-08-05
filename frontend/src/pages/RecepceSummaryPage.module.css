@@ -224,17 +224,17 @@
   color: var(--color-text-muted);
 }
 
-/* Směna nominálů deltas. Same colour vocabulary as the Tabulky → Směnárna
-   "Změny nominálů" panel so the two read alike; compound selectors because
-   `.table td` already sets a colour and would otherwise win on specificity. */
-.table td.changePlus {
-  color: var(--color-success-text, #166534);
+/* Směna nominálů. Compound selectors because `.table td` already sets a colour
+   and would otherwise win on specificity.
+   Only "chybí" is actionable, so only it is emphasised; "zbyde" is information
+   (money you keep) and is deliberately muted so it cannot read as an instruction. */
+.table td.changeMissing {
+  color: var(--color-danger-text, #dc2626);
   font-weight: 700;
 }
 
-.table td.changeMinus {
-  color: var(--color-danger-text, #dc2626);
-  font-weight: 700;
+.table td.leftOver {
+  color: var(--color-text-muted);
 }
 
 .warnLine {
