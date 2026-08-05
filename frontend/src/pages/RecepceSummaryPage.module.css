@@ -224,6 +224,26 @@
   color: var(--color-text-muted);
 }
 
+/* Směna nominálů deltas. Same colour vocabulary as the Tabulky → Směnárna
+   "Změny nominálů" panel so the two read alike; compound selectors because
+   `.table td` already sets a colour and would otherwise win on specificity. */
+.table td.changePlus {
+  color: var(--color-success-text, #166534);
+  font-weight: 700;
+}
+
+.table td.changeMinus {
+  color: var(--color-danger-text, #dc2626);
+  font-weight: 700;
+}
+
+.warnLine {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-danger-text, #dc2626);
+}
+
 .error {
   padding: 8px 12px;
   border-radius: 6px;
