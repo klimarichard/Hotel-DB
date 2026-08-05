@@ -529,28 +529,50 @@ function minWageThresholdServer(
   return null; // DPP / unknown: not checked
 }
 
+type MinWageEffective = {
+  contractType: string;
+  salary: number | null;
+  hoursPerWeek: number | null;
+  active: boolean;
+  /** Nástup date of the session – disambiguates two rows for the same person. */
+  startDate: string;
+};
+
 /**
- * Current effective comp for the minimum-wage check: folds the latest
- * NON-parallel (primary) session — so a concurrent second contract doesn't
- * mask the primary — and applies mzda / úvazek / počet hodin / délka smlouvy
- * Dodatky that have taken effect by today. Mirrors the frontend
- * computeEffectiveState + the audit script.
+ * Effective comp for the minimum-wage check, folded PER SESSION: applies the
+ * mzda / úvazek / počet hodin / délka smlouvy Dodatky that have taken effect by
+ * today, and reports whether each session is running today.
+ *
+ * ⚠️ This used to fold exactly ONE session — "the latest NON-parallel (primary)
+ * one" — and that was wrong twice over. First, `parallel` is a field that is
+ * READ here and NEVER WRITTEN anywhere in the codebase (no frontend writer, no
+ * type member, no production data), so `sessions.filter(s => !s.parallel)` was
+ * the identity function and the promised protection never existed. Second, and
+ * worse, what remained was `sessions[sessions.length - 1]` with no active-session
+ * filter, so a LATER-STARTING BUT ALREADY-ENDED session (e.g. a short DPP worked
+ * during a still-running HPP) won the pick, `!eff.active` dropped the employee
+ * at the call site, and their underpaid running contract was never reported at
+ * all. One closed later session was enough to hide someone completely.
+ *
+ * The correct scope is EVERY session running today, each checked against its own
+ * folded contractType/salary/hoursPerWeek: Czech minimum wage applies per
+ * employment relationship, so concurrent contracts must each clear their own
+ * threshold. This matches the "running today" rule already written in
+ * frontend/src/lib/employmentSessions.ts (resolveStandaloneEmployment) and the
+ * most-recent-ACTIVE-session rule in functions/src/routes/employees.ts.
  */
-function currentEffectiveForMinWage(
-  rows: MinWageRow[],
-  today: string
-): { contractType: string; salary: number | null; hoursPerWeek: number | null; active: boolean } | null {
+function effectivesForMinWage(rows: MinWageRow[], today: string): MinWageEffective[] {
   const sorted = [...rows].sort((a, b) =>
     String(a.startDate ?? "").localeCompare(String(b.startDate ?? ""))
   );
-  type S = { nastup: MinWageRow; dodatky: MinWageRow[]; ukonceni: MinWageRow | null; parallel: boolean };
+  type S = { nastup: MinWageRow; dodatky: MinWageRow[]; ukonceni: MinWageRow | null };
   const sessions: S[] = [];
   let cur: S | null = null;
   for (const r of sorted) {
     const ct = r.changeType;
     if (ct === "nástup") {
       if (cur) sessions.push(cur);
-      cur = { nastup: r, dodatky: [], ukonceni: null, parallel: r.parallel === true };
+      cur = { nastup: r, dodatky: [], ukonceni: null };
     } else if (cur && ct === "změna smlouvy") {
       cur.dodatky.push(r);
     } else if (cur && ct === "ukončení") {
@@ -558,36 +580,38 @@ function currentEffectiveForMinWage(
     }
   }
   if (cur) sessions.push(cur);
-  const nonParallel = sessions.filter((s) => !s.parallel);
-  const s = nonParallel.length ? nonParallel[nonParallel.length - 1] : null;
-  if (!s) return null;
 
-  let contractType = String(s.nastup.contractType ?? "");
-  let salary = s.nastup.salary != null ? Number(s.nastup.salary) : null;
-  let hoursPerWeek = s.nastup.hoursPerWeek != null ? Number(s.nastup.hoursPerWeek) : null;
-  let endDate = (s.nastup.endDate as string | null | undefined) ?? null;
-  for (const d of s.dodatky) {
-    if (String(d.startDate ?? "") > today) continue; // future-dated: not yet effective
-    const changes = (d.changes as Array<{ changeKind?: string; value?: string }> | undefined) ?? [];
-    for (const ch of changes) {
-      if (ch.changeKind === "mzda" && ch.value) {
-        const n = Number(ch.value);
-        if (Number.isFinite(n) && contractType !== "DPP") salary = n;
-      } else if (ch.changeKind === "úvazek" && ch.value) {
-        const m = uvazekToContractTypeLite(ch.value);
-        if (m) contractType = m;
-      } else if (ch.changeKind === "počet hodin" && ch.value) {
-        const n = Number(ch.value);
-        if (Number.isFinite(n)) hoursPerWeek = n;
-      } else if (ch.changeKind === "délka smlouvy") {
-        endDate = ch.value || null;
+  return sessions.map((s) => {
+    let contractType = String(s.nastup.contractType ?? "");
+    let salary = s.nastup.salary != null ? Number(s.nastup.salary) : null;
+    let hoursPerWeek = s.nastup.hoursPerWeek != null ? Number(s.nastup.hoursPerWeek) : null;
+    let endDate = (s.nastup.endDate as string | null | undefined) ?? null;
+    for (const d of s.dodatky) {
+      if (String(d.startDate ?? "") > today) continue; // future-dated: not yet effective
+      const changes = (d.changes as Array<{ changeKind?: string; value?: string }> | undefined) ?? [];
+      for (const ch of changes) {
+        if (ch.changeKind === "mzda" && ch.value) {
+          const n = Number(ch.value);
+          if (Number.isFinite(n) && contractType !== "DPP") salary = n;
+        } else if (ch.changeKind === "úvazek" && ch.value) {
+          const m = uvazekToContractTypeLite(ch.value);
+          if (m) contractType = m;
+        } else if (ch.changeKind === "počet hodin" && ch.value) {
+          const n = Number(ch.value);
+          if (Number.isFinite(n)) hoursPerWeek = n;
+        } else if (ch.changeKind === "délka smlouvy") {
+          endDate = ch.value || null;
+        }
       }
     }
-  }
-  if (s.ukonceni && s.ukonceni.startDate) endDate = s.ukonceni.startDate as string;
-  const started = String(s.nastup.startDate ?? "") <= today;
-  const ended = !!endDate && String(endDate) < today;
-  return { contractType, salary, hoursPerWeek, active: started && !ended };
+    // An Ukončení row's date is the LAST ACTIVE day, so `< today` (not `<=`) —
+    // same semantics as sessionIsOver() in routes/employees.ts.
+    if (s.ukonceni && s.ukonceni.startDate) endDate = s.ukonceni.startDate as string;
+    const startDate = String(s.nastup.startDate ?? "");
+    const started = startDate <= today;
+    const ended = !!endDate && String(endDate) < today;
+    return { contractType, salary, hoursPerWeek, active: started && !ended, startDate };
+  });
 }
 
 payrollRouter.get(
@@ -606,26 +630,35 @@ payrollRouter.get(
       empSnap.docs.map(async (empDoc) => {
         const rowsSnap = await empDoc.ref.collection("employment").get();
         const rows = rowsSnap.docs.map((r) => r.data() as MinWageRow);
-        const eff = currentEffectiveForMinWage(rows, today);
-        if (!eff || !eff.active) return null;
-        const threshold = minWageThresholdServer(eff.contractType, minWage, eff.hoursPerWeek);
-        if (threshold == null) return null; // DPP not checked
-        if (eff.salary == null || !Number.isFinite(eff.salary) || eff.salary >= threshold) return null;
+        // EVERY session running today, each against its own threshold — an
+        // employee with two concurrent contracts can breach on one and not the
+        // other, and both must be reported.
+        const running = effectivesForMinWage(rows, today).filter((e) => e.active);
+        if (!running.length) return [];
         // Display context — honour displayName like the rest of the UI.
         const n = nameParts(empDoc.data());
-        return {
-          employeeId: empDoc.id,
-          name: n.displayName || `${n.firstName} ${n.lastName}`.trim() || empDoc.id,
-          contractType: eff.contractType,
-          hoursPerWeek: eff.hoursPerWeek,
-          salary: eff.salary,
-          threshold,
-        };
+        const name = n.displayName || `${n.firstName} ${n.lastName}`.trim() || empDoc.id;
+        return running.flatMap((eff) => {
+          const threshold = minWageThresholdServer(eff.contractType, minWage, eff.hoursPerWeek);
+          if (threshold == null) return []; // DPP not checked
+          const salary = eff.salary;
+          if (salary == null || !Number.isFinite(salary) || salary >= threshold) return [];
+          return [{
+            employeeId: empDoc.id,
+            name,
+            contractType: eff.contractType,
+            hoursPerWeek: eff.hoursPerWeek,
+            salary,
+            threshold,
+            startDate: eff.startDate,
+            // Lets the UI label which contract a row refers to when one person
+            // legitimately appears twice.
+            concurrent: running.length > 1,
+          }];
+        });
       })
     );
-    const violations = checked
-      .filter((v): v is NonNullable<typeof v> => v !== null)
-      .sort((a, b) => a.salary - b.salary);
+    const violations = checked.flat().sort((a, b) => a.salary - b.salary);
     res.json({ minimumWage: minWage, violations });
   }
 );

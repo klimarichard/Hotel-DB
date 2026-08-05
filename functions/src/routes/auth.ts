@@ -70,6 +70,39 @@ async function userIsAdmin(u: Record<string, unknown>): Promise<boolean> {
   return set.has("system.admin");
 }
 
+/** Does assigning this user type confer superadmin? */
+async function typeIsAdmin(typeId: string): Promise<boolean> {
+  return (await resolveEffectivePermissions({ roleType: typeId })).has("system.admin");
+}
+
+/**
+ * Escalation guard for BOTH type-assigning routes (create-user and
+ * PATCH .../permissions).
+ *
+ * NON_GRANTABLE_PERMISSIONS already blocks `system.admin` on the per-user
+ * grant paths, on the stated principle that "the only way to confer superadmin
+ * is to assign the protected `admin` type itself". But nothing guarded
+ * *assigning that type* — so a users.manage holder could POST /create-user with
+ * roleType:"admin" and mint a superadmin, and a users.setType holder could
+ * promote any account (their own included) the same way. The lockout guards
+ * below are demotion-directional (wasAdmin && !willBeAdmin), so promotion fell
+ * straight through them.
+ *
+ * Returns true when the caller may proceed; sends the 403 itself otherwise.
+ */
+function assertMayConferAdmin(
+  req: AuthRequest,
+  res: { status: (n: number) => { json: (b: unknown) => void } },
+  targetWillBeAdmin: boolean
+): boolean {
+  if (!targetWillBeAdmin) return true;
+  if (req.permissions?.has("system.admin")) return true;
+  res.status(403).json({
+    error: "Přiřadit typ s administrátorskými právy může jen administrátor.",
+  });
+  return false;
+}
+
 /**
  * PATCH /api/auth/users/:uid/permissions
  * Assign a user's configurable type + per-user permission grants/revokes.
@@ -149,6 +182,12 @@ authRouter.patch(
       })
     ).has("system.admin");
 
+    // Promotion guard — the mirror of the demotion guards below. Only an admin
+    // may hand out admin; a users.setType-only caller must not be able to
+    // promote anyone (least of all themselves). Skipped when the target is
+    // already an admin, since that is not an escalation.
+    if (!wasAdmin && !assertMayConferAdmin(req, res, willBeAdmin)) return;
+
     if (wasAdmin && !willBeAdmin) {
       if (uid === req.uid) {
         res.status(400).json({ error: "Nemůžete odebrat vlastní administrátorská práva." });
@@ -225,6 +264,9 @@ authRouter.post(
       res.status(400).json({ error: "Zvolený typ uživatele neexistuje." });
       return;
     }
+    // The type doc merely EXISTING was the only check here — so users.manage
+    // alone could create an account with roleType:"admin" and log into it.
+    if (!assertMayConferAdmin(req, res, await typeIsAdmin(typeId))) return;
 
     // Linking an employee record at creation must satisfy the SAME gate as the
     // dedicated PATCH /users/:uid/employee endpoint (users.linkEmployee). Without

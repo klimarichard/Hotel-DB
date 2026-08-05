@@ -166,6 +166,16 @@ interface MinWageViolation {
   hoursPerWeek: number | null;
   salary: number;
   threshold: number;
+  /** Nástup date of the offending contract. */
+  startDate: string;
+  /** The employee has more than one contract running today, so name alone is ambiguous. */
+  concurrent: boolean;
+}
+
+/** "2024-01-15" → "15. 1. 2024". Pure string work, so no UTC day-shift. */
+function czDate(iso: string): string {
+  const [y, m, d] = iso.split("-");
+  return y && m && d ? `${Number(d)}. ${Number(m)}. ${y}` : iso;
 }
 
 interface PosCascadePreview {
@@ -1944,7 +1954,7 @@ export default function SettingsPage() {
                     <div style={{ maxHeight: 220, overflowY: "auto" }}>
                       {minWageViolations.map((v) => (
                         <div
-                          key={v.employeeId}
+                          key={`${v.employeeId}-${v.startDate}`}
                           style={{
                             display: "flex",
                             justifyContent: "space-between",
@@ -1960,6 +1970,9 @@ export default function SettingsPage() {
                               {" · "}
                               {v.contractType}
                               {v.contractType === "PPP" ? ` ${v.hoursPerWeek ?? 20} h/týd` : ""}
+                              {/* Same person can legitimately appear twice with
+                                  concurrent contracts – say which one this is. */}
+                              {v.concurrent && v.startDate ? ` · od ${czDate(v.startDate)}` : ""}
                             </span>
                           </span>
                           <span style={{ whiteSpace: "nowrap", color: "var(--color-danger-text-strong)" }}>

@@ -214,6 +214,10 @@ const COMPARE_OPS = new Set(["lt", "lte", "gt", "gte", "eq", "neq", "empty", "no
 // Unary operators test the left operand alone — no right operand required.
 const UNARY_COMPARE_OPS = new Set(["empty", "notEmpty"]);
 const CUSTOM_VAR_LABEL_MAX = 60;
+// ⚠️ Mirrored as CUSTOM_VAR_DEFAULT_MAX in frontend/src/lib/contractVariables.ts,
+// where it caps the default-value inputs. THIS copy is the authority (the client
+// check is only an affordance) — keep the two in sync, or the editor produces a
+// value this validator refuses and the document becomes unsavable.
 const CUSTOM_VAR_DEFAULT_MAX = 200;
 
 /**
@@ -222,30 +226,54 @@ const CUSTOM_VAR_DEFAULT_MAX = 200;
  * {kind:"literal",value} }. Operands here can only be other custom slots —
  * there is no employee-sourced comparable catalogue on this page — so keys are
  * only length-checked, exactly as in contractTemplates.
+ *
+ * Returns null when valid, otherwise a Czech clause naming the offending field.
+ * The clause is a sentence fragment: `variableDefsError` prefixes it with the
+ * slot it belongs to.
  */
-function isValidCondition(v: unknown): boolean {
-  if (v === undefined) return true;
-  if (!v || typeof v !== "object" || Array.isArray(v)) return false;
+function conditionError(v: unknown): string | null {
+  if (v === undefined) return null;
+  if (!v || typeof v !== "object" || Array.isArray(v)) return "podmínka má neplatný tvar.";
   const c = v as Record<string, unknown>;
-  if (typeof c.leftKey !== "string" || !c.leftKey || c.leftKey.length > CUSTOM_VAR_LABEL_MAX) return false;
-  if (typeof c.op !== "string" || !COMPARE_OPS.has(c.op)) return false;
-  if (UNARY_COMPARE_OPS.has(c.op)) return true;
-  if (!c.right || typeof c.right !== "object") return false;
+  if (typeof c.leftKey !== "string" || !c.leftKey || c.leftKey.length > CUSTOM_VAR_LABEL_MAX) {
+    return "v podmínce není vybrána porovnávaná proměnná.";
+  }
+  if (typeof c.op !== "string" || !COMPARE_OPS.has(c.op)) return "podmínka má neznámý operátor.";
+  if (UNARY_COMPARE_OPS.has(c.op)) return null;
+  if (!c.right || typeof c.right !== "object") return "podmínce chybí druhá strana porovnání.";
   const r = c.right as Record<string, unknown>;
-  if (r.kind === "var") return typeof r.key === "string" && !!r.key && r.key.length <= CUSTOM_VAR_LABEL_MAX;
-  if (r.kind === "literal") return typeof r.value === "string" && r.value.length <= CUSTOM_VAR_DEFAULT_MAX;
-  return false;
+  if (r.kind === "var") {
+    if (typeof r.key !== "string" || !r.key) {
+      return "v podmínce není vybrána druhá porovnávaná proměnná.";
+    }
+    if (r.key.length > CUSTOM_VAR_LABEL_MAX) {
+      return "název druhé porovnávané proměnné v podmínce je příliš dlouhý.";
+    }
+    return null;
+  }
+  if (r.kind === "literal") {
+    if (typeof r.value !== "string") return "porovnávaná hodnota v podmínce musí být text.";
+    if (r.value.length > CUSTOM_VAR_DEFAULT_MAX) {
+      return `porovnávaná hodnota v podmínce je delší než ${CUSTOM_VAR_DEFAULT_MAX} znaků.`;
+    }
+    return null;
+  }
+  return "druhá strana podmínky má neznámý druh.";
 }
 
-/** Optional per-slot default value — a literal string. */
-function isValidCustomDefault(v: unknown): boolean {
-  if (v === undefined) return true;
-  if (!v || typeof v !== "object" || Array.isArray(v)) return false;
+/** Optional per-slot default value — a literal string. Null when valid. */
+function customDefaultError(v: unknown): string | null {
+  if (v === undefined) return null;
+  if (!v || typeof v !== "object" || Array.isArray(v)) return "výchozí hodnota má neplatný tvar.";
   const d = v as Record<string, unknown>;
   if (d.kind === "literal") {
-    return typeof d.value === "string" && d.value.length <= CUSTOM_VAR_DEFAULT_MAX;
+    if (typeof d.value !== "string") return "výchozí hodnota musí být text.";
+    if (d.value.length > CUSTOM_VAR_DEFAULT_MAX) {
+      return `výchozí hodnota je delší než ${CUSTOM_VAR_DEFAULT_MAX} znaků.`;
+    }
+    return null;
   }
-  return false;
+  return "výchozí hodnota má neznámý druh.";
 }
 
 /**
@@ -320,23 +348,44 @@ function isImageDataUri(v: unknown): boolean {
  * validator does not understand is a def the renderer has never been checked
  * against, and silently storing it would let the next reader of the document
  * assume it had been vetted.
+ *
+ * Returns null when valid, otherwise a Czech clause naming the offending choice
+ * BY POSITION — "the images are wrong" is unactionable when a slot holds eight
+ * of them.
  */
-function isValidCustomImages(v: unknown): boolean {
-  if (v === undefined) return true;
-  if (!Array.isArray(v)) return false;
-  if (v.length > CUSTOM_VAR_MAX_IMAGES) return false;
-  return v.every((o) => {
-    if (!o || typeof o !== "object" || Array.isArray(o)) return false;
+function customImagesError(v: unknown): string | null {
+  if (v === undefined) return null;
+  if (!Array.isArray(v)) return "seznam obrázků má neplatný tvar.";
+  if (v.length > CUSTOM_VAR_MAX_IMAGES) {
+    return `obrázků může být nejvýše ${CUSTOM_VAR_MAX_IMAGES}.`;
+  }
+  for (let i = 0; i < v.length; i++) {
+    const at = `obrázek č. ${i + 1} – `;
+    const o = v[i];
+    if (!o || typeof o !== "object" || Array.isArray(o)) return `${at}neplatný tvar možnosti.`;
     const img = o as Record<string, unknown>;
-    if (Object.keys(img).some((k) => !CUSTOM_VAR_IMAGE_FIELDS.has(k))) return false;
+    const unknownField = Object.keys(img).find((k) => !CUSTOM_VAR_IMAGE_FIELDS.has(k));
+    if (unknownField !== undefined) return `${at}neznámé pole „${unknownField}“.`;
     // The label doubles as the slot's raw value (what a condition or a
     // {{#case}} compares against), so it is bounded like a list option.
-    if (typeof img.label !== "string" || img.label.length > CUSTOM_VAR_OPTION_MAX) return false;
-    if (!isImageDataUri(img.src)) return false;
-    if (img.width !== undefined && !CUSTOM_VAR_IMAGE_WIDTHS.has(img.width as string)) return false;
-    if (img.align !== undefined && !CUSTOM_VAR_IMAGE_ALIGNS.has(img.align as string)) return false;
-    return true;
-  });
+    if (typeof img.label !== "string" || img.label.length > CUSTOM_VAR_OPTION_MAX) {
+      return `${at}název musí být text do ${CUSTOM_VAR_OPTION_MAX} znaků.`;
+    }
+    if (!isImageDataUri(img.src)) {
+      return (
+        `${at}chybí nahraný obrázek. Uložit lze jen vložený obrázek ` +
+        `(data:image/png|jpeg|webp|gif;base64, nejvýše ${CUSTOM_VAR_IMAGE_MAX_CHARS} znaků) – ` +
+        "SVG ani odkaz na web nejsou povoleny."
+      );
+    }
+    if (img.width !== undefined && !CUSTOM_VAR_IMAGE_WIDTHS.has(img.width as string)) {
+      return `${at}neplatná šířka (povoleno 25%, 50%, 75% nebo 100%).`;
+    }
+    if (img.align !== undefined && !CUSTOM_VAR_IMAGE_ALIGNS.has(img.align as string)) {
+      return `${at}neplatné zarovnání (povoleno left, center nebo right).`;
+    }
+  }
+  return null;
 }
 
 /**
@@ -406,31 +455,64 @@ function isValidThousandsSeparator(v: unknown): boolean {
   return typeof v === "string" && CUSTOM_VAR_THOUSANDS_SEPARATORS.has(v);
 }
 
-function isValidVariableDefs(v: unknown): boolean {
-  if (!v || typeof v !== "object" || Array.isArray(v)) return false;
-  return Object.entries(v as Record<string, unknown>).every(([key, def]) => {
-    if (!CUSTOM_VAR_KEYS.has(key)) return false;
-    if (!def || typeof def !== "object") return false;
+/**
+ * Validate the whole `variableDefs` map.
+ *
+ * Returns null when everything is valid, otherwise ONE Czech sentence naming
+ * the offending slot and field. It used to return a bare boolean, and the 400
+ * it produced recited the entire accepted shape without saying which of up to
+ * 25 slots was wrong — so a document that had drifted into an unsavable state
+ * (an image choice with nothing uploaded, an over-long default, a condition
+ * operand with no variable picked) could not be repaired: the author had no way
+ * to find the offending field. Keep this in lockstep with the identical
+ * function in contractTemplates.ts — the two are deliberate mirrors.
+ */
+function variableDefsError(v: unknown): string | null {
+  if (!v || typeof v !== "object" || Array.isArray(v)) {
+    return "Nastavení proměnných musí být objekt.";
+  }
+  for (const [key, def] of Object.entries(v as Record<string, unknown>)) {
+    if (!CUSTOM_VAR_KEYS.has(key)) {
+      return `Neznámá proměnná „${key}“ – dokument nabízí pouze var1–var${CUSTOM_VAR_KEYS.size}.`;
+    }
+    const at = `Proměnná „${key}“: `;
+    if (!def || typeof def !== "object" || Array.isArray(def)) {
+      return `${at}nastavení má neplatný tvar.`;
+    }
     const d = def as Record<string, unknown>;
-    return (
-      typeof d.label === "string" &&
-      d.label.length <= CUSTOM_VAR_LABEL_MAX &&
-      typeof d.type === "string" &&
-      CUSTOM_VAR_TYPES.has(d.type) &&
-      isValidCustomDefault(d.default) &&
-      isValidCondition(d.condition) &&
-      isValidCustomOptions(d.options) &&
-      isValidCustomImages(d.images) &&
-      isValidCustomFormula(d.formula) &&
-      isValidCustomDecimals(d.decimals) &&
-      isValidCustomFontSize(d.fontSize) &&
-      isValidCustomLineHeight(d.lineHeight) &&
-      isValidThousandsSeparator(d.thousandsSeparator) &&
-      // "Nepovinná" – absent means required, so only a real boolean is
-      // accepted; a truthy string would silently make a slot optional.
-      (d.optional === undefined || typeof d.optional === "boolean")
-    );
-  });
+    if (typeof d.label !== "string" || d.label.length > CUSTOM_VAR_LABEL_MAX) {
+      return `${at}název musí být text do ${CUSTOM_VAR_LABEL_MAX} znaků.`;
+    }
+    if (typeof d.type !== "string" || !CUSTOM_VAR_TYPES.has(d.type)) {
+      return `${at}neznámý typ proměnné.`;
+    }
+    const defaultErr = customDefaultError(d.default);
+    if (defaultErr) return at + defaultErr;
+    const condErr = conditionError(d.condition);
+    if (condErr) return at + condErr;
+    if (!isValidCustomOptions(d.options)) {
+      return `${at}seznam možností smí mít nejvýše ${CUSTOM_VAR_MAX_OPTIONS} textových hodnot do ${CUSTOM_VAR_OPTION_MAX} znaků.`;
+    }
+    const imagesErr = customImagesError(d.images);
+    if (imagesErr) return at + imagesErr;
+    if (!isValidCustomFormula(d.formula)) {
+      return `${at}vzorec smí mít nejvýše ${CUSTOM_VAR_FORMULA_MAX} znaků a jen písmena, číslice, _ + - * / ( ) , a tečku.`;
+    }
+    if (!isValidCustomDecimals(d.decimals)) {
+      return `${at}počet desetinných míst musí být celé číslo 0–${CUSTOM_VAR_DECIMALS_MAX}.`;
+    }
+    if (!isValidCustomFontSize(d.fontSize)) return `${at}nepovolená velikost písma.`;
+    if (!isValidCustomLineHeight(d.lineHeight)) return `${at}nepovolené řádkování.`;
+    if (!isValidThousandsSeparator(d.thousandsSeparator)) {
+      return `${at}nepovolené oddělení tisíců.`;
+    }
+    // "Nepovinná" – absent means required, so only a real boolean is
+    // accepted; a truthy string would silently make a slot optional.
+    if (d.optional !== undefined && typeof d.optional !== "boolean") {
+      return `${at}příznak „nepovinná“ musí být true nebo false.`;
+    }
+  }
+  return null;
 }
 
 /**
@@ -736,12 +818,12 @@ dokumentyRouter.put(
       return;
     }
 
-    if (variableDefs !== undefined && !isValidVariableDefs(variableDefs)) {
-      res.status(400).json({
-        error:
-          "variableDefs musí být objekt {var1..var25: {label, type, optional?, options?, images?, formula?, decimals?}}, kde type je text|longtext|date|number|bool|list|condition|math|image, optional je true|false, options je seznam nejvýše 30 textových hodnot, images je seznam nejvýše 8 položek {label, src, width?, align?}, kde src musí být vložený obrázek (data:image/png|jpeg|webp|gif;base64, nejvýše 120 000 znaků – SVG ani odkaz na web nejsou povoleny), width je 25%|50%|75%|100% a align je left|center|right, formula je vzorec do 200 znaků (jen písmena, číslice, _ + - * / ( ) , .) a decimals je celé číslo 0–4.",
-      });
-      return;
+    if (variableDefs !== undefined) {
+      const varDefsErr = variableDefsError(variableDefs);
+      if (varDefsErr) {
+        res.status(400).json({ error: `Nastavení proměnných nelze uložit. ${varDefsErr}` });
+        return;
+      }
     }
 
     // Firestore caps a single document at 1 MiB. The htmlContent is by far the

@@ -210,6 +210,16 @@ export default function EmployeeFormPage() {
     setCleared((prev) => { const s = new Set(prev); s.delete(field); return s; });
   }
 
+  // A partial load is DANGEROUS here, not merely ugly. Save PUTs contact /
+  // documents / benefits unconditionally, and the four GETs below sit behind
+  // three different permissions (/benefits needs benefits.view|employees.edit,
+  // /contact + /documents need employees.view.*). If any one 403s, `.then`
+  // never runs — but `.finally` still clears loadingData, so the form used to
+  // render on top of the empty* defaults and the first Uložit wrote those
+  // blanks over the stored record. Never render the form unless every section
+  // actually loaded.
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   useEffect(() => {
     if (!isEdit || !id) return;
     Promise.all([
@@ -247,6 +257,8 @@ export default function EmployeeFormPage() {
         zaucovani: zStillActive,
         zaucovaniDo: zDo,
       } as AdditionalForm);
+    }).catch((err) => {
+      setLoadError(errorMessage(err, "Údaje zaměstnance se nepodařilo načíst."));
     }).finally(() => setLoadingData(false));
   }, [id, isEdit]);
 
@@ -406,6 +418,8 @@ export default function EmployeeFormPage() {
   }
 
   if (loadingData) return <div className={styles.state}>Načítám…</div>;
+  // Deliberately blocks the whole form: a half-loaded form would save blanks.
+  if (loadError) return <div className={styles.state}>{loadError}</div>;
 
   const sensitiveHint = isEdit ? "Ponechte prázdné pro zachování stávající hodnoty" : "";
 
