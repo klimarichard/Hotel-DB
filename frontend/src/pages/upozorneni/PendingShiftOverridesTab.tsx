@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { api } from "@/lib/api";
+import { api, errorMessage } from "@/lib/api";
 import { formatDateCZ } from "@/lib/dateFormat";
 import { employeeDisplayName } from "@/lib/employeeName";
 import styles from "../AlertsPage.module.css";
@@ -35,12 +35,17 @@ export default function PendingShiftOverridesTab() {
   const [items, setItems] = useState<OverrideRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [empMap, setEmpMap] = useState<Map<string, EmployeeMini>>(new Map());
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([
       api.get<OverrideRequest[]>("/shifts/overrides/pending"),
-      api.get<EmployeeMini[]>("/employees?status=active"),
-      api.get<EmployeeMini[]>("/employees?status=terminated"),
+      // The employee lists only decorate rows with a name. Reviewing shift
+      // overrides is gated on shifts.override.review, which does NOT imply
+      // employees.view.* – so a 403 here must degrade to the raw employeeId
+      // (see the JSX fallback below), never hide the pending list itself.
+      api.get<EmployeeMini[]>("/employees?status=active").catch(() => [] as EmployeeMini[]),
+      api.get<EmployeeMini[]>("/employees?status=terminated").catch(() => [] as EmployeeMini[]),
     ])
       .then(([reqs, active, terminated]) => {
         setItems(reqs);
@@ -48,10 +53,22 @@ export default function PendingShiftOverridesTab() {
         [...active, ...terminated].forEach((e) => m.set(e.id, e));
         setEmpMap(m);
       })
+      .catch((err) =>
+        setError(
+          `Čekající výjimky se nepodařilo načíst. ${errorMessage(err, "Zkuste to prosím znovu.")}`
+        )
+      )
       .finally(() => setLoading(false));
   }, []);
 
   if (loading) return <div className={styles.state}>Načítám…</div>;
+  if (error) {
+    return (
+      <div className={styles.empty} style={{ color: "var(--color-danger-text)" }}>
+        {error}
+      </div>
+    );
+  }
   if (items.length === 0) {
     return <div className={styles.empty}>Žádné čekající výjimky.</div>;
   }

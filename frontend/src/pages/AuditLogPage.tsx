@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Navigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
-import { api } from "@/lib/api";
+import { api, errorMessage } from "@/lib/api";
 import { employeeDisplayName } from "@/lib/employeeName";
 import Button from "@/components/Button";
 import AuditEventCard from "@/components/AuditEventCard";
@@ -107,8 +107,15 @@ export default function AuditLogPage() {
   const [eduLevels, setEduLevels] = useState<NamedRec[]>([]);
   const [plans, setPlans] = useState<MonthRec[]>([]);
   const [periods, setPeriods] = useState<MonthRec[]>([]);
+  // Non-fatal lookup failures (typically a 403 for a nav.audit.view holder who
+  // lacks employees.view.* / users.view). The log stays usable, but the missing
+  // names + empty filter dropdowns must be explained rather than looking empty.
+  const [lookupWarnings, setLookupWarnings] = useState<string[]>([]);
 
   useEffect(() => {
+    const warn = (msg: string) =>
+      setLookupWarnings((prev) => (prev.includes(msg) ? prev : [...prev, msg]));
+
     // Load ALL statuses (incl. "before-start") so every audited employee
     // resolves to a name in the card title – a Před-nástupem employee's edits
     // were otherwise nameless.
@@ -123,7 +130,11 @@ export default function AuditLogPage() {
         );
         setEmployees(all);
       })
-      .catch(() => undefined);
+      .catch((err) =>
+        warn(
+          `Jména zaměstnanců se nepodařilo načíst. ${errorMessage(err, "Zkuste stránku načíst znovu.")}`
+        )
+      );
 
     api
       .get<UserProfile[]>("/auth/users")
@@ -134,7 +145,11 @@ export default function AuditLogPage() {
           )
         )
       )
-      .catch(() => undefined);
+      .catch((err) =>
+        warn(
+          `Jména uživatelů se nepodařilo načíst. ${errorMessage(err, "Zkuste stránku načíst znovu.")}`
+        )
+      );
 
     api
       .get<TemplateMini[]>("/contractTemplates")
@@ -504,6 +519,17 @@ export default function AuditLogPage() {
           </label>
         </div>
       </div>
+
+      {lookupWarnings.length > 0 && (
+        <div
+          className={styles.dim}
+          style={{ fontSize: "0.8rem", margin: "0.5rem 0 1rem", lineHeight: 1.5 }}
+        >
+          {lookupWarnings.map((w) => (
+            <div key={w}>{w}</div>
+          ))}
+        </div>
+      )}
 
       {error && <div className={styles.errorState}>{error}</div>}
 
