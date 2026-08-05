@@ -1316,20 +1316,23 @@ non-obvious constraints a maintainer must not break. Code: `RecepceSummaryPage`
 - **Směna nominálů (bottom section, 2026-08-05).** Answers "which notes must I
   obtain so every receptionist can be paid their CELKEM as a physical pile?" You
   type what is in hand; the section derives the rest.
-  - ⚠️ **The comparison is ASYMMETRIC, and this is the load-bearing detail.** The
-    first version rendered a signed `need − have` delta per denomination, copied
-    from the Směnárna "Změny nominálů" panel. That was wrong: Směnárna compares
-    two piles that must **match**, whereas here the goal is only to **cover** the
-    payouts. The symmetric delta turned "I hold six 2000s and need four" into
-    "hand back two 2000s" — nonsense, because holding more than you need is not a
-    debt, it is change left over. The table therefore has a **`chybí`** row
-    (`max(0, need − have)`, the only actionable figure) and a separate muted
-    **`zbyde`** row (`max(0, have − need)`, information only). Do not collapse
-    these back into one signed row.
-  - Known cosmetic edge: when there is a genuine money shortfall, `zbyde` still
-    lists denominations the composition does not use (those are the notes you
-    would trade in), while its total clamps to 0. The red shortfall warning is
-    what carries the real meaning in that case.
+  - ⚠️ **The give side is BOUNDED. This is the load-bearing detail — it was got
+    wrong twice.** The panel looks exactly like Směnárna's "Změny nominálů", but
+    it cannot be computed the same way. Směnárna's two sides have the **same total
+    value** (the office hands over precisely the money owed), so a plain signed
+    `need − have` describes a real swap there. Here the holdings are normally
+    **worth more** than the payouts, and that same formula produced "hand back two
+    2000s" against nothing received — a pure loss. Clamping the negatives away
+    instead (a `chybí`-only row) fixed that but destroyed the point of the table:
+    you knew what was missing and not what to hand over for it.
+  - The correct model, and what the code does: take `missing = max(0, need − have)`
+    and `surplus = max(0, have − need)` per denomination, then select spare notes
+    **largest-first, only up to the value of `missing`**, and return the overshoot
+    as change (`decompose(giveValue − missingValue, 0)` — pool 0, so change is
+    never paid in 5000s). The rendered list is
+    `missing + change − give`, which **balances to zero in value** whenever there
+    is enough money, and is off by exactly the shortfall when there is not.
+    Invariant worth keeping: post-swap holdings cover `need` in every denomination.
   - **The page has no denomination data and never gets any.** CELKEM is a lump
     sum (`employeeTotal()`), and no summary endpoint returns note counts. The
     target composition is *derived client-side* by running each positive CELKEM

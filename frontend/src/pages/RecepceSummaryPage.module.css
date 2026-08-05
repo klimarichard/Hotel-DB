@@ -224,17 +224,82 @@
   color: var(--color-text-muted);
 }
 
-/* Směna nominálů. Compound selectors because `.table td` already sets a colour
-   and would otherwise win on specificity.
-   Only "chybí" is actionable, so only it is emphasised; "zbyde" is information
-   (money you keep) and is deliberately muted so it cannot read as an instruction. */
-.table td.changeMissing {
-  color: var(--color-danger-text, #dc2626);
-  font-weight: 700;
+/* ── Směna nominálů ──────────────────────────────────────────────────────────
+   Mirrors the Tabulky → Směnárna denomination block: the wide table keeps its
+   own horizontal scroll and the changes panel sits beside it, wrapping under
+   only when there is genuinely no room. */
+.denomLayout {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  flex-wrap: wrap;
 }
 
-.table td.leftOver {
+.denomLayout > .tableWrap {
+  flex: 1 1 32rem;
+  min-width: 0;
+}
+
+.changesPanel {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.changesTable {
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.changesTable th,
+.changesTable td {
+  border: 1px solid var(--color-border);
+  padding: 3px 10px;
+  text-align: center;
+}
+
+.changesTable thead th {
+  background: var(--color-surface-3, var(--color-surface-2));
+  color: var(--color-text-heading);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.changesDenom {
+  background: var(--color-surface-2, var(--color-surface));
+  font-weight: 600;
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.changePlus,
+.changeMinus {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  min-width: 3rem;
+}
+
+.changePlus {
+  color: var(--color-success-text, #166534);
+}
+
+.changeMinus {
+  color: var(--color-danger-text, #dc2626);
+}
+
+.changesEmpty {
   color: var(--color-text-muted);
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.changesHint {
+  margin: 0;
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+  max-width: 11rem;
+  line-height: 1.35;
 }
 
 .warnLine {

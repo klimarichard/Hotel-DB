@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { api, ApiError, errorMessage, type RequestOptions } from "@/lib/api";
 import { HOTELS, type HotelSlug } from "@/lib/hotels";
-import { CZK_DENOMS, decomposeAll, sumCounts, denomTotal } from "@/lib/denominations";
+import { CZK_DENOMS, decompose, decomposeAll, sumCounts, denomTotal } from "@/lib/denominations";
 import Button from "@/components/Button";
 import IconButton from "@/components/IconButton";
 import ConfirmModal from "@/components/ConfirmModal";
@@ -513,32 +513,74 @@ export default function RecepceSummaryPage() {
   // dependency list here would be a third place to keep those in sync, and the
   // input is a handful of rows.
   //
-  // ⚠️ The comparison is ASYMMETRIC, and that is the whole point. An earlier
-  // version showed a signed `need − have` delta per denomination, copying the
-  // Směnárna panel — but that panel compares two piles that must MATCH, whereas
-  // here the goal is only to COVER the payouts. A symmetric delta turned "I hold
-  // six 2000s and only need four" into "hand back two 2000s", which is nonsense:
-  // holding more than you need is not a debt, it is simply change left over.
-  // So only a genuine shortage is actionable; a surplus is reported as `zbyde`,
-  // purely for information, and never as an instruction.
+  // ⚠️ Why this is NOT a plain `need − have` delta like the Směnárna panel it is
+  // modelled on. There, both sides have the SAME total value (the exchange office
+  // hands over exactly the money that is owed), so a signed delta describes a
+  // genuine swap. Here the holdings are usually WORTH MORE than the payouts, and
+  // a plain delta turned "I hold six 2000s and need four" into "hand back two
+  // 2000s" against nothing received — a pure loss.
+  //
+  // So the give side is BOUNDED: hand over only as much spare as is needed to
+  // fund the missing notes, and take the overshoot back as change. Both columns
+  // of the resulting list then balance in value, which is exactly what makes the
+  // Směnárna presentation correct again.
   //
   // ⚠️ The 5000 pool passed to decomposeAll is the number of 5000s ALREADY HELD,
-  // so the ideal composition can never call for more 5000s than are in hand and
-  // `chybí` for that denomination is always empty.
+  // so the ideal composition can never call for more 5000s than are in hand.
   const cashPiles = emps
     .map((e) => ({ key: e.employeeId, amount: employeeTotal(e) }))
     .filter((p) => p.amount > 0);
   const cashNeedCounts = sumCounts(decomposeAll(cashPiles, cash["5000"] ?? 0));
   const cashNeedTotal = denomTotal(cashNeedCounts);
   const cashHaveTotal = denomTotal(cash);
-  /** Per denomination: what is missing, and what will be left over afterwards.
-   *  Both are clamped at 0 — for any one denomination at most one can be non-zero. */
-  const cashRows = EXCHANGE_DENOMS.map((d) => {
+
+  // What is short, and what is spare. For any one denomination only one can be
+  // non-zero, so these two never overlap.
+  const cashMissing: Record<string, number> = {};
+  const cashSurplus: Record<string, number> = {};
+  for (const d of EXCHANGE_DENOMS) {
     const need = cashNeedCounts[d] ?? 0;
     const have = cash[d] ?? 0;
-    return { denom: d, missing: Math.max(0, need - have), left: Math.max(0, have - need) };
-  });
-  const cashMissingCount = cashRows.filter((r) => r.missing > 0).length;
+    if (need > have) cashMissing[d] = need - have;
+    else if (have > need) cashSurplus[d] = have - need;
+  }
+  const cashMissingValue = denomTotal(cashMissing);
+
+  // Pick the spare notes to hand over: biggest first, taking only whole notes
+  // that still fit inside what is owed.
+  const cashGive: Record<string, number> = {};
+  let cashRest = cashMissingValue;
+  for (const d of EXCHANGE_DENOMS) {
+    const v = Number(d);
+    const spare = cashSurplus[d] ?? 0;
+    if (!spare || cashRest < v) continue;
+    const take = Math.min(spare, Math.floor(cashRest / v));
+    if (take > 0) {
+      cashGive[d] = take;
+      cashRest -= take * v;
+    }
+  }
+  // The remainder is now smaller than every note still spare, so cover it with
+  // one more note (the smallest that covers it) and let the difference come back
+  // as change. Repeats only while spare notes remain — if they run out, the
+  // leftover `cashRest` is a genuine money shortfall, reported separately below.
+  while (cashRest > 0) {
+    const spareLeft = EXCHANGE_DENOMS.filter((d) => (cashSurplus[d] ?? 0) > (cashGive[d] ?? 0));
+    if (spareLeft.length === 0) break;
+    const pick = [...spareLeft].reverse().find((d) => Number(d) >= cashRest) ?? spareLeft[0];
+    cashGive[pick] = (cashGive[pick] ?? 0) + 1;
+    cashRest -= Number(pick);
+  }
+  const cashGiveValue = denomTotal(cashGive);
+  // Overshoot returns as change. Pool 0 on purpose: change is never paid out in
+  // 5000s, matching the rule that we never exchange UP to a 5000.
+  const cashChangeBack =
+    cashGiveValue > cashMissingValue ? decompose(cashGiveValue - cashMissingValue, 0).counts : {};
+  /** Signed, and balanced in value: positive = receive, negative = hand over. */
+  const cashChanges = EXCHANGE_DENOMS.map((d) => ({
+    denom: d,
+    delta: (cashMissing[d] ?? 0) + (cashChangeBack[d] ?? 0) - (cashGive[d] ?? 0),
+  })).filter((c) => c.delta !== 0);
   // Only a SHORTFALL of MONEY is an error. A per-denomination shortage is fixed
   // by breaking bigger notes you already hold; less money than the piles need
   // cannot be. A surplus is never a problem.
@@ -924,6 +966,7 @@ export default function RecepceSummaryPage() {
               is what keeps it off the sheet — same as Walk-iny above. */}
           <section className={`${styles.section} ${styles.noPrint}`}>
             <h2 className={styles.sectionTitle}>Směna nominálů</h2>
+            <div className={styles.denomLayout}>
             <div className={styles.tableWrap}>
               <table className={styles.table}>
                 <thead>
@@ -964,31 +1007,43 @@ export default function RecepceSummaryPage() {
                     ))}
                     <td className={`${styles.num} ${styles.strong}`}>{money(cashNeedTotal)}</td>
                   </tr>
-                  <tr>
-                    <th>chybí</th>
-                    {cashRows.map((r) => (
-                      <td
-                        key={r.denom}
-                        className={`${styles.num} ${r.missing > 0 ? styles.changeMissing : ""}`}
-                      >
-                        {r.missing || ""}
-                      </td>
-                    ))}
-                    <td className={styles.num} />
-                  </tr>
-                  <tr>
-                    <th>zbyde</th>
-                    {cashRows.map((r) => (
-                      <td key={r.denom} className={`${styles.num} ${styles.leftOver}`}>
-                        {r.left || ""}
-                      </td>
-                    ))}
-                    <td className={`${styles.num} ${styles.leftOver}`}>
-                      {money(Math.max(0, cashHaveTotal - cashNeedTotal))}
-                    </td>
-                  </tr>
                 </tbody>
               </table>
+            </div>
+
+            {/* Note-by-note swap, laid out like the Tabulky → Směnárna panel.
+                Both columns balance in value because the give side is bounded by
+                what is actually missing. */}
+            <div className={styles.changesPanel}>
+              <table className={styles.changesTable}>
+                <thead>
+                  <tr>
+                    <th colSpan={2}>Změny nominálů</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cashChanges.length === 0 ? (
+                    <tr>
+                      <td colSpan={2} className={styles.changesEmpty}>
+                        {cashHaveTotal === 0 ? "Zadejte řádek mám" : "Složení sedí"}
+                      </td>
+                    </tr>
+                  ) : (
+                    cashChanges.map((c) => (
+                      <tr key={c.denom}>
+                        <th className={styles.changesDenom}>{c.denom}</th>
+                        <td className={c.delta > 0 ? styles.changePlus : styles.changeMinus}>
+                          {c.delta > 0 ? `+${c.delta}` : c.delta}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+              {cashChanges.length > 0 && (
+                <p className={styles.changesHint}>Kladné = vyměnit za, záporné = odevzdat.</p>
+              )}
+            </div>
             </div>
             {cashPiles.length === 0 ? (
               <p className={styles.muted}>
@@ -1001,7 +1056,7 @@ export default function RecepceSummaryPage() {
                 {money(cashNeedTotal)} pro {cashPiles.length}{" "}
                 {cashPiles.length === 1 ? "recepční" : "recepčních"}.
               </p>
-            ) : cashMissingCount === 0 ? (
+            ) : cashChanges.length === 0 ? (
               <p className={styles.muted}>
                 Máte všechny potřebné nominály, měnit není potřeba. Přebytek si necháte.
               </p>
