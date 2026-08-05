@@ -506,29 +506,42 @@ export default function RecepceSummaryPage() {
 
   // ── Směna nominálů (screen only) ────────────────────────────────────────────
   //
-  // "Which notes do I have to swap so I can hand every receptionist their CELKEM
-  // as a physical pile?" Same shape as the Tabulky → Směnárna "Změny nominálů"
-  // panel: decompose each target into the fewest notes, sum those, subtract what
-  // is in hand. Deliberately NOT memoised — employeeTotal() closes over perShift,
-  // minusByEmp and rate, so a dependency list here would be a third place to keep
-  // those in sync, and the input is a handful of rows.
+  // "Which notes must I obtain so I can hand every receptionist their CELKEM as a
+  // physical pile?" Each target is decomposed into the fewest notes (Tabulky →
+  // Směnárna uses the same helper) and summed into `potřebuji`. Deliberately NOT
+  // memoised — employeeTotal() closes over perShift, minusByEmp and rate, so a
+  // dependency list here would be a third place to keep those in sync, and the
+  // input is a handful of rows.
   //
-  // ⚠️ The 5000 pool passed to decomposeAll is the number of 5000s ALREADY HELD.
-  // That is what guarantees the 5000 row can never come out positive: the ideal
-  // composition may use at most what is in hand, so need − have ≤ 0 for that
-  // denomination and the section never tells anyone to acquire a 5000 note.
+  // ⚠️ The comparison is ASYMMETRIC, and that is the whole point. An earlier
+  // version showed a signed `need − have` delta per denomination, copying the
+  // Směnárna panel — but that panel compares two piles that must MATCH, whereas
+  // here the goal is only to COVER the payouts. A symmetric delta turned "I hold
+  // six 2000s and only need four" into "hand back two 2000s", which is nonsense:
+  // holding more than you need is not a debt, it is simply change left over.
+  // So only a genuine shortage is actionable; a surplus is reported as `zbyde`,
+  // purely for information, and never as an instruction.
+  //
+  // ⚠️ The 5000 pool passed to decomposeAll is the number of 5000s ALREADY HELD,
+  // so the ideal composition can never call for more 5000s than are in hand and
+  // `chybí` for that denomination is always empty.
   const cashPiles = emps
     .map((e) => ({ key: e.employeeId, amount: employeeTotal(e) }))
     .filter((p) => p.amount > 0);
   const cashNeedCounts = sumCounts(decomposeAll(cashPiles, cash["5000"] ?? 0));
   const cashNeedTotal = denomTotal(cashNeedCounts);
   const cashHaveTotal = denomTotal(cash);
-  const cashChanges = EXCHANGE_DENOMS.map((d) => ({
-    denom: d,
-    delta: (cashNeedCounts[d] ?? 0) - (cash[d] ?? 0),
-  })).filter((c) => c.delta !== 0);
-  // Only a SHORTFALL is an error. A per-denomination mismatch is fixed by
-  // breaking bigger notes; less money than the piles need cannot be.
+  /** Per denomination: what is missing, and what will be left over afterwards.
+   *  Both are clamped at 0 — for any one denomination at most one can be non-zero. */
+  const cashRows = EXCHANGE_DENOMS.map((d) => {
+    const need = cashNeedCounts[d] ?? 0;
+    const have = cash[d] ?? 0;
+    return { denom: d, missing: Math.max(0, need - have), left: Math.max(0, have - need) };
+  });
+  const cashMissingCount = cashRows.filter((r) => r.missing > 0).length;
+  // Only a SHORTFALL of MONEY is an error. A per-denomination shortage is fixed
+  // by breaking bigger notes you already hold; less money than the piles need
+  // cannot be. A surplus is never a problem.
   const cashShortfall = cashHaveTotal > 0 && cashNeedTotal > cashHaveTotal ? cashNeedTotal - cashHaveTotal : 0;
 
   function setCashCount(denom: string, raw: string) {
@@ -911,12 +924,6 @@ export default function RecepceSummaryPage() {
               is what keeps it off the sheet — same as Walk-iny above. */}
           <section className={`${styles.section} ${styles.noPrint}`}>
             <h2 className={styles.sectionTitle}>Směna nominálů</h2>
-            <p className={styles.note}>
-              Zadejte bankovky a mince, které máte právě u sebe. Řádek „potřebuji“ je
-              nejúspornější složení výplat pro všechny recepční z jejich sloupce CELKEM,
-              řádek „změna“ říká, co doměnit. Kladné číslo = obstarat navíc, záporné =
-              odevzdat. Tato sekce se netiskne.
-            </p>
             <div className={styles.tableWrap}>
               <table className={styles.table}>
                 <thead>
@@ -958,21 +965,27 @@ export default function RecepceSummaryPage() {
                     <td className={`${styles.num} ${styles.strong}`}>{money(cashNeedTotal)}</td>
                   </tr>
                   <tr>
-                    <th>změna</th>
-                    {EXCHANGE_DENOMS.map((d) => {
-                      const delta = (cashNeedCounts[d] ?? 0) - (cash[d] ?? 0);
-                      return (
-                        <td
-                          key={d}
-                          className={`${styles.num} ${
-                            delta > 0 ? styles.changePlus : delta < 0 ? styles.changeMinus : ""
-                          }`}
-                        >
-                          {delta === 0 ? "" : delta > 0 ? `+${delta}` : delta}
-                        </td>
-                      );
-                    })}
+                    <th>chybí</th>
+                    {cashRows.map((r) => (
+                      <td
+                        key={r.denom}
+                        className={`${styles.num} ${r.missing > 0 ? styles.changeMissing : ""}`}
+                      >
+                        {r.missing || ""}
+                      </td>
+                    ))}
                     <td className={styles.num} />
+                  </tr>
+                  <tr>
+                    <th>zbyde</th>
+                    {cashRows.map((r) => (
+                      <td key={r.denom} className={`${styles.num} ${styles.leftOver}`}>
+                        {r.left || ""}
+                      </td>
+                    ))}
+                    <td className={`${styles.num} ${styles.leftOver}`}>
+                      {money(Math.max(0, cashHaveTotal - cashNeedTotal))}
+                    </td>
                   </tr>
                 </tbody>
               </table>
@@ -988,8 +1001,10 @@ export default function RecepceSummaryPage() {
                 {money(cashNeedTotal)} pro {cashPiles.length}{" "}
                 {cashPiles.length === 1 ? "recepční" : "recepčních"}.
               </p>
-            ) : cashChanges.length === 0 ? (
-              <p className={styles.muted}>Složení sedí, měnit není potřeba.</p>
+            ) : cashMissingCount === 0 ? (
+              <p className={styles.muted}>
+                Máte všechny potřebné nominály, měnit není potřeba. Přebytek si necháte.
+              </p>
             ) : null}
             {cashShortfall > 0 && (
               <p className={styles.warnLine}>
