@@ -40,6 +40,7 @@ import {
   CUSTOM_VAR_TYPE_LABELS,
   CUSTOM_VAR_MAX_OPTIONS,
   CUSTOM_VAR_FORMULA_MAX,
+  CUSTOM_VAR_DEFAULT_MAX,
   CUSTOM_VAR_DECIMALS_MAX,
   CUSTOM_VAR_LONGTEXT_FONT_SIZES,
   CUSTOM_VAR_LONGTEXT_LINE_HEIGHTS,
@@ -57,6 +58,7 @@ import {
   OPS_FOR_COMPARABLE,
   usedCustomVars,
   fillTemplate,
+  sanitizeVariableDefsForSave,
   COMPARABLE_VARS,
   COMPARE_OP_LABELS,
   type ComparableType,
@@ -795,7 +797,12 @@ export default function ContractTemplatesPage() {
             selected,
           htmlContent,
           margins,
-          variableDefs,
+          // Half-finished slots (an image choice with nothing uploaded yet, a
+          // condition operand with no variable picked) are stripped here rather
+          // than sent: the server refuses them and the whole template would be
+          // unsavable while the author is still configuring it. Local state
+          // keeps the row, so nothing disappears from the editor.
+          variableDefs: sanitizeVariableDefsForSave(variableDefs),
         }),
       });
 
@@ -2009,7 +2016,18 @@ export default function ContractTemplatesPage() {
                       const kind = e.target.value as "var" | "literal";
                       if (kind === "var") {
                         const first = builtinRight[0] ?? customRight[0];
-                        setCond({ ...c, right: { kind: "var", key: first?.key ?? "" } });
+                        // With no type-compatible operand to point at there is
+                        // nothing to select, and a variable operand with an
+                        // empty key is refused by the server – it would make
+                        // the whole template unsavable. Stay on a fixed value
+                        // instead. This fires routinely for a TEXT comparison:
+                        // the built-in comparables are dates and numbers only.
+                        setCond({
+                          ...c,
+                          right: first
+                            ? { kind: "var", key: first.key }
+                            : { kind: "literal", value: "" },
+                        });
                       } else {
                         setCond({ ...c, right: { kind: "literal", value: "" } });
                       }
@@ -2022,8 +2040,23 @@ export default function ContractTemplatesPage() {
                     <select
                       style={{ ...fieldStyle, width: "auto", flex: "1 1 130px", minWidth: 0 }}
                       value={c.right.key}
-                      onChange={(e) => setCond({ ...c, right: { kind: "var", key: e.target.value } })}
+                      // Clearing the select back to the placeholder stores a
+                      // fixed empty value, never a variable operand without a
+                      // key: the server refuses the latter and the template
+                      // could not be saved at all.
+                      onChange={(e) =>
+                        setCond({
+                          ...c,
+                          right: e.target.value
+                            ? { kind: "var", key: e.target.value }
+                            : { kind: "literal", value: "" },
+                        })
+                      }
                     >
+                      {/* Without this the blank state of a keyless operand (an
+                          older template, or one built before the guard above)
+                          rendered as an empty box with nothing to explain it. */}
+                      <option value="">– vyberte proměnnou –</option>
                       {builtinRight.length > 0 && (
                         <optgroup label="Zabudované proměnné">{builtinRight.map(opt)}</optgroup>
                       )}
@@ -2036,6 +2069,7 @@ export default function ContractTemplatesPage() {
                       type={lt === "date" ? "date" : lt === "number" ? "number" : "text"}
                       style={{ ...fieldStyle, width: "auto", flex: "1 1 110px", minWidth: 0 }}
                       value={c.right.value}
+                      maxLength={CUSTOM_VAR_DEFAULT_MAX}
                       placeholder={lt === "text" ? "Porovnávaná hodnota" : undefined}
                       onChange={(e) => setCond({ ...c, right: { kind: "literal", value: e.target.value } })}
                     />
@@ -2316,6 +2350,7 @@ export default function ContractTemplatesPage() {
                 style={{ ...fieldStyle, resize: "vertical", minHeight: 64, fontFamily: "inherit" }}
                 rows={3}
                 value={value}
+                maxLength={CUSTOM_VAR_DEFAULT_MAX}
                 placeholder="Výchozí hodnota"
                 onChange={(e) => set(e.target.value)}
               />
@@ -2334,6 +2369,7 @@ export default function ContractTemplatesPage() {
               }
               style={fieldStyle}
               value={value}
+              maxLength={CUSTOM_VAR_DEFAULT_MAX}
               placeholder="Výchozí hodnota"
               onChange={(e) => set(e.target.value)}
             />

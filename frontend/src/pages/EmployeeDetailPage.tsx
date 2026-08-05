@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { api } from "@/lib/api";
+import { api, ApiError, errorMessage } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import * as clock from "@/lib/clock";
 import ConfirmModal from "@/components/ConfirmModal";
@@ -643,6 +643,7 @@ function AddEntryModal({
   employment,
   initialRow,
   lockedChangeType,
+  parentRowId,
 }: {
   onClose: () => void;
   onSaved: (row: EmploymentRow) => void;
@@ -657,6 +658,13 @@ function AddEntryModal({
    * point produces a single, well-known kind of row.
    */
   lockedChangeType?: ChangeType;
+  /**
+   * Nástup row id of the session this entry belongs to, set by the per-session
+   * buttons. The caller always knew which contract the user clicked on, but the
+   * value was never passed down – so the minimum-wage check fell back to "the
+   * last session", which with concurrent contracts is routinely a different job.
+   */
+  parentRowId?: string;
 }) {
   const isEdit = !!initialRow;
   const [form, setForm] = useState<EmploymentForm>(() => {
@@ -843,8 +851,17 @@ function AddEntryModal({
       if (!mzda) return null;
       const salary = Number(mzda.value);
       if (!Number.isFinite(salary)) return null;
+      // The session this Dodatek actually belongs to – NOT "the last one".
+      // A Dodatek raising the salary on an employee's earlier concurrent
+      // contract was being checked against the other contract's type and hours;
+      // if that other one happened to be a DPP the check bailed out at the
+      // contractType test below and no warning appeared at all.
       const sessions = groupBySession(employment);
-      const eff = sessions.length ? sessions[sessions.length - 1].effective : null;
+      const anchorId = initialRow?.id ?? parentRowId;
+      const target =
+        (anchorId && sessions.find((s) => s.rows.some((r) => r.id === anchorId))) ||
+        (sessions.length ? sessions[sessions.length - 1] : null);
+      const eff = target?.effective ?? null;
       let contractType = eff?.contractType ?? "";
       let hpw = eff?.hoursPerWeek ?? undefined;
       // Overlay changes made in THIS dodatek (a single Dodatek can move úvazek
@@ -1335,6 +1352,7 @@ export default function EmployeeDetailPage() {
   const [posList, setPosList] = useState<{ id: string; name: string }[]>([]);
   const [eduList, setEduList] = useState<{ id: string; name: string; code: string }[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [page, setPage] = useState<"detail" | "history" | "other-docs">("detail");
   const [newEntryMode, setNewEntryMode] = useState<{
     lockedChangeType: ChangeType;
@@ -1480,8 +1498,13 @@ export default function EmployeeDetailPage() {
     if (!id) return;
     Promise.all([
       api.get<Employee>(`/employees/${id}`),
-      api.get<EmploymentRow[]>(`/employees/${id}/employment`),
-      api.get<AlertItem[]>(`/employees/${id}/alerts`),
+      // These two sit behind DIFFERENT permissions from the one gating this page
+      // (/employment needs employment.view). Without their own catch a 403 on
+      // either rejected the whole Promise.all, left `employee` null, and the
+      // page reported "Zaměstnanec nenalezen." about a record that exists and
+      // that the user is perfectly entitled to see.
+      api.get<EmploymentRow[]>(`/employees/${id}/employment`).catch(() => [] as EmploymentRow[]),
+      api.get<AlertItem[]>(`/employees/${id}/alerts`).catch(() => [] as AlertItem[]),
       api.get<ContractRecord[]>(`/employees/${id}/contracts`).catch(() => [] as ContractRecord[]),
       api.get<CompanyRec[]>("/companies").catch(() => [] as CompanyRec[]),
       api.get<{ id: string; name: string }[]>("/departments").catch(() => []),
@@ -1497,6 +1520,17 @@ export default function EmployeeDetailPage() {
         setDeptList(deps);
         setPosList(poss);
         setEduList(edus);
+      })
+      .catch((err) => {
+        // Only /employees/:id can reach here now. "Not found" and "not allowed"
+        // are different facts and must not read the same; the backend's 404 body
+        // is English, so keep the Czech string for that case.
+        const status = err instanceof ApiError ? err.status : 0;
+        setLoadError(
+          status === 404
+            ? "Zaměstnanec nenalezen."
+            : errorMessage(err, "Zaměstnance se nepodařilo načíst.")
+        );
       })
       .finally(() => setLoading(false));
   }, [id]);
@@ -1701,6 +1735,7 @@ export default function EmployeeDetailPage() {
   }
 
   if (loading) return <div className={styles.state}>Načítám…</div>;
+  if (loadError) return <div className={styles.state}>{loadError}</div>;
   if (!employee) return <div className={styles.state}>Zaměstnanec nenalezen.</div>;
 
   const val = (v?: string | null) => v || "–";
@@ -1924,6 +1959,7 @@ export default function EmployeeDetailPage() {
               employee={employee}
               employment={employment}
               lockedChangeType={newEntryMode.lockedChangeType}
+              parentRowId={newEntryMode.parentRowId}
               onClose={() => setNewEntryMode(null)}
               onSaved={(row) => {
                 setEmployment((prev) => [row, ...prev]);

@@ -237,6 +237,15 @@ The employee root `status` is now **derived from the employment sessions** rathe
 - **`applyDerivedStatus(empRef, now, req?)`** recomputes + persists `status` (audited when `req` is supplied). Wired into all three employment write paths — `resyncRootFields` (POST/PATCH employment) and the DELETE employment handler — plus the nightly `refreshEffectiveRootForAllActive` sweep, which now scans **every** employee and re-derives status in **all three directions** so date transitions flip on their day with no employment write (including `before-start → active` on the start day). It is orthogonal to the denormalized current* fields (the list-blanking resync logic is untouched); `computeEffectiveRootFields` also date-gates the Ukončení row so a future-dated termination keeps the still-active employee's current* columns populated.
 - **Reinstate-on-duplicate:** the new-employee form (`EmployeeFormPage`) matches the entered first+last name and `dateOfBirth` against terminated employees; on a match it offers — via `ConfirmModal`'s three-way layout — *Reaktivovat a upravit údaje* (navigate to the existing record's edit form; adding a fresh Nástup there reactivates them through the same derived status), *Přesto vytvořit nového*, or *Zrušit*. No separate status endpoint is needed.
 
+### The frontend `terminated` flag uses the SAME date rule (aligned 2026-08-05)
+
+`EmploymentSession.terminated`, produced by `groupBySession()` in `frontend/src/lib/employmentSessions.ts`, is **`effective.endDate < today`** — a pure date test, mirroring the server's `sessionIsOver()`.
+
+⚠️ It used to be `!!ukonceni || expired`, i.e. true on the mere **existence** of an Ukončení row. Because the server has always been date-only, the two halves of the employee detail page disagreed during a notice period: the status badge (server-derived, `employee.status`) rendered a green **Aktivní** directly above a session card that was dimmed and had its buttons hidden (frontend-derived). This is safe to express as a date test because `computeEffectiveState()` already folds the Ukončení row's `startDate` into `effective.endDate`, and that assignment wins over everything else.
+
+- `resolveStandaloneEmployment()` previously hand-rolled the correct date rule inline specifically to dodge the bad flag; that duplicate is gone — it now reads `!s.terminated`.
+- **`!session.ukonceni` in `EmploymentSession.tsx` is a different test and stays existence-based:** "Ukončit smlouvu" must disappear once a termination row exists, whatever its date. Only "+ Dodatek" keys off `terminated`.
+
 ### Frontend — three-tab Employees page
 
 `EmployeesPage` fetches all three statuses in parallel on load (`/employees?status=active`, `/employees?status=before-start`, `/employees?status=terminated`) — three separate single-field queries, no composite index needed. The tab switcher shows three buttons: **Aktivní** / **Před nástupem** / **Ukončení**. The "Před nástupem" tab sits between Aktivní and Ukončení.
@@ -610,7 +619,9 @@ These are computed in `computeEffectiveRootFields` by finding `leaveSession` —
 - **Contract-type badges in the name cell** — a concurrent-leave employee shows two badges: `leaveContractType` first, then `currentContractType`, each coloured independently via `contractBadgeClass()` (default/grey = HPP, `.contractBadgePpp` blue = PPP, `.contractBadgeDpp` amber = DPP).
 - **Sorting** — Pozice/Oddělení columns sort on `positionDisplay` / `departmentDisplay`, so "RODIČOVSKÁ/..." sorts under R.
 
-> **Note:** An earlier "Phase 1" interim design (a user-settable `parallel` flag on Nástup rows, an `additionalContracts[]` array, and a "Souběžná smlouva" checkbox) was built and then replaced before this feature reached production. No production data carries that flag. The `currentEffectiveForMinWage` helper in `routes/payroll.ts` reads `r.parallel === true` defensively, but this will always be `false` for current data.
+> **Note:** An earlier "Phase 1" interim design (a user-settable `parallel` flag on Nástup rows, an `additionalContracts[]` array, and a "Souběžná smlouva" checkbox) was built and then replaced before this feature reached production. **No code writes `parallel`, no type declares it, and no production data carries it.**
+>
+> ⚠️ This note used to add that `routes/payroll.ts` read `r.parallel === true` "defensively" and that it "will always be `false`". That framing is what let a real bug survive review: the read was paired with a `sessions[sessions.length - 1]` pick that had no active-session filter, so the always-false filter left the minimum-wage check selecting the *last* session rather than a *running* one — and one already-ended later session was enough to drop an employee from the violation list entirely. The dead read is gone as of the Tier B audit fixes; the check now folds **every session running today**. A field that is only ever read is not harmless, it is a filter that silently does nothing.
 
 > **A different tie-break applies to standalone documents (v4.12.0).** The `chosen`-session rule above governs the `current*` root fields (Zaměstnanci list, badges, payroll/shifts). Generating a standalone document (Multisport, Hmotná odpovědnost, a custom template) during a concurrent-contract situation needs the *other* answer — the on-leave contract, not the latest active one — because that's the contract the document is actually about. See [Contracts & Templates — Standalone documents now resolve employment variables](contracts.md#standalone-documents-now-resolve-employment-variables-v4120).
 
@@ -667,11 +678,15 @@ Exports:
 - `isBelowMinWage(contractType, salary, minWage, hoursPerWeek?)` → `boolean`
 - `formatCzk(value)` → `"39 000"` (Czech thousands grouping with non-breaking space)
 
-The backend in `functions/src/routes/payroll.ts` mirrors the formula in `minWageThresholdServer()` and `currentEffectiveForMinWage()`.
+The backend in `functions/src/routes/payroll.ts` mirrors the formula in `minWageThresholdServer()` and `effectivesForMinWage()`.
+
+**Scope rule (important):** the check applies to **every employment session running today**, each against its own folded `contractType` / `salary` / `hoursPerWeek` — not to one "primary" session. Czech minimum wage applies per employment relationship, so an employee with concurrent contracts must clear the threshold on each one independently and can legitimately appear more than once in the results. "Running today" is `nastup.startDate <= today && (!endDate || endDate >= today)`, the same last-active-day semantics as `sessionIsOver()` in `routes/employees.ts`.
 
 ### Warning surface 1 — contract entry
 
 In `EmployeeDetailPage.tsx`, both the Nástup salary field and the mzda Dodatek salary field call `minWageThreshold` on change. When the entered value is below threshold, a `ConfirmModal` (state variable `minWageWarn`) informs the user. The warning is **non-blocking** — the admin acknowledges it and proceeds; no save is blocked.
+
+For a **Dodatek**, the contract type and hours come from the session the Dodatek belongs to, resolved via the `parentRowId` prop that the per-session "+ Dodatek" button passes to `AddEntryModal`. It used to fall back to `sessions[sessions.length - 1]`, which with concurrent contracts is routinely a different job — and if that other session happened to be a DPP the check bailed out and showed no warning at all.
 
 ### Warning surface 2 — Settings → Mzdy
 
@@ -686,8 +701,9 @@ GET /api/payroll/min-wage-check?minimumWage=<number>
 - **Gate:** `requireAuth` + `requirePermission("settings.payroll.manage")`
 - **Query parameter:** `minimumWage` — a positive number; returns 400 otherwise
 - **Response:** `{ minimumWage: number, violations: ViolationEntry[] }`
-- `ViolationEntry`: `{ employeeId, name, contractType, hoursPerWeek: number | null, salary: number, threshold: number }`
-- Only ACTIVE employees and active (started, not yet ended) contracts are checked.
+- `ViolationEntry`: `{ employeeId, name, contractType, hoursPerWeek: number | null, salary: number, threshold: number, startDate: string, concurrent: boolean }`
+- `startDate` is the Nástup date of the offending contract and `concurrent` is true when the employee has more than one contract running today. **An `employeeId` is therefore NOT unique in `violations`** — the Settings list keys on `employeeId + startDate` and labels the row with the contract start when `concurrent` is set.
+- Every contract running today is checked (started, not yet ended — the end date is the last active day). DPP is still skipped by the threshold formula.
 - Results sorted by `salary` ascending (most under-threshold first).
 - Defined in `functions/src/routes/payroll.ts`.
 

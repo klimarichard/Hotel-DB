@@ -260,6 +260,19 @@ Note the pattern: the *route* stays ungated because the list is genuinely public
 
 The GET now accepts either key. The tab additionally refuses to render editable values it could not read (a network failure produces the same state as the 403). **General rule: whoever may write a setting must be able to read it — check the read gate whenever you add a write gate.**
 
+### Only an admin may confer admin (escalation guard, 2026-08-05)
+
+`NON_GRANTABLE_PERMISSIONS` blocks `system.admin` on the per-user grant paths, on the documented principle that *"the only way to confer superadmin is to assign the protected `admin` type itself"*. Nothing guarded **assigning that type**, so the principle was load-bearing and unenforced:
+
+- `POST /api/auth/create-user` validated only that the chosen `roleType` **document exists**. A caller holding `users.manage` alone could create an account with `roleType: "admin"` and log into it.
+- `PATCH /api/auth/users/:uid/permissions` was the same hole for `users.setType`. Its lockout guards are **demotion-directional** (`wasAdmin && !willBeAdmin`), so a promotion — including promoting yourself — fell straight through them.
+
+The frontend never exposed either path (the type `<select>` is fed by `GET /role-types`, which needs `userTypes.manage`/`users.setType`), but the HTTP boundary was open.
+
+Both routes now call **`assertMayConferAdmin()`**: if the resulting effective permission set would contain `system.admin` and the *caller* does not hold `system.admin`, the request is refused with 403 *"Přiřadit typ s administrátorskými právy může jen administrátor."* The PATCH route skips the check when the target is already an admin, since that is not an escalation.
+
+**Rule to carry forward:** a guard on *granting a permission* is worthless if the *type* carrying that permission can be assigned freely. Whenever you protect a permission key, check every path that can assign a type containing it.
+
 ### Row-level scope
 
 A second layer is still applied at the router level on `employees.ts` and `contracts.ts` (`enforceEmpAccess` / `enforceContractAccess`):

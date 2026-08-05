@@ -89,11 +89,18 @@ export interface EmploymentSession {
   rodicovska: EmploymentRow[];
   effective: EffectiveState;
   /**
-   * Session has ended – either an explicit Ukončení row exists, or the
-   * effective endDate is in the past (a fixed-term Nástup that ran out
-   * without anyone filing the termination paperwork). The UI treats the
-   * two cases identically: no "+ Dodatek" / "Ukončit smlouvu" buttons,
-   * dimmed card styling.
+   * Session has ended – its effective end date has PASSED. That covers both an
+   * explicit Ukončení row (whose startDate `computeEffectiveState` folds into
+   * `effective.endDate`) and a fixed-term Nástup that ran out without anyone
+   * filing the termination paperwork.
+   *
+   * ⚠️ Deliberately a DATE test, not "does an Ukončení row exist". The server's
+   * sessionIsOver() (functions/src/routes/employees.ts) has always been date-only
+   * – the end date is the LAST ACTIVE DAY – so the existence test made the two
+   * halves of the employee detail page disagree during a notice period: the
+   * status badge (server-derived) read a green "Aktivní" while the session card
+   * right below it rendered dimmed and hid its buttons. An employee serving
+   * notice is still employed.
    */
   terminated: boolean;
 }
@@ -158,6 +165,8 @@ export function groupBySession(rows: EmploymentRow[]): EmploymentSession[] {
       ...(current.ukonceni ? [current.ukonceni] : []),
     ];
     const effective = computeEffectiveState(current.nastup, current.dodatky, current.ukonceni);
+    // Mirrors the server's sessionIsOver(): end date is the last active day, so
+    // a today-dated or future-dated Ukončení leaves the session in force.
     const expired = !!effective.endDate && effective.endDate < today;
     sessions.push({
       nastup: current.nastup,
@@ -166,7 +175,7 @@ export function groupBySession(rows: EmploymentRow[]): EmploymentSession[] {
       rows: rowsInOrder,
       rodicovska: current.rodicovska,
       effective,
-      terminated: !!current.ukonceni || expired,
+      terminated: expired,
     });
     current = null;
   }
@@ -449,17 +458,13 @@ export function resolveStandaloneEmployment(
   const today = clock.today();
   // "Running today" = started, and not ended as of today.
   //
-  // Deliberately NOT `!session.terminated`: that flag is true for ANY Ukončení
-  // row, including a future-dated one, so an employee whose notice is already
-  // filed for next month would count as not running — while they are in fact
-  // still working today. computeEffectiveState already folds an Ukončení's date
-  // into effective.endDate, so testing the date covers both that and a
-  // fixed-term contract that simply ran out. An endDate is the LAST active day,
-  // hence `>= today`. Matches the backend's date-based rule.
-  const running = groupBySession(rows).filter((s) => {
-    if (s.nastup.startDate > today) return false;
-    return !s.effective.endDate || s.effective.endDate >= today;
-  });
+  // This used to re-derive the end test inline because `session.terminated` was
+  // true for ANY Ukončení row including a future-dated one. `terminated` is now
+  // date-based itself (matching the server's sessionIsOver), so the local copy
+  // is gone – one definition, not two.
+  const running = groupBySession(rows).filter(
+    (s) => s.nastup.startDate <= today && !s.terminated
+  );
   if (running.length === 0) return null;
 
   let chosen = running[0];

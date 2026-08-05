@@ -150,8 +150,9 @@ export default function EmploymentSessionCard({
         {/* "Ukončit smlouvu" stays available for any session without a formal
             Ukončení row – including fixed-term contracts (e.g. DPP) whose end
             date is set or has already passed, so they can always be ended
-            (early or retroactively). "+ Dodatek" remains hidden once the
-            session is over (terminated = Ukončení row or endDate in the past). */}
+            (early or retroactively). That test is deliberately existence-based
+            and stays so. "+ Dodatek" remains hidden once the session is over,
+            where over = the effective end date has PASSED. */}
         {canManageEmployment && !session.ukonceni && (
           <div className={styles.headerActions} onClick={(e) => e.stopPropagation()}>
             {!session.terminated && (
