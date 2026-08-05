@@ -108,6 +108,13 @@ function czk(n: number): string {
   return new Intl.NumberFormat("cs-CZ", { maximumFractionDigits: 0 }).format(Math.round(n));
 }
 
+/** Foreign-currency amounts, unlike the CZK piles, are genuinely fractional –
+ *  the amount inputs are step="any" and 120,50 € is an ordinary entry. So these
+ *  keep up to two decimals instead of rounding to whole units like czk(). */
+function fx(n: number): string {
+  return new Intl.NumberFormat("cs-CZ", { maximumFractionDigits: 2 }).format(n);
+}
+
 export default function SmenarnaTab() {
   const [rows, setRows] = useState<Row[]>(defaultRows);
 
@@ -213,12 +220,16 @@ export default function SmenarnaTab() {
   const exchange = balance;
   const exTotals = exchange.reduce(
     (acc, e) => ({
+      /** Per-currency sums of the RAW foreign amounts, so the CELKEM row answers
+       *  "how much € / $ / £ is there altogether". Positional like everything
+       *  else on this page: index 0/1/2 = € / $ / £ (see CURRENCIES). */
+      amt: [acc.amt[0] + e.amt[0], acc.amt[1] + e.amt[1], acc.amt[2] + e.amt[2]] as Triple,
       smenarna: acc.smenarna + e.smenarna,
       uNas: acc.uNas + e.uNas,
       rozdil: acc.rozdil + e.rozdil,
       zbyva: acc.zbyva + e.zbyva,
     }),
-    { smenarna: 0, uNas: 0, rozdil: 0, zbyva: 0 }
+    { amt: emptyTriple(), smenarna: 0, uNas: 0, rozdil: 0, zbyva: 0 }
   );
 
   // A blank rate is normal — not every run has every currency. It is only a
@@ -637,7 +648,7 @@ export default function SmenarnaTab() {
                 </td>
               </tr>
               <tr>
-                <th className={styles.rowHead}>kurz ČNB</th>
+                <th className={styles.rowHead}>kurz sm.</th>
                 {CURRENCIES.map((c, k) => (
                   <td key={c.symbol}>
                     <input
@@ -653,7 +664,7 @@ export default function SmenarnaTab() {
                           return n;
                         })
                       }
-                      aria-label={`Kurz ČNB ${c.label}`}
+                      aria-label={`Kurz sm. ${c.label}`}
                     />
                   </td>
                 ))}
@@ -694,7 +705,11 @@ export default function SmenarnaTab() {
               ))}
               <tr className={styles.totalRow}>
                 <th className={styles.rowHead}>CELKEM</th>
-                <td colSpan={3} />
+                {CURRENCIES.map((c, k) => (
+                  <td key={c.symbol} className={styles.totalCell}>
+                    {fx(exTotals.amt[k])} {c.symbol}
+                  </td>
+                ))}
                 <td className={styles.totalCell}>{czk(exTotals.smenarna)}</td>
                 <td className={styles.totalCell}>{czk(exTotals.uNas)}</td>
                 <td className={styles.totalCell}>{czk(exTotals.rozdil)}</td>
@@ -708,10 +723,10 @@ export default function SmenarnaTab() {
           <p key={m.symbol} className={styles.warn}>
             U měny {m.symbol} je zadaná částka, ale chybí{" "}
             {m.ourMissing && m.cnbMissing
-              ? "kurz u nás i kurz ČNB"
+              ? "kurz u nás i kurz sm."
               : m.ourMissing
               ? "kurz u nás"
-              : "kurz ČNB"}
+              : "kurz sm."}
             . Tato měna se počítá jako nula.
           </p>
         ))}
