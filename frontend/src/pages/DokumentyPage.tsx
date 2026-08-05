@@ -51,6 +51,7 @@ import {
   CUSTOM_VAR_IMAGE_ALIGNS,
   CUSTOM_VAR_IMAGE_ALIGN_LABELS,
   CUSTOM_VAR_FORMULA_MAX,
+  CUSTOM_VAR_DEFAULT_MAX,
   CUSTOM_VAR_DECIMALS_MAX,
   CUSTOM_VAR_LONGTEXT_FONT_SIZES,
   CUSTOM_VAR_LONGTEXT_LINE_HEIGHTS,
@@ -68,6 +69,7 @@ import {
   usedCustomVars,
   requiredCustomVars,
   fillTemplate,
+  sanitizeVariableDefsForSave,
   type CompareOp,
   type CustomVarCondition,
   type CustomVarDef,
@@ -825,7 +827,12 @@ export default function DokumentyPage() {
         name,
         htmlContent,
         margins,
-        variableDefs,
+        // Half-finished slots (an image choice with nothing uploaded yet, a
+        // condition operand with no variable picked) are stripped here rather
+        // than sent: the server refuses them and the whole document would be
+        // unsavable while the author is still configuring it. Local state keeps
+        // the row, so nothing disappears from the editor.
+        variableDefs: sanitizeVariableDefsForSave(variableDefs),
         // Always sent explicitly. Omitting the key would leave the stored value
         // untouched, and the header picker edits it optimistically – so a freshly
         // changed rung has to travel with this save to mean anything. The `??`
@@ -1576,7 +1583,18 @@ export default function DokumentyPage() {
                     const first = candidates.find(
                       (o) => comparableTypeOfCustom(variableDefs[o.key]?.type) === leftType
                     );
-                    write({ ...c, right: { kind: "var", key: first?.key ?? "" } });
+                    // With no type-compatible slot to point at there is nothing
+                    // to select, and a variable operand with an empty key is
+                    // refused by the server – it would make the whole document
+                    // unsavable. Stay on a fixed value instead; the hint below
+                    // already explains that another comparable variable is
+                    // needed first.
+                    write({
+                      ...c,
+                      right: first
+                        ? { kind: "var", key: first.key }
+                        : { kind: "literal", value: "" },
+                    });
                   } else {
                     write({ ...c, right: { kind: "literal", value: "" } });
                   }
@@ -1590,7 +1608,18 @@ export default function DokumentyPage() {
                   style={{ ...fieldStyle, width: "auto", flex: "1 1 150px", minWidth: 0 }}
                   value={c.right.key}
                   aria-label={`Porovnávaná druhá proměnná pro ${def?.label || key}`}
-                  onChange={(e) => write({ ...c, right: { kind: "var", key: e.target.value } })}
+                  // Clearing the select back to the placeholder stores a fixed
+                  // empty value, never a variable operand without a key: the server
+                  // refuses the latter and the document could not be saved at
+                  // all.
+                  onChange={(e) =>
+                    write({
+                      ...c,
+                      right: e.target.value
+                        ? { kind: "var", key: e.target.value }
+                        : { kind: "literal", value: "" },
+                    })
+                  }
                 >
                   <option value="">– vyberte proměnnou –</option>
                   {candidates
@@ -1608,6 +1637,7 @@ export default function DokumentyPage() {
                   type={leftType === "date" ? "date" : leftType === "number" ? "number" : "text"}
                   style={{ ...fieldStyle, width: "auto", flex: "1 1 130px", minWidth: 0 }}
                   value={c.right.value}
+                  maxLength={CUSTOM_VAR_DEFAULT_MAX}
                   placeholder="Hodnota"
                   aria-label={`Porovnávaná hodnota pro ${def?.label || key}`}
                   onChange={(e) => write({ ...c, right: { kind: "literal", value: e.target.value } })}
@@ -1636,6 +1666,7 @@ export default function DokumentyPage() {
         <textarea
           style={{ ...fieldStyle, minHeight: 60, resize: "vertical", fontFamily: "inherit" }}
           value={value}
+          maxLength={CUSTOM_VAR_DEFAULT_MAX}
           placeholder="Výchozí hodnota"
           rows={3}
           onChange={(e) => set(e.target.value)}
@@ -1692,6 +1723,7 @@ export default function DokumentyPage() {
         }
         style={fieldStyle}
         value={value}
+        maxLength={CUSTOM_VAR_DEFAULT_MAX}
         placeholder="Výchozí hodnota"
         onChange={(e) => set(e.target.value)}
       />

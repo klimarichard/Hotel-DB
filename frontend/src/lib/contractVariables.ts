@@ -351,6 +351,18 @@ export const CUSTOM_VAR_THOUSANDS_SEPARATOR_LABELS: Record<CustomVarThousandsSep
 export const CUSTOM_VAR_FORMULA_MAX = 200;
 export const CUSTOM_VAR_DECIMALS_MAX = 4;
 
+/**
+ * Longest a slot's default value (and a condition's literal operand) may be.
+ *
+ * ⚠️ Must stay in sync with `CUSTOM_VAR_DEFAULT_MAX` in BOTH
+ * `functions/src/routes/dokumenty.ts` and
+ * `functions/src/routes/contractTemplates.ts` — the server is the authority and
+ * refuses the whole save when a default is longer, so this copy exists only to
+ * stop the editor from producing a value the server would reject (it is fed to
+ * `maxLength` on every default input).
+ */
+export const CUSTOM_VAR_DEFAULT_MAX = 200;
+
 // ── "longtext" typography ─────────────────────────────────────────────────────
 //
 // A "Dlouhý text" slot may carry its own font size and line spacing, chosen when
@@ -497,6 +509,54 @@ export function findImageOption(
 
 /** Slot key → its configuration on a given template. Stored on contractTemplates/{id}. */
 export type CustomVarDefs = Record<string, CustomVarDef>;
+
+/**
+ * The defs as they should be SENT to the server, with the two half-finished
+ * shapes the editors can hold in memory removed.
+ *
+ * Both editors let a slot reach a state that renders as nothing but that the
+ * server validators refuse outright, which made the whole template unsavable —
+ * with an error about a field the author was still filling in:
+ *
+ *  1. an image choice with no picture uploaded yet (`src: ""`). The server only
+ *     stores inline `data:` pictures, and `renderCustomImage` already prints ""
+ *     for such a row, so dropping it changes nothing that any document renders.
+ *  2. a condition whose right operand is a VARIABLE with no key chosen (there
+ *     was no compatible slot to offer). An empty key compares against nothing,
+ *     so it degrades to the equivalent empty literal instead.
+ *
+ * Applied at save time only — the editor's own state keeps the half-filled row
+ * visible so the author can finish it, and `customVarWarning` keeps pointing at
+ * it. Nothing here relaxes a server check; it only stops the client sending
+ * data the server was always right to refuse.
+ */
+export function sanitizeVariableDefsForSave(defs: CustomVarDefs): CustomVarDefs {
+  const out: CustomVarDefs = {};
+  for (const [key, def] of Object.entries(defs)) {
+    if (!def) continue;
+    let next: CustomVarDef = def;
+    if (next.images) {
+      const usable = next.images.filter((o) => isImageDataUri(o.src));
+      if (usable.length !== next.images.length) {
+        next = { ...next };
+        if (usable.length > 0) next.images = usable;
+        else delete next.images;
+      }
+    }
+    const cond = next.condition;
+    // `right?.` is NOT redundant despite the type saying otherwise: the server
+    // validators return early for the unary ops (empty / notEmpty) without ever
+    // requiring a right operand, so a stored condition legitimately may not have
+    // one. Reading .kind off it unguarded would throw inside handleSave and
+    // leave the document unsavable again, which is the bug this function exists
+    // to fix.
+    if (cond && cond.right?.kind === "var" && !cond.right.key) {
+      next = { ...next, condition: { ...cond, right: { kind: "literal", value: "" } } };
+    }
+    out[key] = next;
+  }
+  return out;
+}
 
 export function isCustomVarKey(key: string): boolean {
   return CUSTOM_VAR_KEY_SET.has(key);
