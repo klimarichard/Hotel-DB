@@ -353,7 +353,16 @@ export function mapContractsToRows(
 export function expectedContractTypesForRow(row: EmploymentRow): ContractType[] {
   if (row.changeType === "nástup") {
     if (row.contractType === "HPP") return ["nastup_hpp"];
-    if (row.contractType === "PPP") return ["nastup_ppp"];
+    // ⚠️ WIDENED, never swapped. PPP rows generate from `nastup_hpp` since the
+    // two nástup templates were merged, but contracts signed BEFORE that are
+    // stored with type "nastup_ppp" and must keep matching their row. Drop the
+    // legacy id here and mapContractsToRows() stops matching them, which does
+    // not just hide a download button: EmployeeSelfPage keeps only rows with a
+    // matching SIGNED contract, so every affected employee's entire employment
+    // history would vanish from their own Můj profil, the "Generovat" button
+    // would reappear on an already-signed row, and "Upravit" would unlock a row
+    // that is legally frozen by its signed PDF.
+    if (row.contractType === "PPP") return ["nastup_hpp", "nastup_ppp"];
     if (row.contractType === "DPP") return ["nastup_dpp"];
     return [];
   }

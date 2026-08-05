@@ -77,7 +77,7 @@ The existing `GenerateContractModal` is unchanged — only the call sites moved.
   - `délka smlouvy` → `endDate` — an **empty** value means "změna na dobu neurčitou" and clears a fixed end date (`endDate = null`); a non-empty value sets it. (The fold is mirrored server-side in `routes/employees.ts`, `services/payrollCalculator.ts` and `services/probationAlerts.ts` — all four honour the empty-clears-to-indefinite case.)
   - Ukončení's `startDate` overrides `endDate` (the actual end of the session)
 - `mapContractsToRows(rows, contracts)` — `rowId → ContractRecord`, picking the most recent generation per row.
-- `expectedContractTypesForRow(row)` — the template id(s) appropriate for a given row's `changeType` + `contractType`. Used both for matching existing contracts and as the default type for upload-without-generate.
+- `expectedContractTypesForRow(row)` — the template id(s) appropriate for a given row's `changeType` + `contractType`. Used both for matching existing contracts and as the default type for upload-without-generate. ⚠️ A **PPP** nástup row returns **two** ids (`["nastup_hpp", "nastup_ppp"]`) — new contracts generate as `nastup_hpp` since the merge, but 10 signed production contracts still carry the legacy id and would be orphaned from their rows if it were dropped. See the merge note in [contracts.md](contracts.md#contract-types).
 
 ### Backend changes
 `functions/src/routes/employees.ts`:

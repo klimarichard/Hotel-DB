@@ -37,9 +37,23 @@ export const BUILTIN_CONTRACT_TYPES = [
   "multisport",
 ] as const;
 
+/**
+ * Labels for the built-in templates. `Object.keys()` of this map IS the Šablony
+ * smluv sidebar list, so an id absent here simply stops being offered for
+ * editing — its Firestore document is untouched.
+ *
+ * ⚠️ `nastup_ppp` is deliberately absent. The two nástup templates were merged
+ * into one "Nástup HPP/PPP" (2026-08-05): PPP rows now generate from
+ * `nastup_hpp`, whose clause about contract type / weekly hours is conditional.
+ * The `contractTemplates/nastup_ppp` document is intentionally LEFT IN PLACE as
+ * a backup — nothing prunes Firestore against this list — and its id is still
+ * honoured by expectedContractTypesForRow() so contracts signed from it keep
+ * matching their row. Do not "tidy up" by deleting the document or by dropping
+ * the id from `BUILTIN_IDS` in functions/src/routes/contractTemplates.ts, which
+ * is the only thing preventing a hard delete of that backup.
+ */
 export const CONTRACT_TYPE_LABELS: Record<string, string> = {
-  nastup_hpp: "Nástup HPP",
-  nastup_ppp: "Nástup PPP",
+  nastup_hpp: "Nástup HPP/PPP",
   nastup_dpp: "Nástup DPP",
   ukonceni_hpp_ppp: "Ukončení HPP/PPP",
   ukonceni_dpp: "Ukončení DPP",
