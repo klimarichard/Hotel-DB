@@ -35,7 +35,8 @@ Returns the three global sm rates from `settings/sm` to prefill *kurz u nás*.
 Rows are free-text labels, **one shared list across all four blocks**, seeded with `AMBI / SUP / A&A / ANKORA` and freely renamed, added, removed.
 
 1. **PŘEDKLÁDÁM / POŽADUJI** — a CZK note swap over `CZK_DENOMS`. It **need not balance**: a shortfall is funded from the exchange money (see below). PŘEDKLÁDÁM carries a `ze směnárny` column = `max(0, POŽADUJI − PŘEDKLÁDÁM)`.
-2. **SMĚNÁRNA** — € / $ / £ amounts × two rate triples → `CELKEM směnárna` (kurz ČNB), `CELKEM u nás` (kurz u nás), `ROZDÍL` = the margin, and `zbývá ze směnárny`.
+2. **SMĚNÁRNA** — € / $ / £ amounts × two rate triples → `CELKEM směnárna` (kurz sm.), `CELKEM u nás` (kurz u nás), `ROZDÍL` = the margin, and `zbývá ze směnárny`. The **CELKEM row also totals each currency column** (`exTotals.amt`, positional € / $ / £ like everything else here) so the run's total foreign holding is readable without adding the rows up by hand. Those three cells are formatted with `fx()`, **not** `czk()` — foreign amounts are genuinely fractional (the inputs are `step="any"`), so they keep two decimals instead of rounding to whole units.
+   - ⚠️ The second rate row was labelled **`kurz ČNB`** until 2026-08-05 and is now **`kurz sm.`** (the exchange office's own rate). Only the label changed — the field, its `settings/sm` prefill and every formula are untouched. The page and tab titles still say ČNB.
 3. **Ideální složení** — the note mix to request, plus **Změny nominálů** beside it.
 
 ### `zbývá ze směnárny` — the spreadsheet's H column

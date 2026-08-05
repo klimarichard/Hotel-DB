@@ -1313,3 +1313,48 @@ non-obvious constraints a maintainer must not break. Code: `RecepceSummaryPage`
   miss since the page works fine until a split actually exists in the queried
   range, then 500s. Full write-up (schema, endpoints, validation, the three
   different tallies over the same grid): [Shifts — Manual hour splits](shifts.md).
+- **Směna nominálů (bottom section, 2026-08-05).** Answers "which notes must I
+  obtain so every receptionist can be paid their CELKEM as a physical pile?" You
+  type what is in hand; the section derives the rest.
+  - ⚠️ **The give side is BOUNDED. This is the load-bearing detail — it was got
+    wrong twice.** The panel looks exactly like Směnárna's "Změny nominálů", but
+    it cannot be computed the same way. Směnárna's two sides have the **same total
+    value** (the office hands over precisely the money owed), so a plain signed
+    `need − have` describes a real swap there. Here the holdings are normally
+    **worth more** than the payouts, and that same formula produced "hand back two
+    2000s" against nothing received — a pure loss. Clamping the negatives away
+    instead (a `chybí`-only row) fixed that but destroyed the point of the table:
+    you knew what was missing and not what to hand over for it.
+  - The correct model, and what the code does: take `missing = max(0, need − have)`
+    and `surplus = max(0, have − need)` per denomination, then select spare notes
+    **largest-first, only up to the value of `missing`**, and return the overshoot
+    as change (`decompose(giveValue − missingValue, 0)` — pool 0, so change is
+    never paid in 5000s). The rendered list is
+    `missing + change − give`, which **balances to zero in value** whenever there
+    is enough money, and is off by exactly the shortfall when there is not.
+    Invariant worth keeping: post-swap holdings cover `need` in every denomination.
+  - **The page has no denomination data and never gets any.** CELKEM is a lump
+    sum (`employeeTotal()`), and no summary endpoint returns note counts. The
+    target composition is *derived client-side* by running each positive CELKEM
+    through `decomposeAll()` from `lib/denominations.ts` — the same helper the
+    Tabulky → Směnárna block uses. Nothing new is fetched or persisted server-side.
+  - **The 5000 pool is what the user already holds**, so the ideal composition can
+    never use more 5000s than are in hand. That is a deliberate guarantee, not a
+    side effect: `need ≤ have` for that denomination, so `chybí` is always empty
+    there and the section can never tell anyone to *acquire* a 5000 note.
+    Preserve this if you touch the call.
+  - Denominations are cut at 10 Kč (`EXCHANGE_DENOMS`, derived from `CZK_DENOMS`
+    by filter so it cannot drift from the canonical list). Safe because every
+    CELKEM is `floor10()`-ed, so `decompose()` provably never reaches 5/2/1.
+  - **Never printed.** It carries `.noPrint` and deliberately NO `printOrderN`
+    class. `.page` is a flex column in which only the three printed sections have
+    an `order`, so an unordered child falls to `order: 0` and would print *first*,
+    above everything — `.noPrint` is the only thing preventing that. Same
+    arrangement as the Walk-iny section above it.
+  - State is `localStorage` only (`recepce.summary.cash`), alongside the existing
+    range/rate/params/perShift keys. `loadCash()` filters to `EXCHANGE_DENOMS` on
+    read, because `denomTotal()` sums a record's OWN keys — a stale or hand-edited
+    entry carrying e.g. `"3000"` would otherwise inflate the held total against a
+    column that is never rendered.
+  - Only a **shortfall** warns. A per-denomination mismatch is fixed by breaking
+    larger notes; less money than the piles need cannot be. A surplus is silent.

@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { api, ApiError, errorMessage, type RequestOptions } from "@/lib/api";
 import { HOTELS, type HotelSlug } from "@/lib/hotels";
+import { CZK_DENOMS, decompose, decomposeAll, sumCounts, denomTotal } from "@/lib/denominations";
 import Button from "@/components/Button";
 import IconButton from "@/components/IconButton";
 import ConfirmModal from "@/components/ConfirmModal";
@@ -65,6 +66,17 @@ const LS_RANGE = "recepce.summary.range";
 const LS_RATE = "recepce.summary.rate";
 const LS_PARAMS = "recepce.summary.params";
 const LS_PERSHIFT = "recepce.summary.perShift";
+const LS_CASH = "recepce.summary.cash";
+
+// Denominations the Směna nominálů section works in. Derived from the shared
+// CZK_DENOMS rather than re-typed, so it can never drift from the canonical list
+// (there are already four hand-synced copies of that list in this repo).
+//
+// Cut at 10 Kč on purpose: every CELKEM is floor10()-ed, so a pile can genuinely
+// need a 20 or a 10 but the 5/2/1 coins below are unreachable — decompose() would
+// return zero for them in every possible case, and three permanently empty
+// columns are just noise.
+const EXCHANGE_DENOMS = CZK_DENOMS.filter((d) => Number(d) >= 10);
 
 const WALKIN_PROVISION_RATE = 0.1; // 10 % of the CZK-converted walk-in total.
 
@@ -185,6 +197,25 @@ function loadParams(): Record<HotelSlug, HotelParams> {
   }
   return base;
 }
+/** Note counts currently in hand. Filtered to EXCHANGE_DENOMS on read so a stale
+ *  or hand-edited localStorage entry cannot smuggle a denomination the section
+ *  does not render (denomTotal sums the record's OWN keys, so a stray "3000"
+ *  would silently inflate the held total against an invisible column). */
+function loadCash(): Record<string, number> {
+  const base: Record<string, number> = {};
+  try {
+    const p = JSON.parse(window.localStorage.getItem(LS_CASH) || "null") as Record<string, unknown> | null;
+    if (p) {
+      for (const d of EXCHANGE_DENOMS) {
+        const n = Math.floor(Number(p[d]));
+        if (Number.isFinite(n) && n > 0) base[d] = n;
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return base;
+}
 function loadPerShift(): Record<HotelSlug, number> {
   const base = zeroNums();
   try {
@@ -204,6 +235,8 @@ export default function RecepceSummaryPage() {
   const [params, setParams] = useState<Record<HotelSlug, HotelParams>>(loadParams);
   // Hand-entered per-shift value per hotel — feeds the Počet směn Kč shares.
   const [perShift, setPerShift] = useState<Record<HotelSlug, number>>(loadPerShift);
+  // Notes physically in hand, for the Směna nominálů section at the page bottom.
+  const [cash, setCash] = useState<Record<string, number>>(loadCash);
 
   const [data, setData] = useState<SummaryResponse | null>(null);
   const [provizeMinus, setProvizeMinus] = useState<ProvizeMinusEntry[]>([]);
@@ -386,6 +419,13 @@ export default function RecepceSummaryPage() {
       /* ignore */
     }
   }, [perShift]);
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(LS_CASH, JSON.stringify(cash));
+    } catch {
+      /* ignore */
+    }
+  }, [cash]);
 
   function setParam(slug: HotelSlug, key: keyof HotelParams, value: number) {
     setParams((prev) => ({ ...prev, [slug]: { ...prev[slug], [key]: value } }));
@@ -463,6 +503,98 @@ export default function RecepceSummaryPage() {
     return { taxi, walkinProv, soucetHotel, shiftMoneyByHotel, empTotal, minusTotal, shiftsTotal };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, rate, params, perShift, provizeMinus]);
+
+  // ── Směna nominálů (screen only) ────────────────────────────────────────────
+  //
+  // "Which notes must I obtain so I can hand every receptionist their CELKEM as a
+  // physical pile?" Each target is decomposed into the fewest notes (Tabulky →
+  // Směnárna uses the same helper) and summed into `potřebuji`. Deliberately NOT
+  // memoised — employeeTotal() closes over perShift, minusByEmp and rate, so a
+  // dependency list here would be a third place to keep those in sync, and the
+  // input is a handful of rows.
+  //
+  // ⚠️ Why this is NOT a plain `need − have` delta like the Směnárna panel it is
+  // modelled on. There, both sides have the SAME total value (the exchange office
+  // hands over exactly the money that is owed), so a signed delta describes a
+  // genuine swap. Here the holdings are usually WORTH MORE than the payouts, and
+  // a plain delta turned "I hold six 2000s and need four" into "hand back two
+  // 2000s" against nothing received — a pure loss.
+  //
+  // So the give side is BOUNDED: hand over only as much spare as is needed to
+  // fund the missing notes, and take the overshoot back as change. Both columns
+  // of the resulting list then balance in value, which is exactly what makes the
+  // Směnárna presentation correct again.
+  //
+  // ⚠️ The 5000 pool passed to decomposeAll is the number of 5000s ALREADY HELD,
+  // so the ideal composition can never call for more 5000s than are in hand.
+  const cashPiles = emps
+    .map((e) => ({ key: e.employeeId, amount: employeeTotal(e) }))
+    .filter((p) => p.amount > 0);
+  const cashNeedCounts = sumCounts(decomposeAll(cashPiles, cash["5000"] ?? 0));
+  const cashNeedTotal = denomTotal(cashNeedCounts);
+  const cashHaveTotal = denomTotal(cash);
+
+  // What is short, and what is spare. For any one denomination only one can be
+  // non-zero, so these two never overlap.
+  const cashMissing: Record<string, number> = {};
+  const cashSurplus: Record<string, number> = {};
+  for (const d of EXCHANGE_DENOMS) {
+    const need = cashNeedCounts[d] ?? 0;
+    const have = cash[d] ?? 0;
+    if (need > have) cashMissing[d] = need - have;
+    else if (have > need) cashSurplus[d] = have - need;
+  }
+  const cashMissingValue = denomTotal(cashMissing);
+
+  // Pick the spare notes to hand over: biggest first, taking only whole notes
+  // that still fit inside what is owed.
+  const cashGive: Record<string, number> = {};
+  let cashRest = cashMissingValue;
+  for (const d of EXCHANGE_DENOMS) {
+    const v = Number(d);
+    const spare = cashSurplus[d] ?? 0;
+    if (!spare || cashRest < v) continue;
+    const take = Math.min(spare, Math.floor(cashRest / v));
+    if (take > 0) {
+      cashGive[d] = take;
+      cashRest -= take * v;
+    }
+  }
+  // The remainder is now smaller than every note still spare, so cover it with
+  // one more note (the smallest that covers it) and let the difference come back
+  // as change. Repeats only while spare notes remain — if they run out, the
+  // leftover `cashRest` is a genuine money shortfall, reported separately below.
+  while (cashRest > 0) {
+    const spareLeft = EXCHANGE_DENOMS.filter((d) => (cashSurplus[d] ?? 0) > (cashGive[d] ?? 0));
+    if (spareLeft.length === 0) break;
+    const pick = [...spareLeft].reverse().find((d) => Number(d) >= cashRest) ?? spareLeft[0];
+    cashGive[pick] = (cashGive[pick] ?? 0) + 1;
+    cashRest -= Number(pick);
+  }
+  const cashGiveValue = denomTotal(cashGive);
+  // Overshoot returns as change. Pool 0 on purpose: change is never paid out in
+  // 5000s, matching the rule that we never exchange UP to a 5000.
+  const cashChangeBack =
+    cashGiveValue > cashMissingValue ? decompose(cashGiveValue - cashMissingValue, 0).counts : {};
+  /** Signed, and balanced in value: positive = receive, negative = hand over. */
+  const cashChanges = EXCHANGE_DENOMS.map((d) => ({
+    denom: d,
+    delta: (cashMissing[d] ?? 0) + (cashChangeBack[d] ?? 0) - (cashGive[d] ?? 0),
+  })).filter((c) => c.delta !== 0);
+  // Only a SHORTFALL of MONEY is an error. A per-denomination shortage is fixed
+  // by breaking bigger notes you already hold; less money than the piles need
+  // cannot be. A surplus is never a problem.
+  const cashShortfall = cashHaveTotal > 0 && cashNeedTotal > cashHaveTotal ? cashNeedTotal - cashHaveTotal : 0;
+
+  function setCashCount(denom: string, raw: string) {
+    const n = Math.floor(Number(raw));
+    setCash((prev) => {
+      const next = { ...prev };
+      if (!Number.isFinite(n) || n <= 0) delete next[denom];
+      else next[denom] = n;
+      return next;
+    });
+  }
 
   // ── Provize minus CRUD ──────────────────────────────────────────────────────
   function requestDeleteMinus(entry: ProvizeMinusEntry) {
@@ -824,6 +956,116 @@ export default function RecepceSummaryPage() {
                   </tbody>
                 </table>
               </div>
+            )}
+          </section>
+
+          {/* ── Směna nominálů (screen bottom, NEVER printed) ──────────────────
+              No printOrderN class ON PURPOSE: .page is a flex column and only
+              the three printed sections carry an order, so an unordered child
+              would fall to order:0 and print FIRST, above everything. .noPrint
+              is what keeps it off the sheet — same as Walk-iny above. */}
+          <section className={`${styles.section} ${styles.noPrint}`}>
+            <h2 className={styles.sectionTitle}>Směna nominálů</h2>
+            <div className={styles.denomLayout}>
+            <div className={styles.tableWrap}>
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th>hodnota</th>
+                    {EXCHANGE_DENOMS.map((d) => (
+                      <th key={d} className={styles.num}>
+                        {d}
+                      </th>
+                    ))}
+                    <th className={styles.num}>CELKEM</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <th>mám</th>
+                    {EXCHANGE_DENOMS.map((d) => (
+                      <td key={d} className={styles.num}>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          className={`${styles.input} ${styles.inputNumber} ${styles.paramInput}`}
+                          value={cash[d] ?? ""}
+                          onChange={(e) => setCashCount(d, e.target.value)}
+                          aria-label={`Mám ${d} Kč`}
+                        />
+                      </td>
+                    ))}
+                    <td className={`${styles.num} ${styles.strong}`}>{money(cashHaveTotal)}</td>
+                  </tr>
+                  <tr>
+                    <th>potřebuji</th>
+                    {EXCHANGE_DENOMS.map((d) => (
+                      <td key={d} className={styles.num}>
+                        {cashNeedCounts[d] || ""}
+                      </td>
+                    ))}
+                    <td className={`${styles.num} ${styles.strong}`}>{money(cashNeedTotal)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {/* Note-by-note swap, laid out like the Tabulky → Směnárna panel.
+                Both columns balance in value because the give side is bounded by
+                what is actually missing. */}
+            <div className={styles.changesPanel}>
+              <table className={styles.changesTable}>
+                <thead>
+                  <tr>
+                    <th colSpan={2}>Změny nominálů</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cashChanges.length === 0 ? (
+                    <tr>
+                      <td colSpan={2} className={styles.changesEmpty}>
+                        {cashHaveTotal === 0 ? "Zadejte řádek mám" : "Složení sedí"}
+                      </td>
+                    </tr>
+                  ) : (
+                    cashChanges.map((c) => (
+                      <tr key={c.denom}>
+                        <th className={styles.changesDenom}>{c.denom}</th>
+                        <td className={c.delta > 0 ? styles.changePlus : styles.changeMinus}>
+                          {c.delta > 0 ? `+${c.delta}` : c.delta}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+              {cashChanges.length > 0 && (
+                <p className={styles.changesHint}>Kladné = vyměnit za, záporné = odevzdat.</p>
+              )}
+            </div>
+            </div>
+            {cashPiles.length === 0 ? (
+              <p className={styles.muted}>
+                Zatím není co rozdělit – v období nejsou recepční s kladným součtem
+                (zkontrolujte „Na 1 směnu“ u hotelů).
+              </p>
+            ) : cashHaveTotal === 0 ? (
+              <p className={styles.muted}>
+                Zadejte, co máte u sebe, a doplní se, co doměnit. Potřeba je{" "}
+                {money(cashNeedTotal)} pro {cashPiles.length}{" "}
+                {cashPiles.length === 1 ? "recepční" : "recepčních"}.
+              </p>
+            ) : cashChanges.length === 0 ? (
+              <p className={styles.muted}>
+                Máte všechny potřebné nominály, měnit není potřeba. Přebytek si necháte.
+              </p>
+            ) : null}
+            {cashShortfall > 0 && (
+              <p className={styles.warnLine}>
+                Máte o {money(cashShortfall)} méně, než je potřeba na všechny výplaty (
+                {money(cashHaveTotal)} proti {money(cashNeedTotal)}).
+              </p>
             )}
           </section>
         </>
