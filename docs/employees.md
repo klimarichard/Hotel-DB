@@ -647,7 +647,7 @@ Three new variables in `frontend/src/lib/contractVariables.ts` (v3.5.0):
 
 | Variable | Group | Description |
 |---|---|---|
-| `{{hoursPerWeek}}` | Pracovní podmínky | Hours/week from the Nástup row (PPP) |
+| `{{hoursPerWeek}}` | Pracovní podmínky | Contracted hours/week — stored row value, else HPP → 40, PPP → 20, DPP → blank (default added v5.6.1; see [contracts.md](contracts.md#row-sourced-template-variables--probationend-date-conditionals-2026-04-29)) |
 | `{{newHoursPerWeek}}` | Dodatky | New hours/week from a "počet hodin" Dodatek |
 | `{{isDodatekHodiny}}` | Dodatky | `"ano"` when the Dodatek contains a "počet hodin" change; empty otherwise |
 
