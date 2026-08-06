@@ -65,6 +65,26 @@ Rozsah kontroly se liší podle typu smlouvy:
 
 > 🖥️ Jen rozhraní. Kontrola žije pouze v prohlížeči (`frontend/src/lib/minWage.ts:24-36`, dialog `frontend/src/pages/EmployeeDetailPage.tsx:825-871`); na serveru žádná obdoba není. Nejde tedy o záruku, že mzda pod minimem v datech nevznikne.
 
+### Počet hodin týdně se do smlouvy doplní sám, pokud není u zaměstnance vyplněn
+
+Pole **Počet hodin týdně** se u zaměstnance vyplňuje **jen u smlouvy typu PPP** – u HPP se formulář na hodiny neptá a do dat se uloží prázdná hodnota.
+
+Proměnná `{{hoursPerWeek}}` v šabloně smlouvy proto **doplní chybějící hodnotu podle typu smlouvy**:
+
+| Typ smlouvy | Do smlouvy se vytiskne |
+|---|---|
+| HPP | uložená hodnota, jinak **40** |
+| PPP | uložená hodnota, jinak **20** |
+| DPP | nic (DPP se řídí sjednaným rozsahem a odměnou, ne týdenními hodinami) |
+
+Je-li u zaměstnance hodnota vyplněna, má vždy přednost před doplněnou.
+
+**Doplněná hodnota se nikde neukládá** – použije se pouze při vytištění smlouvy. Do evidence zaměstnance se nezapíše a **nemá vliv na mzdy**: kontrola minimální mzdy i poměrný nárok na dovolenou u PPP počítají dál z uložené hodnoty (a chybí-li, počítají s 20 hodinami jako dosud).
+
+*Pozn.:* hodnota 20 u PPP je záměrně stejná, jakou používá kontrola minimální mzdy – vytištěný úvazek a kontrola mzdy si tak neodporují.
+
+> ⚙️ Automatika. Zdroj: `frontend/src/lib/contractVariables.ts:1256-1267` (`hoursPerWeekValue`), použití na `:1192` (tištěná hodnota) a `:1297` (podklad pro Podmínku). Nedotčené výpočty mezd: `frontend/src/lib/minWage.ts:24-36`, `functions/src/services/payrollCalculator.ts:274-277`.
+
 ---
 
 ## Směny

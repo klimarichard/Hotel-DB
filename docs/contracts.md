@@ -85,7 +85,11 @@ Empty / unknown nationality is treated as foreign because the foreign branch typ
 Four plain variables sourced from the employment row are exposed in the template variable picker (under "Pracovní podmínky"):
 - `{{workLocation}}` / `{{probationPeriod}}` — free-form strings stored on the row.
 - `{{signingDate}}` — raw ISO; `resolveVariables` formats it with the shared `formatDateCZ` helper, so it lands in the rendered contract as "DD. MM. YYYY".
-- `{{hoursPerWeek}}` (v3.5.0) — effective hours per week from the PPP Nástup row (the `hoursPerWeek` field, absent for HPP/DPP). Used in PPP contracts to state the contracted fraction ("Počet hodin týdně (PPP)" in the picker).
+- `{{hoursPerWeek}}` (v3.5.0; defaulted since v5.7.0) — contracted hours per week. A stored `hoursPerWeek` on the effective employment row always wins; when there is none, `hoursPerWeekValue()` falls back by contract type: **HPP → 40**, **PPP → 20**, DPP → blank. The picker label was **"Počet hodin týdně (PPP)"** until v5.7.0 and is now just "Počet hodin týdně" — the variable is no longer PPP-specific.
+  - The fallback exists because the employee form persists `hoursPerWeek` **only** for PPP rows and writes `null` for HPP (`EmployeeDetailPage.tsx`, the Nástup payload), so before v5.7.0 the variable rendered blank on every HPP contract — and, since no production row had ever been given a value, on PPP ones too.
+  - The 20 for PPP is deliberately the same half-time assumption `minWageThreshold` makes, so the printed figure and the minimum-wage check agree.
+  - ⚠️ **Presentation only.** The default is never written back to the employment row: `row.hoursPerWeek` drives the payroll minimum-wage threshold and the PPP vacation proration, and materialising 40/20 there would move payroll figures. Those call sites read the stored row directly.
+  - `hoursPerWeekValue()` is shared by `resolveVariables` (formatted) and `resolveComparableRaw` (typed) — resolving it in only one would let the printed value and a "Podmínka" built on the same variable disagree.
 
 Four derived conditional flags drive `{{#if}}` blocks for the common branches:
 - `hasProbation` / `noProbation` — `noProbation` is true when the probation string is empty, `"0"`, `"0 měsíců"`, or otherwise contains no non-zero digit (heuristic: `/[1-9]/.test(probationPeriod)`). Anything with a real number is `hasProbation`.
