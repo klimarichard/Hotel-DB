@@ -28,6 +28,12 @@ Implementation notes for the Phase 5 Shift Planner: the shift expression parser,
 
 ## Shift Planner — Additional Notes
 
+### Remaining-vacation badge (v5.7.0)
+
+A read-only pill at the right edge of the frozen name column, on the same gate as the gap badge below (`plan.status === "closed"` + `shifts.counterTable.view`) — closed is the state in which *next* month's plan is being built, which is when "how much leave does this person still have?" gets asked. It shows the employee's vacation balance **entering the plan's month**, projected past the ledger over every month whose payroll is not locked yet, so it already counts the leave the current month is consuming. Red when negative; blank for DPP and for anyone with no ledger for the year.
+
+`GET /shifts/vacation-remaining?year&month` returns `{ values, projectedMonths }` for the plan's own employees. The figure, the projection rule and the reason it cannot be derived from shift cells are documented once, with the ledger: [Employees — Projected remaining balance](employees.md#projected-remaining-balance--shift-plan--payroll-badges-v570).
+
 ### Previous-month gap badge (v4.13.0)
 
 A read-only badge over the **1st-of-month cell** of every employee row, shown **only** when `plan.status === "closed"` and only to holders of `shifts.counterTable.view`. It says how that employee's **previous** month ended: negative = they were working into the month end (`|n|` consecutive worked days, so `-2` = worked the last two), positive = they were off (`n` consecutive non-worked days before the 1st), `"N/A"` = unknown.

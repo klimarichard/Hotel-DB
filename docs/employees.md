@@ -790,6 +790,7 @@ There is deliberately **no self `PATCH` counterpart** — editing a vacation bal
 `feedVacationLedgerOnLock(periodRef, year, month, uid)` walks every entry in the period and writes `upsertLedgerMonth(..., source: "payroll-lock")` with the entry's **effective** vacation hours:
 
 ```ts
+// effectiveEntryVacationHours(entry) in services/vacationLedger.ts
 const eff = e.overrides?.vacationHours
   ?? e.autoOverrides?.vacationHours
   ?? e.vacationHours
@@ -798,7 +799,32 @@ const eff = e.overrides?.vacationHours
 
 This is deliberately the **same override precedence the payroll UI displays** (manual override, then the Nemoc/sick-leave auto-override, then the raw computed value) — reading `vacationHours` alone would misreport anyone whose sick-leave cascade adjusted their vacation hours for the period. Payroll-computation detail for that cascade lives only in the local `payroll.md`, not here.
 
+Since v5.7.0 that expression is the exported `effectiveEntryVacationHours(entry)` rather than an inline literal, because the projected-balance feature below has to predict exactly what this writes. The `??` chain is load-bearing and unit-tested (`vacationLedger.test.ts`): with `||`, an override of **zero** — "this person took no leave after all" — would fall through to the computed figure and keep deducting hours nobody spent, and the wrong value would land in the stored ledger, not just on a screen.
+
 The feed is **best-effort**: it runs inside a `try/catch` and a failure is logged to the server console but never blocks or rolls back the lock itself, because a payroll period must be lockable even if the ledger write has a transient problem. A separate `writeAudit` entry (`event: "vacation.ledger.fromPayrollLock"`, `extra: { source: "payroll-lock", employees: n }`) records how many entries were fed.
+
+### Projected remaining balance — shift plan + payroll badges (v5.7.0)
+
+The stored Zůstatek always trails reality: the ledger only learns a month's čerpáno when that month's payroll period is **locked**, so in August it still reflects the end of July. A manager building the September plan needs the figure that already accounts for August, so both grids show a **projected** balance instead of the raw ledger one.
+
+`projectedRemainingHours({ employeeIds, year, throughMonth, knownPeriods? })` in `services/vacationLedger.ts` starts from `remainingHours()` and walks months `1..throughMonth`, subtracting `effectiveEntryVacationHours(entry)` from that month's payroll period for every month **absent from the ledger**. Returns `{ values: Record<employeeId, number | null>, projectedMonths: number[] }`.
+
+Three decisions worth keeping:
+
+- **Presence in `months[]` is the test for "already counted", not the period's `locked` flag.** `remainingHours()` subtracts `Σ months`, so the ledger's own key set *is* the list of already-deducted months. Testing `locked` instead would double-count a month typed in by hand or arriving from the AVENSIO seed, and would miss a month whose best-effort lock feed failed.
+- **Vacation is never read from shift cells.** There is no "D" cell to count — `payrollCalculator` derives vacation as *(úvazek-prorated target − worked hours)*, so an unlocked month's figure exists **only** on its payroll entry. A month with no payroll period (plan never published) contributes nothing; `projectedMonths` reports what was actually folded in, and both badge tooltips name those months so the number isn't read as settled.
+- **`null`, never `0`, when the year has no ledger or Nárok was never set.** The badge then renders nothing — a blank is honest, a fabricated zero gets planned against.
+
+Cost control: a month whose ledger entry exists for *every* employee in the set is skipped without reading the period at all, so a September plan normally reads one month of entries, not eight.
+
+| Surface | Endpoint | Gate | `throughMonth` | Boundary |
+|---|---|---|---|---|
+| Shift plan row (**closed** plans only) | `GET /api/shifts/vacation-remaining?year&month` | `shifts.counterTable.view` | `month − 1` | balance **entering** the plan month — the budget being spent while the grid is filled, so it must not move as you fill it. Its own period doesn't exist yet anyway (periods are built on publish). |
+| Payroll row, beside the contract badge | `GET /api/payroll/periods/:id/vacation-remaining` | `nav.payroll.view` | `month` | balance **after** this month, so locking the period does not move the number: before lock it is projected from the entry, after lock it is read from the ledger — the same value via the same `effectiveEntryVacationHours`. |
+
+Both reuse the gate of the page they appear on (no new permission key) and are scoped to that plan's / period's own employees. The payroll endpoint passes itself via `knownPeriods` so the badge reflects the entries on screen rather than whatever a `(year, month)` lookup resolves to. `/vacation-remaining` sits at the shifts-router root, **not** under `/plans/…`, for the same `/plans/:planId` capture reason as `/prev-month-gap`.
+
+Frontend: `ShiftGrid.tsx` (`vacationRemainingFor` / `vacationProjectedMonths` props, pill right-aligned into the frozen name column via `margin-left:auto` — no new column on an already-tight grid) and `PayrollPage.tsx`. Formatting and tooltip wording are shared in `frontend/src/lib/vacationHours.ts`, since the two badges show the same figure at two different boundaries and a wording drift would read as a data disagreement. DPP rows are skipped on both (no entitlement — `vacTarget` is 0). A failed fetch blanks the badge rather than falling back to a stale value. Both are a **second** call, never a field on the main period/plan payload, so neither grid waits on a ledger sweep to render.
 
 ### Permission — `employees.vacationBalance.manage`
 
