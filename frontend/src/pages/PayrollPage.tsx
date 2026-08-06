@@ -9,6 +9,7 @@ import PayrollRecalcModal from "./PayrollRecalcModal";
 import ConfirmModal from "@/components/ConfirmModal";
 import { employeeDisplayName, employeeSurnameFirst } from "@/lib/employeeName";
 import { escapeHtml } from "@/lib/escapeHtml";
+import { vacationRemainingLabel, vacationRemainingTitle } from "@/lib/vacationHours";
 import styles from "./PayrollPage.module.css";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -320,6 +321,15 @@ export default function PayrollPage() {
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
 
   const [period, setPeriod] = useState<PayrollPeriod | null>(null);
+  // Remaining vacation hours per employee AFTER this period's month (employeeId →
+  // hours; null = no ledger for the year). `periodId` guards against a response
+  // arriving for a month the user has already left. `projectedMonths` names the
+  // months still read from an unlocked payroll period rather than the ledger.
+  const [vacationRemaining, setVacationRemaining] = useState<{
+    periodId: string;
+    values: Record<string, number | null>;
+    projectedMonths: number[];
+  } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -351,9 +361,26 @@ export default function PayrollPage() {
         `/payroll/periods/by-month/${selectedYear}/${selectedMonth}`
       );
       setPeriod(data);
+      // Remaining vacation hours for the badge beside each name — a second call,
+      // fired after the grid has its data, because it reads every employee's
+      // ledger plus any still-unlocked earlier period and the table must not wait
+      // on it. Tagged with the period id so a slow response from the month you
+      // just navigated away from cannot paint stale numbers onto this one.
+      if (data) {
+        api
+          .get<{ values: Record<string, number | null>; projectedMonths: number[] }>(
+            `/payroll/periods/${data.id}/vacation-remaining`
+          )
+          .then((r) => setVacationRemaining({ periodId: data.id, ...r }))
+          // Blank beats wrong: a balance nobody can trust should not be shown.
+          .catch(() => setVacationRemaining(null));
+      } else {
+        setVacationRemaining(null);
+      }
     } catch (e) {
       setError((e as Error).message ?? "Chyba při načítání.");
       setPeriod(null);
+      setVacationRemaining(null);
     } finally {
       setLoading(false);
     }
@@ -758,12 +785,38 @@ export default function PayrollPage() {
           const sick = entry.sickLeaveHours ?? 0;
           const rowClass = isDpp ? styles.dppRow : isPpp ? styles.pppRow : "";
           const open = openRows.has(entry.id);
+          // Remaining vacation AFTER this month. Null unless the figures belong to
+          // the period on screen (a response for a month the user has left must
+          // not paint this one). DPP is skipped – it has no entitlement at all
+          // (vacTarget is 0 in the calculator), which is why its Dovolená cell
+          // shows "–" too.
+          const vacRemaining =
+            !isDpp && period && vacationRemaining?.periodId === period.id
+              ? vacationRemaining
+              : null;
+          const vacRemainingHours = vacRemaining?.values[entry.id] ?? null;
           return (
             <tr key={entry.id} className={`${rowClass} ${open ? styles.foldOpen : ""}`}>
               <td className={styles.nameCell} onClick={(e) => toggleRow(entry.id, e)}>
                 {employeeDisplayName(entry)}
                 {entry.contractType && (
                   <span className={styles.contractBadge}>{entry.contractType}</span>
+                )}
+                {vacRemaining && vacRemainingHours != null && (
+                  <span
+                    className={`${styles.vacRemainingBadge}${vacRemainingHours < 0 ? ` ${styles.vacRemainingNegative}` : ""}`}
+                    title={vacationRemainingTitle({
+                      hours: vacRemainingHours,
+                      projectedMonths: vacRemaining.projectedMonths,
+                      year: period!.year,
+                      month: period!.month,
+                      // This month's Dovolená IS deducted, so the figure does not
+                      // move when the period is locked and the ledger takes over.
+                      boundary: "after",
+                    })}
+                  >
+                    {vacationRemainingLabel(vacRemainingHours)}
+                  </span>
                 )}
                 {canHardRecompute && !isLocked && (
                   <button

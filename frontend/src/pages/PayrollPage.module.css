@@ -356,6 +356,22 @@
   letter-spacing: 0.03em;
 }
 
+/* Remaining vacation hours, beside the contract-type badge. Deliberately quieter
+   than .contractBadge (no border, muted text): it is reference information for
+   planning, not an attribute of the row's identity. */
+.vacRemainingBadge {
+  display: inline-block;
+  margin-left: 0.4rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.vacRemainingNegative {
+  color: var(--color-danger);
+}
+
 /* Row tints per contract type – clearly distinguishable in both light and dark.
    PPP = blue, DPP = amber. Kept identical to EmployeesPage.module.css. */
 .pppRow {

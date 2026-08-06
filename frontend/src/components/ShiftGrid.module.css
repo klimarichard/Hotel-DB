@@ -529,6 +529,28 @@
   gap: 0.25rem;
 }
 
+/* Remaining vacation hours, closed plans only. margin-left:auto parks it at the
+   right edge of the frozen name column; flex-shrink:0 keeps it whole when a long
+   name competes for the space (the name truncates, the number never does). */
+.vacRemainingBadge {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 0.62rem;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  padding: 2px 5px;
+  border-radius: 5px;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-3);
+  border: 1px solid var(--color-border);
+}
+
+.vacRemainingNegative {
+  color: var(--color-danger);
+  border-color: var(--color-danger);
+}
+
 .modBadge {
   display: inline-flex;
   align-items: center;

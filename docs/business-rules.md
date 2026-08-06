@@ -148,6 +148,23 @@ Ukazatel je pouze informativní: nic neblokuje, do ničeho se nepočítá a v ji
 
 > ⚙️ Automatika (počítá server). Zdroj: `functions/src/routes/shifts.ts:513` (endpoint `GET /shifts/prev-month-gap`), výpočet `prevMonthGap()` na `:492`, definice „skutečné směny" `:479-482`; pravidlo pro Vedoucí `frontend/src/pages/ShiftPlannerPage.tsx:1861`, stav plánu `:385`.
 
+### Zůstatek dovolené u jména: předpokládaný, dokud nejsou mzdy uzamčené
+
+V plánu ve stavu **Uzavřený** se u každého jména vpravo zobrazuje zbývající dovolená v hodinách – kolik jí zaměstnanec má **na začátku měsíce, který plán pokrývá**. Slouží k plánování dalšího měsíce: v srpnu se sestavuje září a je potřeba vědět, s jakým zůstatkem do něj kdo vstupuje.
+
+Údaj **není** jen opsaný zůstatek z karty zaměstnance. Evidence dovolené se plní až **uzamčením mzdového období**, takže uložený zůstatek vždy zaostává o všechny dosud neuzamčené měsíce. Zobrazené číslo proto k uloženému zůstatku **připočítává předpokládanou dovolenou** z těch měsíců, jejichž mzdy ještě uzamčené nejsou. Které měsíce to byly, vypisuje popisek po najetí myší. Číslo se tedy může ještě změnit – dokud se mzdy neuzamknou, jde o odhad, ne o konečný stav.
+
+- **Dovolená se nikde nezadává jako typ směny.** Vypočítá se ve mzdách jako rozdíl mezi měsíční základnou (u zkráceného úvazku poměrně) a odpracovanými hodinami. Proto se předpoklad bere ze mzdového období, ne z rozpisu směn – a měsíc, jehož plán nebyl nikdy publikován (a mzdy tedy nevznikly), se do součtu nepromítne vůbec.
+- **Měsíc, který plán zrovna pokrývá, se neodečítá.** Je to rozpočet, který se právě rozděluje; číslo by se měnilo pod rukama při každém zápisu.
+- **Prázdné pole znamená „nevím", ne nulu.** Zobrazí se u zaměstnanců na **DPP** (nemají nárok na dovolenou) a u těch, kdo pro daný rok nemají v evidenci vyplněný nárok.
+- **Záporné číslo** (červeně) znamená přečerpanou dovolenou; systém ho nijak neblokuje.
+
+Ve **Mzdách** se stejný údaj zobrazuje vedle jména a typu smlouvy, ale ke **konci** zobrazeného měsíce – tedy včetně dovolené za tento měsíc. Uzamčením období se proto číslo nezmění: před uzamčením je dopočítané ze mzdové položky, po uzamčení načtené z evidence, obojí stejnou logikou.
+
+Ukazatel je pouze informativní – nic neblokuje a do žádného výpočtu nevstupuje. V plánu směn vyžaduje oprávnění **Zobrazit tabulku obsazenosti**, ve Mzdách stačí přístup na stránku Mzdy.
+
+> ⚙️ Automatika (počítá server). Zdroj: `functions/src/services/vacationLedger.ts:221` (`projectedRemainingHours()`), precedence hodnoty ze mzdové položky `:177`; endpointy `functions/src/routes/shifts.ts:609` (plán, bez vlastního měsíce) a `functions/src/routes/payroll.ts:770` (mzdy, včetně vlastního měsíce); stav plánu + oprávnění `frontend/src/pages/ShiftPlannerPage.tsx:435`; výpočet dovolené jako rozdílu základny a odpracovaných hodin `functions/src/services/payrollCalculator.ts:596`.
+
 ### Ruční rozdělení hodin směny nesmí přesáhnout 12 hodin na den a typ
 
 Klikne-li vedoucí (s příslušným oprávněním) v tabulce **Přehled obsazení** na buňku některého z osmi počítaných typů recepčních směn (DA DS DQ DK NA NS NQ NK), může zbývající hodiny 12hodinové směny **ručně přiřadit** jinému zaměstnanci – typicky když někdo odpracoval jen část směny (např. 8 z 12 hodin, zapsáno jako číslo se štítkem typu) a zbylé hodiny odsloužil někdo jiný, aniž by měl v rozpisu vlastní buňku.

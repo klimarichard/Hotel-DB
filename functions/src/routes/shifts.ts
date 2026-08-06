@@ -16,6 +16,7 @@ import {
 } from "../services/shiftCounting";
 import { snapshotShifts, deleteCollection, autoFillManagerRShifts } from "../services/planTransitions";
 import { createOrUpdatePayrollPeriod } from "../services/payrollCalculator";
+import { projectedRemainingHours } from "../services/vacationLedger";
 import {
   EmployeeNameParts,
   nameParts,
@@ -585,6 +586,56 @@ shiftsRouter.get(
     }
 
     res.json({ available: true, values });
+  }
+);
+
+/**
+ * GET /api/shifts/vacation-remaining?year=2026&month=9
+ * Remaining vacation hours per employee for the plan of that month, projected
+ * over every month whose payroll has not been locked yet (see
+ * projectedRemainingHours). Answers "how much leave can I still schedule this
+ * person?" while the next month's plan is being built.
+ *
+ * The plan's OWN month is excluded (throughMonth = month − 1): the number is the
+ * budget you are spending as you fill the grid, so it must not move while you fill
+ * it. Its payroll period does not exist yet anyway — periods are built on publish.
+ *
+ * Path is "/vacation-remaining", not nested under "/plans/…", for the same reason
+ * as "/prev-month-gap" above: "/plans/:planId" would capture it.
+ * Same gate as the prev-month gap badge (shifts.counterTable.view) and scoped to
+ * the plan's own employees, so it discloses nothing about anyone not on the grid.
+ */
+shiftsRouter.get(
+  "/vacation-remaining",
+  requireAuth,
+  requirePermission("shifts.counterTable.view"),
+  async (req: AuthRequest, res) => {
+    const year = Number(req.query.year);
+    const month = Number(req.query.month);
+    if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) {
+      res.status(400).json({ error: "year a month jsou povinné (month 1–12)." });
+      return;
+    }
+
+    const planSnap = await db()
+      .collection("shiftPlans")
+      .where("year", "==", year)
+      .where("month", "==", month)
+      .limit(1)
+      .get();
+    if (planSnap.empty) {
+      res.json({ values: {}, projectedMonths: [] });
+      return;
+    }
+
+    const employeesSnap = await planSnap.docs[0].ref.collection("planEmployees").get();
+    const employeeIds = employeesSnap.docs
+      .map((d) => (d.data() as { employeeId?: string }).employeeId)
+      .filter((id): id is string => !!id);
+
+    res.json(
+      await projectedRemainingHours({ employeeIds, year, throughMonth: month - 1 })
+    );
   }
 );
 
