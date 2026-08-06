@@ -7,7 +7,11 @@ import { requirePermission } from "../auth/permissions";
 import { createOrUpdatePayrollPeriod, getMultisportPrice, recomputeEntryForEmployee } from "../services/payrollCalculator";
 import { nameParts, preferLive, resolveEmployeeNameParts } from "../services/employeeNames";
 import { ctxFromReq, logCreate, logUpdate, logDelete, writeAudit } from "../services/auditLog";
-import { upsertLedgerMonth } from "../services/vacationLedger";
+import {
+  effectiveEntryVacationHours,
+  projectedRemainingHours,
+  upsertLedgerMonth,
+} from "../services/vacationLedger";
 import * as clock from "../services/clock";
 
 export const payrollRouter = Router();
@@ -750,6 +754,55 @@ payrollRouter.get(
   }
 );
 
+/**
+ * GET /api/payroll/periods/:id/vacation-remaining
+ * Remaining vacation hours per employee AFTER this period's month, for the badge
+ * beside each name. Deliberately a second call rather than a field on
+ * GET /periods/:id: it reads the ledger of every employee plus any still-unlocked
+ * earlier period, and the grid must not wait on that to render.
+ *
+ * `knownPeriods` pins THIS period for its own month, so the figure always reflects
+ * the entries on screen rather than whatever a (year, month) lookup resolves to.
+ * Gated exactly like the page itself (nav.payroll.view) — the ledger it summarises
+ * is already visible on the employee detail page to anyone who gets that far.
+ */
+payrollRouter.get(
+  "/periods/:id/vacation-remaining",
+  requireAuth,
+  requirePermission("nav.payroll.view"),
+  async (req: AuthRequest, res: Response) => {
+    const periodRef = db().collection("payrollPeriods").doc(req.params.id);
+    const [periodSnap, entriesSnap] = await Promise.all([
+      periodRef.get(),
+      periodRef.collection("entries").get(),
+    ]);
+    if (!periodSnap.exists) {
+      res.status(404).json({ error: "Mzdové období nebylo nalezeno." });
+      return;
+    }
+    const periodData = periodSnap.data() as { year?: number; month?: number };
+    const year = periodData.year;
+    const month = periodData.month;
+    if (year == null || month == null) {
+      res.json({ values: {}, projectedMonths: [] });
+      return;
+    }
+    const employeeIds = entriesSnap.docs.map(
+      (d) => (d.data() as { employeeId?: string }).employeeId ?? d.id
+    );
+    res.json(
+      await projectedRemainingHours({
+        employeeIds,
+        year,
+        // Inclusive: the balance answers "what is left after this month", so it
+        // does not move when the period is locked and the ledger takes over.
+        throughMonth: month,
+        knownPeriods: new Map([[month, periodRef]]),
+      })
+    );
+  }
+);
+
 // ─── GET /payroll/periods/by-month/:year/:month ───────────────────────────────
 
 payrollRouter.get(
@@ -814,11 +867,9 @@ async function feedVacationLedgerOnLock(
       autoOverrides?: Record<string, number>;
     };
     const employeeId = e.employeeId ?? d.id;
-    const eff =
-      e.overrides?.vacationHours ??
-      e.autoOverrides?.vacationHours ??
-      e.vacationHours ??
-      0;
+    // Shared with the projected-balance endpoint below, so the figure the badge
+    // predicts is byte-identical to the one this writes.
+    const eff = effectiveEntryVacationHours(e);
     await upsertLedgerMonth({
       employeeId,
       year,

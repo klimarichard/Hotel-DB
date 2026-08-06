@@ -162,6 +162,156 @@ export async function upsertLedgerMonth(params: {
   );
 }
 
+/**
+ * The vacation figure a payroll entry actually reports, in the SAME precedence
+ * the payroll grid renders: manual override → Nemoc auto-override → computed
+ * `vacationHours`. Reading the raw field alone would misreport anyone with a
+ * sick-leave cascade.
+ *
+ * Shared by the lock feeder (what gets WRITTEN into the ledger, routes/payroll.ts)
+ * and by `projectedRemainingHours` below (what the ledger is GOING to receive).
+ * That sharing is the whole point: the projected balance shown while a month is
+ * still unlocked must equal the figure that lands in the ledger when it locks, or
+ * the number would visibly jump on lock and read as a bug.
+ */
+export function effectiveEntryVacationHours(entry: {
+  vacationHours?: number;
+  overrides?: Record<string, number>;
+  autoOverrides?: Record<string, number>;
+}): number {
+  return (
+    entry.overrides?.vacationHours ??
+    entry.autoOverrides?.vacationHours ??
+    entry.vacationHours ??
+    0
+  );
+}
+
+export interface ProjectedRemaining {
+  /** employeeId → remaining hours, or null when the year has no ledger at all. */
+  values: Record<string, number | null>;
+  /** Months (1–12) whose figures came from an unlocked payroll period, not the ledger. */
+  projectedMonths: number[];
+}
+
+/**
+ * Remaining vacation hours per employee, PROJECTED forward over the months the
+ * ledger has not been fed yet.
+ *
+ * Why a projection is needed at all: the ledger only learns a month's čerpáno when
+ * that month's payroll period is LOCKED (`feedVacationLedgerOnLock`). So in August,
+ * planning September, the stored Zůstatek is still the end-of-July figure — it
+ * ignores the vacation August is already consuming. This walks months 1..
+ * `throughMonth` and, for every month absent from the ledger, subtracts the
+ * effective vacation hours of that month's payroll period entry instead.
+ *
+ * Presence in `months` is the test for "already counted" — not the period's lock
+ * flag — because that is exactly what `remainingHours` subtracted. A month fed by
+ * hand or by the AVENSIO seed therefore also counts once, never twice.
+ *
+ * Vacation is not planned in the shift grid: `payrollCalculator` derives it as
+ * (úvazek-prorated target − worked hours), so the payroll entry is the ONLY place
+ * an unlocked month's figure exists. A month with no payroll period (plan never
+ * published) contributes nothing — `projectedMonths` reports what was actually
+ * folded in so the UI can say so rather than implying full coverage.
+ *
+ * `null` for an employee whose ledger year does not exist, or whose Nárok was never
+ * set — an honest "–" beats a fabricated 0.
+ */
+export async function projectedRemainingHours(params: {
+  employeeIds: string[];
+  year: number;
+  /** Inclusive upper bound, 0–12. 0 = ledger only, no projection. */
+  throughMonth: number;
+  /**
+   * Period refs the caller already holds, by month. Lets the payroll endpoint
+   * project its OWN period rather than re-resolving it by (year, month) query.
+   */
+  knownPeriods?: Map<number, admin.firestore.DocumentReference>;
+}): Promise<ProjectedRemaining> {
+  const { employeeIds, year, throughMonth, knownPeriods } = params;
+  const values: Record<string, number | null> = {};
+  const projectedMonths: number[] = [];
+  const ids = [...new Set(employeeIds)].filter(Boolean);
+  if (ids.length === 0) return { values, projectedMonths };
+
+  // Ledger per employee. getAll is chunked — a plan can carry more employees than
+  // is comfortable in a single batch read.
+  const ledgerMonths = new Map<string, Record<string, LedgerMonth>>();
+  const running = new Map<string, number>();
+  for (let i = 0; i < ids.length; i += 100) {
+    const chunk = ids.slice(i, i + 100);
+    const snaps = await db().getAll(...chunk.map((id) => ledgerRef(id, year)));
+    snaps.forEach((snap, idx) => {
+      const employeeId = chunk[idx];
+      if (!snap.exists) {
+        values[employeeId] = null;
+        return;
+      }
+      const data = snap.data() as Record<string, unknown>;
+      const months = (data.months as Record<string, LedgerMonth>) ?? {};
+      const rem = remainingHours({
+        priorYearHours: (data.priorYearHours as number | null) ?? null,
+        currentYearHours: (data.currentYearHours as number | null) ?? null,
+        paidOutHours: (data.paidOutHours as number | null) ?? null,
+        months,
+      });
+      if (rem == null) {
+        values[employeeId] = null;
+        return;
+      }
+      ledgerMonths.set(employeeId, months);
+      running.set(employeeId, rem);
+    });
+  }
+  if (running.size === 0) return { values, projectedMonths };
+
+  for (let month = 1; month <= Math.min(12, throughMonth); month++) {
+    // Only employees still missing THIS month need the period read at all. In
+    // practice every earlier month is locked, so this skips straight to the one
+    // or two open months instead of reading a year of entries.
+    const pending = new Set(
+      [...running.keys()].filter((id) => !(String(month) in (ledgerMonths.get(id) ?? {})))
+    );
+    if (pending.size === 0) continue;
+
+    let periodRef = knownPeriods?.get(month) ?? null;
+    if (!periodRef) {
+      const snap = await db()
+        .collection("payrollPeriods")
+        .where("year", "==", year)
+        .where("month", "==", month)
+        .limit(1)
+        .get();
+      if (snap.empty) continue;
+      periodRef = snap.docs[0].ref;
+    }
+
+    const entriesSnap = await periodRef.collection("entries").get();
+    let folded = false;
+    for (const d of entriesSnap.docs) {
+      const e = d.data() as {
+        employeeId?: string;
+        vacationHours?: number;
+        overrides?: Record<string, number>;
+        autoOverrides?: Record<string, number>;
+      };
+      const employeeId = e.employeeId ?? d.id;
+      if (!pending.has(employeeId)) continue;
+      running.set(employeeId, running.get(employeeId)! - effectiveEntryVacationHours(e));
+      folded = true;
+    }
+    if (folded) projectedMonths.push(month);
+  }
+
+  for (const [employeeId, rem] of running) {
+    // Two decimals: the inputs are hour figures, and float subtraction otherwise
+    // surfaces as 127.99999999999999 in the badge.
+    values[employeeId] = Math.round(rem * 100) / 100;
+  }
+  return { values, projectedMonths };
+}
+
 /** Set an annual field (Loňská / Letošní / proplaceno). null clears it. */
 export async function setLedgerAnnual(params: {
   employeeId: string;
