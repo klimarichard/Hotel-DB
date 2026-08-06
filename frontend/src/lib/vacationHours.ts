@@ -16,6 +16,16 @@ export function fmtVacationHours(hours: number): string {
 }
 
 /**
+ * Spelled-out variant for the payroll grid, where the badge sits in a row of
+ * numbers that all mean something else — a bare "96 h" there would read as one
+ * more payroll column. The shift plan keeps the bare figure: its badge stands
+ * alone beside the name, and the column is narrow.
+ */
+export function vacationRemainingLabel(hours: number): string {
+  return `zbývá ${fmtVacationHours(hours)} dovolené`;
+}
+
+/**
  * Badge tooltip. `boundary` says which side of the month the figure sits on:
  *   "before" — shift plan: the balance the employee ENTERS the month with, i.e.
  *              the budget you are spending as you fill the grid.

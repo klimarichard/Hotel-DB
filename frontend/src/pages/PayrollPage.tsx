@@ -9,7 +9,7 @@ import PayrollRecalcModal from "./PayrollRecalcModal";
 import ConfirmModal from "@/components/ConfirmModal";
 import { employeeDisplayName, employeeSurnameFirst } from "@/lib/employeeName";
 import { escapeHtml } from "@/lib/escapeHtml";
-import { fmtVacationHours, vacationRemainingTitle } from "@/lib/vacationHours";
+import { vacationRemainingLabel, vacationRemainingTitle } from "@/lib/vacationHours";
 import styles from "./PayrollPage.module.css";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -815,7 +815,7 @@ export default function PayrollPage() {
                       boundary: "after",
                     })}
                   >
-                    {fmtVacationHours(vacRemainingHours)}
+                    {vacationRemainingLabel(vacRemainingHours)}
                   </span>
                 )}
                 {canHardRecompute && !isLocked && (
