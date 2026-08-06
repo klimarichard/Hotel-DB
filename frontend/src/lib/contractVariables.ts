@@ -1002,7 +1002,7 @@ export const VARIABLE_GROUPS: { group: string; vars: VariableDef[] }[] = [
       { key: "startDate", label: "Datum nástupu" },
       { key: "endDate", label: "Datum ukončení" },
       { key: "workLocation", label: "Místo výkonu práce" },
-      { key: "hoursPerWeek", label: "Počet hodin týdně (PPP)" },
+      { key: "hoursPerWeek", label: "Počet hodin týdně" },
       { key: "probationPeriod", label: "Zkušební doba" },
       { key: "signingDate", label: "Datum podpisu" },
       { key: "originalSigningDate", label: "Datum podpisu původní smlouvy" },
@@ -1084,7 +1084,9 @@ export interface EmployeeData {
   // DPP fields
   agreedWorkScope?: string;
   agreedReward?: string | number;
-  // Part-time weekly hours (PPP). Rendered on the PPP contract template.
+  // Contracted weekly hours. Only ever STORED for PPP rows (the employee form
+  // writes null for HPP); hoursPerWeekValue() supplies the HPP/PPP default when
+  // absent, so {{hoursPerWeek}} renders on both contract types.
   hoursPerWeek?: string | number;
   // Dodatek fields – populated when generating "změna smlouvy" contracts.
   // dodatekEffectiveDate is raw ISO; resolveVariables formats it.
@@ -1187,7 +1189,7 @@ export function resolveVariables(
     hasEndDate: hasEndDate ? "ano" : "",
     agreedWorkScope: str(employee.agreedWorkScope),
     agreedReward: formatSalaryCZ(employee.agreedReward),
-    hoursPerWeek: str(employee.hoursPerWeek),
+    hoursPerWeek: str(hoursPerWeekValue(employee)),
     ...(() => {
       const changes = employee.dodatekChanges ?? [];
       const findValue = (kind: string) =>
@@ -1235,6 +1237,36 @@ function toNumber(v: unknown): number | null {
 }
 
 /**
+ * Contracted weekly hours for the {{hoursPerWeek}} template variable, as a
+ * number or null. Shared by resolveVariables (formatted) and
+ * resolveComparableRaw (typed) so the printed value and any "Podmínka" built
+ * on it can never disagree.
+ *
+ * A stored employment-row value always wins. HPP and PPP rows without one fall
+ * back to the full-time week (40) resp. the same half-time assumption payroll
+ * already makes (20 — see minWageThreshold in lib/minWage.ts). This matters
+ * because the employee form persists hoursPerWeek ONLY for PPP and writes null
+ * for HPP, so in practice every HPP row takes the default. DPP has no weekly-
+ * hours concept (it uses agreedWorkScope / agreedReward) and stays null → "".
+ *
+ * ⚠️ Presentation only — never write this back onto the employment row.
+ * row.hoursPerWeek drives the payroll minimum-wage threshold, so materialising
+ * a default there would change payroll figures.
+ */
+function hoursPerWeekValue(employee: EmployeeData): number | null {
+  const stored = toNumber(employee.hoursPerWeek);
+  if (stored != null) return stored;
+  switch (String(employee.contractType ?? "").trim().toUpperCase()) {
+    case "HPP":
+      return 40;
+    case "PPP":
+      return 20;
+    default:
+      return null;
+  }
+}
+
+/**
  * Raw, typed values for the comparable built-in variables (COMPARABLE_VARS),
  * used to evaluate derived conditions. Dates stay ISO YYYY-MM-DD, numbers stay
  * numbers, missing values are null. Kept parallel to resolveVariables but
@@ -1262,7 +1294,7 @@ export function resolveComparableRaw(
     today: todayIso,
     salary: toNumber(employee.salary),
     agreedReward: toNumber(employee.agreedReward),
-    hoursPerWeek: toNumber(employee.hoursPerWeek),
+    hoursPerWeek: hoursPerWeekValue(employee),
     newEndDate: toIsoDate(changeVal("délka smlouvy")),
     newSalary: toNumber(changeVal("mzda")),
     newHoursPerWeek: toNumber(changeVal("počet hodin")),
