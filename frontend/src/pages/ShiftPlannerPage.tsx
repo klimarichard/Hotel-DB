@@ -190,6 +190,12 @@ export default function ShiftPlannerPage() {
     available: boolean;
     values: Record<string, number | null>;
   } | null>(null);
+  // Remaining vacation hours per employee (closed plans only) + the months whose
+  // figures came from an unlocked payroll period rather than the ledger.
+  const [vacationRemaining, setVacationRemaining] = useState<{
+    values: Record<string, number | null>;
+    projectedMonths: number[];
+  } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showAddEmployee, setShowAddEmployee] = useState(false);
@@ -415,6 +421,40 @@ export default function ShiftPlannerPage() {
       cancelled = true;
     };
   }, [showPrevGap, selectedYear, selectedMonth]);
+
+  // Remaining vacation hours per employee, for the badge next to the name. Same
+  // gate as the gap badge above (closed plans, counter-table holders) but its own
+  // const so either can move without dragging the other. Closed is the state in
+  // which NEXT month's plan is being built, which is when "how much leave does
+  // this person still have?" is the question being asked.
+  //
+  // The figure is projected past the ledger over any month whose payroll is not
+  // locked yet — see projectedRemainingHours in functions. `projectedMonths` names
+  // the months that projection actually covered, so the tooltip can say so instead
+  // of implying the number is settled.
+  const showVacationRemaining = plan?.status === "closed" && can("shifts.counterTable.view");
+  useEffect(() => {
+    if (!showVacationRemaining) {
+      setVacationRemaining(null);
+      return;
+    }
+    let cancelled = false;
+    api
+      .get<{ values: Record<string, number | null>; projectedMonths: number[] }>(
+        `/shifts/vacation-remaining?year=${selectedYear}&month=${selectedMonth}`
+      )
+      .then((r) => {
+        if (!cancelled) setVacationRemaining(r);
+      })
+      // A failure leaves every badge blank rather than showing a stale or zeroed
+      // balance — an absent number is honest, a wrong one gets planned against.
+      .catch(() => {
+        if (!cancelled) setVacationRemaining(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [showVacationRemaining, selectedYear, selectedMonth]);
 
   // ── Rozdělení směny (hour splits) ──────────────────────────────────────────
   // Leftover hours of a shift (a tagged numeric cell credits only its own hours,
@@ -1948,6 +1988,18 @@ export default function ShiftPlannerPage() {
                     }
                   : undefined
               }
+              vacationRemainingFor={
+                showVacationRemaining && vacationRemaining
+                  ? (emp) => {
+                      // DPP has no vacation entitlement at all (vacTarget is 0 in
+                      // the payroll calculator), so a balance would be meaningless
+                      // — and those employees have no ledger to read anyway.
+                      if (emp.contractType === "DPP") return null;
+                      return vacationRemaining.values[emp.employeeId] ?? null;
+                    }
+                  : undefined
+              }
+              vacationProjectedMonths={vacationRemaining?.projectedMonths}
               showModCounts={
                 // "created" was added back deliberately, partly undoing the "at most
                 // one guide line per row" rule from the compact-rows pass: the MOD

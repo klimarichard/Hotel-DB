@@ -508,6 +508,18 @@ function payrollFixture(
     if (scenario === "payroll-empty") return { hit: true, value: null };
     return { hit: true, value: buildDemoPayrollPeriod(Number(m[1]), Number(m[2])) };
   }
+  // Remaining-vacation badge beside each name. Keyed by the demo entry ids; the
+  // generic `{}` fallthrough below has no `values` map, and the badge would then
+  // silently never render in the tour. demo-pe-3 is DPP → deliberately absent.
+  if (/^\/payroll\/periods\/[^/]+\/vacation-remaining$/.test(clean)) {
+    return {
+      hit: true,
+      value: {
+        values: { "demo-pe-1": 96, "demo-pe-2": 48 },
+        projectedMonths: [] as number[],
+      },
+    };
+  }
   return { hit: true, value: {} };
 }
 
@@ -651,6 +663,12 @@ function shiftsFixture(
   // show N/A on every row.
   if (clean.startsWith("/shifts/prev-month-gap")) {
     return { hit: true, value: { available: false, values: {} } };
+  }
+  // Remaining-vacation badge – same story as the gap badge above: closed-plans
+  // only, so unreachable today. Declared so it cannot fall through to the `[]`
+  // default, which has no `values` map and would throw in the row renderer.
+  if (clean.startsWith("/shifts/vacation-remaining")) {
+    return { hit: true, value: { values: {}, projectedMonths: [] } };
   }
   // Any other GET under /shifts/* → empty list (safe default, no backend call).
   return { hit: true, value: [] };

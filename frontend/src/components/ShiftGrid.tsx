@@ -4,6 +4,7 @@ import type { PlanDetail, PlanEmployee, ShiftDoc, ModShiftDoc } from "../pages/S
 import { SECTION_LABELS, SECTIONS, type Section, getCzechHolidays, parseShiftExpression, getCellColor, isNightShiftType, sortSectionEmployees, SHIFT_TYPE_TAGS, typeTagToCounterKey, COUNTED_TAG_SET, FULL_SHIFT_HOURS, cellHoursForType } from "../lib/shiftConstants";
 import { modLettersByEmployeeId } from "../lib/modPersons";
 import { employeeDisplayName } from "../lib/employeeName";
+import { fmtVacationHours, vacationRemainingTitle } from "../lib/vacationHours";
 import { useTheme } from "../context/ThemeContext";
 import ShiftCell from "./ShiftCell";
 import ModCell from "./ModCell";
@@ -53,6 +54,12 @@ interface Props {
    *  "N/A" = unknown. Return null to render nothing (management rows, and every
    *  row when the plan is not closed). See prevMonthGapFor in ShiftPlannerPage. */
   prevMonthGapFor?: (emp: PlanEmployee) => string | null;
+  /** Remaining vacation hours for the badge beside the name (closed plans only).
+   *  null renders nothing — DPP, or an employee with no ledger for the year. */
+  vacationRemainingFor?: (emp: PlanEmployee) => number | null;
+  /** Months folded in from a payroll period that is not locked yet. Named in the
+   *  badge tooltip so the figure is not read as settled. */
+  vacationProjectedMonths?: number[];
   alwaysReadOnlySections?: string[];
   /** Whether the viewer holds `shifts.mod.manage`. Absent = allowed (legacy callers). */
   canEditMod?: boolean;
@@ -156,6 +163,8 @@ export default function ShiftGrid({
   onClaimFreeShift,
   onToggleDpaDay,
   prevMonthGapFor,
+  vacationRemainingFor,
+  vacationProjectedMonths,
   alwaysReadOnlySections = [],
   canEditMod = true,
   currentEmployeeId,
@@ -557,6 +566,31 @@ export default function ShiftGrid({
                             );
                           })()}
                         </div>
+                        {/* Remaining vacation hours. Right-aligned into the slack
+                            of the frozen name column (margin-left:auto) rather
+                            than a column of its own – the grid is already tight
+                            on laptops. Skipped entirely when unknown, so a blank
+                            never reads as zero. */}
+                        {vacationRemainingFor && (() => {
+                          const remaining = vacationRemainingFor(emp);
+                          if (remaining === null) return null;
+                          return (
+                            <span
+                              className={`${styles.vacRemainingBadge}${remaining < 0 ? ` ${styles.vacRemainingNegative}` : ""}`}
+                              title={vacationRemainingTitle({
+                                hours: remaining,
+                                projectedMonths: vacationProjectedMonths ?? [],
+                                year: plan.year,
+                                month: plan.month,
+                                // The plan's own month is NOT deducted — this is
+                                // the budget being spent while the grid is filled.
+                                boundary: "before",
+                              })}
+                            >
+                              {fmtVacationHours(remaining)}
+                            </span>
+                          );
+                        })()}
                         {/* Badge – vedoucí only */}
                         {section === "vedoucí" && !isEditingMod && modLetter && (
                           <span
