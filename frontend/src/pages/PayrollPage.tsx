@@ -10,6 +10,7 @@ import ConfirmModal from "@/components/ConfirmModal";
 import { employeeDisplayName, employeeSurnameFirst } from "@/lib/employeeName";
 import { escapeHtml } from "@/lib/escapeHtml";
 import { vacationRemainingLabel, vacationRemainingTitle } from "@/lib/vacationHours";
+import MonthJumpSelect, { MonthJumpItem } from "../components/MonthJumpSelect";
 import styles from "./PayrollPage.module.css";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -321,6 +322,12 @@ export default function PayrollPage() {
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
 
   const [period, setPeriod] = useState<PayrollPeriod | null>(null);
+  // Every existing payroll period, for the quick-jump picker. Deliberately a
+  // separate call from loadPeriod: the list must survive navigating to a month
+  // that has no period yet (which is when the picker is most useful), and
+  // GET /payroll/periods returns only the period documents — `entries` is a
+  // sub-collection, so each is a few hundred bytes.
+  const [periodsList, setPeriodsList] = useState<MonthJumpItem[]>([]);
   // Remaining vacation hours per employee AFTER this period's month (employeeId →
   // hours; null = no ledger for the year). `periodId` guards against a response
   // arriving for a month the user has already left. `projectedMonths` names the
@@ -387,6 +394,16 @@ export default function PayrollPage() {
   }, [selectedYear, selectedMonth]);
 
   useEffect(() => { loadPeriod(); }, [loadPeriod]);
+
+  // Refreshed whenever the selected month's period changes, so a newly created
+  // or deleted period appears in / disappears from the picker without a reload.
+  useEffect(() => {
+    api
+      .get<MonthJumpItem[]>("/payroll/periods")
+      .then(setPeriodsList)
+      // The picker is a convenience; paging with ‹ / › still works without it.
+      .catch(() => undefined);
+  }, [period?.id]);
 
   if (authLoading) return <div className={styles.state}>Načítám…</div>;
   if (!can("nav.payroll.view")) return <Navigate to="/" replace />;
@@ -993,7 +1010,14 @@ export default function PayrollPage() {
     <div>
       {/* Header */}
       <div className={styles.header}>
-        <div />
+        <MonthJumpSelect
+          items={periodsList}
+          selectedYear={selectedYear}
+          selectedMonth={selectedMonth}
+          onSelect={(y, m) => { setSelectedYear(y); setSelectedMonth(m); }}
+          ariaLabel="Přejít na mzdové období"
+          placeholder="Přejít na období…"
+        />
         <div className={styles.monthNav}>
           <button className={styles.navBtn} onClick={prevMonth}>‹</button>
           <span className={styles.monthLabel}>{MONTH_NAMES[selectedMonth - 1]} {selectedYear}</span>

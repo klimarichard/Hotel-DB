@@ -42,7 +42,9 @@ Implementation notes for the Phase 5 Shift Planner: the shift expression parser,
 
 ### Plan quick-jump dropdown + persistent DNES (v5.8.0)
 
-`ShiftPlannerPage.tsx` header. The `.header` grid is `1fr auto 1fr`; the previously-empty left slot now holds a `<select>` listing every plan the viewer can see, grouped by year (`<optgroup>`), newest first. It renders from the `plansList` state the page **already** polls every 15 s for external-change detection, so it costs no extra request. Its value is `""` (a disabled placeholder) when the selected month has no plan — a legitimate state, since you navigate to a month before creating its plan.
+`ShiftPlannerPage.tsx` header. The `.header` grid is `1fr auto 1fr`; the previously-empty left slot now holds the shared **`components/MonthJumpSelect.tsx`** — a `<select>` listing every month that exists, grouped by year (`<optgroup>`), newest first. On the shift planner it renders from the `plansList` state the page **already** polls every 15 s for external-change detection, so it costs no extra request. Its value is `""` (a disabled placeholder) when the selected month has no entry — a legitimate state, since you navigate to a month before creating its plan.
+
+The same control is on **Payroll** (see below), which is why it is a component rather than two copies. ⚠️ With no items it still renders its wrapper `<div>` and only omits the `<select>`: returning `null` would drop a child of the `1fr auto 1fr` grid and knock the centred month label off-centre.
 
 `DNES` is now always rendered and `disabled` on the current month rather than unmounted. Unmounting changed the nav row's width, which made the centred month label jump while paging.
 
