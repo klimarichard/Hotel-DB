@@ -21,6 +21,12 @@ const pad = (n: number) => String(n).padStart(2, "0");
  * wrappers. For ISO strings, uses string splitting rather than new Date()
  * to avoid timezone shifts.
  */
+/** Czech month names, nominative — for month labels and pickers, not dates. */
+export const MONTH_NAMES = [
+  "Leden", "Únor", "Březen", "Duben", "Květen", "Červen",
+  "Červenec", "Srpen", "Září", "Říjen", "Listopad", "Prosinec",
+] as const;
+
 export function formatDateCZ(input: string | Date | null | undefined): string {
   if (!input) return "";
   if (input instanceof Date) {

@@ -10,7 +10,9 @@ import ConfirmModal from "@/components/ConfirmModal";
 import { employeeDisplayName, employeeSurnameFirst } from "@/lib/employeeName";
 import { escapeHtml } from "@/lib/escapeHtml";
 import { vacationRemainingLabel, vacationRemainingTitle } from "@/lib/vacationHours";
+import { MONTH_NAMES } from "../lib/dateFormat";
 import MonthJumpSelect, { MonthJumpItem } from "../components/MonthJumpSelect";
+import MonthNav from "../components/MonthNav";
 import styles from "./PayrollPage.module.css";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -95,11 +97,6 @@ interface PayrollPeriod {
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-
-const MONTH_NAMES = [
-  "Leden", "Únor", "Březen", "Duben", "Květen", "Červen",
-  "Červenec", "Srpen", "Září", "Říjen", "Listopad", "Prosinec",
-];
 
 // Display groups for the payroll table: managers stay in their own section on
 // top; reception + porters are shown together as one section. The stored
@@ -703,15 +700,6 @@ export default function PayrollPage() {
     }
   }
 
-  function prevMonth() {
-    if (selectedMonth === 1) { setSelectedYear((y) => y - 1); setSelectedMonth(12); }
-    else setSelectedMonth((m) => m - 1);
-  }
-  function nextMonth() {
-    if (selectedMonth === 12) { setSelectedYear((y) => y + 1); setSelectedMonth(1); }
-    else setSelectedMonth((m) => m + 1);
-  }
-
   // Direct per-cell override (HODINY, NOČNÍ, SVÁTEK, SO+NE, NAVÍC, STRAVENKY,
   // DPP). Výkaz / Dovolená / Nemoc / Základ are NOT edited here – they go through
   // the balance dialog (saveBalance) so the invariant is always maintained.
@@ -1018,11 +1006,12 @@ export default function PayrollPage() {
           ariaLabel="Přejít na mzdové období"
           placeholder="Přejít na období…"
         />
-        <div className={styles.monthNav}>
-          <button className={styles.navBtn} onClick={prevMonth}>‹</button>
-          <span className={styles.monthLabel}>{MONTH_NAMES[selectedMonth - 1]} {selectedYear}</span>
-          <button className={styles.navBtn} onClick={nextMonth}>›</button>
-        </div>
+        <MonthNav
+          year={selectedYear}
+          month={selectedMonth}
+          onSelect={(y, m) => { setSelectedYear(y); setSelectedMonth(m); }}
+          today={now}
+        />
         <div />
       </div>
 

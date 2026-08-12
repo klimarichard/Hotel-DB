@@ -5,41 +5,6 @@
   margin-bottom: 1.5rem;
 }
 
-.monthNav {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-.navBtn {
-  background: none;
-  border: 1px solid var(--color-border-strong);
-  border-radius: 6px;
-  width: 2.5rem;
-  height: 2.5rem;
-  cursor: pointer;
-  font-size: 1.4rem;
-  color: var(--color-text-secondary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  line-height: 1;
-}
-
-.navBtn:hover {
-  background: var(--color-surface-4);
-  border-color: var(--color-text-subtle);
-}
-
-.monthLabel {
-  font-size: 1.75rem;
-  font-weight: 700;
-  color: var(--color-text);
-  min-width: 220px;
-  text-align: center;
-}
-
 .state {
   text-align: center;
   color: var(--color-text-muted);
@@ -776,6 +741,15 @@
    base table rules (media queries add no specificity). The header action toolbar
    also wraps instead of overflowing. See index.css for the breakpoint. */
 @media (max-width: 559.98px), (orientation: landscape) and (max-height: 480px) {
+  /* Collapse the 1fr spacers to a single centered column so the header fits
+     ~360px now that it carries both the month picker and the nav. Mirrors the
+     same rule on the shift planner; the label/gap half lives in
+     MonthNav.module.css alongside the nav itself. */
+  .header {
+    grid-template-columns: 1fr;
+    justify-items: center;
+  }
+
   /* Action toolbar (Přepočítat / Exportovat PDF / …) wraps inside the meta box
      instead of overflowing to the right. */
   .meta {
