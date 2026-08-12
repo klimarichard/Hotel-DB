@@ -628,6 +628,28 @@ export default function ShiftPlannerPage() {
     setSelectedYear(now.getFullYear());
   }
 
+  // Quick-jump dropdown over every plan the user can see. Newest first — with 30+
+  // plans after the historical import, the months people reach for are the recent
+  // ones. Empty string when the selected month has no plan (a valid state: you can
+  // navigate to a month before creating its plan), which shows the placeholder.
+  const planJumpValue = plansList.some(
+    (p) => p.year === selectedYear && p.month === selectedMonth
+  )
+    ? `${selectedYear}-${selectedMonth}`
+    : "";
+
+  const planJumpGroups = useMemo(() => {
+    const byYear = new Map<number, PlanListItem[]>();
+    for (const p of plansList) {
+      const list = byYear.get(p.year) ?? [];
+      list.push(p);
+      byYear.set(p.year, list);
+    }
+    return [...byYear.entries()]
+      .sort((a, b) => b[0] - a[0])
+      .map(([year, items]) => [year, [...items].sort((a, b) => b.month - a.month)] as const);
+  }, [plansList]);
+
   // ── Plan actions ───────────────────────────────────────────────────────────
 
   async function handleCreatePlan() {
@@ -1471,16 +1493,49 @@ export default function ShiftPlannerPage() {
         ref={headerRef}
         style={{ position: "sticky", top: 0, zIndex: 10, background: "var(--color-bg)", maxHeight: isPhone ? (headerHeight || undefined) : undefined }}
       >
-        <div />
+        <div className={styles.planJumpWrap}>
+          {plansList.length > 0 && (
+            <select
+              className={styles.planJump}
+              data-tour="shift-plan-jump"
+              aria-label="Přejít na plán"
+              value={planJumpValue}
+              onChange={(e) => {
+                const [y, m] = e.target.value.split("-").map(Number);
+                if (Number.isInteger(y) && Number.isInteger(m)) {
+                  setSelectedYear(y);
+                  setSelectedMonth(m);
+                }
+              }}
+            >
+              {planJumpValue === "" && (
+                <option value="" disabled>
+                  Přejít na plán…
+                </option>
+              )}
+              {planJumpGroups.map(([year, items]) => (
+                <optgroup key={year} label={String(year)}>
+                  {items.map((p) => (
+                    <option key={`${p.year}-${p.month}`} value={`${p.year}-${p.month}`}>
+                      {MONTH_NAMES[p.month - 1]} {p.year}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          )}
+        </div>
         <div className={styles.monthNav} data-tour="shift-month-nav">
           <button className={styles.navBtn} onClick={prevMonth}>‹</button>
           <span className={styles.monthLabel}>
             {MONTH_NAMES[selectedMonth - 1]} {selectedYear}
           </span>
           <button className={styles.navBtn} onClick={nextMonth}>›</button>
-          {!isCurrentMonth && (
-            <button className={styles.todayBtn} onClick={goToday}>DNES</button>
-          )}
+          {/* Always rendered — disabled on the current month rather than removed,
+              so the nav row does not change width as you page through months. */}
+          <button className={styles.todayBtn} onClick={goToday} disabled={isCurrentMonth}>
+            DNES
+          </button>
         </div>
         <div />
       </div>

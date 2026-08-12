@@ -365,6 +365,14 @@
   cursor: pointer;
 }
 
+/* Pre-acquisition Ankora day (before 2024-08-13): no desk to staff, so the cell
+   is inert — neither a green "covered" nor a red "gap". Sits on the surface
+   colour so it reads as "not applicable" in both themes. */
+.counterCellNA {
+  background: var(--color-surface-2);
+  padding: 2px 0;
+}
+
 /* Hover/focus affordance that survives every counterCell0/1/2 background. */
 .counterCellClickable:hover,
 .counterCellClickable:focus-visible {
