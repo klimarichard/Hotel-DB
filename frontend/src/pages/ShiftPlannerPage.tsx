@@ -6,7 +6,7 @@ import { useAuth } from "../hooks/useAuth";
 import { parseShiftExpression, getCellColor, SECTIONS, SECTION_LABELS, getCzechHolidays, sortSectionEmployees, isPureNumericExpression, cellHoursForType, type ShiftSegment } from "../lib/shiftConstants";
 import { modLettersByEmployeeId } from "../lib/modPersons";
 import { employeeDisplayName, employeeSurnameFirst } from "../lib/employeeName";
-import { formatIsoDatetimeCZ } from "../lib/dateFormat";
+import { MONTH_NAMES, formatIsoDatetimeCZ } from "../lib/dateFormat";
 import { escapeHtml } from "../lib/escapeHtml";
 import ShiftGrid from "../components/ShiftGrid";
 import AddEmployeeToPlanModal from "../components/AddEmployeeToPlanModal";
@@ -23,6 +23,8 @@ import Button from "../components/Button";
 import { useShiftOverridesContext } from "../context/ShiftOverridesContext";
 import { useShiftChangeRequestsContext } from "../context/ShiftChangeRequestsContext";
 import { tourDemo } from "../lib/tours/demoData";
+import MonthJumpSelect from "../components/MonthJumpSelect";
+import MonthNav from "../components/MonthNav";
 import styles from "./ShiftPlannerPage.module.css";
 
 // ─── Shared types ─────────────────────────────────────────────────────────────
@@ -125,11 +127,6 @@ function tsMillis(ts: PlanListItem["updatedAt"]): number | null {
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-
-const MONTH_NAMES = [
-  "Leden", "Únor", "Březen", "Duben", "Květen", "Červen",
-  "Červenec", "Srpen", "Září", "Říjen", "Listopad", "Prosinec",
-];
 
 const STATUS_LABELS: Record<PlanStatus, string> = {
   created: "Vytvořený",
@@ -600,55 +597,6 @@ export default function ShiftPlannerPage() {
   }, [plan?.id, plan?.status, plan?.openedAt, plan?.closedAt, plan?.publishedAt]);
 
   // ── Month navigation ───────────────────────────────────────────────────────
-
-  function prevMonth() {
-    if (selectedMonth === 1) {
-      setSelectedMonth(12);
-      setSelectedYear((y) => y - 1);
-    } else {
-      setSelectedMonth((m) => m - 1);
-    }
-  }
-
-  function nextMonth() {
-    if (selectedMonth === 12) {
-      setSelectedMonth(1);
-      setSelectedYear((y) => y + 1);
-    } else {
-      setSelectedMonth((m) => m + 1);
-    }
-  }
-
-  // Whether we're viewing a month other than the current one (#53)
-  const isCurrentMonth =
-    selectedMonth === now.getMonth() + 1 && selectedYear === now.getFullYear();
-
-  function goToday() {
-    setSelectedMonth(now.getMonth() + 1);
-    setSelectedYear(now.getFullYear());
-  }
-
-  // Quick-jump dropdown over every plan the user can see. Newest first — with 30+
-  // plans after the historical import, the months people reach for are the recent
-  // ones. Empty string when the selected month has no plan (a valid state: you can
-  // navigate to a month before creating its plan), which shows the placeholder.
-  const planJumpValue = plansList.some(
-    (p) => p.year === selectedYear && p.month === selectedMonth
-  )
-    ? `${selectedYear}-${selectedMonth}`
-    : "";
-
-  const planJumpGroups = useMemo(() => {
-    const byYear = new Map<number, PlanListItem[]>();
-    for (const p of plansList) {
-      const list = byYear.get(p.year) ?? [];
-      list.push(p);
-      byYear.set(p.year, list);
-    }
-    return [...byYear.entries()]
-      .sort((a, b) => b[0] - a[0])
-      .map(([year, items]) => [year, [...items].sort((a, b) => b.month - a.month)] as const);
-  }, [plansList]);
 
   // ── Plan actions ───────────────────────────────────────────────────────────
 
@@ -1493,50 +1441,22 @@ export default function ShiftPlannerPage() {
         ref={headerRef}
         style={{ position: "sticky", top: 0, zIndex: 10, background: "var(--color-bg)", maxHeight: isPhone ? (headerHeight || undefined) : undefined }}
       >
-        <div className={styles.planJumpWrap}>
-          {plansList.length > 0 && (
-            <select
-              className={styles.planJump}
-              data-tour="shift-plan-jump"
-              aria-label="Přejít na plán"
-              value={planJumpValue}
-              onChange={(e) => {
-                const [y, m] = e.target.value.split("-").map(Number);
-                if (Number.isInteger(y) && Number.isInteger(m)) {
-                  setSelectedYear(y);
-                  setSelectedMonth(m);
-                }
-              }}
-            >
-              {planJumpValue === "" && (
-                <option value="" disabled>
-                  Přejít na plán…
-                </option>
-              )}
-              {planJumpGroups.map(([year, items]) => (
-                <optgroup key={year} label={String(year)}>
-                  {items.map((p) => (
-                    <option key={`${p.year}-${p.month}`} value={`${p.year}-${p.month}`}>
-                      {MONTH_NAMES[p.month - 1]} {p.year}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
-          )}
-        </div>
-        <div className={styles.monthNav} data-tour="shift-month-nav">
-          <button className={styles.navBtn} onClick={prevMonth}>‹</button>
-          <span className={styles.monthLabel}>
-            {MONTH_NAMES[selectedMonth - 1]} {selectedYear}
-          </span>
-          <button className={styles.navBtn} onClick={nextMonth}>›</button>
-          {/* Always rendered — disabled on the current month rather than removed,
-              so the nav row does not change width as you page through months. */}
-          <button className={styles.todayBtn} onClick={goToday} disabled={isCurrentMonth}>
-            DNES
-          </button>
-        </div>
+        <MonthJumpSelect
+          items={plansList}
+          selectedYear={selectedYear}
+          selectedMonth={selectedMonth}
+          onSelect={(y, m) => { setSelectedYear(y); setSelectedMonth(m); }}
+          ariaLabel="Přejít na plán"
+          placeholder="Přejít na plán…"
+          dataTour="shift-plan-jump"
+        />
+        <MonthNav
+          year={selectedYear}
+          month={selectedMonth}
+          onSelect={(y, m) => { setSelectedYear(y); setSelectedMonth(m); }}
+          today={now}
+          dataTour="shift-month-nav"
+        />
         <div />
       </div>
 

@@ -42,7 +42,13 @@ Implementation notes for the Phase 5 Shift Planner: the shift expression parser,
 
 ### Plan quick-jump dropdown + persistent DNES (v5.8.0)
 
-`ShiftPlannerPage.tsx` header. The `.header` grid is `1fr auto 1fr`; the previously-empty left slot now holds a `<select>` listing every plan the viewer can see, grouped by year (`<optgroup>`), newest first. It renders from the `plansList` state the page **already** polls every 15 s for external-change detection, so it costs no extra request. Its value is `""` (a disabled placeholder) when the selected month has no plan — a legitimate state, since you navigate to a month before creating its plan.
+`ShiftPlannerPage.tsx` header. The `.header` grid is `1fr auto 1fr`; the previously-empty left slot now holds the shared **`components/MonthJumpSelect.tsx`** — a `<select>` listing every month that exists, grouped by year (`<optgroup>`), newest first. On the shift planner it renders from the `plansList` state the page **already** polls every 15 s for external-change detection, so it costs no extra request. Its value is `""` (a disabled placeholder) when the selected month has no entry — a legitimate state, since you navigate to a month before creating its plan.
+
+The same control is on **Payroll**, which is why it is a component rather than two copies. ⚠️ With no items it still renders its wrapper `<div>` and only omits the `<select>`: returning `null` would drop a child of the `1fr auto 1fr` grid and knock the centred month label off-centre.
+
+The **`‹ / › + month label + DNES` nav is likewise shared** — `components/MonthNav.tsx`. Both pages had byte-identical `.monthNav` / `.navBtn` / `.monthLabel` rules and two copies of the same year-wrapping paging functions. It owns the paging itself (props are `year`, `month`, `onSelect`, `today`), so a page only holds the selected month. ⚠️ `today` must be `clock.now()`, never `new Date()`, or DNES ignores the test clock.
+
+⚠️ **The nav's phone media query moved into `MonthNav.module.css` with it.** `ShiftPlannerPage.module.css` condensed `.monthLabel` (1.15 rem, `min-width: 0`) and `.monthNav` (`gap: 0.4rem`) below 560 px; those class names now live in the component, so leaving the rule behind would have silently restored the 1.75 rem / 220 px-wide label on mobile. The `.header` half of that rule (collapsing `1fr auto 1fr` to one centred column) stays page-side and was **added to Payroll**, which previously had no mobile header rule and would otherwise have squeezed once it gained the picker and DNES.
 
 `DNES` is now always rendered and `disabled` on the current month rather than unmounted. Unmounting changed the nav row's width, which made the centred month label jump while paging.
 

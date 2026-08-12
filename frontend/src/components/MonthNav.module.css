@@ -1,0 +1,79 @@
+/* Lifted verbatim from ShiftPlannerPage.module.css / PayrollPage.module.css,
+   which carried byte-identical copies of all three rules. */
+
+.monthNav {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.navBtn {
+  background: none;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 6px;
+  width: 2.5rem;
+  height: 2.5rem;
+  cursor: pointer;
+  font-size: 1.4rem;
+  color: var(--color-text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  line-height: 1;
+}
+
+.navBtn:hover {
+  background: var(--color-surface-4);
+  border-color: var(--color-text-subtle);
+}
+
+.monthLabel {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--color-text);
+  min-width: 220px;
+  text-align: center;
+}
+
+/* "DNES" jump-to-current-month button — disabled (not hidden) on the current
+   month, so the nav row keeps a stable width while paging. */
+.todayBtn {
+  background: none;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 6px;
+  height: 2.5rem;
+  padding: 0 0.9rem;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--color-text-secondary);
+  display: flex;
+  align-items: center;
+}
+
+.todayBtn:hover:not(:disabled) {
+  background: var(--color-surface-4);
+  border-color: var(--color-text-subtle);
+}
+
+.todayBtn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Phone / short-landscape: condense so the nav fits ~360px. Moved here from
+   ShiftPlannerPage.module.css when the nav was extracted — the classes it
+   targeted now live in this file, so leaving it behind would have silently
+   restored the 1.75rem / 220px-wide label on mobile. Payroll gains the same
+   condensed nav, which it did not have before. */
+@media (max-width: 559.98px), (orientation: landscape) and (max-height: 480px) {
+  .monthLabel {
+    font-size: 1.15rem;
+    min-width: 0;
+  }
+  .monthNav {
+    gap: 0.4rem;
+  }
+}

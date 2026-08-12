@@ -27,6 +27,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "5.8.1",
+    date: "2026-08-12",
+    changes: [
+      "Mzdy: úprava záhlaví stránky.",
+    ],
+  },
+  {
     version: "5.8.0",
     date: "2026-08-12",
     changes: [
