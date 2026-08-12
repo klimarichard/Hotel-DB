@@ -6,7 +6,7 @@ import { useAuth } from "../hooks/useAuth";
 import { parseShiftExpression, getCellColor, SECTIONS, SECTION_LABELS, getCzechHolidays, sortSectionEmployees, isPureNumericExpression, cellHoursForType, type ShiftSegment } from "../lib/shiftConstants";
 import { modLettersByEmployeeId } from "../lib/modPersons";
 import { employeeDisplayName, employeeSurnameFirst } from "../lib/employeeName";
-import { formatIsoDatetimeCZ } from "../lib/dateFormat";
+import { MONTH_NAMES, formatIsoDatetimeCZ } from "../lib/dateFormat";
 import { escapeHtml } from "../lib/escapeHtml";
 import ShiftGrid from "../components/ShiftGrid";
 import AddEmployeeToPlanModal from "../components/AddEmployeeToPlanModal";
@@ -24,6 +24,7 @@ import { useShiftOverridesContext } from "../context/ShiftOverridesContext";
 import { useShiftChangeRequestsContext } from "../context/ShiftChangeRequestsContext";
 import { tourDemo } from "../lib/tours/demoData";
 import MonthJumpSelect from "../components/MonthJumpSelect";
+import MonthNav from "../components/MonthNav";
 import styles from "./ShiftPlannerPage.module.css";
 
 // ─── Shared types ─────────────────────────────────────────────────────────────
@@ -126,11 +127,6 @@ function tsMillis(ts: PlanListItem["updatedAt"]): number | null {
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-
-const MONTH_NAMES = [
-  "Leden", "Únor", "Březen", "Duben", "Květen", "Červen",
-  "Červenec", "Srpen", "Září", "Říjen", "Listopad", "Prosinec",
-];
 
 const STATUS_LABELS: Record<PlanStatus, string> = {
   created: "Vytvořený",
@@ -601,33 +597,6 @@ export default function ShiftPlannerPage() {
   }, [plan?.id, plan?.status, plan?.openedAt, plan?.closedAt, plan?.publishedAt]);
 
   // ── Month navigation ───────────────────────────────────────────────────────
-
-  function prevMonth() {
-    if (selectedMonth === 1) {
-      setSelectedMonth(12);
-      setSelectedYear((y) => y - 1);
-    } else {
-      setSelectedMonth((m) => m - 1);
-    }
-  }
-
-  function nextMonth() {
-    if (selectedMonth === 12) {
-      setSelectedMonth(1);
-      setSelectedYear((y) => y + 1);
-    } else {
-      setSelectedMonth((m) => m + 1);
-    }
-  }
-
-  // Whether we're viewing a month other than the current one (#53)
-  const isCurrentMonth =
-    selectedMonth === now.getMonth() + 1 && selectedYear === now.getFullYear();
-
-  function goToday() {
-    setSelectedMonth(now.getMonth() + 1);
-    setSelectedYear(now.getFullYear());
-  }
 
   // ── Plan actions ───────────────────────────────────────────────────────────
 
@@ -1481,18 +1450,13 @@ export default function ShiftPlannerPage() {
           placeholder="Přejít na plán…"
           dataTour="shift-plan-jump"
         />
-        <div className={styles.monthNav} data-tour="shift-month-nav">
-          <button className={styles.navBtn} onClick={prevMonth}>‹</button>
-          <span className={styles.monthLabel}>
-            {MONTH_NAMES[selectedMonth - 1]} {selectedYear}
-          </span>
-          <button className={styles.navBtn} onClick={nextMonth}>›</button>
-          {/* Always rendered — disabled on the current month rather than removed,
-              so the nav row does not change width as you page through months. */}
-          <button className={styles.todayBtn} onClick={goToday} disabled={isCurrentMonth}>
-            DNES
-          </button>
-        </div>
+        <MonthNav
+          year={selectedYear}
+          month={selectedMonth}
+          onSelect={(y, m) => { setSelectedYear(y); setSelectedMonth(m); }}
+          today={now}
+          dataTour="shift-month-nav"
+        />
         <div />
       </div>
 
