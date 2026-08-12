@@ -50,33 +50,6 @@
   border-color: var(--color-text-subtle);
 }
 
-/* Quick-jump dropdown over every existing plan. Lives in the header's left 1fr
-   slot (grid: 1fr auto 1fr) and stays left-aligned so it never crowds the
-   centred month label. */
-.planJumpWrap {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-}
-
-.planJump {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border-strong);
-  border-radius: 6px;
-  height: 2.5rem;
-  max-width: 100%;
-  padding: 0 0.6rem;
-  cursor: pointer;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--color-text-secondary);
-  font-family: inherit;
-}
-
-.planJump:hover {
-  border-color: var(--color-text-subtle);
-}
-
 /* "DNES" jump-to-current-month button – disabled (not hidden) on the current
    month, so the nav row keeps a stable width while paging. */
 .todayBtn {
