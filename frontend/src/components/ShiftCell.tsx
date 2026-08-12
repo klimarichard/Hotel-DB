@@ -234,7 +234,7 @@ export default function ShiftCell({
   // Badge colour: for the 12 occupancy types the badge wears that shift type's
   // own colour – its label (e.g. "DA", "NPQ") parses to its code+hotel, so
   // getCellColor returns the same colour the type's cell uses. The 4
-  // annotation-only tags (R/HO/ZD/ZN – no counter key) keep the neutral badge.
+  // annotation-only tags (R/HO/ZD/ZN/REZ – no counter key) keep the neutral badge.
   const tagColor =
     typeTag && typeTagToCounterKey(typeTag)
       ? getCellColor(parseShiftExpression(typeTag), dark)

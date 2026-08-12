@@ -14,6 +14,19 @@ import styles from "./ShiftGrid.module.css";
 // so they share one source of truth in shiftConstants.
 const COUNTER_ROWS = SHIFT_TYPE_TAGS;
 
+// Ankora (hotel K) was acquired on 2024-08-13. The historical plans imported from
+// sluzby_old.xlsx reach back to 2024-01, and before the acquisition there was no
+// Ankora desk to staff — so a DK/NK occupancy of zero there is not a coverage gap
+// to flag in red, it is a hotel that did not exist yet.
+//
+// Scoped to this table on purpose: the underlying shift cells are untouched, and
+// nothing else (payroll, free shifts, the 4D summary) changes. A whole month
+// before the date drops the two rows entirely; the acquisition month keeps them
+// and blanks only days 1–12.
+const ANKORA_FROM = "2024-08-13";
+const isAnkoraRow = (row: { hotel: string }): boolean => row.hotel === "K";
+const ankoraCounted = (dateStr: string): boolean => dateStr >= ANKORA_FROM;
+
 interface Props {
   plan: PlanDetail;
   onCellSave: (employeeId: string, date: string, rawInput: string) => Promise<void>;
@@ -778,11 +791,25 @@ export default function ShiftGrid({
                 <td className={styles.counterSeparatorCell}>Přehled obsazení</td>
                 <td colSpan={days.length + 1} />
               </tr>
-              {COUNTER_ROWS.map((row) => (
+              {COUNTER_ROWS.filter(
+                (row) => !isAnkoraRow(row) || days.some((d) => ankoraCounted(formatDate(d)))
+              ).map((row) => (
                 <tr key={row.label} className={styles.counterRow}>
                   <td className={styles.counterLabelCell}>{row.label}</td>
                   {days.map((d) => {
                     const dateStr = formatDate(d);
+                    // Pre-acquisition Ankora day: render an inert blank rather
+                    // than a red 0. Returns before the split affordance, so the
+                    // cell is not clickable either.
+                    if (isAnkoraRow(row) && !ankoraCounted(dateStr)) {
+                      return (
+                        <td
+                          key={dateStr}
+                          className={`${styles.counterCellNA} ${dayClass(d)}`}
+                          title="Ankora byla pořízena 13. 8. 2024 – dřívější obsazení se nesleduje"
+                        />
+                      );
+                    }
                     const h = counterStats[dateStr]?.[row.label];
                     const count = shiftsFromHours(h?.occupancyHours ?? 0);
                     const cls =

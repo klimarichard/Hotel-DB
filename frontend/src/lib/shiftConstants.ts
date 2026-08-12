@@ -9,6 +9,9 @@ export const SHIFT_HOURS: Record<string, number> = {
   DP: 12,
   NP: 12,
   HO: 6,
+  // REZ — školení na rezervačním oddělení. A real worked shift, just off the
+  // hotel desk: no hotel code, and never part of the occupancy tally.
+  REZ: 8,
   X: 0,
 };
 
@@ -92,6 +95,7 @@ export const CELL_COLORS: Record<string, { bg: string; text: string }> = {
   PA: { bg: "#dbeafe", text: "#1e40af" },   // Ambiance portýr – blue
   PQ: { bg: "#431407", text: "#fed7aa" },   // Amigo portýr – dark brown
   HO: { bg: "#e0e7ff", text: "#3730a3" },   // Home Office – indigo
+  REZ:{ bg: "#e5e7eb", text: "#4b5563" },   // Rezervace (školení) – grey
   X:  { bg: "#fee2e2", text: "#dc2626" },   // X – red
 };
 
@@ -127,6 +131,7 @@ const CELL_COLORS_DARK: Record<string, { bg: string; text: string }> = {
   PA: { bg: "#1d4ed8", text: "#bfdbfe" },   // Ambiance portýr – vivid blue
   PQ: { bg: "#1c0a00", text: "#fed7aa" },   // Amigo portýr – very dark brown
   HO: { bg: "#1e1b4b", text: "#a5b4fc" },   // Home Office – dark indigo
+  REZ:{ bg: "#334155", text: "#cbd5e1" },   // Rezervace (školení) – dark grey
   X:  { bg: "#450a0a", text: "#fca5a5" },   // X – dark red
 };
 
@@ -137,6 +142,7 @@ export function getCellColor(parsed: ParseResult, dark = false): { bg: string; t
   if (!first) return { bg: "transparent", text: dark ? "#94a3b8" : "#374151" };
   if (first.code === "X") return colors["X"];
   if (first.code === "HO") return colors["HO"] ?? defaultColor;
+  if (first.code === "REZ") return colors["REZ"] ?? defaultColor;
   const isZShift = first.code === "ZD" || first.code === "ZN";
   if (isZShift) {
     const zColors = dark ? Z_CELL_COLORS_DARK : Z_CELL_COLORS;
@@ -286,6 +292,10 @@ function parseSegment(token: string): ShiftSegment | { error: string } {
   } else if (token.startsWith("HO")) {
     code = "HO";
     remainder = token.slice(2);
+  } else if (token.startsWith("REZ")) {
+    // MUST precede the single-char branch, which would read "REZ" as R + "EZ".
+    code = "REZ";
+    remainder = token.slice(3);
   } else if (token.length >= 1 && ["D", "N", "R", "X"].includes(token[0])) {
     code = token[0];
     remainder = token.slice(1);
@@ -302,8 +312,8 @@ function parseSegment(token: string): ShiftSegment | { error: string } {
     return { error: "Kód " + code + " vyžaduje hotel (např. " + code + "A)" };
   }
 
-  if (code === "HO" && remainder !== "") {
-    return { error: "Kód HO nepřijímá hotel" };
+  if ((code === "HO" || code === "REZ") && remainder !== "") {
+    return { error: "Kód " + code + " nepřijímá hotel" };
   }
 
   if (remainder !== "" && !(HOTEL_CODES as readonly string[]).includes(remainder)) {
@@ -327,7 +337,7 @@ function parseSegment(token: string): ShiftSegment | { error: string } {
 //    key, so a cell tagged with one counts toward that type in the "Přehled
 //    obsazení" tally and covers the matching free-shift slot. This is also the
 //    single source of truth for the tally rows (`COUNTER_ROWS` in ShiftGrid).
-//  • EXTRA_TYPE_TAGS – annotation-only labels (R, HO, ZD, ZN). They are pickable
+//  • EXTRA_TYPE_TAGS – annotation-only labels (R, HO, ZD, ZN, REZ). They are pickable
 //    on a numeric cell purely as a note; they have NO counter key, so they never
 //    add a tally row, are never counted, and never affect free-shift coverage.
 //    ZD/ZN (trainee) deliberately carry no hotel appropriation.
@@ -354,6 +364,7 @@ export const EXTRA_TYPE_TAGS: { label: string }[] = [
   { label: "HO" },
   { label: "ZD" },
   { label: "ZN" },
+  { label: "REZ" },
 ];
 
 /** Every tag offered in the picker: the 12 counted types + the 4 annotations. */

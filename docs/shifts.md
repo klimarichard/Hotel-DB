@@ -5,6 +5,7 @@ Implementation notes for the Phase 5 Shift Planner: the shift expression parser,
 ### Phase 5 — Shift Planner
 - `parseShiftExpression` is duplicated verbatim in `functions/src/services/shiftParser.ts` AND `frontend/src/lib/shiftConstants.ts` — they cannot share code across packages. Keep in sync manually.
 - **A second hand-maintained mirror, same convention:** `cellHoursForType` — the shift-counting rule behind manual hour splits (see "Manual hour splits" further down this file) — is duplicated verbatim between `functions/src/services/shiftCounting.ts` and `frontend/src/lib/shiftConstants.ts`. Change one, change the other.
+- **`REZ` (v5.8.0)** — školení na rezervačním oddělení, 8 h. Behaves like `HO`: a real worked shift that feeds `hoursComputed`, but not tied to a hotel desk, so it **rejects a hotel suffix**, has no counter key, and never affects the occupancy tally or free-shift coverage. ⚠️ In `parseSegment` it **must** be tested before the single-char `["D","N","R","X"]` branch, which would otherwise read `REZ` as code `R` + hotel `"EZ"` and reject it. Added to the annotation-only tag list (now `R`/`HO`/`ZD`/`ZN`/`REZ`), so a numeric cell can be labelled `REZ` without entering the tally. Payroll needed no change — it reads `hoursComputed` off the stored cell. Deliberately **not** in the legend under the grid, and not in `NON_WORK_CODES`, so it counts as worked in the previous-month gap badge (matching `ZD`/`ZN` training rather than `R`).
 - Shift cell composite doc ID: `${employeeId}_${date}`.
 - `ShiftGrid.module.css` wrapper must use `overflow-x: auto` (NOT `overflow: hidden`) — required for sticky employee name column.
 - **Sticky-left labels** (v3.0.2): the employee-name column and the section/separator rows (Management/Recepce/Portýři, "Přehled obsazení", "Volné směny") all stay pinned on horizontal scroll. `position: sticky; left: 0` only sticks an element that is *narrower* than its row (it needs slack), so each separator row is a **narrow label cell + a filler `colSpan` cell** (both painted with the bar background) rather than one full-width `colSpan` cell — a full-width cell fills its row and cannot stick.
@@ -27,6 +28,30 @@ Implementation notes for the Phase 5 Shift Planner: the shift expression parser,
 - **PDF export** (admin/director): "Exportovat PDF" button builds a standalone HTML table from plan data with inline light-mode styles (6pt compact fonts, `table-layout:fixed`, colgroup percentages) and renders to single-page landscape A4 via `html2pdf.js`. Includes title, full grid with cell colors, MOD badges on vedoucí names, and legend. No DOM cloning — built programmatically from `plan.shifts`, `plan.employees`, `plan.modShifts`.
 
 ## Shift Planner — Additional Notes
+
+### Historical plan import from `sluzby_old.xlsx` (v5.8.0)
+
+26 monthly plans (2024-01 … 2026-02) were imported into production on 2026-08-12 from the legacy `excels/sluzby_old.xlsx` workbook — 745 roster rows, 15,943 shift cells, 790 MOD days. `shiftPlans` went 7 → 33, giving a continuous 2024-01 … 2026-09 run. Script: `scripts/import-old-shift-plans-prod.js` (gitignored, dry-run by default).
+
+- **Plans were written with `status: "published"` directly, never transitioned.** `PATCH /plans/:planId` on `closed → published` fires `autoFillManagerRShifts()` (which would invent `R` on every empty Mon–Fri vedoucí cell — in imported data an empty cell is a fact, not a gap) and `createOrUpdatePayrollPeriod()` (which would generate 26 payroll periods for months never paid through this app). Neither is wanted for history, so the terminal state is set at write time. Verified afterwards: `payrollPeriods` unchanged at 6.
+- **No `shiftsSnapshot`.** Publish *deletes* it, so a published plan legitimately has none — writing one would make the imported plans differ from every real one.
+- Imported plan docs carry **`importedFrom: "sluzby_old.xlsx"`**, which is how verification queries tell them apart from live plans.
+- **Legacy cell normalization** happened in the importer, deliberately *not* in the parser (the app should not start accepting these forms): decimal comma → dot (57 cells), Cyrillic `Х` U+0425 → Latin `X` (7 — visually identical, parser-fatal), `NPA(11)` → `11` tagged `NPA` (6), `1/2 DS` → `6` tagged `DS` (2), `R/n` → `R` (1). Bare `n` (nemocenská, 3 cells) was dropped on request.
+- **Name matching needs `displayName`, plus an explicit alias map.** Four people are spelled differently in the workbook than in `employees` — Gleb/**Hleb** Chebatar, Xenia/**Kseniia** Afanaseva, Julia/**Yuliia** Ukhova, Alexander/**Alexandr** Kornilov. A diacritic-stripped, token-sorted key does not bridge any of them. The last one only resolves via `displayName`, because his legal name carries a patronymic (`Aleksandr Sergeevich Kornilov`).
+- **MOD letters survive the import unchanged** because they are per-plan (`shiftPlans/{id}.modPersons`). They were genuinely reused over time — `K` meant Kateřina Olexová in 2024 and Kateřina Zezulková by 2026, and Richard Klíma moved `K` → `R` — so each sheet's letters are resolved against that sheet's own header.
+
+### Plan quick-jump dropdown + persistent DNES (v5.8.0)
+
+`ShiftPlannerPage.tsx` header. The `.header` grid is `1fr auto 1fr`; the previously-empty left slot now holds a `<select>` listing every plan the viewer can see, grouped by year (`<optgroup>`), newest first. It renders from the `plansList` state the page **already** polls every 15 s for external-change detection, so it costs no extra request. Its value is `""` (a disabled placeholder) when the selected month has no plan — a legitimate state, since you navigate to a month before creating its plan.
+
+`DNES` is now always rendered and `disabled` on the current month rather than unmounted. Unmounting changed the nav row's width, which made the centred month label jump while paging.
+
+### Ankora excluded from the occupancy table before 2024-08-13 (v5.8.0)
+
+Ankora (hotel `K`) was acquired 2024-08-13, and the imported plans reach back to 2024-01. `ShiftGrid.tsx` defines `ANKORA_FROM` + `ankoraCounted(dateStr)`: a month entirely before the date drops the `DK`/`NK` rows from "Přehled obsazení" via a `COUNTER_ROWS.filter`, and the acquisition month keeps them but renders days 1–12 with the inert `.counterCellNA` class. Blank, not `0` — a `0` in that table means *uncovered shift*, a false alarm for a hotel not yet in the group; the blank cell is also not clickable for hour splits.
+
+**Scoped to this table only.** Shift cells, payroll, free shifts and the Recepce 4D summary are untouched. Real effect: 24 pre-13th Ankora cells exist in the workbook (all in August 2024, none in Jan–Jul), of which 17 belong to employees who were never imported — so 7 cells are actually suppressed from the tally. User-facing rule: [`business-rules.md`](business-rules.md) → "Ankora se v obsazenosti nepočítá před 13. 8. 2024".
+
 
 ### Remaining-vacation badge (v5.7.0)
 
