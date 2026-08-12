@@ -2080,6 +2080,7 @@ export default function ShiftPlannerPage() {
               <span>R - 9:00-17:30</span>
               <span>ZD - zaučování denní 7:00-19:00</span>
               <span>ZN - zaučování noční 19:00-7:00</span>
+              <span>REZ - školení rezervačního oddělení (8 h)</span>
               <span>A - Ambiance</span>
               <span>S - Superior</span>
               <span>Q - Amigo & Alqush</span>
