@@ -7,6 +7,10 @@ export const SHIFT_HOURS: Record<string, number> = {
   DP: 12,
   NP: 12,
   HO: 6,
+  // REZ — školení na rezervačním oddělení. A real worked shift (it feeds
+  // hoursComputed like any other code), just off the hotel desk, so it carries
+  // no hotel and is never part of the occupancy tally / free-shift coverage.
+  REZ: 8,
   X: 0,
 };
 
@@ -20,12 +24,12 @@ export type HotelCode = typeof HOTEL_CODES[number];
 //
 // The first 12 are the occupancy types (label = code+hotel) and mirror the
 // frontend COUNTER_ROWS — a cell tagged with one counts in the tally / covers a
-// free-shift slot. The last 4 (R, HO, ZD, ZN) are annotation-only labels: they
+// free-shift slot. The last 5 (R, HO, ZD, ZN, REZ) are annotation-only labels: they
 // are accepted and stored, but never equal any free-slot `code+hotel`, so they
 // add no tally row and affect no coverage. Mirrors ALL_TYPE_TAGS in the frontend.
 export const SHIFT_TYPE_TAGS = [
   "DA", "DS", "DQ", "DK", "NA", "NS", "NQ", "NK", "DPQ", "NPQ", "DPA", "NPA",
-  "R", "HO", "ZD", "ZN",
+  "R", "HO", "ZD", "ZN", "REZ",
 ] as const;
 export type ShiftTypeTag = typeof SHIFT_TYPE_TAGS[number];
 
@@ -101,6 +105,11 @@ function parseSegment(token: string): ShiftSegment | { error: string } {
   } else if (token.startsWith("HO")) {
     code = "HO";
     remainder = token.slice(2);
+  } else if (token.startsWith("REZ")) {
+    // MUST be tested before the single-char branch below, which would otherwise
+    // read "REZ" as code R + hotel "EZ" and reject it.
+    code = "REZ";
+    remainder = token.slice(3);
   } else if (token.length >= 1 && ["D", "N", "R", "X"].includes(token[0])) {
     code = token[0];
     remainder = token.slice(1);
@@ -117,8 +126,8 @@ function parseSegment(token: string): ShiftSegment | { error: string } {
     return { error: "Kód " + code + " vyžaduje hotel (např. " + code + "A)" };
   }
 
-  if (code === "HO" && remainder !== "") {
-    return { error: "Kód HO nepřijímá hotel" };
+  if ((code === "HO" || code === "REZ") && remainder !== "") {
+    return { error: "Kód " + code + " nepřijímá hotel" };
   }
 
   // Remainder must be a valid hotel code or empty
