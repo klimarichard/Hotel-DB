@@ -189,6 +189,19 @@ Dvojitá směna („DA²") se zde počítá jako plných 12 h – tabulka odpov�
 
 > 🖥️ Jen rozhraní (výpočet v prohlížeči, nikde se neukládá). Zdroj: `frontend/src/components/ShiftGrid.tsx` – `shiftsFromHours()` a `counterStats.occupancyHours`.
 
+### Ankora se v obsazenosti nepočítá před 13. 8. 2024
+
+Hotel **Ankora** (kód `K`) byl pořízen **13. 8. 2024**. V plánech starších než toto datum se řádky **DK** a **NK** v tabulce **Přehled obsazení** nepočítají:
+
+- měsíc celý před tímto datem (leden–červenec 2024) oba řádky **vůbec nezobrazí**,
+- v srpnu 2024 se řádky zobrazí, ale **dny 1.–12. zůstanou prázdné**.
+
+Prázdné políčko je zde záměrné – nula by se v této tabulce četla jako **nepokrytá směna**, což u hotelu, který tehdy ještě nepatřil do skupiny, není pravda.
+
+Pravidlo se týká **výhradně této tabulky**. Samotné buňky v rozpisu se nemění, stejně jako mzdy, volné směny i souhrn Recepce. V historických rozpisech existuje 7 takových buněk (všechny v srpnu 2024).
+
+> 🖥️ Jen rozhraní (výpočet v prohlížeči, nikde se neukládá). Zdroj: `frontend/src/components/ShiftGrid.tsx` – konstanta `ANKORA_FROM` a funkce `ankoraCounted()`.
+
 ### Rozdělení hodin lze upravit i po uzavření nebo publikaci plánu
 
 Na rozdíl od běžné úpravy buňky v rozpisu směn není ruční rozdělení hodin (viz pravidla výše) vázáno na stav plánu – jde o dodatečnou opravu evidence, která musí jít provést i na už **uzavřeném** nebo **publikovaném** plánu.
