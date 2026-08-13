@@ -25,3 +25,18 @@
 .select:hover {
   border-color: var(--color-text-subtle);
 }
+
+/* Phone / short-landscape: no quick-jump picker at all — ‹ / › + DNES are the
+   only month navigation on mobile.
+
+   Both host headers collapse from `1fr auto 1fr` to a single `1fr` column at
+   this breakpoint, so the picker stopped being a left-hand slot and became a
+   full-width row stacked above the month label. Hiding the whole `.wrap` rather
+   than just `.select` matters: the wrapper is a grid item, and an empty one
+   would leave a phantom row in the stacked layout. Desktop is untouched — the
+   wrapper still holds the left column there, keeping the label centred. */
+@media (max-width: 559.98px), (orientation: landscape) and (max-height: 480px) {
+  .wrap {
+    display: none;
+  }
+}
