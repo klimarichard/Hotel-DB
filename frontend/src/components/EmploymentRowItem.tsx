@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsPhone } from "@/hooks/useIsPhone";
 import { ContractType } from "@/lib/contractVariables";
+import { docKindForChangeType, docWords } from "@/lib/contractDocKind";
 import { formatDateCZ } from "@/lib/dateFormat";
 import type { EmploymentRow, ContractRecord } from "@/lib/employmentSessions";
 import ContractActionButtons from "./ContractActionButtons";
@@ -156,6 +157,12 @@ export default function EmploymentRowItem({
     }
   }
 
+  // The row states what its document is; the resolved template does not (a
+  // Nástup row with an unrecognised contract type resolves to no template at
+  // all and must still read "smlouva").
+  const docKind = docKindForChangeType(row.changeType);
+  const w = docWords(docKind);
+
   const signedLocked = !!contract?.signedStoragePath;
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -170,7 +177,7 @@ export default function EmploymentRowItem({
     ? cascadeCount > 1
       ? `Tím se smaže celý pracovní poměr – ${cascadeCount} záznamů (Nástup, dodatky a případné Ukončení) včetně všech vygenerovaných i podepsaných smluv. Tato akce je nevratná.`
       : "Tím se smaže celý pracovní poměr včetně všech vygenerovaných i podepsaných smluv. Tato akce je nevratná."
-    : "Pokud k záznamu existuje smlouva (nepodepsaná i podepsaná), bude také smazána. Tato akce je nevratná.";
+    : `Pokud k záznamu existuje ${w.nominativ.toLowerCase()}, bude také ${w.smazan} – včetně případné podepsané kopie. Tato akce je nevratná.`;
 
   return (
     <div className={`${styles.row} ${isPhone ? styles.rowPhone : ""}`}>
@@ -221,6 +228,7 @@ export default function EmploymentRowItem({
         ) : (
           <ContractActionButtons
             contract={contract}
+            docKind={docKind}
             defaultType={defaultContractType}
             employmentRowId={row.id}
             rowSnapshot={rowSnapshot}
