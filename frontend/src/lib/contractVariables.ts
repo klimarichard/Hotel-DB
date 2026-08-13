@@ -1,5 +1,6 @@
 import { formatDateCZ } from "./dateFormat";
 import * as clock from "./clock";
+import { UVAZEK_KIND, LEGACY_UVAZEK_KIND, LEGACY_HOURS_KIND } from "./changeKinds";
 
 /**
  * Format a salary number with Czech thousands-separator dots, intended to
@@ -1020,10 +1021,11 @@ export const VARIABLE_GROUPS: { group: string; vars: VariableDef[] }[] = [
       { key: "isDodatekMzda", label: "Je dodatek o mzdě (pro {{#if}})", kind: "if" },
       { key: "newJobTitle", label: "Nová pozice" },
       { key: "isDodatekPozice", label: "Je dodatek o pozici (pro {{#if}})", kind: "if" },
-      { key: "newWorkScope", label: "Nový úvazek" },
+      { key: "newHoursPerWeek", label: "Nový úvazek (počet hodin)" },
       { key: "isDodatekUvazek", label: "Je dodatek o úvazku (pro {{#if}})", kind: "if" },
-      { key: "newHoursPerWeek", label: "Nový počet hodin týdně" },
-      { key: "isDodatekHodiny", label: "Je dodatek o počtu hodin (pro {{#if}})", kind: "if" },
+      // `newWorkScope` and `isDodatekHodiny` are deliberately NOT offered any
+      // more (the two úvazek kinds were merged), but both still RESOLVE below,
+      // so a template that already references them keeps generating.
       { key: "newEndDate", label: "Nový konec smlouvy" },
       { key: "isDodatekZmenaKonce", label: "Je dodatek o změně konce poměru (pro {{#if}})", kind: "if" },
     ],
@@ -1200,13 +1202,18 @@ export function resolveVariables(
         dodatekEffectiveDate: formatDateCZ(employee.dodatekEffectiveDate),
         newSalary: formatSalaryCZ(newSalaryStr),
         newJobTitle: str(findValue("pracovní pozice")),
-        newWorkScope: str(findValue("úvazek")),
-        newHoursPerWeek: str(findValue("počet hodin")),
+        // Legacy-only: the merged kind stores no free text. Kept resolving for
+        // templates written against the old variable.
+        newWorkScope: str(findValue(LEGACY_UVAZEK_KIND)),
+        newHoursPerWeek: str(findValue(UVAZEK_KIND) || findValue(LEGACY_HOURS_KIND)),
         newEndDate: formatDateCZ(findValue("délka smlouvy")),
         isDodatekMzda: has("mzda") ? "ano" : "",
         isDodatekPozice: has("pracovní pozice") ? "ano" : "",
-        isDodatekUvazek: has("úvazek") ? "ano" : "",
-        isDodatekHodiny: has("počet hodin") ? "ano" : "",
+        // The single úvazek condition — true for the merged kind and for either
+        // legacy half, so one {{#if}} covers Dodatky written before and after.
+        isDodatekUvazek:
+          has(UVAZEK_KIND) || has(LEGACY_UVAZEK_KIND) || has(LEGACY_HOURS_KIND) ? "ano" : "",
+        isDodatekHodiny: has(LEGACY_HOURS_KIND) ? "ano" : "",
         isDodatekZmenaKonce: has("délka smlouvy") ? "ano" : "",
       };
     })(),
@@ -1297,7 +1304,7 @@ export function resolveComparableRaw(
     hoursPerWeek: hoursPerWeekValue(employee),
     newEndDate: toIsoDate(changeVal("délka smlouvy")),
     newSalary: toNumber(changeVal("mzda")),
-    newHoursPerWeek: toNumber(changeVal("počet hodin")),
+    newHoursPerWeek: toNumber(changeVal(UVAZEK_KIND) || changeVal(LEGACY_HOURS_KIND)),
     oldSalary: toNumber(employee.oldSalary),
   };
 }

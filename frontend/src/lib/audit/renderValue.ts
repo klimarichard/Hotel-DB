@@ -10,6 +10,7 @@
  * the UI. Returns a string, or null to HIDE the row (internal-only fields).
  */
 import { formatAuditValue } from "./format";
+import { UVAZEK_KIND, LEGACY_UVAZEK_KIND, LEGACY_HOURS_KIND } from "../changeKinds";
 import { fieldLabel } from "./labels";
 import { nationalityName } from "@/lib/nationalities";
 import { PERMISSION_SECTIONS } from "@/lib/permissions/catalog";
@@ -105,9 +106,11 @@ function renderCompanions(v: unknown): string {
 const CHANGE_KIND_LABELS: Record<string, string> = {
   mzda: "Mzda",
   "pracovní pozice": "Pozice",
-  úvazek: "Úvazek",
+  [UVAZEK_KIND]: "Úvazek (počet hodin)",
   "délka smlouvy": "Délka smlouvy",
-  "počet hodin": "Počet hodin týdně",
+  // Retired kinds — audit entries written before the merge still carry them.
+  [LEGACY_UVAZEK_KIND]: "Úvazek",
+  [LEGACY_HOURS_KIND]: "Počet hodin týdně",
 };
 function renderChanges(v: unknown): string {
   if (!Array.isArray(v) || !v.length) return "–";
