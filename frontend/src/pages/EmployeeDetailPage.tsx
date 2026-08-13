@@ -565,6 +565,23 @@ function ChangeRowInput({
         )}
         {row.changeKind === UVAZEK_KIND && (
           <>
+            {/* Stated, never inferred. The legacy free-text kind guessed HPP/PPP
+                from wording and quietly changed nothing when it did not match,
+                which payroll then read as "still full-time".
+
+                No placeholder option: with only two valid answers the browser
+                shows the first one immediately, so `updateChange` seeds "HPP"
+                into state as the kind is picked. Without that seeding the field
+                would read HPP while holding "", and saving would be refused for
+                a value the user can see selected. */}
+            <select
+              className={styles.modalInput}
+              value={row.contractType || "HPP"}
+              onChange={(e) => onChange(index, "contractType", e.target.value)}
+            >
+              <option value="HPP">HPP</option>
+              <option value="PPP">PPP</option>
+            </select>
             <input
               className={styles.modalInput}
               type="number"
@@ -572,18 +589,6 @@ function ChangeRowInput({
               value={row.value}
               onChange={(e) => onChange(index, "value", e.target.value)}
             />
-            {/* Stated, never inferred. The legacy free-text kind guessed HPP/PPP
-                from wording and quietly changed nothing when it did not match,
-                which payroll then read as "still full-time". */}
-            <select
-              className={styles.modalInput}
-              value={row.contractType ?? ""}
-              onChange={(e) => onChange(index, "contractType", e.target.value)}
-            >
-              <option value="">– HPP / PPP –</option>
-              <option value="HPP">HPP</option>
-              <option value="PPP">PPP</option>
-            </select>
           </>
         )}
         {row.changeKind === LEGACY_HOURS_KIND && (
@@ -824,7 +829,20 @@ function AddEntryModal({
   function updateChange(i: number, field: keyof ChangeRow, value: string) {
     setForm((f) => ({
       ...f,
-      changes: f.changes.map((c, idx) => idx === i ? { ...c, [field]: value } : c),
+      changes: f.changes.map((c, idx) => {
+        if (idx !== i) return c;
+        const next: ChangeRow = { ...c, [field]: value };
+        if (field === "changeKind") {
+          if (value === UVAZEK_KIND) {
+            // Match what the placeholder-less select already displays.
+            if (!next.contractType) next.contractType = "HPP";
+          } else {
+            // Don't carry an úvazek's HPP/PPP onto a mzda / pozice row.
+            delete next.contractType;
+          }
+        }
+        return next;
+      }),
     }));
   }
   function addChange() {
