@@ -585,6 +585,7 @@ function ChangeRowInput({
             <input
               className={styles.modalInput}
               type="number"
+              min={1}
               placeholder="Nový počet hodin týdně"
               value={row.value}
               onChange={(e) => onChange(index, "value", e.target.value)}
@@ -595,6 +596,7 @@ function ChangeRowInput({
           <input
             className={styles.modalInput}
             type="number"
+            min={1}
             placeholder="Nový počet hodin týdně"
             value={row.value}
             onChange={(e) => onChange(index, "value", e.target.value)}
@@ -956,6 +958,29 @@ function AddEntryModal({
     if (form.changeType === "nástup" && !form.contractType) {
       setError("Vyberte typ smlouvy."); return;
     }
+    // A week has to contain at least one contracted hour: 0 or a negative is
+    // never a real úvazek, and both would poison the payroll proration
+    // (hoursPerWeek / 40) and the minimum-wage threshold below. `min={1}` on the
+    // inputs only guards the spinner — typed and pasted values still land here.
+    const badHours = (v: string) => !!v && !(Number(v) >= 1);
+    if (form.contractType === "PPP" && badHours(form.hoursPerWeek)) {
+      setError("Počet hodin týdně musí být alespoň 1."); return;
+    }
+    if (form.changeType === "změna smlouvy") {
+      const kept = form.changes.filter((c) => c.changeKind);
+      // Both halves of the merged úvazek are required: hours with no HPP/PPP
+      // would leave payroll prorating against the OLD contract type, which is
+      // the silent-wrong outcome the merged kind exists to prevent.
+      if (kept.some((c) => c.changeKind === UVAZEK_KIND && (!c.value || !c.contractType))) {
+        setError(`U změny „${UVAZEK_KIND}" vyplňte počet hodin i HPP/PPP.`); return;
+      }
+      // Covers the legacy hours kind too, reachable when editing an old Dodatek.
+      if (kept.some(
+        (c) => (c.changeKind === UVAZEK_KIND || c.changeKind === LEGACY_HOURS_KIND) && badHours(c.value)
+      )) {
+        setError("Počet hodin týdně musí být alespoň 1."); return;
+      }
+    }
     // Rodičovská end date is OPTIONAL – it's unknown when leave begins and can
     // be filled in later by editing the period.
     const warning = computeMinWageWarning();
@@ -1014,26 +1039,12 @@ function AddEntryModal({
           endDate: form.endDate || null,
         };
       } else {
-        const kept = form.changes.filter((c) => c.changeKind);
-        // Validated here, on submit, rather than while the row is being filled
-        // in — an incomplete row is only wrong once you try to save it.
-        // Both halves are required: hours with no HPP/PPP would leave payroll
-        // prorating against the OLD contract type, which is the silent-wrong
-        // outcome the merged kind exists to prevent.
-        const incomplete = kept.find(
-          (c) => c.changeKind === UVAZEK_KIND && (!c.value || !c.contractType)
-        );
-        if (incomplete) {
-          setError(`U změny „${UVAZEK_KIND}" vyplňte počet hodin i HPP/PPP.`);
-          setSaving(false);
-          return;
-        }
         payload = {
           changeType: "změna smlouvy",
           startDate: form.startDate,
           status: "active",
           signingDate: form.signingDate || null,
-          changes: kept,
+          changes: form.changes.filter((c) => c.changeKind),
         };
       }
       if (isEdit && initialRow) {
@@ -1176,6 +1187,7 @@ function AddEntryModal({
                         <input
                           className={styles.modalInput}
                           type="number"
+                          min={1}
                           value={form.hoursPerWeek}
                           onChange={(e) => setField("hoursPerWeek", e.target.value)}
                           placeholder="20"
