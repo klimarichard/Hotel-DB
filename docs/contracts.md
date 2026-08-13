@@ -119,7 +119,7 @@ Contract storage paths stay short and stable (`contracts/{employeeId}/{contractI
 - `nastup_dpp` → `"DPP 2026 Klíma Richard"`.
 - `ukonceni_hpp_ppp` / `ukonceni_zkusebni` → `"Ukončení HPP Klíma Richard"` (subtype from `row.contractType`).
 - `ukonceni_dpp` → `"Ukončení DPP Klíma Richard"`.
-- `zmena_smlouvy` → `"DODATEK2026 navýšení, změna pozice Klíma Richard"` — a `DODATEK<YEAR>` prefix (year from `row.startDate`), then **every** change's label joined by `", "` (`mzda` → `"navýšení"`, `pracovní pozice` → `"změna pozice"`, `úvazek` and `počet hodin` → `"změna úvazku"`, `délka smlouvy` → `"doba určitá"` / `"doba neurčitá"`).
+- `zmena_smlouvy` → `"DODATEK2026 navýšení, změna pozice Klíma Richard"` — a `DODATEK<YEAR>` prefix (year from `row.startDate`), then **every** change's label joined by `", "` (`mzda` → `"navýšení"`, `pracovní pozice` → `"změna pozice"`, `úvazek (počet hodin)` and both legacy úvazek kinds → `"změna úvazku"`, `délka smlouvy` → `"doba určitá"` / `"doba neurčitá"`).
   - `délka smlouvy` derives its label from *whether* the change carries an end date, and never from the value itself: the value is an ISO date (the edit form renders a `type="date"` input), so a date means the dodatek sets a fixed end → `"doba určitá"`, and an empty value means it drops the end date → `"doba neurčitá"` (the same empty-means-open-ended convention the backend readers use as `ch.value || null`). Before v4.10.3 the raw value was used directly, which emitted filenames like `"DODATEK2026 2027-12-31 Klíma Richard"`.
 - `hmotna_odpovednost` / `multisport` → `"Hmotná odpovědnost Klíma Richard"` / `"Multisport Klíma Richard"`.
 
@@ -288,9 +288,9 @@ New "Dodatky" group in the contract-template variable picker covers the four cha
 - `{{dodatekEffectiveDate}}` — "Platnost dodatku", date the dodatek takes effect (= `row.startDate`, formatted via `formatDateCZ`).
 - `{{newSalary}}` / `{{isDodatekMzda}}` — value + conditional flag for `changeKind === "mzda"`.
 - `{{newJobTitle}}` / `{{isDodatekPozice}}` — for `"pracovní pozice"`.
-- `{{newWorkScope}}` / `{{isDodatekUvazek}}` — for `"úvazek"`.
+- `{{newHoursPerWeek}}` / `{{isDodatekUvazek}}` — for `"úvazek (počet hodin)"` (v5.9.0). **The single úvazek pair.** `{{newHoursPerWeek}}` is the new weekly-hours number; `{{isDodatekUvazek}}` is `"ano"` for the merged kind **and** for either legacy half, so one `{{#if}}` covers Dodatky written before and after the merge.
 - `{{newEndDate}}` / `{{isDodatekZmenaKonce}}` — for `"délka smlouvy"` (formatted as date).
-- `{{newHoursPerWeek}}` / `{{isDodatekHodiny}}` (v3.5.0) — new hours/week value + conditional flag for `changeKind === "počet hodin"` (PPP part-time fraction change). `{{isDodatekHodiny}}` is `"ano"` when a "počet hodin" change is present; empty otherwise.
+- ⚠️ `{{newWorkScope}}` and `{{isDodatekHodiny}}` are **retired** (v5.9.0) — no longer offered in the template-editor variable picker, but both still **resolve**, so a template that already references them keeps generating. `{{newWorkScope}}` resolves from the legacy `"úvazek"` free text only (the merged kind stores no prose); `{{isDodatekHodiny}}` from a legacy `"počet hodin"` change only.
 
 `EmployeeData` carries two raw fields — `dodatekEffectiveDate` (ISO) and `dodatekChanges: { changeKind, value }[]` — plus `oldSalary`. `resolveVariables` derives every dodatek-related output from these inputs, so the template surface is single-source-of-truth from the row's `changes` array. Conditional flags use `changes.some(c => c.changeKind === kind)` rather than checking value emptiness, so a present-but-blank entry still triggers the section.
 
