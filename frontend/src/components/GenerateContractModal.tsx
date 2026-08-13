@@ -24,6 +24,7 @@ import {
   type CustomVarDef,
   type CustomVarDefs,
 } from "@/lib/contractVariables";
+import { docKindForContractType, docWords } from "@/lib/contractDocKind";
 import { formatDateCZ } from "@/lib/dateFormat";
 import { isWeekendOrHoliday } from "@/lib/workingDays";
 
@@ -347,7 +348,7 @@ export default function GenerateContractModal({
     <div className={styles.overlay}>
       <div className={styles.modal}>
         <div className={styles.header}>
-          <h2 className={styles.title}>Generovat smlouvu</h2>
+          <h2 className={styles.title}>{`Generovat ${docWords(docKindForContractType(contractType)).akuzativ}`}</h2>
           <IconButton onClick={onClose} aria-label="Zavřít">✕</IconButton>
         </div>
 

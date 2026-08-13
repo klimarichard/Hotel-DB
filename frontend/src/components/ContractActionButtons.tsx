@@ -5,6 +5,7 @@ import ConfirmModal from "./ConfirmModal";
 import Button from "./Button";
 import IconButton from "./IconButton";
 import { ContractType } from "@/lib/contractVariables";
+import { docWords, type ContractDocKind } from "@/lib/contractDocKind";
 import { pagesAccusative } from "@/lib/czechPlural";
 import {
   bytesToBase64,
@@ -81,6 +82,13 @@ function filenameFromDisposition(cd: string | null, fallback: string): string {
 interface Props {
   /** The existing contract record for this slot, or null when nothing has been generated yet. */
   contract: ContractRecord | null;
+  /**
+   * What the document on this row *is*, which every label is worded from.
+   * Required, because there is no safe default: falling back to "smlouva" is
+   * exactly the bug this replaces. The employment-history rows derive it from
+   * `row.changeType`; the ad-hoc documents tab passes "dokument".
+   */
+  docKind: ContractDocKind;
   /** Template id used to materialise a record when the user clicks "Nahrát podepsanou" before generating. */
   defaultType: ContractType;
   /** Owning employment row id (omit for ad-hoc / standalone contracts). */
@@ -98,6 +106,7 @@ interface Props {
 
 export default function ContractActionButtons({
   contract,
+  docKind,
   defaultType,
   employmentRowId,
   rowSnapshot,
@@ -107,6 +116,9 @@ export default function ContractActionButtons({
   onChanged,
 }: Props) {
   const { user, can } = useAuth();
+  // Every user-visible noun on this component comes from here, so a row can
+  // never mix "dodatek" and "smlouva" in two adjacent labels.
+  const w = docWords(docKind);
   // Each contract action is gated by its own permission so custom user types can
   // be granted granular access. Built-in admin/director hold all of these →
   // unchanged. (Regenerate deletes the stale PDF then reopens the generator, but
@@ -118,12 +130,13 @@ export default function ContractActionButtons({
   // The "Smlouva + prohlášení" mode files the trailing pages into the employee's
   // Další dokumenty, so it needs the upload permission on top of contracts.sign.
   const canUploadDocuments = can("documents.upload");
-  // A Prohlášení poplatníka is an onboarding artefact of an employment contract;
-  // ad-hoc / standalone documents never carry one, so the split mode – and the
-  // menu offering it – exist only in the employment-history context. Derived from
-  // employmentRowId rather than taking a prop, so the two call sites cannot
-  // contradict it.
-  const canSplitUpload = canUploadDocuments && !!employmentRowId;
+  // A Prohlášení poplatníka is an onboarding artefact signed alongside the
+  // employment contract itself. A Dodatek, an Ukončení and an ad-hoc document
+  // never carry one, so the split mode – and the ▾ menu offering it – belong to
+  // Nástup rows only. Both conditions are kept: `employmentRowId` because the
+  // trailing pages are filed against an employment row, `docKind` because only
+  // the nástup document is ever scanned together with a Prohlášení.
+  const canSplitUpload = canUploadDocuments && !!employmentRowId && docKind === "smlouva";
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [busy, setBusy] = useState<
@@ -257,7 +270,7 @@ export default function ContractActionButtons({
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!resp.ok) {
-        setError("Nepodařilo se zahodit neaktuální smlouvu.");
+        setError(`Nepodařilo se zahodit neaktuální ${w.akuzativ}.`);
         return;
       }
       onChanged();
@@ -284,7 +297,7 @@ export default function ContractActionButtons({
       body: JSON.stringify(body),
     });
     if (!resp.ok) {
-      setError("Nepodařilo se vytvořit záznam smlouvy.");
+      setError(`Nepodařilo se vytvořit záznam ${w.genitiv}.`);
       return null;
     }
     const json = (await resp.json()) as { id: string };
@@ -317,7 +330,7 @@ export default function ContractActionButtons({
         }
       );
       if (!resp.ok) {
-        setError("Nepodařilo se nahrát podepsanou smlouvu.");
+        setError(`Nepodařilo se nahrát ${w.podepsanyAkuzativ}.`);
         return;
       }
       onChanged();
@@ -416,7 +429,7 @@ export default function ContractActionButtons({
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!resp.ok) {
-        setError("Nepodařilo se smazat smlouvu.");
+        setError(`Nepodařilo se smazat ${w.akuzativ}.`);
         return;
       }
       onChanged();
@@ -433,8 +446,10 @@ export default function ContractActionButtons({
     : hasUnsigned
       ? "unsigned"
       : null;
+  // "Zobrazit podepsanou" was an ellipsis for "…podepsanou smlouvu", which
+  // is the wrong gender on every other row type. Name the document instead.
   const previewLabel = hasSigned
-    ? "Zobrazit podepsanou"
+    ? `Zobrazit ${w.podepsanyAkuzativ}`
     : hasUnsigned
       ? "Zobrazit"
       : null;
@@ -461,9 +476,9 @@ export default function ContractActionButtons({
           className={styles.generateBtn}
           onClick={handleRegenerate}
           disabled={busy !== null}
-          title="Parametry řádku se změnily – vygenerovaná smlouva je neaktuální"
+          title={`Parametry řádku se změnily – ${w.vygenerovany} je neaktuální`}
         >
-          {busy === "deleting" ? "Zahazuji…" : "Znovu generovat smlouvu"}
+          {busy === "deleting" ? "Zahazuji…" : `Znovu generovat ${w.akuzativ}`}
         </button>
       ) : (
         canViewContracts && previewKind && previewLabel && (
@@ -498,7 +513,7 @@ export default function ContractActionButtons({
           onClick={onGenerate}
           disabled={busy !== null}
         >
-          Generovat smlouvu
+          {`Generovat ${w.akuzativ}`}
         </button>
       )}
 
@@ -526,9 +541,7 @@ export default function ContractActionButtons({
               ? "Zpracovávám…"
               : busy === "uploading"
                 ? "Nahrávám…"
-                : employmentRowId
-                  ? `Nahrát podepsanou smlouvu${canSplitUpload ? " ▾" : ""}`
-                  : "Nahrát podepsaný dokument"}
+                : `Nahrát ${w.podepsanyAkuzativ}${canSplitUpload ? " ▾" : ""}`}
           </button>
           {signMenuOpen && signMenuPos &&
             createPortal(
@@ -586,7 +599,7 @@ export default function ContractActionButtons({
           onClick={() => setDeleteConfirm(true)}
           disabled={busy !== null}
         >
-          Smazat smlouvu
+          {`Smazat ${w.akuzativ}`}
         </button>
       )}
 
@@ -677,8 +690,8 @@ export default function ContractActionButtons({
 
       {deleteConfirm && (
         <ConfirmModal
-          title="Smazat smlouvu"
-          message="Smlouva bude trvale smazána včetně případné podepsané kopie."
+          title={`Smazat ${w.akuzativ}`}
+          message={`${w.nominativ} bude trvale ${w.smazan} včetně případné podepsané kopie.`}
           confirmLabel="Smazat"
           danger
           onConfirm={confirmDelete}

@@ -316,6 +316,7 @@ export default function OtherDocumentsTab({
                 </div>
                 <ContractActionButtons
                   contract={row.contract}
+                  docKind="dokument"
                   defaultType={row.contract.type}
                   defaultDisplayName={contractLabel(row.contract.type)}
                   employeeId={employeeId}
