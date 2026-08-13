@@ -1,6 +1,7 @@
 import { Router, Response, NextFunction } from "express";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
+import { applyUvazekChange, isUvazekKind } from "../services/changeKinds";
 import { requireAuth, AuthRequest } from "../middleware/auth";
 import {
   requirePermission,
@@ -157,7 +158,7 @@ function sessionEndDate(
   let endDate = (nastup.endDate as string | null | undefined) ?? null;
   for (const d of dodatky) {
     if (((d.startDate as string | undefined) ?? "") > today) continue;
-    const changes = (d.changes as Array<{ changeKind?: string; value?: string }> | undefined) ?? [];
+    const changes = (d.changes as Array<{ changeKind?: string; value?: string; contractType?: string }> | undefined) ?? [];
     for (const ch of changes) {
       if (ch.changeKind === "délka smlouvy") endDate = ch.value || null;
     }
@@ -261,18 +262,28 @@ export async function computeEffectiveRootFields(
     let department = (s.nastup.department as string | undefined) ?? "";
     for (const dodatek of s.dodatky) {
       if (((dodatek.startDate as string | undefined) ?? "") > today) continue;
-      const changes = (dodatek.changes as Array<{ changeKind?: string; value?: string }> | undefined) ?? [];
+      const changes = (dodatek.changes as Array<{ changeKind?: string; value?: string; contractType?: string }> | undefined) ?? [];
       for (const ch of changes) {
         if (ch.changeKind === "pracovní pozice" && ch.value) {
           jobTitle = ch.value;
           const resolved = await resolveDept(ch.value);
           if (resolved) department = resolved;
-        } else if (ch.changeKind === "úvazek" && ch.value) {
-          // Same mapping as the frontend's uvazekToContractType — keep
-          // the two in sync if either side changes.
-          const v = ch.value.toLowerCase();
-          if (v.includes("polovič") || v.includes("zkrácen") || v.includes("částečn")) contractType = "PPP";
-          else if (v.includes("plný") || v.includes("plny")) contractType = "HPP";
+        } else if (isUvazekKind(ch.changeKind)) {
+          // Only contractType is denormalised onto the employee root here, so
+          // the folded hoursPerWeek is discarded — but it still goes through
+          // the shared helper, so the HPP/PPP rules cannot drift from payroll.
+          ({ contractType } = applyUvazekChange(
+            ch,
+            { contractType, hoursPerWeek: null },
+            // Same mapping as the frontend's uvazekToContractType — keep the
+            // two in sync if either side changes.
+            (v) => {
+              const t = v.toLowerCase();
+              if (t.includes("polovič") || t.includes("zkrácen") || t.includes("částečn")) return "PPP";
+              if (t.includes("plný") || t.includes("plny")) return "HPP";
+              return null;
+            }
+          ));
         }
       }
     }
@@ -516,7 +527,7 @@ export function computeEmploymentDates(
     let endDate = (s.nastup.endDate as string | null | undefined) ?? null;
     for (const d of s.dodatky) {
       if (((d.startDate as string | undefined) ?? "") > today) continue;
-      const changes = (d.changes as Array<{ changeKind?: string; value?: string }> | undefined) ?? [];
+      const changes = (d.changes as Array<{ changeKind?: string; value?: string; contractType?: string }> | undefined) ?? [];
       for (const ch of changes) {
         if (ch.changeKind === "délka smlouvy") endDate = ch.value || null;
       }

@@ -5,6 +5,14 @@ import { useAuth } from "@/hooks/useAuth";
 import * as clock from "@/lib/clock";
 import ConfirmModal from "@/components/ConfirmModal";
 import { formatDateCZ } from "@/lib/dateFormat";
+import {
+  applyUvazekChange,
+  CHANGE_KINDS,
+  LEGACY_CHANGE_KINDS,
+  LEGACY_HOURS_KIND,
+  LEGACY_UVAZEK_KIND,
+  UVAZEK_KIND,
+} from "@/lib/changeKinds";
 import { displayGendered } from "@/lib/genderDisplay";
 import { employeeDisplayName } from "@/lib/employeeName";
 import { formatPhoneDisplay } from "@/lib/phoneFormat";
@@ -265,9 +273,15 @@ interface Employee {
   currentCompanyId: string | null;
 }
 
+// ⚠️ Structurally mirrors `ChangeRow` in lib/employmentSessions.ts, which is
+// what every fold and every display path reads. A field added there and missed
+// here is not a type error — the form simply never writes it, and the change
+// silently loses half its meaning. Keep the two identical.
 interface ChangeRow {
   changeKind: string;
   value: string;
+  /** UVAZEK_KIND only: the HPP/PPP the employee moves to. */
+  contractType?: string;
 }
 
 interface EmploymentRow {
@@ -399,7 +413,8 @@ type ChangeType = typeof CHANGE_TYPES[number] | "rodičovská";
 const CONTRACT_TYPES_NASTUP = ["HPP", "PPP", "DPP"] as const;
 type ContractType = typeof CONTRACT_TYPES_NASTUP[number] | "";
 
-const CHANGE_KINDS = ["mzda", "pracovní pozice", "úvazek", "délka smlouvy", "počet hodin"] as const;
+// "úvazek" and "počet hodin" were merged into UVAZEK_KIND; both legacy kinds
+// stay editable on rows that already carry them (see ChangeEntryRow).
 const UVAZEK_OPTIONS = [
   "plný pracovní úvazek, tj. 40 hod./týdně",
   "poloviční pracovní úvazek, tj. 20 hod./týdně",
@@ -530,6 +545,13 @@ function ChangeRowInput({
         >
           <option value="">– typ změny –</option>
           {CHANGE_KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
+          {/* A row saved before the úvazek merge holds a kind that is no longer
+              offered. Without this the select would render empty and saving the
+              Dodatek would silently erase its change type. Kept out of the list
+              above so it can never be picked for a NEW row. */}
+          {LEGACY_CHANGE_KINDS.includes(row.changeKind) && (
+            <option value={row.changeKind}>{row.changeKind} (původní)</option>
+          )}
         </select>
 
         {row.changeKind === "mzda" && (
@@ -541,7 +563,30 @@ function ChangeRowInput({
             onChange={(e) => onChange(index, "value", e.target.value)}
           />
         )}
-        {row.changeKind === "počet hodin" && (
+        {row.changeKind === UVAZEK_KIND && (
+          <>
+            <input
+              className={styles.modalInput}
+              type="number"
+              placeholder="Nový počet hodin týdně"
+              value={row.value}
+              onChange={(e) => onChange(index, "value", e.target.value)}
+            />
+            {/* Stated, never inferred. The legacy free-text kind guessed HPP/PPP
+                from wording and quietly changed nothing when it did not match,
+                which payroll then read as "still full-time". */}
+            <select
+              className={styles.modalInput}
+              value={row.contractType ?? ""}
+              onChange={(e) => onChange(index, "contractType", e.target.value)}
+            >
+              <option value="">– HPP / PPP –</option>
+              <option value="HPP">HPP</option>
+              <option value="PPP">PPP</option>
+            </select>
+          </>
+        )}
+        {row.changeKind === LEGACY_HOURS_KIND && (
           <input
             className={styles.modalInput}
             type="number"
@@ -602,7 +647,7 @@ function ChangeRowInput({
             </select>
           );
         })()}
-        {row.changeKind === "úvazek" && (
+        {row.changeKind === LEGACY_UVAZEK_KIND && (
           <select
             className={styles.modalInput}
             value={row.value}
@@ -867,13 +912,13 @@ function AddEntryModal({
       // Overlay changes made in THIS dodatek (a single Dodatek can move úvazek
       // and/or hours alongside the salary).
       for (const ch of form.changes) {
-        if (ch.changeKind === "úvazek" && ch.value) {
-          const mapped = uvazekToContractType(ch.value);
-          if (mapped) contractType = mapped;
-        } else if (ch.changeKind === "počet hodin" && ch.value) {
-          const n = Number(ch.value);
-          if (Number.isFinite(n)) hpw = n;
-        }
+        const next = applyUvazekChange(
+          ch,
+          { contractType, hoursPerWeek: hpw ?? null },
+          uvazekToContractType
+        );
+        contractType = next.contractType;
+        hpw = next.hoursPerWeek ?? undefined;
       }
       if (contractType !== "HPP" && contractType !== "PPP") return null;
       const threshold = minWageThreshold(contractType, minimumWage, hpw);
@@ -951,12 +996,26 @@ function AddEntryModal({
           endDate: form.endDate || null,
         };
       } else {
+        const kept = form.changes.filter((c) => c.changeKind);
+        // Validated here, on submit, rather than while the row is being filled
+        // in — an incomplete row is only wrong once you try to save it.
+        // Both halves are required: hours with no HPP/PPP would leave payroll
+        // prorating against the OLD contract type, which is the silent-wrong
+        // outcome the merged kind exists to prevent.
+        const incomplete = kept.find(
+          (c) => c.changeKind === UVAZEK_KIND && (!c.value || !c.contractType)
+        );
+        if (incomplete) {
+          setError(`U změny „${UVAZEK_KIND}" vyplňte počet hodin i HPP/PPP.`);
+          setSaving(false);
+          return;
+        }
         payload = {
           changeType: "změna smlouvy",
           startDate: form.startDate,
           status: "active",
           signingDate: form.signingDate || null,
-          changes: form.changes.filter((c) => c.changeKind),
+          changes: kept,
         };
       }
       if (isEdit && initialRow) {

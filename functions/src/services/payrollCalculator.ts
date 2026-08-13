@@ -22,6 +22,7 @@ import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { randomUUID } from "crypto";
 import { multisportPriceForMonth, multisportStartNotes, readMultisport } from "./multisport";
 import { nameParts } from "./employeeNames";
+import { applyUvazekChange, isUvazekKind } from "./changeKinds";
 
 const db = () => admin.firestore();
 
@@ -247,12 +248,14 @@ export function effectiveCompFromRows(
         if (Number.isFinite(n)) salary = n;
       } else if (ch.changeKind === "pracovní pozice" && ch.value) {
         jobTitle = ch.value;
-      } else if (ch.changeKind === "úvazek" && ch.value) {
-        const m = uvazekToContractType(ch.value);
-        if (m) contractType = m;
-      } else if (ch.changeKind === "počet hodin" && ch.value) {
-        const n = Number(ch.value);
-        if (Number.isFinite(n)) hoursPerWeek = n;
+      } else if (isUvazekKind(ch.changeKind)) {
+        // Merged úvazek kind + both legacy halves, in one shared helper so the
+        // three backend folds cannot drift apart.
+        ({ contractType, hoursPerWeek } = applyUvazekChange(
+          ch,
+          { contractType, hoursPerWeek },
+          uvazekToContractType
+        ));
       }
     }
   }

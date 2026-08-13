@@ -4,7 +4,8 @@ import { useIsPhone } from "@/hooks/useIsPhone";
 import { ContractType } from "@/lib/contractVariables";
 import { docKindForChangeType, docWords } from "@/lib/contractDocKind";
 import { formatDateCZ } from "@/lib/dateFormat";
-import type { EmploymentRow, ContractRecord } from "@/lib/employmentSessions";
+import { UVAZEK_KIND, LEGACY_UVAZEK_KIND, LEGACY_HOURS_KIND } from "@/lib/changeKinds";
+import type { ChangeRow, EmploymentRow, ContractRecord } from "@/lib/employmentSessions";
 import ContractActionButtons from "./ContractActionButtons";
 import ConfirmModal from "./ConfirmModal";
 import SalaryReveal from "./SalaryReveal";
@@ -73,12 +74,22 @@ const ROW_LABEL: Record<string, string> = {
 const CHANGE_KIND_LABEL: Record<string, string> = {
   "mzda": "Mzda",
   "pracovní pozice": "Pozice",
-  "úvazek": "Úvazek",
+  [UVAZEK_KIND]: "Úvazek (počet hodin)",
   "délka smlouvy": "Délka smlouvy",
-  "počet hodin": "Počet hodin týdně",
+  // Retired kinds, still shown on Dodatky saved before the merge.
+  [LEGACY_UVAZEK_KIND]: "Úvazek",
+  [LEGACY_HOURS_KIND]: "Počet hodin týdně",
 };
 
-function renderChangeValue(kind: string, value: string): React.ReactNode {
+function renderChangeValue(change: ChangeRow): React.ReactNode {
+  const { changeKind: kind, value } = change;
+  // Merged úvazek: both halves on one line ("20 h/týd. · PPP"). Either half may
+  // be absent on a row saved before the other was required.
+  if (kind === UVAZEK_KIND) {
+    const hours = value ? `${value} h/týd.` : "";
+    const ct = change.contractType || "";
+    return [hours, ct].filter(Boolean).join(" · ") || "–";
+  }
   // "délka smlouvy" is checked BEFORE the generic empty guard: an empty value
   // here is not a missing value, it IS the change – the dodatek clears the fixed
   // end date, which the edit form spells out ("Prázdné datum = změna na dobu
@@ -144,7 +155,7 @@ export default function EmploymentRowItem({
         const k = CHANGE_KIND_LABEL[c.changeKind] ?? c.changeKind;
         return (
           <span key={i} className={styles.changePart}>
-            {k}: {renderChangeValue(c.changeKind, c.value)}
+            {k}: {renderChangeValue(c)}
           </span>
         );
       });
