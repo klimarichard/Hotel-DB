@@ -40,6 +40,11 @@ interface Props {
  * noise) but the wrapper still renders: it occupies the header grid's left
  * column, and dropping the element would re-flow `1fr auto 1fr` and knock the
  * centred month label off-centre.
+ *
+ * Hidden entirely on phones (see the media query in the stylesheet) — the
+ * mobile header is a single column, so the picker stacked above the month
+ * label instead of sitting beside it. `MonthNav` is the only month navigation
+ * there.
  */
 export default function MonthJumpSelect({
   items,
