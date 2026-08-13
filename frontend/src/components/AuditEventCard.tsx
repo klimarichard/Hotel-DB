@@ -17,7 +17,8 @@ interface Props {
   authorName: string;
   title: string;
   titleHref?: string;
-  /** Tighter layout, for the employee-detail mini-list. */
+  /** Tighter layout, for the employee-detail mini-list. Density only — it must
+   *  not gate what information the card shows. */
   compact?: boolean;
   /** Hide the author on the header line. */
   hideAuthor?: boolean;
@@ -43,10 +44,21 @@ const HIDDEN_FIELDS = new Set([
 // Internal foreign-key fields shown only when a resolver labels them.
 const REF_FIELDS = new Set(["employmentRowId"]);
 
-function formatTime(d: Date | null, withDate: boolean): string {
+/**
+ * Always date + time, on both hosts.
+ *
+ * The date used to be dropped in `compact` mode. That was survivable on the
+ * Log změn page, which groups its cards under date headers, but the
+ * employee-detail "Historie změn" list is flat — so a bare "14:32" was the only
+ * timestamp anywhere on the entry, and you could not tell which day (or year) a
+ * change belonged to. `compact` now means layout density and nothing else.
+ */
+function formatTime(d: Date | null): string {
   if (!d) return "–";
   return d.toLocaleString("cs-CZ", {
-    ...(withDate ? { day: "2-digit", month: "2-digit", year: "numeric" } : {}),
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
   });
@@ -164,7 +176,7 @@ export default function AuditEventCard({
         {compactSummary && <span className={styles.summary}>· {compactSummary}</span>}
         <span className={styles.spacer} />
         {!hideAuthor && <span className={styles.author}>{authorName}</span>}
-        <time className={styles.time}>{formatTime(event.timestamp, !compact)}</time>
+        <time className={styles.time}>{formatTime(event.timestamp)}</time>
       </div>
 
       {expanded && (

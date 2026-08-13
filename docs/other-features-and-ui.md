@@ -251,6 +251,7 @@ The page (`/audit`) is a date-sectioned timeline of grouped event cards. The bac
 - Expanded body: changed fields as `label: old → new` rows within section sub-headers; create/delete snapshot rows; reveal/export/trigger `extra` rows; "Technický detail" toggle revealing raw JSON.
 - Sensitive-field rows render as `"citlivý údaj změněn"` without values.
 - Reused by `EmployeeDetailPage`'s "Historie změn" section in compact mode; the `resolveRef` prop resolves internal foreign keys (e.g. `employmentRowId`) to human labels before display.
+- ⚠️ `compact` means **layout density only** — it must never gate what the card shows. Until v5.8.3 it also suppressed the date in the timestamp (`formatTime(ts, !compact)`), which was invisible on the Log změn page (cards sit under date-bucket headers there, and it passes `compact={false}` anyway) but left the employee-detail list — flat, no date headers — showing a bare `14:32` as the entry's only timestamp. Date + time is now unconditional and the `withDate` parameter is gone, so it cannot be flipped back by a caller.
 - `HIDDEN_FIELDS` (`rowSnapshot`, `htmlContent`, `htmlContentLength`, `unsignedStoragePath`, `signedStoragePath`, `hasUnsignedPdf`) are suppressed from the readable view but visible in the raw-JSON escape hatch.
 
 **Deferred (not yet shipped):** permission-key add/remove diff rendering. Permission changes on `roleTypes` entries currently render as labelled key arrays without a human-readable +/- diff.
