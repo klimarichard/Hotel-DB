@@ -1,9 +1,16 @@
 import { ContractType, CHANGE_TYPE_TO_CONTRACTS, type EmployeeData } from "./contractVariables";
+import { applyUvazekChange, isUvazekKind, UVAZEK_KIND, LEGACY_UVAZEK_KIND } from "./changeKinds";
 import * as clock from "./clock";
 
 export interface ChangeRow {
   changeKind: string;
   value: string;
+  /**
+   * Only for `UVAZEK_KIND`: the HPP/PPP the employee moves to. Absent (or an
+   * empty string) means "leave the contract type alone" — the fold below never
+   * guesses one, unlike the legacy free-text kind it replaces.
+   */
+  contractType?: string;
 }
 
 export interface EmploymentRow {
@@ -204,8 +211,11 @@ export function groupBySession(rows: EmploymentRow[]): EmploymentSession[] {
  * at session end. Change kinds:
  *   - mzda           → salary (or agreedReward for DPP)
  *   - pracovní pozice → jobTitle
- *   - úvazek          → contractType (HPP ↔ PPP based on the chosen text)
+ *   - úvazek (počet hodin) → hoursPerWeek + contractType (both stated)
  *   - délka smlouvy   → endDate
+ *   - úvazek / počet hodin → legacy halves of the merged kind above; "úvazek"
+ *     still infers HPP ↔ PPP from its free text, because that is the only
+ *     information rows saved before the merge carry.
  */
 export function computeEffectiveState(
   nastup: EmploymentRow,
@@ -233,17 +243,17 @@ export function computeEffectiveState(
           if (contractType === "DPP") agreedReward = n;
           else salary = n;
         }
-      } else if (ch.changeKind === "úvazek" && ch.value) {
-        const mapped = uvazekToContractType(ch.value);
-        if (mapped) contractType = mapped;
+      } else if (isUvazekKind(ch.changeKind)) {
+        ({ contractType, hoursPerWeek } = applyUvazekChange(
+          ch,
+          { contractType, hoursPerWeek },
+          uvazekToContractType
+        ));
       } else if (ch.changeKind === "délka smlouvy") {
         // Empty value = "změna na dobu neurčitou": a Dodatek can clear a fixed
         // end date. The falsy guard used to drop this, leaving the original end
         // date (employee wrongly shown as terminated).
         endDate = ch.value || null;
-      } else if (ch.changeKind === "počet hodin" && ch.value) {
-        const n = Number(ch.value);
-        if (Number.isFinite(n)) hoursPerWeek = n;
       }
     }
   }
@@ -305,7 +315,9 @@ export function collectFieldChain(
       let next: string | null = null;
       if (field === "jobTitle" && ch.changeKind === "pracovní pozice" && ch.value) {
         next = ch.value;
-      } else if (field === "contractType" && ch.changeKind === "úvazek" && ch.value) {
+      } else if (field === "contractType" && ch.changeKind === UVAZEK_KIND) {
+        next = ch.contractType === "HPP" || ch.contractType === "PPP" ? ch.contractType : null;
+      } else if (field === "contractType" && ch.changeKind === LEGACY_UVAZEK_KIND && ch.value) {
         next = uvazekToContractType(ch.value);
       }
       if (next && next !== chain[chain.length - 1]) chain.push(next);

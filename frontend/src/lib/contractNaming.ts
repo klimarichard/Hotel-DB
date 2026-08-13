@@ -1,4 +1,5 @@
 import type { ContractType } from "./contractVariables";
+import { UVAZEK_KIND, LEGACY_UVAZEK_KIND, LEGACY_HOURS_KIND } from "./changeKinds";
 
 /**
  * Subset of an employment row that the naming function needs. Kept
@@ -22,7 +23,8 @@ function changeLabel(change: { changeKind: string; value: string }): string {
       return "navýšení";
     case "pracovní pozice":
       return "změna pozice";
-    case "úvazek":
+    case UVAZEK_KIND:
+    case LEGACY_UVAZEK_KIND:
       return "změna úvazku";
     case "délka smlouvy":
       // The value is an ISO end date, never a label, so it must NOT be used
@@ -31,7 +33,7 @@ function changeLabel(change: { changeKind: string; value: string }): string {
       // end date (doba neurčitá), the convention the edit form states outright
       // ("Prázdné datum = změna na dobu neurčitou").
       return change.value ? "doba určitá" : "doba neurčitá";
-    case "počet hodin":
+    case LEGACY_HOURS_KIND:
       return "změna úvazku";
     default:
       return change.changeKind || "změna";

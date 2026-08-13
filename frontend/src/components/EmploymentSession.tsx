@@ -147,12 +147,18 @@ export default function EmploymentSessionCard({
             {eff.endDate ? formatDateCZ(eff.endDate) : <span className={styles.ongoing}>trvá</span>}
           </span>
         </div>
-        {/* "Ukončit smlouvu" stays available for any session without a formal
-            Ukončení row – including fixed-term contracts (e.g. DPP) whose end
-            date is set or has already passed, so they can always be ended
-            (early or retroactively). That test is deliberately existence-based
-            and stays so. "+ Dodatek" remains hidden once the session is over,
-            where over = the effective end date has PASSED. */}
+        {/* Every header action here is for a session that is still running, so
+            all of them sit behind `!session.terminated` (= the effective end
+            date has PASSED; an end date of today still counts as active,
+            because it is the last ACTIVE day).
+
+            "Ukončit smlouvu" used to be deliberately existence-based — shown
+            for any session without a formal Ukončení row, including fixed-term
+            contracts whose end date had already passed, so they could be closed
+            retroactively. Changed on request 2026-08-13: an expired contract is
+            already over, and offering to end it again read as a live action.
+            The trade-off is that a lapsed fixed-term session can no longer be
+            given a formal Ukončení row from this header. */}
         {canManageEmployment && !session.ukonceni && (
           <div className={styles.headerActions} onClick={(e) => e.stopPropagation()}>
             {!session.terminated && (
@@ -175,9 +181,9 @@ export default function EmploymentSessionCard({
                 >
                   + Rodičovská
                 </Button>
+                <Button variant="secondary" size="sm" onClick={onTerminate}>Ukončit smlouvu</Button>
               </>
             )}
-            <Button variant="secondary" size="sm" onClick={onTerminate}>Ukončit smlouvu</Button>
           </div>
         )}
       </div>

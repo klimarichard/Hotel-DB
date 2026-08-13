@@ -13,6 +13,7 @@ import {
   upsertLedgerMonth,
 } from "../services/vacationLedger";
 import * as clock from "../services/clock";
+import { applyUvazekChange, isUvazekKind } from "../services/changeKinds";
 
 export const payrollRouter = Router();
 
@@ -592,17 +593,17 @@ function effectivesForMinWage(rows: MinWageRow[], today: string): MinWageEffecti
     let endDate = (s.nastup.endDate as string | null | undefined) ?? null;
     for (const d of s.dodatky) {
       if (String(d.startDate ?? "") > today) continue; // future-dated: not yet effective
-      const changes = (d.changes as Array<{ changeKind?: string; value?: string }> | undefined) ?? [];
+      const changes = (d.changes as Array<{ changeKind?: string; value?: string; contractType?: string }> | undefined) ?? [];
       for (const ch of changes) {
         if (ch.changeKind === "mzda" && ch.value) {
           const n = Number(ch.value);
           if (Number.isFinite(n) && contractType !== "DPP") salary = n;
-        } else if (ch.changeKind === "úvazek" && ch.value) {
-          const m = uvazekToContractTypeLite(ch.value);
-          if (m) contractType = m;
-        } else if (ch.changeKind === "počet hodin" && ch.value) {
-          const n = Number(ch.value);
-          if (Number.isFinite(n)) hoursPerWeek = n;
+        } else if (isUvazekKind(ch.changeKind)) {
+          ({ contractType, hoursPerWeek } = applyUvazekChange(
+            ch,
+            { contractType, hoursPerWeek },
+            uvazekToContractTypeLite
+          ));
         } else if (ch.changeKind === "délka smlouvy") {
           endDate = ch.value || null;
         }

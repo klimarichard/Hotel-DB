@@ -2,8 +2,10 @@ import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsPhone } from "@/hooks/useIsPhone";
 import { ContractType } from "@/lib/contractVariables";
+import { docKindForChangeType, docWords } from "@/lib/contractDocKind";
 import { formatDateCZ } from "@/lib/dateFormat";
-import type { EmploymentRow, ContractRecord } from "@/lib/employmentSessions";
+import { UVAZEK_KIND, LEGACY_UVAZEK_KIND, LEGACY_HOURS_KIND } from "@/lib/changeKinds";
+import type { ChangeRow, EmploymentRow, ContractRecord } from "@/lib/employmentSessions";
 import ContractActionButtons from "./ContractActionButtons";
 import ConfirmModal from "./ConfirmModal";
 import SalaryReveal from "./SalaryReveal";
@@ -72,12 +74,22 @@ const ROW_LABEL: Record<string, string> = {
 const CHANGE_KIND_LABEL: Record<string, string> = {
   "mzda": "Mzda",
   "pracovní pozice": "Pozice",
-  "úvazek": "Úvazek",
+  [UVAZEK_KIND]: "Úvazek (počet hodin)",
   "délka smlouvy": "Délka smlouvy",
-  "počet hodin": "Počet hodin týdně",
+  // Retired kinds, still shown on Dodatky saved before the merge.
+  [LEGACY_UVAZEK_KIND]: "Úvazek",
+  [LEGACY_HOURS_KIND]: "Počet hodin týdně",
 };
 
-function renderChangeValue(kind: string, value: string): React.ReactNode {
+function renderChangeValue(change: ChangeRow): React.ReactNode {
+  const { changeKind: kind, value } = change;
+  // Merged úvazek: both halves on one line ("20 h/týd. · PPP"). Either half may
+  // be absent on a row saved before the other was required.
+  if (kind === UVAZEK_KIND) {
+    const hours = value ? `${value} h/týd.` : "";
+    const ct = change.contractType || "";
+    return [hours, ct].filter(Boolean).join(" · ") || "–";
+  }
   // "délka smlouvy" is checked BEFORE the generic empty guard: an empty value
   // here is not a missing value, it IS the change – the dodatek clears the fixed
   // end date, which the edit form spells out ("Prázdné datum = změna na dobu
@@ -143,7 +155,7 @@ export default function EmploymentRowItem({
         const k = CHANGE_KIND_LABEL[c.changeKind] ?? c.changeKind;
         return (
           <span key={i} className={styles.changePart}>
-            {k}: {renderChangeValue(c.changeKind, c.value)}
+            {k}: {renderChangeValue(c)}
           </span>
         );
       });
@@ -155,6 +167,12 @@ export default function EmploymentRowItem({
       }, []);
     }
   }
+
+  // The row states what its document is; the resolved template does not (a
+  // Nástup row with an unrecognised contract type resolves to no template at
+  // all and must still read "smlouva").
+  const docKind = docKindForChangeType(row.changeType);
+  const w = docWords(docKind);
 
   const signedLocked = !!contract?.signedStoragePath;
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -170,7 +188,7 @@ export default function EmploymentRowItem({
     ? cascadeCount > 1
       ? `Tím se smaže celý pracovní poměr – ${cascadeCount} záznamů (Nástup, dodatky a případné Ukončení) včetně všech vygenerovaných i podepsaných smluv. Tato akce je nevratná.`
       : "Tím se smaže celý pracovní poměr včetně všech vygenerovaných i podepsaných smluv. Tato akce je nevratná."
-    : "Pokud k záznamu existuje smlouva (nepodepsaná i podepsaná), bude také smazána. Tato akce je nevratná.";
+    : `Pokud k záznamu existuje ${w.nominativ.toLowerCase()}, bude také ${w.smazan} – včetně případné podepsané kopie. Tato akce je nevratná.`;
 
   return (
     <div className={`${styles.row} ${isPhone ? styles.rowPhone : ""}`}>
@@ -221,6 +239,7 @@ export default function EmploymentRowItem({
         ) : (
           <ContractActionButtons
             contract={contract}
+            docKind={docKind}
             defaultType={defaultContractType}
             employmentRowId={row.id}
             rowSnapshot={rowSnapshot}
