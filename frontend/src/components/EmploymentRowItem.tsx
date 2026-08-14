@@ -2,11 +2,16 @@ import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsPhone } from "@/hooks/useIsPhone";
 import { ContractType } from "@/lib/contractVariables";
-import { docKindForChangeType, docWords } from "@/lib/contractDocKind";
+import {
+  docKindForChangeType,
+  docWords,
+  EMPLOYMENT_DOC_KINDS,
+} from "@/lib/contractDocKind";
 import { formatDateCZ } from "@/lib/dateFormat";
 import { UVAZEK_KIND, LEGACY_UVAZEK_KIND, LEGACY_HOURS_KIND } from "@/lib/changeKinds";
 import type { ChangeRow, EmploymentRow, ContractRecord } from "@/lib/employmentSessions";
 import ContractActionButtons from "./ContractActionButtons";
+import AlignedLabel from "./AlignedLabel";
 import ConfirmModal from "./ConfirmModal";
 import SalaryReveal from "./SalaryReveal";
 import styles from "./EmploymentRowItem.module.css";
@@ -35,6 +40,17 @@ const RowChevron = ({ open }: { open: boolean }) => (
   </svg>
 );
 
+/**
+ * Read actions an employee has on their OWN signed document. Passing this
+ * object is what puts the card in self-service mode (Můj profil).
+ */
+export interface SelfServiceActions {
+  /** Open the signed PDF in a new tab. */
+  onPreview: (contractId: string) => void;
+  /** Save the signed PDF under its convention filename. */
+  onDownload: (contractId: string, displayName?: string) => void;
+}
+
 interface Props {
   row: EmploymentRow;
   contract: ContractRecord | null;
@@ -57,12 +73,14 @@ interface Props {
   onDelete?: () => void;
   onContractsChanged: () => void;
   /**
-   * Self-service (Můj profil) download-only mode. When provided, the admin
-   * ContractActionButtons are replaced by a single "Stáhnout smlouvu" button
-   * that downloads this row's SIGNED contract via the self endpoint. Employees
-   * get no generate/sign/delete/preview actions.
+   * Self-service (Můj profil) mode. The row then offers exactly two actions on
+   * its signed document - open it and save it - and NO management affordances:
+   * no Upravit, no Smazat, no generate/sign. That holds even for a viewer who
+   * happens to hold employment.manage, because an admin reading their own
+   * profile is a viewer there; the page's edit callbacks are no-ops anyway, so
+   * the buttons only ever promised something that could not happen.
    */
-  onSelfDownload?: (contractId: string, displayName?: string) => void;
+  selfService?: SelfServiceActions;
 }
 
 const ROW_LABEL: Record<string, string> = {
@@ -117,7 +135,7 @@ export default function EmploymentRowItem({
   onEdit,
   onDelete,
   onContractsChanged,
-  onSelfDownload,
+  selfService,
 }: Props) {
   const { can } = useAuth();
   const isPhone = useIsPhone();
@@ -128,8 +146,9 @@ export default function EmploymentRowItem({
   const [expanded, setExpanded] = useState(false);
   const showActions = !isPhone || expanded;
   // Per-row Upravit/Smazat are employment-record management. Built-in
-  // admin/director hold employment.manage → unchanged.
-  const canManageEmployment = can("employment.manage");
+  // admin/director hold employment.manage → unchanged. Self-service is the one
+  // hard override: on Můj profil nobody manages anything, permission or not.
+  const canManageEmployment = !selfService && can("employment.manage");
   const label = ROW_LABEL[row.changeType] ?? row.changeType;
 
   let detail: React.ReactNode = null;
@@ -174,8 +193,28 @@ export default function EmploymentRowItem({
   const docKind = docKindForChangeType(row.changeType);
   const w = docWords(docKind);
 
+  // Widths the self-service preview button shares with the sibling rows. Same
+  // wording as the detail page, and every row here is signed by definition.
+  const selfPreviewVariants = EMPLOYMENT_DOC_KINDS.map(
+    (k) => `Zobrazit ${docWords(k).podepsanyAkuzativ}`
+  );
+
   const signedLocked = !!contract?.signedStoragePath;
   const [confirmDelete, setConfirmDelete] = useState(false);
+
+  // Handed to ContractActionButtons rather than rendered here: the actions are
+  // right-aligned, so "Upravit" only keeps a stable column if it sits between
+  // the preview pair and the generated-document slot.
+  const editButton = canManageEmployment && onEdit && !signedLocked && (
+    <button
+      data-tour="emp-contract-edit"
+      type="button"
+      className={styles.editBtn}
+      onClick={onEdit}
+    >
+      Upravit
+    </button>
+  );
 
   const isNastup = row.changeType === "nástup";
   const cascadeCount = sessionRowCount ?? 1;
@@ -216,30 +255,33 @@ export default function EmploymentRowItem({
       </div>
       {showActions && (
       <div className={styles.actions}>
-        {canManageEmployment && onEdit && !signedLocked && (
-          <button
-            data-tour="emp-contract-edit"
-            type="button"
-            className={styles.editBtn}
-            onClick={onEdit}
-          >
-            Upravit
-          </button>
-        )}
-        {onSelfDownload ? (
+        {selfService ? (
           contract?.status === "signed" && (
-            <button
-              type="button"
-              className={styles.editBtn}
-              onClick={() => onSelfDownload(contract.id, contract.displayName)}
-            >
-              Stáhnout smlouvu
-            </button>
+            <>
+              <button
+                type="button"
+                className={styles.editBtn}
+                onClick={() => selfService.onPreview(contract.id)}
+              >
+                <AlignedLabel variants={selfPreviewVariants}>
+                  {`Zobrazit ${w.podepsanyAkuzativ}`}
+                </AlignedLabel>
+              </button>
+              <button
+                type="button"
+                className={styles.editBtn}
+                onClick={() => selfService.onDownload(contract.id, contract.displayName)}
+              >
+                Stáhnout
+              </button>
+            </>
           )
         ) : (
           <ContractActionButtons
             contract={contract}
             docKind={docKind}
+            alignKinds={EMPLOYMENT_DOC_KINDS}
+            editSlot={editButton}
             defaultType={defaultContractType}
             employmentRowId={row.id}
             rowSnapshot={rowSnapshot}

@@ -167,6 +167,33 @@ export default function EmployeeSelfPage() {
   // Download the employee's OWN signed contract for a history entry. Streams
   // from the self endpoint (auth-only, signed-only); the server sets the proper
   // filename in Content-Disposition, which we honour for the saved file.
+  /**
+   * Open the signed PDF in a new tab. Mirrors the detail page's preview: the
+   * self endpoint sends the file as an attachment, but a blob URL ignores
+   * Content-Disposition, so the tab renders it inline. The trade-off is that a
+   * blob URL carries no filename - "Stáhnout" is the path that saves it under
+   * the naming convention.
+   */
+  async function handlePreviewContract(contractId: string) {
+    if (!user) return;
+    try {
+      const token = await user.getIdToken();
+      const resp = await fetch(`/api/me/employee/contracts/${contractId}/download`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!resp.ok) {
+        setDialog({ title: "Chyba", message: "Dokument se nepodařilo otevřít.", showCancel: false });
+        return;
+      }
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank", "noopener,noreferrer");
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch {
+      setDialog({ title: "Chyba", message: "Dokument se nepodařilo otevřít.", showCancel: false });
+    }
+  }
+
   async function handleDownloadContract(contractId: string, displayName?: string) {
     if (!user) return;
     try {
@@ -175,7 +202,7 @@ export default function EmployeeSelfPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!resp.ok) {
-        setDialog({ title: "Chyba", message: "Smlouvu se nepodařilo stáhnout.", showCancel: false });
+        setDialog({ title: "Chyba", message: "Dokument se nepodařilo stáhnout.", showCancel: false });
         return;
       }
       const cd = resp.headers.get("Content-Disposition");
@@ -194,7 +221,7 @@ export default function EmployeeSelfPage() {
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 5_000);
     } catch {
-      setDialog({ title: "Chyba", message: "Smlouvu se nepodařilo stáhnout.", showCancel: false });
+      setDialog({ title: "Chyba", message: "Dokument se nepodařilo stáhnout.", showCancel: false });
     }
   }
 
@@ -627,7 +654,10 @@ export default function EmployeeSelfPage() {
                       onAddRodicovska={() => {}}
                       onTerminate={() => {}}
                       onContractsChanged={() => {}}
-                      onSelfDownload={handleDownloadContract}
+                      selfService={{
+                        onPreview: handlePreviewContract,
+                        onDownload: handleDownloadContract,
+                      }}
                     />
                   ))}
               </div>

@@ -5,7 +5,7 @@ import { formatDateCZ } from "@/lib/dateFormat";
 import { Fragment } from "react";
 import type { EmploymentRow, ContractRecord, EmploymentSession } from "@/lib/employmentSessions";
 import { collectFieldChain } from "@/lib/employmentSessions";
-import EmploymentRowItem from "./EmploymentRowItem";
+import EmploymentRowItem, { type SelfServiceActions } from "./EmploymentRowItem";
 import Button from "./Button";
 import SalaryReveal from "./SalaryReveal";
 import styles from "./EmploymentSession.module.css";
@@ -48,11 +48,14 @@ interface Props {
   onTerminate: () => void;
   onContractsChanged: () => void;
   /**
-   * Self-service (Můj profil) download-only mode. When set, each row's admin
-   * contract actions are replaced by a single "Stáhnout smlouvu" button for the
-   * signed contract. Passed straight through to EmploymentRowItem.
+   * Self-service (Můj profil) mode. Rows offer only the two read actions on
+   * their signed document, and EVERY management affordance on this card - "+
+   * Dodatek", "+ Rodičovská", "Ukončit smlouvu", the rodičovská row's
+   * edit/remove - is hidden regardless of permissions. The self page passes
+   * no-op callbacks for all of them, so a viewer holding employment.manage was
+   * being shown buttons that could not do anything.
    */
-  onSelfDownload?: (contractId: string, displayName?: string) => void;
+  selfService?: SelfServiceActions;
 }
 
 const Chevron = ({ open }: { open: boolean }) => (
@@ -79,12 +82,13 @@ export default function EmploymentSessionCard({
   rodicovskaBlocked,
   onTerminate,
   onContractsChanged,
-  onSelfDownload,
+  selfService,
 }: Props) {
   const { can } = useAuth();
   // "+ Dodatek" / "Ukončit smlouvu" are employment-record management. Built-in
-  // admin/director hold employment.manage → unchanged.
-  const canManageEmployment = can("employment.manage");
+  // admin/director hold employment.manage → unchanged. Self-service is the one
+  // hard override: on Můj profil nobody manages anything, permission or not.
+  const canManageEmployment = !selfService && can("employment.manage");
   const [open, setOpen] = useState(defaultExpanded);
   const eff = session.effective;
   const companyName = companies[eff.companyId] ?? eff.companyId ?? "–";
@@ -242,7 +246,7 @@ export default function EmploymentSessionCard({
               onEdit={() => onEditRow(row)}
               onDelete={() => onDeleteRow(row)}
               onContractsChanged={onContractsChanged}
-              onSelfDownload={onSelfDownload}
+              selfService={selfService}
             />
           ))}
         </div>
