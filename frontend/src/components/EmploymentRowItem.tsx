@@ -189,6 +189,20 @@ export default function EmploymentRowItem({
   const signedLocked = !!contract?.signedStoragePath;
   const [confirmDelete, setConfirmDelete] = useState(false);
 
+  // Handed to ContractActionButtons rather than rendered here: the actions are
+  // right-aligned, so "Upravit" only keeps a stable column if it sits between
+  // the preview pair and the generated-document slot.
+  const editButton = canManageEmployment && onEdit && !signedLocked && (
+    <button
+      data-tour="emp-contract-edit"
+      type="button"
+      className={styles.editBtn}
+      onClick={onEdit}
+    >
+      Upravit
+    </button>
+  );
+
   const isNastup = row.changeType === "nástup";
   const cascadeCount = sessionRowCount ?? 1;
   const deleteTitle = isNastup
@@ -228,33 +242,27 @@ export default function EmploymentRowItem({
       </div>
       {showActions && (
       <div className={styles.actions}>
-        {canManageEmployment && onEdit && !signedLocked && (
-          <button
-            data-tour="emp-contract-edit"
-            type="button"
-            className={styles.editBtn}
-            onClick={onEdit}
-          >
-            Upravit
-          </button>
-        )}
         {onSelfDownload ? (
-          contract?.status === "signed" && (
-            <button
-              type="button"
-              className={styles.editBtn}
-              onClick={() => onSelfDownload(contract.id, contract.displayName)}
-            >
-              <AlignedLabel variants={selfDownloadVariants}>
-                {`Stáhnout ${w.podepsanyAkuzativ}`}
-              </AlignedLabel>
-            </button>
-          )
+          <>
+            {editButton}
+            {contract?.status === "signed" && (
+              <button
+                type="button"
+                className={styles.editBtn}
+                onClick={() => onSelfDownload(contract.id, contract.displayName)}
+              >
+                <AlignedLabel variants={selfDownloadVariants}>
+                  {`Stáhnout ${w.podepsanyAkuzativ}`}
+                </AlignedLabel>
+              </button>
+            )}
+          </>
         ) : (
           <ContractActionButtons
             contract={contract}
             docKind={docKind}
             alignKinds={EMPLOYMENT_DOC_KINDS}
+            editSlot={editButton}
             defaultType={defaultContractType}
             employmentRowId={row.id}
             rowSnapshot={rowSnapshot}
