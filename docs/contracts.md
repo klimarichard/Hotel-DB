@@ -679,9 +679,72 @@ New exported `resolveStandaloneEmployment(rows)` in `frontend/src/lib/employment
 
 `frontend/src/components/ContractActionButtons.tsx`'s **"Nahrát podepsanou smlouvu ▾"** dropdown (offering **Smlouva** vs. **Smlouva + prohlášení** — see "Signed-contract split + client-side PDF compression" above) previously rendered identically whether the button sat on an employment-history row or on a Další dokumenty (ad-hoc/standalone) entry. A "Prohlášení poplatníka daně" is the taxpayer's declaration, an onboarding artefact that belongs to an *employment contract* — it is meaningless attached to an ad-hoc document like Multisport or a custom template, so offering the split there was a trap waiting to file a declaration nobody meant to create.
 
-**Fix:** the split option is now shown only when the component is rendering for an employment-history row. `canSplitUpload = canUploadDocuments && !!employmentRowId` is derived from the existing `employmentRowId` prop (already optional — absent means ad-hoc/standalone, per its doc comment) rather than a new prop threaded through both call sites, specifically so the two call sites (Historie tab vs. Další dokumenty) can never disagree about which mode they're in.
+**Fix:** the split option is now shown only when the component is rendering for an employment-history row. `canSplitUpload = canUploadDocuments && !!employmentRowId` (v5.9.0 added a third condition, `&& docKind === "smlouva"` — a Dodatek or Ukončení is never scanned together with a Prohlášení either) is derived from the existing `employmentRowId` prop (already optional — absent means ad-hoc/standalone, per its doc comment) rather than a new prop threaded through both call sites, specifically so the two call sites (Historie tab vs. Další dokumenty) can never disagree about which mode they're in.
 
 - **Employment-history row** (`employmentRowId` set): button reads **"Nahrát podepsanou smlouvu ▾"** and opens the two-item menu, unchanged.
 - **Ad-hoc / standalone document** (`employmentRowId` absent): button reads **"Nahrát podepsaný dokument"**, single click straight to the file picker, no dropdown — matches the pre-split single-file upload behaviour.
 
 **Backend unchanged.** `POST .../signed-pdf-with-declaration` never enforced this distinction server-side — it will happily file a declaration against any contract id it's given. This is purely a UI affordance to stop an operator from being *offered* a meaningless choice; it is not a new backend guard.
+
+---
+
+## Action-strip layout — one column per operation (v5.9.1)
+
+v5.9.0 started wording every action after the row's own document (`Smazat smlouvu` /
+`Smazat dodatek` / `Smazat ukončení`). Correct Czech, but the employment-history rows are a
+vertical list, so each row drew a differently-sized button and the strip looked ragged.
+
+### `AlignedLabel` — equal widths without hard-coded pixels
+
+`frontend/src/components/AlignedLabel.tsx` (+ its CSS module) takes a `variants` array of
+every caption a slot can render and stacks them all in **one CSS-grid cell**
+(`grid-area: 1 / 1`). The alternatives are `visibility: hidden` ghosts — they keep their
+width contribution but stay out of the accessibility tree — and the real label is centred
+on top. The grid column sizes to the widest, so the slot reserves it automatically.
+
+Why not `min-width`: the captions are generated from `docWords()`, so a fixed pixel width
+would have to be re-tuned by hand every time one of those Czech nouns changes. Adding a
+variant is the only maintenance this needs.
+
+- **Busy captions are variants too** (`Stahuji…`, `Nahrávám…`, `Zahazuji…`) so a button
+  cannot resize mid-click. All of them are shorter than their idle label, so they steady
+  the width without inflating it.
+- **Phones drop the ghosts** (`display: none` under the same media query as
+  `PHONE_MEDIA_QUERY`). Rows expand one at a time there, so there is no column to align and
+  the reserved width would only force extra wraps.
+- **Scope is per surface.** `ContractActionButtons` takes `alignKinds?: readonly
+  ContractDocKind[]`; the employment history passes `EMPLOYMENT_DOC_KINDS`
+  (`smlouva` / `dodatek` / `ukonceni`, exported from `lib/contractDocKind.ts`), while the
+  Další dokumenty tab omits it — every row there is a `dokument` already, so its buttons
+  size to their own text instead of padding to a noun that can never appear.
+
+### Slot order is load-bearing
+
+The strip is right-aligned inside the row (`justify-content: space-between`), so columns
+are counted **from the right** and a button rendered outside the group lands in a different
+column on every row shape. Order, left to right:
+
+`Zobrazit …` · `Stáhnout` · `Upravit` · **generated-document slot** · `Nahrát podepsaný …` · `Smazat`
+
+- The **generated-document slot** is one column with three mutually exclusive states —
+  `Generovat <co>`, `Znovu generovat`, `Smazat <co>` — sharing a single width group
+  (`documentSlotVariants`). `Smazat <co>` had to move left of the upload button for this;
+  it is not "delete goes last".
+- **`Upravit` is passed in as `editSlot`.** It belongs to `EmploymentRowItem` (employment
+  record, `employment.manage`) but must render *between* the preview pair and the document
+  slot, so it is handed to `ContractActionButtons` as a node. The parent still owns the
+  permission check, the handler and the `signedLocked` rule; the child only decides where
+  it lands.
+- **`Znovu generovat` carries no noun.** Naming the document would make
+  "Znovu generovat ukončení" the widest caption in the slot and stretch the whole column
+  for a state most rows never reach. It also replaces `Smazat <co>` on a stale row, which
+  loses nothing: `handleRegenerate` deletes the stale PDF *before* reopening the generator.
+- **The " ▾" is reserved on every row**, though only a Nástup row can show it (only that
+  row can carry a Prohlášení), or that one button would stick out of the column.
+
+### Known non-alignment: the signed row
+
+A signed row drops both `Upravit` (`signedLocked`) and the upload button (already signed),
+so right-alignment shifts its remaining buttons two columns right — `Smazat <co>` sits
+where `Nahrát …` sits everywhere else. Accepted as-is: reserving invisible placeholders
+would put dead space on every finished row. Reviewed and signed off 2026-08-14.

@@ -61,7 +61,7 @@ A bottom collapsible **Adhoc smlouvy** lists every contract record where `employ
 ### Components
 - `frontend/src/components/EmploymentSession.tsx` — collapsible card; computes `idx === 0`-style default-expanded behaviour from a prop, uses `<SalaryReveal>` for the redacted salary display.
 - `frontend/src/components/EmploymentRowItem.tsx` — single row's metadata + action cluster. Owns the per-row delete confirm modal with copy that varies by row type (Nástup → cascade warning with row count; Dodatek/Ukončení → tied-contract warning). **On phones (v3.8.1)** the row's action cluster is collapsed by default and revealed by tapping the summary (see "Collapsible employment-history entries on phones" in `docs/other-features-and-ui.md`); desktop is unchanged.
-- `frontend/src/components/ContractActionButtons.tsx` — leaf renderer of the three states: no contract → `Generovat smlouvu` + `Nahrát podepsanou smlouvu`; contract with unsigned PDF → download + `Smazat smlouvu` + upload; contract with signed PDF → "Stáhnout podepsanou" + `Smazat smlouvu` + upload. The upload-without-generate path POSTs `/contracts` with no `pdfBase64` to materialise a record on the fly, then POSTs `/signed-pdf` against it — needed for legacy paper contracts that have no generated unsigned counterpart. **v4.6.0:** the upload button is now a two-option menu ("Smlouva" / "Smlouva + prohlášení") with client-side scan compression and splitting — see [Contracts & Templates](contracts.md#signed-contract-split--client-side-pdf-compression-v460).
+- `frontend/src/components/ContractActionButtons.tsx` — leaf renderer of the per-row states (see the state table below; every noun is row-typed since v5.9.0, and the strip is laid out in fixed columns since v5.9.1 — see [Contracts & Templates](contracts.md#action-strip-layout--one-column-per-operation-v591)). The upload-without-generate path POSTs `/contracts` with no `pdfBase64` to materialise a record on the fly, then POSTs `/signed-pdf` against it — needed for legacy paper contracts that have no generated unsigned counterpart. **v4.6.0:** the upload button is now a two-option menu ("Smlouva" / "Smlouva + prohlášení") with client-side scan compression and splitting — see [Contracts & Templates](contracts.md#signed-contract-split--client-side-pdf-compression-v460).
 - ~~`frontend/src/components/AdhocContractsSection.tsx`~~ — **deleted in v4.6.0**; see the restructure section below.
 - `frontend/src/components/SalaryReveal.tsx` — shared `••••• [eye]` widget. Click stops propagation so it doesn't toggle the surrounding collapsible.
 
@@ -132,11 +132,23 @@ For an **Ukončení** row the termination date lives in the row's own `startDate
 `AddEntryModal` accepts `lockedChangeType?: ChangeType`. When set, the changeType selector is hidden and the form is pre-filled with the locked value. Title reflects the action ("Nový nástup" / "Nový dodatek" / "Ukončit smlouvu"). The `+ Nástup` page button, session-header `+ Dodatek`, and session-header `Ukončit smlouvu` all use this lock so each entry point produces exactly one kind of row.
 
 ### Per-row action button states
-| State                        | Buttons shown                                               |
-|------------------------------|-------------------------------------------------------------|
-| No contract record           | `Generovat smlouvu`, `Nahrát podepsanou smlouvu`            |
-| Contract record, unsigned    | "Stáhnout", `Smazat smlouvu`, `Nahrát podepsanou smlouvu`   |
-| Contract record, signed      | "Stáhnout podepsanou", `Smazat smlouvu`                     |
+
+Buttons are listed **left to right as rendered**. The strip is right-aligned inside the
+row, so a state with fewer buttons keeps the right-hand columns and drops the left-hand
+ones. `<co>` is the row's own document — smlouvu / dodatek / ukončení (v5.9.0).
+
+| State | Buttons shown (left → right) |
+|---|---|
+| No contract record | `Upravit`, `Generovat <co>`, `Nahrát podepsaný <co> ▾`, `Smazat` |
+| Contract record, unsigned | `Zobrazit`, `Stáhnout`, `Upravit`, `Smazat <co>`, `Nahrát podepsaný <co> ▾`, `Smazat` |
+| Unsigned + row edited (stale) | `Upravit`, `Znovu generovat`, `Nahrát podepsaný <co> ▾`, `Smazat` — the preview pair is hidden because it would open an out-of-date document |
+| Contract record, signed | `Zobrazit podepsaný <co>`, `Stáhnout`, `Smazat <co>`, `Smazat` — no `Upravit` (`signedLocked`) and no upload (already signed), so this is the one state whose columns do **not** line up with the others |
+| Record with no PDF (edge) | as "no contract record", plus `Smazat <co>` — reachable when `ensureContractId()` creates the record and the signed upload then fails; the document slot holds two buttons until the next successful upload |
+
+Row types are exhaustive: the server whitelists `nástup` / `změna smlouvy` / `ukončení` /
+`rodičovská` (`VALID_CHANGE_TYPES`) and `groupBySession` drops anything else, so no other
+row can reach this strip. **Rodičovská never renders as a row** — it is collected into the
+session header band with its own ✎ / ✕ icons.
 
 The existing `archived` lifecycle (PATCH `status: "archived"` / `status: "unsigned"`) is no longer surfaced in the UI; the backend endpoint stays in place for backward safety. Legacy archived contracts render as ordinary signed contracts in the new layout.
 
@@ -202,7 +214,34 @@ const visibleEmployment = employment.filter((row) => {
 - **`GET /me/employee/contracts`** — returns contract metadata for the caller's own record: `{ id, type, status, employmentRowId, generatedAt, displayName }`. Auth-only (no `contracts.view` required); returns no PDF bytes or storage paths. The frontend uses this list to build the `contractByRow` map.
 - **`GET /me/employee/contracts/:contractId/download`** — streams the caller's own signed contract PDF via Admin SDK (`storage.rules` deny direct client access). Self-scoped and signed-only: 404s when the contract is not under the caller's employee record, is not in `status: "signed"`, or the Storage file is missing. Auth-only — no `contracts.view` (unlike the admin download route in `functions/src/routes/contracts.ts`). Sends `Content-Disposition: attachment` with a UTF-8 filename (`<displayName> - podepsaná.pdf`) and an ASCII fallback for legacy clients; mirrors the filename pattern of the admin route.
 
-**Frontend download button.** Each visible (signed) history entry on Můj profil shows a "Stáhnout smlouvu" button. `frontend/src/components/EmploymentRowItem.tsx` and `frontend/src/components/EmploymentSession.tsx` gained an optional `onSelfDownload?: (contractId: string, displayName?: string) => void` prop. When set (on the self page only), the admin `<ContractActionButtons>` cluster is replaced by the single download button — no generate/sign/delete/preview actions leak onto Můj profil, including for admins viewing their own profile.
+**Frontend read actions.** Each visible (signed) history entry on Můj profil shows
+`Zobrazit podepsaný <co>` + `Stáhnout` — the same wording as the detail page, since every
+row here is signed by definition. Both hit the same self endpoint; preview opens the blob
+in a new tab (a blob URL ignores `Content-Disposition`, which is why "Stáhnout" is still
+the path that saves under the naming convention).
+
+`EmploymentRowItem` / `EmploymentSession` take a `selfService?: SelfServiceActions`
+prop (`{ onPreview, onDownload }`, exported from `EmploymentRowItem.tsx`). **Its presence
+is the mode flag**, and it hard-overrides the permission in exactly one place per
+component:
+
+```ts
+const canManageEmployment = !selfService && can("employment.manage");
+```
+
+**v5.9.1 — why the override exists.** Both components already funnel every management
+affordance through that single const, but it used to read `can("employment.manage")`
+alone. An admin (or anyone else holding the permission) reading their **own** profile
+therefore saw `Upravit`, `Smazat`, `+ Dodatek`, `+ Rodičovská`, `Ukončit smlouvu` and the
+rodičovská ✎ / ✕ icons. Every one of them was dead — `EmployeeSelfPage` passes no-op
+callbacks for all of them — so the buttons promised something that could never happen.
+This is a UI-affordance fix, not a security fix: the write endpoints are admin-scoped and
+were never reachable from this page. Gating on the mode rather than on each button means a
+management affordance added later is hidden here by default.
+
+The predecessor prop was `onSelfDownload?: (contractId, displayName?) => void`; it carried
+only the download callback, so "self-service" was inferred from *a download function was
+passed*, which is what let the management buttons stay permission-gated.
 
 ### Promotion-batch fixes (2026-05-22)
 - **create-user** (`functions/src/routes/auth.ts`): the handler had no try/catch and the Express app had no error middleware, so a rejected `admin.auth().createUser` (e.g. duplicate email, or the project's password policy) left the request hanging. Now wrapped in try/catch with mapped Firebase error codes → clean Czech messages, incl. translating `PASSWORD_DOES_NOT_MEET_REQUIREMENTS`; a global error-handler middleware was added in `index.ts` as a safety net. The create-user form also shows a password-policy hint (≥8 chars, upper+lower+digit).
