@@ -2335,6 +2335,7 @@ export default function EmployeeDetailPage() {
             <VacationLedgerSection
               basePath={`/employees/${id}/vacation-ledger`}
               canManage={canManageVacationBalance}
+              isTerminated={employee?.status === "terminated"}
             />
           ) : null}
         </Section>
