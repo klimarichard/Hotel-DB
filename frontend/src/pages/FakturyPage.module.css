@@ -358,14 +358,16 @@
   width: 44px;
 }
 
+/* Widths follow the column CONTENT, so they moved with it when Typ and Sazba
+   DPH swapped places: col 2 = Typ, col 3 = Sazba DPH. */
 .itemTable th:nth-child(2),
 .itemTable td:nth-child(2) {
-  width: 190px;
+  width: 150px;
 }
 
 .itemTable th:nth-child(3),
 .itemTable td:nth-child(3) {
-  width: 150px;
+  width: 190px;
 }
 
 .itemTable th:nth-child(4),

@@ -2009,8 +2009,8 @@ function ConfigPanel({
                   <thead>
                     <tr>
                       <th>Popis</th>
-                      <th>Sazba DPH</th>
                       <th>Typ</th>
+                      <th>Sazba DPH</th>
                       <th>Aktivní</th>
                       <th aria-label="Akce" />
                     </tr>
@@ -2034,26 +2034,6 @@ function ConfigPanel({
                         <td>
                           <select
                             className={styles.cellInput}
-                            value={it.vatRateId ?? ""}
-                            onChange={(e) =>
-                              setItems((prev) =>
-                                prev.map((x) =>
-                                  x.id === it.id ? { ...x, vatRateId: e.target.value || null } : x
-                                )
-                              )
-                            }
-                          >
-                            <option value="">– žádná –</option>
-                            {vatSorted.map((r) => (
-                              <option key={r.id} value={r.id}>
-                                {r.label}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                        <td>
-                          <select
-                            className={styles.cellInput}
                             value={it.group}
                             onChange={(e) =>
                               setItems((prev) =>
@@ -2069,6 +2049,33 @@ function ConfigPanel({
                               </option>
                             ))}
                           </select>
+                        </td>
+                        <td>
+                          {/* Only a Položka carries VAT: `computeTotals` reads `vatRateId`
+                              solely on `group === "item"` lines, so on any other type the
+                              dropdown offered a choice that could never reach an invoice.
+                              A previously chosen rate is KEPT in the record (inert, and
+                              still there if the type is switched back), just not shown. */}
+                          {it.group === "item" && (
+                            <select
+                              className={styles.cellInput}
+                              value={it.vatRateId ?? ""}
+                              onChange={(e) =>
+                                setItems((prev) =>
+                                  prev.map((x) =>
+                                    x.id === it.id ? { ...x, vatRateId: e.target.value || null } : x
+                                  )
+                                )
+                              }
+                            >
+                              <option value="">– žádná –</option>
+                              {vatSorted.map((r) => (
+                                <option key={r.id} value={r.id}>
+                                  {r.label}
+                                </option>
+                              ))}
+                            </select>
+                          )}
                         </td>
                         <td>
                           <input
