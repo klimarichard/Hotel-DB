@@ -1216,28 +1216,36 @@ export default function FakturyPage() {
                             </select>
                           </td>
                           <td>
-                            <select
-                              className={`${styles.cellInput} ${
-                                isCustom ? styles.cellRequired : ""
-                              } ${vatMissing ? styles.inputError : ""}`}
-                              value={line.vatRateId ?? ""}
-                              disabled={fromCatalog}
-                              title={
-                                fromCatalog
-                                  ? "Sazba DPH je dána vybranou položkou katalogu."
-                                  : undefined
-                              }
-                              onChange={(e) =>
-                                patchLine(line.id, { vatRateId: e.target.value || null })
-                              }
-                            >
-                              <option value="">– vyberte –</option>
-                              {vatOptions.map((v) => (
-                                <option key={v.id} value={v.id}>
-                                  {v.label}
-                                </option>
-                              ))}
-                            </select>
+                            {/* Same rule as the Katalog položek tab: only a Položka
+                                carries VAT. `computeTotals` reads `vatRateId` solely on
+                                `group === "item"` lines and `vatMissing` is item-only, so
+                                on a Platba or Převod row this select could not affect the
+                                invoice. A rate already on the line stays stored (inert)
+                                rather than being cleared out from under the user. */}
+                            {line.group === "item" && (
+                              <select
+                                className={`${styles.cellInput} ${
+                                  isCustom ? styles.cellRequired : ""
+                                } ${vatMissing ? styles.inputError : ""}`}
+                                value={line.vatRateId ?? ""}
+                                disabled={fromCatalog}
+                                title={
+                                  fromCatalog
+                                    ? "Sazba DPH je dána vybranou položkou katalogu."
+                                    : undefined
+                                }
+                                onChange={(e) =>
+                                  patchLine(line.id, { vatRateId: e.target.value || null })
+                                }
+                              >
+                                <option value="">– vyberte –</option>
+                                {vatOptions.map((v) => (
+                                  <option key={v.id} value={v.id}>
+                                    {v.label}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
                           </td>
                           <td>{formatMoney(lineTotal(line))}</td>
                           <td>
