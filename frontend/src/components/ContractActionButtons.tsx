@@ -491,7 +491,13 @@ export default function ContractActionButtons({
     ? alignWords.map((x) => `Zobrazit ${x.podepsanyAkuzativ}`)
     : ["Zobrazit"];
   const downloadVariants = ["Stáhnout", "Stahuji…"];
-  const generateVariants = alignWords.map((x) => `Generovat ${x.akuzativ}`);
+  // "Generovat <co>" and "Smazat <co>" are two states of ONE slot - make the
+  // document yourself, or throw the made one away - so they share a width and
+  // form a single column whether or not the row already has a document.
+  const documentSlotVariants = [
+    ...alignWords.map((x) => `Generovat ${x.akuzativ}`),
+    ...alignWords.map((x) => `Smazat ${x.akuzativ}`),
+  ];
   const regenerateVariants = [
     ...alignWords.map((x) => `Znovu generovat ${x.akuzativ}`),
     "Zahazuji…",
@@ -504,7 +510,6 @@ export default function ContractActionButtons({
     "Zpracovávám…",
     "Nahrávám…",
   ];
-  const deleteVariants = alignWords.map((x) => `Smazat ${x.akuzativ}`);
 
   return (
     <div className={styles.actions}>
@@ -555,12 +560,29 @@ export default function ContractActionButtons({
           onClick={onGenerate}
           disabled={busy !== null}
         >
-          <AlignedLabel variants={generateVariants}>
+          <AlignedLabel variants={documentSlotVariants}>
             {`Generovat ${w.akuzativ}`}
           </AlignedLabel>
         </button>
       )}
 
+      {contract && canDeleteContract && (
+        <button
+          data-tour="emp-contract-delete"
+          type="button"
+          className={styles.deleteBtn}
+          onClick={() => setDeleteConfirm(true)}
+          disabled={busy !== null}
+        >
+          <AlignedLabel variants={documentSlotVariants}>
+            {`Smazat ${w.akuzativ}`}
+          </AlignedLabel>
+        </button>
+      )}
+
+      {/* Sits left of "Nahrát podepsaný…" on purpose: the actions are
+          right-aligned, so this keeps the generated-document slot
+          ("Generovat …" / "Smazat …") in one column down the list. */}
       {canSign && !hasSigned && (
         <div className={styles.signWrap}>
           <button
@@ -635,20 +657,6 @@ export default function ContractActionButtons({
             disabled={busy !== null}
           />
         </div>
-      )}
-
-      {contract && canDeleteContract && (
-        <button
-          data-tour="emp-contract-delete"
-          type="button"
-          className={styles.deleteBtn}
-          onClick={() => setDeleteConfirm(true)}
-          disabled={busy !== null}
-        >
-          <AlignedLabel variants={deleteVariants}>
-            {`Smazat ${w.akuzativ}`}
-          </AlignedLabel>
-        </button>
       )}
 
       {error && <span className={styles.error}>{error}</span>}
