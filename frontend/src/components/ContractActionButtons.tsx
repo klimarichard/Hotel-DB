@@ -483,10 +483,13 @@ export default function ContractActionButtons({
 
   // Every caption each slot can render, including the transient busy ones (so a
   // button does not resize mid-click). The visible label is measured as well.
-  const previewVariants = [
-    "Zobrazit",
-    ...alignWords.map((x) => `Zobrazit ${x.podepsanyAkuzativ}`),
-  ];
+  // Signed and unsigned are sized apart on purpose. The unsigned caption is the
+  // bare "Zobrazit"; measuring it against "Zobrazit podepsanou smlouvu" left a
+  // one-word button four times wider than its text. Only the row-type wordings
+  // - the thing that made the list ragged - are aligned against each other.
+  const previewVariants = hasSigned
+    ? alignWords.map((x) => `Zobrazit ${x.podepsanyAkuzativ}`)
+    : ["Zobrazit"];
   const downloadVariants = ["Stáhnout", "Stahuji…"];
   const generateVariants = alignWords.map((x) => `Generovat ${x.akuzativ}`);
   const regenerateVariants = [
