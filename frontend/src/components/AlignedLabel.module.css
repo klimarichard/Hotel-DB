@@ -1,0 +1,26 @@
+/* All children share one grid cell: the column sizes to the widest of them. */
+.box {
+  display: grid;
+  justify-items: center;
+  align-items: center;
+}
+
+.box > * {
+  grid-area: 1 / 1;
+  white-space: nowrap;
+}
+
+/* visibility:hidden (not display:none) – keeps the width contribution while
+   staying out of the accessibility tree. */
+.ghost {
+  visibility: hidden;
+}
+
+/* Phone layout – same media query as useIsPhone/PHONE_MEDIA_QUERY. Rows are
+   expanded one at a time, so drop the reserved width and let each button shrink
+   to its own label. */
+@media (max-width: 559.98px), (orientation: landscape) and (max-height: 480px) {
+  .ghost {
+    display: none;
+  }
+}

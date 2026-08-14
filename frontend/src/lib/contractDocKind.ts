@@ -14,6 +14,18 @@ import { CHANGE_TYPE_TO_CONTRACTS, type ContractType } from "./contractVariables
 export type ContractDocKind = "smlouva" | "dodatek" | "ukonceni" | "dokument";
 
 /**
+ * The kinds that share one employment-history list. A session mixes Nástup,
+ * Dodatek and Ukončení rows, so their action buttons are width-aligned against
+ * each other (see AlignedLabel). "dokument" is deliberately absent: ad-hoc
+ * documents live in their own tab where every row is the same kind already.
+ */
+export const EMPLOYMENT_DOC_KINDS: readonly ContractDocKind[] = [
+  "smlouva",
+  "dodatek",
+  "ukonceni",
+];
+
+/**
  * The inflected forms each label needs.
  *
  * Czech forces this: the four nouns span three genders (smlouva = feminine,
