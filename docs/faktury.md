@@ -96,6 +96,24 @@ The `"Invoice"` transfer line is printed on the PDF like any other line, but `co
 
 **A catalogue pick owns the line's `group` and `vatRateId`.** In the editor both selects are disabled while the row's description matches a catalogue entry, and editable only for a `Vlastní text…` row (or an untouched empty one): deciding those two fields is what the catalogue exists for, and a line silently disagreeing with it posts to the wrong recap bucket — a mistake visible nowhere except the printed recap. Fixing a wrong mapping belongs in Číselníky, where it fixes every future line at once.
 
+**Sazba DPH is shown only on `Položka` rows (v5.9.2)** — in the invoice editor and in the
+Katalog položek tab of Číselníky alike; on any other `group` the cell is left blank. Both
+readers of `vatRateId` are item-only — `computeTotals()` buckets a line's amount under its
+rate inside `if (line.group === "item")`, and the missing-rate validation is
+`lines.some(l => l.group === "item" && !l.vatRateId)` — so a rate picked on a `Platba` or
+`Převod na fakturu` row could never reach a total, a recap bucket or the printed document.
+The control was offering an effect it did not have. There is no per-line rate on the PDF,
+so the editor and the print cannot disagree about this.
+
+An already-stored `vatRateId` on a non-item row is **kept, not cleared**. It is inert by
+the two call sites above, so nulling it would only discard the operator's earlier choice
+when a row's type is flipped and flipped back. Same reason the catalogue keeps it.
+
+The Katalog položek columns are ordered **Popis / Typ / Sazba DPH / Aktivní**: `Typ` is what
+decides whether a rate means anything, so it precedes it. ⚠️ The column widths in
+`FakturyPage.module.css` are `nth-child` rules — they are positional, so reordering the
+columns in the JSX silently reassigns widths unless the CSS moves with it.
+
 A line's `vatRateId` is deliberately **not validated against the current config's rate list** on save (`faktury.ts:173-176`): the catalogue is admin-editable, so an older draft may reference a rate that has since been deleted. That must degrade gracefully — the recap simply omits the bucket — rather than 400 and leave the draft unopenable.
 
 ## Storage
