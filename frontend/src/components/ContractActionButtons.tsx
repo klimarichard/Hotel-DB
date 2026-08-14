@@ -98,6 +98,13 @@ interface Props {
    * the same kind already, so each button sizes to its own label.
    */
   alignKinds?: readonly ContractDocKind[];
+  /**
+   * Rendered between the preview pair and the generated-document slot. The
+   * employment history puts its own "Upravit" here rather than outside this
+   * component: the actions are right-aligned, so a button that sits outside
+   * lands in a different column on every row shape.
+   */
+  editSlot?: React.ReactNode;
   /** Template id used to materialise a record when the user clicks "Nahrát podepsanou" before generating. */
   defaultType: ContractType;
   /** Owning employment row id (omit for ad-hoc / standalone contracts). */
@@ -117,6 +124,7 @@ export default function ContractActionButtons({
   contract,
   docKind,
   alignKinds,
+  editSlot,
   defaultType,
   employmentRowId,
   rowSnapshot,
@@ -491,15 +499,15 @@ export default function ContractActionButtons({
     ? alignWords.map((x) => `Zobrazit ${x.podepsanyAkuzativ}`)
     : ["Zobrazit"];
   const downloadVariants = ["Stáhnout", "Stahuji…"];
-  // "Generovat <co>" and "Smazat <co>" are two states of ONE slot - make the
-  // document yourself, or throw the made one away - so they share a width and
-  // form a single column whether or not the row already has a document.
+  // Every caption the generated-document slot can show: make the document,
+  // remake a stale one, or throw the made one away. They share a width, so the
+  // column holds whatever state each row happens to be in. "Znovu generovat"
+  // carries no noun deliberately - naming the document there would make this
+  // the widest caption in the group and stretch the whole column.
   const documentSlotVariants = [
     ...alignWords.map((x) => `Generovat ${x.akuzativ}`),
     ...alignWords.map((x) => `Smazat ${x.akuzativ}`),
-  ];
-  const regenerateVariants = [
-    ...alignWords.map((x) => `Znovu generovat ${x.akuzativ}`),
+    "Znovu generovat",
     "Zahazuji…",
   ];
   // The " ▾" only renders on the row that can carry a Prohlášení (nástup),
@@ -513,6 +521,40 @@ export default function ContractActionButtons({
 
   return (
     <div className={styles.actions}>
+      {/* Hidden on a stale row: the document it would open is out of date, so
+          the row offers "Znovu generovat" in the slot below instead. */}
+      {!isStale && canViewContracts && previewKind && previewLabel && (
+        <>
+          <button
+            data-tour="emp-contract-view"
+            type="button"
+            className={styles.downloadBtn}
+            onClick={() => handlePreview(previewKind)}
+            disabled={busy !== null}
+          >
+            <AlignedLabel variants={previewVariants}>{previewLabel}</AlignedLabel>
+          </button>
+          <button
+            type="button"
+            className={styles.downloadBtn}
+            onClick={() => handleDownload(previewKind)}
+            disabled={busy !== null}
+            title="Stáhnout PDF se správným názvem podle konvence"
+          >
+            <AlignedLabel variants={downloadVariants}>
+              {busy === "downloading" ? "Stahuji…" : "Stáhnout"}
+            </AlignedLabel>
+          </button>
+        </>
+      )}
+
+      {editSlot}
+
+      {/* The generated-document slot - ONE column, three mutually exclusive
+          states. Its position here (right of "Upravit", left of "Nahrát
+          podepsaný…") is load-bearing: the strip is right-aligned, so this is
+          what keeps the column lined up down the list whatever state a row is
+          in. Keep the three together when editing. */}
       {isStale ? (
         <button
           type="button"
@@ -521,68 +563,42 @@ export default function ContractActionButtons({
           disabled={busy !== null}
           title={`Parametry řádku se změnily – ${w.vygenerovany} je neaktuální`}
         >
-          <AlignedLabel variants={regenerateVariants}>
-            {busy === "deleting" ? "Zahazuji…" : `Znovu generovat ${w.akuzativ}`}
+          <AlignedLabel variants={documentSlotVariants}>
+            {busy === "deleting" ? "Zahazuji…" : "Znovu generovat"}
           </AlignedLabel>
         </button>
       ) : (
-        canViewContracts && previewKind && previewLabel && (
-          <>
+        <>
+          {canGenerate && onGenerate && !hasUnsigned && !hasSigned && (
             <button
-              data-tour="emp-contract-view"
+              data-tour="emp-contract-generate"
               type="button"
-              className={styles.downloadBtn}
-              onClick={() => handlePreview(previewKind)}
+              className={styles.generateBtn}
+              onClick={onGenerate}
               disabled={busy !== null}
             >
-              <AlignedLabel variants={previewVariants}>{previewLabel}</AlignedLabel>
-            </button>
-            <button
-              type="button"
-              className={styles.downloadBtn}
-              onClick={() => handleDownload(previewKind)}
-              disabled={busy !== null}
-              title="Stáhnout PDF se správným názvem podle konvence"
-            >
-              <AlignedLabel variants={downloadVariants}>
-                {busy === "downloading" ? "Stahuji…" : "Stáhnout"}
+              <AlignedLabel variants={documentSlotVariants}>
+                {`Generovat ${w.akuzativ}`}
               </AlignedLabel>
             </button>
-          </>
-        )
+          )}
+
+          {contract && canDeleteContract && (
+            <button
+              data-tour="emp-contract-delete"
+              type="button"
+              className={styles.deleteBtn}
+              onClick={() => setDeleteConfirm(true)}
+              disabled={busy !== null}
+            >
+              <AlignedLabel variants={documentSlotVariants}>
+                {`Smazat ${w.akuzativ}`}
+              </AlignedLabel>
+            </button>
+          )}
+        </>
       )}
 
-      {canGenerate && onGenerate && !hasUnsigned && !hasSigned && !isStale && (
-        <button
-          data-tour="emp-contract-generate"
-          type="button"
-          className={styles.generateBtn}
-          onClick={onGenerate}
-          disabled={busy !== null}
-        >
-          <AlignedLabel variants={documentSlotVariants}>
-            {`Generovat ${w.akuzativ}`}
-          </AlignedLabel>
-        </button>
-      )}
-
-      {contract && canDeleteContract && (
-        <button
-          data-tour="emp-contract-delete"
-          type="button"
-          className={styles.deleteBtn}
-          onClick={() => setDeleteConfirm(true)}
-          disabled={busy !== null}
-        >
-          <AlignedLabel variants={documentSlotVariants}>
-            {`Smazat ${w.akuzativ}`}
-          </AlignedLabel>
-        </button>
-      )}
-
-      {/* Sits left of "Nahrát podepsaný…" on purpose: the actions are
-          right-aligned, so this keeps the generated-document slot
-          ("Generovat …" / "Smazat …") in one column down the list. */}
       {canSign && !hasSigned && (
         <div className={styles.signWrap}>
           <button
