@@ -2,11 +2,16 @@ import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsPhone } from "@/hooks/useIsPhone";
 import { ContractType } from "@/lib/contractVariables";
-import { docKindForChangeType, docWords } from "@/lib/contractDocKind";
+import {
+  docKindForChangeType,
+  docWords,
+  EMPLOYMENT_DOC_KINDS,
+} from "@/lib/contractDocKind";
 import { formatDateCZ } from "@/lib/dateFormat";
 import { UVAZEK_KIND, LEGACY_UVAZEK_KIND, LEGACY_HOURS_KIND } from "@/lib/changeKinds";
 import type { ChangeRow, EmploymentRow, ContractRecord } from "@/lib/employmentSessions";
 import ContractActionButtons from "./ContractActionButtons";
+import AlignedLabel from "./AlignedLabel";
 import ConfirmModal from "./ConfirmModal";
 import SalaryReveal from "./SalaryReveal";
 import styles from "./EmploymentRowItem.module.css";
@@ -58,9 +63,11 @@ interface Props {
   onContractsChanged: () => void;
   /**
    * Self-service (Můj profil) download-only mode. When provided, the admin
-   * ContractActionButtons are replaced by a single "Stáhnout smlouvu" button
-   * that downloads this row's SIGNED contract via the self endpoint. Employees
-   * get no generate/sign/delete/preview actions.
+   * ContractActionButtons are replaced by a single download button, worded
+   * after the row's own document ("Stáhnout podepsanou smlouvu" /
+   * "…podepsaný dodatek" / "…podepsané ukončení"), which fetches this row's
+   * SIGNED contract from the self endpoint. Employees get no
+   * generate/sign/delete/preview actions.
    */
   onSelfDownload?: (contractId: string, displayName?: string) => void;
 }
@@ -174,6 +181,11 @@ export default function EmploymentRowItem({
   const docKind = docKindForChangeType(row.changeType);
   const w = docWords(docKind);
 
+  // Widths the self-service download button shares with the sibling rows.
+  const selfDownloadVariants = EMPLOYMENT_DOC_KINDS.map(
+    (k) => `Stáhnout ${docWords(k).podepsanyAkuzativ}`
+  );
+
   const signedLocked = !!contract?.signedStoragePath;
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -233,13 +245,16 @@ export default function EmploymentRowItem({
               className={styles.editBtn}
               onClick={() => onSelfDownload(contract.id, contract.displayName)}
             >
-              Stáhnout smlouvu
+              <AlignedLabel variants={selfDownloadVariants}>
+                {`Stáhnout ${w.podepsanyAkuzativ}`}
+              </AlignedLabel>
             </button>
           )
         ) : (
           <ContractActionButtons
             contract={contract}
             docKind={docKind}
+            alignKinds={EMPLOYMENT_DOC_KINDS}
             defaultType={defaultContractType}
             employmentRowId={row.id}
             rowSnapshot={rowSnapshot}
