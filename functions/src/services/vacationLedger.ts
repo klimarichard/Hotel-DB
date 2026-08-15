@@ -109,23 +109,75 @@ export async function readLedger(
 ): Promise<Record<string, unknown> | null> {
   const snap = await ledgerRef(employeeId, year).get();
   if (!snap.exists) return null;
-  const data = snap.data() as Record<string, unknown>;
+  return projectLedger(snap.data() as Record<string, unknown>, year);
+}
+
+/**
+ * Round a derived hour figure for display. The stored parts are whatever payroll
+ * and the AVENSIO import put there, so summing them surfaces float noise
+ * (127.99999999999999). `projectedRemainingHours` already rounds for exactly this
+ * reason; every ledger read does it too, so no caller has to remember.
+ */
+function round2(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+/**
+ * Project a raw ledger document into the shape EVERY read path returns — the
+ * admin `GET /employees/:id/vacation-ledger`, the self-scoped
+ * `GET /me/employee/vacation-ledger`, and the aggregate overview table. Pure:
+ * takes doc data, does no I/O, so the bulk reader can call it per document.
+ *
+ * Kept as ONE function rather than reimplemented per endpoint. Two copies of a
+ * derivation that drift apart is this codebase's most expensive recurring bug
+ * (see the two session walkers behind the Ukončení-row fix), and here the
+ * aggregate table splices a row refreshed from the per-employee endpoint into a
+ * response built by the bulk one — they MUST be the same object shape.
+ */
+export function projectLedger(
+  data: Record<string, unknown>,
+  year: number
+): Record<string, unknown> {
   const months = (data.months as Record<string, LedgerMonth>) ?? {};
   const priorYearHours = (data.priorYearHours as number | null) ?? null;
   const currentYearHours = (data.currentYearHours as number | null) ?? null;
   const paidOutHours = (data.paidOutHours as number | null) ?? null;
+  const entitlement = entitlementHours(priorYearHours, currentYearHours);
+  const remaining = remainingHours({ priorYearHours, currentYearHours, paidOutHours, months });
   return {
     year,
     priorYearHours,
     currentYearHours,
-    entitlementHours: entitlementHours(priorYearHours, currentYearHours),
+    entitlementHours: entitlement === null ? null : round2(entitlement),
     paidOutHours,
     months,
-    consumedHours: sumConsumed(months),
-    remainingHours: remainingHours({ priorYearHours, currentYearHours, paidOutHours, months }),
+    consumedHours: round2(sumConsumed(months)),
+    remainingHours: remaining === null ? null : round2(remaining),
     updatedAt: data.updatedAt ?? null,
     updatedBy: data.updatedBy ?? null,
   };
+}
+
+/**
+ * Lock state of every payroll period in `year`, by month.
+ *
+ * Lives here rather than in the payroll route because it is ledger-domain
+ * knowledge: a month's lock state is what tells a ledger editor whether their
+ * manual value is settled or will be overwritten by `feedVacationLedgerOnLock`
+ * the next time that period is locked.
+ *
+ * Period doc IDs are auto-generated, NOT `${year}-${month}`, so this must be a
+ * field query — never a doc-id lookup.
+ */
+export async function periodsForYear(
+  year: number
+): Promise<{ month: number; locked: boolean }[]> {
+  const snap = await db().collection("payrollPeriods").where("year", "==", year).get();
+  return snap.docs
+    .map((d) => d.data() as Record<string, unknown>)
+    .filter((p) => Number.isInteger(Number(p.month)))
+    .map((p) => ({ month: Number(p.month), locked: p.locked === true }))
+    .sort((a, b) => a.month - b.month);
 }
 
 /**

@@ -12,6 +12,8 @@ import VacationCollisionInfoModal, {
 import VacationCollisionResolutionModal from "../components/VacationCollisionResolutionModal";
 import ConfirmModal from "../components/ConfirmModal";
 import Button from "../components/Button";
+import VacationLedgerTable from "../components/VacationLedgerTable";
+import { useIsPhone } from "../hooks/useIsPhone";
 
 function extractCollisions(e: unknown): ShiftCollision[] | null {
   // Preferred path – ApiError with structured body
@@ -82,6 +84,9 @@ export default function VacationPage() {
   // hide it – and skip its fetch – for vacation.view.all holders. Inverse-gate
   // pattern, mirroring the tour's excludeIfPermission.
   const canViewApprovedUpcoming = can("vacation.view.approvedUpcoming") && !canViewAll;
+  // Aggregate vacation-ledger table at the bottom of the page (desktop only).
+  const canManageVacationBalance = can("employees.vacationBalance.manage");
+  const isPhone = useIsPhone();
 
   const [requests, setRequests] = useState<VacationRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -798,6 +803,14 @@ export default function VacationPage() {
           </>
         );
       })()}
+
+      {/* Aggregate ledger table – independent of the canViewAll block above, it
+          answers to its own permission. Hidden entirely on a phone: a 20-column
+          grid has no readable phone form, and a card fallback would lose the
+          side-by-side reconciliation that is the whole point of it. */}
+      {canManageVacationBalance && !isPhone && (
+        <VacationLedgerTable canManage={canManageVacationBalance} />
+      )}
     </div>
   );
 }

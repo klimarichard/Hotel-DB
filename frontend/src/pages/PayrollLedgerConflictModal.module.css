@@ -1,0 +1,194 @@
+/* Pre-lock collision dialog: which hand-entered vacation cells would the lock
+   overwrite, and what should happen to each of them. Wider than the other
+   payroll modals because it carries a four-column table. */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--overlay-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 1rem;
+}
+
+.modal {
+  composes: shell from "../styles/modalShell.module.css";
+  background: var(--color-surface);
+  border-radius: 10px;
+  width: 100%;
+  max-width: 680px;
+  box-shadow: 0 8px 32px var(--shadow-md);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--color-text-heading);
+}
+
+.period {
+  margin-left: 0.5rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.body {
+  composes: shellBody from "../styles/modalShell.module.css";
+  padding: 1rem 1.25rem;
+}
+
+.intro {
+  margin: 0 0 0.85rem;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.6rem;
+}
+
+.toolbarLabel {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  margin-right: 0.15rem;
+}
+
+.bulkBtn {
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 0.2rem 0.55rem;
+  font-family: inherit;
+  font-size: 0.78rem;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.bulkBtn:hover:not(:disabled) {
+  background: var(--color-surface-4);
+}
+
+.bulkBtn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.table th {
+  text-align: left;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 0.45rem 0.5rem;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text);
+  vertical-align: middle;
+}
+
+.numCol {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.name {
+  font-weight: 500;
+}
+
+/* ── per-row segmented choice ─────────────────────────────────────────────── */
+
+.choice {
+  display: inline-flex;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.choiceBtn {
+  background: var(--color-surface);
+  border: none;
+  padding: 0.28rem 0.6rem;
+  font-family: inherit;
+  font-size: 0.78rem;
+  line-height: 1.2;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.choiceBtn + .choiceBtn {
+  border-left: 1px solid var(--color-border);
+}
+
+.choiceBtn:hover:not(:disabled):not(.choiceActiveKeep):not(.choiceActiveOverwrite) {
+  background: var(--color-surface-4);
+}
+
+.choiceBtn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.choiceActiveKeep {
+  background: var(--color-success-bg);
+  color: var(--color-success-text);
+  font-weight: 600;
+}
+
+.choiceActiveOverwrite {
+  background: var(--color-warning-bg);
+  color: var(--color-warning-text);
+  font-weight: 600;
+}
+
+.summary {
+  margin-top: 0.85rem;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.error {
+  color: var(--color-danger-text-strong);
+  font-size: 0.8125rem;
+  margin-top: 0.5rem;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding: 0.875rem 1.25rem;
+  border-top: 1px solid var(--color-border);
+}
