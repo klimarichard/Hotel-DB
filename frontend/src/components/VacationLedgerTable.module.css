@@ -120,6 +120,12 @@
   border-spacing: 0;
   font-size: 0.8rem;
   white-space: nowrap;
+  /* Page-wide by default. Column widths below are percentages that add up to
+     100, each with a hard minimum: on a wide screen the table fills the space,
+     on a narrow one the minimums win and .scroll takes over horizontally.
+     Deliberately NOT `table-layout: fixed` — fixed layout ignores min-width
+     when sizing columns, which is exactly the half of this we need. */
+  width: 100%;
 }
 
 /* border-box so the sticky second header row can be offset by the first row's
@@ -159,7 +165,8 @@
   color: var(--color-text-muted);
   font-weight: 600;
   font-size: 0.72rem;
-  min-width: 2.6rem;
+  width: 4%;
+  min-width: 2.4rem;
   border-bottom: 2px solid var(--color-border);
 }
 
@@ -168,21 +175,35 @@
   border-left: 2px solid var(--color-border-strong);
 }
 
-.nameHead {
+/* Loňská · Letošní · Nárok · Čerpáno · Proplaceno · Zůstatek all get the same
+   width, so the numbers line up as one block on each side of the months.
+   6 × 6% = 36%. */
+.sumHead {
+  width: 6%;
+  min-width: 3.4rem;
+}
+
+/* Name column. The `.table th`/`.table td` base rules are (0,1,1) — one class
+   plus one element — so a bare `.nameHead` at (0,1,0) LOSES to their
+   `text-align: center` no matter where it sits in the file. Qualifying these
+   with the element is what actually left-aligns the column. */
+.table th.nameHead {
   left: 0;
   z-index: 4;
   text-align: left;
-  min-width: 13rem;
+  width: 16%;
+  min-width: 11rem;
   border-right: 2px solid var(--color-border-strong);
 }
 
-.nameCell {
+.table td.nameCell {
   position: sticky;
   left: 0;
   z-index: 1;
   background: var(--color-surface);
   text-align: left;
-  min-width: 13rem;
+  width: 16%;
+  min-width: 11rem;
   border-right: 2px solid var(--color-border-strong);
 }
 
@@ -206,9 +227,15 @@
 }
 
 /* Leavers stay in the table on purpose — they hold most of the Proplaceno
-   figures — but read as history rather than as current staff. */
+   figures — but read as history rather than as current staff, and they sort
+   below everyone else (see the comparator). The top border marks where the
+   current staff end; only the FIRST leaver carries it. */
 .terminatedRow td {
   color: var(--color-text-muted);
+}
+
+.terminatedFirst td {
+  border-top: 2px solid var(--color-border-strong);
 }
 
 .pill {
