@@ -815,7 +815,11 @@ Only the **monthly** čerpáno figure must be ≥ 0. Since v5.9.3, **all three a
 
 `hours === null` clears the field. Every write is tagged `source: "manual"` and audit-logged (`logUpdate`, collection `"employees/vacationLedger"`, `subResourceId` = the year).
 
+**Response — returns the fresh row (feature/vacation-ledger-table).** The reply changed from `{ success: true }` to `{ success: true, ledger: <projectLedger payload> | null }` (`functions/src/routes/employees.ts:1596`). This matters beyond saving a round trip: the GET above is gated on `employees.view.*`, while this PATCH is gated on the narrower `employees.vacationBalance.manage` — a caller holding only the manage key would previously save successfully and then get 403'd trying to fetch the result, so the value landed in Firestore but *looked* like it hadn't saved. The aggregate overview table (below) and the employee-detail section both use the returned row directly instead of issuing a follow-up GET.
+
 Both this GET and the self-service mirror below now share one implementation, `readLedger(employeeId, year)` in `functions/src/services/vacationLedger.ts` — extracted in v4.12.1 so the two endpoints can never drift apart: **one frontend component (`VacationLedgerSection.tsx`) renders both**, so a difference in response shape between them would break one of them silently rather than fail loudly. `entitlementHours`/`sumConsumed`/`remainingHours` are unchanged, just called from the shared function instead of inline in the route handler.
+
+**Further split (feature/vacation-ledger-table): the derivation itself is now a separate pure function, `projectLedger(data, year)`, that `readLedger` simply wraps.** `projectLedger` takes raw doc data and returns the shared shape with no I/O, so the bulk overview endpoint (below) can call it once per document from a batch read instead of going through `readLedger`'s own per-employee Firestore fetch — and, for the same reason as the v4.12.1 split, it keeps a *third* consumer from drifting: the aggregate table splices a row refreshed from the **per-employee** PATCH response into a response the **bulk** GET built, so a shape difference between the two would corrupt the row silently rather than fail loudly. `projectLedger` also now **rounds `entitlementHours`/`consumedHours`/`remainingHours` to 2 decimal places** — `remainingHours` never did before, which showed up as one stray `127.99999999999999` on the single employee detail page but as forty of them down a table column.
 
 ### Self-service mirror — `GET /me/employee/vacation-ledger?year=YYYY` (v4.12.1)
 
@@ -910,6 +914,56 @@ A one-time historical backfill, **scoped to the 32 employees present in the July
 - **Additive and idempotent**: uses `set({ merge: true })`, so it only ever touches the fields it carries (Loňská, Letošní, paidOut, months 1–6) and never clears months a later payroll lock adds (7+); it also `FieldValue.delete()`s the deprecated pre-split `entitlementHours`.
 - **Prod-only, dry-run by default**: refuses to run if emulator env vars are set, requires `--commit` to actually write, and skips (reporting) any `employeeId` not found in prod `employees/`.
 - Only imports Jan–Jun 2026 (H1) — the rest of the year is expected to be fed live by payroll locks as each month closes.
+
+### Aggregate overview — "Přehled čerpání dovolené" table (feature/vacation-ledger-table)
+
+A table at the bottom of the **Dovolená** page shows every employee's ledger for one year side by side, mirroring the AVENSIO "Roční přehled čerpání dovolené" export so the two can be reconciled visually. Gated on `employees.vacationBalance.manage` and **hidden entirely on phones** (`useIsPhone()`) — the grid is a 12-month-plus-totals table with no readable card form.
+
+```
+GET /api/vacation/ledger-overview?year=YYYY
+```
+→ `{ year, periods: { month, locked }[], rows: [...] }`, each row the employee's identity fields plus the full `projectLedger` payload (see above).
+
+- **Mounted on `vacationRouter`, not `employeesRouter`** (`functions/src/routes/vacation.ts:94-176`). `GET /employees/:id` would shadow any collection-level route registered after it in Express's declaration-order routing, and `employeesRouter`'s `enforceEmpAccess` middleware reads the first path segment as an employee id — a literal segment like `ledger-overview` would trigger a full `users` collection scan trying to resolve it as one.
+- **Consequence: the management-record filter is not inherited.** Because the endpoint sits outside `employeesRouter`, it does not get `enforceEmpAccess` for free — the handler applies the same filter `GET /employees` uses, by hand (`isNonManagementScoped(req.permissions)` → `getManagementEmployeeIds()`, `vacation.ts:135-143`). This is a real security boundary, not tidiness: without it, a caller who holds `employees.view.nonManagement` but not `employees.view.all` (e.g. a non-management-scoped HR type) could read a director's vacation balance from this aggregate table while still being 403'd opening that director's own employee detail page.
+- **Row set.** Only employees that have a `vacationLedger/{year}` doc at all — the query result set *is* the row set, via a Firestore **collection-group** query: `db().collectionGroup("vacationLedger").where("year", "==", year)` (`vacation.ts:111-114`). This requires the `vacationLedger.year` **COLLECTION_GROUP** `fieldOverride` in `firestore.indexes.json` (`:246-253`) — verified against production that without it the query throws `FAILED_PRECONDITION: The query requires a COLLECTION_GROUP_ASC index`. The emulator does not enforce index config, so a missing index only ever surfaces once deployed. Indexes deploy before functions within a single `firebase deploy`, so this is safe by default — just don't split the deploy into functions-first steps.
+- A **terminated** employee stays in the table through the end of the year they left in (`employmentEndDate` year ≥ the selected year) and drops out of later years — their Proplaceno and final balance belong to that year's reconciliation. A missing `employmentEndDate` keeps the row rather than hiding it (`vacation.ts:160-167`).
+- A ledger doc can outlive its employee doc; that row is surfaced with `employeeMissing: true` instead of being dropped, since the aggregate view is the only surface where such an orphan is even visible (the per-employee page needs an employee record to open).
+- **Frontend** — `frontend/src/components/VacationLedgerTable.tsx` + `.module.css`, mounted at the bottom of `frontend/src/pages/VacationPage.tsx` behind `canManageVacationBalance && !isPhone`. Cells reuse **`VacationLedgerCell.tsx`** — the double-click-to-edit widget extracted out of `VacationLedgerSection.tsx` so the employee-detail section and this table share one copy of the interaction and its validation asymmetry (`allowNegative`: monthly cells reject negatives, the three annual figures allow them). Each month column header shows a 🔒 glyph when that month's payroll period is locked — **lock state is a property of the month, identical for every row**, so it belongs on the column header rather than being repeated per cell. After a PATCH, the response's re-projected `ledger` row (see above) is spliced straight into the table's local state rather than re-fetching the whole overview.
+
+### Pre-lock ledger-conflict guard (feature/vacation-ledger-table)
+
+Locking a payroll period always feeds that month's vacation hours into the ledger (`feedVacationLedgerOnLock`, above), overwriting whatever is already in `months[month]` — including a value someone typed in by hand. That blind overwrite is deliberate (it is what makes re-locking a period the fix for a bad import), but until this feature nothing told the person locking the period that a hand-edited cell was about to be discarded.
+
+```
+GET /api/payroll/periods/:id/ledger-conflicts
+```
+Gated `payroll.lock`. Returns `{ conflicts: { employeeId, firstName, lastName, manualHours, payrollHours }[] }` — every employee whose ledger cell for this period's month has `source === "manual"` **and** whose value disagrees with what payroll would write (`ledgerConflictsOnLock()`, `functions/src/routes/payroll.ts:908-961`). A manual value that already happens to match is not a conflict — it would be overwritten with the same number, so there's nothing to ask about. Cells tagged `"payroll-lock"` or `"avensio-seed"` are never conflicts either, on purpose: re-locking to correct a bad import (exactly how the AVENSIO H1 seed got fixed) must stay friction-free. Returns `[]` once the period is already locked, since the feed only ever runs on a genuine `unlocked → locked` transition.
+
+```
+PATCH /api/payroll/periods/:id
+```
+now additionally accepts `keepManual?: string[]` — employee ids whose manual cell should be left alone. `feedVacationLedgerOnLock` skips every id in that set (`payroll.ts:871`); the PATCH handler only reads and forwards it on the unlock→lock transition (`:1030-1039`).
+
+Frontend: `frontend/src/pages/PayrollLedgerConflictModal.tsx` — a per-employee keep/overwrite table, shown when `ledger-conflicts` returns a non-empty list before the lock request is sent. **Default is "keep the manual value"** for every conflict (`useState` seeded with `true` for every `employeeId`, `PayrollLedgerConflictModal.tsx:51-53`) — the number was typed on purpose, so silent overwrite is exactly what the dialog exists to prevent.
+
+⚠️ The confirmation dialog is a frontend affordance only — `GET /ledger-conflicts` is a read the UI chooses to call before locking, not something the PATCH endpoint requires. A direct `PATCH` call with `locked: true` and no `keepManual` still locks and overwrites every conflicting cell exactly as it always did; what's new is the warning, not the underlying overwrite rule. See the matching entry in `docs/business-rules.md`.
+
+### Yearly vacation-entitlement rollover (feature/vacation-ledger-table)
+
+`functions/src/services/vacationYearRollover.ts` — `rolloverVacationEntitlement({ year, updatedBy, dryRun })`, plus the exported constant:
+
+```ts
+export const YEARLY_ENTITLEMENT_HOURS: Record<string, number> = { HPP: 160, PPP: 80, DPP: 0 };
+```
+
+- **Writes only `currentYearHours` (Letošní).** `priorYearHours` (Loňská) is deliberately never touched by this job — carrying a balance forward is a human decision, and an employee who overdrew the previous year would otherwise start the new year silently in deficit.
+- **Scope** is everyone who has a `vacationLedger/{year - 1}` doc (a collection-group query on `year`, the same index the aggregate overview above depends on), minus anyone whose `employmentEndDate` is before 1 January of the new year (`vacationYearRollover.ts:141-148`). A future-dated termination inside the new year still gets the entitlement — they work part of the year and their payout is reconciled at that point.
+- **Idempotent.** Skips anyone whose `currentYearHours` is already set (`:161-167`), whether from this job's own earlier run or a manual correction — so both the scheduled 1 January run and a later manual re-run are safe, and a re-run never clobbers a value someone already fixed.
+- An employee whose `currentContractType` is empty or not one of `HPP`/`PPP`/`DPP` is **never guessed** — reported in `skippedUnknownContract` instead so a human fixes the record and re-runs (`:150-159`). Production has exactly one such record as of this writing.
+- **Scheduled function** `rolloverVacationYear` in `functions/src/index.ts:428-446`, cron `0 1 1 1 *` (1 January, 01:00) Europe/Prague. 01:00 rather than midnight is deliberate: it runs *after* the `refreshEmployeeEffective` sweep (00:00) has re-folded `currentContractType` from any Dodatek whose validity date just arrived — `currentContractType` is what sizes the entitlement, so it has to be current first.
+- **Manual re-run**: `POST /api/employees/trigger-vacation-rollover?year=&dryRun=`, gated `system.triggers` (`index.ts:252-281`), mirroring the other four trigger jobs — audit action `"manual-trigger"`, `extra.trigger: "rolloverVacationEntitlement"`.
+- **Frontend** — `frontend/src/pages/settings/JobsTab.tsx`, a two-step trigger card unlike the other jobs on that tab: **step 1** (`previewRollover`) calls the endpoint with `dryRun=true` and shows the plan in a `ConfirmModal`; **step 2** (`runRollover`) only fires after the user confirms, calling the endpoint again without `dryRun`. This "preview, then confirm" shape mirrors other irreversible bulk operations elsewhere in the app — needed here because the idempotence guard only prevents *re-running* damage, not a first run against the wrong year.
 
 ---
 
