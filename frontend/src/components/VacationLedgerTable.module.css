@@ -1,0 +1,365 @@
+/* Aggregate vacation-ledger table ("Přehled čerpání dovolené") at the bottom of
+   /dovolena. Mirrors the AVENSIO "Roční přehled čerpání dovolené" layout so the
+   two can be reconciled side by side. */
+
+.section {
+  background: var(--color-surface);
+  border-radius: 8px;
+  box-shadow: 0 1px 4px var(--shadow-sm);
+  margin-bottom: 1.5rem;
+  /* NOTE: no `overflow: hidden` here (unlike VacationPage's .tableWrapper) —
+     it silently kills `position: sticky` on every descendant. The grid brings
+     its own scroll container instead. */
+}
+
+/* ── Collapsible header (same idiom as VacationPage) ──────────────────────── */
+
+.collapsibleHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.85rem 1.25rem;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--color-text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.collapsibleHeader:hover {
+  background: var(--color-bg);
+}
+
+.collapsibleChevron {
+  display: inline-block;
+  width: 0.9rem;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  line-height: 1;
+}
+
+.collapsibleCount {
+  font-weight: 500;
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+}
+
+.body {
+  padding: 0 1.25rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+/* ── ‹ rok › ──────────────────────────────────────────────────────────────── */
+
+.yearNav {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.navBtn {
+  background: none;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 6px;
+  width: 2rem;
+  height: 2rem;
+  cursor: pointer;
+  font-size: 1.2rem;
+  color: var(--color-text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.navBtn:hover:not(:disabled) {
+  background: var(--color-surface-4);
+  border-color: var(--color-text-subtle);
+}
+
+.navBtn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.yearLabel {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--color-text);
+  min-width: 4rem;
+  text-align: center;
+}
+
+.state {
+  padding: 0.5rem 0;
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+}
+
+/* ── Grid ─────────────────────────────────────────────────────────────────── */
+
+.scroll {
+  overflow: auto;
+  max-width: 100%;
+  max-height: calc(100vh - 16rem);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-surface);
+}
+
+/* `separate` (not `collapse`) so per-cell borders survive sticky positioning —
+   collapsed borders belong to the table, and scroll out from under sticky
+   cells. */
+.table {
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  /* Page-wide by default. Column widths below are percentages that add up to
+     100, each with a hard minimum: on a wide screen the table fills the space,
+     on a narrow one the minimums win and .scroll takes over horizontally.
+     Deliberately NOT `table-layout: fixed` — fixed layout ignores min-width
+     when sizing columns, which is exactly the half of this we need. */
+  width: 100%;
+}
+
+/* border-box so the sticky second header row can be offset by the first row's
+   exact height (2rem) without a scroll-through seam. */
+.table th,
+.table td {
+  box-sizing: border-box;
+  border-bottom: 1px solid var(--color-border-subtle);
+  border-right: 1px solid var(--color-border-subtle);
+  padding: 0.3rem 0.45rem;
+  text-align: center;
+  color: var(--color-text-heading);
+}
+
+/* Every sticky cell paints its OWN background — a transparent one lets the
+   rows scroll straight through it. */
+.headCell {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  height: 2rem;
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
+  font-weight: 600;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 2px solid var(--color-border);
+}
+
+/* Second header row (bare month digits) sits directly under the first. */
+.monthHeadCell {
+  position: sticky;
+  top: 2rem;
+  z-index: 2;
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
+  font-weight: 600;
+  font-size: 0.72rem;
+  width: 4%;
+  min-width: 2.4rem;
+  border-bottom: 2px solid var(--color-border);
+}
+
+/* Group header over months 1–12. */
+.groupHead {
+  border-left: 2px solid var(--color-border-strong);
+}
+
+/* Loňská · Letošní · Nárok · Čerpáno · Proplaceno · Zůstatek all get the same
+   width, so the numbers line up as one block on each side of the months.
+   6 × 6% = 36%. */
+.sumHead {
+  width: 6%;
+  min-width: 3.4rem;
+}
+
+/* Name column. The `.table th`/`.table td` base rules are (0,1,1) — one class
+   plus one element — so a bare `.nameHead` at (0,1,0) LOSES to their
+   `text-align: center` no matter where it sits in the file. Qualifying these
+   with the element is what actually left-aligns the column. */
+.table th.nameHead {
+  left: 0;
+  z-index: 4;
+  text-align: left;
+  width: 16%;
+  min-width: 11rem;
+  border-right: 2px solid var(--color-border-strong);
+}
+
+.table td.nameCell {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--color-surface);
+  text-align: left;
+  width: 16%;
+  min-width: 11rem;
+  border-right: 2px solid var(--color-border-strong);
+}
+
+/* Zebra/hover paint the ROW, not its cells, so a locked month's column tint
+   (set on the cell) still wins over them. Only the sticky name cell needs its
+   own opaque copy. */
+.row:nth-child(even) {
+  background: var(--color-surface-2);
+}
+
+.row:nth-child(even) .nameCell {
+  background: var(--color-surface-2);
+}
+
+.row:hover {
+  background: var(--color-surface-3);
+}
+
+.row:hover .nameCell {
+  background: var(--color-surface-3);
+}
+
+/* Leavers stay in the table on purpose — they hold most of the Proplaceno
+   figures — but read as history rather than as current staff, and they sort
+   below everyone else (see the comparator). The top border marks where the
+   current staff end; only the FIRST leaver carries it. */
+.terminatedRow td {
+  color: var(--color-text-muted);
+}
+
+.terminatedFirst td {
+  border-top: 2px solid var(--color-border-strong);
+}
+
+.pill {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 1px 6px;
+  border-radius: 9999px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  background: var(--color-surface-4);
+  color: var(--color-text-muted);
+  vertical-align: middle;
+}
+
+.pillMissing {
+  background: var(--color-danger-bg);
+  color: var(--color-danger-text);
+}
+
+.orphanId {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.72rem;
+}
+
+/* Column separators that mark the three blocks (annual / months / totals). */
+.blockStart {
+  border-left: 2px solid var(--color-border-strong);
+}
+
+/* Derived, server-computed values: visibly not a field, so a double-click that
+   does nothing reads as "not editable" instead of "broken". */
+.derived {
+  cursor: default;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.negative {
+  color: var(--color-danger-text);
+  font-weight: 700;
+}
+
+.muted {
+  color: var(--color-text-subtle);
+}
+
+/* Faint tint over a locked month's whole column. */
+.lockedCol {
+  background: var(--color-surface-3);
+}
+
+.lockGlyph {
+  margin-left: 0.15rem;
+  font-size: 0.7rem;
+  opacity: 0.75;
+}
+
+.lockGlyphOpen {
+  color: var(--color-warning-border);
+  opacity: 1;
+}
+
+/* ── Editable cells (classes handed to VacationLedgerCell) ────────────────── */
+
+.editable {
+  cursor: pointer;
+  display: inline-block;
+  min-width: 1.5rem;
+  border-radius: 3px;
+}
+
+.editable:hover {
+  background: var(--color-active-bg);
+}
+
+/* Manual edit marker — mirrors Payroll's overridden cell (warning bg + "*"). */
+.overridden {
+  background: var(--color-warning-bg);
+  color: var(--color-warning-text);
+  font-weight: 600;
+  padding: 0 0.2rem;
+}
+
+.overridden::after {
+  content: "*";
+  margin-left: 0.1rem;
+  font-size: 0.85em;
+  opacity: 0.7;
+}
+
+.input {
+  width: 3.2rem;
+  padding: 0.15rem 0.3rem;
+  font-size: 0.8rem;
+  text-align: center;
+  border: 1px solid var(--color-input-border);
+  border-radius: 4px;
+  background: var(--color-input-bg);
+  color: var(--color-text);
+}
+
+/* ── Totals ───────────────────────────────────────────────────────────────── */
+
+.totalsRow td {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  background: var(--color-surface-2);
+  font-weight: 700;
+  border-top: 2px solid var(--color-border-strong);
+}
+
+.totalsRow .nameCell {
+  z-index: 2;
+  background: var(--color-surface-2);
+  font-weight: 700;
+}
+
+/* ── Legend ───────────────────────────────────────────────────────────────── */
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.25rem;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}

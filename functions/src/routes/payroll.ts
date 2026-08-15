@@ -9,6 +9,7 @@ import { nameParts, preferLive, resolveEmployeeNameParts } from "../services/emp
 import { ctxFromReq, logCreate, logUpdate, logDelete, writeAudit } from "../services/auditLog";
 import {
   effectiveEntryVacationHours,
+  ledgerRef,
   projectedRemainingHours,
   upsertLedgerMonth,
 } from "../services/vacationLedger";
@@ -856,18 +857,18 @@ async function feedVacationLedgerOnLock(
   periodRef: admin.firestore.DocumentReference,
   year: number,
   month: number,
-  uid: string | null
+  uid: string | null,
+  keepManual: Set<string>
 ): Promise<number> {
   const entriesSnap = await periodRef.collection("entries").get();
   let n = 0;
   for (const d of entriesSnap.docs) {
-    const e = d.data() as {
-      employeeId?: string;
-      vacationHours?: number;
-      overrides?: Record<string, number>;
-      autoOverrides?: Record<string, number>;
-    };
+    const e = d.data() as PayrollVacationEntry;
     const employeeId = e.employeeId ?? d.id;
+    // The user was shown this employee's hand-entered value in the pre-lock
+    // modal and chose to keep it, so leave months[month] exactly as it is --
+    // including its "manual" source tag.
+    if (keepManual.has(employeeId)) continue;
     // Shared with the projected-balance endpoint below, so the figure the badge
     // predicts is byte-identical to the one this writes.
     const eff = effectiveEntryVacationHours(e);
@@ -884,12 +885,115 @@ async function feedVacationLedgerOnLock(
   return n;
 }
 
+interface PayrollVacationEntry {
+  employeeId?: string;
+  firstName?: string;
+  lastName?: string;
+  vacationHours?: number;
+  overrides?: Record<string, number>;
+  autoOverrides?: Record<string, number>;
+}
+
+/** One hand-edited ledger cell that locking this period would overwrite. */
+export interface LedgerConflict {
+  employeeId: string;
+  firstName: string;
+  lastName: string;
+  /** What the ledger holds now, entered by hand. */
+  manualHours: number;
+  /** What the lock would write over it. */
+  payrollHours: number;
+}
+
+/**
+ * Ledger cells this period's lock would silently destroy.
+ *
+ * `feedVacationLedgerOnLock` blind-writes months[month] with no regard for the
+ * existing cell's source. That is exactly what makes re-locking a period the FIX
+ * for a bad import, and equally what makes it a TRAP for anyone who corrected a
+ * month by hand. A cell counts as a conflict only when a human edited it
+ * (source "manual") AND it disagrees with what payroll computes: a manual value
+ * that already matches gets overwritten with the same number, so there is
+ * nothing to ask about. Cells tagged "payroll-lock" or "avensio-seed" are never
+ * conflicts -- re-locking to correct a bad seed must stay friction-free.
+ */
+async function ledgerConflictsOnLock(
+  periodRef: admin.firestore.DocumentReference,
+  year: number,
+  month: number
+): Promise<LedgerConflict[]> {
+  const entriesSnap = await periodRef.collection("entries").get();
+  const entries = entriesSnap.docs.map((d) => {
+    const e = d.data() as PayrollVacationEntry;
+    return { ...e, employeeId: e.employeeId ?? d.id };
+  });
+  if (entries.length === 0) return [];
+
+  const conflicts: LedgerConflict[] = [];
+  for (let i = 0; i < entries.length; i += 100) {
+    const chunk = entries.slice(i, i + 100);
+    const snaps = await db().getAll(...chunk.map((e) => ledgerRef(e.employeeId, year)));
+    snaps.forEach((snap, idx) => {
+      if (!snap.exists) return;
+      const e = chunk[idx];
+      const months =
+        ((snap.data() as Record<string, unknown>).months as
+          | Record<string, { hours?: number; source?: string }>
+          | undefined) ?? {};
+      const cell = months[String(month)];
+      if (!cell || cell.source !== "manual" || typeof cell.hours !== "number") return;
+      const payrollHours = effectiveEntryVacationHours(e);
+      if (cell.hours === payrollHours) return;
+      conflicts.push({
+        employeeId: e.employeeId,
+        firstName: e.firstName ?? "",
+        lastName: e.lastName ?? "",
+        manualHours: cell.hours,
+        payrollHours,
+      });
+    });
+  }
+  return conflicts.sort(
+    (a, b) =>
+      (a.lastName || "").localeCompare(b.lastName || "", "cs") ||
+      (a.firstName || "").localeCompare(b.firstName || "", "cs")
+  );
+}
+
+// -- GET /payroll/periods/:id/ledger-conflicts --------------------------------
+// Pre-lock check for the frontend: which hand-edited vacation cells would this
+// lock overwrite? Read-only. Returns an empty list when the period is already
+// locked, because the feed only runs on a genuine unlocked -> locked
+// transition, so nothing is at risk until it is unlocked and locked again.
+
+payrollRouter.get(
+  "/periods/:id/ledger-conflicts",
+  requireAuth,
+  requirePermission("payroll.lock"),
+  async (req: AuthRequest, res: Response) => {
+    const periodRef = db().collection("payrollPeriods").doc(req.params.id);
+    const snap = await periodRef.get();
+    if (!snap.exists) {
+      res.status(404).json({ error: "Mzdové období nebylo nalezeno." });
+      return;
+    }
+    const d = snap.data() as Record<string, unknown>;
+    const year = Number(d.year);
+    const month = Number(d.month);
+    if (d.locked === true || !Number.isInteger(year) || !Number.isInteger(month)) {
+      res.json({ conflicts: [] });
+      return;
+    }
+    res.json({ conflicts: await ledgerConflictsOnLock(periodRef, year, month) });
+  }
+);
+
 payrollRouter.patch(
   "/periods/:id",
   requireAuth,
   requirePermission("payroll.lock"),
   async (req: AuthRequest, res: Response) => {
-    const { locked } = req.body as { locked?: boolean };
+    const { locked, keepManual } = req.body as { locked?: boolean; keepManual?: string[] };
     if (typeof locked !== "boolean") {
       res.status(400).json({ error: "Pole 'locked' musí být boolean." });
       return;
@@ -928,7 +1032,11 @@ payrollRouter.patch(
       const month = Number(before.month);
       if (Number.isInteger(year) && Number.isInteger(month)) {
         try {
-          const n = await feedVacationLedgerOnLock(periodRef, year, month, req.uid ?? null);
+          // employeeIds the user chose to keep in the pre-lock conflict modal.
+          const keep = new Set(
+            Array.isArray(keepManual) ? keepManual.filter((x) => typeof x === "string") : []
+          );
+          const n = await feedVacationLedgerOnLock(periodRef, year, month, req.uid ?? null, keep);
           await writeAudit(ctxFromReq(req), {
             action: "update",
             collection: "employees/vacationLedger",
@@ -936,7 +1044,7 @@ payrollRouter.patch(
             event: "vacation.ledger.fromPayrollLock",
             year,
             month,
-            extra: { source: "payroll-lock", employees: n },
+            extra: { source: "payroll-lock", employees: n, keptManual: keep.size },
           });
         } catch (err) {
           // Ledger feed is idempotent and re-runnable (unlock→lock) — never fail the lock.

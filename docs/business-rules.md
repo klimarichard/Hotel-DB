@@ -97,6 +97,26 @@ Pole samotné je editovatelné pro každého zaměstnance přes API (viz pravidl
 
 > 🖥️ Jen rozhraní. Zdroj: `frontend/src/components/VacationLedgerSection.tsx:164` (`showPaidOut = isTerminated || paidOut != null`); prop `isTerminated` nastavuje `frontend/src/pages/EmployeeDetailPage.tsx:2338` podle `employee?.status === "terminated"`.
 
+### Nový rok dostane nárok na dovolenou automaticky 1. ledna
+
+Každý 1. ledna v 01:00 aplikace sama zapíše novou hodnotu **Letošní** (nárok na dovolenou pro nový rok) každému zaměstnanci, kterého evidence dovolené sledovala v předchozím roce a kdo do nového roku ještě nevstoupil jako ukončený:
+
+| Typ smlouvy | Letošní |
+|---|---|
+| HPP | 160 hodin |
+| PPP | 80 hodin |
+| DPP | 0 hodin |
+
+**Loňská se automaticky nedoplňuje nikdy.** Přenesení zůstatku z minulého roku je rozhodnutí, které musí udělat člověk – kdyby se přeneslo samo, zaměstnanec, který loni vyčerpal víc, než měl nárok, by nový rok tiše začínal v mínusu.
+
+Úloha je **odolná proti opakování**: má-li zaměstnanec Letošní už vyplněné (ať z tohoto běhu, nebo opravené ručně), přeskočí ho – opakované spuštění tedy jen dopočítá, koho úloha minula, a nikdy nepřepíše ruční opravu.
+
+Zaměstnanci ukončení **před** 1. lednem nového roku nárok nedostanou. Zaměstnanec s ukončením naplánovaným až v průběhu nového roku ho dostane – část roku ještě odpracuje a výplata se dořeší při odchodu.
+
+Chybí-li u zaměstnance rozpoznatelný typ smlouvy (prázdný, nebo jiný než HPP/PPP/DPP), aplikace nic **neodhaduje** – zaměstnance přeskočí a nahlásí ho zvlášť, aby šel opravit ručně.
+
+> ⚙️ Automatika. Zdroj: `functions/src/services/vacationYearRollover.ts` – tabulka `YEARLY_ENTITLEMENT_HOURS` (`:33-37`), vynechání Loňské (komentář `:10-14`), odolnost proti opakování (`:161-167`), vynechání ukončených před novým rokem (`:141-148`), nerozpoznaný typ smlouvy (`:150-159`); plánovaná úloha `rolloverVacationYear` v `functions/src/index.ts:428-446` (čas spuštění `:429`); ruční opakování `POST /api/employees/trigger-vacation-rollover` tamtéž `:252-281`.
+
 ---
 
 ## Směny
@@ -290,6 +310,14 @@ Uzamčení mzdového období má **dva důsledky**, z nichž druhý není z rozh
 2. Uzamčení je **jediný okamžik, kdy se plní hodinová evidence dovolené**. Bez uzamčení období zůstanou hodnoty v evidenci nedoplněné.
 
 > 🔒 Server. Zdroj: `functions/src/routes/payroll.ts:1005-1008` (přepočet), `:1044-1047` (tvrdý přepočet), `:1085` (smazání), `:52-65` (úpravy); plnění evidence `:758-790`.
+
+### Uzamčením období se přepíše i ručně opravená dovolená – s výstrahou předem
+
+Ruční oprava měsíční hodnoty dovolené v evidenci (viz pravidlo výše) není vůči dalšímu uzamčení téhož období nijak chráněná: uzamčení přepíše hodnotu podle mzdových podkladů bez ohledu na to, jestli ji předtím někdo opravil ručně. To je záměr – opakované uzamčení je právě způsob, jak opravit špatný import – ale bez varování by tiše smazalo i platnou ruční opravu.
+
+Proto se před uzamčením zobrazí dialog s výčtem zaměstnanců, u kterých se ručně zadaná hodnota **liší** od té, kterou by uzamčení zapsalo (ruční hodnota, která se náhodou shoduje, se za kolizi nepočítá – přepsala by se na stejné číslo). U každého lze zvolit, jestli se má hodnota ponechat, nebo přepsat mzdovými podklady; výchozí volba je **ponechat ručně zadanou hodnotu**. Volba se odešle spolu s požadavkem na uzamčení a server ji dodrží.
+
+> 🔒 Server (samotné přepsání i dodržení volby „ponechat") + 🖥️ Jen rozhraní (dialog s výstrahou – přímé volání API bez seznamu zaměstnanců k ponechání uzamkne a přepíše všechny kolidující hodnoty bez varování, přesně jako dřív). Zdroj: `functions/src/routes/payroll.ts` – přepis `feedVacationLedgerOnLock()` (`:856-886`, vynechání podle seznamu k ponechání na `:871`), definice kolize `ledgerConflictsOnLock()` (`:908-961`), `GET /payroll/periods/:id/ledger-conflicts` (`:969-989`), čtení seznamu z těla a jeho předání jen při přechodu z neuzamčeného na uzamčené v `PATCH /payroll/periods/:id` (`:996`, `:1030-1039`); dialog `frontend/src/pages/PayrollLedgerConflictModal.tsx` (výchozí volba „ponechat" `:51-53`).
 
 ### Poloviční úvazek: dovolená poměrně, ale přesčas až od plné základny
 

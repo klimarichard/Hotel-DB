@@ -6,6 +6,7 @@ import { Navigate } from "react-router-dom";
 import PayrollNotesModal from "./PayrollNotesModal";
 import PayrollBalanceModal, { type BalanceSavePayload } from "./PayrollBalanceModal";
 import PayrollRecalcModal from "./PayrollRecalcModal";
+import PayrollLedgerConflictModal, { type LedgerConflict } from "./PayrollLedgerConflictModal";
 import ConfirmModal from "@/components/ConfirmModal";
 import { employeeDisplayName, employeeSurnameFirst } from "@/lib/employeeName";
 import { escapeHtml } from "@/lib/escapeHtml";
@@ -356,6 +357,10 @@ export default function PayrollPage() {
     danger?: boolean;
     onConfirm: () => void;
   } | null>(null);
+  // Hand-edited vacation-ledger cells the pending lock would overwrite. Set only
+  // when the pre-lock check found any; null keeps the normal (frictionless) path.
+  const [ledgerConflicts, setLedgerConflicts] = useState<LedgerConflict[] | null>(null);
+  const [lockSaving, setLockSaving] = useState(false);
 
   const loadPeriod = useCallback(async () => {
     setLoading(true);
@@ -429,14 +434,51 @@ export default function PayrollPage() {
       danger: next,
       onConfirm: async () => {
         setConfirmModal(null);
-        try {
-          await api.patch(`/payroll/periods/${period.id}`, { locked: next });
-          setPeriod((prev) => prev ? { ...prev, locked: next } : prev);
-        } catch (e) {
-          setError((e as Error).message ?? "Chyba při uzamykání.");
+        if (!next) {
+          // Unlocking never feeds the vacation ledger, so it skips the check.
+          await applyLock(false);
+          return;
         }
+        // Locking rewrites every vacation-ledger cell for the month, including
+        // ones a human typed. Ask the server which of those would be clobbered
+        // and, if any, let the user decide per employee before anything is
+        // written. The check is advisory: if it fails we fall through to the
+        // plain lock, which is exactly today's behaviour.
+        let conflicts: LedgerConflict[] = [];
+        try {
+          const r = await api.get<{ conflicts: LedgerConflict[] }>(
+            `/payroll/periods/${period.id}/ledger-conflicts`
+          );
+          conflicts = r.conflicts ?? [];
+        } catch (e) {
+          console.error("Kontrola evidence dovolené selhala", e);
+        }
+        if (conflicts.length === 0) {
+          await applyLock(true);
+          return;
+        }
+        setLedgerConflicts(conflicts);
       },
     });
+  }
+
+  /** PATCH the lock flag; `keepManual` preserves those employees' manual ledger cells. */
+  async function applyLock(next: boolean, keepManual?: string[]) {
+    if (!period) return;
+    setLockSaving(true);
+    try {
+      await api.patch(`/payroll/periods/${period.id}`, {
+        locked: next,
+        ...(keepManual && keepManual.length > 0 ? { keepManual } : {}),
+      });
+      setPeriod((prev) => prev ? { ...prev, locked: next } : prev);
+      setLedgerConflicts(null);
+    } catch (e) {
+      setLedgerConflicts(null);
+      setError((e as Error).message ?? "Chyba při uzamykání.");
+    } finally {
+      setLockSaving(false);
+    }
   }
 
   function handleCreatePeriod() {
@@ -1191,6 +1233,17 @@ export default function PayrollPage() {
           canEdit={canManageNotes}
           onClose={() => setNotesModal(null)}
           onChanged={loadPeriod}
+        />
+      )}
+
+      {ledgerConflicts && period && (
+        <PayrollLedgerConflictModal
+          conflicts={ledgerConflicts}
+          month={period.month}
+          year={period.year}
+          saving={lockSaving}
+          onConfirm={(keepIds) => { applyLock(true, keepIds); }}
+          onCancel={() => setLedgerConflicts(null)}
         />
       )}
 

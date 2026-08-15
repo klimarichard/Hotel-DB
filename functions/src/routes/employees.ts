@@ -1587,7 +1587,13 @@ employeesRouter.patch(
       after: { ...before, ...after },
       year,
     });
-    res.json({ success: true });
+    // Return the re-projected row so the caller never has to follow up with a
+    // GET. That matters beyond saving a round trip: the read endpoint above is
+    // gated on employees.view.*, while this one is gated on
+    // employees.vacationBalance.manage — a user holding only the manage key
+    // would save successfully and then be 403'd fetching the result, so the
+    // value would land in Firestore but appear not to have saved.
+    res.json({ success: true, ledger: await readLedger(req.params.id, year) });
   }
 );
 

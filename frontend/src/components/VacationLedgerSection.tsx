@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import * as clock from "@/lib/clock";
 import ConfirmModal from "./ConfirmModal";
+import VacationLedgerCell from "./VacationLedgerCell";
 import styles from "./VacationLedgerSection.module.css";
 
 /**
@@ -85,7 +86,6 @@ export default function VacationLedgerSection({
   const [year, setYear] = useState(currentYear);
   const [ledger, setLedger] = useState<Ledger | null | undefined>(undefined); // undefined = loading
   const [edit, setEdit] = useState<EditTarget | null>(null);
-  const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
   const [errModal, setErrModal] = useState<string | null>(null);
 
@@ -102,34 +102,17 @@ export default function VacationLedgerSection({
     };
   }, [basePath, year]);
 
-  function startEdit(target: EditTarget, current: number | null | undefined) {
+  function startEdit(target: EditTarget) {
     if (!canManage) return;
     setEdit(target);
-    setDraft(current == null ? "" : String(current).replace(".", ","));
   }
 
-  async function save() {
-    if (!edit) return;
-    const raw = draft.trim().replace(",", ".");
-    // The annual figures may be negative — Loňská/Letošní carry a deficit
-    // forward, and Proplaceno is a balancing figure that goes negative when
-    // čerpáno overran the entitlement. Monthly čerpáno must be ≥ 0.
-    const allowNegative = edit.kind !== "month";
-    let hours: number | null;
-    if (raw === "") {
-      hours = null; // clear
-    } else {
-      const n = Number(raw);
-      if (!Number.isFinite(n) || (!allowNegative && n < 0)) {
-        setErrModal(
-          allowNegative
-            ? "Zadejte číslo (počet hodin), nebo nechte prázdné pro smazání."
-            : "Zadejte nezáporné číslo (počet hodin), nebo nechte prázdné pro smazání."
-        );
-        return;
-      }
-      hours = n;
-    }
+  /**
+   * Persist one figure. Parsing/validation happens in VacationLedgerCell (the
+   * copy shared with the aggregate table); this only maps the target to the
+   * one-field PATCH body the server expects.
+   */
+  async function save(edit: EditTarget, hours: number | null) {
     const body =
       edit.kind === "month"
         ? { month: edit.month, hours }
@@ -163,22 +146,28 @@ export default function VacationLedgerSection({
   const paidOut = ledger?.paidOutHours ?? null;
   const showPaidOut = isTerminated || paidOut != null;
 
-  const editInput = (
-    <input
-      className={styles.input}
-      type="text"
-      inputMode="decimal"
-      value={draft}
-      autoFocus
-      disabled={saving}
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={() => void save()}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") { e.preventDefault(); void save(); }
-        if (e.key === "Escape") { e.preventDefault(); setEdit(null); }
-      }}
-    />
-  );
+  /** Shared wiring for every editable figure in this section. */
+  function cellProps(target: EditTarget) {
+    return {
+      editing:
+        edit != null &&
+        edit.kind === target.kind &&
+        (target.kind !== "month" || (edit.kind === "month" && edit.month === target.month)),
+      canManage,
+      // The annual figures may be negative — Loňská/Letošní carry a deficit
+      // forward, and Proplaceno is a balancing figure that goes negative when
+      // čerpáno overran the entitlement. Monthly čerpáno must be ≥ 0.
+      allowNegative: target.kind !== "month",
+      saving,
+      editableClassName: styles.editable,
+      overriddenClassName: styles.overridden,
+      inputClassName: styles.input,
+      onStartEdit: () => startEdit(target),
+      onCommit: (hours: number | null) => void save(target, hours),
+      onCancel: () => setEdit(null),
+      onError: (message: string) => setErrModal(message),
+    };
+  }
 
   return (
     <div className={styles.wrap}>
@@ -225,31 +214,19 @@ export default function VacationLedgerSection({
           <div className={styles.summary}>
             <span className={styles.sumItem}>
               <span className={styles.sumLabel}>Loňská</span>
-              {edit?.kind === "priorYearHours" ? (
-                editInput
-              ) : (
-                <span
-                  className={canManage ? styles.editable : undefined}
-                  onDoubleClick={() => startEdit({ kind: "priorYearHours" }, prior)}
-                  title={canManage ? "Dvojklik pro úpravu" : undefined}
-                >
-                  {fmtH(prior)}
-                </span>
-              )}
+              <VacationLedgerCell
+                {...cellProps({ kind: "priorYearHours" })}
+                value={prior}
+                format={fmtH}
+              />
             </span>
             <span className={styles.sumItem}>
               <span className={styles.sumLabel}>Letošní</span>
-              {edit?.kind === "currentYearHours" ? (
-                editInput
-              ) : (
-                <span
-                  className={canManage ? styles.editable : undefined}
-                  onDoubleClick={() => startEdit({ kind: "currentYearHours" }, current)}
-                  title={canManage ? "Dvojklik pro úpravu" : undefined}
-                >
-                  {fmtH(current)}
-                </span>
-              )}
+              <VacationLedgerCell
+                {...cellProps({ kind: "currentYearHours" })}
+                value={current}
+                format={fmtH}
+              />
             </span>
             <span className={styles.sumItem}>
               <span className={styles.sumLabel}>Nárok</span>
@@ -264,17 +241,11 @@ export default function VacationLedgerSection({
             {showPaidOut && (
               <span className={styles.sumItem}>
                 <span className={styles.sumLabel}>Proplaceno</span>
-                {edit?.kind === "paidOutHours" ? (
-                  editInput
-                ) : (
-                  <span
-                    className={canManage ? styles.editable : undefined}
-                    onDoubleClick={() => startEdit({ kind: "paidOutHours" }, paidOut)}
-                    title={canManage ? "Dvojklik pro úpravu" : undefined}
-                  >
-                    {fmtH(paidOut)}
-                  </span>
-                )}
+                <VacationLedgerCell
+                  {...cellProps({ kind: "paidOutHours" })}
+                  value={paidOut}
+                  format={fmtH}
+                />
               </span>
             )}
             <span className={styles.sumItem}>
@@ -299,28 +270,13 @@ export default function VacationLedgerSection({
                   {Array.from({ length: 12 }, (_, i) => {
                     const month = i + 1;
                     const cell = months[String(month)];
-                    const isManual = cell?.source === "manual";
-                    const isEditing = edit?.kind === "month" && edit.month === month;
                     return (
                       <td key={month} className={styles.monthCell}>
-                        {isEditing ? (
-                          editInput
-                        ) : (
-                          <span
-                            className={[
-                              canManage ? styles.editable : "",
-                              isManual ? styles.overridden : "",
-                            ].join(" ").trim()}
-                            onDoubleClick={() => startEdit({ kind: "month", month }, cell?.hours)}
-                            title={
-                              isManual
-                                ? `Ručně upraveno${canManage ? " · dvojklik upraví" : ""}`
-                                : canManage ? "Dvojklik pro úpravu" : undefined
-                            }
-                          >
-                            {cell ? String(cell.hours).replace(".", ",") : "–"}
-                          </span>
-                        )}
+                        <VacationLedgerCell
+                          {...cellProps({ kind: "month", month })}
+                          value={cell?.hours}
+                          isManual={cell?.source === "manual"}
+                        />
                       </td>
                     );
                   })}
