@@ -1,5 +1,6 @@
 import * as functions from "firebase-functions";
 import { onSchedule } from "firebase-functions/v2/scheduler";
+import { rolloverVacationEntitlement } from "./services/vacationYearRollover";
 import { setGlobalOptions } from "firebase-functions/v2";
 import * as admin from "firebase-admin";
 import express from "express";
@@ -249,6 +250,37 @@ app.post(
 );
 
 app.post(
+  "/employees/trigger-vacation-rollover",
+  requireAuth,
+  requirePermission("system.triggers"),
+  async (req: AuthRequest, res) => {
+    // Re-run the 1 January entitlement seeding. Mirrors rolloverVacationYear.
+    // `?year=` targets a specific year (defaults to the current one) and
+    // `?dryRun=true` reports the plan without writing — the job is idempotent,
+    // so a repeat run only fills in whoever was missed.
+    const year = Number(req.query.year) || Number(clock.today().slice(0, 4));
+    const dryRun = req.query.dryRun === "true";
+    if (!Number.isInteger(year) || year < 2000 || year > 2100) {
+      res.status(400).json({ error: "Neplatný rok." });
+      return;
+    }
+    const result = await rolloverVacationEntitlement({
+      year,
+      updatedBy: req.uid ?? null,
+      dryRun,
+    });
+    if (!dryRun) {
+      await writeAudit(ctxFromReq(req), {
+        action: "manual-trigger",
+        collection: "employees/vacationLedger",
+        extra: { trigger: "rolloverVacationEntitlement", result },
+      });
+    }
+    res.json(result);
+  }
+);
+
+app.post(
   "/users/trigger-scheduled-deactivations",
   requireAuth,
   requirePermission("system.triggers"),
@@ -381,6 +413,35 @@ export const refreshEmployeeEffective = onSchedule(
     await clock.refresh(true);
     const res = await refreshEffectiveRootForAllActive();
     console.log(`[refreshEmployeeEffective] scanned ${res.scanned}, updated ${res.updated}`);
+  }
+);
+
+// ─── 1 January, 01:00 (Europe/Prague): seed the new year's vacation entitlement ─
+// Writes Letošní (HPP 160 / PPP 80 / DPP 0) for everyone who had a ledger last
+// year and had not already left. Loňská is deliberately left empty — carrying a
+// balance forward is a human decision. Idempotent, so a missed run can simply be
+// re-run via:
+//   curl -X POST http://127.0.0.1:5002/.../api/employees/trigger-vacation-rollover
+// 01:00 rather than midnight so it lands after refreshEmployeeEffective has
+// re-folded the current* fields — currentContractType is what sizes the
+// entitlement, so it must be up to date first.
+export const rolloverVacationYear = onSchedule(
+  { schedule: "0 1 1 1 *", timeZone: "Europe/Prague" },
+  async () => {
+    await clock.refresh(true);
+    const year = Number(clock.today().slice(0, 4));
+    const res = await rolloverVacationEntitlement({ year, updatedBy: null });
+    console.log(
+      `[rolloverVacationYear] ${year}: wrote ${res.written} of ${res.candidates} ` +
+        `(terminated ${res.skippedTerminated}, already set ${res.skippedAlreadySet}, ` +
+        `unknown contract ${res.skippedUnknownContract.length})`
+    );
+    for (const skip of res.skippedUnknownContract) {
+      console.warn(
+        `[rolloverVacationYear] no entitlement for ${skip.name} (${skip.employeeId}): ` +
+          `contract type "${skip.contractType}"`
+      );
+    }
   }
 );
 

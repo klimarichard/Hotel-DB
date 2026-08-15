@@ -4,7 +4,8 @@ import { FieldValue } from "firebase-admin/firestore";
 import { requireAuth, AuthRequest } from "../middleware/auth";
 import { requirePermission } from "../auth/permissions";
 import { applyVacationXsToPlans, removeVacationXsFromPlans, findShiftCollisions } from "./shifts";
-import { getManagementEmployeeIds } from "./employees";
+import { getManagementEmployeeIds, isNonManagementScoped } from "./employees";
+import { projectLedger, periodsForYear } from "../services/vacationLedger";
 import { ctxFromReq, logCreate, logUpdate, logDelete } from "../services/auditLog";
 import { resolveEmployeeNameParts, preferLive } from "../services/employeeNames";
 
@@ -72,6 +73,105 @@ vacationRouter.get(
       )
       .map(({ id, firstName, lastName }) => ({ id, firstName, lastName }));
     res.json(employees);
+  }
+);
+
+// ─── GET /vacation/ledger-overview — the whole vacation table for one year ────
+// Feeds the aggregate "Přehled čerpání dovolené" table at the bottom of
+// /dovolena, which mirrors the AVENSIO "Roční přehled čerpání dovolené" export
+// so the two can be reconciled side by side.
+//
+// Mounted HERE rather than on employeesRouter for two reasons: `GET /employees/:id`
+// would shadow any collection-level path registered after it, and that router's
+// `enforceEmpAccess` reads the first path segment as an employee id — a literal
+// segment would trigger a pointless full `users` scan on every call. The cost is
+// that the management-record filter has to be applied by hand below; it is NOT
+// inherited here.
+//
+// Gated on employees.vacationBalance.manage — the same key the frontend uses,
+// enforced independently, because the frontend gate is only a UI affordance.
+
+vacationRouter.get(
+  "/ledger-overview",
+  requireAuth,
+  requirePermission("employees.vacationBalance.manage"),
+  async (req: AuthRequest, res) => {
+    const year = Number(req.query.year);
+    if (!Number.isInteger(year) || year < 2000 || year > 2100) {
+      res.status(400).json({ error: "Neplatný rok." });
+      return;
+    }
+
+    // One collection-group query instead of reading every employee and probing
+    // for a ledger doc: rows ARE "employees who have a ledger this year", which
+    // is literally this query's result set. Needs the vacationLedger.year
+    // COLLECTION_GROUP fieldOverride in firestore.indexes.json — without it this
+    // throws FAILED_PRECONDITION at runtime (the emulator ignores index config,
+    // so a missing index only ever shows up in a deployed environment).
+    const ledgerSnap = await db()
+      .collectionGroup("vacationLedger")
+      .where("year", "==", year)
+      .get();
+
+    const ledgers: { employeeId: string; data: Record<string, unknown> }[] = [];
+    for (const d of ledgerSnap.docs) {
+      const parent = d.ref.parent.parent;
+      if (!parent) continue;
+      ledgers.push({ employeeId: parent.id, data: d.data() as Record<string, unknown> });
+    }
+
+    // Names/status for just those employees. Chunked because getAll takes the
+    // refs as varargs — same idiom as projectedRemainingHours.
+    const employees = new Map<string, Record<string, unknown>>();
+    const ids = ledgers.map((l) => l.employeeId);
+    for (let i = 0; i < ids.length; i += 100) {
+      const chunk = ids.slice(i, i + 100);
+      const snaps = await db().getAll(...chunk.map((id) => db().collection("employees").doc(id)));
+      snaps.forEach((snap) => {
+        if (snap.exists) employees.set(snap.id, snap.data() as Record<string, unknown>);
+      });
+    }
+
+    // A non-management-scoped caller (e.g. personalista) never sees management
+    // records. employeesRouter does this via enforceEmpAccess; this router has no
+    // such middleware, so mirror GET /employees' own filter explicitly.
+    const mgmt = isNonManagementScoped(req.permissions)
+      ? await getManagementEmployeeIds()
+      : null;
+
+    const rows = ledgers
+      .filter((l) => !mgmt || !mgmt.has(l.employeeId))
+      .map((l) => {
+        const emp = employees.get(l.employeeId);
+        return {
+          employeeId: l.employeeId,
+          firstName: (emp?.firstName as string) ?? "",
+          lastName: (emp?.lastName as string) ?? "",
+          status: (emp?.status as string) ?? "",
+          employmentEndDate: (emp?.employmentEndDate as string) ?? "",
+          contractType: (emp?.currentContractType as string) ?? "",
+          // A ledger doc can outlive its employee doc. Surface it rather than
+          // dropping it — the aggregate view is the ONLY place such an orphan
+          // is visible, since the per-employee page needs an employee to open.
+          employeeMissing: !emp,
+          ...projectLedger(l.data, year),
+        };
+      })
+      // A leaver stays in the table through the end of the year they left in —
+      // their Proplaceno and final balance belong to that year's reconciliation —
+      // and drops out of later years. Missing end date: keep the row, because
+      // hiding real data on a missing field is the worse failure.
+      .filter((r) => {
+        if (r.status !== "terminated" || !r.employmentEndDate) return true;
+        return Number(r.employmentEndDate.slice(0, 4)) >= year;
+      })
+      .sort(
+        (a, b) =>
+          (a.lastName || "").localeCompare(b.lastName || "", "cs") ||
+          (a.firstName || "").localeCompare(b.firstName || "", "cs")
+      );
+
+    res.json({ year, periods: await periodsForYear(year), rows });
   }
 );
 
