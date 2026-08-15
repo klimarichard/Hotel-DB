@@ -85,6 +85,18 @@ Je-li u zaměstnance hodnota vyplněna, má vždy přednost před doplněnou.
 
 > ⚙️ Automatika. Zdroj: `frontend/src/lib/contractVariables.ts:1256-1267` (`hoursPerWeekValue`), použití na `:1192` (tištěná hodnota) a `:1297` (podklad pro Podmínku). Nedotčené výpočty mezd: `frontend/src/lib/minWage.ts:24-36`, `functions/src/services/payrollCalculator.ts:274-277`.
 
+### Proplaceno u dovolené je vyrovnávací položka a smí být záporné
+
+Pole **Proplaceno** v evidenci dovolené (výplata místo čerpání, typicky při ukončení poměru) se odečítá od Zůstatku bez ohledu na to, jestli je zrovna vidět v rozhraní: `Zůstatek = Nárok − Čerpáno − Proplaceno`. Protože jde o vyrovnávací položku ze mzdového systému, **smí být záporné** – nastane to, kdykoliv čerpáno překročilo nárok.
+
+> 🔒 Server. Zdroj: `functions/src/services/vacationLedger.ts:87-92` (`remainingHours()` odečítá `paidOutHours` bez podmínky), `functions/src/routes/employees.ts:1561` (`readHours(body[field], true)` pro všechny tři roční položky v `PATCH /employees/:id/vacation-ledger/:year`).
+
+### Proplaceno se v rozhraní zobrazí až při ukončení poměru
+
+Pole samotné je editovatelné pro každého zaměstnance přes API (viz pravidlo výše), ale v rozhraní se řádek **Proplaceno** zobrazí teprve, když je zaměstnanec **ukončený**, nebo když už má hodnotu vyplněnou z dřívějška – u aktivního zaměstnance bez hodnoty se řádek nezobrazuje vůbec. Toto je jen doporučení, kdy se pole má vyplňovat (při odchodu), ne technické omezení.
+
+> 🖥️ Jen rozhraní. Zdroj: `frontend/src/components/VacationLedgerSection.tsx:164` (`showPaidOut = isTerminated || paidOut != null`); prop `isTerminated` nastavuje `frontend/src/pages/EmployeeDetailPage.tsx:2338` podle `employee?.status === "terminated"`.
+
 ---
 
 ## Směny

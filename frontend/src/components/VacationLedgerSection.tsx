@@ -7,7 +7,8 @@ import styles from "./VacationLedgerSection.module.css";
 /**
  * Read/edit view of an employee's vacation-hour ledger, one calendar year at a
  * time (‹ year › switcher, like Payroll/Směny). All figures are in HOURS. The
- * summary line shows Nárok (entitlement, editable), Čerpáno (derived) and
+ * summary line shows Nárok (entitlement, editable), Čerpáno (derived),
+ * Proplaceno (payout — terminated employees only, see `isTerminated`) and
  * Zůstatek (derived; red when negative). Below it a compact two-row table lists
  * the hours taken in each month 1–12.
  *
@@ -51,11 +52,13 @@ function fmtH(n: number | null | undefined): string {
 type EditTarget =
   | { kind: "month"; month: number }
   | { kind: "priorYearHours" }
-  | { kind: "currentYearHours" };
+  | { kind: "currentYearHours" }
+  | { kind: "paidOutHours" };
 
 export default function VacationLedgerSection({
   basePath,
   canManage,
+  isTerminated = false,
 }: {
   /**
    * Ledger endpoint WITHOUT the year: `/employees/{id}/vacation-ledger` on the
@@ -66,6 +69,14 @@ export default function VacationLedgerSection({
    */
   basePath: string;
   canManage: boolean;
+  /**
+   * Employee's employment has ended. Proplaceno (payout on termination) is only
+   * ever filled in when someone leaves, so the field is hidden while they are
+   * still employed rather than sitting there permanently empty. A value that is
+   * already set stays visible regardless — it is subtracted from Zůstatek, and a
+   * balance shrunk by an invisible figure reads as a bug.
+   */
+  isTerminated?: boolean;
 }) {
   // Via clock, not `new Date()`, so the non-prod test clock moves the year too.
   // Also the ceiling: the ledger is fed by payroll locks, so a future year holds
@@ -100,8 +111,10 @@ export default function VacationLedgerSection({
   async function save() {
     if (!edit) return;
     const raw = draft.trim().replace(",", ".");
-    // Loňská/Letošní may be negative (carried-over deficit); months must be ≥ 0.
-    const allowNegative = edit.kind === "priorYearHours" || edit.kind === "currentYearHours";
+    // The annual figures may be negative — Loňská/Letošní carry a deficit
+    // forward, and Proplaceno is a balancing figure that goes negative when
+    // čerpáno overran the entitlement. Monthly čerpáno must be ≥ 0.
+    const allowNegative = edit.kind !== "month";
     let hours: number | null;
     if (raw === "") {
       hours = null; // clear
@@ -122,7 +135,9 @@ export default function VacationLedgerSection({
         ? { month: edit.month, hours }
         : edit.kind === "priorYearHours"
           ? { priorYearHours: hours }
-          : { currentYearHours: hours };
+          : edit.kind === "currentYearHours"
+            ? { currentYearHours: hours }
+            : { paidOutHours: hours };
     setSaving(true);
     try {
       // Only reachable with canManage (startEdit hard-returns otherwise), i.e.
@@ -145,6 +160,8 @@ export default function VacationLedgerSection({
   const consumed = ledger?.consumedHours ?? 0;
   const remaining = ledger?.remainingHours ?? null;
   const months = ledger?.months ?? {};
+  const paidOut = ledger?.paidOutHours ?? null;
+  const showPaidOut = isTerminated || paidOut != null;
 
   const editInput = (
     <input
@@ -242,6 +259,24 @@ export default function VacationLedgerSection({
               <span className={styles.sumLabel}>Čerpáno</span>
               <span>{fmtH(consumed)}</span>
             </span>
+            {/* Proplaceno sits between Čerpáno and Zůstatek so the summary reads
+                as the sum it is: Nárok − Čerpáno − Proplaceno = Zůstatek. */}
+            {showPaidOut && (
+              <span className={styles.sumItem}>
+                <span className={styles.sumLabel}>Proplaceno</span>
+                {edit?.kind === "paidOutHours" ? (
+                  editInput
+                ) : (
+                  <span
+                    className={canManage ? styles.editable : undefined}
+                    onDoubleClick={() => startEdit({ kind: "paidOutHours" }, paidOut)}
+                    title={canManage ? "Dvojklik pro úpravu" : undefined}
+                  >
+                    {fmtH(paidOut)}
+                  </span>
+                )}
+              </span>
+            )}
             <span className={styles.sumItem}>
               <span className={styles.sumLabel}>Zůstatek</span>
               <span className={`${styles.remaining} ${remaining != null && remaining < 0 ? styles.negative : ""}`}>

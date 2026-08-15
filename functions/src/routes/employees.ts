@@ -1510,9 +1510,11 @@ employeesRouter.patch(
     }
     const body = req.body as Record<string, unknown>;
 
-    // Validate an optional hours value: null (clear) or a finite number. Counts
-    // (čerpáno per month, proplaceno) must be ≥ 0; the entitlement components
-    // (Loňská/Letošní) may be negative — a carried-over deficit is legitimate.
+    // Validate an optional hours value: null (clear) or a finite number. The
+    // monthly čerpáno counts must be ≥ 0. The three annual figures may all be
+    // negative: Loňská/Letošní carry a deficit forward, and Proplaceno is the
+    // balancing column from the payroll system (Nárok − Čerpáno − Proplaceno =
+    // Zůstatek), which goes negative whenever čerpáno overran the entitlement.
     const readHours = (v: unknown, allowNegative = false): number | null | undefined => {
       if (v === null) return null;
       if (typeof v === "number" && Number.isFinite(v) && (allowNegative || v >= 0)) return v;
@@ -1555,8 +1557,8 @@ employeesRouter.patch(
           : "currentYearHours" in body
             ? "currentYearHours"
             : "paidOutHours";
-      // Loňská/Letošní may be negative; proplaceno must be ≥ 0.
-      const hours = readHours(body[field], field !== "paidOutHours");
+      // All three annual figures may be negative (see readHours above).
+      const hours = readHours(body[field], true);
       if (hours === undefined) {
         res.status(400).json({ error: "Neplatná hodnota hodin." });
         return;
