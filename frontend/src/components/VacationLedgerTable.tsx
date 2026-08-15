@@ -124,15 +124,24 @@ export default function VacationLedgerTable({ canManage }: { canManage: boolean 
     };
   }, [year]);
 
-  const sorted = useMemo(
-    () =>
-      [...rows].sort((a, b) =>
-        collator.compare(
-          a.employeeMissing ? a.employeeId : employeeSurnameFirst(a),
-          b.employeeMissing ? b.employeeId : employeeSurnameFirst(b)
-        )
-      ),
-    [rows]
+  const sorted = useMemo(() => {
+    const key = (r: OverviewRow) =>
+      r.employeeMissing ? r.employeeId : employeeSurnameFirst(r);
+    return [...rows].sort((a, b) => {
+      // Leavers sink to the bottom. They belong in the table — they hold most
+      // of the Proplaceno figures — but their rows are settled history, so
+      // interleaving them with current staff makes the live half harder to scan.
+      const at = a.status === "terminated" ? 1 : 0;
+      const bt = b.status === "terminated" ? 1 : 0;
+      if (at !== bt) return at - bt;
+      return collator.compare(key(a), key(b));
+    });
+  }, [rows]);
+
+  /** Index of the first leaver, so only that row draws the divider. */
+  const firstTerminated = useMemo(
+    () => sorted.findIndex((r) => r.status === "terminated"),
+    [sorted]
   );
 
   /** month → locked; a month absent from the map has no payroll period at all. */
@@ -281,13 +290,13 @@ export default function VacationLedgerTable({ canManage }: { canManage: boolean 
                       <th rowSpan={2} className={`${styles.headCell} ${styles.nameHead}`}>
                         Jméno
                       </th>
-                      <th rowSpan={2} className={styles.headCell}>
+                      <th rowSpan={2} className={`${styles.headCell} ${styles.sumHead}`}>
                         Loňská
                       </th>
-                      <th rowSpan={2} className={styles.headCell}>
+                      <th rowSpan={2} className={`${styles.headCell} ${styles.sumHead}`}>
                         Letošní
                       </th>
-                      <th rowSpan={2} className={styles.headCell}>
+                      <th rowSpan={2} className={`${styles.headCell} ${styles.sumHead}`}>
                         Nárok
                       </th>
                       <th
@@ -296,13 +305,13 @@ export default function VacationLedgerTable({ canManage }: { canManage: boolean 
                       >
                         Měsíce
                       </th>
-                      <th rowSpan={2} className={`${styles.headCell} ${styles.blockStart}`}>
+                      <th rowSpan={2} className={`${styles.headCell} ${styles.sumHead} ${styles.blockStart}`}>
                         Čerpáno
                       </th>
-                      <th rowSpan={2} className={styles.headCell}>
+                      <th rowSpan={2} className={`${styles.headCell} ${styles.sumHead}`}>
                         Proplaceno
                       </th>
-                      <th rowSpan={2} className={styles.headCell}>
+                      <th rowSpan={2} className={`${styles.headCell} ${styles.sumHead}`}>
                         Zůstatek
                       </th>
                     </tr>
@@ -337,12 +346,20 @@ export default function VacationLedgerTable({ canManage }: { canManage: boolean 
                     </tr>
                   </thead>
                   <tbody>
-                    {sorted.map((r) => {
+                    {sorted.map((r, i) => {
                       const terminated = r.status === "terminated";
                       return (
                         <tr
                           key={r.employeeId}
-                          className={`${styles.row} ${terminated ? styles.terminatedRow : ""}`}
+                          className={[
+                            styles.row,
+                            terminated ? styles.terminatedRow : "",
+                            // Only the first leaver draws the divider that
+                            // separates current staff from history.
+                            i === firstTerminated ? styles.terminatedFirst : "",
+                          ]
+                            .join(" ")
+                            .trim()}
                         >
                           <td className={styles.nameCell}>
                             {r.employeeMissing ? (
