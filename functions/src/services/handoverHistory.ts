@@ -19,8 +19,17 @@
  * whole design exists to avoid. History entries carry `at` (clock time) so the
  * daily retention sweep can drop them after 6 months.
  *
- * Money moves (sm→trezor, wata) and signatures are NOT part of the content PUT
- * and therefore never enter the history or the undo stack — deliberate.
+ * Money moves (sm→trezor, sm trezor clear, wata) do NOT come through the content
+ * PUT — each has its own endpoint — but they ARE recorded here, as entries
+ * flagged `revertible: false`. Those are shown in the panel (only to the users
+ * allowed to move that money — see `restrictedScopeOf`) and skipped by undo/redo
+ * for EVERYONE, admins included. What makes them irreversible is arithmetic, not
+ * permission: a sm→trezor move is compound (counts down, trezor up by the rate in
+ * force at that instant, and the rates are editable afterwards), and both balances
+ * are carried into the NEXT shift when it is created — so replaying one backwards
+ * would silently desync a protocol that has already been handed over.
+ *
+ * Signatures and odvod writes stay out of the history entirely (see odvody.ts).
  */
 import * as admin from "firebase-admin";
 import { Timestamp } from "firebase-admin/firestore";
@@ -57,6 +66,8 @@ export type ChangeTarget =
   | { kind: "account"; id: string; field: "name" | "amount" | "row"; index?: number }
   | { kind: "cash"; drawer: DrawerKey; denom: string }
   | { kind: "sm"; index: number }
+  | { kind: "smTrezor"; via: "transfer" | "clear" }
+  | { kind: "wata" }
   | { kind: "created" };
 
 /** One element-level change, human-labelled, with the values to undo/redo it. */
@@ -65,6 +76,13 @@ export interface HandoverChange {
   before: unknown;
   after: unknown;
   label: string;
+  /**
+   * Absent/true: a normal command — undo and redo replay it. False: a record-only
+   * entry that undo/redo SKIP for every caller (money moves, and any sm count a
+   * money move has since consumed). Absent on every entry written before this
+   * existed, which is why the checks read `revertible === false`, never `!x`.
+   */
+  revertible?: boolean;
 }
 
 /** A persisted history entry (the subcollection doc shape). */
@@ -291,6 +309,66 @@ export function createdChange(carriedFromPreviousShift: boolean): HandoverChange
   };
 }
 
+// ─── Money moves (record-only) ───────────────────────────────────────────────
+//
+// The three money endpoints build their entries here rather than through
+// diffHandover: they don't come through the content PUT and there is no
+// before/after content snapshot to diff. Every one is `revertible: false` — see
+// the file header for why that is arithmetic, not permission.
+
+/** `sm trezor` moved: by a sm→trezor transfer, or reset to 0. */
+export function smTrezorChange(before: number, after: number, via: "transfer" | "clear"): HandoverChange {
+  return {
+    target: { kind: "smTrezor", via },
+    before,
+    after,
+    label:
+      via === "clear"
+        ? `sm trezor vynulován: ${num(before)} → 0 Kč`
+        : `sm trezor: ${num(before)} → ${num(after)} Kč (přesun ze sm)`,
+    revertible: false,
+  };
+}
+
+/** `wata` adjusted by a signed delta. May be negative on either side. */
+export function wataChange(before: number, after: number): HandoverChange {
+  const delta = after - before;
+  return {
+    target: { kind: "wata" },
+    before,
+    after,
+    label: `wata: ${num(before)} → ${num(after)} Kč (${delta >= 0 ? "+" : ""}${num(delta)})`,
+    revertible: false,
+  };
+}
+
+/**
+ * The sm-count side of a sm→trezor transfer: the same per-index entries the
+ * content diff would produce, but record-only. Without these the counts would
+ * drop with nothing in the panel to say where they went — and, far worse, the
+ * EARLIER entries that set those counts would still offer to replay themselves
+ * over the now-transferred value (see sealSmEntries).
+ */
+export function smTransferCountChanges(before: number[], after: number[]): HandoverChange[] {
+  const out: HandoverChange[] = [];
+  diffSm(before, after, out);
+  return out.map((c) => ({ ...c, revertible: false }));
+}
+
+/**
+ * Which permission an entry is gated on for DISPLAY, or null when it is visible
+ * to anyone who may view the protocol. Only the two money balances are scoped:
+ * you see the audit line for a balance exactly when you are allowed to move it.
+ * The sm COUNTS are deliberately unscoped — every protocol-edit user sees and
+ * edits them in the sm modal, so hiding their history would be arbitrary.
+ */
+export type RestrictedScope = "smManage" | "protokolManage";
+export function restrictedScopeOf(target: ChangeTarget): RestrictedScope | null {
+  if (target.kind === "smTrezor") return "smManage";
+  if (target.kind === "wata") return "protokolManage";
+  return null;
+}
+
 // ─── Labels ──────────────────────────────────────────────────────────────────
 
 /** The label of a whole-row addition, from the row itself. */
@@ -341,6 +419,12 @@ function labelFor(
     }
     case "sm":
       return `SM počet #${target.index + 1}: ${num(Number(before) || 0)} → ${num(Number(after) || 0)}`;
+    // Money moves never coalesce (isTypingField excludes them), so these are only
+    // for exhaustiveness — relabel through their builders instead.
+    case "smTrezor":
+      return smTrezorChange(Number(before) || 0, Number(after) || 0, target.via).label;
+    case "wata":
+      return wataChange(Number(before) || 0, Number(after) || 0).label;
     default:
       return "Protokol vytvořen";
   }
@@ -363,6 +447,10 @@ export function applyChange(content: HandoverContent, change: HandoverChange, di
 
   // The creation marker holds no values — nothing to apply in either direction.
   if (t.kind === "created") return;
+  // Money moves are record-only. findUndoTarget/findRedoTarget already skip them,
+  // so reaching here means a caller bypassed the planner; refuse rather than write
+  // a balance that the next shift may already have carried forward.
+  if (t.kind === "smTrezor" || t.kind === "wata") return;
 
   if (t.kind === "note" || t.kind === "account") {
     const arr = (t.kind === "note" ? content.notes : content.accounts) as unknown as Array<Record<string, unknown>>;
@@ -507,6 +595,11 @@ async function tryCoalesce(
   if (!isTypingField(change.target)) return null;
   const tip = await tipEntry(hotel, id, cursor);
   if (!tip || tip.undone) return null;
+  // A sealed tip (a money move, or a count a transfer has consumed) must keep the
+  // values it was sealed with — widening its span would resurrect a replayable
+  // range. In practice the editSession check below already excludes it, since
+  // money moves carry no token; this states the invariant rather than relying on it.
+  if (tip.revertible === false) return null;
   if (tip.byUid !== actor.uid) return null;
   if (tip.editSession !== editSession) return null;
   if (now.toMillis() - tip.at.toMillis() > COALESCE_MAX_AGE_MS) return null;
@@ -650,8 +743,9 @@ function available(entry: HistoryEntry, guard?: StepGuard): boolean {
 /**
  * The entry an UNDO reverts: the highest-seq APPLIED entry the caller may touch.
  * Entries the caller may not touch (a manage-locked row, for a non-manage user)
- * are SKIPPED, so undo lands on the nearest available one beneath them instead of
- * dead-ending. The `created` marker is the floor and is never undone. Skipping is
+ * and record-only entries (`revertible: false` — money moves and the sm counts a
+ * transfer consumed) are SKIPPED, so undo lands on the nearest available one
+ * beneath them instead of dead-ending. The `created` marker is the floor. Skipping is
  * data-safe because a non-manage caller only ever reverts unlocked rows, which are
  * disjoint from the locked rows left applied above — element-local, order-free.
  */
@@ -660,6 +754,7 @@ export function findUndoTarget(entries: HistoryEntry[], guard?: StepGuard): Hist
     const e = entries[i];
     if (e.undone) continue; // already reverted
     if (e.target.kind === "created") continue; // floor
+    if (e.revertible === false) continue; // record-only (money move / consumed sm count)
     if (!available(e, guard)) continue; // skip a locked-row change (non-manage)
     return e;
   }
@@ -671,6 +766,7 @@ export function findUndoTarget(entries: HistoryEntry[], guard?: StepGuard): Hist
 export function findRedoTarget(entries: HistoryEntry[], guard?: StepGuard): HistoryEntry | null {
   for (const e of entries) {
     if (!e.undone) continue; // still applied
+    if (e.revertible === false) continue; // record-only (money move / consumed sm count)
     if (!available(e, guard)) continue; // skip a locked-row change (non-manage)
     return e;
   }
@@ -693,6 +789,34 @@ export function computeCanStep(entries: HistoryEntry[], guard?: StepGuard): { ca
 /** Flag a history entry as (un)done after an undo/redo has been applied. */
 export async function markUndone(hotel: HotelSlug, id: string, seq: number, undone: boolean): Promise<void> {
   await historyCol(hotel, id).doc(String(seq).padStart(9, "0")).set({ undone }, { merge: true });
+}
+
+/**
+ * Seal every `sm`-count entry in this protocol's history as record-only.
+ *
+ * Called after a sm→trezor transfer. The transfer moves counts OUT of `smCounts`
+ * and into `smTrezor` as CZK, but the entries that put those counts there still
+ * hold their original before/after pair — so replaying one would mint sm that the
+ * trezor is already holding. Worked example: a count goes 10 → 25 (entry stored),
+ * all 25 are transferred (counts 0, trezor +25·rate), then one undo writes the
+ * count back to 10. Ten sm now exist in two places at once, and nothing flags it.
+ *
+ * Sealing at transfer time is the narrowest fix: counts stay freely undoable right
+ * up until the moment the money leaves, and counts typed AFTER the transfer get
+ * fresh, revertible entries of their own (until the next transfer seals those too).
+ *
+ * Idempotent, and cheap — the history collection is small and retention-swept, and
+ * the entries are already in memory at the only call site.
+ */
+export async function sealSmEntries(hotel: HotelSlug, id: string, entries: HistoryEntry[]): Promise<void> {
+  const stale = entries.filter((e) => e.target.kind === "sm" && e.revertible !== false);
+  if (stale.length === 0) return;
+  const col = historyCol(hotel, id);
+  const batch = admin.firestore().batch();
+  for (const e of stale) {
+    batch.set(col.doc(String(e.seq).padStart(9, "0")), { revertible: false }, { merge: true });
+  }
+  await batch.commit();
 }
 
 /** Is the row addressed by `id` currently locked in `rows`? */
