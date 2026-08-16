@@ -932,8 +932,8 @@ function ConfigPanel({
               <p className={styles.hint}>
                 Doručovací adresa se vkládá doprostřed věty („…s doručením na adresu X…"), proto ji
                 zadávejte jednořádkově. Fakturační údaje se neopisují – vyberete společnost ze
-                seznamu v Nastavení → Společnosti a do e-mailu se doplní její název, adresa, IČO a
-                DIČ (zkratka nikdy). Bez adresy i společnosti nejde e-mail pro daný hotel
+                seznamu v Nastavení → Společnosti a do e-mailu se doplní její název, IČO a adresa
+                (zkratka ani DIČ nikdy). Bez adresy i společnosti nejde e-mail pro daný hotel
                 zkopírovat.
               </p>
               <div className={styles.hotelList}>
