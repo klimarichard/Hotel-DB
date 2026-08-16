@@ -196,8 +196,16 @@
   cursor: pointer;
 }
 
+/* Hover and arrow-key highlight are the SAME visual state, and hover also sets
+   the active index — so moving the mouse over the list cannot leave two rows
+   looking selected while Enter picks the other one. */
+.resultActive,
 .resultBtn:hover {
   background: var(--color-surface-2);
+}
+
+.resultActive {
+  box-shadow: inset 2px 0 0 var(--color-primary);
 }
 
 .resultUnit {
@@ -223,6 +231,14 @@
   border-collapse: collapse;
   width: 100%;
   font-size: 0.8125rem;
+}
+
+/* Two columns of short text do not need the page. Capped at the width of the
+   search box above it so the block reads as one control stack rather than a
+   narrow field floating over a full-bleed table. The číselník tables below are
+   left full-width — they have five columns and genuinely use the room. */
+.lineTable {
+  max-width: 34rem;
 }
 
 .lineTable th,
@@ -507,6 +523,14 @@
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
+}
+
+/* The resolved billing block, shown under the company picker exactly as the
+   e-mail will print it. */
+.fieldPreview {
+  font-size: 0.6875rem;
+  color: var(--color-text-muted);
+  line-height: 1.4;
 }
 
 @media (max-width: 640px) {

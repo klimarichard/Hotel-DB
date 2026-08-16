@@ -26,8 +26,50 @@ export interface OrderHotel {
   id: string;
   name: string;
   deliveryAddress: string;
-  invoiceDetails: string;
+  /**
+   * Points at a `companies/{id}` doc — the same registry Nastavení → Společnosti
+   * edits (HPM, STP). Billing details are NOT free text: they are a legal
+   * identity that already exists in one place, and retyping it per hotel is how
+   * an IČO ends up wrong in a supplier's records with nothing to reconcile it
+   * against. `null` = not chosen yet, which blocks the copy.
+   */
+  companyId: string | null;
   active: boolean;
+}
+
+/**
+ * A company as `GET /api/companies` returns it. Only the fields the e-mail
+ * needs are modelled; `abbreviation` and `fileNo` exist on the document and are
+ * deliberately NOT here, because neither belongs in an order e-mail.
+ */
+export interface OrderCompany {
+  id: string;
+  name: string;
+  address: string;
+  ic: string;
+  dic: string;
+}
+
+/**
+ * The billing block as it is printed mid-sentence:
+ *
+ *   Hotel Property Management s.r.o., Panská 897/12, Praha 1, 110 00, IČO: …, DIČ: …
+ *
+ * Resolved at READ time from the company document, never stored on the hotel —
+ * so correcting an address in Nastavení fixes every future order e-mail at
+ * once, with nothing to re-save here. Empty parts are dropped rather than
+ * printed as a dangling "IČO: ,".
+ */
+export function companyInvoiceDetails(company: OrderCompany): string {
+  return [
+    company.name,
+    company.address,
+    company.ic ? `IČO: ${company.ic}` : "",
+    company.dic ? `DIČ: ${company.dic}` : "",
+  ]
+    .map((part) => part.trim())
+    .filter((part) => part !== "")
+    .join(", ");
 }
 
 export interface ObjednavkyConfig {
@@ -56,14 +98,20 @@ export interface OrderBlock {
 }
 
 /**
- * A block with every id already resolved against the číselník.
+ * A block with every id already resolved — against the číselník AND against the
+ * company registry, so it carries finished strings rather than references.
  *
  * Both renderers take THIS, never the raw block + config: the plain-text and
  * HTML flavours of one copy must agree line for line, and the only way to
- * guarantee that is to give them the same resolved input.
+ * guarantee that is to give them the same resolved input. Resolving the company
+ * here rather than in each renderer means the same applies to the billing block.
  */
 export interface ResolvedBlock {
-  hotel: OrderHotel;
+  hotelId: string;
+  hotelName: string;
+  deliveryAddress: string;
+  /** Already formatted by `companyInvoiceDetails`; "" when unresolvable. */
+  invoiceDetails: string;
   rows: { label: string; qty: number; unit: OrderUnit }[];
 }
 
@@ -92,9 +140,14 @@ export function itemLabel(item: Pick<OrderItem, "name" | "code">): string {
  * nameless line in a supplier e-mail is worse than a missing one, and the
  * on-screen row list is where the user would notice the item vanish.
  */
-export function resolveBlocks(blocks: OrderBlock[], config: ObjednavkyConfig): ResolvedBlock[] {
+export function resolveBlocks(
+  blocks: OrderBlock[],
+  config: ObjednavkyConfig,
+  companies: OrderCompany[]
+): ResolvedBlock[] {
   const itemById = new Map(config.items.map((i) => [i.id, i]));
   const hotelById = new Map(config.hotels.map((h) => [h.id, h]));
+  const companyById = new Map(companies.map((c) => [c.id, c]));
 
   const out: ResolvedBlock[] = [];
   for (const block of blocks) {
@@ -108,7 +161,20 @@ export function resolveBlocks(blocks: OrderBlock[], config: ObjednavkyConfig): R
       })
       .filter((r): r is { label: string; qty: number; unit: OrderUnit } => r !== null);
     if (rows.length === 0) continue;
-    out.push({ hotel, rows });
+
+    // A companyId pointing at a deleted company resolves to "" exactly like an
+    // unset one, so a company removed in Nastavení blocks the copy instead of
+    // silently dropping the billing block out of a sentence that still reads
+    // as complete.
+    const company = hotel.companyId ? companyById.get(hotel.companyId) : undefined;
+
+    out.push({
+      hotelId: hotel.id,
+      hotelName: hotel.name,
+      deliveryAddress: hotel.deliveryAddress,
+      invoiceDetails: company ? companyInvoiceDetails(company) : "",
+      rows,
+    });
   }
   return out;
 }
@@ -145,9 +211,9 @@ function inline(value: string): string {
 function sentence(block: ResolvedBlock, first: boolean): string {
   const lead = first ? "prosím o objednání" : "Dále prosím o objednání";
   return (
-    `${lead} na ${block.hotel.name}` +
-    ` s doručením na adresu ${inline(block.hotel.deliveryAddress)}` +
-    ` a fakturačními údaji ${inline(block.hotel.invoiceDetails)}.`
+    `${lead} na ${block.hotelName}` +
+    ` s doručením na adresu ${inline(block.deliveryAddress)}` +
+    ` a fakturačními údaji ${inline(block.invoiceDetails)}.`
   );
 }
 

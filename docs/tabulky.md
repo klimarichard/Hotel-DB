@@ -121,11 +121,43 @@ The only stored state is `settings/objednavkyConfig`, served by `GET /config` an
 
 `OrderHotel` is a **separate list** from `lib/hotels.ts` (four Recepce desks, Amigo+Alqush merged) and from `invoiceTypes.ts` (five invoicing entities). Reusing the invoice hotels was requested, investigated and rejected on a concrete finding:
 
-**`InvoiceHotel` has no address field.** The nearest thing is `footer`, a printed contact block — `"Hotel Ambiance, Tyrsova 8, 120 00 Prague 2, Czech Republic, VAT Reg No. CZ06947697\ne-mail: …, Tel.: …, Web: …"`. Substituted into *"s doručením na adresu …"* that drops the VAT number, phone and website into the middle of a sentence, and parsing the street out of admin-editable free text means an invoice-formatting edit silently rewrites an order e-mail. (`companyId` is also `null` on all five seeds — it is filled in by hand, so it cannot be relied on either.)
+**`InvoiceHotel` has no address field.** The nearest thing is `footer`, a printed contact block — `"Hotel Ambiance, Tyrsova 8, 120 00 Prague 2, Czech Republic, VAT Reg No. CZ06947697\ne-mail: …, Tel.: …, Web: …"`. Substituted into *"s doručením na adresu …"* that drops the VAT number, phone and website into the middle of a sentence, and parsing the street out of admin-editable free text means an invoice-formatting edit silently rewrites an order e-mail.
+
+Note the split that fell out of this: the **delivery address** is local to this registry (it exists nowhere else), while the **billing identity** is *not* duplicated — it references `companies/{id}`, which is where that data already lives. Reuse was rejected for the field that had no shared source, and adopted for the field that did.
 
 The general rule this instance of it follows: **reuse a field only when both features would always want it to change together.** A printed footer and a delivery address would not. See the matching warning in `invoiceTypes.ts`.
 
-Hotels ship with **empty** `deliveryAddress` / `invoiceDetails` — those strings are not in the repo and not derivable, and a seeded guess would put a wrong address into a real supplier e-mail.
+Hotels ship with an **empty** `deliveryAddress` and `companyId: null` — neither is in the repo nor derivable, and a seeded guess would put a wrong address into a real supplier e-mail.
+
+## Billing details are a reference, not free text
+
+`OrderHotel.companyId` points at `companies/{id}` — the registry **Nastavení → Společnosti** owns (HPM, STP). The billing block is composed at **read time** by `companyInvoiceDetails()`:
+
+```
+{name}, {address}, IČO: {ic}, DIČ: {dic}
+→ Hotel Property Management s.r.o., Panská 897/12, Praha 1, 110 00, IČO: 06947697, DIČ: CZ06947697
+```
+
+Empty parts are dropped rather than printed as a dangling `IČO: ,`. Read-time resolution, not a stored copy, so correcting an address in Nastavení fixes every future order e-mail with nothing to re-save here — the same choice `project_displayname_readtime_resolution` made for names.
+
+⚠️ **`abbreviation` must never reach the e-mail.** It is an internal handle (HPM, STP), not part of the legal identity, and it is deliberately absent from `OrderCompany` so it cannot be interpolated by accident. `fileNo` is likewise not modelled.
+
+`companyId` is **not validated against the live collection** on save (`objednavky.ts`): the registry is edited elsewhere, so a company deleted after a hotel pointed at it must degrade gracefully rather than 400 and leave the číselník unsaveable. A dangling id resolves to `""` — exactly like an unset one — so it **blocks the copy** instead of silently dropping the billing block out of a sentence that still reads as complete. Same reasoning as `faktury.ts` not validating a draft's `vatRateId`.
+
+`GET /api/companies` needs only `requireAuth` (it populates form dropdowns app-wide), so the tab's own permission is the only gate involved.
+
+## Keyboard flow
+
+The tab is built to be driven without the mouse, because an order is a burst of a dozen search-and-quantity pairs:
+
+**search → ↑/↓ → Enter → quantity → Tab → search →** …
+
+- `activeIndex` is **clamped at render** (`Math.min(active, results.length - 1)`), not corrected by an effect. The result set shrinks as you type *and* as items are added, so a stored index goes stale constantly; deriving it removes the window where it points past the end.
+- `ArrowDown` on a **closed** list opens it on row 0 rather than advancing to row 1.
+- Hovering a row **sets** the active index, so hover and keyboard highlight can never disagree about what Enter will pick.
+- Result buttons are `tabIndex={-1}` — the list is arrow-driven, and Tab out of the search box belongs to the rest of the form.
+- Adding a line mints its id **in the handler, not inside the `setBlocks` updater** (an updater can run twice under StrictMode, which would mint two ids and focus neither line) and parks it in `focusLineId`. The matching `QtyInput` focuses **and selects** — the field already holds `1`, and typing a quantity should replace it.
+- `Tab` inside `QtyInput` is intercepted back to that block's search input. **Shift+Tab is left alone** so reversing out of the form keeps working.
 
 ## Rendering: two clipboard flavours, one source string
 

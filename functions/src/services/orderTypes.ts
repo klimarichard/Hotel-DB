@@ -51,8 +51,16 @@ export interface OrderHotel {
   name: string;
   /** Free text, dropped into "s doručením na adresu …". */
   deliveryAddress: string;
-  /** Free text, dropped into "a fakturačními údaji …". */
-  invoiceDetails: string;
+  /**
+   * Points at a `companies/{id}` doc (Nastavení → Společnosti). The billing
+   * block printed after "a fakturačními údaji …" is composed from that document
+   * at READ time — name, address, IČO, DIČ — and never stored here, so a
+   * correction in Nastavení fixes every future order e-mail at once.
+   *
+   * ⚠️ The company's `abbreviation` must never reach the e-mail. It is an
+   * internal handle (HPM, STP), not part of the legal identity.
+   */
+  companyId: string | null;
   active: boolean;
 }
 
@@ -102,20 +110,20 @@ export const DEFAULT_ORDER_ITEMS: OrderItem[] = [
 ];
 
 /**
- * The four hotels ship with EMPTY address and billing fields on purpose: those
- * strings are not in the repo and not derivable from any other collection, so
- * seeding a guess would put a wrong address into a real supplier e-mail. The
- * tab tells the user which hotels are still missing them and refuses to build
- * an e-mail for one, which is a loud, one-time prompt to fill them in.
+ * The four hotels ship with an EMPTY address and no company on purpose: neither
+ * is in the repo nor derivable from any other collection, so seeding a guess
+ * would put a wrong address into a real supplier e-mail. The tab tells the user
+ * which hotels are still missing them and refuses to build an e-mail for one,
+ * which is a loud, one-time prompt to fill them in.
  *
- * `name` carries the lowercase "hotel " prefix because it is substituted into
+ * `name` carries the lowercase "hotel " prefix because it is substituted
  * mid-sentence ("prosím o objednání na hotel Ambiance …"), not used as a title.
  */
 export const DEFAULT_ORDER_HOTELS: OrderHotel[] = [
-  { id: "ambiance", name: "hotel Ambiance", deliveryAddress: "", invoiceDetails: "", active: true },
-  { id: "superior", name: "hotel Superior", deliveryAddress: "", invoiceDetails: "", active: true },
-  { id: "amigo", name: "hotel Amigo", deliveryAddress: "", invoiceDetails: "", active: true },
-  { id: "ankora", name: "hotel Ankora", deliveryAddress: "", invoiceDetails: "", active: true },
+  { id: "ambiance", name: "hotel Ambiance", deliveryAddress: "", companyId: null, active: true },
+  { id: "superior", name: "hotel Superior", deliveryAddress: "", companyId: null, active: true },
+  { id: "amigo", name: "hotel Amigo", deliveryAddress: "", companyId: null, active: true },
+  { id: "ankora", name: "hotel Ankora", deliveryAddress: "", companyId: null, active: true },
 ];
 
 export const DEFAULT_OBJEDNAVKY_CONFIG: ObjednavkyConfig = {
