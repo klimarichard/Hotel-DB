@@ -405,6 +405,74 @@ Tabulky jsou široké a na telefonu se nedají rozumně vyplňovat, proto se pol
 
 ---
 
+## Tabulky – Objednávky
+
+### Objednávka se nikde neukládá
+
+Záložka **Objednávky** sestavuje **text e-mailu**, nic víc. Rozepsaná objednávka se **neukládá ani automaticky, ani na tlačítko** – po obnovení nebo opuštění stránky je pryč a stránka se vždy otevře prázdná. Historie objednávek neexistuje; co bylo objednáno, zůstává jen v odeslané poště.
+
+Ukládá se **pouze číselník** – seznam položek a hotely s adresami a fakturačními údaji.
+
+> 🖥️ Jen rozhraní. Zdroj: `frontend/src/pages/tabulky/ObjednavkyTab.tsx` – stav `blocks` žije jen v komponentě; `functions/src/routes/objednavky.ts` neobsahuje žádný jiný zdroj než `/config`.
+
+### Fakturační údaje se neopisují – berou se ze Společností
+
+V číselníku se u hotelu **nevyplňují** fakturační údaje ručně; **vybírá se společnost** ze seznamu v **Nastavení → Společnosti** (dnes HPM a STP). Do e-mailu se z ní složí:
+
+> název, IČO: …, adresa
+>
+> například: Hotel Property Management s.r.o., IČO: 06947697, Panská 897/12, Praha 1, 110 00
+
+**Zkratka společnosti se do e-mailu nikdy nedostane** – je to interní označení, ne součást identifikace firmy. **DIČ se nevypisuje** vůbec. Chybí-li u společnosti IČO nebo adresa, příslušná část se vynechá, nevypíše se prázdná („IČO: ,").
+
+Údaje se skládají **až při sestavení e-mailu**, ne při výběru. Oprava adresy nebo IČO v Nastavení se proto projeví ve všech dalších objednávkách sama, bez zásahu v číselníku objednávek.
+
+> ⚙️ Automatika. Zdroj: `frontend/src/lib/objednavky.ts` – `companyInvoiceDetails()`, `resolveBlocks()`.
+
+### Bez adresy a společnosti e-mail nezkopírujete
+
+Má-li některý hotel v objednávce prázdnou **doručovací adresu** nebo **nevybranou společnost**, tlačítko **Kopírovat e-mail** zůstane nedostupné a aplikace vypíše, které hotely je třeba doplnit. Totéž platí, byla-li vybraná společnost mezitím v Nastavení **smazána**.
+
+Není to formalita: obě hodnoty se dosazují doprostřed věty, takže prázdná hodnota nevytvoří viditelnou mezeru, ale větu „…s doručením na adresu  a fakturačními údaji ." – ta vypadá jako dokončená a odešla by jako dokončená.
+
+> 🖥️ Jen rozhraní. Zdroj: `frontend/src/pages/tabulky/ObjednavkyTab.tsx` – `incompleteHotels`, `canCopy`. Server tuto podmínku nekontroluje, protože e-mail nesestavuje.
+
+### Objednávku lze vyplnit celou z klávesnice
+
+Do vyhledávacího pole napište část názvu nebo kódu, **šipkami ↑ / ↓** vyberte položku a **Enterem** ji přidejte. Kurzor pak sám skočí do pole **Množství** s předvyplněnou jedničkou, kterou rovnou přepíšete. **Tabulátorem** se vrátíte zpět do vyhledávání pro další položku.
+
+Myš není potřeba; kliknutí na položku v seznamu funguje stejně jako Enter.
+
+> 🖥️ Jen rozhraní. Zdroj: `frontend/src/pages/tabulky/ObjednavkyTab.tsx` – `handleSearchKey()`, `focusLineId`, `QtyInput`.
+
+### E-mail se kopíruje ve dvou podobách zároveň
+
+Tlačítko **Kopírovat e-mail** vloží do schránky **současně** formátovanou podobu (s tabulkou) a čistý text (položka a množství na řádek). Který tvar se použije, rozhodne až místo vložení: v Outlooku nebo Gmailu se vloží **skutečná tabulka**, do prostého textového pole čistý text.
+
+Neumí-li prohlížeč vložit formátovanou podobu, zkopíruje se **jen čistý text** a aplikace to výslovně napíše – aby se na chybějící tabulku nepřišlo až v odeslaném e-mailu.
+
+Náhled na stránce je vykreslený **ze stejného textu**, který jde do schránky, takže nemůže ukazovat něco jiného, než se vloží.
+
+> 🖥️ Jen rozhraní. Zdroj: `frontend/src/lib/objednavky.ts` – `copyOrderEmail()`, `buildOrderHtml()`, `buildOrderText()`.
+
+### Každý hotel i každá položka jen jednou
+
+Hotel, který už v objednávce je, se **přestane nabízet** v seznamu pro přidání; stejně tak položka, která už je u daného hotele přidaná, zmizí z výsledků vyhledávání. Množství se mění v řádku, ne opakovaným přidáváním.
+
+První hotel uvozuje věta „prosím o objednání na…", každý další „Dále prosím o objednání na…".
+
+> 🖥️ Jen rozhraní. Zdroj: `frontend/src/pages/tabulky/ObjednavkyTab.tsx` – `availableHotels`, `results`.
+
+### Úprava číselníku se hned promítne do rozepsané objednávky
+
+Smažete-li položku nebo hotel z číselníku, **zmizí i z právě rozepsané objednávky** – řádek se nevypíše jako prázdný. Číselník je společný, takže úprava platí pro všechny uživatele.
+
+Kód položky se do e-mailu vypíše **za název v závorce** („AJAX univerzál 1L (2144)"); položka bez kódu se vypíše jen názvem. Jednotka (**ks** / **balení**) je vlastností položky, nezadává se u každé objednávky.
+
+> 🖥️ Jen rozhraní + 🔒 Server. Zdroj: `frontend/src/lib/objednavky.ts` – `resolveBlocks()`, `itemLabel()`; uložení číselníku `PUT /api/objednavky/config` (zapisuje se do logu změn).
+
+---
+
 ## Dokumenty
 
 ### Kdo dokument uvidí, určuje jeho Viditelnost
