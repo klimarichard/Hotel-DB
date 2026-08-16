@@ -105,7 +105,7 @@ The UI calls a saved entry **data** ("Uložit", "Zobrazit historii", "Načíst d
 
 # Objednávky
 
-**v5.11.0.** Composes the recurring cleaning-supply order e-mail: pick a hotel, search the catalogue, set quantities, copy the finished message into Outlook. It replaces retyping the same e-mail by hand; it is not an ordering system and talks to no supplier.
+**v5.11.0.** Composes the recurring cleaning-supply order e-mail — in practice the **Hygop** order, which is what the seeded catalogue is: pick a hotel, search the catalogue, set quantities, copy the finished message into Outlook. It replaces retyping the same e-mail by hand; it is not an ordering system and talks to no supplier's system. Nothing in the code is Hygop-specific, though — the catalogue, units and hotels are all číselník data, so a second supplier needs no code change.
 
 `pages/tabulky/ObjednavkyTab.tsx` (tab + číselník panel), `lib/objednavky.ts` (types, rendering, clipboard, search), `functions/src/routes/objednavky.ts` + `services/orderTypes.ts` (config CRUD, seed).
 
