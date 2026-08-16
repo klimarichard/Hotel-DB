@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { visibleTabulkyTabs, type TabulkyTabId } from "../lib/tabulky";
 import SmenarnaTab from "./tabulky/SmenarnaTab";
+import ObjednavkyTab from "./tabulky/ObjednavkyTab";
 import styles from "./TabulkyPage.module.css";
 
 /**
@@ -71,6 +72,8 @@ function TabBody({ tab }: { tab: TabulkyTabId }) {
   switch (tab) {
     case "smenarna":
       return <SmenarnaTab />;
+    case "objednavky":
+      return <ObjednavkyTab />;
     default:
       return null;
   }

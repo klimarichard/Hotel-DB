@@ -192,6 +192,8 @@ export const PERMISSION_SECTIONS = [
         items: [
           { key: "nav.tabulky.view", label: "Zobrazit Tabulky", level: 0 },
           { key: "tabulky.smenarna.view", label: "Směnárna + ČNB", level: 1 },
+          { key: "tabulky.objednavky.view", label: "Objednávky", level: 1 },
+          { key: "tabulky.objednavky.manage", label: "Spravovat číselníky objednávek", level: 2 },
         ],
       },
     ],

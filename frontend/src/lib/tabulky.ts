@@ -12,7 +12,7 @@ import type { Permission } from "./permissions/catalog";
  * see reference: PERMISSIONS_LIST.md, permissions/catalog.ts,
  * functions/src/auth/permissions.ts) + a case in TabulkyPage's TabBody.
  */
-export type TabulkyTabId = "smenarna";
+export type TabulkyTabId = "smenarna" | "objednavky";
 
 export interface TabulkyTab {
   readonly id: TabulkyTabId;
@@ -23,6 +23,7 @@ export interface TabulkyTab {
 
 export const TABULKY_TABS: readonly TabulkyTab[] = [
   { id: "smenarna", label: "Směnárna + ČNB", viewPerm: "tabulky.smenarna.view" },
+  { id: "objednavky", label: "Objednávky", viewPerm: "tabulky.objednavky.view" },
 ];
 
 export function visibleTabulkyTabs(can: (perm: Permission) => boolean): TabulkyTab[] {
