@@ -323,16 +323,15 @@
   overflow-x: auto;
 }
 
+/* Near-zero margins on purpose. The copied HTML now carries its OWN blank-line
+   paragraphs, so generous margins here would show spacing the pasted e-mail
+   will not have — and the whole point of this preview is that it matches. */
 .preview p {
-  margin: 0 0 0.75rem;
+  margin: 0 0 0.3rem;
 }
 
 .preview table {
-  margin: 0 0 1.25rem;
-}
-
-.preview table:last-child {
-  margin-bottom: 0;
+  margin: 0;
 }
 
 .copyRow {
