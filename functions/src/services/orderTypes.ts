@@ -54,8 +54,10 @@ export interface OrderHotel {
   /**
    * Points at a `companies/{id}` doc (Nastavení → Společnosti). The billing
    * block printed after "a fakturačními údaji …" is composed from that document
-   * at READ time — name, address, IČO, DIČ — and never stored here, so a
-   * correction in Nastavení fixes every future order e-mail at once.
+   * at READ time — `{name}, IČO: {ic}, {address}`, with DIČ deliberately NOT
+   * printed — and never stored here, so a correction in Nastavení fixes every
+   * future order e-mail at once. The format lives in
+   * `frontend/src/lib/objednavky.ts` → `companyInvoiceDetails()`.
    *
    * ⚠️ The company's `abbreviation` must never reach the e-mail. It is an
    * internal handle (HPM, STP), not part of the legal identity.
