@@ -535,6 +535,38 @@ Historické sazby 10 % a 15 % (a jejich zálohové protějšky) mají být **nea
 
 > 🔒 Server + ⚙️ Automatika. Zdroj: `functions/src/services/invoiceTypes.ts` – `VatRate.showInPrint` a podmínka v `computeTotals()` (`!rate.active && !rate.showInPrint && gross === 0` → řádek se vynechá); zrcadleno v `frontend/src/lib/faktury.ts`. Nová konfigurace příznak nedostane automaticky – `sanitizeConfig()` ho čte jako `showInPrint === true`.
 
+## Recepce – Předávací protokol
+
+### Přesun sm do trezoru, vynulování sm trezoru a změny waty nelze vzít zpět
+
+Tyto tři pohyby se **zapisují do Historie změn** protokolu, ale tlačítka **Zpět** a **Vpřed** je přeskakují – a to úplně všem, včetně administrátora. Nejde o oprávnění, ale o počty: přesun sm mění dvě čísla najednou (sníží počty sm, zvýší sm trezor kurzem platným v ten okamžik, přičemž kurzy jde později změnit) a oba zůstatky se navíc **přenášejí do další směny** při jejím založení. Vrácení jedné poloviny takového pohybu by rozhodilo protokol, který už mohl být předán, a nikde by se to neprojevilo.
+
+Zpět/Vpřed proto pokračují k nejbližší starší změně, kterou vrátit lze – nezaseknou se.
+
+> 🔒 Server. Zdroj: `functions/src/services/handoverHistory.ts` (`revertible: false`, `findUndoTarget`/`findRedoTarget`, `applyChange`), zápis v `functions/src/routes/handovers.ts` (`recordMoneyMove`).
+
+### Po přesunu sm do trezoru už nelze vzít zpět ani zadané počty sm
+
+Dokud sm leží v počtech, jde jejich zadání běžně vracet tlačítkem Zpět. **Okamžikem přesunu do trezoru se všechny dosavadní záznamy o počtech sm uzamknou** a Zpět je přeskočí.
+
+Důvod: přesunuté sm už jsou v trezoru přepočtené na koruny. Kdyby šlo vrátit zadání, které je do počtů přivedlo, existovaly by naráz na dvou místech – v počtech i v trezoru – a součet protokolu by tiše narostl. Počty zadané **až po** přesunu se vracet dají normálně, dokud nepřijde další přesun.
+
+> 🔒 Server. Zdroj: `functions/src/services/handoverHistory.ts` (`sealSmEntries`), voláno z `POST /:hotel/:id/sm-transfer` v `functions/src/routes/handovers.ts`.
+
+### Záznam o pohybu sm trezoru a waty vidí v historii jen ten, kdo s ním smí hýbat
+
+V Historii změn se řádky o **sm trezoru** ukazují jen držitelům oprávnění „Spravovat sm" (`recepce.sm.manage`) a řádky o **watě** jen držitelům „Spravovat protokol" daného hotelu (administrátor vidí obojí). Filtruje se na serveru, ne jen v rozhraní.
+
+Samotné **řádky sm trezor a wata v Účtech** přitom zůstávají viditelné všem, jakmile jsou nenulové. Recepční tedy může vidět, že se číslo změnilo, aniž by v historii našel proč – to je záměr. Počty sm (nikoli trezor) se naopak neskrývají nikomu: edituje je každý, kdo smí upravovat protokol.
+
+> 🔒 Server. Zdroj: `restrictedScopeOf()` v `functions/src/services/handoverHistory.ts`, filtr v `GET /:hotel/:id/history` (`functions/src/routes/handovers.ts`); viditelnost řádků `showSmTrezorRow`/`showWataRow` v `frontend/src/pages/recepce/HandoverTab.tsx`.
+
+### Historii nelze vrátit u podepsaného protokolu
+
+Jakmile je protokol podepsán (Předal nebo Převzal), tlačítka Zpět a Vpřed jsou uzamčena **pro všechny včetně administrátora**. Administrátor smí obsah podepsaného protokolu opravit přímo, ale ne přes historii. Chcete-li krokovat historii, je nutné nejdřív zrušit podpis.
+
+> 🔒 Server. Zdroj: `stepHandler()` v `functions/src/routes/handovers.ts` (bez admin výjimky, na rozdíl od obsahového `PUT`).
+
 ## Recepce – Odvody
 
 ### Odvody se připravují z Předávacího protokolu, ne ze samostatné záložky
@@ -593,7 +625,9 @@ Vrácení je záměrně přísné: **není-li v protokolu zamčený řádek „o
 
 ### Změny odvodu se nezapisují do historie protokolu a nejdou vzít zpět
 
-Zásah odvodu do protokolu **neprochází historií změn ani funkcí Zpět/Znovu** – stejně jako převody sm a wata. Zásah se totiž týká dvou dokumentů zároveň; kdyby šlo vzít zpět samotné snížení trezoru, záznam odvodu by dál tvrdil, že peníze odešly. Změny se místo toho zapisují do protokolu změn (auditu).
+Zásah odvodu do protokolu **neprochází historií změn ani funkcí Zpět/Znovu**. Zásah se totiž týká dvou dokumentů zároveň; kdyby šlo vzít zpět samotné snížení trezoru, záznam odvodu by dál tvrdil, že peníze odešly. Změny se místo toho zapisují do protokolu změn (auditu).
+
+Přesuny sm a změny waty jsou na tom **jinak**: ty se do historie protokolu zapisují (viz „Recepce – Předávací protokol"), jen je stejně tak nelze vzít zpět. Odvod se nezapisuje vůbec.
 
 > 🔒 Server. Zdroj: `functions/src/routes/odvody.ts` – hlavičkový komentář; obdobné pravidlo `functions/src/services/handoverHistory.ts`.
 
