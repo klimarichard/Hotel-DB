@@ -212,6 +212,12 @@ export const PERMISSION_CATALOG = [
     group: "Tabulky",
     items: [
       { key: "tabulky.smenarna.view", label: "Směnárna + ČNB" },
+      // The tab itself. `.manage` guards ONLY the číselník behind it — the
+      // product catalogue and the hotel delivery/billing details — exactly as
+      // `faktury.manage` guards that page's číselníky. Building and copying an
+      // order e-mail stores nothing, so it needs no key beyond the view.
+      { key: "tabulky.objednavky.view", label: "Objednávky" },
+      { key: "tabulky.objednavky.manage", label: "Spravovat číselníky objednávek" },
     ],
   },
   {

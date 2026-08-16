@@ -45,6 +45,7 @@ import { terminalRouter } from "./routes/terminal";
 import { exchangeRouter } from "./routes/exchange";
 import { dokumentyRouter } from "./routes/dokumenty";
 import { fakturyRouter } from "./routes/faktury";
+import { objednavkyRouter } from "./routes/objednavky";
 import * as clock from "./services/clock";
 import { requireAuth, AuthRequest } from "./middleware/auth";
 import { requirePermission } from "./auth/permissions";
@@ -146,6 +147,7 @@ app.use("/terminal", terminalRouter);
 app.use("/exchange", exchangeRouter);
 app.use("/dokumenty", dokumentyRouter);
 app.use("/faktury", fakturyRouter);
+app.use("/objednavky", objednavkyRouter);
 
 // Health check
 app.get("/health", (_req, res) => {
