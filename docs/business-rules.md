@@ -419,11 +419,11 @@ Ukládá se **pouze číselník** – seznam položek a hotely s adresami a fakt
 
 V číselníku se u hotelu **nevyplňují** fakturační údaje ručně; **vybírá se společnost** ze seznamu v **Nastavení → Společnosti** (dnes HPM a STP). Do e-mailu se z ní složí:
 
-> název, adresa, IČO: …, DIČ: …
+> název, IČO: …, adresa
 >
-> například: Hotel Property Management s.r.o., Panská 897/12, Praha 1, 110 00, IČO: 06947697, DIČ: CZ06947697
+> například: Hotel Property Management s.r.o., IČO: 06947697, Panská 897/12, Praha 1, 110 00
 
-**Zkratka společnosti se do e-mailu nikdy nedostane** – je to interní označení, ne součást identifikace firmy. Chybí-li u společnosti IČO nebo DIČ, příslušná část se vynechá, nevypíše se prázdná („IČO: ,").
+**Zkratka společnosti se do e-mailu nikdy nedostane** – je to interní označení, ne součást identifikace firmy. **DIČ se nevypisuje** vůbec. Chybí-li u společnosti IČO nebo adresa, příslušná část se vynechá, nevypíše se prázdná („IČO: ,").
 
 Údaje se skládají **až při sestavení e-mailu**, ne při výběru. Oprava adresy nebo IČO v Nastavení se proto projeví ve všech dalších objednávkách sama, bez zásahu v číselníku objednávek.
 
