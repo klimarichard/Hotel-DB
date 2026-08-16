@@ -1,6 +1,10 @@
 # Tabulky (Směnárna + ČNB)
 
-A standalone top-level page (`/tabulky/:tab`) for calculation tables that belong to no single hotel. Introduced in **v4.14.0** with one tab, **Směnárna + ČNB**, ported from `excels/smenarna_cnb.xlsx`. Deliberately built as a hub so later tables slot in without restructuring.
+A standalone top-level page (`/tabulky/:tab`) for tables and tools that belong to no single hotel. Introduced in **v4.14.0** with one tab, **Směnárna + ČNB**, ported from `excels/smenarna_cnb.xlsx`. Deliberately built as a hub so later tables slot in without restructuring.
+
+Two tabs today. **Objednávky** was added second and cost exactly what the hub promised — a registry entry, a permission key, and one `case` in `TabBody`; `TabulkyPage.tsx` was not touched beyond the import.
+
+> **Which section describes which tab:** everything from *Rates* down to *Not built* is **Směnárna + ČNB**. **Objednávky** has its own section at the end of this file.
 
 ## Shell
 
@@ -19,6 +23,8 @@ Adding a tab: registry entry + permission key in all four catalogues + a case in
 |---|---|---|
 | `nav.tabulky.view` | 0 | the page |
 | `tabulky.smenarna.view` | 1 | the Směnárna tab, and every backend read/write it makes |
+| `tabulky.objednavky.view` | 1 | the Objednávky tab, and `GET /api/objednavky/config` |
+| `tabulky.objednavky.manage` | 2 | the Objednávky číselník — `PUT /api/objednavky/config` |
 
 Own **Tabulky** section in the matrix, between Recepce and Zaměstnanci (that position also fixes where it reads in Nápověda, which orders sections by `PERMISSION_SECTIONS`). Granted to **no** built-in type, mirroring Recepce — `admin` gets both via the `system.admin` wildcard; everyone else needs an explicit grant.
 
@@ -94,3 +100,61 @@ The UI calls a saved entry **data** ("Uložit", "Zobrazit historii", "Načíst d
 ## Not built
 
 **Print/PDF** — dropped by decision, not deferred. The user-facing rules live in [`business-rules.md`](business-rules.md) → "Tabulky – Směnárna + ČNB".
+
+---
+
+# Objednávky
+
+**v5.11.0.** Composes the recurring cleaning-supply order e-mail: pick a hotel, search the catalogue, set quantities, copy the finished message into Outlook. It replaces retyping the same e-mail by hand; it is not an ordering system and talks to no supplier.
+
+`pages/tabulky/ObjednavkyTab.tsx` (tab + číselník panel), `lib/objednavky.ts` (types, rendering, clipboard, search), `functions/src/routes/objednavky.ts` + `services/orderTypes.ts` (config CRUD, seed).
+
+## There is no order resource, and that is the design
+
+Nothing about an order is persisted. Working state lives in component state and dies with the component; the page always opens blank. So there is no collection, no list route, no history, no retention sweep — **less** than Směnárna, which at least has explicit snapshots.
+
+The only stored state is `settings/objednavkyConfig`, served by `GET /config` and replaced wholesale by `PUT /config`. Lazy seed: a GET on a missing document returns `DEFAULT_OBJEDNAVKY_CONFIG` **without writing**, and the defaults only become a real document the first time someone saves. Same contract as `settings/fakturyConfig`.
+
+`PUT /config` **is** audit-logged (counts per array, not contents), and this is the one place the feature disagrees with Faktury's "scratch pad isn't audited" reasoning: a wrong delivery address here dispatches real goods to the wrong building, and the e-mail that results carries no record of who changed it.
+
+## A fourth hotel registry
+
+`OrderHotel` is a **separate list** from `lib/hotels.ts` (four Recepce desks, Amigo+Alqush merged) and from `invoiceTypes.ts` (five invoicing entities). Reusing the invoice hotels was requested, investigated and rejected on a concrete finding:
+
+**`InvoiceHotel` has no address field.** The nearest thing is `footer`, a printed contact block — `"Hotel Ambiance, Tyrsova 8, 120 00 Prague 2, Czech Republic, VAT Reg No. CZ06947697\ne-mail: …, Tel.: …, Web: …"`. Substituted into *"s doručením na adresu …"* that drops the VAT number, phone and website into the middle of a sentence, and parsing the street out of admin-editable free text means an invoice-formatting edit silently rewrites an order e-mail. (`companyId` is also `null` on all five seeds — it is filled in by hand, so it cannot be relied on either.)
+
+The general rule this instance of it follows: **reuse a field only when both features would always want it to change together.** A printed footer and a delivery address would not. See the matching warning in `invoiceTypes.ts`.
+
+Hotels ship with **empty** `deliveryAddress` / `invoiceDetails` — those strings are not in the repo and not derivable, and a seeded guess would put a wrong address into a real supplier e-mail.
+
+## Rendering: two clipboard flavours, one source string
+
+`copyOrderEmail()` writes **one `ClipboardItem` carrying both** `text/html` and `text/plain`. The paste target chooses: Outlook/Gmail take the HTML and render a real table, a plain-text field takes the list. Falls back to `writeText` when `ClipboardItem` is missing or the write is refused, and **returns which flavour it managed** — the tab says so out loud, because "the table didn't come through" must not be discovered in the sent mail.
+
+⚠️ **The HTML is written for Outlook's converter, not for a browser.** Pasting into a compose window hands the HTML over as a **CF_HTML** clipboard payload, which Outlook converts with its Word-derived engine: stylesheets are discarded and CSS is normalised hard. Hence presentational **attributes** (`border`, `cellpadding`, `cellspacing`) plus **inline styles repeated on every cell**, no classes, no `<style>` block, no flex/grid. Modern CSS arrives as an unstyled column of text. There is deliberately **no `font-family`**, so the pasted table inherits the mail's own font instead of standing out.
+
+Both renderers take `ResolvedBlock[]`, never raw blocks + config — the two flavours of one copy must agree line for line, and identical input is the only thing that guarantees it. `resolveBlocks()` drops a line whose item was deleted mid-session and a block whose hotel was: a nameless row in a supplier e-mail is worse than a missing one.
+
+The on-screen preview uses `dangerouslySetInnerHTML` **on the same string that goes to the clipboard**, so it physically cannot show one thing and paste another. That is safe because every interpolated value is escaped at its single point of interpolation (`escapeHtml`), and it is the reason the preview is not hand-built JSX — two renderers would be two things to keep in step.
+
+`inline()` collapses whitespace in the address and billing fields at **render** time, because they are substituted mid-sentence; the stored value stays exactly as typed.
+
+## Catalogue
+
+`code` is stored **apart** from `name` and rendered back as `name (code)`. Search then matches either, a code can be fixed without retyping the name, and `CLEAMEN 220 (nerez)` — whose name legitimately contains parentheses that are *not* a code — is expressible at all. An empty code renders with no parentheses (`Prachovka`).
+
+`unit` is `"ks" | "balení"`, **printed verbatim** into the e-mail, so there is no label map to fall out of step with it. Both forms are invariant in Czech across every quantity, so no pluralisation exists. The sanitizer whitelists the two values and falls back to `"ks"` — the narrower claim — rather than letting an unrecognised value reach a supplier.
+
+Search (`searchKey`) is NFD-strip diacritic-insensitive, so `uterka` finds `Mikroutěrka`; same approach as `employmentSessions.ts` uses for names.
+
+## Blocked copy, not a warning
+
+A hotel in the order with a blank address or billing block **disables the copy** rather than warning beside it. A blank substitution does not leave a visible gap — it yields `"s doručením na adresu  a fakturačními údaji ."`, which reads as a finished sentence and would be sent as one.
+
+## Not built
+
+- **No tour step.** `appTour.ts` records a deliberate decision that Tabulky gets one nav-level step and no per-tab steps, because the tabs' own on-screen hints carry the detail and would otherwise go stale independently. Consequence: like `tabulky.smenarna.view`, this tab's permissions do not surface as Nápověda topics.
+- **No editable message template.** The two sentences are hard-coded. Making them editable needs `{hotel}`/`{adresa}` tokens, and a mistyped token yields a broken e-mail with nothing to catch it.
+- **No sending.** The app has no mail transport and none was added; the message is composed and copied, and Outlook sends it.
+
+User-facing rules: [`business-rules.md`](business-rules.md) → "Tabulky – Objednávky".
