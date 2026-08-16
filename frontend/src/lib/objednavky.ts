@@ -53,7 +53,14 @@ export interface OrderCompany {
 /**
  * The billing block as it is printed mid-sentence:
  *
- *   Hotel Property Management s.r.o., Panská 897/12, Praha 1, 110 00, IČO: …, DIČ: …
+ *   Hotel Property Management s.r.o., IČO: 06947697, Panská 897/12, Praha 1, 110 00
+ *
+ * Note the order — name, IČO, THEN address — and that **DIČ is not printed**.
+ * Both were corrected by the customer on 2026-08-16 after an earlier version
+ * that read "name, address, IČO, DIČ"; the supplier wants the company
+ * identified before it is located. `dic` is still carried on `OrderCompany`
+ * because the field exists on the document and dropping it from the type would
+ * make its absence here look like an oversight rather than a decision.
  *
  * Resolved at READ time from the company document, never stored on the hotel —
  * so correcting an address in Nastavení fixes every future order e-mail at
@@ -61,12 +68,7 @@ export interface OrderCompany {
  * printed as a dangling "IČO: ,".
  */
 export function companyInvoiceDetails(company: OrderCompany): string {
-  return [
-    company.name,
-    company.address,
-    company.ic ? `IČO: ${company.ic}` : "",
-    company.dic ? `DIČ: ${company.dic}` : "",
-  ]
+  return [company.name, company.ic ? `IČO: ${company.ic}` : "", company.address]
     .map((part) => part.trim())
     .filter((part) => part !== "")
     .join(", ");
@@ -281,9 +283,12 @@ export function buildOrderHtml(blocks: ResolvedBlock[]): string {
     `<table border="1" cellpadding="6" cellspacing="0" width="${tableWidth}" ` +
     `style="border-collapse:collapse;border:1px solid #000000;` +
     `table-layout:fixed;width:${tableWidth}px;">`;
+  // Bold on the cell AND a <strong> around the text: Word honours the element
+  // unconditionally, while the inline weight covers a paste target that keeps
+  // the CSS but flattens the markup. Same belt-and-braces as the widths.
   const labelCell =
     `width="${w.label}" style="border:1px solid #000000;padding:6px;` +
-    `width:${w.label}px;white-space:nowrap;"`;
+    `width:${w.label}px;white-space:nowrap;font-weight:bold;"`;
   const qtyCell =
     `width="${w.qty}" style="border:1px solid #000000;padding:6px;` +
     `width:${w.qty}px;white-space:nowrap;"`;
@@ -293,7 +298,7 @@ export function buildOrderHtml(blocks: ResolvedBlock[]): string {
       const rows = block.rows
         .map(
           (r) =>
-            `<tr><td ${labelCell}>${escapeHtml(r.label)}</td>` +
+            `<tr><td ${labelCell}><strong>${escapeHtml(r.label)}</strong></td>` +
             `<td ${qtyCell}>${r.qty} ${escapeHtml(r.unit)}</td></tr>`
         )
         .join("");

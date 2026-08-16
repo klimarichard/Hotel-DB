@@ -134,9 +134,11 @@ Hotels ship with an **empty** `deliveryAddress` and `companyId: null` — neithe
 `OrderHotel.companyId` points at `companies/{id}` — the registry **Nastavení → Společnosti** owns (HPM, STP). The billing block is composed at **read time** by `companyInvoiceDetails()`:
 
 ```
-{name}, {address}, IČO: {ic}, DIČ: {dic}
-→ Hotel Property Management s.r.o., Panská 897/12, Praha 1, 110 00, IČO: 06947697, DIČ: CZ06947697
+{name}, IČO: {ic}, {address}
+→ Hotel Property Management s.r.o., IČO: 06947697, Panská 897/12, Praha 1, 110 00
 ```
+
+⚠️ **`DIČ` is not printed, and the IČO precedes the address.** Both were corrected by the customer on 2026-08-16 after a first version that read `name, address, IČO, DIČ` — the supplier wants the company identified before it is located. `dic` stays on `OrderCompany` even though nothing reads it: removing the field would make its absence from the output look like an oversight rather than a decision.
 
 Empty parts are dropped rather than printed as a dangling `IČO: ,`. Read-time resolution, not a stored copy, so correcting an address in Nastavení fixes every future order e-mail with nothing to re-save here — the same choice `project_displayname_readtime_resolution` made for names.
 
@@ -172,6 +174,8 @@ The tab is built to be driven without the mouse, because an order is a burst of 
 Width is **estimated from character count** — there is no way to measure text for a document that will render in an unknown font at an unknown size. `CHAR_PX = 8` is deliberately generous (a proportional 11pt face averages nearer 6px/char): overshooting costs whitespace, undershooting breaks the requirement that the widest label fit on one line. `white-space:nowrap` backs it up — if the estimate ever falls short, Word widens the column instead of wrapping.
 
 ⚠️ The widths are repeated on the table **and on every cell**, as both an HTML attribute and an inline style. Word recomputes table geometry per row, so a width declared once — in a `<colgroup>`, or only on the first row — is exactly what it discards.
+
+The **first column is bold**, declared twice for the same reason: `font-weight:bold` on the cell *and* a `<strong>` around the text. Word honours the element unconditionally; the inline weight covers a target that keeps the CSS but flattens the markup. The plain-text flavour has no equivalent and does not try to fake one.
 
 ### Spacing is explicit, not inherited
 
