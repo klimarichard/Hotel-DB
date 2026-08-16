@@ -165,6 +165,22 @@ The tab is built to be driven without the mouse, because an order is a burst of 
 
 ⚠️ **The HTML is written for Outlook's converter, not for a browser.** Pasting into a compose window hands the HTML over as a **CF_HTML** clipboard payload, which Outlook converts with its Word-derived engine: stylesheets are discarded and CSS is normalised hard. Hence presentational **attributes** (`border`, `cellpadding`, `cellspacing`) plus **inline styles repeated on every cell**, no classes, no `<style>` block, no flex/grid. Modern CSS arrives as an unstyled column of text. There is deliberately **no `font-family`**, so the pasted table inherits the mail's own font instead of standing out.
 
+### Every table in one message is the same size
+
+`columnWidths()` scans **all** blocks before any table is rendered, so a message with three orders does not come out as three ragged boxes sized to their own longest row. The two widths can legitimately come from different blocks (the label column from one order's longest product, the quantity column from another's largest number).
+
+Width is **estimated from character count** — there is no way to measure text for a document that will render in an unknown font at an unknown size. `CHAR_PX = 8` is deliberately generous (a proportional 11pt face averages nearer 6px/char): overshooting costs whitespace, undershooting breaks the requirement that the widest label fit on one line. `white-space:nowrap` backs it up — if the estimate ever falls short, Word widens the column instead of wrapping.
+
+⚠️ The widths are repeated on the table **and on every cell**, as both an HTML attribute and an inline style. Word recomputes table geometry per row, so a width declared once — in a `<colgroup>`, or only on the first row — is exactly what it discards.
+
+### Spacing is explicit, not inherited
+
+One blank line above every table, two below every table except the last, emitted as `<p>&nbsp;</p>`. The `&nbsp;` matters: an empty `<p></p>` is liable to be dropped as insignificant whitespace. `buildOrderText` mirrors the same rhythm (`parts.join("\n\n\n")`).
+
+Consequence for the preview: `.preview p` / `.preview table` margins in the CSS module are near zero **on purpose**, because the copied HTML now carries its own spacing. Restoring generous margins there would show a layout the pasted e-mail does not have.
+
+### Shared input
+
 Both renderers take `ResolvedBlock[]`, never raw blocks + config — the two flavours of one copy must agree line for line, and identical input is the only thing that guarantees it. `resolveBlocks()` drops a line whose item was deleted mid-session and a block whose hotel was: a nameless row in a supplier e-mail is worse than a missing one.
 
 The on-screen preview uses `dangerouslySetInnerHTML` **on the same string that goes to the clipboard**, so it physically cannot show one thing and paste another. That is safe because every interpolated value is escaped at its single point of interpolation (`escapeHtml`), and it is the reason the preview is not hand-built JSX — two renderers would be two things to keep in step.

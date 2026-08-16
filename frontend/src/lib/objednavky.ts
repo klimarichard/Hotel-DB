@@ -230,19 +230,71 @@ function sentence(block: ResolvedBlock, first: boolean): string {
  * No `font-family` anywhere, deliberately — omitting it lets the pasted table
  * inherit the mail's own font instead of standing out as a foreign block.
  */
-const TABLE_OPEN =
-  '<table border="1" cellpadding="6" cellspacing="0" ' +
-  'style="border-collapse:collapse;border:1px solid #000000;">';
-const CELL = 'style="border:1px solid #000000;padding:6px;"';
+/**
+ * Column widths are computed once across **every** table in the message, so all
+ * of them come out identical — a message whose tables each sized themselves to
+ * their own longest row reads as a stack of ragged boxes.
+ *
+ * Width is estimated from character count because there is no way to measure
+ * text for a document that will be rendered in an unknown font at an unknown
+ * size. `CHAR_PX` is therefore deliberately GENEROUS (a proportional 11pt face
+ * averages nearer 6px/char): overshooting costs a little whitespace, while
+ * undershooting is what the requirement — the widest text fits on one line —
+ * explicitly rules out. `white-space:nowrap` is the belt to that braces; if the
+ * estimate ever falls short, Word widens the column rather than wrapping.
+ */
+const CHAR_PX = 8;
+/** 6px padding each side + the 1px borders either side of the content box. */
+const CELL_CHROME_PX = 14;
+const MIN_COL_PX = 56;
+
+function columnWidths(blocks: ResolvedBlock[]): { label: number; qty: number } {
+  let label = 0;
+  let qty = 0;
+  for (const block of blocks) {
+    for (const row of block.rows) {
+      label = Math.max(label, row.label.length);
+      qty = Math.max(qty, `${row.qty} ${row.unit}`.length);
+    }
+  }
+  return {
+    label: Math.max(MIN_COL_PX, label * CHAR_PX + CELL_CHROME_PX),
+    qty: Math.max(MIN_COL_PX, qty * CHAR_PX + CELL_CHROME_PX),
+  };
+}
+
+/**
+ * One empty line. An empty `<p>` alone is liable to be dropped as insignificant
+ * whitespace, so it carries a non-breaking space to survive the conversion.
+ */
+const BLANK_LINE = "<p>&nbsp;</p>";
 
 export function buildOrderHtml(blocks: ResolvedBlock[]): string {
+  const w = columnWidths(blocks);
+  const tableWidth = w.label + w.qty;
+
+  // Widths are repeated on the table AND on every cell, as both an attribute
+  // and an inline style. Word recomputes table geometry per row, so a width
+  // declared only once (in a <colgroup>, or on the first row) is the thing it
+  // most readily discards.
+  const tableOpen =
+    `<table border="1" cellpadding="6" cellspacing="0" width="${tableWidth}" ` +
+    `style="border-collapse:collapse;border:1px solid #000000;` +
+    `table-layout:fixed;width:${tableWidth}px;">`;
+  const labelCell =
+    `width="${w.label}" style="border:1px solid #000000;padding:6px;` +
+    `width:${w.label}px;white-space:nowrap;"`;
+  const qtyCell =
+    `width="${w.qty}" style="border:1px solid #000000;padding:6px;` +
+    `width:${w.qty}px;white-space:nowrap;"`;
+
   return blocks
     .map((block, i) => {
       const rows = block.rows
         .map(
           (r) =>
-            `<tr><td ${CELL}>${escapeHtml(r.label)}</td>` +
-            `<td ${CELL}>${r.qty} ${escapeHtml(r.unit)}</td></tr>`
+            `<tr><td ${labelCell}>${escapeHtml(r.label)}</td>` +
+            `<td ${qtyCell}>${r.qty} ${escapeHtml(r.unit)}</td></tr>`
         )
         .join("");
       // The greeting and the first sentence share one paragraph separated by a
@@ -251,7 +303,10 @@ export function buildOrderHtml(blocks: ResolvedBlock[]): string {
         i === 0
           ? `<p>Dobrý den,<br>${escapeHtml(sentence(block, true))}</p>`
           : `<p>${escapeHtml(sentence(block, false))}</p>`;
-      return `${lead}${TABLE_OPEN}<tbody>${rows}</tbody></table>`;
+      // One blank line above each table, two below — except after the last,
+      // where trailing blanks would just push the signature down.
+      const after = i === blocks.length - 1 ? "" : BLANK_LINE + BLANK_LINE;
+      return `${lead}${BLANK_LINE}${tableOpen}<tbody>${rows}</tbody></table>${after}`;
     })
     .join("");
 }
@@ -268,7 +323,9 @@ export function buildOrderText(blocks: ResolvedBlock[]): string {
     const lead = i === 0 ? `Dobrý den,\n${sentence(block, true)}` : sentence(block, false);
     return `${lead}\n\n${rows}`;
   });
-  return parts.join("\n\n") + "\n";
+  // Mirrors the HTML spacing: one blank line between a sentence and its list
+  // (above), two between one block and the next (below).
+  return parts.join("\n\n\n") + "\n";
 }
 
 /* ------------------------------------------------------------------ */
