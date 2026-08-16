@@ -315,7 +315,8 @@ every write path:
   doc (matched by id, never trusting the client): a non-manage caller still can't
   lock new rows or unlock carried ones; a manage caller passes verbatim.
 - **Undo / redo** — writes content directly (bypassing `mergeLockable`), so it has
-  its own guard; see "History & undo/redo".
+  its own guard; see "History & undo/redo". Money-move entries are skipped by it
+  entirely (`revertible: false`).
 
 ### Virtual signature (Předat / Převzít / revert)
 
@@ -545,10 +546,61 @@ not an on-doc array, to avoid O(n) rewrite cost on every save):
     `false`, redo tail `true`), so switching to them as the source of truth was
     **migration-safe** — no data migration. `histCursor` remains on the doc for
     back-compat only (set to the highest applied seq) and drives no decisions.
-- Money moves (sm→trezor, wata) and signatures are **not** part of the content
-  PUT and therefore never enter history or the undo stack.
+- **Money moves — recorded, never replayable (`revertible: false`).** sm→trezor,
+  sm trezor clear and wata do not come through the content PUT (each has its own
+  endpoint), but since **feature/protokol-money-history** each one appends its own
+  history entry via `recordMoneyMove()` in `handovers.ts`: two new `ChangeTarget`
+  kinds (`{ kind: "smTrezor", via: "transfer" | "clear" }`, `{ kind: "wata" }`),
+  built by `smTrezorChange()` / `wataChange()`, labelled e.g. `"sm trezor: 12 000 →
+  15 500 Kč (přesun ze sm)"`, `"wata: 0 → 500 Kč (+500)"`. All are flagged
+  `revertible: false`; `findUndoTarget`/`findRedoTarget` skip such entries for
+  **everyone**, admins included, and `applyChange` refuses the two money kinds
+  outright as a second line of defence.
+  - **Why irreversible is arithmetic, not permission.** A sm→trezor move is
+    compound (counts down, trezor up by `Σ transferᵢ·rateᵢ` at the rates in force
+    *at that instant* — and `settings/sm` rates are editable afterwards), and both
+    balances are seeded into the NEXT shift at creation (`seedSmTrezor`/`seedWata`).
+    Replaying half of that backwards desyncs a protocol that has already been
+    handed over, with nothing anywhere to flag it. Same reason odvod writes stay
+    out (see `odvody.ts`); signatures stay out entirely.
+  - ⚠️ **`recordMoneyMove` MUST write `histSeq`/`histCursor` back onto the parent
+    doc** (it returns them as a patch folded into the endpoint's `set(…, {merge:
+    true})`). Sequence numbers are handed out from the doc's `histSeq`; leaving it
+    behind would let the next content save reuse those numbers and silently
+    overwrite the money entries.
+- **Sealing sm counts at transfer time (`sealSmEntries`) — fixes a live money bug.**
+  Before this branch, `sm-transfer` wrote `smCounts` with **no** history entry, so
+  the earlier entries that set those counts kept their stale `before`/`after` pair.
+  Worked example: a count goes 10 → 25 (entry stored), all 25 are transferred
+  (counts 0, trezor `+25·rate`), then one Undo writes the count back to 10 — ten sm
+  now exist in the counts *and* in the trezor at once, and nothing flags it. Redo
+  doubled it again. The transfer therefore now (a) records the count decrease as
+  record-only entries (`smTransferCountChanges`, reusing `diffSm` for identical
+  labels) and (b) **seals every pre-existing `sm`-target entry** to
+  `revertible: false`. Counts stay freely undoable right up until the money leaves;
+  counts typed *after* a transfer get fresh revertible entries of their own.
+  - Sealing runs **after** `appendHistory`, on a re-read list — `appendHistory`
+    drops the undone redo tail, and `set(…, {merge: true})`-ing a seq it just
+    deleted would resurrect that doc as a stub carrying nothing but `revertible:
+    false`.
+  - Back-compat: the flag is *absent* on every entry written before this, so every
+    check reads `revertible === false`, never `!revertible`. No migration.
+- **Display scoping — you see the audit line for a balance exactly when you may
+  move it.** `restrictedScopeOf(target)` maps `smTrezor` → `recepce.sm.manage` and
+  `wata` → the hotel's `protokol.manage` (`system.admin` passes both); everything
+  else returns `null` and stays visible to any protocol viewer. `GET
+  /:hotel/:id/history` filters **server-side**, before the display-name resolution,
+  so a withheld entry costs no reads. The sm **counts** are deliberately *not*
+  scoped — every protocol-edit user sees and edits them in the sm modal, so hiding
+  their history would be arbitrary. Note the asymmetry this leaves, which is
+  intended: the sm trezor / wata *rows* are visible to everyone once non-zero
+  (`showSmTrezorRow`/`showWataRow`), so a plain receptionist sees the number move
+  without a history line explaining why. The "why" is the manager's business.
+  - No new permission key — both gates reuse existing ones.
 - `GET /:hotel/:id/history` returns entries newest-first plus `canUndo`/`canRedo`
-  (computed with the caller's guard, so the button reflects what they can reach);
+  (computed with the caller's guard over the **unfiltered** set, so the button
+  still reflects what they can reach); each entry carries `revertible` so the panel
+  can render the money moves with a muted left rail and a `· nelze vrátit` suffix.
   `POST /:hotel/:id/undo` / `.../redo` perform one skip-aware step.
 - **Audit log**: one **compact** entry per save (`event: "recepce.protokol.edit"`,
   up to 6 change labels in `extra.changeLabels`) — the element-level detail lives
