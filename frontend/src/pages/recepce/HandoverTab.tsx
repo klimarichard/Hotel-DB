@@ -75,7 +75,14 @@ interface Handover {
   updatedAt?: TimestampLike | null;
 }
 
-/** One protocol change-history entry (from GET /handovers/:hotel/:id/history). */
+/**
+ * One protocol change-history entry (from GET /handovers/:hotel/:id/history).
+ *
+ * The server already withholds the entries this user may not see (sm trezor needs
+ * recepce.sm.manage, wata the hotel's protokol.manage), so the panel renders
+ * whatever it is given. `revertible` is false for the money moves: they are a
+ * record only, and Zpět/Vpřed step over them for everyone, admins included.
+ */
 interface HistoryEntry {
   seq: number;
   at: TimestampLike | null;
@@ -83,6 +90,7 @@ interface HistoryEntry {
   by: string;
   undone: boolean;
   applied: boolean;
+  revertible?: boolean;
 }
 
 function tsSeconds(ts: TimestampLike | null | undefined): number | null {
@@ -1579,15 +1587,24 @@ function ProtocolEditor({
             <p className={styles.historyEmpty}>Zatím žádné zaznamenané změny.</p>
           ) : (
             <ul className={styles.historyList}>
-              {history.map((h) => (
-                <li key={h.seq} className={h.undone ? styles.historyUndone : undefined}>
-                  <span className={styles.historyLabel}>{h.label}</span>
-                  <span className={styles.historyMeta}>
-                    {h.by} · {stampDateTime(h.at)}
-                    {h.undone ? " · vráceno" : ""}
-                  </span>
-                </li>
-              ))}
+              {history.map((h) => {
+                // A money move is never undone, so the two classes can't collide.
+                const cls = h.undone
+                  ? styles.historyUndone
+                  : h.revertible === false
+                    ? styles.historyRecordOnly
+                    : undefined;
+                return (
+                  <li key={h.seq} className={cls}>
+                    <span className={styles.historyLabel}>{h.label}</span>
+                    <span className={styles.historyMeta}>
+                      {h.by} · {stampDateTime(h.at)}
+                      {h.undone ? " · vráceno" : ""}
+                      {h.revertible === false ? " · nelze vrátit" : ""}
+                    </span>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>

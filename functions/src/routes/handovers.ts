@@ -47,6 +47,12 @@ import {
   computeCanStep,
   markUndone,
   canUndoRedo,
+  smTrezorChange,
+  wataChange,
+  smTransferCountChanges,
+  sealSmEntries,
+  restrictedScopeOf,
+  HistoryEntry,
 } from "../services/handoverHistory";
 import { actorCtx, resolveRecepceActor } from "../services/recepceActor";
 
@@ -1176,6 +1182,41 @@ function revertHandler(slot: SignatureSlot) {
 // Per-field money moves, each returning the full saved doc. Registered BEFORE the
 // generic `/:hotel/:id/:slot` signature routes so their literal path segments
 // aren't captured as a signature slot. All obey the freeze rule (loadForFieldMutation).
+//
+// Each one appends a record-only history entry (`revertible: false`) so the move
+// shows up in the protocol's Historie panel for the people allowed to make it,
+// while undo/redo step straight over it. See handoverHistory.ts for why these are
+// irreversible by arithmetic rather than by permission.
+
+/**
+ * Record a money move in the protocol's history and return the cursor fields to
+ * persist alongside the balance itself. `changes` empty (a no-op move) leaves the
+ * history and the cursor untouched, so the returned patch is empty too.
+ *
+ * Kept separate from the content PUT's history call because these endpoints hold
+ * no content snapshot and never coalesce: a money move is a discrete act, not a
+ * focus-to-blur typing pass, so it is always its own entry.
+ */
+async function recordMoneyMove(
+  hotel: HotelSlug,
+  id: string,
+  before: HandoverDoc,
+  changes: Parameters<typeof appendHistory>[3],
+  actor: Awaited<ReturnType<typeof resolveRecepceActor>>
+): Promise<{ histSeq?: number; histCursor?: number }> {
+  if (changes.length === 0) return {};
+  const cursor = await appendHistory(
+    hotel,
+    id,
+    readCursor(before as unknown as Record<string, unknown>),
+    changes,
+    actor
+  );
+  // MUST be written back: seq numbers are handed out from the parent doc's
+  // histSeq, so leaving it behind would let the next content save reuse these
+  // numbers and overwrite the money entries.
+  return { histSeq: cursor.histSeq, histCursor: cursor.histCursor };
+}
 
 /**
  * Load a protocol doc for a per-field mutation, enforcing the same freeze rule as
@@ -1231,17 +1272,41 @@ handoversRouter.post(
       counts[1] - moved[1],
       counts[2] - moved[2],
     ];
-    const newTrezor = finiteOr(before.smTrezor, 0) + dot(rates, moved);
+    const prevTrezor = finiteOr(before.smTrezor, 0);
+    const newTrezor = prevTrezor + dot(rates, moved);
+
+    // Both halves of the move go into the history, each record-only: the counts
+    // leaving (per index) and the trezor rising. Then seal the OLDER sm-count
+    // entries — the counts they describe are now sitting in the trezor as CZK, so
+    // replaying one would mint sm that the trezor already holds.
+    const actor = await resolveRecepceActor(req, hotel, before.shiftDate, before.shiftType);
+    const changes = [
+      ...smTransferCountChanges(counts, newCounts),
+      ...(newTrezor !== prevTrezor ? [smTrezorChange(prevTrezor, newTrezor, "transfer")] : []),
+    ];
+    const histPatch = await recordMoneyMove(hotel, req.params.id, before, changes, actor);
+    if (changes.length > 0) {
+      // Re-read AFTER appending: appendHistory drops the undone redo tail, and
+      // sealing a seq it just deleted would resurrect that doc as a stub carrying
+      // nothing but `revertible: false`.
+      await sealSmEntries(hotel, req.params.id, await loadHistoryEntries(hotel, req.params.id));
+    }
 
     await ref.set(
-      { smCounts: newCounts, smTrezor: newTrezor, updatedBy: req.uid, updatedAt: FieldValue.serverTimestamp() },
+      {
+        smCounts: newCounts,
+        smTrezor: newTrezor,
+        ...histPatch,
+        updatedBy: req.uid,
+        updatedAt: FieldValue.serverTimestamp(),
+      },
       { merge: true }
     );
-    await logUpdate(actorCtx(await resolveRecepceActor(req, hotel, before.shiftDate, before.shiftType)), {
+    await logUpdate(actorCtx(actor), {
       collection: "shiftHandovers",
       resourceId: req.params.id,
       subResourceId: hotel,
-      before: { smCounts: counts, smTrezor: finiteOr(before.smTrezor, 0) },
+      before: { smCounts: counts, smTrezor: prevTrezor },
       after: { smCounts: newCounts, smTrezor: newTrezor },
     });
     const saved = await ref.get();
@@ -1262,11 +1327,19 @@ handoversRouter.post(
     const { ref, before } = loaded;
 
     const prev = finiteOr(before.smTrezor, 0);
+    const actor = await resolveRecepceActor(req, hotel, before.shiftDate, before.shiftType);
+    const histPatch = await recordMoneyMove(
+      hotel,
+      req.params.id,
+      before,
+      prev !== 0 ? [smTrezorChange(prev, 0, "clear")] : [],
+      actor
+    );
     await ref.set(
-      { smTrezor: 0, updatedBy: req.uid, updatedAt: FieldValue.serverTimestamp() },
+      { smTrezor: 0, ...histPatch, updatedBy: req.uid, updatedAt: FieldValue.serverTimestamp() },
       { merge: true }
     );
-    await logUpdate(actorCtx(await resolveRecepceActor(req, hotel, before.shiftDate, before.shiftType)), {
+    await logUpdate(actorCtx(actor), {
       collection: "shiftHandovers",
       resourceId: req.params.id,
       subResourceId: hotel,
@@ -1293,11 +1366,19 @@ handoversRouter.post(
     const delta = finiteOr((req.body as { delta?: unknown }).delta, 0);
     const prev = finiteOr(before.wata, 0);
     const next = prev + delta;
+    const actor = await resolveRecepceActor(req, hotel, before.shiftDate, before.shiftType);
+    const histPatch = await recordMoneyMove(
+      hotel,
+      req.params.id,
+      before,
+      next !== prev ? [wataChange(prev, next)] : [],
+      actor
+    );
     await ref.set(
-      { wata: next, updatedBy: req.uid, updatedAt: FieldValue.serverTimestamp() },
+      { wata: next, ...histPatch, updatedBy: req.uid, updatedAt: FieldValue.serverTimestamp() },
       { merge: true }
     );
-    await logUpdate(actorCtx(await resolveRecepceActor(req, hotel, before.shiftDate, before.shiftType)), {
+    await logUpdate(actorCtx(actor), {
       collection: "shiftHandovers",
       resourceId: req.params.id,
       subResourceId: hotel,
@@ -1344,21 +1425,33 @@ handoversRouter.get(
     const doc = snap.data() as HandoverDoc;
     const permSet = req.permissions ?? new Set<string>();
     const isManage = permSet.has("system.admin") || permSet.has(handoverManagePerm(hotel));
+    const canSeeSmTrezor = permSet.has("system.admin") || permSet.has(SM_MANAGE_PERM);
     const histSnap = await ref.collection("history").orderBy("seq", "desc").get();
 
+    // Scope the money-balance entries to the people who may move that balance:
+    // sm trezor → recepce.sm.manage, wata → the hotel's protokol.manage. Filtered
+    // SERVER-side (the frontend gate would only be an affordance), and before the
+    // name resolution below so a hidden entry costs no reads. Everything else —
+    // notes, účty, cash, the sm counts — stays visible to any protocol viewer.
+    const visible = histSnap.docs.filter((d) => {
+      const scope = restrictedScopeOf((d.data() as HistoryEntry).target);
+      if (!scope) return true;
+      return scope === "smManage" ? canSeeSmTrezor : isManage;
+    });
+
     // Resolve author display names once per distinct uid.
-    const uids = [...new Set(histSnap.docs.map((d) => (d.data() as { byUid?: string }).byUid).filter(Boolean) as string[])];
+    const uids = [...new Set(visible.map((d) => (d.data() as { byUid?: string }).byUid).filter(Boolean) as string[])];
     const names = new Map<string, string>();
     await Promise.all(
       uids.map(async (uid) => {
-        const entry = histSnap.docs.find((d) => (d.data() as { byUid?: string }).byUid === uid);
+        const entry = visible.find((d) => (d.data() as { byUid?: string }).byUid === uid);
         const email = (entry?.data() as { byEmail?: string })?.byEmail ?? "";
         names.set(uid, await resolveDisplayName(uid, email));
       })
     );
 
-    const entries = histSnap.docs.map((d) => {
-      const e = d.data() as { seq: number; at: unknown; byUid: string; label: string; undone: boolean };
+    const entries = visible.map((d) => {
+      const e = d.data() as HistoryEntry;
       return {
         seq: e.seq,
         at: e.at,
@@ -1366,6 +1459,8 @@ handoversRouter.get(
         by: names.get(e.byUid) ?? e.byUid,
         undone: e.undone === true,
         applied: e.undone !== true,
+        // So the panel can say why Zpět/Vpřed step over this one.
+        revertible: e.revertible !== false,
       };
     });
     res.json({ entries, ...(await canUndoRedo(hotel, id, { content: contentOf(doc), isManage })) });

@@ -317,6 +317,13 @@
   color: var(--color-text-muted);
 }
 
+/* A record-only entry (a money move): kept for the audit trail, skipped by
+   Zpět/Vpřed. Marked with a muted rail rather than a colour, so it reads as
+   "different kind of entry" without competing with the surrounding rows. */
+.historyRecordOnly {
+  border-left: 3px solid var(--color-text-muted);
+}
+
 .placeholder {
   padding: 3rem 1.5rem;
   text-align: center;
