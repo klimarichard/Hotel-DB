@@ -415,13 +415,35 @@ Ukládá se **pouze číselník** – seznam položek a hotely s adresami a fakt
 
 > 🖥️ Jen rozhraní. Zdroj: `frontend/src/pages/tabulky/ObjednavkyTab.tsx` – stav `blocks` žije jen v komponentě; `functions/src/routes/objednavky.ts` neobsahuje žádný jiný zdroj než `/config`.
 
-### Bez adresy a fakturačních údajů e-mail nezkopírujete
+### Fakturační údaje se neopisují – berou se ze Společností
 
-Má-li některý hotel v objednávce prázdnou **doručovací adresu** nebo **fakturační údaje**, tlačítko **Kopírovat e-mail** zůstane nedostupné a aplikace vypíše, které hotely je třeba doplnit.
+V číselníku se u hotelu **nevyplňují** fakturační údaje ručně; **vybírá se společnost** ze seznamu v **Nastavení → Společnosti** (dnes HPM a STP). Do e-mailu se z ní složí:
+
+> název, adresa, IČO: …, DIČ: …
+>
+> například: Hotel Property Management s.r.o., Panská 897/12, Praha 1, 110 00, IČO: 06947697, DIČ: CZ06947697
+
+**Zkratka společnosti se do e-mailu nikdy nedostane** – je to interní označení, ne součást identifikace firmy. Chybí-li u společnosti IČO nebo DIČ, příslušná část se vynechá, nevypíše se prázdná („IČO: ,").
+
+Údaje se skládají **až při sestavení e-mailu**, ne při výběru. Oprava adresy nebo IČO v Nastavení se proto projeví ve všech dalších objednávkách sama, bez zásahu v číselníku objednávek.
+
+> ⚙️ Automatika. Zdroj: `frontend/src/lib/objednavky.ts` – `companyInvoiceDetails()`, `resolveBlocks()`.
+
+### Bez adresy a společnosti e-mail nezkopírujete
+
+Má-li některý hotel v objednávce prázdnou **doručovací adresu** nebo **nevybranou společnost**, tlačítko **Kopírovat e-mail** zůstane nedostupné a aplikace vypíše, které hotely je třeba doplnit. Totéž platí, byla-li vybraná společnost mezitím v Nastavení **smazána**.
 
 Není to formalita: obě hodnoty se dosazují doprostřed věty, takže prázdná hodnota nevytvoří viditelnou mezeru, ale větu „…s doručením na adresu  a fakturačními údaji ." – ta vypadá jako dokončená a odešla by jako dokončená.
 
 > 🖥️ Jen rozhraní. Zdroj: `frontend/src/pages/tabulky/ObjednavkyTab.tsx` – `incompleteHotels`, `canCopy`. Server tuto podmínku nekontroluje, protože e-mail nesestavuje.
+
+### Objednávku lze vyplnit celou z klávesnice
+
+Do vyhledávacího pole napište část názvu nebo kódu, **šipkami ↑ / ↓** vyberte položku a **Enterem** ji přidejte. Kurzor pak sám skočí do pole **Množství** s předvyplněnou jedničkou, kterou rovnou přepíšete. **Tabulátorem** se vrátíte zpět do vyhledávání pro další položku.
+
+Myš není potřeba; kliknutí na položku v seznamu funguje stejně jako Enter.
+
+> 🖥️ Jen rozhraní. Zdroj: `frontend/src/pages/tabulky/ObjednavkyTab.tsx` – `handleSearchKey()`, `focusLineId`, `QtyInput`.
 
 ### E-mail se kopíruje ve dvou podobách zároveň
 

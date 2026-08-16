@@ -111,7 +111,15 @@ function sanitizeConfig(raw: unknown): ObjednavkyConfig {
       id: idOf(e, hotelIds),
       name: str(e.name),
       deliveryAddress: str(e.deliveryAddress, TEXT_MAX),
-      invoiceDetails: str(e.invoiceDetails, TEXT_MAX),
+      // Deliberately NOT validated against the live `companies` collection:
+      // that registry is editable elsewhere, so a company deleted after a hotel
+      // pointed at it must degrade gracefully (the tab blocks the copy and says
+      // so) rather than 400 and leave the číselník unsaveable. Same reasoning as
+      // `faktury.ts` not validating a draft's `vatRateId` against the rate list.
+      companyId:
+        typeof e.companyId === "string" && e.companyId.trim() !== ""
+          ? e.companyId.trim().slice(0, STR_MAX)
+          : null,
       active: e.active !== false,
     };
   });

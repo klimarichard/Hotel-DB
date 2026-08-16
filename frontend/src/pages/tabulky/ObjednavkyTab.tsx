@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 import { api, errorMessage } from "../../lib/api";
 import { useAuth } from "../../hooks/useAuth";
 import Button from "../../components/Button";
@@ -9,6 +15,7 @@ import {
   ORDER_UNITS,
   buildOrderHtml,
   buildOrderText,
+  companyInvoiceDetails,
   copyOrderEmail,
   itemLabel,
   newRowId,
@@ -16,6 +23,7 @@ import {
   searchItems,
   type ObjednavkyConfig,
   type OrderBlock,
+  type OrderCompany,
   type OrderHotel,
   type OrderItem,
   type OrderUnit,
@@ -54,6 +62,8 @@ export default function ObjednavkyTab() {
   const canManage = can("tabulky.objednavky.manage");
 
   const [config, setConfig] = useState<ObjednavkyConfig>(EMPTY_OBJEDNAVKY_CONFIG);
+  /** `companies/{id}` — the billing identities, owned by Nastavení → Společnosti. */
+  const [companies, setCompanies] = useState<OrderCompany[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -63,12 +73,26 @@ export default function ObjednavkyTab() {
   /** The order being assembled. Never persisted, never restored. */
   const [blocks, setBlocks] = useState<OrderBlock[]>([]);
 
+  /**
+   * The line whose Množství field should take focus. Set when a line is added
+   * so the search → quantity hand-off works without the mouse; the field clears
+   * it once it has focused, so a re-render cannot steal focus back later.
+   */
+  const [focusLineId, setFocusLineId] = useState<string | null>(null);
+
   useEffect(() => {
     let cancelled = false;
-    api
-      .get<ObjednavkyConfig>("/objednavky/config")
-      .then((c) => {
-        if (!cancelled) setConfig(c);
+    // `/companies` is readable by any authenticated user (it populates form
+    // dropdowns app-wide), so no extra permission is needed for the billing
+    // block — the tab's own key already gates getting this far.
+    Promise.all([
+      api.get<ObjednavkyConfig>("/objednavky/config"),
+      api.get<OrderCompany[]>("/companies"),
+    ])
+      .then(([c, comps]) => {
+        if (cancelled) return;
+        setConfig(c);
+        setCompanies(comps);
       })
       .catch((e) => {
         if (!cancelled) setError(errorMessage(e, "Číselník objednávek se nepodařilo načíst."));
@@ -86,6 +110,8 @@ export default function ObjednavkyTab() {
     [config.hotels]
   );
 
+  const companyById = useMemo(() => new Map(companies.map((c) => [c.id, c])), [companies]);
+
   /** Active hotels not already in the order, alphabetically. */
   const availableHotels = useMemo(() => {
     const used = new Set(blocks.map((b) => b.hotelId));
@@ -94,12 +120,16 @@ export default function ObjednavkyTab() {
       .sort((a, b) => byCs(a.name, b.name));
   }, [config.hotels, blocks]);
 
-  const resolved = useMemo(() => resolveBlocks(blocks, config), [blocks, config]);
+  const resolved = useMemo(
+    () => resolveBlocks(blocks, config, companies),
+    [blocks, config, companies]
+  );
   const html = useMemo(() => buildOrderHtml(resolved), [resolved]);
   const text = useMemo(() => buildOrderText(resolved), [resolved]);
 
   /**
-   * Hotels in the order that have no delivery address or no billing details.
+   * Hotels in the order with no delivery address, or whose billing company is
+   * unset or no longer exists.
    *
    * This blocks the copy rather than warning beside it: the sentence is built
    * by substitution, so a blank field does not produce a visible gap the user
@@ -109,8 +139,8 @@ export default function ObjednavkyTab() {
   const incompleteHotels = useMemo(
     () =>
       resolved
-        .map((r) => r.hotel)
-        .filter((h) => h.deliveryAddress.trim() === "" || h.invoiceDetails.trim() === ""),
+        .filter((r) => r.deliveryAddress.trim() === "" || r.invoiceDetails.trim() === "")
+        .map((r) => r.hotelName),
     [resolved]
   );
 
@@ -142,13 +172,14 @@ export default function ObjednavkyTab() {
   }
 
   function addLine(blockId: string, itemId: string) {
+    // The id is minted HERE rather than inside the updater so it can also be
+    // handed to the focus target — an updater may be invoked more than once
+    // under StrictMode, which would mint two ids and focus neither line.
+    const lineId = newRowId();
     setBlocks((prev) =>
-      prev.map((b) =>
-        b.id === blockId
-          ? { ...b, lines: [...b.lines, { id: newRowId(), itemId, qty: 1 }] }
-          : b
-      )
+      prev.map((b) => (b.id === blockId ? { ...b, lines: [...b.lines, { id: lineId, itemId, qty: 1 }] } : b))
     );
+    setFocusLineId(lineId);
   }
 
   function setQty(blockId: string, lineId: string, qty: number) {
@@ -254,12 +285,18 @@ export default function ObjednavkyTab() {
       {blocks.map((block) => {
         const hotel = hotelById.get(block.hotelId);
         if (!hotel) return null;
+        // Checked here rather than from `resolved`, which only contains blocks
+        // that already have rows — the warning has to show on an empty block too.
+        const billingReady = hotel.companyId !== null && companyById.has(hotel.companyId);
         return (
           <HotelBlock
             key={block.id}
             block={block}
             hotel={hotel}
             items={config.items}
+            incomplete={hotel.deliveryAddress.trim() === "" || !billingReady}
+            focusLineId={focusLineId}
+            onFocused={() => setFocusLineId(null)}
             onAddLine={(itemId) => addLine(block.id, itemId)}
             onSetQty={(lineId, qty) => setQty(block.id, lineId, qty)}
             onRemoveLine={(lineId) => removeLine(block.id, lineId)}
@@ -283,8 +320,8 @@ export default function ObjednavkyTab() {
           <>
             {incompleteHotels.length > 0 && (
               <p className={styles.warning}>
-                Než půjde e-mail zkopírovat, doplňte v číselníku doručovací adresu a fakturační
-                údaje: {incompleteHotels.map((h) => h.name).join(", ")}.
+                Než půjde e-mail zkopírovat, doplňte v číselníku doručovací adresu a společnost:{" "}
+                {incompleteHotels.join(", ")}.
               </p>
             )}
             {/* The preview IS the clipboard payload — same string, so the two
@@ -303,6 +340,7 @@ export default function ObjednavkyTab() {
       {configOpen && canManage && (
         <ConfigPanel
           config={config}
+          companies={companies}
           onSaved={setConfig}
           onClose={() => setConfigOpen(false)}
           onError={setError}
@@ -326,11 +364,17 @@ export default function ObjednavkyTab() {
 /* ------------------------------------------------------------------ */
 /* One hotel's section of the order                                    */
 /* ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ */
+/* One hotel's section of the order                                    */
+/* ------------------------------------------------------------------ */
 
 function HotelBlock({
   block,
   hotel,
   items,
+  incomplete,
+  focusLineId,
+  onFocused,
   onAddLine,
   onSetQty,
   onRemoveLine,
@@ -339,6 +383,10 @@ function HotelBlock({
   block: OrderBlock;
   hotel: OrderHotel;
   items: OrderItem[];
+  /** Missing delivery address or billing company — computed by the parent. */
+  incomplete: boolean;
+  focusLineId: string | null;
+  onFocused: () => void;
   onAddLine: (itemId: string) => void;
   onSetQty: (lineId: string, qty: number) => void;
   onRemoveLine: (lineId: string) => void;
@@ -346,6 +394,11 @@ function HotelBlock({
 }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
+  /** Highlighted result. See `activeIndex` — this is the raw, unclamped value. */
+  const [active, setActive] = useState(0);
+
+  const searchRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
 
   const itemById = useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);
 
@@ -362,13 +415,52 @@ function HotelBlock({
       .sort((a, b) => byCs(itemLabel(a), itemLabel(b)));
   }, [items, query, block.lines]);
 
+  /**
+   * Clamped at render rather than corrected by an effect. The result set shrinks
+   * as you type and as items are added, so a stored index goes stale constantly;
+   * deriving the valid one removes the window where it points past the end.
+   */
+  const activeIndex = results.length === 0 ? -1 : Math.min(active, results.length - 1);
+
+  // Keep the highlighted row in view when arrowing past the visible window.
+  useEffect(() => {
+    if (!open || activeIndex < 0) return;
+    const el = listRef.current?.children[activeIndex] as HTMLElement | undefined;
+    el?.scrollIntoView({ block: "nearest" });
+  }, [open, activeIndex]);
+
   function add(itemId: string) {
     onAddLine(itemId);
     setQuery("");
+    setActive(0);
     setOpen(false);
+    // Focus is NOT returned to the search box here: the parent moves it to the
+    // new line's Množství field, and Tab from there comes back for the next item.
   }
 
-  const incomplete = hotel.deliveryAddress.trim() === "" || hotel.invoiceDetails.trim() === "";
+  function handleSearchKey(e: ReactKeyboardEvent<HTMLInputElement>) {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      // A closed list opens ON the first row instead of skipping past it.
+      if (!open) {
+        setOpen(true);
+        setActive(0);
+        return;
+      }
+      setActive(Math.min(activeIndex + 1, results.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setOpen(true);
+      setActive(Math.max(activeIndex - 1, 0));
+    } else if (e.key === "Enter") {
+      if (open && activeIndex >= 0) {
+        e.preventDefault();
+        add(results[activeIndex].id);
+      }
+    } else if (e.key === "Escape") {
+      setOpen(false);
+    }
+  }
 
   return (
     <div className={styles.section}>
@@ -385,36 +477,56 @@ function HotelBlock({
 
       {incomplete && (
         <p className={styles.warning}>
-          Tento hotel nemá v číselníku vyplněnou doručovací adresu nebo fakturační údaje.
+          Tento hotel nemá v číselníku vyplněnou doručovací adresu nebo přiřazenou společnost.
         </p>
       )}
 
       <div className={styles.searchWrap}>
         <input
+          ref={searchRef}
           className={styles.search}
           type="text"
           value={query}
           placeholder="Hledat položku podle názvu nebo kódu…"
           aria-label={`Přidat položku pro ${hotel.name}`}
+          autoComplete="off"
+          role="combobox"
+          aria-expanded={open}
+          aria-controls={`vysledky-${block.id}`}
+          aria-activedescendant={
+            open && activeIndex >= 0 ? `vysledek-${block.id}-${activeIndex}` : undefined
+          }
           onChange={(e) => {
             setQuery(e.target.value);
+            setActive(0);
             setOpen(true);
           }}
           onFocus={() => setOpen(true)}
+          onKeyDown={handleSearchKey}
           // Blur fires before a click on a result, so closing is deferred past
           // the mousedown that picks one.
           onBlur={() => window.setTimeout(() => setOpen(false), 120)}
         />
         {open && (
-          <ul className={styles.results}>
+          <ul className={styles.results} id={`vysledky-${block.id}`} ref={listRef} role="listbox">
             {results.length === 0 ? (
               <li className={styles.resultEmpty}>Nic nenalezeno</li>
             ) : (
-              results.map((item) => (
-                <li key={item.id}>
+              results.map((item, i) => (
+                <li
+                  key={item.id}
+                  id={`vysledek-${block.id}-${i}`}
+                  role="option"
+                  aria-selected={i === activeIndex}
+                >
                   <button
                     type="button"
-                    className={styles.resultBtn}
+                    // Skipped by Tab on purpose: this list is driven by the
+                    // arrow keys, and Tab out of the search box belongs to the
+                    // rest of the form.
+                    tabIndex={-1}
+                    className={`${styles.resultBtn} ${i === activeIndex ? styles.resultActive : ""}`}
+                    onMouseEnter={() => setActive(i)}
                     onMouseDown={(e) => {
                       // mousedown, not click: the input's blur would otherwise
                       // unmount this list before the click landed.
@@ -456,6 +568,9 @@ function HotelBlock({
                         <QtyInput
                           value={line.qty}
                           label={`Množství – ${itemLabel(item)}`}
+                          takeFocus={focusLineId === line.id}
+                          onFocused={onFocused}
+                          onTabToSearch={() => searchRef.current?.focus()}
                           onChange={(qty) => onSetQty(line.id, qty)}
                         />
                         <span className={styles.unit}>{item.unit}</span>
@@ -491,17 +606,28 @@ function HotelBlock({
  * keystroke, so typing "12" over a "1" lands you on "112" — the field fights
  * the most ordinary edit there is. The model only ever sees a valid whole
  * number >= 1; blur restores the last good value if the box was left empty.
+ *
+ * It is also the middle of the keyboard loop: it takes focus when its line was
+ * just added, and Tab hands focus back to the search box for the next item.
  */
 function QtyInput({
   value,
   label,
+  takeFocus,
   onChange,
+  onFocused,
+  onTabToSearch,
 }: {
   value: number;
   label: string;
+  /** This line was just added — grab focus and select, then report back. */
+  takeFocus: boolean;
   onChange: (qty: number) => void;
+  onFocused: () => void;
+  onTabToSearch: () => void;
 }) {
   const [text, setText] = useState(String(value));
+  const ref = useRef<HTMLInputElement>(null);
 
   // Re-sync when the model changes from elsewhere. Typing does not trigger a
   // fight: the effect only fires when `value` actually differs, and while the
@@ -510,8 +636,18 @@ function QtyInput({
     setText(String(value));
   }, [value]);
 
+  useEffect(() => {
+    if (!takeFocus) return;
+    ref.current?.focus();
+    // Selected, not just focused: the field already holds "1", and typing a
+    // real quantity should replace it rather than append to it.
+    ref.current?.select();
+    onFocused();
+  }, [takeFocus, onFocused]);
+
   return (
     <input
+      ref={ref}
       className={styles.qtyInput}
       type="number"
       min={1}
@@ -523,6 +659,15 @@ function QtyInput({
         setText(raw);
         const n = Math.trunc(Number(raw));
         if (raw !== "" && Number.isFinite(n) && n > 0) onChange(n);
+      }}
+      onKeyDown={(e) => {
+        // Tab closes the loop back to the search box so a whole order can be
+        // typed without the mouse. Shift+Tab is left alone — reversing out of
+        // the form has to keep working.
+        if (e.key === "Tab" && !e.shiftKey) {
+          e.preventDefault();
+          onTabToSearch();
+        }
       }}
       onBlur={() => setText(String(value))}
     />
@@ -542,11 +687,14 @@ const CONFIG_TABS: { id: ConfigTab; label: string }[] = [
 
 function ConfigPanel({
   config,
+  companies,
   onSaved,
   onClose,
   onError,
 }: {
   config: ObjednavkyConfig;
+  /** Read-only here — this list is owned by Nastavení → Společnosti. */
+  companies: OrderCompany[];
   /** Hands the saved config back to the tab. Does NOT close the panel. */
   onSaved: (next: ObjednavkyConfig) => void;
   onClose: () => void;
@@ -620,10 +768,16 @@ function ConfigPanel({
     });
   }
 
+  /** Alphabetical, matching the app-wide dropdown convention. */
+  const companySorted = useMemo(
+    () => [...companies].sort((a, b) => byCs(a.name, b.name)),
+    [companies]
+  );
+
   function removeHotel(hotel: OrderHotel) {
     setConfirmState({
       title: "Odebrat hotel?",
-      message: `Hotel „${hotel.name}" se z číselníku odebere i s adresou a fakturačními údaji.`,
+      message: `Hotel „${hotel.name}" se z číselníku odebere i s adresou a přiřazenou společností.`,
       confirmLabel: "Odebrat",
       danger: true,
       onConfirm: () => {
@@ -779,9 +933,11 @@ function ConfigPanel({
           {tab === "hotels" && (
             <section className={styles.card}>
               <p className={styles.hint}>
-                Adresa i fakturační údaje se vkládají doprostřed věty („…s doručením na adresu X a
-                fakturačními údaji Y."), proto je zadávejte jednořádkově. Bez obou údajů nejde
-                e-mail pro daný hotel zkopírovat.
+                Doručovací adresa se vkládá doprostřed věty („…s doručením na adresu X…"), proto ji
+                zadávejte jednořádkově. Fakturační údaje se neopisují – vyberete společnost ze
+                seznamu v Nastavení → Společnosti a do e-mailu se doplní její název, adresa, IČO a
+                DIČ (zkratka nikdy). Bez adresy i společnosti nejde e-mail pro daný hotel
+                zkopírovat.
               </p>
               <div className={styles.hotelList}>
                 {hotels.map((h) => (
@@ -836,18 +992,35 @@ function ConfigPanel({
                       />
                     </label>
                     <label className={styles.field}>
-                      <span className={styles.fieldLabel}>Fakturační údaje</span>
-                      <input
+                      <span className={styles.fieldLabel}>Fakturační údaje (společnost)</span>
+                      <select
                         className={styles.cellInput}
-                        value={h.invoiceDetails}
+                        value={h.companyId ?? ""}
                         onChange={(e) =>
                           setHotels((prev) =>
                             prev.map((x) =>
-                              x.id === h.id ? { ...x, invoiceDetails: e.target.value } : x
+                              x.id === h.id ? { ...x, companyId: e.target.value || null } : x
                             )
                           )
                         }
-                      />
+                      >
+                        <option value="">– vyberte společnost –</option>
+                        {companySorted.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                      {/* Shows the exact string the e-mail will carry, so a
+                          missing IČO in Nastavení is visible HERE rather than
+                          in a sent message. */}
+                      <span className={styles.fieldPreview}>
+                        {(() => {
+                          const c = companies.find((x) => x.id === h.companyId);
+                          if (!c) return "Bez společnosti nelze e-mail pro tento hotel zkopírovat.";
+                          return companyInvoiceDetails(c);
+                        })()}
+                      </span>
                     </label>
                   </div>
                 ))}
@@ -862,7 +1035,7 @@ function ConfigPanel({
                       id: newRowId(),
                       name: "",
                       deliveryAddress: "",
-                      invoiceDetails: "",
+                      companyId: null,
                       active: true,
                     },
                   ])
