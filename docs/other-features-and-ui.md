@@ -274,6 +274,7 @@ The page (`/audit`) is a date-sectioned timeline of grouped event cards. The bac
 5. **Žádosti o změny** — same pattern via `GET /api/shifts/changeRequests/pending`. Gated `shifts.changeRequest.review`.
 6. **Žádosti o úpravu údajů** — pending employee self-service data-change requests (`EmployeeDataChangeRequestsTab`, gated `changeRequests.review`).
 7. **Předávací protokol** — Recepce handover warnings (`HandoverWarningsTab`, `GET/POST /api/handover-warnings`, gated `changeRequests.review` — no separate key), in two unread sections plus a shared **Přečtené**: **Nenavazující předání** (handover chain break) and **Pozdní příchody** (Převzal after the next shift's start — 19:00 night / 07:00 day). Detailed in [Recepce — Handover warnings](recepce.md#handover-warnings-předávací-protokol-tab). The combined unread count (both types) feeds the tab pill and the sidebar `/upozorneni` badge via `HandoverWarningsContext` (`GET /handover-warnings/unread-count`).
+8. **Úlohy** — health of the ten scheduled Cloud Functions (`ScheduledJobsTab`, `GET /api/jobs`, gated **`system.triggers`** — the key that already gates Nastavení → Úlohy and the manual re-run buttons; deliberately **no new permission key**, so no matrix / tour / Nápověda entry). Failing + overdue jobs feed the tab pill and the sidebar badge via `ScheduledJobsContext` (`GET /jobs/alert-count`). Full write-up below.
 
 Tab labels show pending counts as red pill badges.
 
@@ -291,9 +292,9 @@ The distinction matters because the employment-row `status` field can lag the de
 
 **Manual refresh (admin)** — a rotating-arrow `IconButton` (`refresh` variant) next to the page title, rendered only for `admin`, re-triggers both refreshers (`POST /api/employees/trigger-alert-refresh` + `…/trigger-probation-refresh`) in parallel, spins while in flight, then calls `AlertsContext.refresh()` for the badges and bumps a `refreshKey` to remount the active tab so it re-fetches the regenerated alerts. Each call writes its usual `manual-trigger` audit entry; failures surface via `ConfirmModal`. Directors don't see the button (the trigger endpoints are `admin`-only).
 
-**Sidebar badge for `/upozorneni`** — sums **all seven** review queues shown on the Upozornění page, so the badge equals the page's tab counts: unread documents + unread probation + pending vacation + pending shift overrides + pending shift change-requests + pending employee data-change requests + unread Předávací protokol warnings (chain + late). Each addend is gated by the same permission as its page tab (`vacation.review` / `shifts.override.review` / `shifts.changeRequest.review` / `changeRequests.review` — the handover warnings reuse `changeRequests.review`; documents/probation are already 0 without `nav.alerts.view`). Vacation and the shift queues **also** keep their dedicated `/dovolena` and `/smeny` badges — the dedicated badge says WHERE, this total says overall outstanding load. (Earlier this summed only documents + probation, so a pending vacation request appeared on the page's Dovolená tab but never in the sidebar total — fixed v2.1.3.)
+**Sidebar badge for `/upozorneni`** — sums **all eight** queues shown on the Upozornění page, so the badge equals the page's tab counts: unread documents + unread probation + pending vacation + pending shift overrides + pending shift change-requests + pending employee data-change requests + unread Předávací protokol warnings (chain + late) + failing/overdue scheduled jobs (`system.triggers`). The eighth addend is not a review queue, but it carries the same "needs a human" semantics, and a silently failing job is precisely what has to reach the sidebar rather than waiting for someone to open the tab. Each addend is gated by the same permission as its page tab (`vacation.review` / `shifts.override.review` / `shifts.changeRequest.review` / `changeRequests.review` — the handover warnings reuse `changeRequests.review`; documents/probation are already 0 without `nav.alerts.view`). Vacation and the shift queues **also** keep their dedicated `/dovolena` and `/smeny` badges — the dedicated badge says WHERE, this total says overall outstanding load. (Earlier this summed only documents + probation, so a pending vacation request appeared on the page's Dovolená tab but never in the sidebar total — fixed v2.1.3.)
 
-**Badge freshness** — the count contexts (`AlertsContext`, `VacationContext`, `ShiftOverridesContext`, `ShiftChangeRequestsContext`, `EmployeeChangeRequestsContext`, `HandoverWarningsContext`) otherwise fetch once on mount, so a request submitted by *another* user never appeared until a full reload. `Layout.tsx` re-pulls all of them **on every navigation** (`location.pathname`) and on a **60s interval**. Each `refresh()` is a permission-gated no-op, so non-reviewers issue zero extra requests; a reviewer's own approve/reject still calls `refresh()` locally for an immediate update (added v2.1.3).
+**Badge freshness** — the count contexts (`AlertsContext`, `VacationContext`, `ShiftOverridesContext`, `ShiftChangeRequestsContext`, `EmployeeChangeRequestsContext`, `HandoverWarningsContext`, `ScheduledJobsContext`) otherwise fetch once on mount, so a request submitted by *another* user never appeared until a full reload. `Layout.tsx` re-pulls all of them **on every navigation** (`location.pathname`) and on a **60s interval**. Each `refresh()` is a permission-gated no-op, so non-reviewers issue zero extra requests; a reviewer's own approve/reject still calls `refresh()` locally for an immediate update (added v2.1.3).
 
 **Cross-plan list endpoints** — `GET /api/shifts/overrides/pending` and `GET /api/shifts/changeRequests/pending` use `collectionGroup` queries on `(status == "pending", requestedAt desc)`. Both composite indexes are declared in `firestore.indexes.json`. Per-plan modals on `ShiftPlannerPage` are unchanged — they remain the primary action surface for approve/reject; the Upozornění hub is the cross-plan read-only/list view.
 
@@ -302,6 +303,64 @@ The distinction matters because the employment-row `status` field can lag the de
 **Audit log** — probation-alert writes are system-generated (scheduled refresh + on-employment-edit cascade) and intentionally NOT in the audit log. The triggering employment row create/edit is already audited, which is the user-meaningful event.
 
 **Live employee-name resolution (v4.6.0)** — `alerts`/`probationAlerts` docs and `employeeChangeRequests` docs all snapshot the employee's name when generated/submitted and are only rewritten when the underlying deadline changes (or never, for change requests). The **Doklady** and **Zkušební doba** tabs (`GET /alerts`, the probation alerts GET — both via a `withLiveEmployeeNames` wrapper) and **Žádosti o úpravu údajů** (`GET /employee-change-requests/pending`) now re-resolve the name against the live employee record before responding, so a display-name edit or a first-ever `displayName` reaches alerts raised before the feature existed. See [Data Model — Live employee-name resolution](data-model.md#live-employee-name-resolution--read-time-never-a-backfill-v460).
+
+
+### Scheduled-job health — Upozornění → Úlohy (v5.11.2)
+
+**There are TEN scheduled functions**, not the six that Nastavení → Úlohy
+(`frontend/src/pages/settings/JobsTab.tsx`) lists. That page only shows jobs with a
+manual `trigger-*` endpoint (5 buttons + the vacation rollover); `checkScheduledDeactivations`,
+`refreshPayroll`, `sweepRecepceHistory` and `sweepSmenarnaSnapshots` have none and appeared
+nowhere in the app. All ten are monitored here. **Keep `JOB_DEFS` in step with `index.ts`:**
+an entry with no `runJob()` wrapper reports `unknown` forever, and a wrapped function with no
+entry is recorded but never displayed.
+
+**Recording layer — `functions/src/services/jobRuns.ts`.** Before this, the scheduled
+functions only `console.log`ed: a failure existed in Cloud Functions logs and nowhere else.
+`runJob(jobId, fn)` now wraps every `onSchedule` body and upserts `jobRuns/{jobId}`
+(`lastStatus`, `lastRunAt`, `lastSuccessAt`, `lastFailureAt`, `lastDurationMs`, `lastError`,
+`consecutiveFailures`).
+
+- ⚠️ **It re-throws on failure.** Swallowing the error would make the tab green *and* hide the
+  failure from Cloud Functions' own error reporting and suppress the platform retry — trading one
+  blind spot for a worse one. The recording write itself is best-effort and can never fail the job.
+- ⚠️ **Timestamps use `clock.nowMs()`, never `serverTimestamp()`.** Recording and the overdue
+  comparison must read the same clock; a serverTimestamp write compared against the staging
+  test clock (services/clock.ts) would flip every job to overdue the moment the clock jumps forward.
+- `set(merge: true)` is correct here (history fields must survive), which is exactly why
+  `lastError: null` is written **explicitly** on success — an omitted key is never cleared, so
+  otherwise the previous failure's stack would outlive the recovery.
+
+**Health rule — `healthOf()`**, server-side so the tab cannot drift from it:
+
+| Health | Meaning |
+|---|---|
+| `error` | The job ran and threw. `lastError` holds the stack (truncated to 4 000 chars). |
+| `overdue` | No **success** within `periodMs × OVERDUE_FACTOR` (**1.5**, i.e. half a period of grace on top of the schedule, absorbing Cloud Scheduler jitter — "every 24 hours" is not a wall-clock guarantee). |
+| `ok` | Last run succeeded and is inside that window. |
+| `unknown` | Nothing recorded yet. |
+
+⚠️ **`overdue` is the load-bearing half.** An `error` record only exists if the job ran *and*
+threw; the failures that go unnoticed indefinitely write nothing at all — a trigger dropped by a
+deploy, an OOM, a crash before the first statement. Those are detectable only as an absence, which
+is why the rule keys on `lastSuccessAt` rather than on `lastStatus`.
+
+⚠️ **`unknown` is deliberately NOT an alert.** Every job has no record on the day this ships, and
+`rolloverVacationYear` legitimately has none until the next 1 January — alerting on those would make
+the tab cry wolf on day one and teach everyone to ignore it. Known soft spot of the same rule: at
+1.5 × a 365-day period the yearly rollover is only flagged after **547 days**, so it is effectively
+unmonitored between January runs.
+
+**Endpoints** (`functions/src/routes/jobs.ts`, both `system.triggers`): `GET /api/jobs` returns every
+job with its record and computed health; `GET /api/jobs/alert-count` returns just the number. The
+split matters — the sidebar badge polls every 60 s on every navigation and must not pull error
+stacks to render an integer (same reasoning as `/handover-warnings/unread-count`).
+
+**Frontend.** `ScheduledJobsTab` renders two sections ("Vyžaduje pozornost" / "Ostatní úlohy"),
+reusing `AlertsPage.module.css` for tables, section headers and the red/amber row tints; only the
+green/grey badges and the failure-detail block are local. A failing row expands to show the job's
+description, the error text, and whether a manual re-run button exists — four of the ten have none,
+stated outright so nobody hunts for a button that was never built.
 
 ---
 

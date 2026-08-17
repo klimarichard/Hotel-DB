@@ -10,6 +10,7 @@ import { useEmployeeChangeRequestsContext } from "@/context/EmployeeChangeReques
 import { useSelfDocAlertsContext } from "@/context/SelfDocAlertsContext";
 import { useVacationContext } from "@/context/VacationContext";
 import { useHandoverWarningsContext } from "@/context/HandoverWarningsContext";
+import { useScheduledJobsContext } from "@/context/ScheduledJobsContext";
 import { useTheme } from "@/context/ThemeContext";
 import { api, ApiError } from "@/lib/api";
 import { verifyCredential } from "@/lib/secondaryAuth";
@@ -66,9 +67,12 @@ export default function Layout() {
   const { count: selfDocAlertCount, refresh: refreshSelfDocAlerts } = useSelfDocAlertsContext();
   const { pendingCount: pendingVacationCount, refresh: refreshVacation } = useVacationContext();
   const { unreadCount: handoverWarningCount, refresh: refreshHandoverWarnings } = useHandoverWarningsContext();
+  const { alertCount: jobAlertCount, refresh: refreshJobs } = useScheduledJobsContext();
   // The "Upozornění" sidebar badge mirrors the Upozornění page total: it sums
-  // ALL seven review queues shown there, each gated by the same permission that
-  // gates that page's tab. (Documents/probation are already 0 without
+  // ALL eight queues shown there, each gated by the same permission that
+  // gates that page's tab. The eighth (Úlohy) counts failing/overdue scheduled
+  // jobs – not a review queue, but the same "needs a human" semantics, and a
+  // silently failing job is precisely what needs to reach the sidebar. (Documents/probation are already 0 without
   // alerts.view, since AlertsContext only fetches them then.) Vacation + shift
   // queues ALSO keep their own dedicated badges below – the dedicated badge
   // says WHERE, this total says overall outstanding load.
@@ -79,7 +83,8 @@ export default function Layout() {
     (can("shifts.override.review") ? pendingOverrideCount : 0) +
     (can("shifts.changeRequest.review") ? pendingChangeRequestCount : 0) +
     (can("changeRequests.review") ? pendingDataChangeCount : 0) +
-    (can("changeRequests.review") ? handoverWarningCount : 0);
+    (can("changeRequests.review") ? handoverWarningCount : 0) +
+    (can("system.triggers") ? jobAlertCount : 0);
   const shiftsBadgeCount =
     (can("shifts.override.review") ? pendingOverrideCount : 0) +
     (can("shifts.changeRequest.review") ? pendingChangeRequestCount : 0);
@@ -102,6 +107,7 @@ export default function Layout() {
       refreshSelfDocAlerts();
       refreshVacation();
       refreshHandoverWarnings();
+      refreshJobs();
     }
     refreshAll();
     const id = window.setInterval(refreshAll, 60_000);
