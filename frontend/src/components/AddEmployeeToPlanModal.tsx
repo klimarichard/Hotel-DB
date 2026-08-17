@@ -53,10 +53,17 @@ export default function AddEmployeeToPlanModal({ planId, existingEmployees, onCl
   }
 
   useEffect(() => {
+    // /employees/plan-options, not /employees: the full list is gated on
+    // employees.view.*, which the FOM type does not hold, so this modal used to
+    // render an empty picker for them. Surface the failure instead of swallowing
+    // it – a blank dropdown reads as "no employees exist", not as an error.
     api
-      .get<Employee[]>("/employees")
+      .get<Employee[]>("/employees/plan-options")
       .then((data) => setEmployees(data))
-      .catch(() => setEmployees([]))
+      .catch((e) => {
+        setEmployees([]);
+        setError(e instanceof Error ? e.message : "Nepodařilo se načíst seznam zaměstnanců");
+      })
       .finally(() => setLoadingEmps(false));
   }, []);
 

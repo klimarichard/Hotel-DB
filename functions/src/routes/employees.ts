@@ -1006,6 +1006,51 @@ employeesRouter.get(
   }
 );
 
+/**
+ * GET /api/employees/plan-options
+ *
+ * Name-only roster for the "Přidat zaměstnance do plánu" picker.
+ *
+ * Exists so staffing a shift plan does not require read access to employee
+ * RECORDS. The picker used to call GET /api/employees, which is gated on
+ * employees.view.all / employees.view.nonManagement — permissions the FOM
+ * (manager) type has never held. The list came back 403, the modal swallowed the
+ * error, and the search box silently showed nothing for every FOM.
+ *
+ * Gated on the permission the caller already needs in order to act on the result
+ * (shifts.planEmployees.manage) and projected down to the four fields the picker
+ * renders — no contract, contact, nationality or salary data leaves here.
+ *
+ * MUST stay above "/:id" below — see the note on /questionnaire-blank.
+ */
+employeesRouter.get(
+  "/plan-options",
+  requirePermission("shifts.planEmployees.manage", "employees.view.all", "employees.view.nonManagement"),
+  async (req: AuthRequest, res) => {
+    const snapshot = await db().collection("employees").get();
+    let employees = snapshot.docs.map((doc) => {
+      const data = doc.data() as Record<string, unknown>;
+      return {
+        id: doc.id,
+        firstName: (data.firstName as string | undefined) ?? "",
+        lastName: (data.lastName as string | undefined) ?? "",
+        displayName: (data.displayName as string | undefined) ?? "",
+      };
+    });
+
+    // Preserve the scoping invariant of GET / : a non-management-scoped caller (hr)
+    // must not learn management names through this endpoint either. Callers who
+    // only hold shifts.planEmployees.manage are not scoped and see the whole roster —
+    // the "vedoucí" section of the plan is theirs to staff.
+    if (isNonManagementScoped(req.permissions)) {
+      const mgmt = await getManagementEmployeeIds();
+      employees = employees.filter((e) => !mgmt.has(e.id));
+    }
+
+    res.json(employees);
+  }
+);
+
 // ─── GET ONE ─────────────────────────────────────────────────────────────────
 
 /**
