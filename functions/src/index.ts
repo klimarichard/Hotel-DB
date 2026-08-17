@@ -35,6 +35,8 @@ import { employeeChangeRequestsRouter } from "./routes/employeeChangeRequests";
 import { roleTypesRouter } from "./routes/roleTypes";
 import { handoversRouter } from "./routes/handovers";
 import { handoverWarningsRouter } from "./routes/handoverWarnings";
+import { jobsRouter } from "./routes/jobs";
+import { runJob } from "./services/jobRuns";
 import { walkinsRouter } from "./routes/walkins";
 import { recepceSummaryRouter } from "./routes/recepceSummary";
 import { taxiRouter } from "./routes/taxi";
@@ -137,6 +139,7 @@ app.use("/employee-change-requests", employeeChangeRequestsRouter);
 app.use("/role-types", roleTypesRouter);
 app.use("/handovers", handoversRouter);
 app.use("/handover-warnings", handoverWarningsRouter);
+app.use("/jobs", jobsRouter);
 app.use("/walkins", walkinsRouter);
 app.use("/recepce-summary", recepceSummaryRouter);
 app.use("/taxi", taxiRouter);
@@ -352,8 +355,10 @@ export const api = functions
 //   curl -X POST http://127.0.0.1:5002/hotel-hr-app-75581/europe-west3/api/shifts/trigger-deadlines
 
 export const checkPlanDeadlines = onSchedule("every 5 minutes", async () => {
-  await clock.refresh(true);
-  await transitionPlanDeadlines();
+  await runJob("checkPlanDeadlines", async () => {
+    await clock.refresh(true);
+    await transitionPlanDeadlines();
+  });
 });
 
 // ─── Scheduled function: fire due user auto-deactivations ────────────────────
@@ -361,10 +366,12 @@ export const checkPlanDeadlines = onSchedule("every 5 minutes", async () => {
 // of the chosen time. In the emulator, trigger manually via:
 //   curl -X POST http://127.0.0.1:5002/.../api/users/trigger-scheduled-deactivations
 export const checkScheduledDeactivations = onSchedule("every 5 minutes", async () => {
-  const result = await runScheduledDeactivations();
-  if (result.deactivated) {
-    console.log(`[checkScheduledDeactivations] deactivated ${result.deactivated} of ${result.scanned} due`);
-  }
+  await runJob("checkScheduledDeactivations", async () => {
+    const result = await runScheduledDeactivations();
+    if (result.deactivated) {
+      console.log(`[checkScheduledDeactivations] deactivated ${result.deactivated} of ${result.scanned} due`);
+    }
+  });
 });
 
 // ─── Daily: refresh document expiry alerts for all employees ─────────────────
@@ -377,13 +384,15 @@ export const checkScheduledDeactivations = onSchedule("every 5 minutes", async (
 //   curl -X POST http://127.0.0.1:5002/.../api/payroll/trigger
 
 export const refreshPayroll = onSchedule("every 24 hours", async () => {
-  await clock.refresh(true);
-  const db = admin.firestore();
-  const snap = await db.collection("shiftPlans").where("status", "==", "published").get();
-  for (const doc of snap.docs) {
-    const data = doc.data() as { year: number; month: number };
-    await createOrUpdatePayrollPeriod(doc.id, data.year, data.month);
-  }
+  await runJob("refreshPayroll", async () => {
+    await clock.refresh(true);
+    const db = admin.firestore();
+    const snap = await db.collection("shiftPlans").where("status", "==", "published").get();
+    for (const doc of snap.docs) {
+      const data = doc.data() as { year: number; month: number };
+      await createOrUpdatePayrollPeriod(doc.id, data.year, data.month);
+    }
+  });
 });
 
 // ─── Daily: auto-untick Multisport once multisportTo has passed ──────────────
@@ -391,15 +400,19 @@ export const refreshPayroll = onSchedule("every 24 hours", async () => {
 //   curl -X POST http://127.0.0.1:5002/.../api/benefits/trigger-multisport-sweep
 
 export const sweepMultisport = onSchedule("every 24 hours", async () => {
-  await clock.refresh(true);
-  await sweepExpiredMultisport();
+  await runJob("sweepMultisport", async () => {
+    await clock.refresh(true);
+    await sweepExpiredMultisport();
+  });
 });
 
 // ─── Daily: refresh document expiry alerts for all employees ─────────────────
 
 export const refreshProbationAlerts = onSchedule("every 24 hours", async () => {
-  await clock.refresh(true);
-  await refreshAllProbationAlerts();
+  await runJob("refreshProbationAlerts", async () => {
+    await clock.refresh(true);
+    await refreshAllProbationAlerts();
+  });
 });
 
 // ─── Daily at midnight (Europe/Prague): refresh employees' effective root ────
@@ -412,9 +425,11 @@ export const refreshProbationAlerts = onSchedule("every 24 hours", async () => {
 export const refreshEmployeeEffective = onSchedule(
   { schedule: "0 0 * * *", timeZone: "Europe/Prague" },
   async () => {
-    await clock.refresh(true);
-    const res = await refreshEffectiveRootForAllActive();
-    console.log(`[refreshEmployeeEffective] scanned ${res.scanned}, updated ${res.updated}`);
+    await runJob("refreshEmployeeEffective", async () => {
+      await clock.refresh(true);
+      const res = await refreshEffectiveRootForAllActive();
+      console.log(`[refreshEmployeeEffective] scanned ${res.scanned}, updated ${res.updated}`);
+    });
   }
 );
 
@@ -430,20 +445,22 @@ export const refreshEmployeeEffective = onSchedule(
 export const rolloverVacationYear = onSchedule(
   { schedule: "0 1 1 1 *", timeZone: "Europe/Prague" },
   async () => {
-    await clock.refresh(true);
-    const year = Number(clock.today().slice(0, 4));
-    const res = await rolloverVacationEntitlement({ year, updatedBy: null });
-    console.log(
-      `[rolloverVacationYear] ${year}: wrote ${res.written} of ${res.candidates} ` +
-        `(terminated ${res.skippedTerminated}, already set ${res.skippedAlreadySet}, ` +
-        `unknown contract ${res.skippedUnknownContract.length})`
-    );
-    for (const skip of res.skippedUnknownContract) {
-      console.warn(
-        `[rolloverVacationYear] no entitlement for ${skip.name} (${skip.employeeId}): ` +
-          `contract type "${skip.contractType}"`
+    await runJob("rolloverVacationYear", async () => {
+      await clock.refresh(true);
+      const year = Number(clock.today().slice(0, 4));
+      const res = await rolloverVacationEntitlement({ year, updatedBy: null });
+      console.log(
+        `[rolloverVacationYear] ${year}: wrote ${res.written} of ${res.candidates} ` +
+          `(terminated ${res.skippedTerminated}, already set ${res.skippedAlreadySet}, ` +
+          `unknown contract ${res.skippedUnknownContract.length})`
       );
-    }
+      for (const skip of res.skippedUnknownContract) {
+        console.warn(
+          `[rolloverVacationYear] no entitlement for ${skip.name} (${skip.employeeId}): ` +
+            `contract type "${skip.contractType}"`
+        );
+      }
+    });
   }
 );
 
@@ -455,11 +472,13 @@ export const rolloverVacationYear = onSchedule(
 export const sweepRecepceHistory = onSchedule(
   { schedule: "0 0 * * *", timeZone: "Europe/Prague" },
   async () => {
-    await clock.refresh(true);
-    const res = await sweepRecepceRetention();
-    console.log(
-      `[sweepRecepceHistory] cutoff ${res.cutoffISO}: deleted ${res.auditDeleted} audit + ${res.historyDeleted} history`
-    );
+    await runJob("sweepRecepceHistory", async () => {
+      await clock.refresh(true);
+      const res = await sweepRecepceRetention();
+      console.log(
+        `[sweepRecepceHistory] cutoff ${res.cutoffISO}: deleted ${res.auditDeleted} audit + ${res.historyDeleted} history`
+      );
+    });
   }
 );
 
@@ -469,39 +488,43 @@ export const sweepRecepceHistory = onSchedule(
 export const sweepSmenarnaSnapshots = onSchedule(
   { schedule: "15 0 * * *", timeZone: "Europe/Prague" },
   async () => {
-    await clock.refresh(true);
-    const res = await sweepSmenarnaRetention();
-    console.log(`[sweepSmenarnaSnapshots] cutoff ${res.cutoffISO}: deleted ${res.deleted}`);
+    await runJob("sweepSmenarnaSnapshots", async () => {
+      await clock.refresh(true);
+      const res = await sweepSmenarnaRetention();
+      console.log(`[sweepSmenarnaSnapshots] cutoff ${res.cutoffISO}: deleted ${res.deleted}`);
+    });
   }
 );
 
 export const refreshDocumentAlerts = onSchedule("every 24 hours", async () => {
-  await clock.refresh(true);
-  const db = admin.firestore();
-  const employeesSnap = await db.collection("employees").get();
+  await runJob("refreshDocumentAlerts", async () => {
+    await clock.refresh(true);
+    const db = admin.firestore();
+    const employeesSnap = await db.collection("employees").get();
 
-  for (const empDoc of employeesSnap.docs) {
-    const emp = empDoc.data() as Record<string, unknown>;
-    const docsSnap = await empDoc.ref.collection("documents").limit(1).get();
-    if (docsSnap.empty) continue;
+    for (const empDoc of employeesSnap.docs) {
+      const emp = empDoc.data() as Record<string, unknown>;
+      const docsSnap = await empDoc.ref.collection("documents").limit(1).get();
+      if (docsSnap.empty) continue;
 
-    const docData = docsSnap.docs[0].data() as Record<string, unknown>;
+      const docData = docsSnap.docs[0].data() as Record<string, unknown>;
 
-    // Build a body-like object containing only the expiry fields. Terminated
-    // employees get an all-null body so updateDocumentAlerts deletes any existing
-    // alerts and creates none. Active AND before-start (upcoming) employees still
-    // get document-expiry alerts.
-    const terminated = emp.status === "terminated";
-    const alertBody: Record<string, unknown> = {};
-    for (const { field } of EXPIRY_FIELDS) {
-      alertBody[field] = terminated ? null : (docData[field] ?? null);
+      // Build a body-like object containing only the expiry fields. Terminated
+      // employees get an all-null body so updateDocumentAlerts deletes any existing
+      // alerts and creates none. Active AND before-start (upcoming) employees still
+      // get document-expiry alerts.
+      const terminated = emp.status === "terminated";
+      const alertBody: Record<string, unknown> = {};
+      for (const { field } of EXPIRY_FIELDS) {
+        alertBody[field] = terminated ? null : (docData[field] ?? null);
+      }
+
+      await updateDocumentAlerts(
+        empDoc.id,
+        emp.firstName as string ?? "",
+        emp.lastName as string ?? "",
+        alertBody
+      );
     }
-
-    await updateDocumentAlerts(
-      empDoc.id,
-      emp.firstName as string ?? "",
-      emp.lastName as string ?? "",
-      alertBody
-    );
-  }
+  });
 });

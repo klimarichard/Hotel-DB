@@ -1,0 +1,71 @@
+/*
+ * Only the pieces AlertsPage.module.css does not already provide. Layout,
+ * tables, section headers, the red count badge and the red/amber row tints are
+ * reused from there — this file adds the two badge colours that surface has no
+ * equivalent for (healthy / never-run) and the failure detail block.
+ */
+
+.badgeOk {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  background: var(--color-success-bg);
+  color: var(--color-success-text);
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.badgeUnknown {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  background: var(--color-bg);
+  color: var(--color-text-muted);
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+/* Detail row under a failing job: description, error text, where to re-run. */
+.detailCell {
+  padding-top: 0 !important;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}
+
+.detailDesc {
+  margin: 0 0 0.4rem;
+}
+
+.errorBox {
+  margin: 0 0 0.4rem;
+  padding: 0.5rem 0.65rem;
+  background: var(--color-danger-bg);
+  color: var(--color-danger-text);
+  border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 11rem;
+  overflow: auto;
+}
+
+.hint {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--color-text-subtle);
+}
+
+.schedule {
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}
+
+.failCount {
+  margin-left: 0.4rem;
+  font-size: 0.75rem;
+  color: var(--color-danger-text);
+  font-weight: 600;
+}
