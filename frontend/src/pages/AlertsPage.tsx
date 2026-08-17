@@ -7,6 +7,7 @@ import { useShiftOverridesContext } from "@/context/ShiftOverridesContext";
 import { useShiftChangeRequestsContext } from "@/context/ShiftChangeRequestsContext";
 import { useEmployeeChangeRequestsContext } from "@/context/EmployeeChangeRequestsContext";
 import { useHandoverWarningsContext } from "@/context/HandoverWarningsContext";
+import { useScheduledJobsContext } from "@/context/ScheduledJobsContext";
 import IconButton from "@/components/IconButton";
 import ConfirmModal from "@/components/ConfirmModal";
 import DocumentExpiryTab from "./upozorneni/DocumentExpiryTab";
@@ -16,9 +17,10 @@ import PendingShiftOverridesTab from "./upozorneni/PendingShiftOverridesTab";
 import PendingShiftChangeRequestsTab from "./upozorneni/PendingShiftChangeRequestsTab";
 import EmployeeDataChangeRequestsTab from "./upozorneni/EmployeeDataChangeRequestsTab";
 import HandoverWarningsTab from "./upozorneni/HandoverWarningsTab";
+import ScheduledJobsTab from "./upozorneni/ScheduledJobsTab";
 import styles from "./AlertsPage.module.css";
 
-type Tab = "doklady" | "zkusebni" | "dovolena" | "vyjimky" | "zmeny" | "uprava" | "predani";
+type Tab = "doklady" | "zkusebni" | "dovolena" | "vyjimky" | "zmeny" | "uprava" | "predani" | "ulohy";
 
 export default function AlertsPage() {
   const { can } = useAuth();
@@ -28,6 +30,7 @@ export default function AlertsPage() {
   const { pendingCount: changesCount } = useShiftChangeRequestsContext();
   const { pendingCount: dataChangesCount } = useEmployeeChangeRequestsContext();
   const { unreadCount: handoverWarningCount } = useHandoverWarningsContext();
+  const { alertCount: jobAlertCount } = useScheduledJobsContext();
 
   // Per-tab visibility. "Doklady"/"Zkušební doba" ride on the route's alerts.view
   // gate; the review-queue tabs each require their own review permission.
@@ -35,6 +38,9 @@ export default function AlertsPage() {
   const canOverrides = can("shifts.override.review");
   const canChanges = can("shifts.changeRequest.review");
   const canDataChanges = can("changeRequests.review");
+  // Úlohy rides on system.triggers – the key that already gates Nastavení → Úlohy
+  // and the manual re-run buttons, so no new permission was introduced.
+  const canJobs = can("system.triggers");
 
   // Default to the first tab the user can actually see (Doklady/Zkušební are
   // always visible here, so this is effectively always "doklady", but it keeps
@@ -47,6 +53,7 @@ export default function AlertsPage() {
     ...(canChanges ? (["zmeny"] as Tab[]) : []),
     ...(canDataChanges ? (["uprava"] as Tab[]) : []),
     ...(canDataChanges ? (["predani"] as Tab[]) : []),
+    ...(canJobs ? (["ulohy"] as Tab[]) : []),
   ];
   const [tab, setTab] = useState<Tab>(visibleTabs[0] ?? "doklady");
 
@@ -166,6 +173,14 @@ export default function AlertsPage() {
             {tabLabel("Předávací protokol", handoverWarningCount)}
           </button>
         )}
+        {canJobs && (
+          <button
+            className={tab === "ulohy" ? styles.tabActive : styles.tabBtn}
+            onClick={() => setTab("ulohy")}
+          >
+            {tabLabel("Úlohy", jobAlertCount)}
+          </button>
+        )}
       </div>
 
       {tab === "doklady" && <DocumentExpiryTab key={refreshKey} />}
@@ -175,6 +190,7 @@ export default function AlertsPage() {
       {tab === "zmeny" && canChanges && <PendingShiftChangeRequestsTab />}
       {tab === "uprava" && canDataChanges && <EmployeeDataChangeRequestsTab />}
       {tab === "predani" && canDataChanges && <HandoverWarningsTab />}
+      {tab === "ulohy" && canJobs && <ScheduledJobsTab />}
 
       {error && (
         <ConfirmModal
