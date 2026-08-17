@@ -340,3 +340,58 @@ Manually assigned split hours feed **only** the third tally (and, by extension, 
 - **DNES** (#53): a button in the month nav, shown only when the user is viewing a month other than the current one.
 - **Day/night section ordering**: in `recepce` & `portýři`, day employees (`D`/`DP`) always sort above night (`N`/`NP`), with displayOrder ordering within each group; a 3px `.shiftPeriodDivider` marks the boundary. The single source of truth is `sortSectionEmployees()` (+ `isNightShiftType()`) in `shiftConstants.ts`, used by `ShiftGrid`, the PDF export, and the CSV export so all three match. Auto-grouping overrides cross-group manual displayOrder; the Management (`vedoucí`) section is unaffected.
 - **Schedule all transitions from Created** (#56): the deadline bar shows each *upcoming* transition's deadline in every earlier state — so from `created` admin can set Otevření **and** Uzavření **and** Publikování at once (Uzavření also editable in `opened`; Publikování in `opened`/`closed`). The backend `PATCH /plans/:id/deadlines` already accepts any field in any state; `handleDeadlineChange` guards chronological order (open ≤ close ≤ publish). `transitionPlanDeadlines` advances one step per 5-min run, so a full chain cascades created→opened→closed→published as each deadline passes.
+
+## Plan staffing is permission-gated, not status-gated (v5.11.1)
+
+Adding, editing and removing `planEmployees` rows is governed **solely** by
+`shifts.planEmployees.manage`, in **every** plan state including `published`.
+
+Until v5.11.1 the UI additionally demanded `shifts.plan.revert` once a plan was
+published (`ShiftPlannerPage.tsx` — the `+ Přidat zaměstnance` button and the
+`canEditEmployees` prop passed to `ShiftGrid`). That was wrong on two counts:
+
+- **It was a UI-only gate.** `POST`, `PUT` and `DELETE` on
+  `/shifts/plans/:planId/employees[/:docId]` only ever ran
+  `requirePermission("shifts.planEmployees.manage")` — none of them reads
+  `plan.status`. The server has always allowed the write; the JSX was the only
+  thing hiding it. Contrast the genuine status gates elsewhere, which are enforced
+  server-side: the plan **delete** gate (409 unless `created`) and the transition
+  validator (`reverseTransitions` + `shifts.plan.revert`).
+- **It forced a much broader permission for a narrow need.** A FOM staffing the
+  already-published current month (a late starter joining mid-month is routine)
+  had to be granted "may un-publish any plan" to do it.
+
+⚠️ Consequence to keep in mind: re-publishing is **not** required after a late
+add, but payroll for that month was already generated at publish time. A locked
+`payrollPeriod` is skipped entirely by `createOrUpdatePayrollPeriod`
+(`payrollCalculator.ts`), so a late roster addition does **not** flow into a locked
+month — that needs an explicit unlock + recalculate.
+
+### `GET /api/employees/plan-options` — name-only roster for the picker
+
+`AddEmployeeToPlanModal` used to populate its search from `GET /api/employees`,
+which is gated on `employees.view.all` / `employees.view.nonManagement`. The
+`manager` (FOM) seed set holds **neither**, so the request 403'd; the modal's bare
+`.catch(() => setEmployees([]))` turned that into an empty dropdown, which reads as
+"no employees exist" rather than as an error. Every FOM had a silently broken
+picker from the day the modal shipped.
+
+The fix deliberately **avoids widening the FOM's employee-record access**. A
+dedicated endpoint returns only what the picker renders:
+
+- **Projection:** `id`, `firstName`, `lastName`, `displayName` — nothing else. No
+  contract, contact, nationality, job-title or salary data leaves the handler.
+- **Gate:** `requirePermission("shifts.planEmployees.manage", "employees.view.all",
+  "employees.view.nonManagement")` (OR semantics) — i.e. the permission the caller
+  already needs in order to *act* on the result, so **no new permission key**, and
+  therefore no `PERMISSION_CATALOG` / matrix / `appTour.ts` / Nápověda change.
+- **Scoping preserved:** the `isNonManagementScoped` filter from `GET /` is applied,
+  so an `hr`-scoped caller still cannot learn management names here. Callers holding
+  only `shifts.planEmployees.manage` are unscoped and see the full roster — the
+  `vedoucí` section of the plan is theirs to staff.
+- ⚠️ **Route order:** it must stay above `/:id` in `functions/src/routes/employees.ts`,
+  or Express matches it as `id="plan-options"` (same reason as `/export` and
+  `/questionnaire-blank`).
+
+The modal now renders the load error instead of swallowing it — a blank picker must
+never be the visible form of a 403.

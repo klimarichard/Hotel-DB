@@ -1547,7 +1547,13 @@ export default function ShiftPlannerPage() {
             )}
 
             {/* Add employee */}
-            {plan && (plan.status !== "published" || can("shifts.plan.revert")) && can("shifts.planEmployees.manage") && (
+            {/* Deliberately NOT coupled to plan.status: staffing a plan is its own
+                right. A FOM holding shifts.planEmployees.manage routinely has to add
+                a late starter to the already-published current month, and pairing
+                that with shifts.plan.revert forced the far broader "may un-publish
+                any plan" permission on them. The three planEmployees endpoints never
+                checked plan.status either, so this aligns the UI with the server. */}
+            {plan && can("shifts.planEmployees.manage") && (
               <Button
                 data-tour="shift-add-employee"
                 variant="secondary"
@@ -1937,9 +1943,9 @@ export default function ShiftPlannerPage() {
               canEditMod={can("shifts.mod.manage")}
               onEditEmployee={(emp) => setEditingEmployee(emp)}
               onDeleteEmployee={handleDeleteEmployee}
-              canEditEmployees={
-                can("shifts.plan.revert") || (can("shifts.planEmployees.manage") && plan.status !== "published")
-              }
+              // Same reasoning as the "+ Přidat zaměstnance" button above: the
+              // row-level edit/remove actions follow the permission, not the status.
+              canEditEmployees={can("shifts.planEmployees.manage")}
               canSeeInactiveFlag={canEdit}
               readOnly={selfServiceOnly ? plan.status !== "opened" : !canEdit}
               alwaysReadOnlySections={selfServiceOnly ? ["vedoucí"] : []}
