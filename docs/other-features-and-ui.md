@@ -317,6 +317,8 @@ buttons in `JobsTab.tsx`. Adding a scheduled function means editing all three. A
 an entry with no `runJob()` wrapper reports `unknown` forever, and a wrapped function with no
 entry is recorded but never displayed.
 
+⚠️ **`runJob()` is the ONLY writer of `jobRuns/{jobId}`.** Until v5.11.7 it wrapped only the scheduled bodies, so a manual re-run from Nastavení → Úlohy did the work, returned 200 and left the health document untouched — the tab stayed red until the next scheduled run. Caught in prod on 2026-08-18: two successful manual sweeps, `jobRuns/sweepRecepceHistory` still `lastStatus: "error"` with the previous night's `updateTime`. The manual triggers now route through `runManualTrigger()` → `runJob()` as well, so a button press clears the error and the overdue state. **Any new path that runs a job must go through `runJob()`, or the tab will not see it.**
+
 **Recording layer — `functions/src/services/jobRuns.ts`.** Before this, the scheduled
 functions only `console.log`ed: a failure existed in Cloud Functions logs and nowhere else.
 `runJob(jobId, fn)` now wraps every `onSchedule` body and upserts `jobRuns/{jobId}`
