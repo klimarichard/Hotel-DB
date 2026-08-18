@@ -160,12 +160,58 @@ app.get("/health", (_req, res) => {
 // HTTP triggers below mirror the scheduled functions and exist for admins to
 // re-run a job after a missed/failed scheduled execution. Admin-only, and
 // every successful call writes a `manual-trigger` audit entry.
+
+/**
+ * Run a manual trigger's body through runJob() so a button press records health
+ * in `jobRuns/{jobId}` exactly like the scheduled run does.
+ *
+ * Without this the loop the Úlohy tab exists to close cannot close: the tab shows
+ * a job red, you press Spustit, the work succeeds — and the row stays red until
+ * the next scheduled run, because only runJob() writes jobRuns. A successful
+ * manual run now clears the stored error AND the overdue state (runJob nulls
+ * `lastError` explicitly and stamps `lastRunAt` + `lastSuccessAt`).
+ *
+ * Two constraints this shape exists to satisfy:
+ *  • runJob() RE-THROWS on failure by design, so Cloud Functions error reporting
+ *    and the platform retry still see it. An Express 4 async handler must catch
+ *    its own rejections — an escaping one hangs the request with no response —
+ *    so the throw is converted to a typed failure here instead.
+ *  • runJob() resolves to void, but these endpoints return the job's own result
+ *    as JSON. The result is captured by closure rather than widening runJob's
+ *    signature, leaving all ten scheduled callers untouched.
+ */
+async function runManualTrigger<T>(
+  jobId: string,
+  fn: () => Promise<T>
+): Promise<{ ok: true; result: T } | { ok: false; message: string }> {
+  let result!: T;
+  try {
+    await runJob(jobId, async () => {
+      result = await fn();
+    });
+    return { ok: true, result };
+  } catch (err) {
+    console.error(`[manual-trigger] ${jobId} failed`, err);
+    return { ok: false, message: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/** Uniform 500 for a manual trigger whose job threw. */
+function manualTriggerFailed(res: express.Response, message: string): void {
+  res.status(500).json({ error: `Úlohu se nepodařilo dokončit: ${message}` });
+}
+
 app.post(
   "/shifts/trigger-deadlines",
   requireAuth,
   requirePermission("system.triggers"),
   async (req: AuthRequest, res) => {
-    const result = await transitionPlanDeadlines();
+    const run = await runManualTrigger("checkPlanDeadlines", () => transitionPlanDeadlines());
+    if (!run.ok) {
+      manualTriggerFailed(res, run.message);
+      return;
+    }
+    const result = run.result;
     await writeAudit(ctxFromReq(req), {
       action: "manual-trigger",
       collection: "shiftPlans",
@@ -180,7 +226,12 @@ app.post(
   requireAuth,
   requirePermission("system.triggers"),
   async (req: AuthRequest, res) => {
-    const result = await sweepExpiredMultisport();
+    const run = await runManualTrigger("sweepMultisport", () => sweepExpiredMultisport());
+    if (!run.ok) {
+      manualTriggerFailed(res, run.message);
+      return;
+    }
+    const result = run.result;
     await writeAudit(ctxFromReq(req), {
       action: "manual-trigger",
       collection: "benefits",
@@ -195,7 +246,12 @@ app.post(
   requireAuth,
   requirePermission("system.triggers"),
   async (req: AuthRequest, res) => {
-    const result = await refreshAllProbationAlerts();
+    const run = await runManualTrigger("refreshProbationAlerts", () => refreshAllProbationAlerts());
+    if (!run.ok) {
+      manualTriggerFailed(res, run.message);
+      return;
+    }
+    const result = run.result;
     await writeAudit(ctxFromReq(req), {
       action: "manual-trigger",
       collection: "probationAlerts",
@@ -210,22 +266,30 @@ app.post(
   requireAuth,
   requirePermission("system.triggers"),
   async (req: AuthRequest, res) => {
-    const db = admin.firestore();
-    const employeesSnap = await db.collection("employees").get();
-    let refreshed = 0;
-    for (const empDoc of employeesSnap.docs) {
-      const emp = empDoc.data() as Record<string, unknown>;
-      const docsSnap = await empDoc.ref.collection("documents").limit(1).get();
-      if (docsSnap.empty) continue;
-      const docData = docsSnap.docs[0].data() as Record<string, unknown>;
-      // Terminated employees get an all-null body → their alerts are deleted.
-      // Active and before-start employees keep their document-expiry alerts.
-      const terminated = emp.status === "terminated";
-      const alertBody: Record<string, unknown> = {};
-      for (const { field } of EXPIRY_FIELDS) alertBody[field] = terminated ? null : (docData[field] ?? null);
-      await updateDocumentAlerts(empDoc.id, (emp.firstName as string) ?? "", (emp.lastName as string) ?? "", alertBody);
-      refreshed++;
+    const run = await runManualTrigger("refreshDocumentAlerts", async () => {
+      const db = admin.firestore();
+      const employeesSnap = await db.collection("employees").get();
+      let refreshed = 0;
+      for (const empDoc of employeesSnap.docs) {
+        const emp = empDoc.data() as Record<string, unknown>;
+        const docsSnap = await empDoc.ref.collection("documents").limit(1).get();
+        if (docsSnap.empty) continue;
+        const docData = docsSnap.docs[0].data() as Record<string, unknown>;
+        // Terminated employees get an all-null body → their alerts are deleted.
+        // Active and before-start employees keep their document-expiry alerts.
+        const terminated = emp.status === "terminated";
+        const alertBody: Record<string, unknown> = {};
+        for (const { field } of EXPIRY_FIELDS) alertBody[field] = terminated ? null : (docData[field] ?? null);
+        await updateDocumentAlerts(empDoc.id, (emp.firstName as string) ?? "", (emp.lastName as string) ?? "", alertBody);
+        refreshed++;
+      }
+      return refreshed;
+    });
+    if (!run.ok) {
+      manualTriggerFailed(res, run.message);
+      return;
     }
+    const refreshed = run.result;
     await writeAudit(ctxFromReq(req), {
       action: "manual-trigger",
       collection: "documentAlerts",
@@ -244,7 +308,12 @@ app.post(
     // employee's latest session. Mirrors the daily refreshEmployeeEffective job;
     // also repairs any record whose cache drifted (e.g. blanked by the old
     // raw-copy bug in PATCH/POST /employment).
-    const result = await refreshEffectiveRootForAllActive();
+    const run = await runManualTrigger("refreshEmployeeEffective", () => refreshEffectiveRootForAllActive());
+    if (!run.ok) {
+      manualTriggerFailed(res, run.message);
+      return;
+    }
+    const result = run.result;
     await writeAudit(ctxFromReq(req), {
       action: "manual-trigger",
       collection: "employees",
@@ -269,19 +338,27 @@ app.post(
       res.status(400).json({ error: "Neplatný rok." });
       return;
     }
-    const result = await rolloverVacationEntitlement({
-      year,
-      updatedBy: req.uid ?? null,
-      dryRun,
-    });
-    if (!dryRun) {
-      await writeAudit(ctxFromReq(req), {
-        action: "manual-trigger",
-        collection: "employees/vacationLedger",
-        extra: { trigger: "rolloverVacationEntitlement", result },
-      });
+    // A dry run writes nothing, so it must NOT be recorded in jobRuns — merely
+    // PREVIEWING the plan would otherwise clear a real failure off the Úlohy tab.
+    if (dryRun) {
+      res.json(
+        await rolloverVacationEntitlement({ year, updatedBy: req.uid ?? null, dryRun: true })
+      );
+      return;
     }
-    res.json(result);
+    const run = await runManualTrigger("rolloverVacationYear", () =>
+      rolloverVacationEntitlement({ year, updatedBy: req.uid ?? null, dryRun: false })
+    );
+    if (!run.ok) {
+      manualTriggerFailed(res, run.message);
+      return;
+    }
+    await writeAudit(ctxFromReq(req), {
+      action: "manual-trigger",
+      collection: "employees/vacationLedger",
+      extra: { trigger: "rolloverVacationEntitlement", result: run.result },
+    });
+    res.json(run.result);
   }
 );
 
@@ -290,7 +367,12 @@ app.post(
   requireAuth,
   requirePermission("system.triggers"),
   async (req: AuthRequest, res) => {
-    const result = await runScheduledDeactivations();
+    const run = await runManualTrigger("checkScheduledDeactivations", () => runScheduledDeactivations());
+    if (!run.ok) {
+      manualTriggerFailed(res, run.message);
+      return;
+    }
+    const result = run.result;
     await writeAudit(ctxFromReq(req), {
       action: "manual-trigger",
       collection: "users",
@@ -306,7 +388,12 @@ app.post(
   requirePermission("system.triggers"),
   async (req: AuthRequest, res) => {
     await clock.refresh(true);
-    const result = await sweepRecepceRetention();
+    const run = await runManualTrigger("sweepRecepceHistory", () => sweepRecepceRetention());
+    if (!run.ok) {
+      manualTriggerFailed(res, run.message);
+      return;
+    }
+    const result = run.result;
     await writeAudit(ctxFromReq(req), {
       action: "manual-trigger",
       collection: "auditLog",
@@ -325,7 +412,12 @@ app.post(
     // older than 6 months. Snapshots are a convenience record of a past exchange
     // run — nothing references them, so deleting one removes no business data.
     await clock.refresh(true);
-    const result = await sweepSmenarnaRetention();
+    const run = await runManualTrigger("sweepSmenarnaSnapshots", () => sweepSmenarnaRetention());
+    if (!run.ok) {
+      manualTriggerFailed(res, run.message);
+      return;
+    }
+    const result = run.result;
     await writeAudit(ctxFromReq(req), {
       action: "manual-trigger",
       collection: "smenarnaSnapshots",
@@ -345,7 +437,12 @@ app.post(
     // LOCKED periods are untouched, and manual overrides / sickLeaveHours /
     // notes are preserved (no discardOverrides) — only auto cells recompute.
     await clock.refresh(true);
-    const result = await refreshAllPublishedPayrollPeriods();
+    const run = await runManualTrigger("refreshPayroll", () => refreshAllPublishedPayrollPeriods());
+    if (!run.ok) {
+      manualTriggerFailed(res, run.message);
+      return;
+    }
+    const result = run.result;
     await writeAudit(ctxFromReq(req), {
       action: "manual-trigger",
       collection: "payrollPeriods",
