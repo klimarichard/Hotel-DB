@@ -28,6 +28,20 @@ const JOBS: Job[] = [
     endpoint: "/shifts/trigger-deadlines",
   },
   {
+    id: "deactivations",
+    title: "Naplánovaná deaktivace účtů",
+    description:
+      "Provede naplánované deaktivace uživatelských účtů, jejichž čas už nastal. Účet se zablokuje a uživatel se nebude moci přihlásit.",
+    endpoint: "/users/trigger-scheduled-deactivations",
+  },
+  {
+    id: "payroll",
+    title: "Přepočet mezd",
+    description:
+      "Přepočítá mzdové podklady u všech publikovaných plánů směn. Uzamčená období zůstávají beze změny a ruční úpravy, nemoc i poznámky se zachovají – přepočítají se pouze automaticky počítané hodnoty.",
+    endpoint: "/payroll/trigger-refresh",
+  },
+  {
     id: "multisport",
     title: "Údržba Multisportu",
     description: "Ukončí Multisport období, kterým vypršela platnost.",
@@ -58,6 +72,13 @@ const JOBS: Job[] = [
     description:
       "Smaže historii změn a auditní záznamy předávacích protokolů, walk-inů, taxi, lobby baru a terminálu starší než 6 měsíců. Samotné záznamy (protokoly, prodeje, jízdy) zůstávají – maže se pouze jejich historie. Smazání je nevratné.",
     endpoint: "/recepce/trigger-retention-sweep",
+  },
+  {
+    id: "smenarna-retention",
+    title: "Úklid snímků směnárny",
+    description:
+      "Smaže uložené snímky kurzovního lístku směnárny starší než 6 měsíců. Snímek je jen záznam o proběhlé směně, nic dalšího na něj neodkazuje. Smazání je nevratné.",
+    endpoint: "/exchange/trigger-snapshot-sweep",
   },
 ];
 
