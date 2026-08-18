@@ -309,9 +309,11 @@ The distinction matters because the employment-row `status` field can lag the de
 
 **There are TEN scheduled functions**, not the six that Nastavení → Úlohy
 (`frontend/src/pages/settings/JobsTab.tsx`) lists. That page only shows jobs with a
-manual `trigger-*` endpoint; `checkScheduledDeactivations`, `refreshPayroll` and
-`sweepSmenarnaSnapshots` have none and appeared nowhere in the app. (`sweepRecepceHistory` gained
-its button in **v5.11.5** — see below; the endpoint had existed all along.) All ten are monitored here. **Keep `JOB_DEFS` in step with `index.ts`:**
+manual `trigger-*` endpoint, and at the time only six did. **As of v5.11.6 all ten have one**, so both screens
+now cover the same ten jobs — `sweepRecepceHistory` gained its button in v5.11.5 (see below; the endpoint had
+existed all along), and `checkScheduledDeactivations`, `refreshPayroll` and `sweepSmenarnaSnapshots` in v5.11.6.
+⚠️ They remain **three separate lists** — `JOB_DEFS`/`JOB_REGISTRY` here, the endpoints in `index.ts`, and the
+buttons in `JobsTab.tsx`. Adding a scheduled function means editing all three. All ten are monitored here. **Keep `JOB_DEFS` in step with `index.ts`:**
 an entry with no `runJob()` wrapper reports `unknown` forever, and a wrapped function with no
 entry is recorded but never displayed.
 
