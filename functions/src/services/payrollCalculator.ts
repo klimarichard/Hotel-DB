@@ -1139,3 +1139,31 @@ export async function recomputeEntryForEmployee(
   await entryRef.set({ ...entry, multisportActive, multisportPrice, notes });
   return true;
 }
+
+
+/**
+ * Re-fold every PUBLISHED shift plan into its payroll period.
+ *
+ * Extracted so the nightly `refreshPayroll` job and the manual
+ * `POST /api/payroll/trigger-refresh` button run the SAME code — a copied loop
+ * is exactly the divergent-duplicate shape that has bitten this codebase before.
+ *
+ * Scope guarantees (why this is safe to expose as a button): it only touches
+ * periods whose plan is `published`, `createOrUpdatePayrollPeriod` leaves LOCKED
+ * periods untouched, and without `discardOverrides` every manual override,
+ * sickLeaveHours and note is preserved — only auto-computed cells are recomputed.
+ */
+export async function refreshAllPublishedPayrollPeriods(): Promise<{
+  plans: number;
+  refreshed: number;
+}> {
+  const db = admin.firestore();
+  const snap = await db.collection("shiftPlans").where("status", "==", "published").get();
+  let refreshed = 0;
+  for (const doc of snap.docs) {
+    const data = doc.data() as { year: number; month: number };
+    await createOrUpdatePayrollPeriod(doc.id, data.year, data.month);
+    refreshed++;
+  }
+  return { plans: snap.size, refreshed };
+}

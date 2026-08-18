@@ -53,7 +53,7 @@ import { requireAuth, AuthRequest } from "./middleware/auth";
 import { requirePermission } from "./auth/permissions";
 import { writeAudit, ctxFromReq } from "./services/auditLog";
 import { transitionPlanDeadlines } from "./services/planTransitions";
-import { createOrUpdatePayrollPeriod } from "./services/payrollCalculator";
+import { refreshAllPublishedPayrollPeriods } from "./services/payrollCalculator";
 import { sweepExpiredMultisport } from "./services/multisportSweep";
 import { updateDocumentAlerts, EXPIRY_FIELDS } from "./routes/employees";
 import { refreshAllProbationAlerts } from "./services/probationAlerts";
@@ -316,6 +316,45 @@ app.post(
   }
 );
 
+app.post(
+  "/exchange/trigger-snapshot-sweep",
+  requireAuth,
+  requirePermission("system.triggers"),
+  async (req: AuthRequest, res) => {
+    // Mirrors the daily sweepSmenarnaSnapshots job: drops směnárna snapshots
+    // older than 6 months. Snapshots are a convenience record of a past exchange
+    // run — nothing references them, so deleting one removes no business data.
+    await clock.refresh(true);
+    const result = await sweepSmenarnaRetention();
+    await writeAudit(ctxFromReq(req), {
+      action: "manual-trigger",
+      collection: "smenarnaSnapshots",
+      extra: { trigger: "sweepSmenarnaSnapshots", result },
+    });
+    res.json(result);
+  }
+);
+
+app.post(
+  "/payroll/trigger-refresh",
+  requireAuth,
+  requirePermission("system.triggers"),
+  async (req: AuthRequest, res) => {
+    // Mirrors the daily refreshPayroll job via the SAME shared service, so the
+    // button and the schedule can never drift. Only PUBLISHED plans are folded;
+    // LOCKED periods are untouched, and manual overrides / sickLeaveHours /
+    // notes are preserved (no discardOverrides) — only auto cells recompute.
+    await clock.refresh(true);
+    const result = await refreshAllPublishedPayrollPeriods();
+    await writeAudit(ctxFromReq(req), {
+      action: "manual-trigger",
+      collection: "payrollPeriods",
+      extra: { trigger: "refreshAllPublishedPayrollPeriods", result },
+    });
+    res.json(result);
+  }
+);
+
 // Catch-all error handler — turns a thrown error (or an explicit next(err))
 // into a JSON 500 instead of letting the request hang with no response. Async
 // handlers in Express 4 must still try/catch their own rejections to reach
@@ -386,12 +425,8 @@ export const checkScheduledDeactivations = onSchedule("every 5 minutes", async (
 export const refreshPayroll = onSchedule("every 24 hours", async () => {
   await runJob("refreshPayroll", async () => {
     await clock.refresh(true);
-    const db = admin.firestore();
-    const snap = await db.collection("shiftPlans").where("status", "==", "published").get();
-    for (const doc of snap.docs) {
-      const data = doc.data() as { year: number; month: number };
-      await createOrUpdatePayrollPeriod(doc.id, data.year, data.month);
-    }
+    const res = await refreshAllPublishedPayrollPeriods();
+    console.log(`[refreshPayroll] refreshed ${res.refreshed}/${res.plans} published plans`);
   });
 });
 
