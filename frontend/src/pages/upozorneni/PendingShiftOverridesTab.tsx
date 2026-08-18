@@ -44,13 +44,22 @@ export default function PendingShiftOverridesTab() {
       // overrides is gated on shifts.override.review, which does NOT imply
       // employees.view.* – so a 403 here must degrade to the raw employeeId
       // (see the JSX fallback below), never hide the pending list itself.
+      //
+      // All THREE lifecycle statuses are needed, not just active + terminated:
+      // a future hire is stamped "before-start" until their Nástup date
+      // arrives, and /employees/plan-options staffs plans from the whole
+      // roster with no status filter — so a request can legitimately exist
+      // against someone who has not started yet. Omitting them dropped the
+      // row to the raw-employeeId fallback, which is meant to signal a 403,
+      // not a routine gap in the map.
       api.get<EmployeeMini[]>("/employees?status=active").catch(() => [] as EmployeeMini[]),
+      api.get<EmployeeMini[]>("/employees?status=before-start").catch(() => [] as EmployeeMini[]),
       api.get<EmployeeMini[]>("/employees?status=terminated").catch(() => [] as EmployeeMini[]),
     ])
-      .then(([reqs, active, terminated]) => {
+      .then(([reqs, active, beforeStart, terminated]) => {
         setItems(reqs);
         const m = new Map<string, EmployeeMini>();
-        [...active, ...terminated].forEach((e) => m.set(e.id, e));
+        [...active, ...beforeStart, ...terminated].forEach((e) => m.set(e.id, e));
         setEmpMap(m);
       })
       .catch((err) =>
