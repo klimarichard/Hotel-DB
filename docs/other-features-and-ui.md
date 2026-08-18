@@ -309,9 +309,9 @@ The distinction matters because the employment-row `status` field can lag the de
 
 **There are TEN scheduled functions**, not the six that Nastavení → Úlohy
 (`frontend/src/pages/settings/JobsTab.tsx`) lists. That page only shows jobs with a
-manual `trigger-*` endpoint (5 buttons + the vacation rollover); `checkScheduledDeactivations`,
-`refreshPayroll`, `sweepRecepceHistory` and `sweepSmenarnaSnapshots` have none and appeared
-nowhere in the app. All ten are monitored here. **Keep `JOB_DEFS` in step with `index.ts`:**
+manual `trigger-*` endpoint; `checkScheduledDeactivations`, `refreshPayroll` and
+`sweepSmenarnaSnapshots` have none and appeared nowhere in the app. (`sweepRecepceHistory` gained
+its button in **v5.11.5** — see below; the endpoint had existed all along.) All ten are monitored here. **Keep `JOB_DEFS` in step with `index.ts`:**
 an entry with no `runJob()` wrapper reports `unknown` forever, and a wrapped function with no
 entry is recorded but never displayed.
 
@@ -425,6 +425,50 @@ avoid adding a Cloud Functions dependency.
 - **Favicon / logo**: single source of truth at `frontend/src/assets/logo.svg` (real OTH gold brand mark, viewBox tightened to `210 300 195 195` so the glyph fills its box at any size — path data untouched from the Illustrator export). Referenced from `frontend/index.html` as `<link rel="icon" href="./src/assets/logo.svg">` (relative path so Vite processes and fingerprints it in production), imported into `Layout.tsx` at 26×26px in the sidebar via `styles.logoMark`, and rendered at 72×72px above the heading on both login and forgot-password views via `LoginPage.module.css` → `.logo`. The earlier placeholder `public/favicon.svg` was removed in `feature/unified-logo`; `assets/logo-mark.svg` (unimported placeholder) is retained as a backup.
 - **Active nav link**: `Layout.module.css` → `.active` combines the existing `#3b82f6` 3px left-border and `#2d3f54` fill with a soft primary-tinted inner shadow (`box-shadow: inset 0 0 18px rgba(59, 130, 246, 0.12)`) so the selected row reads as "lit up" rather than merely shaded.
 - **Sidebar user bar**: `.userBar` uses `gap: var(--space-2)` between email, role, logout and theme toggle (no per-element `margin-top` rules). `.userEmail` is `0.8125rem`.
+
+#### First real catch — `sweepRecepceHistory` had never once succeeded (v5.11.5)
+
+The tab's first working day (2026-08-18) surfaced `9 FAILED_PRECONDITION: The query requires
+an index` on **Úklid historie recepce**. The failure was **six weeks old**; only the monitoring
+was new. `jobRuns/sweepRecepceHistory` had **no `lastSuccessAt` field at all** and a
+`createTime` of the first post-v5.11.2 run — the sweep had thrown on every nightly run since
+it shipped in v4.0.0 (2026-07-09), logging to Cloud Functions and nowhere else. That is
+precisely the blind spot the tab was built to close, so treat this as the feature working.
+
+⚠️ **Root cause — index DIRECTION, not a missing index.** The sweep runs
+
+```ts
+auditLog.where("collection", "==", X).where("timestamp", "<=", cutoff)
+```
+
+with **no explicit `orderBy`**, so Firestore orders implicitly by the inequality field
+**ASCENDING** and requires `(collection ASC, timestamp ASC)`. Only
+`(collection ASC, timestamp DESC)` was declared — added earlier for the audit-log *reading*
+UI, which sorts newest-first. A composite index is reverse-scannable only as the exact
+inverse of **all** its fields, and reversing that one yields `(collection DESC, timestamp ASC)`,
+which does not match. Both directions are now declared; the DESC one must stay.
+
+The comment in `services/recepceRetention.ts` had claimed the index was covered: it matched
+on field **names** and missed the direction. **Reviewing an index by field names alone is
+not review.** To diagnose this class of failure without deploying anything, base64-decode the
+`create_composite=` blob in the error — it spells out the collection, field order and query
+scope literally.
+
+⚠️ **Before re-enabling a stalled DELETE job, compute the backlog.** Retention is 6 months;
+at the time of the fix the cutoff was 2026-02-18 while the oldest `auditLog` document in all
+of production was 2026-05-21 (launch day), so the first successful run deleted **nothing**,
+and will delete nothing until roughly January 2027. Fixing a broken sweep early is free;
+fixing it late means one pass deletes months of history at once.
+
+**Manual trigger (v5.11.5).** `POST /api/recepce/trigger-retention-sweep` had existed since
+v4.0.0 — only the `triggerEndpoint` field in the `jobRuns.ts` registry was missing, which is
+why the tab reported the job had no trigger. ⚠️ **Two divergent lists:** the registry drives
+only the Upozornění *hint text*; `settings/JobsTab.tsx` keeps its **own** hardcoded `JOBS`
+array holding the actual buttons. Setting the registry field alone flips the hint to
+"Ručně ji spustíte v Nastavení → Úlohy" while pointing at a screen with no such button —
+**always edit both.** The button routes through the existing `ConfirmModal` like every other
+job, and its description states that the deletion is irreversible and that only history is
+swept, never the live protocols, sales or rides.
 
 ### Modal shell — bounded height (`modalShell.module.css`)
 
