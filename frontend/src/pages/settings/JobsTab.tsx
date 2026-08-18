@@ -52,6 +52,13 @@ const JOBS: Job[] = [
       "Přepočítá denormalizované aktuální údaje (pozice, oddělení, smlouva) u všech aktivních zaměstnanců.",
     endpoint: "/employees/trigger-effective-refresh",
   },
+  {
+    id: "recepce-retention",
+    title: "Úklid historie recepce",
+    description:
+      "Smaže historii změn a auditní záznamy předávacích protokolů, walk-inů, taxi, lobby baru a terminálu starší než 6 měsíců. Samotné záznamy (protokoly, prodeje, jízdy) zůstávají – maže se pouze jejich historie. Smazání je nevratné.",
+    endpoint: "/recepce/trigger-retention-sweep",
+  },
 ];
 
 /**

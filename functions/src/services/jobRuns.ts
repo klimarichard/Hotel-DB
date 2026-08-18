@@ -123,6 +123,7 @@ export const JOB_DEFS: readonly JobDef[] = [
       "Smaže záznamy historie a auditu předávacích protokolů starší než retenční lhůta.",
     schedule: "denně v 00:00",
     periodMs: DAY,
+    triggerEndpoint: "/recepce/trigger-retention-sweep",
   },
   {
     id: "sweepSmenarnaSnapshots",
