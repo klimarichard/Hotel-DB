@@ -122,6 +122,8 @@ interface EmployeeSummary {
   firstName: string;
   lastName: string;
   displayName?: string;
+  /** Lifecycle status, stamped locally from the query that returned the row. */
+  status?: "active" | "before-start";
 }
 
 interface CompanyRecord {
@@ -422,9 +424,24 @@ export default function SettingsPage() {
     roleTypesApi.list().then(setRoleTypes).catch(() => setRoleTypes([]));
   }, []);
 
+  // The employee pickers must offer everyone who can plausibly own an account:
+  // people working today AND future hires whose Nástup is still ahead
+  // ("před nástupem") — their login is normally set up before day one.
+  // computeEffectiveStatus() keeps a future-dated Nástup out of "active" on
+  // purpose, so a single status=active query silently hid them. The list route
+  // takes one status equality, so fan out per status and merge — the same
+  // pattern EmployeesPage / AuditLogPage use. Terminated stays out.
   useEffect(() => {
-    api.get<EmployeeSummary[]>("/employees?status=active")
-      .then((list) => setEmployees(list))
+    Promise.all([
+      api.get<EmployeeSummary[]>("/employees?status=active").catch(() => [] as EmployeeSummary[]),
+      api.get<EmployeeSummary[]>("/employees?status=before-start").catch(() => [] as EmployeeSummary[]),
+    ])
+      .then(([active, beforeStart]) =>
+        setEmployees([
+          ...active.map((e) => ({ ...e, status: "active" as const })),
+          ...beforeStart.map((e) => ({ ...e, status: "before-start" as const })),
+        ])
+      )
       .catch(() => setEmployees([]));
   }, []);
 
@@ -1029,6 +1046,13 @@ export default function SettingsPage() {
     return (a.name ?? "").localeCompare(b.name ?? "", "cs");
   });
 
+  // Future hires are flagged in the picker so a list mixing them with people
+  // already working stays unambiguous.
+  const employeeOptionLabel = (emp: EmployeeSummary) =>
+    emp.status === "before-start"
+      ? `${employeeSurnameFirst(emp)} (před nástupem)`
+      : employeeSurnameFirst(emp);
+
   // Employee-picker dropdowns are always sorted by surname, then first name.
   const sortedEmployees = [...employees].sort((a, b) => {
     const last = (a.lastName ?? "").localeCompare(b.lastName ?? "", "cs");
@@ -1132,7 +1156,7 @@ export default function SettingsPage() {
                     <option value="">– Nepropojovat –</option>
                     {sortedEmployees.map((emp) => (
                       <option key={emp.id} value={emp.id}>
-                        {employeeSurnameFirst(emp)}
+                        {employeeOptionLabel(emp)}
                       </option>
                     ))}
                   </select>
@@ -1169,7 +1193,7 @@ export default function SettingsPage() {
                 <option value="">– Zrušit propojení –</option>
                 {sortedEmployees.map((emp) => (
                   <option key={emp.id} value={emp.id}>
-                    {employeeSurnameFirst(emp)}
+                    {employeeOptionLabel(emp)}
                   </option>
                 ))}
               </select>
