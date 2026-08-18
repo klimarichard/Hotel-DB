@@ -76,7 +76,17 @@ export async function sweepRecepceRetention(): Promise<RetentionResult> {
   const before = cutoff();
 
   // auditLog — one query per recepce collection (collection == X && timestamp <=
-  // cutoff). Composite index (collection, timestamp) in firestore.indexes.json.
+  // cutoff).
+  //
+  // ⚠️ This needs the (collection ASC, timestamp **ASC**) composite index, NOT the
+  // (collection ASC, timestamp DESC) one the audit-log reading UI uses. There is
+  // no explicit orderBy here, so Firestore orders implicitly by the inequality
+  // field ASCENDING, and an index can only be scanned in reverse as the exact
+  // inverse of ALL its fields — reversing (collection ASC, timestamp DESC) gives
+  // (collection DESC, timestamp ASC), which does not match. Both directions are
+  // declared in firestore.indexes.json; matching on field NAMES alone is what
+  // made this sweep throw FAILED_PRECONDITION every night from v4.0.0 until the
+  // ASC index was added.
   let auditDeleted = 0;
   for (const collection of RECEPCE_AUDIT_COLLECTIONS) {
     auditDeleted += await deleteAll(
