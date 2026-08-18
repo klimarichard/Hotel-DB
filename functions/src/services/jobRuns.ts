@@ -74,6 +74,7 @@ export const JOB_DEFS: readonly JobDef[] = [
     description: "Deaktivuje uživatelské účty, u kterých nastal naplánovaný čas deaktivace.",
     schedule: "každých 5 minut",
     periodMs: 5 * MINUTE,
+    triggerEndpoint: "/users/trigger-scheduled-deactivations",
   },
   {
     id: "refreshPayroll",
@@ -82,6 +83,7 @@ export const JOB_DEFS: readonly JobDef[] = [
       "Přepočítá mzdová období všech publikovaných plánů směn, aby se do nich promítly dodatečné úpravy směn. Uzamčená období přeskakuje.",
     schedule: "každých 24 hodin",
     periodMs: DAY,
+    triggerEndpoint: "/payroll/trigger-refresh",
   },
   {
     id: "sweepMultisport",
@@ -131,6 +133,7 @@ export const JOB_DEFS: readonly JobDef[] = [
     description: "Smaže snímky kurzovního lístku směnárny starší než 6 měsíců.",
     schedule: "denně v 00:15",
     periodMs: DAY,
+    triggerEndpoint: "/exchange/trigger-snapshot-sweep",
   },
   {
     id: "rolloverVacationYear",
