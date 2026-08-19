@@ -2,16 +2,19 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import * as clock from "@/lib/clock";
 import ConfirmModal from "./ConfirmModal";
-import VacationLedgerCell from "./VacationLedgerCell";
+import VacationLedgerCell, { formatLedgerValue } from "./VacationLedgerCell";
 import styles from "./VacationLedgerSection.module.css";
 
 /**
  * Read/edit view of an employee's vacation-hour ledger, one calendar year at a
- * time (‹ year › switcher, like Payroll/Směny). All figures are in HOURS. The
- * summary line shows Nárok (entitlement, editable), Čerpáno (derived),
- * Proplaceno (payout — terminated employees only, see `isTerminated`) and
- * Zůstatek (derived; red when negative). Below it a compact two-row table lists
- * the hours taken in each month 1–12.
+ * time (‹ year › switcher, like Payroll/Směny). All figures are in HOURS.
+ *
+ * Laid out as ONE row of the same grid the aggregate table on /dovolena draws
+ * for everybody at once: Loňská · Letošní · Nárok · [1–12] · Čerpáno ·
+ * (Proplaceno) · Zůstatek. Before, the annual figures sat in a separate summary
+ * line above a two-row month table, so the same ledger read differently
+ * depending on which page you were on and the two could not be compared by eye.
+ * Keeping the column order identical is the point — see VacationLedgerTable.
  *
  * Editing is gated by the caller (`canManage` ← employees.vacationBalance.manage).
  * A manually-edited month value (source "manual") is marked exactly like a manual
@@ -44,11 +47,7 @@ interface Ledger {
  */
 const MIN_YEAR = 2022;
 
-/** Format an hour figure: drop trailing .0, Czech decimal comma. */
-function fmtH(n: number | null | undefined): string {
-  if (n == null) return "–";
-  return `${String(n).replace(".", ",")} h`;
-}
+const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1);
 
 type EditTarget =
   | { kind: "month"; month: number }
@@ -210,83 +209,105 @@ export default function VacationLedgerSection({
           )}
           {(ledger !== null || canManage) && (
             <>
-          {/* Loňská + Letošní (editable) / Nárok (=součet, jen ke čtení) / Čerpáno / Zůstatek */}
-          <div className={styles.summary}>
-            <span className={styles.sumItem}>
-              <span className={styles.sumLabel}>Loňská</span>
-              <VacationLedgerCell
-                {...cellProps({ kind: "priorYearHours" })}
-                value={prior}
-                format={fmtH}
-              />
-            </span>
-            <span className={styles.sumItem}>
-              <span className={styles.sumLabel}>Letošní</span>
-              <VacationLedgerCell
-                {...cellProps({ kind: "currentYearHours" })}
-                value={current}
-                format={fmtH}
-              />
-            </span>
-            <span className={styles.sumItem}>
-              <span className={styles.sumLabel}>Nárok</span>
-              <span className={styles.derived} title="Loňská + Letošní">{fmtH(entitlement)}</span>
-            </span>
-            <span className={styles.sumItem}>
-              <span className={styles.sumLabel}>Čerpáno</span>
-              <span>{fmtH(consumed)}</span>
-            </span>
-            {/* Proplaceno sits between Čerpáno and Zůstatek so the summary reads
-                as the sum it is: Nárok − Čerpáno − Proplaceno = Zůstatek. */}
-            {showPaidOut && (
-              <span className={styles.sumItem}>
-                <span className={styles.sumLabel}>Proplaceno</span>
-                <VacationLedgerCell
-                  {...cellProps({ kind: "paidOutHours" })}
-                  value={paidOut}
-                  format={fmtH}
-                />
-              </span>
-            )}
-            <span className={styles.sumItem}>
-              <span className={styles.sumLabel}>Zůstatek</span>
-              <span className={`${styles.remaining} ${remaining != null && remaining < 0 ? styles.negative : ""}`}>
-                {fmtH(remaining)}
-              </span>
-            </span>
-          </div>
-
-          {/* Two-row month table */}
+          {/* One row, same column order as the aggregate table on /dovolena.
+              The month block is fenced off from the annual figures on both
+              sides (blockStart), so "Nárok | 1..12 | Čerpáno" reads as the sum
+              it is rather than as seventeen equal columns. */}
           <div className={styles.tableScroll}>
-            <table className={styles.monthTable}>
-              <tbody>
-                <tr className={styles.monthHeadRow}>
-                  {Array.from({ length: 12 }, (_, i) => (
-                    <th key={i + 1} className={styles.monthHead}>{i + 1}</th>
-                  ))}
-                  <th className={`${styles.monthHead} ${styles.totalHead}`}>CELKEM</th>
+            <table className={styles.ledgerTable}>
+              <thead>
+                <tr>
+                  <th rowSpan={2} className={`${styles.headCell} ${styles.sumHead}`}>Loňská</th>
+                  <th rowSpan={2} className={`${styles.headCell} ${styles.sumHead}`}>Letošní</th>
+                  <th rowSpan={2} className={`${styles.headCell} ${styles.sumHead}`}>Nárok</th>
+                  <th colSpan={12} className={`${styles.headCell} ${styles.groupHead}`}>Měsíce</th>
+                  <th rowSpan={2} className={`${styles.headCell} ${styles.sumHead} ${styles.blockStart}`}>
+                    Čerpáno
+                  </th>
+                  {/* Proplaceno keeps its place BETWEEN Čerpáno and Zůstatek —
+                      the same slot it holds on /dovolena — and the same
+                      show-when-relevant rule as before: a payout is only ever
+                      filled in on termination, but a value that exists always
+                      shows, because it is subtracted from Zůstatek and a
+                      balance shrunk by an invisible figure reads as a bug. */}
+                  {showPaidOut && (
+                    <th rowSpan={2} className={`${styles.headCell} ${styles.sumHead}`}>Proplaceno</th>
+                  )}
+                  <th rowSpan={2} className={`${styles.headCell} ${styles.sumHead}`}>Zůstatek</th>
                 </tr>
                 <tr>
-                  {Array.from({ length: 12 }, (_, i) => {
-                    const month = i + 1;
-                    const cell = months[String(month)];
+                  {MONTHS.map((m) => (
+                    <th
+                      key={m}
+                      className={`${styles.monthHeadCell} ${m === 1 ? styles.blockStart : ""}`.trim()}
+                    >
+                      {m}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>
+                    <VacationLedgerCell {...cellProps({ kind: "priorYearHours" })} value={prior} />
+                  </td>
+                  <td>
+                    <VacationLedgerCell
+                      {...cellProps({ kind: "currentYearHours" })}
+                      value={current}
+                    />
+                  </td>
+                  <td>
+                    <span className={styles.derived} title="Loňská + Letošní">
+                      {formatLedgerValue(entitlement)}
+                    </span>
+                  </td>
+                  {MONTHS.map((m) => {
+                    const cell = months[String(m)];
                     return (
-                      <td key={month} className={styles.monthCell}>
+                      <td key={m} className={m === 1 ? styles.blockStart : undefined}>
                         <VacationLedgerCell
-                          {...cellProps({ kind: "month", month })}
+                          {...cellProps({ kind: "month", month: m })}
                           value={cell?.hours}
                           isManual={cell?.source === "manual"}
+                          className={cell ? undefined : styles.muted}
                         />
                       </td>
                     );
                   })}
-                  <td className={`${styles.monthCell} ${styles.totalCell}`}>
-                    {String(consumed).replace(".", ",")}
+                  <td className={styles.blockStart}>
+                    <span className={styles.derived}>{formatLedgerValue(consumed)}</span>
+                  </td>
+                  {showPaidOut && (
+                    <td>
+                      <VacationLedgerCell
+                        {...cellProps({ kind: "paidOutHours" })}
+                        value={paidOut}
+                      />
+                    </td>
+                  )}
+                  <td>
+                    <span
+                      className={`${styles.derived} ${
+                        remaining != null && remaining < 0 ? styles.negative : ""
+                      }`}
+                    >
+                      {formatLedgerValue(remaining)}
+                    </span>
                   </td>
                 </tr>
               </tbody>
             </table>
-              </div>
+          </div>
+
+          {/* The unit used to ride on every annual figure ("160 h"); with the
+              months in the same row that would have been seventeen columns of
+              mixed formatting, so it is stated once here instead. */}
+          <div className={styles.legend}>
+            <span>Všechny hodnoty jsou v hodinách.</span>
+            {canManage && <span>Dvojklikem upravíte hodnotu.</span>}
+            <span>* = ručně upraveno</span>
+          </div>
             </>
           )}
         </>
