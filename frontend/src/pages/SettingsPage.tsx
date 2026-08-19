@@ -34,7 +34,7 @@ const EyeOffIcon = () => (
 // Render a scheduled-deactivation instant (a full ISO string) in Prague-local
 // cs formatting, e.g. "5. 7. 2026 18:00". Safe with new Date() since the value
 // is a complete ISO timestamp, not a bare YYYY-MM-DD (see CLAUDE.md date rule).
-function formatScheduledAt(iso: string): string {
+function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString("cs-CZ", {
     day: "numeric",
     month: "numeric",
@@ -1223,13 +1223,14 @@ export default function SettingsPage() {
                   <th>E-mail</th>
                   <th>Typ</th>
                   <th>Zaměstnanec</th>
+                  <th>Poslední aktivita</th>
                   <th>Stav</th>
                   <th>Akce</th>
                 </tr>
               </thead>
               <tbody>
                 {sortedUsers.length === 0 && (
-                  <tr><td colSpan={6} className={styles.empty}>Žádní uživatelé</td></tr>
+                  <tr><td colSpan={7} className={styles.empty}>Žádní uživatelé</td></tr>
                 )}
                 {sortedUsers.map((u) => {
                   const isLinked = !!u.employeeId;
@@ -1284,6 +1285,9 @@ export default function SettingsPage() {
                             </button>
                           ))}
                       </td>
+                      <td data-label="Poslední aktivita">
+                        {u.lastActiveAt ? formatDateTime(u.lastActiveAt) : "–"}
+                      </td>
                       <td data-label="Stav">
                         <span className={u.active ? styles.badgeActive : styles.badgeInactive}>
                           {u.active ? "Aktivní" : "Deaktivován"}
@@ -1291,7 +1295,7 @@ export default function SettingsPage() {
                         {u.active && u.scheduledDeactivationAt && (
                           <div className={styles.scheduleNote}>
                             <span title="Naplánovaná automatická deaktivace">
-                              ⏱ Deaktivace {formatScheduledAt(u.scheduledDeactivationAt)}
+                              ⏱ Deaktivace {formatDateTime(u.scheduledDeactivationAt)}
                             </span>
                             {can("users.manage") && (
                               <button
