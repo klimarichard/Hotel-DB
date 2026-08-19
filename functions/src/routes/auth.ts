@@ -309,7 +309,6 @@ authRouter.post(
         employeeId: linkedEmployeeId,
         active: true,
         createdAt: FieldValue.serverTimestamp(),
-        lastLogin: null,
       });
 
       await logCreate(ctxFromReq(req), {
@@ -489,6 +488,32 @@ authRouter.get("/users", requireAuth, requirePermission("users.view"), async (_r
       empNames.set(d.id, `${(e.lastName as string ?? "").trim()} ${(e.firstName as string ?? "").trim()}`.trim());
     });
   }
+  // Last-activity instant per uid, read from Firebase Auth itself. The app keeps
+  // no server-side record of logins: sign-in happens client-side against Auth,
+  // so no Cloud Function ever observes it. `lastRefreshTime` is the last ID-token
+  // refresh, i.e. when the user last actually used the app - more informative
+  // than `lastSignInTime` (the last time they typed their password), which is why
+  // it is preferred here. Falls back to the sign-in instant for accounts that
+  // predate the refresh metadata.
+  const lastActive = new Map<string, string | null>();
+  try {
+    // listUsers pages 1000 at a time; the loop keeps this correct as we grow.
+    let pageToken: string | undefined;
+    do {
+      const page = await admin.auth().listUsers(1000, pageToken);
+      page.users.forEach((u) => {
+        const raw = u.metadata.lastRefreshTime || u.metadata.lastSignInTime || null;
+        const at = raw ? new Date(raw) : null;
+        lastActive.set(u.uid, at && !isNaN(at.getTime()) ? at.toISOString() : null);
+      });
+      pageToken = page.pageToken;
+    } while (pageToken);
+  } catch (err) {
+    // A failed Auth sweep must not take the whole user list down - the column
+    // simply renders empty.
+    console.error("listUsers failed while resolving last activity:", err);
+  }
+
   const users = snapshot.docs.map((doc) => {
     const data = doc.data() as Record<string, unknown>;
     const typeId = roleTypeFromUserDoc(data) ?? "";
@@ -502,6 +527,7 @@ authRouter.get("/users", requireAuth, requirePermission("users.view"), async (_r
       scheduledDeactivationAt: schedAt ? schedAt.toDate().toISOString() : null,
       roleTypeName: typeId ? typeNames.get(typeId) ?? typeId : null,
       employeeName: employeeId ? empNames.get(employeeId) ?? null : null,
+      lastActiveAt: lastActive.get(doc.id) ?? null,
     };
   });
   res.json(users);
