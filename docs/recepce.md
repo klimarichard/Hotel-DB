@@ -635,8 +635,105 @@ protocol has no realtime channel. Two mechanisms cover this:
    `document.visibilityState === "visible"`, and on `window` focus /
    `visibilitychange`. If the server's `updatedAt` has moved and the user has **no
    unsaved edits**, it silently reloads (`applyDoc`). If the user **has** unsaved
-   edits, it raises a non-destructive banner (`externalChange` state) offering to
-   reload — never auto-discards local work.
+   edits, it raises the conflict dialog below — never auto-discards local work.
+
+### Conflict resolution — blocking dialog + three-way merge (v5.11.8)
+
+Until v5.11.8 a rejected save raised an inline banner and nothing else. Two
+properties of that made it lose money silently, and a real incident (Amigo &
+Alqush, 2026-08-18) turned on both at once:
+
+- the banner rendered **above the cash tables**, so a user scrolled down to the
+  trezor rows never saw it; and
+- a raised conflict **pauses autosave**, so every keystroke after that point was
+  discarded too.
+
+A rejected write leaves nothing in Firestore by construction — no document, no
+`history` entry, no `auditLog` row — so the only surviving evidence was a lone
+`409` in the Cloud Functions log. The corrected trezor count (−14 000 Kč) was
+simply gone, and the receptionist had no way to know.
+
+**`frontend/src/pages/recepce/ConflictModal.tsx`** replaces the banner with a
+modal that has no ✕ and no backdrop dismissal (the project's modal rule, plus
+"an unresolved conflict must not be leavable"). The only exits are *Sloučit a
+uložit* and *Zahodit mé změny*.
+
+**`frontend/src/lib/handoverMerge.ts`** is the pure, React-free merge engine.
+The important design point is that it is a **three-way** merge, not
+mine-vs-theirs:
+
+| side | source |
+|---|---|
+| `base` | `savedPayloadRef.current` — the exact version the local edits were made against |
+| `mine` | the current UI state |
+| `theirs` | the 409 body's `current` (or the fresh GET, for the poll path) |
+
+Without the common ancestor, "trezor 500 Kč is 20 here and 30 there" is
+unresolvable — there is no way to tell which side moved, and for cash counts
+guessing invents or destroys money. With it, every element falls into one of
+four buckets: unchanged, only-mine (apply), only-theirs (keep), or both (ask).
+Granularity mirrors the server's own `diffHandover`: one item per cash
+denomination, per sm count, and per note/účet field, so two people editing
+different rows never collide at all.
+
+Defaults are deliberately asymmetric: a non-conflicting change is **pre-ticked**
+(pure gain), a conflicting one is **not** — where two people counted the same
+drawer, the newer figure on the server stands unless the user deliberately ticks
+their own. `applyMerge()` then lays the ticked items over `theirs` and PUTs that
+against the server's `updatedAt`; a *second* 409 rebuilds the plan against the
+newer version rather than erroring, so no edit is lost to a race.
+
+Four modes: `conflict` (409 / poll), `draft` (recovered buffer), `deleted`
+(nothing to merge into — read-only list plus a clipboard button), and `frozen`
+(the stored version got signed and the caller is not admin, so the server would
+refuse the merge; say so up front rather than failing on the button).
+
+Row identity is the note/účet `id`. Every row this app writes carries one and
+the server preserves it, but the server does **not** mint ids for rows that
+arrive without one — such a row would diff as delete-plus-add. There are none in
+production; the failure mode is a noisy plan, not lost money.
+
+### Keeping the pending payload alive
+
+The 409 was only the loudest way edits evaporated. Everything below now holds
+them:
+
+- **Draft buffer** — `frontend/src/lib/handoverDraft.ts` mirrors unsaved edits
+  into `localStorage` (`hotel_hr_handover_draft_<uid>_<hotel>_<docId>`), storing
+  `base` alongside the payload so the merge is still possible after a reload.
+  Scoped to the uid **and** stamped with a capture time because reception runs on
+  shared terminal accounts, and swept after a 24 h TTL so a stale count can never
+  be re-applied over a fresh one days later. This is the one client write that
+  deliberately bypasses the `/api/*` boundary: it is not user state, it is an
+  *unsent write*, and sending it to the server is the very thing that failed.
+  Disabled while `tourDemo.active` (the tour mounts this same editor).
+- **`beforeunload`** while dirty or conflicted. It renders browser chrome, which
+  the no-native-dialogs rule normally forbids — there is no alternative, since
+  `ConfirmModal` cannot intercept a tab close.
+- **Leave guard on the shift toolbar.** `ProtocolEditor` is keyed per shift, so
+  changing date/směna **remounts** it. It now publishes a
+  `registerLeaveGuard(async () => boolean)` up to `HandoverTab.go()`, which
+  flushes first and refuses to move when that raised a conflict.
+- **Last-gasp flush on unmount** (Recepce tab switch, hotel switch, leaving the
+  page): the request outlives the component, so the edits still land; if it
+  conflicts instead, the draft survives and the merge is offered next open.
+- **Retry timer for failed saves.** A non-409 failure (network blip, expired
+  token) used to be retried *only* if the user typed again — stopping right after
+  one lost the lot. Now retried every 10s while the error stands. Both the timer
+  and the unmount flush go through a `saveRef`, or they would push a stale
+  payload over a newer one.
+
+⚠️ **`applyDoc()` was the quieter killer.** Undo/redo, `sm-transfer`,
+`sm-trezor/clear`, `wata`, the odvod dialog and `settle-eur` all end in
+`applyDoc()`, which replaces local state wholesale — an unsaved edit vanished
+with no dialog, no error and *no history entry*, which is quieter than the 409
+path ever was. All of them now call `ensureSaved()` first and abort if it raised
+a conflict. **Any new action that re-seeds the editor from the server must do the
+same.**
+
+Not done: blocking react-router navigation out of Recepce entirely. That needs
+`useBlocker`, which requires migrating `main.tsx` from `BrowserRouter` to a data
+router. The draft re-offers the merge on the next open, so nothing is lost.
 
 Every write endpoint that returns the saved document (`PUT` content, sign,
 revert, sm-transfer, sm-trezor-clear, wata, undo, redo) returns the **full

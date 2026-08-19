@@ -9,6 +9,16 @@ import type { Hotel } from "@/lib/hotels";
 import { verifyCredential } from "@/lib/secondaryAuth";
 import SignModal, { type Signer } from "@/components/SignModal";
 import OdvodyModal from "./OdvodyModal";
+import ConflictModal, { type ConflictMode } from "./ConflictModal";
+import {
+  applyMerge,
+  buildMergePlan,
+  type HandoverPayload,
+  type MergeItem,
+  type MergePlan,
+} from "@/lib/handoverMerge";
+import { clearDraft, draftStamp, readDraft, saveDraft } from "@/lib/handoverDraft";
+import { tourDemo } from "@/lib/tours/demoData";
 import styles from "./HandoverTab.module.css";
 
 type ShiftType = "den" | "noc";
@@ -274,6 +284,44 @@ function toPayload(
   };
 }
 
+/** The same four content fields, read off a stored document. Used as the
+ *  "theirs" side of the three-way merge (see lib/handoverMerge.ts). */
+function payloadOf(doc: Handover): HandoverPayload {
+  return toPayload(
+    coerceNotes(doc.notes),
+    {
+      kasaCZK: doc.cashCounts?.kasaCZK ?? {},
+      trezorCZK: doc.cashCounts?.trezorCZK ?? {},
+      kasaEUR: doc.cashCounts?.kasaEUR ?? {},
+      trezorEUR: doc.cashCounts?.trezorEUR ?? {},
+    },
+    coerceAccounts(doc.accounts),
+    triple(doc.smCounts)
+  );
+}
+
+/**
+ * An unresolved clash between local edits and the stored document — raised by a
+ * rejected save (409), by the change-detection poll finding someone else's write
+ * while we are dirty, or by recovering a draft left behind by a previous session.
+ *
+ * `base` is the common ancestor the local edits are derived from. It is the whole
+ * reason a merge is possible: without it, "trezor 500 Kč is 20 here and 30 there"
+ * cannot be resolved, because there is no way to tell which side moved.
+ */
+interface ConflictState {
+  mode: ConflictMode;
+  /** The stored version; null when the protokol was deleted meanwhile. */
+  server: Handover | null;
+  base: HandoverPayload;
+  theirs: HandoverPayload;
+  items: MergeItem[];
+  theirItems: MergeItem[];
+  otherUser: string | null;
+  /** Draft mode: when the unsaved changes were captured. */
+  stampedAt?: string;
+}
+
 // ── Inline row-action icons (feather-style) ──────────────────────────────────
 function PencilIcon() {
   return (
@@ -452,8 +500,27 @@ export default function HandoverTab({ hotel }: { hotel: Hotel }) {
   // A doc handed over from createNextShift so the target editor renders it
   // directly (avoids a read-after-write GET of the just-created next-shift doc).
   const [seeded, setSeeded] = useState<Handover | null>(null);
+  const [navBusy, setNavBusy] = useState(false);
 
-  function go(date: string, shift: ShiftType, doc: Handover | null = null) {
+  /**
+   * The editor's veto on leaving the protokol currently on screen. Switching
+   * shift REMOUNTS the editor (it is keyed per shift), so anything unsaved would
+   * go with it — the guard flushes first and refuses the move when the flush
+   * raised a conflict, leaving the dialog up on the protokol it belongs to.
+   */
+  const leaveGuardRef = useRef<(() => Promise<boolean>) | null>(null);
+
+  async function go(date: string, shift: ShiftType, doc: Handover | null = null) {
+    if (navBusy) return;
+    const guard = leaveGuardRef.current;
+    if (guard) {
+      setNavBusy(true);
+      try {
+        if (!(await guard())) return;
+      } finally {
+        setNavBusy(false);
+      }
+    }
     setShiftDate(date);
     setShiftType(shift);
     setSeeded(doc);
@@ -470,9 +537,10 @@ export default function HandoverTab({ hotel }: { hotel: Hotel }) {
           <Button
             variant="secondary"
             size="sm"
+            disabled={navBusy}
             onClick={() => {
               const p = previousShift(shiftDate, shiftType);
-              go(p.date, p.shift);
+              void go(p.date, p.shift);
             }}
             title="Předchozí směna"
           >
@@ -483,7 +551,8 @@ export default function HandoverTab({ hotel }: { hotel: Hotel }) {
             type="date"
             className={styles.dateInput}
             value={shiftDate}
-            onChange={(e) => e.target.value && go(e.target.value, shiftType)}
+            disabled={navBusy}
+            onChange={(e) => e.target.value && void go(e.target.value, shiftType)}
           />
           <span className={styles.toolbarLabel}>Směna</span>
           <div className={styles.shiftGroup}>
@@ -492,7 +561,8 @@ export default function HandoverTab({ hotel }: { hotel: Hotel }) {
                 key={s}
                 type="button"
                 className={shiftType === s ? styles.shiftBtnActive : styles.shiftBtn}
-                onClick={() => go(shiftDate, s)}
+                disabled={navBusy}
+                onClick={() => void go(shiftDate, s)}
               >
                 {SHIFT_LABELS[s]}
               </button>
@@ -501,9 +571,10 @@ export default function HandoverTab({ hotel }: { hotel: Hotel }) {
           <Button
             variant="secondary"
             size="sm"
+            disabled={navBusy}
             onClick={() => {
               const n = nextShift(shiftDate, shiftType);
-              go(n.date, n.shift);
+              void go(n.date, n.shift);
             }}
             title="Následující směna"
           >
@@ -520,6 +591,9 @@ export default function HandoverTab({ hotel }: { hotel: Hotel }) {
         shiftType={shiftType}
         initialDoc={initialDoc}
         onNavigate={go}
+        registerLeaveGuard={(fn) => {
+          leaveGuardRef.current = fn;
+        }}
       />
     </div>
   );
@@ -536,6 +610,7 @@ function ProtocolEditor({
   shiftType,
   initialDoc,
   onNavigate,
+  registerLeaveGuard,
 }: {
   hotel: Hotel;
   shiftDate: string;
@@ -544,8 +619,15 @@ function ProtocolEditor({
    *  read-after-write GET of a just-created next-shift duplicate). */
   initialDoc: Handover | null;
   onNavigate: (date: string, shift: ShiftType, doc?: Handover | null) => void;
+  /** Publishes this editor's "may I be unmounted?" check to the shift toolbar. */
+  registerLeaveGuard: (fn: (() => Promise<boolean>) | null) => void;
 }) {
-  const { can } = useAuth();
+  const { can, user } = useAuth();
+  // The guided tour mounts this same editor against demo fixtures. Drafts are
+  // scoped to a real (hotel, shift) pair, so leaving them on during a tour would
+  // let mock data be buffered as if it were real unsaved work — and would pop the
+  // conflict dialog over the tour. An empty uid disables the buffer entirely.
+  const uid = tourDemo.active ? "" : (user?.uid ?? "");
   const canCreate = can(hotel.protokolCreatePerm);
   const canDelete = can(hotel.protokolDeletePerm);
   const canManage = can(hotel.protokolManagePerm);
@@ -619,10 +701,12 @@ function ProtocolEditor({
    * the chain can never deadlock.
    */
   const [prevHandedOver, setPrevHandedOver] = useState<boolean | null>(null);
-  // Set when another user has changed (or deleted) this doc since we loaded it and
-  // we have unsaved edits: a non-destructive banner lets the user reload. `current`
-  // is the server's version (null = it was deleted). While set, autosave is paused.
-  const [externalChange, setExternalChange] = useState<{ current: Handover | null } | null>(null);
+  // An unresolved clash with the stored document (see ConflictState). While set,
+  // autosave is paused and the blocking ConflictModal is up: the only ways out
+  // are merging the pending changes into the server's version or discarding them.
+  const [conflict, setConflict] = useState<ConflictState | null>(null);
+  const [conflictBusy, setConflictBusy] = useState(false);
+  const [conflictError, setConflictError] = useState<string | null>(null);
 
   const predal = loaded?.predal ?? null;
   const prevzal = loaded?.prevzal ?? null;
@@ -647,7 +731,10 @@ function ProtocolEditor({
   // without re-subscribing its interval/listeners on every keystroke.
   const loadedRef = useRef<Handover | null>(null);
   const dirtyRef = useRef(false);
-  const externalRef = useRef<{ current: Handover | null } | null>(null);
+  const conflictRef = useRef<ConflictState | null>(null);
+  // The live payload, so the conflict/leave handlers can read the very latest
+  // edits without being re-created on every keystroke.
+  const currentPayloadRef = useRef<HandoverPayload>(toPayload([], emptyCashCounts(), [], [0, 0, 0]));
 
   /** Seed local state + the saved-baseline from a loaded doc. */
   function applyDoc(data: Handover) {
@@ -715,8 +802,11 @@ function ProtocolEditor({
     dirtyRef.current = dirty;
   }, [dirty]);
   useEffect(() => {
-    externalRef.current = externalChange;
-  }, [externalChange]);
+    conflictRef.current = conflict;
+  }, [conflict]);
+  useEffect(() => {
+    currentPayloadRef.current = currentPayload;
+  }, [currentPayload]);
 
   // Load the signer pool for this shift's month (for the sign dropdown).
   useEffect(() => {
@@ -827,7 +917,7 @@ function ProtocolEditor({
   // Debounced autosave – active once a record exists and while it's not frozen.
   useEffect(() => {
     if (loading || !loaded) return;
-    if (externalChange) return; // paused while an unresolved external-change banner is up
+    if (conflict) return; // paused until the conflict dialog is resolved
     if (!canEdit) return; // frozen after Předat
     if (!dirty) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -836,7 +926,80 @@ function ProtocolEditor({
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [notes, cashCounts, accounts, smCounts, loading, loaded, dirty, canEdit, externalChange]);
+  }, [notes, cashCounts, accounts, smCounts, loading, loaded, dirty, canEdit, conflict]);
+
+  // ── Draft buffer ───────────────────────────────────────────────────────────
+  // Mirror every unsaved edit into localStorage. Autosave normally clears this
+  // within a second; it earns its keep only when the save CANNOT go through — a
+  // paused-for-conflict editor, a dropped connection, an expired session, a
+  // closed tab. Those are exactly the cases where the edits used to die with the
+  // page. See lib/handoverDraft.ts for why this one write bypasses /api/*.
+  useEffect(() => {
+    if (loading || !loaded || !uid) return;
+    if (dirty) {
+      saveDraft(uid, hotel.slug, docId, {
+        base: JSON.parse(savedPayloadRef.current) as HandoverPayload,
+        payload: currentPayload,
+        baseUpdatedAt: tsMillis(loaded.updatedAt),
+        conflicted: !!conflict,
+      });
+    } else if (!conflict) {
+      clearDraft(uid, hotel.slug, docId);
+    }
+  }, [currentPayload, dirty, conflict, loading, loaded, uid, hotel.slug, docId]);
+
+  // Last line of defence for a tab close / hard reload / navigating away by URL.
+  // The draft above means nothing is actually lost, but the prompt keeps the user
+  // from walking away believing a paused autosave had gone through.
+  useEffect(() => {
+    function onBeforeUnload(e: BeforeUnloadEvent) {
+      if (!dirtyRef.current && !conflictRef.current) return;
+      e.preventDefault();
+      e.returnValue = "";
+    }
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, []);
+
+  // `save` closes over this render's state, so anything that fires it later (a
+  // retry timer, the unmount flush) must go through a ref or it would push a
+  // stale payload over a newer one.
+  const saveRef = useRef(save);
+  useEffect(() => {
+    saveRef.current = save;
+  });
+
+  // A failed save is otherwise retried only when the payload changes again —
+  // stop typing right after a network blip or an expired token and it never
+  // lands at all. Keep trying quietly while the error stands.
+  useEffect(() => {
+    if (!autosaveError || !dirty || conflict || !canEdit || loading || !loaded) return;
+    const iv = setInterval(() => void saveRef.current(), 10000);
+    return () => clearInterval(iv);
+  }, [autosaveError, dirty, conflict, canEdit, loading, loaded]);
+
+  // Last-gasp flush when the editor is unmounted (Recepce tab switch, hotel
+  // switch, leaving the page). The request outlives the component, so the edits
+  // still land — and if it conflicts instead, the draft stays in localStorage and
+  // the merge is offered the next time this protokol is opened.
+  useEffect(
+    () => () => {
+      if (!dirtyRef.current || conflictRef.current) return;
+      void saveRef.current();
+    },
+    []
+  );
+
+  // Publish the leave check to the shift toolbar (see `go` in HandoverTab).
+  // Re-registered every render so the closure it hands up is never stale.
+  useEffect(() => {
+    registerLeaveGuard(async () => {
+      if (conflictRef.current) return false; // resolve the dialog first
+      if (!dirtyRef.current) return true;
+      return ensureSaved();
+    });
+    return () => registerLeaveGuard(null);
+  });
 
   // ── Edit sessions (history coalescing) ─────────────────────────────────────
   // One token per focus-to-blur pass over one input. The server folds successive
@@ -865,14 +1028,66 @@ function ProtocolEditor({
       clearTimeout(saveTimerRef.current);
       saveTimerRef.current = null;
     }
-    if (dirtyRef.current && canEdit && !externalRef.current) void save();
+    if (dirtyRef.current && canEdit && !conflictRef.current) void save();
   }
 
-  async function save(): Promise<boolean> {
-    if (isSavingRef.current) return false;
-    isSavingRef.current = true;
-    setAutosaving(true);
-    const payload = toPayload(notes, cashCounts, accounts, smCounts);
+  /**
+   * Build the decision list for a clash and raise the blocking dialog.
+   *
+   * `base` is read from the saved baseline (the exact version the local edits
+   * were made against) unless a recovered draft supplies its own. Without that
+   * ancestor the dialog could only offer "yours or theirs" wholesale; with it,
+   * every cash denomination, sm count and row field is decided on its own and
+   * disjoint edits merge with no question asked.
+   */
+  function raiseConflict(
+    server: Handover | null,
+    opts?: { mode?: ConflictMode; base?: HandoverPayload; mine?: HandoverPayload; stampedAt?: string }
+  ) {
+    const base = opts?.base ?? (JSON.parse(savedPayloadRef.current) as HandoverPayload);
+    const mine = opts?.mine ?? currentPayloadRef.current;
+    const theirs = server ? payloadOf(server) : base;
+    const plan: MergePlan = server
+      ? buildMergePlan(base, mine, theirs)
+      : // Deleted server-side: there is nothing to merge INTO, so list every
+        // pending change as read-only so the user can at least copy it out.
+        buildMergePlan(base, mine, base);
+
+    if (server && plan.items.length === 0) {
+      // Nothing of ours is missing from the stored version — the other user's
+      // write did not collide with anything we hold. Adopt it silently rather
+      // than blocking the shift with a dialog that has no decision in it.
+      adoptServerVersion(server);
+      return;
+    }
+
+    // A signed protokol is frozen for everyone but an admin, so a merge would be
+    // refused by the server. Say so up front instead of failing on the button.
+    const frozenServer = !!server && !!(server.predal || server.prevzal) && !isAdmin;
+    const mode: ConflictMode = opts?.mode ?? (!server ? "deleted" : frozenServer ? "frozen" : "conflict");
+
+    setConflictError(null);
+    setConflict({
+      mode,
+      server,
+      base,
+      theirs,
+      items: plan.items,
+      theirItems: plan.theirItems,
+      otherUser: server?.predal?.displayName ?? server?.prevzal?.displayName ?? null,
+      stampedAt: opts?.stampedAt,
+    });
+  }
+
+  /**
+   * PUT one payload. Split out of `save()` so the merge can push a payload that
+   * is not (yet) in React state, against the base version it was merged onto.
+   */
+  async function pushPayload(
+    payload: HandoverPayload,
+    baseUpdatedAt: number | null,
+    editSession: string | null
+  ): Promise<{ ok: true; saved: Handover } | { ok: false; conflictWith?: Handover | null; error?: string }> {
     try {
       const saved = await api.put<Handover>(`/handovers/${hotel.slug}`, {
         shiftDate,
@@ -881,27 +1096,45 @@ function ProtocolEditor({
         // Optimistic-concurrency token: the version we currently hold. The server
         // rejects the save (409) if the stored doc has moved since, rather than
         // silently overwriting a colleague's edit.
-        baseUpdatedAt: tsMillis(loaded?.updatedAt),
-        editSession: editRef.current?.id ?? null,
+        baseUpdatedAt,
+        editSession,
       });
-      setLoaded(saved);
-      savedPayloadRef.current = JSON.stringify(payload);
-      setAutosaveError(null);
-      // A sealed session has now reached the server, stragglers included. Drop the
-      // token so a later, unrelated single-change save can't inherit it and fold
-      // into the entry this session produced. A failed save keeps it, to retry.
-      if (editRef.current?.closed) editRef.current = null;
-      return true;
+      return { ok: true, saved };
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
-        // Another user changed (or deleted) the doc since we loaded it. Don't
-        // clobber — surface the server's version and let the user reload.
         const body = err.body as { current?: Handover | null } | undefined;
-        setExternalChange({ current: body?.current ?? null });
+        return { ok: false, conflictWith: body?.current ?? null };
+      }
+      return { ok: false, error: err instanceof Error ? err.message : "Chyba ukládání." };
+    }
+  }
+
+  async function save(): Promise<boolean> {
+    if (isSavingRef.current) return false;
+    isSavingRef.current = true;
+    setAutosaving(true);
+    const payload = toPayload(notes, cashCounts, accounts, smCounts);
+    try {
+      const res = await pushPayload(payload, tsMillis(loaded?.updatedAt), editRef.current?.id ?? null);
+      if (res.ok) {
+        setLoaded(res.saved);
+        savedPayloadRef.current = JSON.stringify(payload);
         setAutosaveError(null);
+        if (uid) clearDraft(uid, hotel.slug, docId);
+        // A sealed session has now reached the server, stragglers included. Drop the
+        // token so a later, unrelated single-change save can't inherit it and fold
+        // into the entry this session produced. A failed save keeps it, to retry.
+        if (editRef.current?.closed) editRef.current = null;
+        return true;
+      }
+      if (res.conflictWith !== undefined) {
+        // Another user changed (or deleted) the doc since we loaded it. Don't
+        // clobber and don't drop the edits — put the decision to the user.
+        setAutosaveError(null);
+        raiseConflict(res.conflictWith);
         return false;
       }
-      setAutosaveError(err instanceof Error ? err.message : "Chyba ukládání.");
+      setAutosaveError(res.error ?? "Chyba ukládání.");
       return false;
     } finally {
       isSavingRef.current = false;
@@ -909,11 +1142,10 @@ function ProtocolEditor({
     }
   }
 
-  /** Discard local edits and adopt the server's current version (conflict banner). */
-  function reloadFromExternal() {
-    const cur = externalChange?.current ?? null;
-    if (cur) {
-      applyDoc(cur);
+  /** Adopt the server's version wholesale, dropping every pending local edit. */
+  function adoptServerVersion(server: Handover | null) {
+    if (server) {
+      applyDoc(server);
     } else {
       // Deleted on the server → drop back to the empty state (create button).
       setLoaded(null);
@@ -925,18 +1157,74 @@ function ProtocolEditor({
       setWata(0);
       savedPayloadRef.current = JSON.stringify(toPayload([], emptyCashCounts(), [], [0, 0, 0]));
     }
-    setExternalChange(null);
+    if (uid) clearDraft(uid, hotel.slug, docId);
+    setConflict(null);
+    setConflictError(null);
     setAutosaveError(null);
+  }
+
+  /** Conflict dialog: tick / untick one pending change. */
+  function toggleMergeItem(key: string, apply: boolean) {
+    setConflict((c) =>
+      c ? { ...c, items: c.items.map((i) => (i.key === key ? { ...i, apply } : i)) } : c
+    );
+  }
+
+  function toggleAllMergeItems(apply: boolean) {
+    setConflict((c) =>
+      c ? { ...c, items: c.items.map((i) => (i.applicable ? { ...i, apply } : i)) } : c
+    );
+  }
+
+  /**
+   * Conflict dialog: lay the ticked changes on top of the server's version and
+   * save that. A second 409 (someone saved again while the dialog was open) is
+   * not an error — the plan is simply rebuilt against the newer version and the
+   * dialog stays up, so no edit is ever lost to a race.
+   */
+  async function mergeAndSave() {
+    const c = conflictRef.current;
+    if (!c || !c.server) return;
+    setConflictBusy(true);
+    setConflictError(null);
+    try {
+      const merged = applyMerge(c.theirs, c.items);
+      const res = await pushPayload(merged, tsMillis(c.server.updatedAt), null);
+      if (res.ok) {
+        applyDoc(res.saved);
+        if (uid) clearDraft(uid, hotel.slug, docId);
+        setConflict(null);
+        setAutosaveError(null);
+        return;
+      }
+      if (res.conflictWith !== undefined) {
+        const carried = c.items.filter((i) => i.apply && i.applicable);
+        raiseConflict(res.conflictWith, {
+          base: c.theirs,
+          // Re-diff what the user actually chose to keep, against the version it
+          // was going to be written onto.
+          mine: applyMerge(c.theirs, carried),
+        });
+        // After raiseConflict, which resets the error slot.
+        setConflictError(
+          "Protokol se mezitím změnil znovu. Přehled je aktualizovaný – zkontrolujte ho prosím a potvrďte."
+        );
+        return;
+      }
+      setConflictError(res.error ?? "Uložení se nezdařilo.");
+    } finally {
+      setConflictBusy(false);
+    }
   }
 
   // Detect another user's edits. The doc has no realtime channel (firestore.rules
   // block direct client reads, so an onSnapshot is impossible), so we poll while
   // the tab is visible + refetch on focus. If the stored doc has moved: reload
-  // silently when we have no unsaved edits, else raise the non-destructive banner.
+  // silently when we have no unsaved edits, else raise the conflict dialog.
   // Reads live values via refs so the interval/listeners subscribe once per shift.
   useEffect(() => {
     async function check() {
-      if (isSavingRef.current || externalRef.current) return;
+      if (isSavingRef.current || conflictRef.current) return;
       if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       if (!loadedRef.current) return;
       try {
@@ -944,11 +1232,11 @@ function ProtocolEditor({
         const serverMs = tsMillis(server.updatedAt);
         const baseMs = tsMillis(loadedRef.current?.updatedAt);
         if (serverMs === null || baseMs === null || serverMs === baseMs) return;
-        if (dirtyRef.current) setExternalChange({ current: server });
+        if (dirtyRef.current) raiseConflict(server);
         else applyDoc(server);
       } catch (e) {
         if (e instanceof ApiError && e.status === 404) {
-          if (dirtyRef.current) setExternalChange({ current: null });
+          if (dirtyRef.current) raiseConflict(null);
           else {
             setLoaded(null);
             setNotes([]);
@@ -1005,9 +1293,62 @@ function ProtocolEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loaded, hotel.slug, docId]);
 
+  // Recover a draft left behind by a previous session. Runs once per protokol,
+  // as soon as its stored version is on screen: anything still buffered means a
+  // save never completed, so the same merge decision is put to the user instead
+  // of letting the browser quietly hold the only copy of it.
+  const draftCheckedRef = useRef(false);
+  useEffect(() => {
+    if (draftCheckedRef.current || loading || !loaded || !uid) return;
+    draftCheckedRef.current = true;
+    const draft = readDraft(uid, hotel.slug, docId);
+    if (!draft) return;
+    const plan = buildMergePlan(draft.base, draft.payload, payloadOf(loaded));
+    if (plan.items.length === 0) {
+      // Everything in the draft is already on the server (a save did land, we
+      // just never saw the response). Nothing to ask about.
+      clearDraft(uid, hotel.slug, docId);
+      return;
+    }
+    const frozenNow = !!(loaded.predal || loaded.prevzal) && !isAdmin;
+    raiseConflict(loaded, {
+      ...(frozenNow ? {} : { mode: "draft" as ConflictMode }),
+      base: draft.base,
+      mine: draft.payload,
+      stampedAt: draftStamp(draft.savedAt),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, loaded, uid]);
+
+  /**
+   * Flush pending edits before an action that re-seeds the editor from the
+   * server. Undo/redo, the sm transfer, the sm-trezor clear, wata and the odvod
+   * all end in `applyDoc()`, which replaces local state wholesale — so an
+   * unflushed edit would disappear with no dialog, no error and no history
+   * entry. Returns false when the flush did not go through (a conflict dialog is
+   * now up instead), and callers abort rather than pressing on.
+   */
+  async function ensureSaved(): Promise<boolean> {
+    if (conflictRef.current) return false;
+    if (!canEdit) return true;
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    if (editRef.current) editRef.current.closed = true;
+    // An autosave may already be in flight — wait for it rather than racing it.
+    for (let i = 0; i < 60 && isSavingRef.current; i++) {
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    if (conflictRef.current) return false;
+    if (!dirtyRef.current) return true;
+    return save();
+  }
+
   /** Undo or redo one step on the server, then reseed local state from the result. */
   async function step(dir: "undo" | "redo") {
     if (stepBusy) return;
+    if (!(await ensureSaved())) return;
     setStepBusy(true);
     try {
       const saved = await api.post<Handover & { canUndo: boolean; canRedo: boolean }>(
@@ -1090,12 +1431,14 @@ function ProtocolEditor({
       const base = `/handovers/${hotel.slug}/${docId}/${signAction.slot}`;
       if (signAction.mode === "sign") {
         // Persist any pending edits BEFORE freezing the content. If that save hits
-        // a conflict (409), the external-change banner is raised — abort the sign
-        // rather than stamping over a version we no longer hold.
+        // a conflict (409), the conflict dialog is raised — abort the sign rather
+        // than stamping over a version we no longer hold, and close this dialog so
+        // the conflict is not left sitting behind a second modal.
         if (dirty && !isSavingRef.current) {
           const ok = await save();
           if (!ok) {
             setSignBusy(false);
+            if (conflictRef.current) setSignAction(null);
             return;
           }
         }
@@ -1116,6 +1459,7 @@ function ProtocolEditor({
   /** After Převzít: create the next shift as an exact duplicate (cash/účty/notes,
    *  no signatures) unless it already exists, then navigate to it. */
   async function createNextShift() {
+    if (!(await ensureSaved())) return;
     const next = nextShift(shiftDate, shiftType);
     const nextId = `${next.date}_${next.shift}`;
     try {
@@ -1199,6 +1543,10 @@ function ProtocolEditor({
 
   /** MOVE a portion of the sm counts into sm trezor (sm.manage only). */
   async function transferSm(transfer: [number, number, number]) {
+    if (!(await ensureSaved())) {
+      setSmModalOpen(false);
+      return;
+    }
     setSmBusy(true);
     setSmError(null);
     try {
@@ -1223,6 +1571,10 @@ function ProtocolEditor({
     });
   }
   async function clearSmTrezor() {
+    if (!(await ensureSaved())) {
+      setConfirm(null);
+      return;
+    }
     try {
       const saved = await api.post<Handover>(`/handovers/${hotel.slug}/${docId}/sm-trezor/clear`, {});
       applyDoc(saved);
@@ -1240,6 +1592,10 @@ function ProtocolEditor({
 
   /** Add (delta>0) or subtract (delta<0) from wata (protokol.manage only). */
   async function applyWata(delta: number) {
+    if (!(await ensureSaved())) {
+      setWataModalOpen(false);
+      return;
+    }
     setSmBusy(true);
     setSmError(null);
     try {
@@ -1294,6 +1650,10 @@ function ProtocolEditor({
 
   async function settleOdvod() {
     if (odvodBusy) return;
+    if (!(await ensureSaved())) {
+      setConfirm(null);
+      return;
+    }
     // Close the confirmation first: it stays up for the whole round-trip
     // otherwise, and its own button would still be live for a second click.
     setConfirm(null);
@@ -1569,15 +1929,23 @@ function ProtocolEditor({
           Protokol je podepsán – obsah může upravit pouze administrátor, krok zpět/vpřed je uzamčen.
         </div>
       )}
-      {externalChange && (
-        <div className={styles.frozenNotice}>
-          {externalChange.current === null
-            ? "Tento protokol byl mezitím smazán jiným uživatelem. Vaše neuložené změny nebyly uloženy."
-            : "Tento protokol byl mezitím upraven jiným uživatelem. Vaše neuložené změny nebyly uloženy."}{" "}
-          <Button variant="secondary" size="sm" onClick={reloadFromExternal}>
-            {externalChange.current === null ? "Zavřít" : "Načíst aktuální verzi"}
-          </Button>
-        </div>
+      {/* Conflicts are raised as a blocking dialog, NOT an inline notice: the old
+          banner rendered here, above the cash tables, so anyone scrolled down to
+          the trezor never saw it while their autosave sat silently paused. */}
+      {conflict && (
+        <ConflictModal
+          mode={conflict.mode}
+          stampedAt={conflict.stampedAt}
+          otherUser={conflict.otherUser}
+          items={conflict.items}
+          theirItems={conflict.theirItems}
+          busy={conflictBusy}
+          error={conflictError}
+          onToggle={toggleMergeItem}
+          onToggleAll={toggleAllMergeItems}
+          onMerge={() => void mergeAndSave()}
+          onDiscard={() => adoptServerVersion(conflict.server)}
+        />
       )}
 
       {historyOpen && (
@@ -1709,7 +2077,9 @@ function ProtocolEditor({
                   <Button
                     variant="secondary"
                     size="sm"
-                    onClick={() => setOdvodOpen(true)}
+                    onClick={() => void (async () => {
+                      if (await ensureSaved()) setOdvodOpen(true);
+                    })()}
                     title="Připravit měsíční odvod hotovosti"
                     data-tour="odvody-open"
                   >
