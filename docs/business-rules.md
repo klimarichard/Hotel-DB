@@ -93,9 +93,9 @@ Pole **Proplaceno** v evidenci dovolené (výplata místo čerpání, typicky p�
 
 ### Proplaceno se v rozhraní zobrazí až při ukončení poměru
 
-Pole samotné je editovatelné pro každého zaměstnance přes API (viz pravidlo výše), ale v rozhraní se řádek **Proplaceno** zobrazí teprve, když je zaměstnanec **ukončený**, nebo když už má hodnotu vyplněnou z dřívějška – u aktivního zaměstnance bez hodnoty se řádek nezobrazuje vůbec. Toto je jen doporučení, kdy se pole má vyplňovat (při odchodu), ne technické omezení.
+Pole samotné je editovatelné pro každého zaměstnance přes API (viz pravidlo výše), ale v rozhraní se sloupec **Proplaceno** zobrazí teprve, když je zaměstnanec **ukončený**, nebo když už má hodnotu vyplněnou z dřívějška – u aktivního zaměstnance bez hodnoty se sloupec nezobrazuje vůbec. Toto je jen doporučení, kdy se pole má vyplňovat (při odchodu), ne technické omezení.
 
-> 🖥️ Jen rozhraní. Zdroj: `frontend/src/components/VacationLedgerSection.tsx:164` (`showPaidOut = isTerminated || paidOut != null`); prop `isTerminated` nastavuje `frontend/src/pages/EmployeeDetailPage.tsx:2338` podle `employee?.status === "terminated"`.
+> 🖥️ Jen rozhraní. Zdroj: `frontend/src/components/VacationLedgerSection.tsx:146` (`showPaidOut = isTerminated || paidOut != null`); prop `isTerminated` nastavuje `frontend/src/pages/EmployeeDetailPage.tsx:2338` podle `employee?.status === "terminated"`.
 
 ### Nový rok dostane nárok na dovolenou automaticky 1. ledna
 
