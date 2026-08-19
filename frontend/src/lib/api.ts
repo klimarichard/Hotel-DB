@@ -129,7 +129,12 @@ export interface UserProfile {
   /** Surname-first name of the linked employee (resolved server-side; null if none). */
   employeeName?: string | null;
   createdAt: unknown;
-  lastLogin: unknown;
+  /**
+   * Last time the user's ID token was refreshed, i.e. when they last actually
+   * used the app (ISO instant, resolved server-side from Firebase Auth).
+   * null when Auth has no record - typically an account that never signed in.
+   */
+  lastActiveAt?: string | null;
   /** Assigned user type (defaults to `role` when unset). */
   roleType?: string | null;
   /** Czech display name of the user's type (resolved server-side from roleType). */

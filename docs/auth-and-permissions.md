@@ -351,7 +351,7 @@ When adding a new UI section, check whether it is a subset of something a higher
 | `POST /api/auth/create-user` | Create a new user account | `users.manage`; if `employeeId` is supplied in the body, also requires `users.linkEmployee` (or `system.admin`) — a `users.manage` holder without `users.linkEmployee` receives 403 when they include `employeeId` (v3.2.1) |
 | `PATCH /api/auth/users/:uid/employee` | Link or unlink an employee record to a user | `users.linkEmployee`; body `{ employeeId: string \| null }` |
 | `PATCH /api/auth/users/:uid` | Edit a user's name/email and/or their **Recepce default hotel** | `users.manage`; body `{ name?, email?, recepceDefaultHotel? }` — `recepceDefaultHotel` is absent-vs-`null` sensitive (absent = leave alone, `null` = clear); a non-null value is validated against the **target** user's own effective permissions (`resolveEffectivePermissions`), 400 if they can't see that hotel; audit-logged |
-| `GET /api/auth/users` | List all users | `users.view`; each entry includes `roleTypeName` and `employeeName` (see below) |
+| `GET /api/auth/users` | List all users | `users.view`; each entry includes `roleTypeName`, `employeeName` and `lastActiveAt` (see below) |
 | `GET /api/auth/me` | Returns the resolved `permissions` array (plus the user profile, including `roleTypeName`, **`sharedTerminal`** — whether the caller's type is a shared terminal, read from the roleType doc; drives the shift-request "who is really requesting?" picker — and **`noSelfLogout`** — whether the caller's type can't sign itself out; read live from the same roleType doc, never cached, see "No-self-logout release" above) | authenticated |
 | `GET /api/auth/logout-authorizers` | Pool of accounts eligible to authorize a release (`system.logout.authorize` or `system.admin` holders), as `[{uid,name,email,label}]` | `noSelfLogout`-type callers only (403 for everyone else); flag read live |
 | `POST /api/auth/logout-authorize` | Body `{ idToken }`; verifies the password-proven token, requires `system.logout.authorize`/`system.admin` on the **authorizer**, audit-logs `logoutAuthorizedBy` on the terminal's `users/{uid}` | `requireAuth` + in-handler check against the decoded token's own claims (not the caller's) |
@@ -361,15 +361,28 @@ When adding a new UI section, check whether it is a subset of something a higher
 
 ### `GET /api/auth/users` — resolved display names
 
-The user-list endpoint returns each user with two server-resolved display fields (in addition to the raw `roleType`/`employeeId` values):
+The user-list endpoint returns each user with several server-resolved display fields (in addition to the raw `roleType`/`employeeId` values):
 
 - **`roleTypeName`** — the Czech display name of the user's type, resolved from `roleTypes/{id}.name`. Falls back to the raw type id if the doc is missing.
 - **`employeeName`** — the linked employee's surname-first name (`${lastName} ${firstName}`), resolved via `admin.firestore().getAll(...)` regardless of the employee's `status` and regardless of whether the viewer has `employees.view.*` access.
 - **`scheduledDeactivationAt`** (v3.7.0) — the pending auto-deactivation instant emitted as a clean **ISO string** (or `null`), overriding the raw Firestore Timestamp so the frontend gets a directly-parseable value.
+- **`lastActiveAt`** — the user's last app activity as an **ISO string** (or `null`), read from Firebase Auth rather than Firestore. Backs the *Poslední aktivita* column in Settings → Uživatelé. See the subsection below.
 
 Both fields are resolved server-side so the Settings → Uživatelé tab shows readable type and linked-employee labels for any viewer holding only `users.view`, even if they lack access to the `roleTypes` collection or the employees list.
 
 ⚠️ **`GET /auth/me` returns an `employeeName` too, and it is composed differently.** The user-list field above is **surname-first** (`Novák Jan`) because that tab is scanned and sorted by surname. The `/auth/me` field (v5.0.1) is the **display name, first name first** (`recepceDisplayName`: `displayName` if set, else `Jan Novák`), because it pre-fills "who is doing this" into forms — Faktury → *Vystavil* is the first consumer, surfaced on `useAuth()` as `employeeName`. Prefer it over `name` for that purpose: `name` is the *account* name on `users/{uid}`, which on a shared reception login is the terminal ("Recepce Ankora"), not the person. Both are live lookups against the employee record, so a rename propagates without a backfill.
+
+### `lastActiveAt` — last activity comes from Firebase Auth, not Firestore
+
+⚠️ **There is no server-side record of logins in this app, and there cannot be one without adding a round-trip.** Sign-in runs entirely client-side (`LoginPage.tsx` → `signInWithEmailAndPassword` against Firebase Auth), so no Cloud Function ever observes a login. A `users/{uid}.lastLogin` field existed for years and was **always `null`**: `POST /api/auth/create-user` initialised it and nothing ever wrote it again. That write and its audit label were removed when this column shipped. Existing user docs keep their null `lastLogin` (no migration was run — a stale null is harmless), and `lastLogin` deliberately stays in `IGNORED_FIELD_SUFFIXES` (see [Audit log](other-features-and-ui.md)) so a legacy doc can never surface it in a change diff.
+
+The value is instead read from **Firebase Auth's own user metadata**, which already holds it for every account with no backfill and no new writes — the same source the Firebase console's last-sign-in column displays. `GET /api/auth/users` sweeps `admin.auth().listUsers(1000, pageToken)` in a loop (Auth pages at 1000; `getUsers()` was rejected because it caps at 100 identifiers per call, i.e. N/100 round-trips instead of one) and builds a `uid → ISO instant` map merged into each row.
+
+**Why `lastRefreshTime`, not `lastSignInTime`.** Auth exposes both. `lastSignInTime` is when the user last *typed their password*; `lastRefreshTime` is when their ID token was last refreshed, i.e. when they last actually **used** the app. Sessions here are long-lived, so sign-in time badly understates activity — a user working daily may not have signed in for weeks. The column answers "is this account still in use?", so refresh time is the honest number, and the UI labels it **Poslední aktivita** rather than *Poslední přihlášení* to match. `lastSignInTime` is the fallback for accounts predating the refresh metadata; `null` (rendered `–`) means Auth has neither, typically an account that has never signed in.
+
+**Failure mode is deliberate.** The `listUsers` sweep is wrapped in `try/catch`: an Auth outage or quota error logs and leaves the map empty, so the column renders `–` for everyone while the rest of the user list still loads. A user-management screen must not go dark because a decorative column's data source is unavailable.
+
+**Gating** — none of its own. The data rides the endpoint's existing `users.view` gate; anyone who can see the user list can see when those users were last active.
 
 **Type column in Settings → Uživatelé:** if the viewer holds `users.setType` or `users.permissions.manage`, the type column renders as an editable `<select>`. Otherwise it renders as a static `<span>` showing `roleTypeName` (with a fallback to the resolved name from the locally-loaded types list, then the raw id). No editability bleeds through to users who lack the relevant permissions.
 

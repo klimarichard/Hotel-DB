@@ -132,7 +132,6 @@ const users: FieldLabelMap = {
   logoutAuthorizedBy: "Odhlášení autorizoval",
   createdAt: "Vytvořeno",
   updatedAt: "Upraveno",
-  lastLogin: "Poslední přihlášení",
 };
 
 // ── Pracovní pozice (functions/src/routes/jobPositions.ts) ──
