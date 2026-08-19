@@ -1,0 +1,181 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--overlay-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100; /* above ConfirmModal (1000): a conflict outranks any prompt */
+  padding: 1rem;
+}
+
+.modal {
+  composes: shell from "../../styles/modalShell.module.css";
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  width: min(760px, 100%);
+  box-shadow: 0 20px 60px var(--shadow-md);
+}
+
+.header {
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-heading);
+}
+
+.body {
+  composes: shellBody from "../../styles/modalShell.module.css";
+  padding: 16px 20px;
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+}
+
+.intro {
+  margin: 0 0 12px;
+  line-height: 1.5;
+}
+
+.warn {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-warning-border);
+  background: var(--color-warning-bg);
+  color: var(--color-warning-text);
+  border-radius: var(--radius-sm, 6px);
+  line-height: 1.45;
+}
+
+.empty {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.selectAll {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.selectCount {
+  margin-left: auto;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}
+
+/* The comparison table is four data columns wide; on a phone it scrolls inside
+   its own box rather than pushing the dialog sideways. */
+.tableWrap {
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm, 6px);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}
+
+.table th {
+  text-align: left;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-muted);
+  background: var(--color-surface-3);
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--color-border);
+  position: sticky;
+  top: 0;
+}
+
+.table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--color-border-subtle);
+  vertical-align: top;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.checkCol {
+  width: 34px;
+  text-align: center;
+}
+
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The user's own value is what the decision is about, so it reads strongest. */
+.mine {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+}
+
+.rowConflict {
+  background: var(--color-warning-bg);
+}
+
+.rowConflict .mine {
+  color: var(--color-warning-text);
+}
+
+.rowBlocked {
+  background: var(--color-danger-bg);
+  color: var(--color-danger-text);
+}
+
+.blockedNote {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--color-danger-text);
+  white-space: normal;
+}
+
+.theirs {
+  margin-top: 12px;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}
+
+.theirs summary {
+  cursor: pointer;
+}
+
+.theirList {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  line-height: 1.6;
+}
+
+.error {
+  margin: 12px 0 0;
+  padding: 8px 10px;
+  border: 1px solid var(--color-danger-border);
+  background: var(--color-danger-bg);
+  color: var(--color-danger-text);
+  border-radius: var(--radius-sm, 6px);
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--color-border);
+  flex-wrap: wrap;
+}
+
+.footerSpacer {
+  flex: 1 1 auto;
+}
