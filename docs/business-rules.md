@@ -635,6 +635,27 @@ Jakmile je protokol podepsán (Předal nebo Převzal), tlačítka Zpět a Vpřed
 
 > 🔒 Server. Zdroj: `stepHandler()` v `functions/src/routes/handovers.ts` (bez admin výjimky, na rozdíl od obsahového `PUT`).
 
+### Upravují-li protokol dva lidé naráz, uloží se jen ten, kdo byl první
+
+Protokol nemá společné živé úpravy. Uloží-li ho někdo jiný dřív, než se stihnou uložit vaše rozepsané změny, server vaše uložení **odmítne** – právě proto, aby vám cizí zápis nepřepsal. Vaše změny se v tu chvíli **nikam neuloží** a aplikace otevře okno **„Protokol byl mezitím upraven"**, ve kterém vyberete, které z nich se mají do aktuální verze doplnit. Okno nejde zavřít křížkem ani kliknutím vedle – dokud nerozhodnete, protokol se dál neukládá.
+
+Zásadní je výchozí nastavení voleb v tomto okně:
+
+- Změny, kterých se ten druhý **nedotkl**, jsou předvybrané a po potvrzení se doplní.
+- Položky, které **oba změnili na jinou hodnotu** (typicky stejná přihrádka hotovosti), předvybrané **nejsou** – ponechá se hodnota, kterou uložil ten druhý, protože je novější. Chcete-li prosadit svou, musíte ji zaškrtnout ručně.
+
+Tlačítko **Zahodit mé změny** vaše rozepsané úpravy zahodí nenávratně.
+
+> 🔒 Server (odmítnutí zápisu) + 🖥️ Jen rozhraní (slučovací okno a jeho výchozí volby). Zdroj: kontrola `baseUpdatedAt` v `PUT /handovers/:hotel` (`functions/src/routes/handovers.ts`); `frontend/src/lib/handoverMerge.ts` a `frontend/src/pages/recepce/ConflictModal.tsx`.
+
+### Neuložené změny protokolu drží jen ten prohlížeč, ve kterém vznikly
+
+Dokud se rozepsaná změna neuloží na server (odmítnuté uložení podle pravidla výše, výpadek sítě, vypršené přihlášení), leží **pouze v prohlížeči na daném počítači**, a to nejvýše **24 hodin**. Kolega na jiném počítači ji nevidí a v Historii změn ani v Logu změn není – neuložený zápis v databázi nezanechá žádnou stopu.
+
+Zavřete-li kartu, aplikace se zeptá. Po opětovném otevření téhož protokolu na **stejném účtu a stejném počítači** aplikace změny nabídne k doplnění (okno **„Nalezeny neuložené změny"** s časem, kdy vznikly – na sdíleném účtu recepce podle něj poznáte, zda jsou vaše). Po 24 hodinách se zahodí.
+
+> 🖥️ Jen rozhraní. Zdroj: `frontend/src/lib/handoverDraft.ts` (`localStorage`, klíč podle uživatele a směny, `TTL_MS`).
+
 ## Recepce – Odvody
 
 ### Odvody se připravují z Předávacího protokolu, ne ze samostatné záložky

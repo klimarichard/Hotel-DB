@@ -131,6 +131,15 @@ Předávací protokol eviduje hotovost, účty a poznámky pro jednu konkrétní
 - Psaní textu (poznámka, název nebo částka účtu) se do historie zapisuje jako **jeden záznam za celou úpravu**, ne po jednotlivých znacích. Úprava je uzavřena ve chvíli, kdy z pole odejdete – kliknete jinam, přejdete tabulátorem dál, nebo úpravu ukončíte tlačítkem **✓ Hotovo**. Vrátíte-li se do stejného pole později, začíná nová úprava a vznikne nový záznam. Jedno kliknutí na **↶ Zpět** vrátí celou úpravu najednou. Napíšete-li text a poté ho smažete zpět na původní hodnotu, v historii po této úpravě nezůstane žádný záznam.
 - Dokud protokol není podepsaný, jsou k dispozici tlačítka **↶ Zpět** a **↷ Vpřed** – vrátí, respektive znovu provedou poslední změnu. Po podpisu jsou nedostupná pro všechny.
 
+**Když protokol upravují dva lidé naráz**
+
+- Protokol se ukládá průběžně sám. Stihne-li ho ale někdo jiný uložit dřív než vy, vaše rozepsané změny se **neuloží** – server je odmítne, aby vám cizí zápis nepřepsal.
+- V tu chvíli se otevře okno **„Protokol byl mezitím upraven"** s přehledem vašich neuložených změn: u každé vidíte **původní hodnotu**, **svoji hodnotu** a **hodnotu na serveru**. Zaškrtnutím vyberete, co se má do aktuální verze doplnit, a potvrdíte tlačítkem **Sloučit a uložit**.
+- Změny, kterých se ten druhý nedotkl, jsou **předvybrané**. Položky, které jste **oba** změnili na jinou hodnotu (typicky stejná přihrádka hotovosti), předvybrané **nejsou** a jsou zvýrazněné – přednost dostane novější hodnota kolegy, dokud ručně nezaškrtnete tu svoji. Vždy si obě čísla porovnejte.
+- Okno nejde zavřít křížkem ani kliknutím vedle. Dokud nerozhodnete, protokol se dál neukládá. Tlačítko **Zahodit mé změny** vaše úpravy nenávratně zahodí.
+
+> ⚠️ Neuložené změny drží **jen prohlížeč na daném počítači**, a to nejvýše 24 hodin. Zavřete-li kartu, aplikace se zeptá; při dalším otevření téhož protokolu na stejném účtu a počítači je nabídne k doplnění (okno **„Nalezeny neuložené změny"** s časem, kdy vznikly). V Historii změn ani v Logu změn neuložený zápis není.
+
 **Tisk**
 
 - Jakmile jsou podepsané **obě** strany (*Předal* i *Převzal*), zobrazí se tlačítko **Tisk** — otevře přehlednou černobílou tiskovou sestavu protokolu na jednu stránku A4.
