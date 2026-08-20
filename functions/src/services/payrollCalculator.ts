@@ -785,13 +785,22 @@ async function getPriorEntryData(
  * overrides (Výkaz pin, Svátek=0, Základ override, …) so every cell recomputes
  * cleanly from the shift plan. sickLeaveHours (Nemoc) and notes are still
  * preserved — those are real data, not fudged numbers.
+ *
+ * Reports what it did, because the LOCKED skip below is invisible from the
+ * outside: callers that recompute in bulk were counting attempts as refreshes
+ * and reporting "32 of 32 refreshed" for a month where 31 were locked and
+ * untouched. Re-checking `locked` in the caller would put the lock rule in two
+ * places, so the decision is returned from the one place that makes it.
+ * Every caller but the bulk refresher ignores the value.
  */
+export type PayrollPeriodRefreshOutcome = "refreshed" | "skipped-locked";
+
 export async function createOrUpdatePayrollPeriod(
   planId: string,
   year: number,
   month: number,
   opts: { discardOverrides?: boolean } = {}
-): Promise<void> {
+): Promise<PayrollPeriodRefreshOutcome> {
   const holidays = getCzechHolidays(year);
   const baseHours = getBaseHours(year, month);
 
@@ -814,7 +823,7 @@ export async function createOrUpdatePayrollPeriod(
 
   // Locked periods are immutable — skip entirely.
   if (!existing.empty && (existing.docs[0].data() as Record<string, unknown>).locked === true) {
-    return;
+    return "skipped-locked";
   }
 
   // Preserve the rate stored on an existing period; only pull from settings for new periods.
@@ -1013,6 +1022,7 @@ export async function createOrUpdatePayrollPeriod(
   }
 
   await batch.commit();
+  return "refreshed";
 }
 
 /**
@@ -1152,18 +1162,28 @@ export async function recomputeEntryForEmployee(
  * periods whose plan is `published`, `createOrUpdatePayrollPeriod` leaves LOCKED
  * periods untouched, and without `discardOverrides` every manual override,
  * sickLeaveHours and note is preserved — only auto-computed cells are recomputed.
+ *
+ * ⚠️ **`refreshed` counts periods actually recomputed, not plans visited.**
+ * It used to increment once per loop pass, so it always equalled `plans` and the
+ * status line claimed "32 refreshed" on a run where 31 periods were locked and
+ * deliberately left alone — the skip is the whole point of the lock, and the
+ * number hid it. `skippedLocked` is reported alongside so the two always account
+ * for `plans` and the gap needs no explaining.
  */
 export async function refreshAllPublishedPayrollPeriods(): Promise<{
   plans: number;
   refreshed: number;
+  skippedLocked: number;
 }> {
   const db = admin.firestore();
   const snap = await db.collection("shiftPlans").where("status", "==", "published").get();
   let refreshed = 0;
+  let skippedLocked = 0;
   for (const doc of snap.docs) {
     const data = doc.data() as { year: number; month: number };
-    await createOrUpdatePayrollPeriod(doc.id, data.year, data.month);
-    refreshed++;
+    const outcome = await createOrUpdatePayrollPeriod(doc.id, data.year, data.month);
+    if (outcome === "refreshed") refreshed++;
+    else skippedLocked++;
   }
-  return { plans: snap.size, refreshed };
+  return { plans: snap.size, refreshed, skippedLocked };
 }

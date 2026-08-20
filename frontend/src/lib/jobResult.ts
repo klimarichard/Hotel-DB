@@ -25,7 +25,7 @@ import { formatIsoDatetimeCZ } from "./dateFormat";
  *   checkScheduledDeactivations  { scanned, deactivated }
  *   sweepRecepceHistory          { cutoffISO, auditDeleted, historyDeleted }
  *   sweepSmenarnaSnapshots       { cutoffISO, deleted }
- *   refreshPayroll               { plans, refreshed }
+ *   refreshPayroll               { plans, refreshed, skippedLocked }
  *
  * (`rolloverVacationYear` never reaches here — JobsTab formats its richer result
  * with its own `rolloverCounts()`.)
@@ -38,6 +38,7 @@ const RESULT_LABELS: Record<string, string> = {
   updated: "aktualizováno",
   refreshed: "přepočítáno",
   plans: "plánů",
+  skippedLocked: "přeskočeno uzamčených",
   unticked: "ukončeno období",
   deactivated: "deaktivováno",
   deleted: "smazáno",
