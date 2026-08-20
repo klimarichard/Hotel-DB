@@ -3,6 +3,7 @@ import Button from "@/components/Button";
 import ConfirmModal from "@/components/ConfirmModal";
 import { useAuth } from "@/hooks/useAuth";
 import { api, ApiError } from "@/lib/api";
+import { summarizeJobResult } from "@/lib/jobResult";
 import styles from "./JobsTab.module.css";
 
 /**
@@ -128,17 +129,6 @@ function unknownContractLine(r: RolloverResult): string {
   return ` Bez určeného typu smlouvy, nárok nelze vypočítat – opravte záznam u: ${shown}${rest}.`;
 }
 
-/** Build a short summary line from the job's returned result object. */
-function summarize(result: unknown): string {
-  if (result && typeof result === "object") {
-    const parts = Object.entries(result as Record<string, unknown>)
-      .filter(([, v]) => typeof v === "number" || typeof v === "string" || typeof v === "boolean")
-      .map(([k, v]) => `${k}: ${v}`);
-    if (parts.length) return parts.join(", ");
-  }
-  return "";
-}
-
 export default function JobsTab() {
   const { can } = useAuth();
   const [running, setRunning] = useState<string | null>(null);
@@ -157,7 +147,7 @@ export default function JobsTab() {
     });
     try {
       const result = await api.post<unknown>(job.endpoint, {});
-      const s = summarize(result);
+      const s = summarizeJobResult(result);
       setResults((r) => ({ ...r, [job.id]: { ok: true, msg: s ? `Hotovo · ${s}` : "Hotovo" } }));
     } catch (e) {
       const msg =
