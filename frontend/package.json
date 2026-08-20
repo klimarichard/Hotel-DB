@@ -1,6 +1,6 @@
 {
   "name": "hotel-hr-frontend",
-  "version": "5.11.11",
+  "version": "5.11.12",
   "private": true,
   "type": "module",
   "scripts": {
