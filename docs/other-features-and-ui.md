@@ -505,6 +505,25 @@ navigation cost, not a privilege boundary.
   `settings/JobsTab.tsx` — the two surfaces that start jobs by hand format the returned
   counters with one implementation rather than a copy each.
 
+**Czech result labels (v5.11.12).** The summary joined the endpoint's own JSON keys, so a
+successful run read `Hotovo · plans: 32, refreshed: 32` — the keys are the SERVER's field
+names and therefore English. `jobResult.ts` now carries a key → Czech label map covering
+every key the ten jobs return, and renders `cutoffISO` through `formatIsoDatetimeCZ` instead
+of printing a raw ISO string. Translating at the display boundary keeps backend field names
+conventional and fixes both Úlohy screens in one edit. ⚠️ **An unlabelled key keeps its raw
+name on purpose** — a future field is then visibly untranslated (a prompt to add a label)
+rather than being silently dropped from the line. Two jobs still show a bare "Hotovo":
+`checkPlanDeadlines` returns an array (filtered out) and `refreshDocumentAlerts` returns a
+bare number rather than an object.
+
+⚠️ **`refreshPayroll`'s counter was meaningless until v5.11.12.**
+`refreshAllPublishedPayrollPeriods` (`functions/src/services/payrollCalculator.ts`) incremented
+`refreshed++` after an unconditional `await`, so it counted loop passes: `refreshed` always
+equalled `plans`, and a run where 31 of 32 periods were locked and deliberately untouched
+still reported "32 refreshed". `createOrUpdatePayrollPeriod` now returns
+`"refreshed" | "skipped-locked"` and the loop counts the outcome, reporting `skippedLocked`
+alongside so the two account for `plans`.
+
 ### Modal shell — bounded height (`modalShell.module.css`)
 
 A modal box has no natural height limit, and the overlay is `position: fixed`, so the page behind it can't scroll either — a dialog whose content outgrows the viewport hangs off both ends with its lower half (and its own action buttons) permanently unreachable. This bit a real user before it was fixed. `frontend/src/styles/modalShell.module.css` exposes two shapes, consumed via CSS Modules `composes` rather than hand-written into every dialog:
