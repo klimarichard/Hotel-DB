@@ -69,3 +69,35 @@
   color: var(--color-danger-text);
   font-weight: 600;
 }
+
+/*
+ * "Spustit nyní" + the note beside it. Wraps on narrow screens so the button
+ * keeps its full width instead of squeezing the caption off the row.
+ */
+.detailActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem;
+  margin-top: 0.15rem;
+}
+
+/*
+ * Outcome of a manual run, rendered under the job title. Uses the theme tokens
+ * rather than the fixed greens/reds of the Settings tab so it stays readable in
+ * dark mode on top of the tinted alert rows.
+ */
+.runOk,
+.runErr {
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.runOk {
+  color: var(--color-success-text);
+}
+
+.runErr {
+  color: var(--color-danger-text);
+}
