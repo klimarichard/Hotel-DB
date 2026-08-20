@@ -274,7 +274,7 @@ The page (`/audit`) is a date-sectioned timeline of grouped event cards. The bac
 5. **Žádosti o změny** — same pattern via `GET /api/shifts/changeRequests/pending`. Gated `shifts.changeRequest.review`.
 6. **Žádosti o úpravu údajů** — pending employee self-service data-change requests (`EmployeeDataChangeRequestsTab`, gated `changeRequests.review`).
 7. **Předávací protokol** — Recepce handover warnings (`HandoverWarningsTab`, `GET/POST /api/handover-warnings`, gated `changeRequests.review` — no separate key), in two unread sections plus a shared **Přečtené**: **Nenavazující předání** (handover chain break) and **Pozdní příchody** (Převzal after the next shift's start — 19:00 night / 07:00 day). Detailed in [Recepce — Handover warnings](recepce.md#handover-warnings-předávací-protokol-tab). The combined unread count (both types) feeds the tab pill and the sidebar `/upozorneni` badge via `HandoverWarningsContext` (`GET /handover-warnings/unread-count`).
-8. **Úlohy** — health of the ten scheduled Cloud Functions (`ScheduledJobsTab`, `GET /api/jobs`, gated **`system.triggers`** — the key that already gates Nastavení → Úlohy and the manual re-run buttons; deliberately **no new permission key**, so no matrix / tour / Nápověda entry). Failing + overdue jobs feed the tab pill and the sidebar badge via `ScheduledJobsContext` (`GET /jobs/alert-count`). Full write-up below.
+8. **Úlohy** — health of the ten scheduled Cloud Functions (`ScheduledJobsTab`, `GET /api/jobs`, gated **`system.triggers`** — the key that already gates Nastavení → Úlohy and the manual re-run buttons; deliberately **no new permission key**, so no matrix / tour / Nápověda entry). Failing + overdue jobs feed the tab pill and the sidebar badge via `ScheduledJobsContext` (`GET /jobs/alert-count`). As of **v5.11.11** a failing job carries a **„Spustit nyní“** button that re-runs it in place. Full write-up below.
 
 Tab labels show pending counts as red pill badges.
 
@@ -466,13 +466,44 @@ fixing it late means one pass deletes months of history at once.
 
 **Manual trigger (v5.11.5).** `POST /api/recepce/trigger-retention-sweep` had existed since
 v4.0.0 — only the `triggerEndpoint` field in the `jobRuns.ts` registry was missing, which is
-why the tab reported the job had no trigger. ⚠️ **Two divergent lists:** the registry drives
-only the Upozornění *hint text*; `settings/JobsTab.tsx` keeps its **own** hardcoded `JOBS`
-array holding the actual buttons. Setting the registry field alone flips the hint to
-"Ručně ji spustíte v Nastavení → Úlohy" while pointing at a screen with no such button —
-**always edit both.** The button routes through the existing `ConfirmModal` like every other
+why the tab reported the job had no trigger. ⚠️ **Two divergent lists:** the registry and
+`settings/JobsTab.tsx`'s **own** hardcoded `JOBS` array. Setting one alone leaves the other
+screen without the job — **always edit both.** (Until v5.11.11 the registry field drove only
+the Upozornění *hint text*, so the failure mode was worse: the hint pointed at a Settings
+screen that had no such button. It now drives a real button on both screens — see
+"Running a failing job from Upozornění" below.) The button routes through the existing `ConfirmModal` like every other
 job, and its description states that the deletion is irreversible and that only history is
 swept, never the live protocols, sales or rides.
+
+#### Running a failing job from Upozornění (v5.11.11)
+
+The failure detail block used to end with the sentence "Ručně ji spustíte v Nastavení → Úlohy".
+It now renders a **"Spustit nyní"** button that POSTs the job's own `triggerEndpoint`.
+
+**No new endpoint and no new permission** — this is a frontend-only change, and deliberately
+so. `GET /api/jobs` already shipped `triggerEndpoint` per job (`ScheduledJobsTab` was
+receiving it and using it only to choose which sentence to print), and that read and every
+`trigger-*` endpoint are gated on the **same `system.triggers` key**. Seeing that a job
+failed therefore already implies the right to re-run it, so the trip to Settings was pure
+navigation cost, not a privilege boundary.
+
+- ⚠️ **`rolloverVacationYear` is excluded on purpose** — the `NO_QUICK_RUN` set in
+  `ScheduledJobsTab.tsx`. It seeds every employee's yearly entitlement, and Nastavení → Úlohy
+  runs it as **dry-run → user approves the plan → real write**. A one-click trigger would
+  bypass that review, and copying the dry-run flow onto a second surface would put
+  data-sensitive logic in two places. That row keeps its pointer to Settings.
+- The run outcome renders on the **main row, not the detail row**. A successful run flips
+  health to `ok`, which unmounts the detail row — putting the confirmation there would remove
+  it the instant it appeared.
+- After a run the tab re-fetches `/jobs` **and** calls `ScheduledJobsContext.refresh()`. The
+  sidebar badge fetches its own count (`GET /jobs/alert-count`), so re-reading the list alone
+  would leave the badge stale until the next poll.
+- Because manual triggers record through `runJob()` (v5.11.7, above), a successful press
+  clears **both** `error` and `overdue` and the row moves out of "Vyžaduje pozornost" on the
+  spot. Had that fix not landed first, this button would have looked broken.
+- `summarizeJobResult()` lives in `frontend/src/lib/jobResult.ts`, shared with
+  `settings/JobsTab.tsx` — the two surfaces that start jobs by hand format the returned
+  counters with one implementation rather than a copy each.
 
 ### Modal shell — bounded height (`modalShell.module.css`)
 

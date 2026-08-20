@@ -27,6 +27,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "5.11.11",
+    date: "2026-08-20",
+    changes: [
+      "Neúspěšné automatické úlohy lze spustit přímo z Upozornění.",
+    ],
+  },
+  {
     version: "5.11.10",
     date: "2026-08-19",
     changes: [
