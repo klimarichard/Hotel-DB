@@ -36,6 +36,9 @@ const MOCK_TEXT: Record<string, string> = {
   firstName: "Jana",
   lastName: "Nováková",
   birthDate: "14. 3. 1992",
+  // Preview only — a made-up RČ. The real value is AES-encrypted and is only
+  // ever decrypted at generation time, so the template editor never sees one.
+  birthNumber: "925314/1234",
   address: "Vinohradská 1511/230, 100 00 Praha 10",
   passportNumber: "12345678",
   visaNumber: "ABC123456",

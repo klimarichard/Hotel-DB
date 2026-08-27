@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import Button from "./Button";
 import IconButton from "./IconButton";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { employeeDisplayName, employeeSurnameFirst } from "@/lib/employeeName";
 import { resolveStandaloneEmployment, type EmploymentRow } from "@/lib/employmentSessions";
@@ -24,6 +24,7 @@ import {
   isComputedVarType,
   resolveComparableRaw,
   resolveComputedVars,
+  templateReferencesVariable,
   type CustomVarDef,
   type CustomVarDefs,
 } from "@/lib/contractVariables";
@@ -252,6 +253,10 @@ export default function BulkGenerateModal({ employees, onClose }: Props) {
   // total would then print blank on every document in the batch.
   const customKeys = template ? requiredCustomVars(template, variableDefs) : [];
 
+  // Does this template print the encrypted rodné číslo? Gate for the per-employee
+  // reveal in loadEmployeeData — see the comment there.
+  const needsBirthNumber = templateReferencesVariable(template, "birthNumber");
+
   // Slots the operator types once for the whole batch. The computed slots
   // (`condition`, `math`) are derived per employee, and a slot defaulting to a
   // fixed variable (e.g. {{firstName}}) RESOLVES per employee – none of them is
@@ -308,11 +313,26 @@ export default function BulkGenerateModal({ employees, onClose }: Props) {
   /** Assemble one employee's variable inputs from the endpoints that already
    *  exist. Going per-id keeps the router's management scoping in force. */
   async function loadEmployeeData(id: string): Promise<{ data: EmployeeData; companyId: string | null }> {
-    const [root, contact, documents, employment] = await Promise.all([
+    const [root, contact, documents, employment, birthNumber] = await Promise.all([
       api.get<Record<string, unknown>>(`/employees/${id}`),
       api.get<Record<string, unknown> | null>(`/employees/${id}/contact`).catch(() => null),
       api.get<Record<string, unknown> | null>(`/employees/${id}/documents`).catch(() => null),
       api.get<EmploymentRow[]>(`/employees/${id}/employment`).catch(() => [] as EmploymentRow[]),
+      // Rodné číslo is encrypted at rest; only /reveal hands back plaintext, and
+      // only to `sensitive.reveal`. Requested per employee (one audit entry
+      // each, which is the honest record) and ONLY when the template prints it.
+      // A 404 means this employee has no rodné číslo stored — an empty field,
+      // not a failure — so it degrades to "". Everything else propagates and
+      // fails that employee's document rather than printing a silent blank.
+      needsBirthNumber
+        ? api
+            .post<{ value: string }>(`/employees/${id}/reveal`, { field: "birthNumber" })
+            .then((r) => r.value ?? "")
+            .catch((err) => {
+              if (err instanceof ApiError && err.status === 404) return "";
+              throw err;
+            })
+        : Promise.resolve(undefined),
     ]);
     const companyId = (root.currentCompanyId as string) ?? null;
     return {
@@ -333,6 +353,7 @@ export default function BulkGenerateModal({ employees, onClose }: Props) {
         passportNumber: documents?.passportNumber as string | undefined,
         visaNumber: documents?.visaNumber as string | undefined,
         visaType: documents?.visaType as string | undefined,
+        birthNumber,
         signingDate,
       },
     };
@@ -427,6 +448,17 @@ export default function BulkGenerateModal({ employees, onClose }: Props) {
         });
         results.push({ employeeId: emp.id, name, ok: true });
       } catch (err) {
+        // A 403 while the template needs the rodné číslo is not this employee's
+        // problem — it is the operator's missing `sensitive.reveal`, and it will
+        // fail identically for every remaining row. Stop the batch and say so
+        // once, instead of producing a wall of the same error.
+        if (needsBirthNumber && err instanceof ApiError && err.status === 403) {
+          setRunError(
+            "Tato šablona používá proměnnou Rodné číslo, ale nemáte oprávnění " +
+              "citlivé údaje zobrazit. Hromadné generování bylo zastaveno."
+          );
+          break;
+        }
         results.push({
           employeeId: emp.id,
           name,
