@@ -981,6 +981,15 @@ export const VARIABLE_GROUPS: { group: string; vars: VariableDef[] }[] = [
       { key: "firstName", label: "Jméno" },
       { key: "lastName", label: "Příjmení" },
       { key: "birthDate", label: "Datum narození" },
+      // ⚠️ The ONE variable whose value is not simply handed in by the page
+      // that opens the generate dialog. `employees.birthNumber` is AES-256-GCM
+      // encrypted at rest and never leaves the server in plaintext except via
+      // POST /api/employees/:id/reveal, which is gated on `sensitive.reveal`
+      // and writes an auditLog entry. Both generate dialogs therefore fetch it
+      // themselves, and only when the template actually references the token —
+      // see templateReferencesVariable(). resolveVariables() below stays dumb:
+      // it formats whatever plaintext it is given, or blank.
+      { key: "birthNumber", label: "Rodné číslo" },
       { key: "address", label: "Adresa" },
       { key: "passportNumber", label: "Číslo pasu" },
       { key: "visaNumber", label: "Číslo povolení k pobytu" },
@@ -1066,6 +1075,11 @@ export interface EmployeeData {
   address?: string;
   // personal fields
   birthDate?: string; // raw ISO date (YYYY-MM-DD); resolveVariables formats it
+  // DECRYPTED rodné číslo, supplied by the generate dialog after a successful
+  // reveal call. Absent on every other path (employee lists, detail page), so
+  // {{birthNumber}} simply renders empty there rather than leaking a
+  // ciphertext string into a document.
+  birthNumber?: string;
   nationality?: string; // free-form string from employee.nationality
   gender?: string; // "m" | "f" (or empty) – drives the isMale conditional
   // document sub-doc fields (merged in by caller)
@@ -1169,6 +1183,7 @@ export function resolveVariables(
     firstName: str(employee.firstName),
     lastName: str(employee.lastName),
     birthDate: formatDateCZ(employee.birthDate),
+    birthNumber: str(employee.birthNumber),
     passportNumber: str(employee.passportNumber),
     visaNumber: str(employee.visaNumber),
     currentJobTitle: str(employee.currentJobTitle),
@@ -1741,4 +1756,28 @@ export function getMissingVariables(html: string, vars: Record<string, string>):
     }
   }
   return missing;
+}
+
+/**
+ * Whether `html` mentions `key` inside ANY `{{…}}` construct — a plain
+ * `{{birthNumber}}`, a `{{#if birthNumber}}`, a `{{#unless …}}`, or a
+ * `{{#case birthNumber = …}}`.
+ *
+ * Deliberately a raw scan rather than a pass through `processConditionals`:
+ * this answers "does generating this document need the value at all?", and a
+ * token that only appears inside a branch that happens to be false right now
+ * still has to be fetched — otherwise the branch would evaluate against a
+ * blank it was never given.
+ *
+ * Its one caller today is the {{birthNumber}} reveal in both generate dialogs.
+ * Fetching a decrypted rodné číslo (and writing the audit entry that comes with
+ * it) for every contract, whether or not the template prints it, would fill the
+ * audit log with reveals nobody performed — this is the gate that stops that.
+ */
+export function templateReferencesVariable(html: string, key: string): boolean {
+  if (!html) return false;
+  // Built from a template literal, so every regex backslash has to be doubled:
+  // a single "\b" here would be a BACKSPACE character, not a word boundary, and
+  // the test would silently never match.
+  return new RegExp(`\\{\\{[^}]*\\b${key}\\b[^}]*\\}\\}`).test(html);
 }

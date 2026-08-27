@@ -15,6 +15,9 @@ import {
   ResizableImage,
   IMAGE_WIDTH_PRESETS,
   ListItemIndent,
+  BulletListMarker,
+  activeBulletVariant,
+  setBulletVariant,
   NbspKeybind,
   LineHeight,
   PageBreak,
@@ -484,6 +487,7 @@ export default function DokumentyPage() {
       StarterKit.configure(STARTER_KIT_OPTIONS),
       TabParagraph,
       ListItemIndent,
+      BulletListMarker,
       NbspKeybind,
       Underline,
       TextStyle,
@@ -2297,14 +2301,23 @@ export default function DokumentyPage() {
               <span className={styles.toolSep} />
 
               {/* Lists */}
+              {/* Two variants of ONE list – see the same pair in Šablony smluv. */}
               <button
-                className={`${styles.toolBtn} ${editor?.isActive("bulletList") ? styles.toolBtnActive : ""}`}
+                className={`${styles.toolBtn} ${activeBulletVariant(editor) === "plain" ? styles.toolBtnActive : ""}`}
                 onMouseDown={(e) => {
                   e.preventDefault();
-                  editor?.chain().focus().toggleBulletList().run();
+                  setBulletVariant(editor, false);
                 }}
                 title="Odrážkový seznam"
               >≡</button>
+              <button
+                className={`${styles.toolBtn} ${activeBulletVariant(editor) === "checklist" ? styles.toolBtnActive : ""}`}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  setBulletVariant(editor, true);
+                }}
+                title="Zaškrtávací seznam (prázdné čtverečky k zaškrtnutí)"
+              >☐</button>
               <button
                 className={`${styles.toolBtn} ${editor?.isActive("orderedList") ? styles.toolBtnActive : ""}`}
                 onMouseDown={(e) => {

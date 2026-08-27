@@ -19,6 +19,7 @@ import {
   resolveComputedVars,
   missingCustomVars,
   isCustomVarKey,
+  templateReferencesVariable,
   findImageOption,
   CUSTOM_VAR_TYPE_LABELS,
   type CustomVarDef,
@@ -142,16 +143,34 @@ export default function GenerateContractModal({
   const [requestedAt, setRequestedAt] = useState(initialSigningDate);
   const [validFrom, setValidFrom] = useState(initialSigningDate);
 
+  // Decrypted rodné číslo, fetched below — `null` until the reveal answers.
+  // Unlike every other employee token this one is NOT handed in by the page
+  // that opened the dialog: employees.birthNumber is encrypted at rest, so the
+  // detail page has only a mask to give.
+  const [birthNumber, setBirthNumber] = useState<string | null>(null);
+  const [loadingBirthNumber, setLoadingBirthNumber] = useState(false);
+  // Set only when the reveal FAILED in a way that must stop generation (no
+  // `sensitive.reveal` permission, or a request that broke). "Employee simply
+  // has no rodné číslo on file" is deliberately NOT an error — see the effect.
+  const [birthNumberError, setBirthNumberError] = useState<string | null>(null);
+
   // When collecting dates in-modal, feed them into the variable resolver so the
   // {{signingDate}} / {{requestedAt}} / {{validFrom}} tokens track the inputs.
-  const effectiveEmployeeData: EmployeeData = collectDates
-    ? {
-        ...employeeData,
-        signingDate,
-        requestedAt: isMultisport ? requestedAt : employeeData.requestedAt,
-        validFrom: isMultisport ? validFrom : employeeData.validFrom,
-      }
-    : employeeData;
+  const effectiveEmployeeData: EmployeeData = {
+    ...employeeData,
+    ...(collectDates
+      ? {
+          signingDate,
+          requestedAt: isMultisport ? requestedAt : employeeData.requestedAt,
+          validFrom: isMultisport ? validFrom : employeeData.validFrom,
+        }
+      : {}),
+    // Spread only once the reveal has answered. Passing the `null` through
+    // would make resolveVariables print the string "null" into a signed
+    // contract; leaving the key absent renders {{birthNumber}} empty, which is
+    // what every other unavailable field already does.
+    ...(birthNumber !== null ? { birthNumber } : {}),
+  };
   const autoVars = resolveVariables(effectiveEmployeeData, companyData);
 
   // Custom slots this template needs, and the values they resolve to.
@@ -292,6 +311,71 @@ export default function GenerateContractModal({
     })();
   }, [user, companyId]);
 
+  // ─── Decrypt {{birthNumber}}, on demand ────────────────────────────────────
+  //
+  // Only when the template actually references the token. The reveal endpoint
+  // writes an auditLog entry per call, so firing it for every contract would
+  // record reveals nobody performed and bury the ones that matter.
+  //
+  // Failure modes are deliberately split. A 404 means the employee simply has
+  // no rodné číslo stored — that is an empty field like any other, so it falls
+  // through to the standard "Chybějící údaje" warning and generation stays
+  // allowed. A 403 (no `sensitive.reveal`) or a broken request BLOCKS: the
+  // difference between "no value" and "not allowed to see the value" is
+  // invisible in the output, and a legal document that silently prints an empty
+  // rodné číslo is worse than one that refuses to print.
+  const needsBirthNumber = !!template && templateReferencesVariable(template, "birthNumber");
+  useEffect(() => {
+    if (!user || !needsBirthNumber) return;
+    let cancelled = false;
+    setLoadingBirthNumber(true);
+    setBirthNumberError(null);
+    (async () => {
+      try {
+        const token = await user.getIdToken();
+        const resp = await fetch(`/api/employees/${employeeId}/reveal`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ field: "birthNumber" }),
+        });
+        if (cancelled) return;
+        if (resp.ok) {
+          const doc = (await resp.json()) as { value?: string };
+          setBirthNumber(String(doc.value ?? ""));
+        } else if (resp.status === 404) {
+          // Employee has no rodné číslo on file. Empty is the honest answer.
+          setBirthNumber("");
+        } else if (resp.status === 403) {
+          setBirthNumberError(
+            "Tato šablona používá proměnnou Rodné číslo, ale nemáte oprávnění " +
+              "citlivé údaje zobrazit. Požádejte správce o oprávnění „Odhalit " +
+              "skryté údaje“, nebo nechte dokument vygenerovat někoho, kdo je má."
+          );
+        } else {
+          setBirthNumberError(
+            "Rodné číslo se nepodařilo načíst. Zkuste to prosím znovu – bez něj " +
+              "by se dokument vygeneroval s prázdným polem."
+          );
+        }
+      } catch {
+        if (!cancelled) {
+          setBirthNumberError(
+            "Rodné číslo se nepodařilo načíst. Zkuste to prosím znovu – bez něj " +
+              "by se dokument vygeneroval s prázdným polem."
+          );
+        }
+      } finally {
+        if (!cancelled) setLoadingBirthNumber(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, employeeId, needsBirthNumber]);
+
   async function handleGenerate() {
     if (!template) return;
     // Validate on submit, not on open: the button stays live so pressing it is
@@ -300,6 +384,9 @@ export default function GenerateContractModal({
       setTriedGenerate(true);
       return;
     }
+    // Never generate a document whose {{birthNumber}} we could not resolve —
+    // the blank would be indistinguishable from a legitimately empty field.
+    if (birthNumberError || loadingBirthNumber) return;
     setStep("generating");
 
     try {
@@ -451,6 +538,13 @@ export default function GenerateContractModal({
                           </strong>
                         </div>
                       )}
+                    </div>
+                  )}
+
+                  {birthNumberError && (
+                    <div className={styles.missingBox}>
+                      <strong>Rodné číslo nelze načíst</strong>
+                      <p>{birthNumberError}</p>
                     </div>
                   )}
 
@@ -762,7 +856,14 @@ export default function GenerateContractModal({
               <Button
                 variant="primary"
                 onClick={handleGenerate}
-                disabled={loadingTemplate || loadingCompany || !template || templateInactive}
+                disabled={
+                  loadingTemplate ||
+                  loadingCompany ||
+                  !template ||
+                  templateInactive ||
+                  loadingBirthNumber ||
+                  !!birthNumberError
+                }
               >
                 Generovat PDF
               </Button>
