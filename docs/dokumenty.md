@@ -226,7 +226,27 @@ A `{{#case}}` switch needs a **third**, raw-value map to preview correctly — m
 
 ## `lib/editor/extensions.ts`
 
-`frontend/src/lib/editor/extensions.ts` is the set of TipTap extensions (`Table` with the `borderless` attribute, `ResizableImage`, `ListItemIndent`, `NbspKeybind`, `LineHeight`, `PageBreak`, `PasteCleanup`, `SearchHighlight`, `ListItemStyle`, `FontSize`, `TabParagraph`, …) extracted **verbatim** out of `ContractTemplatesPage.tsx` when Dokumenty needed a second editor of the same kind (`ContractTemplatesPage.tsx` dropped from roughly 2483 to 2081 lines; the module itself is ~414 lines). Both pages still each run their own `useEditor(...)` call with their own extension list and their own toolbar — only the extension *definitions* are shared, because that's the part that's genuinely identical, and the part where a fix landing on one page but not the other would silently diverge the two editors' output HTML (and therefore their PDFs, since `pdfRenderer.ts`'s CSS has to match both).
+`frontend/src/lib/editor/extensions.ts` is the set of TipTap extensions (`Table` with the `borderless` attribute, `ResizableImage`, `ListItemIndent`, `BulletListMarker` (v5.11.13), `NbspKeybind`, `LineHeight`, `PageBreak`, `PasteCleanup`, `SearchHighlight`, `ListItemStyle`, `FontSize`, `TabParagraph`, …) extracted **verbatim** out of `ContractTemplatesPage.tsx` when Dokumenty needed a second editor of the same kind (`ContractTemplatesPage.tsx` dropped from roughly 2483 to 2081 lines; the module itself is ~414 lines). Both pages still each run their own `useEditor(...)` call with their own extension list and their own toolbar — only the extension *definitions* are shared, because that's the part that's genuinely identical, and the part where a fix landing on one page but not the other would silently diverge the two editors' output HTML (and therefore their PDFs, since `pdfRenderer.ts`'s CSS has to match both).
+
+### `BulletListMarker` — the tickable ☐ bullet (v5.11.13)
+
+Adds a boolean `checklist` attribute to `bulletList` that round-trips through the
+stored HTML as the class `hpm-checklist`, plus the two exported helpers
+`setBulletVariant()` / `activeBulletVariant()` that both toolbars drive their
+bullet buttons from. Same shape as `Table`'s `borderless` ⇄ `hpm-borderless`.
+
+The **☐ toolbar button was added to both pages** rather than only to Šablony
+smluv, which is the case this module's own warning above is about: the extension
+travels with the shared file either way, so an editor without the button would
+still have had to *render* a `hpm-checklist` list correctly (pasted or imported)
+while offering no way to author one.
+
+The glyph itself is not in this module – it is one CSS rule per surface
+(`DokumentyPage.module.css` → `.a4Page :global(ul.hpm-checklist)`, its twin in
+`ContractTemplatesPage.module.css`, and `RENDER_CSS` in `pdfRenderer.ts`), exactly
+as the default `"– "` marker already is. Full write-up, including why it is a
+class and not an inline `list-style-type`, is in
+[contracts.md](contracts.md#tickable-bullet-list--v51113).
 
 The module also exports **`STARTER_KIT_OPTIONS`**, which both pages pass to `StarterKit.configure(...)` for exactly that reason. Two settings live there:
 
