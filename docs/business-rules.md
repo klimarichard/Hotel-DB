@@ -473,6 +473,46 @@ Kód položky se do e-mailu vypíše **za název v závorce** („AJAX univerzá
 
 ---
 
+## Smlouvy a šablony
+
+### Šablona s rodným číslem vyžaduje oprávnění navíc a každé vygenerování se zapíše do logu
+
+Šablona smlouvy může tisknout **rodné číslo** zaměstnance (proměnná `{{birthNumber}}`,
+skupina Zaměstnanec). Rodné číslo je v databázi uloženo **zašifrovaně** – na rozdíl od
+jména nebo čísla pasu je nikde v aplikaci nevidíte, dokud si je výslovně nezobrazíte.
+
+Z toho plynou tři důsledky, které z rozhraní nejsou vidět:
+
+1. **Na vygenerování takové smlouvy nestačí oprávnění „Generovat smlouvy".** Potřebujete
+   navíc **„Odhalit skryté údaje"** (`sensitive.reveal`) – tedy stejné oprávnění jako na
+   zobrazení rodného čísla na kartě zaměstnance. Bez něj se tlačítko **Generovat PDF**
+   nezpřístupní a aplikace vysvětlí proč.
+2. **Každé vygenerování se zapíše do Historie změn** jako zobrazení citlivého údaje –
+   stejně, jako byste si rodné číslo zobrazili ručně. U **Hromadného generování** vznikne
+   jeden záznam **na každého zaměstnance** v dávce, ne jeden na dávku.
+3. **Zápis vznikne jen u šablon, které rodné číslo skutečně tisknou.** U ostatních šablon
+   se nic nezobrazuje ani nezaznamenává.
+
+Nemá-li zaměstnanec rodné číslo vyplněné, dokument se vygeneruje normálně a prázdné pole
+se objeví v běžném upozornění **„Chybějící údaje"** – to je jiný případ než chybějící
+oprávnění a negeneruje se kvůli němu chyba.
+
+> 🔒 Server. Rozhodnutí, zda rodné číslo vydat, dělá server (`functions/src/routes/employees.ts:1210-1275`
+> – `requirePermission("sensitive.reveal")` a zápis `action: "reveal"` do `auditLog`).
+> Bez oprávnění je hodnota nedostupná i při přímém volání API.
+>
+> 🖥️ Jen rozhraní je *zablokování samotného generování*
+> (`frontend/src/components/GenerateContractModal.tsx`, `BulkGenerateModal.tsx`). Kdo by
+> rozhraní obešel, nezíská rodné číslo – dostal by dokument s prázdným polem. Blokování
+> tedy chrání před tiše neúplnou smlouvou, ne před únikem údaje; ten hlídá server.
+
+> Zdroj: `functions/src/routes/employees.ts:1210-1275`,
+> `frontend/src/lib/contractVariables.ts` (`templateReferencesVariable`, `VARIABLE_GROUPS`),
+> `frontend/src/components/GenerateContractModal.tsx`,
+> `frontend/src/components/BulkGenerateModal.tsx`
+
+---
+
 ## Dokumenty
 
 ### Kdo dokument uvidí, určuje jeho Viditelnost

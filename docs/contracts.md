@@ -99,7 +99,7 @@ Both polarities of each flag are emitted so templates can pick the more readable
 
 ### Template variable pruning + hasPermanentResidence conditional (2026-04-29)
 Trimmed the contract-template variable surface to just the keys real templates use. The picker (`VARIABLE_GROUPS` in `frontend/src/lib/contractVariables.ts`) and `resolveVariables` no longer emit:
-- `birthNumber`, `idCardNumber`, `currentDepartment` (employee)
+- `birthNumber`, `idCardNumber`, `currentDepartment` (employee) — ⚠️ **`birthNumber` was reinstated in v5.11.13**, on a different mechanism than it had here; see [Rodné číslo back as a template variable](#rodné-číslo-back-as-a-template-variable-v51113). The other two remain pruned.
 - `nationality` (kept on `EmployeeData` as the input for `isCzech` / `isForeigner`, but not emitted as a template var)
 - `city`, `zip` (address is now a single line; templates use `{{address}}`)
 - `dic` (company)
@@ -181,6 +181,8 @@ TipTap's schema permits `<ul>` inside `<ol>` (and arbitrary further nesting), bu
 After sinking, click the bullet/ordered toolbar button to convert the freshly-nested list to the desired type (e.g. `<ul>` inside `<ol>`).
 
 Bullet glyphs: top-level `<ul>` uses `list-style-type: "– "` (en-dash + space) regardless of whether it sits at document root or inside an `<ol>`; `<ul>` nested inside another `<ul>` switches to `circle`. Both rules live in the editor CSS and the Puppeteer `RENDER_CSS`. `<ol>` markers stay default (decimal).
+
+A third glyph — an empty, tickable box — was added in v5.11.13; see [Tickable bullet list](#tickable-bullet-list--v51113).
 
 ### Generovat button hidden when matching contract exists (2026-04-29)
 Contract docs now carry an optional `rowSnapshot` field — a freeze-frame of the row's identifying parameters at generation time. Snapshot fields: `companyId, contractType, jobTitle, department, startDate, endDate, salary, hourlyRate, agreedReward, workLocation, probationPeriod, agreedWorkScope, signingDate`. `POST /api/employees/:id/contracts` accepts and persists `rowSnapshot`; `useContractGeneration.uploadContract` forwards it; `GenerateContractModal` takes a `rowSnapshot` prop; `EmployeeDetailPage` builds the snapshot from the row at modal open.
@@ -748,3 +750,157 @@ A signed row drops both `Upravit` (`signedLocked`) and the upload button (alread
 so right-alignment shifts its remaining buttons two columns right — `Smazat <co>` sits
 where `Nahrát …` sits everywhere else. Accepted as-is: reserving invisible placeholders
 would put dead space on every finished row. Reviewed and signed off 2026-08-14.
+
+---
+
+## Rodné číslo back as a template variable (v5.11.13)
+
+`{{birthNumber}}` is offered again in the **Zaměstnanec** group of the variable
+picker. This reverses the 2026-04-29 pruning above, but **not** by restoring what
+was removed: the old variable was an ordinary `resolveVariables` passthrough, and
+that is exactly why it could not survive contact with the encrypted field.
+
+### Why it cannot be a passthrough
+
+`employees.birthNumber` is AES-256-GCM encrypted at rest. Every other member of
+the Zaměstnanec group (`firstName`, `passportNumber`, `visaNumber`, …) arrives as
+plaintext on `GET /employees/:id` and its sub-documents, so `EmployeeDetailPage`
+simply hands it to `resolveVariables()` at each of its three `GenerateContractModal`
+call sites. For `birthNumber` the page holds only the mask `••••••••` — there is
+nothing to hand over. The single decrypting path is:
+
+```
+POST /api/employees/:id/reveal   { field: "birthNumber" }  →  { value: "<plaintext>" }
+```
+
+which is gated on **`sensitive.reveal`** and writes an `auditLog` entry with
+`action: "reveal"`, `extra.fieldName: "birthNumber"`.
+
+The fetch therefore lives **inside the two generate dialogs** rather than in their
+callers. That is a deliberate security choice, not convenience: adding a second
+server path that decrypts the field for contract generation would have meant a
+second permission gate and a second audit story to keep honest. Reusing `/reveal`
+keeps exactly one gate and one audit shape.
+
+| | |
+|---|---|
+| Catalogue entry | `VARIABLE_GROUPS` → "Zaměstnanec" → `{ key: "birthNumber", label: "Rodné číslo" }` |
+| Type | `EmployeeData.birthNumber?: string` — **decrypted plaintext**, supplied only by a generate dialog |
+| Resolver | `resolveVariables` emits `str(employee.birthNumber)` — deliberately dumb; it formats what it is given, or blank |
+| Single generate | `GenerateContractModal` — `useEffect` on `needsBirthNumber`, raw `fetch` (matching its sibling template/company fetches) |
+| Bulk generate | `BulkGenerateModal.loadEmployeeData` — a fifth entry in the existing `Promise.all`, via `api.post` |
+| Preview | `templatePreview.ts` `MOCK_TEXT.birthNumber = "925314/1234"` — a made-up value; the editor never sees a real one |
+
+### The call is gated on the template, not made unconditionally
+
+`templateReferencesVariable(html, key)` (in `contractVariables.ts`) decides whether
+to reveal at all. It is a raw scan for the key inside any `{{…}}` construct — the
+bare token, `{{#if}}`, `{{#unless}}`, `{{#case}}` — deliberately **not** run through
+`processConditionals`, because a token inside a branch that is false right now still
+has to be fetched or that branch would evaluate against a blank it was never given.
+
+Without this gate every contract generation would write a `reveal` audit entry,
+recording reveals nobody performed and burying the ones that matter. That is the
+whole reason the helper exists.
+
+> ⚠️ The regex is built from a template literal, so every backslash is doubled
+> (`\\b`, not `\b`). A single `\b` there is a **backspace character**, not a word
+> boundary, and the test then silently never matches — which reads as "no template
+> uses rodné číslo" rather than as a bug.
+
+### Failure modes are split on purpose
+
+| Response | Treated as | Generation |
+|---|---|---|
+| `200` | plaintext value | allowed |
+| `404` (no rodné číslo stored) | empty field, like any other blank | **allowed** — falls through to the normal "Chybějící údaje" warning |
+| `403` (no `sensitive.reveal`) | named, blocking error | **blocked** |
+| network / `5xx` | named, blocking error | **blocked** |
+
+The asymmetry is the point. In a finished PDF an empty rodné číslo and a forbidden
+one are indistinguishable, so a document that refuses to print is strictly better
+than one that prints a silent blank onto a signed legal form. A genuinely absent
+value is a different thing and is already handled by the existing missing-variable
+warning, so it must not block.
+
+Bulk generation adds one rule of its own: a `403` **stops the whole batch**
+(`setRunError` + `break`) instead of failing every row with the same message. The
+403 is a property of the operator's permissions, not of any one employee, so it
+will recur identically for every remaining row.
+
+### Consequence for permissions
+
+Generating a template that prints `{{birthNumber}}` now requires
+**`contracts.generate` *and* `sensitive.reveal`**. No new permission key was added
+— this is the existing reveal gate being reached from a new surface. A user type
+that may generate contracts but not reveal sensitive data will see the blocking
+message rather than a silently incomplete document. See also
+`docs/business-rules.md` → *Smlouvy a šablony*.
+
+---
+
+## Tickable bullet list — ☐ (v5.11.13)
+
+A second bullet button (`☐`, *Zaškrtávací seznam*) sits next to `≡` in the toolbar
+of **both** template editors. It produces a `<ul>` whose marker is an empty box
+that can be ticked with a pen on the printed document, instead of the default
+en-dash.
+
+### Two variants of one list, not two toggles
+
+The pair is modelled as one control with two states:
+
+- The highlight follows whichever marker the caret's list actually uses
+  (`activeBulletVariant(editor)` → `"plain" | "checklist" | null`).
+- Pressing the **other** button converts in place — nesting and any Tab
+  indentation (`margin-left` on that same `<ul>`) survive the switch.
+- Pressing the **active** button turns the list off, which is what the single
+  bullet button has always done.
+
+Both live in `frontend/src/lib/editor/extensions.ts` as `setBulletVariant()` /
+`activeBulletVariant()` — plain exported helpers rather than TipTap commands, which
+would have required augmenting the `@tiptap/core` `Commands` interface for no gain.
+
+### Why a class, not an inline `list-style-type`
+
+`BulletListMarker` adds a boolean `checklist` attribute to `bulletList` that
+round-trips through the stored HTML as the class `hpm-checklist` — the same shape
+as `Table`'s `borderless` ⇄ `hpm-borderless`. Two reasons it is not an inline style:
+
+1. **`ListItemIndent` already owns the `<ul>`'s `style` attribute.** Tab/Shift-Tab
+   writes `margin-left` into it via a global attribute registered on
+   `bulletList`/`orderedList`. A second writer of the same string is how the two
+   would eventually clobber each other.
+2. **The marker is a CSS *string* value** (`"☐ "`, exactly like the default `"– "`),
+   so inline it would have to survive quote-escaping through Firestore and back.
+
+### Where the glyph is declared — three places, in lockstep
+
+| Surface | Selector |
+|---|---|
+| Šablony smluv | `ContractTemplatesPage.module.css` → `.a4Page :global(ul.hpm-checklist)` |
+| Dokumenty | `DokumentyPage.module.css` → `.a4Page :global(ul.hpm-checklist)` |
+| PDF | `functions/src/services/pdfRenderer.ts` → `RENDER_CSS` |
+
+This mirrors how the default `"– "` is already declared per surface.
+
+> ⚠️ Scoped to **`.a4Page`**, next to the `hpm-borderless` rules — *not* to
+> `.editorContent`. The template preview pane renders the same HTML **without** the
+> `.editorContent` class (only `.previewContent`, which carries no list rules at
+> all), so a rule placed there would show the correct box while editing and a plain
+> browser disc in the preview that is supposed to be byte-accurate.
+
+The class selector out-specifies `.editorContent ul ul { list-style-type: circle }`,
+so a **nested** checklist keeps its boxes rather than falling back to a circle.
+
+> ⚠️ `RENDER_CSS` is a **template literal**. A backtick inside a CSS comment there
+> terminates the string and TypeScript then parses the CSS as code. Every comment in
+> that block avoids backticks for this reason.
+
+### Known non-parity
+
+`DokumentyPage`'s `.previewContent` never received the base
+`list-style-type: "– "` that `.editorContent` and `RENDER_CSS` carry, so an ordinary
+bullet list shows a browser disc in that one preview. Pre-existing, unrelated to
+this change, and left alone here rather than silently altering how every existing
+document previews.
