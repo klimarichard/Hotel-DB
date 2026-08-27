@@ -27,6 +27,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "5.11.13",
+    date: "2026-08-27",
+    changes: [
+      "Šablony smluv: Nová proměnná Rodné číslo a nový typ odrážek se čtverečky k zaškrtnutí.",
+    ],
+  },
+  {
     version: "5.11.12",
     date: "2026-08-20",
     changes: [
