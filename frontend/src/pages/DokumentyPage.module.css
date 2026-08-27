@@ -730,6 +730,26 @@
   background: transparent !important;
 }
 
+/*
+ * Tickable bullet list – an EMPTY box the reader fills in with a pen on the
+ * printed document. Written by the ☐ toolbar button (BulletListMarker) and
+ * stored on the <ul> as the class `hpm-checklist`.
+ *
+ * Scoped to .a4Page, next to `hpm-borderless`, rather than to .editorContent:
+ * the preview pane renders the same HTML WITHOUT the .editorContent class, and
+ * a marker that changed between editing and previewing would defeat the point
+ * of the preview.
+ *
+ * ⚠️ Must stay in lockstep with the identical rule in RENDER_CSS
+ * (functions/src/services/pdfRenderer.ts) – editor, preview and PDF each
+ * declare the marker themselves, exactly as the default "– " already is.
+ * The class beats `.editorContent ul ul { circle }` on specificity, so a
+ * nested checklist keeps its boxes.
+ */
+.a4Page :global(ul.hpm-checklist) {
+  list-style-type: "☐ ";
+}
+
 /* Selected cell highlight (TipTap convention) */
 .a4Page :global(table .selectedCell::after) {
   content: "";
