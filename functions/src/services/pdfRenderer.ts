@@ -33,6 +33,14 @@ const RENDER_CSS = `
   ul, ol { padding-left: 1.5em; margin-bottom: 0.5em; }
   ul { list-style-type: "– "; }
   ul ul { list-style-type: circle; }
+  /*
+   * Tickable bullet list (the ☐ toolbar button). The class selector
+   * out-specifies the 'ul ul' rule above, so a nested checklist keeps its
+   * boxes instead of falling back to a circle. Mirrors
+   * '.editorContent ul.hpm-checklist' in ContractTemplatesPage.module.css
+   * and DokumentyPage.module.css.
+   */
+  ul.hpm-checklist, ul.hpm-checklist ul.hpm-checklist { list-style-type: "☐ "; }
   li { line-height: 1.3; }
   li > p { margin: 0; }
   table {

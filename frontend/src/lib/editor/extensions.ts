@@ -11,6 +11,8 @@
  * Nothing in here knows about contracts, documents, or employees.
  */
 import { Extension, Node, mergeAttributes } from "@tiptap/core";
+import type { Editor } from "@tiptap/core";
+import type { Node as PMNode } from "@tiptap/pm/model";
 import Paragraph from "@tiptap/extension-paragraph";
 import Image from "@tiptap/extension-image";
 import { Table as TableBase } from "@tiptap/extension-table";
@@ -456,3 +458,102 @@ export const TabParagraph = Paragraph.extend({
     }), 0];
   },
 });
+
+// ─── Bullet-list marker variant ──────────────────────────────────────────────
+
+/**
+ * Class marking a bullet list whose marker is an EMPTY box (☐) rather than the
+ * default dash — a list meant to be ticked with a pen on the printed document.
+ *
+ * Same shape as `hpm-borderless` on tables: the fact lives on the node as a
+ * boolean attribute, round-trips through the stored HTML as a class, and the
+ * actual glyph is one CSS rule per surface. Deliberately NOT an inline
+ * `style="list-style-type: …"`:
+ *   • `ListItemIndent` already owns the `<ul>`'s `style` attribute (Tab writes
+ *     `margin-left` into it). A second writer of the same string is how the two
+ *     would eventually clobber each other.
+ *   • The marker is a CSS *string* value (`"☐ "`, like the default `"– "`), so
+ *     inline it would have to survive quote-escaping through Firestore and back.
+ * The glyph therefore has to be declared in three places that must stay in
+ * lockstep — both editors' `.editorContent` CSS and `RENDER_CSS` in
+ * `functions/src/services/pdfRenderer.ts` — exactly as `"– "` already is.
+ */
+export const CHECKLIST_CLASS = "hpm-checklist";
+
+export const BulletListMarker = Extension.create({
+  name: "bulletListMarker",
+  addGlobalAttributes() {
+    return [
+      {
+        types: ["bulletList"],
+        attributes: {
+          checklist: {
+            default: false,
+            parseHTML: (el) => (el as HTMLElement).classList.contains(CHECKLIST_CLASS),
+            renderHTML: (attrs) => (attrs.checklist ? { class: CHECKLIST_CLASS } : {}),
+          },
+        },
+      },
+    ];
+  },
+});
+
+/** Innermost `bulletList` ancestor of the caret, with the position to edit it at. */
+function nearestBulletList(editor: Editor): { pos: number; node: PMNode } | null {
+  const { $from } = editor.state.selection;
+  for (let d = $from.depth; d > 0; d--) {
+    const node = $from.node(d);
+    if (node.type.name === "bulletList") return { pos: $from.before(d), node };
+  }
+  return null;
+}
+
+/**
+ * Which of the two bullet variants the caret sits in, if any. The toolbar
+ * highlights the matching button, so the two are mutually exclusive states of
+ * one list rather than two independent toggles.
+ */
+export function activeBulletVariant(
+  editor: Editor | null | undefined
+): "plain" | "checklist" | null {
+  if (!editor) return null;
+  const found = nearestBulletList(editor);
+  if (!found) return null;
+  return found.node.attrs.checklist === true ? "checklist" : "plain";
+}
+
+/**
+ * Toolbar action for both bullet buttons.
+ *
+ * Pressing the button of the variant you are already in turns the list OFF —
+ * that is what the single bullet button has always done, and keeping it makes
+ * the pair read as one control. Pressing the OTHER one converts in place
+ * instead of unwrapping and re-wrapping, so nesting and Tab indentation
+ * (`margin-left` on the same `<ul>`) survive the switch.
+ */
+export function setBulletVariant(
+  editor: Editor | null | undefined,
+  checklist: boolean
+): void {
+  if (!editor) return;
+  const current = nearestBulletList(editor);
+
+  if (current) {
+    if ((current.node.attrs.checklist === true) === checklist) {
+      editor.chain().focus().toggleBulletList().run();
+      return;
+    }
+  } else {
+    editor.chain().focus().toggleBulletList().run();
+  }
+
+  // Re-resolve: toggleBulletList rebuilt the document, so a position captured
+  // before it ran points at the wrong node (or at nothing).
+  const target = nearestBulletList(editor);
+  if (!target) return;
+  const { state, view } = editor;
+  view.dispatch(
+    state.tr.setNodeMarkup(target.pos, undefined, { ...target.node.attrs, checklist })
+  );
+  editor.commands.focus();
+}
