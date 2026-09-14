@@ -96,7 +96,7 @@ interface ChangeLite {
   value?: string;
 }
 
-interface EmploymentRowLite {
+export interface EmploymentRowLite {
   changeType?: string;
   startDate?: string;
   endDate?: string | null;
