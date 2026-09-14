@@ -924,15 +924,21 @@ export async function createOrUpdatePayrollPeriod(
     const empRows = empRowsSnap.docs.map((d) => d.data() as EmploymentRowLite);
     const eff = effectiveCompFromRows(empRows, year, month);
 
-    // Contract type still prefers the employee root's currentContractType (kept
-    // folded with the latest Dodatek by recomputeRootFromLatestSession). The
-    // session-folded value is the fallback; both beat the Nástup-only planEmp.
+    // Contract type comes from the session fold for THIS payroll month, exactly
+    // like salary / jobTitle / hoursPerWeek right below. It used to prefer the
+    // root's currentContractType, which is an as-of-today value re-folded nightly
+    // by refreshEmployeeEffective and on every employment write — so recomputing
+    // an earlier month AFTER a Dodatek (and refreshAllPublishedPayrollPeriods
+    // recomputes every published unlocked period daily) stamped the later
+    // contract type onto the earlier month. That is not cosmetic: contractType
+    // drives isDpp, resolveHourlyRate and the PPP vacation factor.
+    // Root stays the fallback for records with no contract type on their rows.
     const rootSnap = await db().collection("employees").doc(employeeId).get();
     const currentContractType = rootSnap.exists
       ? ((rootSnap.data() as Record<string, unknown>).currentContractType as string | undefined)
       : undefined;
 
-    const contractType = currentContractType || eff?.contractType || (planEmp.contractType as string) || "";
+    const contractType = eff?.contractType || currentContractType || (planEmp.contractType as string) || "";
     const jobTitle = eff?.jobTitle || (planEmp.jobTitle as string) || "";
     // Name from the LIVE employee doc, never from planEmp: the roster snapshot is
     // frozen when the person is added to the plan, so a later displayName edit
@@ -1087,7 +1093,9 @@ export async function recomputeEntryForEmployee(
     ? ((rootSnap.data() as Record<string, unknown>).currentContractType as string | undefined)
     : undefined;
 
-  const contractType = currentContractType || eff?.contractType || (planEmp.contractType as string) || "";
+  // Session fold for THIS month wins over the root's as-of-today value — same
+  // reasoning as in the orchestrator above; the two must not diverge.
+  const contractType = eff?.contractType || currentContractType || (planEmp.contractType as string) || "";
   const jobTitle = eff?.jobTitle || (planEmp.jobTitle as string) || "";
   // Live employee doc wins over the frozen planEmp roster snapshot — see the
   // orchestrator above.
