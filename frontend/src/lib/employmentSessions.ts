@@ -428,9 +428,17 @@ function addCalendarMonths(start: string, n: number): string {
  * date, see computeEffectiveState).
  */
 export function terminationContractType(session: EmploymentSession): ContractType {
-  if (session.effective.contractType === "DPP") return "ukonceni_dpp";
-  const start = session.nastup.startDate;
   const endDate = session.effective.endDate;
+  // Fold as of the TERMINATION DATE, not today. `session.effective` is built by
+  // groupBySession with no asOfDate, so for a future-dated Ukončení on a session
+  // that also has a pending úvazek Dodatek, the template was chosen from the
+  // contract type in force now rather than the one being terminated — e.g. an
+  // employee moving HPP → DPP next month got the HPP/PPP termination template.
+  const atEnd = endDate
+    ? computeEffectiveState(session.nastup, session.dodatky, session.ukonceni, endDate)
+    : session.effective;
+  if (atEnd.contractType === "DPP") return "ukonceni_dpp";
+  const start = session.nastup.startDate;
   const months = parseProbationMonths(session.nastup.probationPeriod);
   if (start && endDate && months && endDate < addCalendarMonths(start, months)) {
     return "ukonceni_zkusebni";

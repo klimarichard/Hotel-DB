@@ -19,6 +19,7 @@
  */
 import * as admin from "firebase-admin";
 import { setLedgerAnnual } from "./vacationLedger";
+import { effectiveCompAsOf, EmploymentRowLite } from "./payrollCalculator";
 
 const db = () => admin.firestore();
 
@@ -109,16 +110,29 @@ export async function rolloverVacationEntitlement(params: {
 
   // Employee records (status, contract type) and any ledger doc that already
   // exists for the target year — payroll may have locked January before this
-  // ran, which creates the doc with months but no entitlement.
+  // ran, which creates the doc with months but no entitlement. Plus the
+  // employment rows, which is where the contract type for the seeded year
+  // actually lives (see the fold below).
   const employees = new Map<string, Record<string, unknown>>();
   const existing = new Map<string, Record<string, unknown>>();
+  const employmentRows = new Map<string, EmploymentRowLite[]>();
   for (let i = 0; i < employeeIds.length; i += 100) {
     const chunk = employeeIds.slice(i, i + 100);
-    const [empSnaps, ledSnaps] = await Promise.all([
+    const [empSnaps, ledSnaps, rowSnaps] = await Promise.all([
       db().getAll(...chunk.map((id) => db().collection("employees").doc(id))),
       db().getAll(
         ...chunk.map((id) =>
           db().collection("employees").doc(id).collection("vacationLedger").doc(String(year))
+        )
+      ),
+      // A subcollection can't come from getAll, so it's one query per employee —
+      // fired in parallel within the same 100-wide chunk that already bounds the
+      // two getAll calls, same idiom as contractTypesForMonth in routes/shifts.ts.
+      Promise.all(
+        chunk.map((id) =>
+          db()
+            .collection("employees").doc(id)
+            .collection("employment").orderBy("startDate", "asc").get()
         )
       ),
     ]);
@@ -127,6 +141,9 @@ export async function rolloverVacationEntitlement(params: {
     });
     ledSnaps.forEach((s, idx) => {
       if (s.exists) existing.set(chunk[idx], s.data() as Record<string, unknown>);
+    });
+    rowSnaps.forEach((s, idx) => {
+      employmentRows.set(chunk[idx], s.docs.map((d) => d.data() as EmploymentRowLite));
     });
   }
 
@@ -147,7 +164,19 @@ export async function rolloverVacationEntitlement(params: {
       continue;
     }
 
-    const contractType = ((emp.currentContractType as string) ?? "").trim();
+    // The whole year's entitlement is sized by the contract type in force on
+    // 1 January of the year being seeded — folded from the employment rows, NOT
+    // read off the root's `currentContractType`, which is an as-of-TODAY value
+    // re-folded nightly by refreshEmployeeEffective. The scheduled 1 January
+    // 01:00 run happens to agree (refreshEmployeeEffective runs at 00:00), but
+    // this job is explicitly re-runnable and manually triggerable for any year:
+    // a re-run in March for an employee whose HPP→PPP úvazek Dodatek took effect
+    // on 1 March would otherwise hand out 80 h for a year that opened as HPP.
+    // Root stays the fallback for legacy/seeded records whose rows carry no
+    // contract type at all (and for the one prod record with none anywhere,
+    // which keeps landing in skippedUnknownContract exactly as before).
+    const eff = effectiveCompAsOf(employmentRows.get(employeeId) ?? [], `${year}-01-01`);
+    const contractType = (eff?.contractType || (emp.currentContractType as string) || "").trim();
     const hours = YEARLY_ENTITLEMENT_HOURS[contractType];
     if (hours === undefined) {
       result.skippedUnknownContract.push({

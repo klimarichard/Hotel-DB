@@ -35,6 +35,7 @@ import {
 import { nationalityName } from "@/lib/nationalities";
 import { buildContractName } from "@/lib/contractNaming";
 import {
+  computeEffectiveState,
   groupBySession,
   hasOpenRodicovska,
   mapContractsToRows,
@@ -926,7 +927,19 @@ function AddEntryModal({
       const target =
         (anchorId && sessions.find((s) => s.rows.some((r) => r.id === anchorId))) ||
         (sessions.length ? sessions[sessions.length - 1] : null);
-      const eff = target?.effective ?? null;
+      // ...and folded as of the date THIS Dodatek takes effect, not as of today.
+      // `target.effective` is computed by groupBySession with no asOfDate, i.e.
+      // always today, so a Dodatek dated next quarter was checked against the
+      // contract type / hours in force now rather than the ones it will actually
+      // amend — wrong baseline, wrong minimum-wage threshold.
+      const eff = target
+        ? computeEffectiveState(
+            target.nastup,
+            target.dodatky,
+            target.ukonceni,
+            form.startDate || clock.today()
+          )
+        : null;
       let contractType = eff?.contractType ?? "";
       let hpw = eff?.hoursPerWeek ?? undefined;
       // Overlay changes made in THIS dodatek (a single Dodatek can move úvazek
@@ -2356,6 +2369,22 @@ export default function EmployeeDetailPage() {
         // is a no-op.
         const r = generateModal.row;
         const p = generateModal.parent;
+        // The state in force ON THIS ROW'S OWN VALIDITY DATE. Every employment
+        // field below used to read `r.x || p.x`, and a Dodatek row carries none
+        // of them (its payload lives in changes[]), so each one fell through to
+        // the NÁSTUP's original value: a third amendment printed the contract
+        // type, salary and úvazek the employee had on their hire date, ignoring
+        // the two amendments in between. {{oldSalary}} in this same object has
+        // always been date-folded (findOldSalary), so the payload disagreed with
+        // itself. Folding as of r.startDate INCLUDES r itself, which is what a
+        // Dodatek document should state: the newly agreed values, with
+        // {{oldSalary}} supplying the "before" side.
+        const rowSession = groupBySession(employment).find((s) =>
+          s.rows.some((x) => x.id === r.id)
+        );
+        const effAt = rowSession
+          ? computeEffectiveState(rowSession.nastup, rowSession.dodatky, null, r.startDate)
+          : null;
         return (
           <GenerateContractModal
             employeeId={id!}
@@ -2366,8 +2395,12 @@ export default function EmployeeDetailPage() {
               id: employee.id,
               firstName: employee.firstName,
               lastName: employee.lastName,
-              currentJobTitle: r.jobTitle || p.jobTitle || employee.currentJobTitle,
-              currentCompanyId: employee.currentCompanyId ?? undefined,
+              currentJobTitle: r.jobTitle || effAt?.jobTitle || p.jobTitle || employee.currentJobTitle,
+              // Company from the row/session, matching the companyId prop two
+              // lines above; the root's currentCompanyId is a today value and,
+              // for someone holding a second concurrent contract, can be the
+              // OTHER company entirely.
+              currentCompanyId: r.companyId || p.companyId || employee.currentCompanyId || undefined,
               address: contact?.contactAddress || contact?.permanentAddress,
               birthDate: employee.dateOfBirth ?? undefined,
               nationality: employee.nationality,
@@ -2375,8 +2408,8 @@ export default function EmployeeDetailPage() {
               passportNumber: documents?.passportNumber,
               visaNumber: documents?.visaNumber,
               visaType: documents?.visaType,
-              contractType: r.contractType || p.contractType,
-              salary: r.salary ?? p.salary,
+              contractType: r.contractType || effAt?.contractType || p.contractType,
+              salary: r.salary ?? effAt?.salary ?? p.salary,
               startDate: r.changeType === "nástup" ? r.startDate : p.startDate,
               // An "ukončení" row stores the termination date in its own
               // startDate (not endDate). The {{endDate}} variable on a
@@ -2384,17 +2417,24 @@ export default function EmployeeDetailPage() {
               // the row's startDate – otherwise it falls back to the parent's
               // (often empty, or the original fixed end) and the template
               // reports no end date / the wrong date.
+              // ⚠️ When a fold is available its endDate is authoritative and is
+              // NOT ?? -chained onto the parent: a "délka smlouvy" Dodatek with an
+              // empty value means "změna na dobu neurčitou", i.e. endDate null.
+              // Falling through to p.endDate there would print the ORIGINAL fixed
+              // end date on the very document abolishing it.
               endDate:
                 r.changeType === "ukončení"
                   ? r.startDate
-                  : (r.endDate ?? p.endDate) ?? undefined,
+                  : r.endDate ?? (effAt ? effAt.endDate ?? undefined : p.endDate ?? undefined),
+              // workLocation / probationPeriod / agreedWorkScope are Nástup-only
+              // and never folded by a Dodatek, so the parent stays correct here.
               workLocation: r.workLocation || p.workLocation,
               probationPeriod: r.probationPeriod || p.probationPeriod,
-              hoursPerWeek: r.hoursPerWeek ?? p.hoursPerWeek,
+              hoursPerWeek: r.hoursPerWeek ?? effAt?.hoursPerWeek ?? p.hoursPerWeek,
               signingDate: r.signingDate ?? undefined,
               originalSigningDate: findOriginalSigningDate(r, employment),
               agreedWorkScope: r.agreedWorkScope || p.agreedWorkScope,
-              agreedReward: (r.agreedReward ?? p.agreedReward) ?? undefined,
+              agreedReward: (r.agreedReward ?? effAt?.agreedReward ?? p.agreedReward) ?? undefined,
               dodatekEffectiveDate:
                 r.changeType === "změna smlouvy" ? r.startDate : undefined,
               dodatekChanges: r.changes?.map((c) => ({
@@ -2407,7 +2447,9 @@ export default function EmployeeDetailPage() {
             displayName={buildContractName(
               generateModal.contractType,
               {
-                contractType: r.contractType || p.contractType,
+                // Same fold as the payload above, so the document's NAME cannot
+                // disagree with the contract type printed inside it.
+                contractType: r.contractType || effAt?.contractType || p.contractType,
                 startDate: r.startDate,
                 changes: r.changes,
               },

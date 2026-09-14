@@ -105,6 +105,7 @@ export interface EmploymentRowLite {
   salary?: number | null;
   hourlyRate?: number | null;
   hoursPerWeek?: number | null;
+  companyId?: string;
   changes?: ChangeLite[];
 }
 
@@ -217,15 +218,61 @@ export function proratedBaseFromRows(rows: EmploymentRowLite[], year: number, mo
  * the session keeps the Nástup's hourlyRate and applies the mzda amendment.
  * Pure + exported for unit testing.
  */
+export interface EffectiveComp {
+  salary: number | null;
+  hourlyRate: number | null;
+  contractType: string;
+  jobTitle: string;
+  hoursPerWeek: number | null;
+  positionChanged: boolean;
+  /** Company of the session's Nástup. Dodatky never move an employee's company. */
+  companyId: string;
+  /** The session's Nástup date — the real employment start, NOT a Dodatek's date. */
+  nastupStartDate: string;
+  /** The session's effective end, or null while it is open-ended. */
+  sessionEndDate: string | null;
+}
+
 export function effectiveCompFromRows(
   rows: EmploymentRowLite[],
   year: number,
   month: number
-): { salary: number | null; hourlyRate: number | null; contractType: string; jobTitle: string; hoursPerWeek: number | null; positionChanged: boolean } | null {
+): EffectiveComp | null {
   const relevant = relevantSessionForMonth(buildSessions(rows), year, month);
   if (!relevant) return null;
+  // A month-scoped fold is an as-of fold anchored on the month's last day: a
+  // Dodatek counts for the month once its validity has arrived by then.
+  return foldSessionAsOf(relevant, monthBounds(year, month).monthEnd);
+}
+
+/**
+ * The same fold anchored on an exact DATE rather than a month. Use this wherever
+ * the caller has a real date to be correct as of — a generated document's
+ * validity date, a tax period, a year's entitlement, or plain "today" for a
+ * current-state read (where the month variant would wrongly count a Dodatek due
+ * later in the same month).
+ *
+ * Pure + exported for unit testing. `effectiveCompFromRows` delegates here, so
+ * the month and date paths cannot drift apart.
+ */
+export function effectiveCompAsOf(rows: EmploymentRowLite[], asOfDate: string): EffectiveComp | null {
+  const sessions = buildSessions(rows);
+  let relevant: SessionLite | null = null;
+  for (const s of sessions) {
+    if (s.start <= asOfDate && (s.end == null || s.end >= asOfDate)) relevant = s;
+  }
+  // Nothing in force on that date → fall back to the LAST session, mirroring
+  // computeEffectiveRootFields in routes/employees.ts: a not-yet-started hire
+  // shows what they are joining as, a leaver shows the contract they left from.
+  // Returning null here would blank the caller's fields, which is precisely what
+  // the export / questionnaire / tax-declaration bugs looked like.
+  relevant = relevant ?? sessions[sessions.length - 1] ?? null;
+  if (!relevant) return null;
+  return foldSessionAsOf(relevant, asOfDate);
+}
+
+function foldSessionAsOf(relevant: SessionLite, asOfDate: string): EffectiveComp {
   const nastupJobTitle = relevant.nastup.jobTitle ?? "";
-  const { monthEnd } = monthBounds(year, month);
 
   let salary: number | null = null;
   let hourlyRate: number | null = null;
@@ -234,8 +281,8 @@ export function effectiveCompFromRows(
   let hoursPerWeek: number | null = null;
 
   // Nástup first, then Dodatky whose validity (startDate) has arrived by the
-  // month's end. A future-dated Dodatek must not change comp until its day.
-  const applicable = [relevant.nastup, ...relevant.dodatky.filter((d) => (d.startDate ?? "") <= monthEnd)];
+  // anchor date. A future-dated Dodatek must not change comp until its day.
+  const applicable = [relevant.nastup, ...relevant.dodatky.filter((d) => (d.startDate ?? "") <= asOfDate)];
   for (const row of applicable) {
     if (row.salary != null) salary = row.salary;
     if (row.hourlyRate != null) hourlyRate = row.hourlyRate;
@@ -262,7 +309,17 @@ export function effectiveCompFromRows(
   // positionChanged: a "pracovní pozice" Dodatek moved the employee off the
   // Nástup position, so the Nástup's folded hourlyRate is stale for navíc.
   const positionChanged = normalizePositionName(jobTitle) !== normalizePositionName(nastupJobTitle);
-  return { salary, hourlyRate, contractType, jobTitle, hoursPerWeek, positionChanged };
+  return {
+    salary,
+    hourlyRate,
+    contractType,
+    jobTitle,
+    hoursPerWeek,
+    positionChanged,
+    companyId: relevant.nastup.companyId ?? "",
+    nastupStartDate: relevant.start,
+    sessionEndDate: relevant.end,
+  };
 }
 
 /**
@@ -924,15 +981,21 @@ export async function createOrUpdatePayrollPeriod(
     const empRows = empRowsSnap.docs.map((d) => d.data() as EmploymentRowLite);
     const eff = effectiveCompFromRows(empRows, year, month);
 
-    // Contract type still prefers the employee root's currentContractType (kept
-    // folded with the latest Dodatek by recomputeRootFromLatestSession). The
-    // session-folded value is the fallback; both beat the Nástup-only planEmp.
+    // Contract type comes from the session fold for THIS payroll month, exactly
+    // like salary / jobTitle / hoursPerWeek right below. It used to prefer the
+    // root's currentContractType, which is an as-of-today value re-folded nightly
+    // by refreshEmployeeEffective and on every employment write — so recomputing
+    // an earlier month AFTER a Dodatek (and refreshAllPublishedPayrollPeriods
+    // recomputes every published unlocked period daily) stamped the later
+    // contract type onto the earlier month. That is not cosmetic: contractType
+    // drives isDpp, resolveHourlyRate and the PPP vacation factor.
+    // Root stays the fallback for records with no contract type on their rows.
     const rootSnap = await db().collection("employees").doc(employeeId).get();
     const currentContractType = rootSnap.exists
       ? ((rootSnap.data() as Record<string, unknown>).currentContractType as string | undefined)
       : undefined;
 
-    const contractType = currentContractType || eff?.contractType || (planEmp.contractType as string) || "";
+    const contractType = eff?.contractType || currentContractType || (planEmp.contractType as string) || "";
     const jobTitle = eff?.jobTitle || (planEmp.jobTitle as string) || "";
     // Name from the LIVE employee doc, never from planEmp: the roster snapshot is
     // frozen when the person is added to the plan, so a later displayName edit
@@ -1087,7 +1150,9 @@ export async function recomputeEntryForEmployee(
     ? ((rootSnap.data() as Record<string, unknown>).currentContractType as string | undefined)
     : undefined;
 
-  const contractType = currentContractType || eff?.contractType || (planEmp.contractType as string) || "";
+  // Session fold for THIS month wins over the root's as-of-today value — same
+  // reasoning as in the orchestrator above; the two must not diverge.
+  const contractType = eff?.contractType || currentContractType || (planEmp.contractType as string) || "";
   const jobTitle = eff?.jobTitle || (planEmp.jobTitle as string) || "";
   // Live employee doc wins over the frozen planEmp roster snapshot — see the
   // orchestrator above.
