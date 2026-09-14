@@ -15,7 +15,7 @@ import {
   isCountedTag,
 } from "../services/shiftCounting";
 import { snapshotShifts, deleteCollection, autoFillManagerRShifts } from "../services/planTransitions";
-import { createOrUpdatePayrollPeriod } from "../services/payrollCalculator";
+import { createOrUpdatePayrollPeriod, effectiveCompFromRows, EmploymentRowLite } from "../services/payrollCalculator";
 import { projectedRemainingHours } from "../services/vacationLedger";
 import {
   EmployeeNameParts,
@@ -690,6 +690,38 @@ shiftsRouter.post(
   }
 );
 
+// ─── Contract type as of a plan's month ──────────────────────────────────────
+// The voluntary-X limit (8 HPP / 13 PPP) is sized by contract type, and a plan
+// for a FUTURE month must use the type that will be in force THAT month — not
+// today's. The employee root's `currentContractType` is an as-of-today fold
+// (re-folded nightly by refreshEmployeeEffective), so a Dodatek switching
+// PPP → HPP from 1 October is invisible while the October plan is being filled
+// in September: the planner kept offering 13 Xs to someone already down to 8.
+// Fold the employment session for the plan's own year/month instead, reusing
+// payroll's effectiveCompFromRows so the two folds cannot drift apart. A Dodatek
+// counts once its startDate falls on or before the month's end (same rule as
+// payroll). The root value stays the fallback for employees whose rows carry no
+// contract type at all (legacy/seeded records) or who have no session that month.
+async function contractTypesForMonth(
+  employeeIds: string[],
+  year: number,
+  month: number,
+  rootFallback: Map<string, string>
+): Promise<Map<string, string>> {
+  const snaps = await Promise.all(
+    employeeIds.map((id) =>
+      db().collection("employees").doc(id).collection("employment").orderBy("startDate", "asc").get()
+    )
+  );
+  const out = new Map<string, string>();
+  employeeIds.forEach((id, i) => {
+    const rows = snaps[i].docs.map((d) => d.data() as EmploymentRowLite);
+    const eff = effectiveCompFromRows(rows, year, month);
+    out.set(id, eff?.contractType || rootFallback.get(id) || "");
+  });
+  return out;
+}
+
 // GET /shifts/plans/:planId — plan + employees + shifts
 shiftsRouter.get(
   "/plans/:planId",
@@ -747,10 +779,19 @@ shiftsRouter.get(
         liveNames.set(d.id, nameParts(data));
       }
     });
+    // Contract type is resolved for the PLAN'S month, not for today — see
+    // contractTypesForMonth. contractTypeMap (the live root value) is only the
+    // fallback.
+    const monthContractTypes = await contractTypesForMonth(
+      employeeIds,
+      Number(planData.year),
+      Number(planData.month),
+      contractTypeMap
+    );
     const employees = rawEmployees.map((e) => ({
       ...e,
       ...preferLive(liveNames, e.employeeId, e),
-      contractType: contractTypeMap.get(e.employeeId) ?? null,
+      contractType: monthContractTypes.get(e.employeeId) || null,
     }));
 
     // Self-service viewers (no shifts.view.all) see a closed plan's snapshot
@@ -1470,7 +1511,8 @@ shiftsRouter.put(
           // in the plan conflict on a shared document under Firestore's optimistic
           // model — so the coverage check can't be raced, including the phantom case
           // where the racing X is a brand-new cell the day-query never saw.
-          await tx.get(planRef);
+          // The snapshot is also what gives the rules below the plan's year/month.
+          const planSnapTx = await tx.get(planRef);
           const beforeExists = cellSnap.exists;
           auditBeforeRaw = beforeExists ? ((cellSnap.data() as Record<string, unknown>).rawInput as string) ?? "" : "";
           // Optimistic concurrency (same as the non-X path).
@@ -1480,11 +1522,14 @@ shiftsRouter.put(
               throw new CellConflict(beforeExists ? { id: xDocId, ...(cellSnap.data() as object) } : null);
             }
           }
-          const [empSnap, daySnap, planEmpsSnap, meGlobalSnap] = await Promise.all([
+          const [empSnap, daySnap, planEmpsSnap, meGlobalSnap, meEmploymentSnap] = await Promise.all([
             tx.get(shiftsCol.where("employeeId", "==", employeeId)),
             tx.get(shiftsCol.where("date", "==", date)),
             tx.get(planRef.collection("planEmployees")),
             tx.get(db().collection("employees").doc(employeeId)),
+            tx.get(
+              db().collection("employees").doc(employeeId).collection("employment").orderBy("startDate", "asc")
+            ),
           ]);
           const meEmp = planEmpsSnap.docs
             .map((d) => d.data() as Record<string, unknown>)
@@ -1510,8 +1555,20 @@ shiftsRouter.put(
           }
           // Rule 2 — monthly X limit (8 HPP / 13 PPP; admin override only with vacation).
           if (meEmp) {
+            // Contract type as of the PLAN'S month, mirroring contractTypesForMonth
+            // on the GET: a Dodatek taking effect in the planned month must size the
+            // limit while that plan is still being filled the month before. The root's
+            // as-of-today currentContractType stays the fallback.
+            const planDataTx = planSnapTx.data() as Record<string, unknown> | undefined;
+            const effTx = effectiveCompFromRows(
+              meEmploymentSnap.docs.map((d) => d.data() as EmploymentRowLite),
+              Number(planDataTx?.year),
+              Number(planDataTx?.month)
+            );
             const ctBase = xBaseLimit(
-              ((meGlobalSnap.data() as Record<string, unknown> | undefined)?.currentContractType as string) ?? null
+              effTx?.contractType ||
+                (((meGlobalSnap.data() as Record<string, unknown> | undefined)?.currentContractType as string) ??
+                  null)
             );
             if (ctBase !== null) {
               const limit = vacationX > 0 && meEmp.xLimitOverride != null ? (meEmp.xLimitOverride as number) : ctBase;
