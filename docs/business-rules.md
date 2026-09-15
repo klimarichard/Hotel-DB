@@ -115,7 +115,9 @@ Zaměstnanci ukončení **před** 1. lednem nového roku nárok nedostanou. Zam�
 
 Chybí-li u zaměstnance rozpoznatelný typ smlouvy (prázdný, nebo jiný než HPP/PPP/DPP), aplikace nic **neodhaduje** – zaměstnance přeskočí a nahlásí ho zvlášť, aby šel opravit ručně.
 
-> ⚙️ Automatika. Zdroj: `functions/src/services/vacationYearRollover.ts` – tabulka `YEARLY_ENTITLEMENT_HOURS` (`:33-37`), vynechání Loňské (komentář `:10-14`), odolnost proti opakování (`:161-167`), vynechání ukončených před novým rokem (`:141-148`), nerozpoznaný typ smlouvy (`:150-159`); plánovaná úloha `rolloverVacationYear` v `functions/src/index.ts:428-446` (čas spuštění `:429`); ruční opakování `POST /api/employees/trigger-vacation-rollover` tamtéž `:252-281`.
+**Rozhoduje typ smlouvy platný k 1. lednu daného roku**, ne typ platný v okamžiku spuštění. Při běhu podle plánu je to totéž, ale úlohu lze spustit ručně kdykoli a pro libovolný rok – a v takovém případě se do verze 5.11.14 nárok počítal podle dnešního typu smlouvy, takže opakované spuštění v průběhu roku mohlo celý rok ocenit podle úvazku, který v lednu ještě neplatil.
+
+> ⚙️ Automatika. Zdroj: `functions/src/services/vacationYearRollover.ts` – tabulka `YEARLY_ENTITLEMENT_HOURS` (`:34-38`), vynechání Loňské (komentář `:10-14`), odolnost proti opakování (`:193-195`), vynechání ukončených před novým rokem (`:162-164`), nerozpoznaný typ smlouvy (`:180-186`), typ smlouvy k 1. lednu (`:167-179`, přes `effectiveCompAsOf`); plánovaná úloha `rolloverVacationYear` v `functions/src/index.ts:577-597` (čas spuštění `:578`); ruční opakování `POST /api/employees/trigger-vacation-rollover` tamtéž `:327`.
 
 ---
 
@@ -135,7 +137,9 @@ Při překročení limitu se otevře **žádost o výjimku** s odůvodněním, k
 
 **Dny dovolené se do limitu nezapočítávají.** X zapsané schválenou dovolenou je vedeno zvlášť a limit nesnižuje.
 
-> 🔒 Server, ale **pouze pro samoobslužné zadání**. Držitelé oprávnění `shifts.xAllowance.manage` a administrátoři pravidlo obcházejí na serveru i v rozhraní, takže pro ně limit neplatí. Zdroj: `functions/src/routes/shifts.ts:1190-1196` (limity), `:1325-1336` (výjimka), `:1312-1317` (dovolená mimo limit), rozsah vynucení `:1268`.
+**Rozhoduje typ smlouvy platný v měsíci, pro který je plán sestavován – ne typ platný dnes.** Plán se vyplňuje měsíc dopředu, takže u zaměstnance, kterému dodatek mění úvazek například od 1. října, platí pro říjnový plán už limit podle nového úvazku, i když se plán vyplňuje v září. Do verze 5.11.14 se limit řídil dnešním stavem, takže se nová hodnota projevila až prvního dne daného měsíce – tedy pozdě.
+
+> 🔒 Server, ale **pouze pro samoobslužné zadání**. Držitelé oprávnění `shifts.xAllowance.manage` a administrátoři pravidlo obcházejí na serveru i v rozhraní, takže pro ně limit neplatí. Zdroj: `functions/src/routes/shifts.ts:1417-1423` (`xBaseLimit`, hodnoty 8/13), `:1556-1578` (vynucení měsíčního limitu), `:1545-1546` (dovolená mimo limit), rozsah vynucení `:1450-1451` (`selfServiceOnly`); typ smlouvy podle měsíce plánu `:705-723` (`contractTypesForMonth`, pro zobrazení) a `:1558-1570` (tentýž výpočet uvnitř zápisové transakce). Žádost o výjimku: `:2225` a dále (`shiftOverrideRequests`).
 
 ### Nejvýše 6 X v řadě – bez možnosti výjimky
 
@@ -143,7 +147,7 @@ Zapsat **více než 6 X po sobě jdoucích dnů** aplikace odmítne úplně. Na 
 
 Do řady se počítají jen **vlastní** X. Schválená dovolená zapíše X se svým vlastním původem, takže ani čtrnáctidenní dovolená toto pravidlo neporuší.
 
-> 🔒 Server. Zdroj: `functions/src/routes/shifts.ts:1319-1324` (hláška „Nelze zadat více než 6 X po sobě jdoucích dnů…"), rozsah započítávání `:1310-1317`. Kontrola v rozhraní `frontend/src/pages/ShiftPlannerPage.tsx:1204` je jen předběžná.
+> 🔒 Server. Zdroj: `functions/src/routes/shifts.ts:1550-1555` (hláška „Nelze zadat více než 6 X po sobě jdoucích dnů…"), rozsah započítávání `:1545-1548`. Kontrola v rozhraní `frontend/src/pages/ShiftPlannerPage.tsx:1315-1320` je jen předběžná.
 
 ### Plán směn lze smazat pouze ve stavu „Vytvořený"
 

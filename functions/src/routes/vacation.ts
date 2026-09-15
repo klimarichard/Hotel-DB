@@ -7,6 +7,7 @@ import { applyVacationXsToPlans, removeVacationXsFromPlans, findShiftCollisions 
 import { getManagementEmployeeIds, isNonManagementScoped } from "./employees";
 import { projectLedger, periodsForYear } from "../services/vacationLedger";
 import { ctxFromReq, logCreate, logUpdate, logDelete } from "../services/auditLog";
+import { effectiveCompAsOf, EmploymentRowLite } from "../services/payrollCalculator";
 import { resolveEmployeeNameParts, preferLive } from "../services/employeeNames";
 
 export const vacationRouter = Router();
@@ -138,9 +139,38 @@ vacationRouter.get(
     const mgmt = isNonManagementScoped(req.permissions)
       ? await getManagementEmployeeIds()
       : null;
+    const visible = ledgers.filter((l) => !mgmt || !mgmt.has(l.employeeId));
 
-    const rows = ledgers
-      .filter((l) => !mgmt || !mgmt.has(l.employeeId))
+    // Contract type has to be folded as of the year being VIEWED. The root's
+    // `currentContractType` is an as-of-today value re-folded nightly by
+    // refreshEmployeeEffective, so opening 2025 after an HPP→PPP Dodatek showed
+    // "PPP" next to a Nárok of 160 h that the rollover had sized as HPP — the
+    // two columns contradicted each other on the same row. Anchored on 31
+    // December so the year's final úvazek wins, which is the figure Zůstatek is
+    // reconciled against. Root stays the fallback for legacy/seeded records
+    // whose employment rows carry no contract type at all.
+    //
+    // Read cost: one employment query per VISIBLE employee (management records
+    // are filtered out first, so we never pay for rows we won't return), issued
+    // in parallel — a per-row await would add a serial round trip each on top of
+    // the collection-group query and the chunked getAll this endpoint already does.
+    const rowSnaps = await Promise.all(
+      visible.map((l) =>
+        db()
+          .collection("employees").doc(l.employeeId)
+          .collection("employment").orderBy("startDate", "asc").get()
+      )
+    );
+    const yearContractType = new Map<string, string>();
+    visible.forEach((l, i) => {
+      const empRows = rowSnaps[i].docs.map((d) => d.data() as EmploymentRowLite);
+      yearContractType.set(
+        l.employeeId,
+        effectiveCompAsOf(empRows, `${year}-12-31`)?.contractType ?? ""
+      );
+    });
+
+    const rows = visible
       .map((l) => {
         const emp = employees.get(l.employeeId);
         return {
@@ -148,8 +178,15 @@ vacationRouter.get(
           firstName: (emp?.firstName as string) ?? "",
           lastName: (emp?.lastName as string) ?? "",
           status: (emp?.status as string) ?? "",
+          // Deliberately still the ROOT field, not the fold's sessionEndDate:
+          // this one drives the year-membership filter below ("did they leave
+          // before this year?"), which needs the FINAL termination date, and the
+          // frontend renders it only as the "Ukončeno k …" tooltip on the
+          // status-driven pill. sessionEndDate would conflate a fixed-term
+          // contract end with a termination, and would drop terminated rows
+          // whose root end date is blank — rows the filter below deliberately keeps.
           employmentEndDate: (emp?.employmentEndDate as string) ?? "",
-          contractType: (emp?.currentContractType as string) ?? "",
+          contractType: yearContractType.get(l.employeeId) || (emp?.currentContractType as string) || "",
           // A ledger doc can outlive its employee doc. Surface it rather than
           // dropping it — the aggregate view is the ONLY place such an orphan
           // is visible, since the per-employee page needs an employee to open.

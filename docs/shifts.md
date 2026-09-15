@@ -331,6 +331,34 @@ Manually assigned split hours feed **only** the third tally (and, by extension, 
 - Inline badge under the employee name (`ShiftGrid`): `X: used / limit`, plus `(N dovolená)` when the employee has vacation Xs that month; red when over. The `✎` editor appears only when a vacation exists; editing shows the vacation-X count as a hint.
 - Shown to **admin/director only** (never managers — `xInfoFor`/`onSetXAllowance` gated on `canPublish`), and **only in `created`/`opened`** plan states. Hidden in `closed`/`published` to keep rows compact.
 
+### Contract type as of a plan's month (v5.11.14)
+
+The X-limit base above (8 HPP / 13 PPP) is sized by **the contract in force in the plan's own
+month**, not by the employee's contract today.
+
+`GET /shifts/plans/:planId` used to enrich each `planEmployees` row with the employee root's
+`currentContractType` — an as-of-today denormalization re-folded nightly at 00:00 Europe/Prague by
+`refreshEmployeeEffective`. Because a plan is filled the month *before* it runs, a Dodatek switching
+someone PPP → HPP from 1 October was invisible for the whole of September: the October plan kept
+offering 13 Xs to an employee already down to 8, and the server-side rule let all 13 through. The
+value only corrected itself at midnight on 1 October — by which point the plan was already built.
+
+Both the display and the enforcement now fold the employment session for the plan's `year`/`month`:
+
+- `contractTypesForMonth(employeeIds, year, month, rootFallback)` (`functions/src/routes/shifts.ts`)
+  on the plan GET. The frontend needed no change — `ShiftPlannerPage`'s `getXBase()` reads
+  `emp.contractType` straight off this response.
+- The same fold inside the cell-write transaction for the self-service X rule, taking `year`/`month`
+  off the plan snapshot that is already in the transaction's read set for the concurrency guard.
+
+Both were fixed together deliberately: a display-only fix would have moved the surprise to the save,
+showing "8" while the server still accepted 13. The root `currentContractType` remains the
+**fallback** for records whose employment rows carry no contract type at all.
+
+Mechanics, the shared fold API and the anchor-choice rule for other date-scoped reads:
+[Employment History: Session Folding & As-Of Reads](employment-history-folding.md). User-facing
+statement of the rule: [business-rules.md](business-rules.md#limity-vlastního-volna-x-podle-typu-smlouvy).
+
 ### Other Batch 4 items
 - **Count/occupancy table** (`showCounterTable`) is shown to **admin in every plan state** (previously only when closed).
 - **Compact name-cell rows + section label** (admin/director): the MOD-count line (`MOD: N (PD/V+S)`, `showModCounts`) shows in **`created`/`closed`/`published`**, the X-limit line **only in `created`/`opened`** — so `created` carries **both** and is the one state where a Management row is two guide lines tall. This partly retires the original "at most one guide line per row" rule (commit `19d383c`, which had the MOD line in `closed`/`published` only): that rule bought compactness at the price of hiding the MOD tally during `created`, which is precisely when the planner is filling the MOD row and needs to see the running balance. `opened` deliberately keeps the X-line alone — that state belongs to employees entering their own requests, not to MOD balancing. `.nameLines` is `display: flex; flex-direction: column`, so the two badges stack with no layout change. The manager section is **displayed as "Management"** via `SECTION_LABELS["vedoucí"]` in `shiftConstants.ts`; the stored section data key stays `"vedoucí"` (display-only rename). (Previously this label was "FOM".) Per-section Σ summary rows have been removed from the grid — sections are now separated by header rows only.

@@ -23,6 +23,11 @@ import {
   deleteProbationAlertsForEmployee,
 } from "../services/probationAlerts";
 import * as clock from "../services/clock";
+// Shared employment-session fold. A Dodatek ("změna smlouvy") row carries its
+// payload in changes[] and has NO salary / jobTitle / contractType / companyId
+// of its own, so "the latest row" is the wrong thing to read anywhere — see the
+// three call sites below.
+import { effectiveCompAsOf, type EmploymentRowLite } from "../services/payrollCalculator";
 import { fillQuestionnairePdf, fillProhlaseniPdf } from "../services/formPdf";
 import { formatNationality } from "../services/nationalities";
 import { normalizeContactAddresses } from "../services/addressFormat";
@@ -861,8 +866,8 @@ employeesRouter.get(
 
 /**
  * GET /api/employees/export
- * Returns merged rows (root + contact + documents + benefits + latest employment)
- * for CSV export on the frontend.
+ * Returns merged rows (root + contact + documents + benefits + the employment
+ * session folded as of today) for CSV export on the frontend.
  *
  * Query params (all optional):
  *   status, companyId, department, contractType, nationality, jobTitle
@@ -902,6 +907,9 @@ employeesRouter.get(
       exportDocs = exportDocs.filter((d) => !mgmt.has(d.id));
     }
 
+    // clock.today() honours the non-prod test clock.
+    const today = clock.today();
+
     const rows = await Promise.all(
       exportDocs.map(async (empDoc) => {
         const empRef = empDoc.ref;
@@ -909,9 +917,10 @@ employeesRouter.get(
           empRef.collection("contact").limit(1).get(),
           empRef.collection("documents").limit(1).get(),
           empRef.collection("benefits").limit(1).get(),
-          // A few latest rows so we can skip informational "rodičovská" periods
-          // and export the latest actual employment-contract row.
-          empRef.collection("employment").orderBy("startDate", "desc").limit(5).get(),
+          // The WHOLE history, oldest first: the export folds the session rather
+          // than reading one row (see below), and the fold needs the Nástup plus
+          // every Dodatek on top of it.
+          empRef.collection("employment").orderBy("startDate", "asc").get(),
         ]);
 
         let root = empDoc.data() as Record<string, unknown>;
@@ -924,11 +933,37 @@ employeesRouter.get(
         const contact = contactSnap.empty
           ? {}
           : (contactSnap.docs[0].data() as Record<string, unknown>);
-        const employmentDoc = employmentSnap.docs.find(
-          (d) => (d.data() as Record<string, unknown>).changeType !== "rodičovská"
-        );
-        const employment = employmentDoc
-          ? (employmentDoc.data() as Record<string, unknown>)
+        // Until 2026-09-14 this took the latest non-"rodičovská" row as THE
+        // employment row. For the 31 of 96 active employees whose latest row is
+        // a Dodatek that exported blanks: a Dodatek has no salary / contractType
+        // / jobTitle / companyId of its own (they live in changes[]), and its
+        // startDate is the amendment date, so "Ve firmě od" showed the amendment
+        // instead of the hire date. Fold the session instead. Nástup-only fields
+        // (signingDate, workLocation, probationPeriod, department…) have no
+        // Dodatek counterpart, so they still come off the Nástup row — which is
+        // also the right referent for "Podpis smlouvy": the contract the person
+        // is employed under, matching the startDate next to it.
+        const employmentRows = employmentSnap.docs.map((d) => d.data() as EmploymentRowLite);
+        const eff = effectiveCompAsOf(employmentRows, today);
+        // nastupStartDate identifies the folded session's Nástup row uniquely.
+        const nastupRow = eff
+          ? employmentSnap.docs.find((d) => {
+              const r = d.data();
+              return r.changeType === "nástup" && r.startDate === eff.nastupStartDate;
+            })?.data()
+          : undefined;
+        const employment: Record<string, unknown> = eff
+          ? {
+              ...nastupRow,
+              salary: eff.salary,
+              hourlyRate: eff.hourlyRate,
+              contractType: eff.contractType,
+              jobTitle: eff.jobTitle,
+              hoursPerWeek: eff.hoursPerWeek,
+              companyId: eff.companyId,
+              startDate: eff.nastupStartDate,
+              endDate: eff.sessionEndDate,
+            }
           : {};
 
         if (includeSensitive) {
@@ -1296,7 +1331,8 @@ employeesRouter.get(
       empRef.collection("contact").limit(1).get(),
       empRef.collection("documents").limit(1).get(),
       empRef.collection("benefits").limit(1).get(),
-      empRef.collection("employment").orderBy("startDate", "desc").limit(5).get(),
+      // Whole history, oldest first — the dotazník folds the session (below).
+      empRef.collection("employment").orderBy("startDate", "asc").get(),
     ]);
 
     const root = decryptFields(empSnap.data() as Record<string, unknown>, [...SENSITIVE_FIELDS]);
@@ -1307,10 +1343,18 @@ employeesRouter.get(
       ? {}
       : decryptFields(benefitsSnap.docs[0].data() as Record<string, unknown>, [...BENEFITS_SENSITIVE_FIELDS]);
     const contact = contactSnap.empty ? {} : (contactSnap.docs[0].data() as Record<string, unknown>);
-    const employmentDoc = employmentSnap.docs.find(
-      (d) => (d.data() as Record<string, unknown>).changeType !== "rodičovská"
+
+    // The dotazník describes the employment relationship as it stands NOW, so
+    // both of its employment fields resolve from ONE fold anchored on today.
+    // Before 2026-09-14 they came from two different points in time: jobTitle
+    // from root.currentJobTitle (today) but startDate from the latest employment
+    // row — which for an employee whose latest row is a Dodatek is the amendment
+    // date, not the hire date (and a Dodatek carries no jobTitle at all, so the
+    // two could disagree). clock.today() honours the non-prod test clock.
+    const eff = effectiveCompAsOf(
+      employmentSnap.docs.map((d) => d.data() as EmploymentRowLite),
+      clock.today()
     );
-    const employment = employmentDoc ? (employmentDoc.data() as Record<string, unknown>) : {};
 
     const permanentAddress = asStr(contact.permanentAddress);
     const contactAddress = contact.contactAddressSameAsPermanent
@@ -1319,8 +1363,10 @@ employeesRouter.get(
 
     const title = `Dotazník ${asStr(root.firstName)} ${asStr(root.lastName)}`.replace(/\s+/g, " ").trim();
     const pdf = await fillQuestionnairePdf({
-      jobTitle: asStr(root.currentJobTitle),
-      startDate: asStr(employment.startDate),
+      // Folded position; root.currentJobTitle stays the fallback for an employee
+      // with no employment rows at all (the fold returns null there).
+      jobTitle: eff?.jobTitle || asStr(root.currentJobTitle),
+      startDate: asStr(eff?.nastupStartDate),
       firstName: asStr(root.firstName),
       lastName: asStr(root.lastName),
       birthSurname: asStr(root.birthSurname),
@@ -1388,25 +1434,38 @@ employeesRouter.get(
 
     const [contactSnap, employmentSnap] = await Promise.all([
       empRef.collection("contact").limit(1).get(),
-      empRef.collection("employment").orderBy("startDate", "desc").limit(5).get(),
+      // Whole history, oldest first — the employer is folded out of the session
+      // (below), not read off one row.
+      empRef.collection("employment").orderBy("startDate", "asc").get(),
     ]);
     const root = decryptFields(empSnap.data() as Record<string, unknown>, [...SENSITIVE_FIELDS]);
     const contact = contactSnap.empty ? {} : (contactSnap.docs[0].data() as Record<string, unknown>);
-    const employmentDoc = employmentSnap.docs.find(
-      (d) => (d.data() as Record<string, unknown>).changeType !== "rodičovská"
-    );
-    const employment = employmentDoc ? (employmentDoc.data() as Record<string, unknown>) : {};
 
-    const companyId = asStr(employment.companyId) || asStr(root.currentCompanyId);
+    // "Zdaňovací období" is user-entered (free text, e.g. "2026" or "od září 2026")
+    // via the generate dialog; fall back to the current year if omitted.
+    // clock.today() honours the non-prod test clock.
+    const period = asStr(req.query.period).trim() || String(Number((clock.today() || "").slice(0, 4)) || "");
+
+    // The employer whose name + address are stamped into the Prohlášení is the
+    // one the employee worked for in the TAX PERIOD, so the fold is anchored on
+    // 31. 12. of that period's year — not on today. Until 2026-09-14 this read
+    // `employment.companyId` off the latest row; a Dodatek has no companyId, so
+    // it ALWAYS fell through to root.currentCompanyId, i.e. today's company,
+    // silently printing the wrong employer on a back-year declaration. A
+    // free-text period still yields its year; a period with no year at all (and
+    // an employee with no employment rows) falls back to today / the root field.
+    const periodYear = period.match(/\d{4}/)?.[0];
+    const eff = effectiveCompAsOf(
+      employmentSnap.docs.map((d) => d.data() as EmploymentRowLite),
+      periodYear ? `${periodYear}-12-31` : clock.today()
+    );
+
+    const companyId = eff?.companyId || asStr(root.currentCompanyId);
     let company: Record<string, unknown> = {};
     if (companyId) {
       const companySnap = await db().collection("companies").doc(companyId).get();
       if (companySnap.exists) company = companySnap.data() as Record<string, unknown>;
     }
-
-    // "Zdaňovací období" is user-entered (free text, e.g. "2026" or "od září 2026")
-    // via the generate dialog; fall back to the current year if omitted.
-    const period = asStr(req.query.period).trim() || String(Number((clock.today() || "").slice(0, 4)) || "");
 
     // adresa_bydliště: Czech employees (nationality "CZE") use their trvalá
     // (permanent) address; foreigners use their resolved Czech contact address,
