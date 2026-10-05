@@ -335,6 +335,17 @@ off.
   longer manufactures `${name}@hotel.local` from a display name. (Doing so was the
   v4.2.6 bug — no account logs in with a `@hotel.local` address, so every sign
   attempt hit a non-existent user and surfaced as "invalid password".)
+  **v5.12.0:** the dialogs call `verifyAnyCredential(emails, password)` instead,
+  which tries the password against **every** login of the picked person
+  (`Signer.emails`, see the pools below) in order and returns the first that
+  accepts it; only when all fail does it throw a `CredentialError` carrying the
+  most informative Firebase code (precedence in `frontend/src/lib/signErrors.ts`:
+  `network-request-failed` › `too-many-requests` › `user-disabled` › wrong
+  password › missing/invalid login). `signErrorMessage(code)` maps each to its own
+  Czech message — before v5.12.0 every `auth/*` failure read "Neplatné jméno nebo
+  heslo.", which hid a lockout, a broken account link and a stale token alike.
+  `credentialFlowErrorMessage(err)` is the shared dialog formatter (also used by
+  `Layout.tsx`'s logout authorization).
 - **`frontend/src/components/SignModal.tsx`** — a shared credential-prompt component (name dropdown + password
   field) used for Předat, Převzít, and self/manage-unsign. Closes only via its
   buttons (✕/Zrušit), never backdrop click, per the project modal rule. Lives
@@ -352,13 +363,28 @@ off.
   entirely from the password-verified token, decoupled from who is logged in.
 - **Sign rules**: a slot can't be signed twice (409); `prevzal` requires `predal`
   first (400); the same person can't be both `predal` and `prevzal` on one
-  protocol (400).
+  protocol (400). "Same person" is `samePerson()` (`services/signerPool.ts`): the
+  same uid **or two accounts linked to the same employee** — otherwise one person
+  could satisfy the two-person rule through two of their accounts (v5.12.0).
 - **Revert rules**: `predal` can't be reverted while `prevzal` stands (would
-  orphan it, 400). Authorized to revert: the **signer themself** (self-unsign,
-  no permission needed beyond a valid password) or a `protokol.manage`/
-  `system.admin` holder.
+  orphan it, 400). Authorized to revert: the **signer themself** — through any
+  account of theirs, again via `samePerson()` — (self-unsign, no permission
+  needed beyond a valid password) or a `protokol.manage`/`system.admin` holder.
+- A token the server fails to verify returns 401 **"Ověření vypršelo, zkuste to
+  prosím znovu."** — the password was already proven on the client, so this is a
+  stale token, not a wrong password (it used to say "Neplatné jméno nebo heslo.").
+- **One entry per person, every login (v5.12.0).** All three password pickers —
+  `/signers`, `/revokers`, and `GET /auth/logout-authorizers` — fold qualifying
+  accounts through `groupSignerPool()` (`functions/src/services/signerPool.ts`):
+  one entry per **employee**, carrying `emails: string[]` = every qualifying
+  account's login (accounts with no linked employee stay one entry each). Before
+  v5.12.0 the pools kept only the **first** account per employee, so a second
+  account linked to the same person (an admin's test account re-linked for
+  testing) silently replaced that person's login in the picker and their correct
+  password was rejected — the Oksana Smolyak incident, 2026-10. `uid`/`email`
+  remain (the entry's representative account) for back-compat and pre-selection.
 - **Signer pool** — `GET /:hotel/signers?date=&shift=` returns the users eligible
-  to sign (`{ uid, name, email, label }`): everyone whose linked employee is on
+  to sign (`{ uid, name, email, emails, label }`): everyone whose linked employee is on
   that month's shift-plan **roster** (`planEmployees`), falling back to **all active
   users** when the month has no plan (never dead-ends signing). Roster presence is
   the eligibility signal — an inactive `planEmployees` row (`active: false`) is
@@ -377,13 +403,40 @@ off.
   Also returns
   `scheduled: { predal, prevzal }` — the employees actually
   rostered for this shift (Předal) and the next one (Převzal), resolved via
-  `scheduleLookup.ts`'s `scheduledSigner()` (matches `D`/`ZD` day or `N`/`ZN`
-  night reception segments for the hotel), used as the modal's pre-selected
+  `scheduleLookup.ts`'s `scheduledEmployeeId()` (matches `D`/`ZD` day or `N`/`ZN`
+  night reception segments for the hotel) and mapped to their pool entry **by
+  employee** (the entry's representative uid), used as the modal's pre-selected
   default.
 - **Revoker pool** — `GET /:hotel/revokers?signer=<uid>` is narrower: the signer
-  themself, plus everyone holding the hotel's `protokol.manage` (resolved via
-  `resolveEffectivePermissions` per candidate user — this endpoint evaluates
-  effective permissions for a set of *other* users, not the caller).
+  themself (every account linked to the signer's employee), plus everyone holding
+  the hotel's `protokol.manage` (resolved via `resolveEffectivePermissions` per
+  candidate user — this endpoint evaluates effective permissions for a set of
+  *other* users, not the caller). Only **qualifying** accounts contribute an
+  email, so an entry never offers a login the server would refuse with 403. The
+  signing account is placed first so it becomes its entry's representative uid —
+  the client pre-selects by the stamp's uid.
+
+**Signature audit trail (v5.12.0).** Every attempt — sign or revert, successful
+or failed — writes one `auditLog` entry via `logSignatureAttempt()` in
+`handovers.ts`: `collection: "shiftHandovers"`, `resourceId` = the protocol id,
+`event` = `recepce.protokol.sign` / `signFailed` / `unsign` / `unsignFailed`,
+`extra` = `{ hotel, date, shift, slot, signer, signerEmail, triedEmails,
+revertedSigner, error, errorCode }`. The entry's author is the **logged-in
+session** (often a shared terminal); the person whose password was checked is
+`extra.signer`, and `signerEmail` is the login that actually proved it. Failures
+after the request reaches the server are logged by `stampHandler`/`revertHandler`
+(`errorCode: "server:<status>"`). Failures that never reach it — wrong password,
+lockout, offline, all checked on the client's secondary app — are reported by
+`HandoverTab.handleSignSubmit` to **`POST /:hotel/:id/:slot/failed`**
+(`signFailureHandler`, `requireHotelPerm("edit")`, body `{ mode, signerUid,
+errorCode, triedEmails }`; `errorCode` is validated to `auth/*` or `unknown`). It
+is logging only and best effort: client-reported, so a forensic aid, not proof —
+the success entries are server-written. The sign/revert bodies also carry
+`signerUid` purely as a logging hint for the 400/401 branches. Like every
+`shiftHandovers` audit entry these age out after 6 months (see "Retention
+sweep"). The change-log renderer never merges two signature entries into one
+card (`grouping.ts` `isStandaloneEvent`), since a card shows only its first
+entry's `extra`.
 
 **Live signature-name resolution (v4.6.0).** The above covers the *pool offered before signing*; once a protocol **is** signed, the `predal`/`prevzal` stamp freezes `displayName` at that moment and is never rewritten — so a protokol signed before the display-name feature (or before a rename) kept showing the signer's old/legal name forever, even though the sign-dialog pool itself was already live. `GET /:hotel/handovers` (`withLiveSignerNames` in `handovers.ts`) and the derived `handoverWarnings` (`handoverWarnings.ts`) now re-resolve the stamp's `uid` → live display name on every read, via two new helpers in `recepceEmployees.ts`: `resolveEmployeeIdsByUid` (batch `users/{uid}.employeeId`) and `resolveDisplayNamesByUid` (composes that with `resolveEmployeeDisplays`). Only the display **label** is re-resolved — the signature's legal substance (`uid`, the proven `email`, and `at`) is the historical record and is never rewritten; the protokol still attests to the same person, just under the name they currently go by. See [Data Model — Live employee-name resolution](data-model.md#live-employee-name-resolution--read-time-never-a-backfill-v460) for the app-wide pattern this generalises.
 
@@ -405,7 +458,8 @@ sign/revert flow (`resyncChainAfter`) and never by content edits. Each is a `.se
 upsert that resets `read:false`, self-healing (cleared when the condition clears):
 
 - **`type: "chain"` — Nenavazující předání.** `syncChainWarning()` compares this
-  shift's `predal.uid` against the **previous** shift's `prevzal.uid`; a mismatch
+  shift's `predal.uid` against the **previous** shift's `prevzal.uid` — by
+  person via `samePerson()` since v5.12.0; a mismatch
   (the person signing this shift over wasn't the one who received the prior shift)
   upserts `handoverWarnings/{hotel}_{id}` with `actorUid/actorName` (this predal) +
   `expectedUid/expectedName` (prev prevzal). Legacy docs predating the `type` field
@@ -1282,6 +1336,30 @@ discarded:
 So an entry attributed to the on-shift receptionist still records *which
 terminal session* the write physically came through — the substitution adds
 information, it never loses any.
+
+## Odvody — change-log entries (v5.12.0)
+
+`functions/src/routes/odvody.ts` writes one `writeAudit` entry per action,
+`collection: "odvody"`, `resourceId` = the month (`YYYY-MM`), category `recepce`:
+
+| `event` | When | `extra` |
+|---|---|---|
+| `recepce.odvod.create` / `recepce.odvod.update` | `PUT /:hotel/:month` (new vs. existing doc) | `hotel, month, date, shift, totalCZK, totalEUR` + **`odvodAuditDetail()`** + `protokolCreated, overrodeSignature` |
+| `recepce.odvod.delete` | `DELETE /:hotel/:month` | `hotel, month, date, shift` + `odvodAuditDetail()` of the **deleted** doc |
+| `recepce.odvod.settle` | `POST /:hotel/settle-eur` ("Provést odvod") | `hotel, month, date, shift, czk, eur` |
+
+`odvodAuditDetail()` records the full content: `czkFromTrezor` / `czkFromKasa` /
+`eurFromTrezor` / `eurFromKasa` (denomination → pieces, taken from the stored
+`OdvodEffect` — i.e. the per-drawer split the server actually applied, not the
+request), `receipts` (`[{ name, amount }]` of the removed Účty rows), `protel`
+(`[{ register, czkCash, czkDeposit, eurCash, eurDeposit }]`, one per register —
+two for Amigo & Alqush) and, for multi-register hotels only, `weights`.
+
+Before v5.12.0 save entries used a single `recepce.odvod.save` event and carried
+only the two totals plus a receipt **count** (`receipts: number`); the renderer
+still labels both shapes. `odvody` is deliberately **not** in the retention
+sweep's list — the entries are monthly and low-volume, and they are the only
+record of what an odvod contained.
 
 ## Retention sweep
 
