@@ -33,6 +33,39 @@ const HANDOVER_FIELDS: Record<string, FieldLabelMap> = {
     date: "Datum",
     changeLabels: "Změny",
     label: "Změna",
+    // Signature attempts (sign / revert, successful or failed)
+    slot: "Podpis",
+    signer: "Ověřovaná osoba",
+    signerEmail: "Ověřený účet",
+    triedEmails: "Zkoušené účty",
+    revertedSigner: "Odebíraný podpis",
+    error: "Důvod",
+    errorCode: "Chyba ověření",
+    // Pre-2026-10 sign/revert entries were plain field diffs of the slot.
+    predal: "Předal",
+    prevzal: "Převzal",
+  },
+  // Recepce odvod (month-end cash transfer)
+  odvody: {
+    hotel: "Hotel",
+    month: "Měsíc",
+    date: "Datum směny",
+    shift: "Směna",
+    shiftDate: "Datum směny",
+    shiftType: "Směna",
+    totalCZK: "Celkem CZK",
+    totalEUR: "Celkem EUR",
+    czkFromTrezor: "CZK bankovky z trezoru",
+    czkFromKasa: "CZK bankovky z kasy",
+    eurFromTrezor: "EUR bankovky z trezoru (k odvodu)",
+    eurFromKasa: "EUR bankovky z kasy (k odvodu)",
+    receipts: "Odvedené účty",
+    protel: "Hodnoty z Protelu",
+    weights: "Poměr rozdělení",
+    protokolCreated: "Vytvořen nový protokol",
+    overrodeSignature: "Upraven podepsaný protokol",
+    czk: "Odvedeno CZK",
+    eur: "Odvedeno EUR",
   },
 };
 
@@ -99,6 +132,7 @@ export const COLLECTION_LABELS: Record<string, string> = {
   documentAlerts: "Upozornění – doklady",
   probationAlerts: "Upozornění – zkušební doba",
   shiftHandovers: "Předávací protokol",
+  odvody: "Odvod",
 };
 
 /**
@@ -148,6 +182,7 @@ export type AuditCategory =
   | "navody"
   | "mujProfil"
   | "nastaveni"
+  | "recepce"
   | "system";
 
 /** Categories in display order for the "stránka" multi-select filter. */
@@ -160,6 +195,7 @@ export const CATEGORIES: AuditCategory[] = [
   "navody",
   "mujProfil",
   "nastaveni",
+  "recepce",
   "system",
 ];
 
@@ -172,6 +208,7 @@ export const CATEGORY_LABELS: Record<AuditCategory, string> = {
   navody: "Návody",
   mujProfil: "Můj profil",
   nastaveni: "Nastavení",
+  recepce: "Recepce",
   system: "Systém",
 };
 
@@ -288,6 +325,8 @@ const SUBJECT_GEN: Record<string, string> = {
   alerts: "upozornění",
   documentAlerts: "upozornění",
   probationAlerts: "upozornění",
+  shiftHandovers: "předávacího protokolu",
+  odvody: "odvodu",
 };
 
 /** Genitive noun for the "<action noun> <noun>" header phrase. */
@@ -356,6 +395,16 @@ export const EVENT_LABELS: Record<string, string> = {
   "recepce.protokol.edit": "Úprava předávacího protokolu",
   "recepce.protokol.undo": "Vrácení změny v protokolu",
   "recepce.protokol.redo": "Obnovení změny v protokolu",
+  "recepce.protokol.sign": "Podpis protokolu",
+  "recepce.protokol.signFailed": "Neúspěšný pokus o podpis protokolu",
+  "recepce.protokol.unsign": "Odebrání podpisu protokolu",
+  "recepce.protokol.unsignFailed": "Neúspěšný pokus o odebrání podpisu",
+  // Recepce – Odvod
+  "recepce.odvod.create": "Vytvoření odvodu",
+  "recepce.odvod.update": "Úprava odvodu",
+  "recepce.odvod.save": "Uložení odvodu", // pre-2026-10 create/update
+  "recepce.odvod.delete": "Smazání odvodu",
+  "recepce.odvod.settle": "Proveden odvod",
 };
 
 /** Header phrase for a semantic event id, or undefined if unknown. */

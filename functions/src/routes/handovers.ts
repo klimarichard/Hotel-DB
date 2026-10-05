@@ -23,6 +23,7 @@ import {
   isSignatureSlot,
   isShiftDate,
   isShiftType,
+  ShiftType,
   docId,
   handoverCol,
   previousShift,
@@ -31,8 +32,9 @@ import {
   EUR_DENOMS,
   DrawerKey,
 } from "../services/handoverShared";
-import { scheduledSigner } from "../services/scheduleLookup";
+import { scheduledEmployeeId } from "../services/scheduleLookup";
 import { resolveEmployeeDisplays, recepceDisplayName, recepceSortKey } from "../services/recepceEmployees";
+import { PoolCandidate, groupSignerPool, publicEntry, samePerson } from "../services/signerPool";
 import {
   HandoverContent,
   diffHandover,
@@ -517,17 +519,12 @@ handoversRouter.get(
     }
     const usePlan = planMembers.size > 0;
 
-    // Map active users → signer entries; when a plan exists, keep only users whose
-    // linked employee is in it. The users collection is small, so one read is fine.
-    // Dedupe by employeeId — if several accounts link to the same employee (a data
-    // anomaly, but nothing prevents it) they'd otherwise appear as identical rows.
+    // Active users with a login email → candidates; when a plan exists, keep only
+    // users whose linked employee is in it. The users collection is small, so one
+    // read is fine. Several accounts linked to one employee become ONE entry that
+    // carries every login email (see services/signerPool.ts) — never just the first.
     const usersSnap = await db().collection("users").get();
-    // Live display names (displayName || "First Last") for every linked employee.
-    const displays = await resolveEmployeeDisplays(
-      usersSnap.docs.map((d) => (d.data() as { employeeId?: unknown }).employeeId as string)
-    );
-    const out: Array<{ uid: string; name: string; email: string; label: string; sortKey: string }> = [];
-    const seenEmp = new Set<string>();
+    const candidates: PoolCandidate[] = [];
     for (const d of usersSnap.docs) {
       const u = d.data() as { name?: unknown; email?: unknown; employeeId?: unknown; active?: unknown };
       if (u.active === false) continue;
@@ -537,37 +534,31 @@ handoversRouter.get(
       // account with no email can't be authenticated, so it can never sign.
       if (email.trim() === "") continue;
       const empId = typeof u.employeeId === "string" ? u.employeeId : null;
-      if (usePlan) {
-        if (!empId || !planMembers.has(empId)) continue;
-        if (seenEmp.has(empId)) continue;
-        seenEmp.add(empId);
-      } else if (empId) {
-        if (seenEmp.has(empId)) continue;
-        seenEmp.add(empId);
-      }
-      // Prefer the LIVE employee name; fall back to the plan snapshot, then the
-      // user's own name / email so an entry always has a readable label.
-      const disp = empId ? displays.get(empId) ?? planSnapshot.get(empId) : undefined;
-      const label = disp?.name || name || email;
-      const sortKey = disp?.sortKey || label.toLowerCase();
-      out.push({ uid: d.id, name, email, label, sortKey });
+      if (usePlan && (!empId || !planMembers.has(empId))) continue;
+      candidates.push({ uid: d.id, name, email, employeeId: empId });
     }
-    out.sort((a, b) => a.sortKey.localeCompare(b.sortKey, "cs"));
+    // Prefer the LIVE employee name; fall back to the plan snapshot, then the
+    // user's own name / email so an entry always has a readable label.
+    const pool = await groupSignerPool(candidates, (empId) => planSnapshot.get(empId));
 
     // Default signers: whoever is scheduled for THIS shift (Předal) and the NEXT
-    // shift (Převzal) in the plan. null when nobody is scheduled → no default.
+    // shift (Převzal) in the plan, mapped to their pool entry BY EMPLOYEE — the
+    // entry's representative account need not be the one a uid lookup would pick.
+    // null when nobody is scheduled → no default.
     const shift = isShiftType(req.query.shift) ? (req.query.shift as "den" | "noc") : null;
     let scheduled: { predal: string | null; prevzal: string | null } = { predal: null, prevzal: null };
     if (shift) {
       const next = nextShift(dateStr, shift);
       const [cur, nxt] = await Promise.all([
-        scheduledSigner(hotel, dateStr, shift),
-        scheduledSigner(hotel, next.date, next.shift),
+        scheduledEmployeeId(hotel, dateStr, shift),
+        scheduledEmployeeId(hotel, next.date, next.shift),
       ]);
-      scheduled = { predal: cur?.uid ?? null, prevzal: nxt?.uid ?? null };
+      const entryUid = (empId: string | null) =>
+        empId ? pool.find((e) => e.employeeId === empId)?.uid ?? null : null;
+      scheduled = { predal: entryUid(cur), prevzal: entryUid(nxt) };
     }
 
-    res.json({ signers: out.map(({ sortKey, ...s }) => s), scheduled });
+    res.json({ signers: pool.map(publicEntry), scheduled });
   }
 );
 
@@ -589,8 +580,13 @@ handoversRouter.get(
     const managePerm = handoverManagePerm(hotel);
 
     const usersSnap = await db().collection("users").get();
-    const included: Array<{ uid: string; name: string; email: string; employeeId: string | null }> = [];
-    const seenEmp = new Set<string>();
+    // The signer's employee: every account linked to it may self-unsign (the
+    // server's revert check compares people, not accounts — see samePerson).
+    const signerEmp = signerUid
+      ? ((usersSnap.docs.find((d) => d.id === signerUid)?.data() as { employeeId?: unknown } | undefined)
+          ?.employeeId as string | undefined) ?? null
+      : null;
+    const candidates: PoolCandidate[] = [];
     for (const d of usersSnap.docs) {
       const u = d.data() as {
         name?: unknown;
@@ -606,7 +602,9 @@ handoversRouter.get(
       const email = typeof u.email === "string" ? u.email : "";
       // Un-signing also re-verifies the password, so a signer needs a real email.
       if (email.trim() === "") continue;
-      let ok = d.id === signerUid; // the signer may always self-unsign
+      const empId = typeof u.employeeId === "string" ? u.employeeId : null;
+      // The signer may always self-unsign, through any account of theirs.
+      let ok = d.id === signerUid || (signerEmp !== null && empId === signerEmp);
       if (!ok) {
         const perms = await resolveEffectivePermissions({
           roleType: roleTypeFromUserDoc(u),
@@ -615,26 +613,20 @@ handoversRouter.get(
         });
         ok = perms.has("system.admin") || perms.has(managePerm);
       }
+      // Only QUALIFYING accounts contribute an email, so a person's entry never
+      // offers a login the server would then refuse with 403.
       if (!ok) continue;
-      const empId = typeof u.employeeId === "string" ? u.employeeId : null;
-      if (empId) {
-        if (seenEmp.has(empId)) continue;
-        seenEmp.add(empId);
-      }
-      included.push({ uid: d.id, name, email, employeeId: empId });
+      const c = { uid: d.id, name, email, employeeId: empId };
+      // The signing account goes first, so it becomes its entry's representative
+      // uid — the client pre-selects the entry by the stamp's uid.
+      if (d.id === signerUid) candidates.unshift(c);
+      else candidates.push(c);
     }
 
-    // Resolve LIVE employee-name labels (displayName || "First Last") for the
-    // (few) included users, sorted surname-first — same convention as /signers.
-    const displays = await resolveEmployeeDisplays(included.map((e) => e.employeeId ?? ""));
-    const out = included.map((e) => {
-      const disp = e.employeeId ? displays.get(e.employeeId) : undefined;
-      const label = disp?.name || e.name;
-      const sortKey = disp?.sortKey || label.toLowerCase();
-      return { uid: e.uid, name: e.name, email: e.email, label, sortKey };
-    });
-    out.sort((a, b) => a.sortKey.localeCompare(b.sortKey, "cs"));
-    res.json(out.map(({ sortKey, ...s }) => s));
+    // LIVE employee-name labels (displayName || "First Last"), surname-first —
+    // same convention as /signers.
+    const pool = await groupSignerPool(candidates);
+    res.json(pool.map(publicEntry));
   }
 );
 
@@ -1035,6 +1027,85 @@ async function resyncChainAfter(hotel: HotelSlug, doc: HandoverDoc, slot: Signat
   }
 }
 
+// ─── Signature audit trail ───────────────────────────────────────────────────
+// EVERY signature attempt — successful or not, sign or revert — gets its own
+// change-log entry. Two real incidents (2026-10) were only diagnosable by piecing
+// together Firebase Auth sign-in times, because a failed attempt left no trace:
+// one employee's picker entry carried another account's email, another simply
+// did not know her password. With these entries the log answers "who tried to
+// sign what, through which account(s), and why it failed" directly.
+//
+// Attribution: the entry's author is the LOGGED-IN session (often a shared
+// reception terminal); the person whose password was checked is named in
+// `extra.signer`. Failures that happen before the request reaches the server
+// (wrong password, lockout, offline) are reported by the client through
+// POST /:hotel/:id/:slot/failed; everything after that is logged right here.
+
+type SignMode = "sign" | "revert";
+
+const SIGN_EVENTS: Record<SignMode, { ok: string; fail: string }> = {
+  sign: { ok: "recepce.protokol.sign", fail: "recepce.protokol.signFailed" },
+  revert: { ok: "recepce.protokol.unsign", fail: "recepce.protokol.unsignFailed" },
+};
+
+/** "2026-10-04_noc" → its date + shift, for the entry's readable fields. */
+function parseHandoverId(id: string): { date?: string; shift?: ShiftType } {
+  const m = /^(\d{4}-\d{2}-\d{2})_(den|noc)$/.exec(id);
+  return m ? { date: m[1], shift: m[2] as ShiftType } : {};
+}
+
+async function logSignatureAttempt(
+  req: AuthRequest,
+  args: {
+    hotel: HotelSlug;
+    id: string;
+    slot: SignatureSlot;
+    mode: SignMode;
+    ok: boolean;
+    /** Account whose password was checked (decoded token, or the client's hint on failure). */
+    signerUid?: string | null;
+    /** The login email that proved the password (success only). */
+    signerEmail?: string;
+    /** Every login email the client tried (client-reported failures). */
+    triedEmails?: string[];
+    /** Whose signature a revert removed / tried to remove. */
+    revertedUid?: string;
+    revertedName?: string;
+    /** Czech reason shown to the user (server-side failures). */
+    error?: string;
+    /** Machine code: Firebase `auth/*`, or `server:<http status>`. */
+    errorCode?: string;
+  }
+): Promise<void> {
+  const signer = args.signerUid ? await resolveDisplayName(args.signerUid, args.signerEmail ?? "") : undefined;
+  const reverted = args.revertedUid
+    ? await resolveDisplayName(args.revertedUid, args.revertedName ?? "")
+    : args.revertedName;
+  await writeAudit(ctxFromReq(req), {
+    action: "update",
+    collection: "shiftHandovers",
+    resourceId: args.id,
+    event: args.ok ? SIGN_EVENTS[args.mode].ok : SIGN_EVENTS[args.mode].fail,
+    extra: {
+      hotel: args.hotel,
+      ...parseHandoverId(args.id),
+      slot: args.slot,
+      signer,
+      signerEmail: args.signerEmail,
+      triedEmails: args.triedEmails && args.triedEmails.length ? args.triedEmails : undefined,
+      revertedSigner: reverted,
+      error: args.error,
+      errorCode: args.errorCode,
+    },
+  });
+}
+
+/** Optional client hint naming the account it attempted — used for logging ONLY. */
+function signerHint(body: unknown): string | null {
+  const v = (body as { signerUid?: unknown } | undefined)?.signerUid;
+  return typeof v === "string" && v !== "" && v.length <= 128 ? v : null;
+}
+
 // ─── Virtual signatures (Předat / Převzít + revert) ──────────────────────────
 // The client verifies a colleague's username+password on a secondary Firebase
 // app and posts the resulting idToken; the server verifies it and records the
@@ -1049,37 +1120,47 @@ function stampHandler(slot: SignatureSlot) {
     const hotel = req.params.hotel as HotelSlug;
     const id = req.params.id;
     const body = req.body as { idToken?: unknown };
+    const fail = async (status: number, error: string, signerUid: string | null): Promise<void> => {
+      await logSignatureAttempt(req, {
+        hotel, id, slot, mode: "sign", ok: false, signerUid, error, errorCode: `server:${status}`,
+      });
+      res.status(status).json({ error });
+    };
     if (typeof body.idToken !== "string" || body.idToken.trim() === "") {
-      res.status(400).json({ error: "Chybí ověření." });
+      await fail(400, "Chybí ověření.", signerHint(req.body));
       return;
     }
     let decoded;
     try {
       decoded = await admin.auth().verifyIdToken(body.idToken);
     } catch {
-      res.status(401).json({ error: "Neplatné jméno nebo heslo." });
+      // The password was already proven on the client; a token the server then
+      // rejects is stale/expired, not a wrong password.
+      await fail(401, "Ověření vypršelo, zkuste to prosím znovu.", signerHint(req.body));
       return;
     }
 
     const ref = handoverCol(hotel).doc(id);
     const snap = await ref.get();
     if (!snap.exists) {
-      res.status(404).json({ error: "Předání nenalezeno." });
+      await fail(404, "Předání nenalezeno.", decoded.uid);
       return;
     }
     const before = snap.data() as HandoverDoc;
 
     if (before[slot]) {
-      res.status(409).json({ error: slot === "predal" ? "Protokol už byl předán." : "Protokol už byl převzat." });
+      await fail(409, slot === "predal" ? "Protokol už byl předán." : "Protokol už byl převzat.", decoded.uid);
       return;
     }
     if (slot === "prevzal" && !before.predal) {
-      res.status(400).json({ error: "Protokol musí být nejprve předán." });
+      await fail(400, "Protokol musí být nejprve předán.", decoded.uid);
       return;
     }
+    // Two-person rule, by PERSON: two accounts linked to one employee must not
+    // satisfy it (the pickers now offer every linked account — signerPool.ts).
     const other = before[otherSlot] as StampedSignature | null | undefined;
-    if (other && other.uid === decoded.uid) {
-      res.status(400).json({ error: "Předal a převzal musí být dva různí uživatelé." });
+    if (other && (await samePerson(other.uid, decoded.uid))) {
+      await fail(400, "Předal a převzal musí být dva různí uživatelé.", decoded.uid);
       return;
     }
 
@@ -1093,12 +1174,8 @@ function stampHandler(slot: SignatureSlot) {
       { [slot]: stamp, updatedBy: req.uid, updatedAt: FieldValue.serverTimestamp() },
       { merge: true }
     );
-    await logUpdate(ctxFromReq(req), {
-      collection: "shiftHandovers",
-      resourceId: id,
-      subResourceId: hotel,
-      before: { [slot]: null },
-      after: { [slot]: { uid: stamp.uid, displayName: stamp.displayName } },
+    await logSignatureAttempt(req, {
+      hotel, id, slot, mode: "sign", ok: true, signerUid: stamp.uid, signerEmail: stamp.email,
     });
 
     await resyncChainAfter(hotel, before, slot);
@@ -1114,38 +1191,50 @@ function revertHandler(slot: SignatureSlot) {
     const hotel = req.params.hotel as HotelSlug;
     const id = req.params.id;
     const body = req.body as { idToken?: unknown };
+    let revertedUid: string | undefined;
+    let revertedName: string | undefined;
+    const fail = async (status: number, error: string, signerUid: string | null): Promise<void> => {
+      await logSignatureAttempt(req, {
+        hotel, id, slot, mode: "revert", ok: false, signerUid, revertedUid, revertedName,
+        error, errorCode: `server:${status}`,
+      });
+      res.status(status).json({ error });
+    };
     if (typeof body.idToken !== "string" || body.idToken.trim() === "") {
-      res.status(400).json({ error: "Chybí ověření." });
+      await fail(400, "Chybí ověření.", signerHint(req.body));
       return;
     }
     let decoded;
     try {
       decoded = await admin.auth().verifyIdToken(body.idToken);
     } catch {
-      res.status(401).json({ error: "Neplatné jméno nebo heslo." });
+      await fail(401, "Ověření vypršelo, zkuste to prosím znovu.", signerHint(req.body));
       return;
     }
 
     const ref = handoverCol(hotel).doc(id);
     const snap = await ref.get();
     if (!snap.exists) {
-      res.status(404).json({ error: "Předání nenalezeno." });
+      await fail(404, "Předání nenalezeno.", decoded.uid);
       return;
     }
     const before = snap.data() as HandoverDoc;
     const stamp = before[slot] as StampedSignature | null | undefined;
     if (!stamp) {
-      res.status(404).json({ error: "Tento podpis neexistuje." });
+      await fail(404, "Tento podpis neexistuje.", decoded.uid);
       return;
     }
+    revertedUid = stamp.uid;
+    revertedName = stamp.displayName;
     // Předal can't be reverted while Převzal stands (would orphan it).
     if (slot === "predal" && before.prevzal) {
-      res.status(400).json({ error: "Nejprve odeberte podpis Převzal." });
+      await fail(400, "Nejprve odeberte podpis Převzal.", decoded.uid);
       return;
     }
 
-    // Authorize the credential-verified identity: self, or manage/admin.
-    let authorized = decoded.uid === stamp.uid;
+    // Authorize the credential-verified identity: the signer themself (through
+    // any of their accounts), or a manage/admin holder.
+    let authorized = await samePerson(decoded.uid, stamp.uid);
     if (!authorized) {
       const perms = await resolveEffectivePermissions({
         roleType: typeof decoded.roleType === "string" ? decoded.roleType : undefined,
@@ -1155,7 +1244,7 @@ function revertHandler(slot: SignatureSlot) {
       authorized = perms.has("system.admin") || perms.has(handoverManagePerm(hotel));
     }
     if (!authorized) {
-      res.status(403).json({ error: "Nemáte oprávnění odebrat cizí podpis." });
+      await fail(403, "Nemáte oprávnění odebrat cizí podpis.", decoded.uid);
       return;
     }
 
@@ -1163,12 +1252,9 @@ function revertHandler(slot: SignatureSlot) {
       { [slot]: null, updatedBy: req.uid, updatedAt: FieldValue.serverTimestamp() },
       { merge: true }
     );
-    await logUpdate(ctxFromReq(req), {
-      collection: "shiftHandovers",
-      resourceId: id,
-      subResourceId: hotel,
-      before: { [slot]: { uid: stamp.uid, displayName: stamp.displayName } },
-      after: { [slot]: null },
+    await logSignatureAttempt(req, {
+      hotel, id, slot, mode: "revert", ok: true, signerUid: decoded.uid, signerEmail: decoded.email ?? "",
+      revertedUid, revertedName,
     });
 
     await resyncChainAfter(hotel, before, slot);
@@ -1176,6 +1262,41 @@ function revertHandler(slot: SignatureSlot) {
     const saved = await ref.get();
     res.json(await withLiveSignerName({ id, ...saved.data() }));
   };
+}
+
+/** Firebase `auth/*` codes the client may report, plus its own "unknown". */
+const CLIENT_FAILURE_CODE = /^(auth\/[a-z0-9-]{1,60}|unknown)$/;
+
+/**
+ * Record a signature attempt that failed BEFORE reaching the sign/revert route —
+ * the password check runs on the client (secondary Firebase app), so a wrong
+ * password, a lockout or a dropped connection never hits the server otherwise.
+ * Logging only: it changes nothing and authorizes nothing. Gated like the sign
+ * routes themselves, so only someone who could open the dialog can write one.
+ */
+async function signFailureHandler(req: AuthRequest, res: Response): Promise<void> {
+  const hotel = req.params.hotel as HotelSlug;
+  const id = req.params.id;
+  const slot = req.params.slot as SignatureSlot;
+  const body = (req.body ?? {}) as { mode?: unknown; errorCode?: unknown; triedEmails?: unknown };
+  const mode: SignMode = body.mode === "revert" ? "revert" : "sign";
+  const errorCode =
+    typeof body.errorCode === "string" && CLIENT_FAILURE_CODE.test(body.errorCode) ? body.errorCode : "unknown";
+  const triedEmails = Array.isArray(body.triedEmails)
+    ? body.triedEmails.filter((e): e is string => typeof e === "string" && e.length <= 200).slice(0, 10)
+    : [];
+  let revertedUid: string | undefined;
+  let revertedName: string | undefined;
+  if (mode === "revert") {
+    const snap = await handoverCol(hotel).doc(id).get();
+    const stamp = snap.exists ? asStamp((snap.data() as HandoverDoc)[slot]) : null;
+    revertedUid = stamp?.uid;
+    revertedName = stamp?.displayName;
+  }
+  await logSignatureAttempt(req, {
+    hotel, id, slot, mode, ok: false, signerUid: signerHint(req.body), triedEmails, revertedUid, revertedName, errorCode,
+  });
+  res.json({ ok: true });
 }
 
 // ─── sm trezor / wata mutations ──────────────────────────────────────────────
@@ -1535,7 +1656,19 @@ handoversRouter.post("/:hotel/:id/redo", requireAuth, requireHotelPerm("edit"), 
   void stepHandler("redo")(req, res);
 });
 
-// Register the 4-segment revert routes BEFORE the 3-segment sign routes.
+// Register the 4-segment revert/failed routes BEFORE the 3-segment sign routes.
+handoversRouter.post(
+  "/:hotel/:id/:slot/failed",
+  requireAuth,
+  requireHotelPerm("edit"),
+  (req: AuthRequest, res: Response) => {
+    if (!isSignatureSlot(req.params.slot)) {
+      res.status(404).json({ error: "Neznámý podpis." });
+      return;
+    }
+    void signFailureHandler(req, res);
+  }
+);
 handoversRouter.post(
   "/:hotel/:id/:slot/revert",
   requireAuth,

@@ -9,6 +9,9 @@ export interface Signer {
   name: string;
   /** the account's real login email – drives the password check. */
   email: string;
+  /** every login of this person (several accounts can link to one employee);
+   *  the password is tried against each – see verifyAnyCredential. */
+  emails?: string[];
   /** friendly display label for the dropdown. */
   label: string;
 }
