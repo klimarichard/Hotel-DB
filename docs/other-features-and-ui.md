@@ -63,7 +63,7 @@ The `auditLog/` collection stores one document per changed field for `update` ac
   employeeId?,     // denormalized: present whenever the change concerns an employee
   // Change-log overhaul additions (v2.3.0) — all optional; absent on legacy entries
   event?,          // semantic event id, e.g. "vacation.approve", "plan.autoTransition"
-  category?,       // page bucket: smeny|dovolena|zamestnanci|mzdy|sablony|mujProfil|nastaveni|system
+  category?,       // page bucket: smeny|dovolena|zamestnanci|mzdy|sablony|mujProfil|nastaveni|recepce|system
   year?,           // period filter for smeny/mzdy/dovolena
   month?,
   templateId?,     // sablony filter — auto-derived from resourceId for contractTemplates
@@ -124,6 +124,7 @@ Public API:
 | `contractTemplates` | `sablony` |
 | `employeeChangeRequests` | `mujProfil` |
 | `users`, `roleTypes`, `companies`, `departments`, `jobPositions`, `educationLevels`, `settings` | `nastaveni` |
+| `shiftHandovers`, `odvody`, `walkins`, `walkinConfig`, `taxiRides`, `taxiRoutes`, `taxiConfig`, `lobbyBarSales`, `lobbyBarItems`, `lobbyBarConfig`, `terminalPayments`, `terminalTypes`, `terminalConfig` | `recepce` (v5.12.0 — entries written earlier carry no category and only show with no page filter; no backfill was run) |
 | (written via `logSystemEvent`) | `system` |
 
 `employeeChangeRequests` is in `mujProfil` by default (the submit side). The approve/reject handlers in `routes/employeeChangeRequests.ts` pass `category: "zamestnanci"` as an override so review actions land in the Zaměstnanci bucket, not Můj profil.
@@ -238,7 +239,9 @@ The page (`/audit`) is a date-sectioned timeline of grouped event cards. The bac
 - `labels.ts` — all type definitions (`AuditCategory`, `SettingsArea`, `AuditAction`) mirroring the backend; `CATEGORIES`/`CATEGORY_LABELS`; `SETTINGS_AREAS`/`SETTINGS_AREA_LABELS`; `COLLECTION_LABELS`/`SUBAREA_LABELS`; `ACTION_LABELS`; `EVENT_LABELS` (event id → full Czech phrase, e.g. `"vacation.approve"` → `"Schválení žádosti o dovolenou"`); `eventLabel(event)` → phrase or `undefined`; `deriveLegacyEventId(collection, statusValue)` → render-derives an event id for pre-v2.3.0 entries from their `status` field change (no data migration required); `fieldLabel(collection, fieldPath)` walks the label map most-specific-path-first; `subjectNoun(collection)` → Czech genitive noun for the generic header phrase; `actionVerb(action)` → verbal noun (Vytvoření / Upravení / Smazání / Zobrazení citlivého údaje / Export dat / Spuštění úlohy).
 - `fields.employee.ts`, `fields.payroll.ts`, `fields.shifts.ts`, `fields.misc.ts` — Czech field-label maps per collection family (~255 fields total). Merged into `FIELD_LABELS` in `labels.ts`, keyed by root collection name.
 - `format.ts` — value formatters: ISO dates, Ano/Ne booleans, enum display strings, generic fallback. Sensitive values remain redacted (no formatting applied).
-- `grouping.ts` — `groupEntries(entries)` folds the flat per-field stream into one `AuditEvent` per (author + action + record) within a 20-second window, with field changes sub-grouped by section (area label). Employee sections are sorted in canonical order (Osobní údaje → Kontakt → Doklady → Pojištění a banka → Pracovní poměr → Smlouvy). `bucketByDate(events)` partitions events into date headers (Dnes / Včera / explicit Czech date). `eventTitle(ev, employeeName?)` derives the record identifier (employee name with link, payroll month, snapshot name, or empty).
+- `grouping.ts` — `groupEntries(entries)` folds the flat per-field stream into one `AuditEvent` per (author + action + record) within a 20-second window (the key also includes `event`), with field changes sub-grouped by section (area label). Employee sections are sorted in canonical order (Osobní údaje → Kontakt → Doklady → Pojištění a banka → Pracovní poměr → Smlouvy). `bucketByDate(events)` partitions events into date headers (Dnes / Včera / explicit Czech date). `eventTitle(ev, employeeName?)` derives the record identifier (employee name with link, payroll month, Recepce protocol "Superior · 04.10.2026 noční" / "Odvod Ankora 9/2026", snapshot name, or empty).
+
+**Standalone events (v5.12.0):** a card renders only its FIRST entry's `extra`, so merging two `extra`-bearing entries silently drops the second. Signature attempts (`recepce.protokol.sign|signFailed|unsign|unsignFailed`) and odvod actions (`recepce.odvod.*`) are therefore never merged (`isStandaloneEvent`) — three wrong-password tries read as three cards. Protocol autosave edits (`recepce.protokol.edit`) still merge on purpose: they fire every few seconds while someone types.
 
 **Shift-cell label:** `grouping.ts` parses the date from `subResourceId` (`employeeId_YYYY-MM-DD`) and labels each shift-cell change row with its formatted date (e.g. `"5. 5. 2025"`) instead of the generic field name. A grouped multi-day edit reads as one dated row per day.
 

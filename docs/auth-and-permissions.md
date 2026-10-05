@@ -178,9 +178,13 @@ picking a name and entering their password:
    `users/{terminalUid}` (`logoutAuthorizedBy: null → <authorizer's display name>`).
 3. Only then does the client call `signOut(auth)` on the terminal's own session.
 
-`GET /api/auth/logout-authorizers` returns the `[{uid,name,email,label}]` pool
+`GET /api/auth/logout-authorizers` returns the `[{uid,name,email,emails,label}]` pool
 (the exact `Signer[]` shape `SignModal` expects), fetched lazily when the modal
-opens. It is itself restricted to callers whose own type is `noSelfLogout`
+opens. Since v5.12.0 it is one entry **per person** carrying every qualifying
+login in `emails` (`groupSignerPool()`, `functions/src/services/signerPool.ts`),
+and the client tries the password against each (`verifyAnyCredential`) — see
+[Recepce — Virtual signature](recepce.md#virtual-signature-předat--převzít--revert).
+A token the server cannot verify now returns 401 "Ověření vypršelo, zkuste to prosím znovu." It is itself restricted to callers whose own type is `noSelfLogout`
 (403 otherwise) — otherwise every authenticated user could enumerate every
 admin's name paired with their login email.
 
@@ -353,7 +357,7 @@ When adding a new UI section, check whether it is a subset of something a higher
 | `PATCH /api/auth/users/:uid` | Edit a user's name/email and/or their **Recepce default hotel** | `users.manage`; body `{ name?, email?, recepceDefaultHotel? }` — `recepceDefaultHotel` is absent-vs-`null` sensitive (absent = leave alone, `null` = clear); a non-null value is validated against the **target** user's own effective permissions (`resolveEffectivePermissions`), 400 if they can't see that hotel; audit-logged |
 | `GET /api/auth/users` | List all users | `users.view`; each entry includes `roleTypeName`, `employeeName` and `lastActiveAt` (see below) |
 | `GET /api/auth/me` | Returns the resolved `permissions` array (plus the user profile, including `roleTypeName`, **`sharedTerminal`** — whether the caller's type is a shared terminal, read from the roleType doc; drives the shift-request "who is really requesting?" picker — and **`noSelfLogout`** — whether the caller's type can't sign itself out; read live from the same roleType doc, never cached, see "No-self-logout release" above) | authenticated |
-| `GET /api/auth/logout-authorizers` | Pool of accounts eligible to authorize a release (`system.logout.authorize` or `system.admin` holders), as `[{uid,name,email,label}]` | `noSelfLogout`-type callers only (403 for everyone else); flag read live |
+| `GET /api/auth/logout-authorizers` | Pool of people eligible to authorize a release (`system.logout.authorize` or `system.admin` holders), one entry per person, as `[{uid,name,email,emails,label}]` | `noSelfLogout`-type callers only (403 for everyone else); flag read live |
 | `POST /api/auth/logout-authorize` | Body `{ idToken }`; verifies the password-proven token, requires `system.logout.authorize`/`system.admin` on the **authorizer**, audit-logs `logoutAuthorizedBy` on the terminal's `users/{uid}` | `requireAuth` + in-handler check against the decoded token's own claims (not the caller's) |
 | `GET/PUT /api/auth/me/recepce-default` | The caller's own Recepce default hotel (`{ hotel: HotelSlug \| null }`) | `requireAuth` only, **no permission key** (self-service, same precedent as `/me/theme`); `PUT` validates the slug against the **caller's own** permissions, 403 otherwise; not audit-logged. See [Recepce — Per-user default hotel](recepce.md#per-user-default-hotel--usersuidrecepcedefaulthotel) |
 

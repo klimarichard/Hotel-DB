@@ -922,7 +922,8 @@ async function syncChainWarning(hotel: HotelSlug, id: string): Promise<void> {
   const prev = previousShift(doc.shiftDate, doc.shiftType);
   const prevSnap = await handoverCol(hotel).doc(docId(prev.date, prev.shift)).get();
   const prevPrevzal = prevSnap.exists ? (prevSnap.data() as HandoverDoc).prevzal : null;
-  if (prevPrevzal && prevPrevzal.uid !== doc.predal.uid) {
+  // Compared by PERSON: one employee may sign through several linked accounts.
+  if (prevPrevzal && !(await samePerson(prevPrevzal.uid, doc.predal.uid))) {
     await warnRef.set({
       hotel,
       handoverId: id,
