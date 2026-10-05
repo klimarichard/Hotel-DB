@@ -117,6 +117,7 @@ Předávací protokol eviduje hotovost, účty a poznámky pro jednu konkrétní
 - **Jakmile je protokol podepsaný alespoň jednou stranou** (Předal nebo Převzal), **obsah se uzamkne** a dál jej nelze upravovat — výjimkou je administrátor. Krok **Zpět/Vpřed** (viz níže) je po podpisu zamčený pro úplně všechny, administrátora nevyjímaje.
 - Řádek **sm** zůstává klikatelný i po podpisu — okno se otevře **pouze ke čtení** (počty i sazby jsou vidět, ale nelze je změnit) a zavře se tlačítkem **Zavřít**. Nastupující směna si tak může ověřit, z čeho se výsledná částka „sm" počítá. Řádky **sm trezor** a **wata** po podpisu klikatelné nejsou — jejich částka je celá vidět přímo v tabulce.
 - Podpis lze odebrat kliknutím na ikonu koše u jména — smí to udělat sám podepsaný, nebo uživatel s oprávněním **Spravovat protokol**/administrátor. Podpis *Předal* lze odebrat, jen dokud není podepsáno *Převzal*.
+- Když se podpis nepodaří, okno napíše **proč**: nesprávné heslo, účet **dočasně zablokovaný** po mnoha neúspěšných pokusech (počkejte několik minut, nebo si obnovte heslo přes „Zapomenuté heslo?" na přihlašovací stránce), zablokovaný účet, nebo výpadek připojení. Každý pokus o podpis i o odebrání podpisu – **včetně neúspěšných** – se zapisuje do **Logu změn** (stránka *Recepce*).
 
 > ⚠️ Po podpisu obsah protokolu (hotovost, účty, poznámky) neupravujte, nejste-li administrátor — podepsaná verze má zůstat finální záznam o směně.
 

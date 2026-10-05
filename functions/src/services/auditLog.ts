@@ -21,6 +21,7 @@ export type AuditCategory =
   | "navody"
   | "mujProfil"
   | "nastaveni"
+  | "recepce"
   | "system";
 
 /** Settings sub-area, for the Nastavení per-tab filter. */
@@ -74,6 +75,21 @@ const COLLECTION_CATEGORY: Record<string, AuditCategory> = {
   jobPositions: "nastaveni",
   educationLevels: "nastaveni",
   settings: "nastaveni",
+  // Recepce — protokol, odvody and the per-hotel registers. Entries written
+  // before 2026-10 carry no category (they still show under "all pages").
+  shiftHandovers: "recepce",
+  odvody: "recepce",
+  walkins: "recepce",
+  walkinConfig: "recepce",
+  taxiRides: "recepce",
+  taxiRoutes: "recepce",
+  taxiConfig: "recepce",
+  lobbyBarSales: "recepce",
+  lobbyBarItems: "recepce",
+  lobbyBarConfig: "recepce",
+  terminalPayments: "recepce",
+  terminalTypes: "recepce",
+  terminalConfig: "recepce",
 };
 
 /**

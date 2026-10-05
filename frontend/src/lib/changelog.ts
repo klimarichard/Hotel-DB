@@ -27,6 +27,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    version: "5.12.0",
+    date: "2026-10-05",
+    changes: [
+      "Předávací protokol: Úprava kontroly podpisů.",
+    ],
+  },
+  {
     version: "5.11.14",
     date: "2026-09-14",
     changes: [

@@ -700,6 +700,20 @@ Zavřete-li kartu, aplikace se zeptá. Po opětovném otevření téhož protoko
 
 > 🖥️ Jen rozhraní. Zdroj: `frontend/src/lib/handoverDraft.ts` (`localStorage`, klíč podle uživatele a směny, `TTL_MS`).
 
+### Podpis ověřuje osobu, ne konkrétní účet
+
+V dialogu podpisu (Předal / Převzal), odebrání podpisu i autorizace odhlášení sdíleného terminálu se vybírá **osoba**. Je-li k jednomu zaměstnanci připojeno víc uživatelských účtů (typicky testovací účet administrátora), zadané heslo se postupně zkusí **proti každému z nich** a podpis se provede účtem, jehož heslo souhlasí. Chyba se zobrazí, až když selžou všechny – a to ta nejvýmluvnější (výpadek připojení, dočasné zablokování po mnoha pokusech, zablokovaný účet, nesprávné heslo, chybějící přihlašovací e-mail).
+
+Do podpisu se zapíše účet, který heslo skutečně prokázal. Proto **Předal a Převzal musí podepsat dvě různé osoby** – dva účty téhož zaměstnance pravidlo nesplní – a svůj vlastní podpis smí podepisující odebrat přes kterýkoli ze svých účtů.
+
+> 🔒 Server + 🖥️ Jen rozhraní. Výběr osob a seskupení účtů: `functions/src/services/signerPool.ts` (`groupSignerPool`), použito v `GET /:hotel/signers` a `GET /:hotel/revokers` (`functions/src/routes/handovers.ts`) a `GET /auth/logout-authorizers` (`functions/src/routes/auth.ts`). Pravidlo dvou osob a odebrání vlastního podpisu: `samePerson` v `stampHandler` / `revertHandler` (`handovers.ts`). Zkoušení hesla proti všem účtům a pořadí chyb je jen v rozhraní: `frontend/src/lib/secondaryAuth.ts` (`verifyAnyCredential`), `frontend/src/lib/signErrors.ts`.
+
+### Každý pokus o podpis se zapíše do Logu změn – i neúspěšný
+
+Do Logu změn (stránka **Recepce**) se zapíše každý podpis, každé odebrání podpisu **i každý neúspěšný pokus** o obojí: kdo byl přihlášen na zařízení, čí heslo se ověřovalo, přes který účet podpis prošel (u neúspěchu které účty se zkoušely) a proč pokus selhal. Neúspěšné pokusy, ke kterým dojde ještě v prohlížeči (nesprávné heslo, zablokování, výpadek připojení), hlásí serveru samo rozhraní; zapsání je jen „nejlepší snaha" – bez připojení se neodešle.
+
+> 🔒 Server + 🖥️ Jen rozhraní. Zdroj: `logSignatureAttempt` a `POST /:hotel/:id/:slot/failed` (`signFailureHandler`) v `functions/src/routes/handovers.ts`; hlášení selhání z rozhraní v `handleSignSubmit` (`frontend/src/pages/recepce/HandoverTab.tsx`).
+
 ## Recepce – Odvody
 
 ### Odvody se připravují z Předávacího protokolu, ne ze samostatné záložky
@@ -759,6 +773,10 @@ Vrácení je záměrně přísné: **není-li v protokolu zamčený řádek „o
 ### Změny odvodu se nezapisují do historie protokolu a nejdou vzít zpět
 
 Zásah odvodu do protokolu **neprochází historií změn ani funkcí Zpět/Znovu**. Zásah se totiž týká dvou dokumentů zároveň; kdyby šlo vzít zpět samotné snížení trezoru, záznam odvodu by dál tvrdil, že peníze odešly. Změny se místo toho zapisují do protokolu změn (auditu).
+
+Záznam vytvoření, úpravy i smazání odvodu obsahuje **úplný obsah odvodu**: počty bankovek CZK a EUR zvlášť z trezoru a z kasy, seznam odvedených účtů (název a částka) a hodnoty z Protelu (CZK cash, CZK depozit, EUR cash, EUR depozit – u Amigo & Alqush pro každou pokladnu zvlášť). Provedení odvodu se zapíše s časem a uživatelem. Záznamy pořízené před říjnem 2026 obsahují jen celkové částky.
+
+> 🔒 Server. Zdroj: `odvodAuditDetail` a zápisy `writeAudit` v `functions/src/routes/odvody.ts`.
 
 Přesuny sm a změny waty jsou na tom **jinak**: ty se do historie protokolu zapisují (viz „Recepce – Předávací protokol"), jen je stejně tak nelze vzít zpět. Odvod se nezapisuje vůbec.
 
