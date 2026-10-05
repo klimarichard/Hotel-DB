@@ -17,6 +17,7 @@ import { PERMISSION_SECTIONS } from "@/lib/permissions/catalog";
 import { MENU_ITEMS } from "@/lib/menuItems";
 import { VARIABLE_GROUPS } from "@/lib/contractVariables";
 import { hotelBySlug } from "@/lib/hotels";
+import { signErrorMessage } from "@/lib/signErrors";
 
 function isObj(v: unknown): v is Record<string, unknown> {
   return !!v && typeof v === "object" && !Array.isArray(v);
@@ -146,6 +147,56 @@ function renderJobResult(v: unknown): string {
   return parts.length ? parts.join(", ") : "–";
 }
 
+// ── Recepce: odvod + signature attempts ──────────────────────────────────────
+function money(n: unknown, unit: "Kč" | "€"): string {
+  return typeof n === "number" ? `${n.toLocaleString("cs-CZ")} ${unit}` : "–";
+}
+/** {"5000": 2, "1000": 3} → "5 000 Kč × 2, 1 000 Kč × 3" (largest note first). */
+function renderNominals(v: unknown, unit: "Kč" | "€"): string {
+  if (!isObj(v)) return formatAuditValue(v);
+  const parts = Object.entries(v)
+    .filter(([, n]) => typeof n === "number" && n > 0)
+    .sort(([a], [b]) => Number(b) - Number(a))
+    .map(([denom, n]) => `${Number(denom).toLocaleString("cs-CZ")} ${unit} × ${n}`);
+  return parts.length ? parts.join(", ") : "žádné";
+}
+/** Odvod receipts: [{name, amount}] → "Booking 123 (1 500 Kč); …". Legacy entries stored a count. */
+function renderReceipts(v: unknown): string {
+  if (typeof v === "number") return `${v} ks`;
+  if (!Array.isArray(v)) return formatAuditValue(v);
+  if (!v.length) return "žádné";
+  return v
+    .map((r) => {
+      const o = isObj(r) ? r : {};
+      const name = typeof o.name === "string" && o.name.trim() ? o.name : "(bez názvu)";
+      return `${name} (${money(o.amount, "Kč")})`;
+    })
+    .join("; ");
+}
+/** Protel values, one register per segment (only Amigo & Alqush has two). */
+function renderProtel(v: unknown): string {
+  if (!Array.isArray(v) || !v.length) return formatAuditValue(v);
+  const many = v.length > 1;
+  return v
+    .map((r) => {
+      const o = isObj(r) ? r : {};
+      const body =
+        `CZK cash ${money(o.czkCash, "Kč")}, CZK depozit ${money(o.czkDeposit, "Kč")}, ` +
+        `EUR cash ${money(o.eurCash, "€")}, EUR depozit ${money(o.eurDeposit, "€")}`;
+      return many && typeof o.register === "string" ? `${o.register}: ${body}` : body;
+    })
+    .join("; ");
+}
+function renderWeights(v: unknown): string {
+  if (!Array.isArray(v) || !v.length) return formatAuditValue(v);
+  return v
+    .map((r) => {
+      const o = isObj(r) ? r : {};
+      return `${typeof o.register === "string" ? o.register : "?"} ${formatAuditValue(o.weight)}`;
+    })
+    .join(", ");
+}
+
 // Internal foreign-key / bookkeeping fields with no human-meaningful value –
 // the record's identity is already in the card title, so hide these rows.
 const HIDDEN_ID_LEAVES = new Set([
@@ -213,8 +264,44 @@ export function renderAuditFieldValue(
         ? hotelBySlug(value)?.label ?? value
         : formatAuditValue(value);
     case "shift":
+    case "shiftType":
       // Handover shift code → Czech.
       return value === "den" ? "Denní" : value === "noc" ? "Noční" : formatAuditValue(value);
+    case "slot":
+      // Signature slot of a protocol.
+      return value === "predal" ? "Předal" : value === "prevzal" ? "Převzal" : formatAuditValue(value);
+    case "predal":
+    case "prevzal":
+      // Pre-2026-10 sign/revert entries: the stamp object (or null when removed).
+      return isObj(value) && typeof value.displayName === "string" ? value.displayName : formatAuditValue(value);
+    case "errorCode":
+      // Server-side failures also carry the Czech `error` text – the bare HTTP
+      // code adds nothing readable (it stays in the technical detail).
+      if (typeof value !== "string" || value.startsWith("server:")) return null;
+      return signErrorMessage(value);
+    case "czkFromTrezor":
+    case "czkFromKasa":
+      return renderNominals(value, "Kč");
+    case "eurFromTrezor":
+    case "eurFromKasa":
+      return renderNominals(value, "€");
+    case "receipts":
+      return renderReceipts(value);
+    case "protel":
+      return renderProtel(value);
+    case "weights":
+      return renderWeights(value);
+    case "totalCZK":
+    case "czk":
+      return money(value, "Kč");
+    case "totalEUR":
+    case "eur":
+      return money(value, "€");
+    case "month":
+      // Odvod month "2026-09" → "9/2026"; numeric months elsewhere stay as-is.
+      return typeof value === "string" && /^\d{4}-\d{2}$/.test(value)
+        ? `${Number(value.slice(5))}/${value.slice(0, 4)}`
+        : formatAuditValue(value, leaf);
     case "visibility":
       // Dokumenty audience rung → the same word the picker shows. Stored in
       // English so the server can validate a closed set; never displayed that way.

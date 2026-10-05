@@ -12,8 +12,8 @@ import { useVacationContext } from "@/context/VacationContext";
 import { useHandoverWarningsContext } from "@/context/HandoverWarningsContext";
 import { useScheduledJobsContext } from "@/context/ScheduledJobsContext";
 import { useTheme } from "@/context/ThemeContext";
-import { api, ApiError } from "@/lib/api";
-import { verifyCredential } from "@/lib/secondaryAuth";
+import { api } from "@/lib/api";
+import { verifyAnyCredential, signerEmails, credentialFlowErrorMessage } from "@/lib/secondaryAuth";
 import { resolveOrderByPermission } from "@/lib/menuItems";
 import TimeOverrideBanner from "@/components/TimeOverrideBanner";
 import TimeOverrideControl from "@/components/TimeOverrideControl";
@@ -47,16 +47,6 @@ const MoonIcon = () => (
     <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
   </svg>
 );
-
-/** Firebase auth/* codes mean a bad password; ApiError carries the server's
- *  Czech message (e.g. the authorizer lacks system.logout.authorize). */
-function logoutAuthErrorMessage(err: unknown): string {
-  if (err instanceof ApiError) return err.message || "Odhlášení se nezdařilo.";
-  const code = (err as { code?: string })?.code;
-  if (typeof code === "string" && code.startsWith("auth/")) return "Neplatné jméno nebo heslo.";
-  if (err instanceof Error && err.message) return err.message;
-  return "Ověření se nezdařilo.";
-}
 
 export default function Layout() {
   const { user, role, name, roleTypeName, noSelfLogout, can } = useAuth();
@@ -173,13 +163,13 @@ export default function Layout() {
     setLogoutBusy(true);
     setLogoutError(null);
     try {
-      const cred = await verifyCredential(signer.email, password);
+      const cred = await verifyAnyCredential(signerEmails(signer), password);
       await api.post("/auth/logout-authorize", { idToken: cred.idToken });
       setLogoutAuthOpen(false);
       await signOut(auth);
       navigate("/login");
     } catch (err) {
-      setLogoutError(logoutAuthErrorMessage(err));
+      setLogoutError(credentialFlowErrorMessage(err, "Odhlášení se nezdařilo."));
     } finally {
       setLogoutBusy(false);
     }

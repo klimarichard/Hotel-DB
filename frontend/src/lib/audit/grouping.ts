@@ -19,6 +19,7 @@ import {
   sectionLabel,
 } from "./labels";
 import { formatAuditValue } from "./format";
+import { hotelBySlug } from "@/lib/hotels";
 
 export interface AuditEntry {
   id: string;
@@ -71,6 +72,7 @@ export interface AuditEvent {
   collectionRoot: string;
   primaryCollection: string;
   resourceId?: string;
+  subResourceId?: string;
   employeeId?: string;
   /** Semantic event id (set, or render-derived for legacy entries). */
   event?: string;
@@ -183,6 +185,7 @@ function buildEvent(entries: AuditEntry[]): AuditEvent {
     collectionRoot: root,
     primaryCollection: first.collection,
     resourceId: first.resourceId,
+    subResourceId: first.subResourceId,
     employeeId: first.employeeId,
     event,
     sections,
@@ -190,6 +193,11 @@ function buildEvent(entries: AuditEntry[]): AuditEvent {
     extra: first.extra,
     entries,
   };
+}
+
+const STANDALONE_EVENT = /^recepce\.(protokol\.(sign|signFailed|unsign|unsignFailed)|odvod\.)/;
+function isStandaloneEvent(event: string | undefined): boolean {
+  return !!event && STANDALONE_EVENT.test(event);
 }
 
 /** Fold a time-desc list of audit entries into grouped events. */
@@ -207,12 +215,17 @@ export function groupEntries(entries: AuditEntry[]): AuditEvent[] {
   };
 
   for (const e of entries) {
-    const eKey = `${e.userId}|${e.action}|${recordKey(e)}`;
+    const eKey = `${e.userId}|${e.action}|${e.event ?? ""}|${recordKey(e)}`;
     const ms = tsToDate(e.timestamp)?.getTime() ?? null;
     const withinWindow =
       anchorMs !== null && ms !== null && Math.abs(anchorMs - ms) <= GROUP_WINDOW_MS;
+    // Signature attempts and odvod actions are each one complete record, and a
+    // card shows only its FIRST entry's extra – merging would silently drop the
+    // rest (three wrong-password tries must read as three). Protocol autosave
+    // edits keep merging: they fire every few seconds while someone types.
+    const standalone = isStandaloneEvent(e.event) || current.some((c) => isStandaloneEvent(c.event));
 
-    if (current.length && eKey === key && withinWindow) {
+    if (current.length && eKey === key && withinWindow && !standalone) {
       current.push(e);
     } else {
       flush();
@@ -277,6 +290,19 @@ export function eventTitle(ev: AuditEvent, employeeName?: string): EventTitle {
     return { text: employeeName, href: `/zamestnanci/${ev.employeeId}` };
   }
   const root = ev.collectionRoot;
+  // Recepce: "Superior · 04.10.2026 noční" / "Odvod Ankora 9/2026".
+  if (root === "shiftHandovers" || root === "odvody") {
+    const x = ev.extra ?? {};
+    const slug = typeof x.hotel === "string" ? x.hotel : ev.subResourceId;
+    const hotel = slug ? hotelBySlug(slug)?.label ?? slug : "";
+    if (root === "odvody") {
+      const m = /^(\d{4})-(\d{2})$/.exec(ev.resourceId ?? "");
+      return { text: ["Odvod", hotel, m ? `${Number(m[2])}/${m[1]}` : ""].filter(Boolean).join(" ") };
+    }
+    const id = /^(\d{4}-\d{2}-\d{2})_(den|noc)$/.exec(ev.resourceId ?? "");
+    const when = id ? `${formatAuditValue(id[1])} ${id[2] === "den" ? "denní" : "noční"}` : "";
+    return { text: [hotel, when].filter(Boolean).join(" · ") };
+  }
   if (root === "payrollPeriods" && ev.resourceId && /^\d{4}-\d{2}$/.test(ev.resourceId)) {
     const [y, m] = ev.resourceId.split("-");
     return { text: `Mzdy ${Number(m)}/${y}` };

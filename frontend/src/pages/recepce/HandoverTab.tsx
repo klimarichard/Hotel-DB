@@ -6,7 +6,7 @@ import Button from "@/components/Button";
 import IconButton from "@/components/IconButton";
 import ConfirmModal from "@/components/ConfirmModal";
 import type { Hotel } from "@/lib/hotels";
-import { verifyCredential } from "@/lib/secondaryAuth";
+import { CredentialError, credentialFlowErrorMessage, signerEmails, verifyAnyCredential } from "@/lib/secondaryAuth";
 import SignModal, { type Signer } from "@/components/SignModal";
 import OdvodyModal from "./OdvodyModal";
 import ConflictModal, { type ConflictMode } from "./ConflictModal";
@@ -1390,14 +1390,6 @@ function ProtocolEditor({
   }
 
   // ── Signatures (Předat / Převzít / Un-sign) ────────────────────────────────
-  function signErrorMessage(err: unknown): string {
-    if (err instanceof ApiError) return err.message || "Akce se nezdařila.";
-    const code = (err as { code?: string })?.code;
-    if (typeof code === "string" && code.startsWith("auth/")) return "Neplatné jméno nebo heslo.";
-    if (err instanceof Error && err.message) return err.message;
-    return "Ověření se nezdařilo.";
-  }
-
   function openSign(slot: SignatureSlot) {
     setSignError(null);
     setSignAction({ slot, mode: "sign" });
@@ -1427,8 +1419,27 @@ function ProtocolEditor({
     setSignBusy(true);
     setSignError(null);
     try {
-      const cred = await verifyCredential(signer.email, password);
       const base = `/handovers/${hotel.slug}/${docId}/${signAction.slot}`;
+      let cred;
+      try {
+        cred = await verifyAnyCredential(signerEmails(signer), password);
+      } catch (authErr) {
+        // The password check runs here on the client, so the server never sees
+        // a wrong password / lockout / offline attempt – report it for the change
+        // log (best effort; logging must never block or mask the real error).
+        // Failures AFTER this point are logged by the sign/revert route itself.
+        if (authErr instanceof CredentialError) {
+          void api
+            .post(`${base}/failed`, {
+              mode: signAction.mode,
+              signerUid: signer.uid,
+              errorCode: authErr.code,
+              triedEmails: authErr.triedEmails,
+            })
+            .catch(() => undefined);
+        }
+        throw authErr;
+      }
       if (signAction.mode === "sign") {
         // Persist any pending edits BEFORE freezing the content. If that save hits
         // a conflict (409), the conflict dialog is raised — abort the sign rather
@@ -1442,15 +1453,15 @@ function ProtocolEditor({
             return;
           }
         }
-        const saved = await api.post<Handover>(base, { idToken: cred.idToken });
+        const saved = await api.post<Handover>(base, { idToken: cred.idToken, signerUid: cred.uid });
         applyDoc(saved);
       } else {
-        const saved = await api.post<Handover>(`${base}/revert`, { idToken: cred.idToken });
+        const saved = await api.post<Handover>(`${base}/revert`, { idToken: cred.idToken, signerUid: cred.uid });
         applyDoc(saved);
       }
       setSignAction(null);
     } catch (err) {
-      setSignError(signErrorMessage(err));
+      setSignError(credentialFlowErrorMessage(err, "Akce se nezdařila."));
     } finally {
       setSignBusy(false);
     }
