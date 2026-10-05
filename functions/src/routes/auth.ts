@@ -10,6 +10,7 @@ import {
   ROLE_TYPES_COLLECTION,
 } from "../auth/permissions";
 import { ctxFromReq, logCreate, logUpdate } from "../services/auditLog";
+import { PoolCandidate, groupSignerPool, publicEntry } from "../services/signerPool";
 import { isHotelSlug, hotelViewPerm, type HotelSlug } from "../services/hotels";
 import { resolveEmployeeDisplays } from "../services/recepceEmployees";
 import * as clock from "../services/clock";
@@ -801,8 +802,7 @@ authRouter.get("/logout-authorizers", requireAuth, async (req: AuthRequest, res)
     return;
   }
   const usersSnap = await admin.firestore().collection("users").get();
-  const included: Array<{ uid: string; name: string; email: string; employeeId: string | null }> = [];
-  const seenEmp = new Set<string>();
+  const candidates: PoolCandidate[] = [];
   for (const d of usersSnap.docs) {
     const u = d.data() as {
       name?: unknown;
@@ -825,24 +825,13 @@ authRouter.get("/logout-authorizers", requireAuth, async (req: AuthRequest, res)
     });
     if (!perms.has("system.admin") && !perms.has("system.logout.authorize")) continue;
     const empId = typeof u.employeeId === "string" ? u.employeeId : null;
-    if (empId) {
-      if (seenEmp.has(empId)) continue;
-      seenEmp.add(empId);
-    }
-    included.push({ uid: d.id, name, email, employeeId: empId });
+    candidates.push({ uid: d.id, name, email, employeeId: empId });
   }
 
-  // LIVE employee-name labels (displayName || "First Last"), surname-first sort —
-  // same convention as the handover signer pickers.
-  const displays = await resolveEmployeeDisplays(included.map((e) => e.employeeId ?? ""));
-  const out = included.map((e) => {
-    const disp = e.employeeId ? displays.get(e.employeeId) : undefined;
-    const label = disp?.name || e.name;
-    const sortKey = disp?.sortKey || label.toLowerCase();
-    return { uid: e.uid, name: e.name, email: e.email, label, sortKey };
-  });
-  out.sort((a, b) => a.sortKey.localeCompare(b.sortKey, "cs"));
-  res.json(out.map(({ sortKey, ...s }) => s));
+  // One entry per person carrying every qualifying login email (the client tries
+  // each), LIVE employee-name labels, surname-first — see services/signerPool.ts.
+  const pool = await groupSignerPool(candidates);
+  res.json(pool.map(publicEntry));
 });
 
 /**
@@ -862,7 +851,8 @@ authRouter.post("/logout-authorize", requireAuth, async (req: AuthRequest, res) 
   try {
     decoded = await admin.auth().verifyIdToken(body.idToken);
   } catch {
-    res.status(401).json({ error: "Neplatné jméno nebo heslo." });
+    // The password was already proven on the client; a rejected token is stale.
+    res.status(401).json({ error: "Ověření vypršelo, zkuste to prosím znovu." });
     return;
   }
   // Permissions of the password-proven identity, from ITS claims — independent

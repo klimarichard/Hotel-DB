@@ -401,6 +401,37 @@ function serializeOdvod(id: string, d: OdvodDoc): Record<string, unknown> {
   };
 }
 
+/**
+ * The change-log payload of an odvod: exactly what was counted and ticked, so a
+ * month-end odvod can be reconstructed from Log změn alone (the September 2026
+ * Ankora odvod could not — entries then carried only the two totals).
+ *
+ * Banknotes come from the stored EFFECT, not the request: the effect is the
+ * per-drawer split the server actually applied (CZK taken out of trezor/kasa now;
+ * EUR earmarked in trezor/kasa until "Provést odvod"). Receipts are the full rows
+ * removed from Účty. Protel values are listed per register (Amigo & Alqush has two).
+ */
+function odvodAuditDetail(
+  hotel: HotelSlug,
+  data: { protel?: Record<string, { czkCash: number; czkDeposit: number; eurCash: number; eurDeposit: number }>; weights?: Record<string, number> },
+  effect: OdvodEffect | null
+): Record<string, unknown> {
+  const registers = ODVOD_REGISTERS[hotel];
+  return {
+    czkFromTrezor: effect?.czkTaken.trezor ?? {},
+    czkFromKasa: effect?.czkTaken.kasa ?? {},
+    eurFromTrezor: effect?.eurPending.trezor ?? {},
+    eurFromKasa: effect?.eurPending.kasa ?? {},
+    receipts: (effect?.removedAccounts ?? []).map((a) => ({ name: a.name ?? "", amount: a.amount ?? 0 })),
+    protel: registers.map((r) => ({ register: r.label, ...(data.protel?.[r.key] ?? {}) })),
+    // The split weights only matter where a hotel has more than one register.
+    weights:
+      registers.length > 1
+        ? registers.map((r) => ({ register: r.label, weight: data.weights?.[r.key] ?? null }))
+        : undefined,
+  };
+}
+
 odvodyRouter.use("/:hotel", validateHotelParam);
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -540,7 +571,7 @@ odvodyRouter.post(
         collection: "odvody",
         resourceId: month,
         event: "recepce.odvod.settle",
-        extra: { hotel, month, shiftDate, shiftType, czk: result.lineAmount, eur: result.eurTotal },
+        extra: { hotel, month, date: shiftDate, shift: shiftType, czk: result.lineAmount, eur: result.eurTotal },
       });
       res.json({ ok: true, ...result });
     } catch (err) {
@@ -761,15 +792,15 @@ odvodyRouter.put(
         action: result.isUpdate ? "update" : "create",
         collection: "odvody",
         resourceId: month,
-        event: "recepce.odvod.save",
+        event: result.isUpdate ? "recepce.odvod.update" : "recepce.odvod.create",
         extra: {
           hotel,
           month,
-          shiftDate: target.shiftDate,
-          shiftType: target.shiftType,
+          date: target.shiftDate,
+          shift: target.shiftType,
           totalCZK: result.plan.totalCZK,
           totalEUR: result.plan.totalEUR,
-          receipts: result.effect.removedAccounts.length,
+          ...odvodAuditDetail(hotel, { protel, weights }, result.effect),
           protokolCreated: result.created,
           // Flagged explicitly: odvody.manage is allowed to rewrite a protocol
           // that has already been signed off.
@@ -801,7 +832,7 @@ odvodyRouter.delete(
     const target = await resolveTarget(hotel);
 
     try {
-      await db().runTransaction(async (tx) => {
+      const deleted = await db().runTransaction(async (tx) => {
         const odvodRef = odvodCol(hotel).doc(month);
         const protoRef = handoverCol(hotel).doc(docId(target.shiftDate, target.shiftType));
         const [odvodSnap, protoSnap] = await tx.getAll(odvodRef, protoRef);
@@ -825,14 +856,23 @@ odvodyRouter.delete(
           });
         }
         tx.delete(odvodRef);
+        return { existing, effect: existingEffect };
       });
 
+      // Record what was deleted — the same detail a save records — so a removed
+      // odvod can still be reconstructed from the change log.
       await writeAudit(ctxFromReq(req), {
         action: "delete",
         collection: "odvody",
         resourceId: month,
         event: "recepce.odvod.delete",
-        extra: { hotel, month, shiftDate: target.shiftDate, shiftType: target.shiftType },
+        extra: {
+          hotel,
+          month,
+          date: target.shiftDate,
+          shift: target.shiftType,
+          ...odvodAuditDetail(hotel, deleted.existing, deleted.effect),
+        },
       });
       res.json({ ok: true });
     } catch (err) {
