@@ -37,6 +37,16 @@ export interface AppCheckEntry {
   multisportPrice: number;
   allowances: boolean | null;
   nepodepiseProhlaseni: boolean | null;
+  /** vacationLedger/{period year}; remaining as at the END of the period's month. null = no ledger doc. */
+  vacation: {
+    priorYearHours: number | null;
+    currentYearHours: number | null;
+    paidOutHours: number | null;
+    /** Čerpáno of months 1..period month. */
+    consumedHours: number;
+    /** null when Nárok (Loňská + Letošní) is unset. */
+    remainingHours: number | null;
+  } | null;
 }
 
 export interface AppCheckData {
