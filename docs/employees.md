@@ -70,6 +70,8 @@ The existing `GenerateContractModal` is unchanged — only the call sites moved.
 ### Session derivation
 `frontend/src/lib/employmentSessions.ts`:
 - `groupBySession(rows)` — walks rows in `startDate` ascending order, opens a new session on each `nástup`, appends `změna smlouvy` and the (single) `ukončení`. Orphan rows (no preceding Nástup) are silently dropped — rare in practice, indicates dirty data.
+  - ⚠️ Rows carry **no parent link** — a Dodatek / Ukončení / Rodičovská belongs to whichever Nástup precedes its `startDate`, regardless of which card's button created it. Same-day ties are broken arbitrarily (array / doc-id order) here and in every backend copy (`payrollCalculator.buildSessions`, the four builders in `routes/employees.ts`).
+- `sessionMismatch(rows, candidate, nastupId)` (**v5.13.1**) — would `candidate` be filed under `nastupId`'s session? Runs `groupBySession` on the rows plus the candidate, pre-sorted Nástup-first on same-day ties (a row dated on a contract's first day belongs to it). `AddEntryModal` (`EmployeeDetailPage.tsx`) anchors on `parentRowId` (new row) or the session holding `initialRow` (edit), shows a `modalWarning` under the date and **blocks the save** on a mismatch. Frontend-only; the API does not check it. Added after a mistyped year filed a new Dodatek under a finished contract.
 - `computeEffectiveState(nastup, dodatky, ukonceni)` — folds Dodatek changes:
   - `mzda` → `salary` (or `agreedReward` for DPP)
   - `pracovní pozice` → `jobTitle`
