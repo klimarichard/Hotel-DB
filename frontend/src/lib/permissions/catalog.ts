@@ -270,6 +270,7 @@ export const PERMISSION_SECTIONS = [
           { key: "payroll.edit", label: "Upravit mzdy (odemčené)", level: 1 },
           { key: "payroll.notes.manage", label: "Spravovat poznámky ke mzdám", level: 2 },
           { key: "payroll.lock", label: "Zamknout/odemknout období", level: 1 },
+          { key: "payroll.check", label: "Kontrola mezd (XLS + PDF)", level: 2 },
           { key: "payroll.recalculate", label: "Přepočítat mzdy (zachovává ruční úpravy)", level: 1 },
           { key: "payroll.recalculate.hard", label: "Tvrdý přepočet (zahodit veškeré úpravy)", level: 2 },
           { key: "payroll.create", label: "Vytvořit mzdové období", level: 1, spaceBefore: true },

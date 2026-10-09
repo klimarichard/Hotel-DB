@@ -161,6 +161,7 @@ export default function App() {
         <Route path="napoveda/ukazka-profil" element={<TourDemoRoute scenario="self"><EmployeeSelfPage key="demo-self" /></TourDemoRoute>} />
         <Route path="napoveda/ukazka-mzdy" element={<TourDemoRoute scenario="payroll"><PayrollPage key="demo-payroll" /></TourDemoRoute>} />
         <Route path="napoveda/ukazka-mzdy-prazdne" element={<TourDemoRoute scenario="payroll-empty"><PayrollPage key="demo-payroll-empty" /></TourDemoRoute>} />
+        <Route path="napoveda/ukazka-mzdy-uzamceno" element={<TourDemoRoute scenario="payroll-locked"><PayrollPage key="demo-payroll-locked" /></TourDemoRoute>} />
         <Route path="napoveda/ukazka-smeny" element={<TourDemoRoute scenario="shifts"><ShiftPlannerPage key="demo-shifts" /></TourDemoRoute>} />
         <Route path="napoveda/ukazka-smeny-prazdne" element={<TourDemoRoute scenario="shifts-empty"><ShiftPlannerPage key="demo-shifts-empty" /></TourDemoRoute>} />
         <Route path="napoveda/ukazka-smeny-vytvoreny" element={<TourDemoRoute scenario="shifts-created"><ShiftPlannerPage key="demo-shifts-created" /></TourDemoRoute>} />

@@ -46,8 +46,9 @@ export interface CompressResult {
   compressed: boolean;
 }
 
-/** pdf.js needs its worker URL set once. Vite resolves `?url` to an asset URL. */
-async function loadPdfJs() {
+/** pdf.js needs its worker URL set once. Vite resolves `?url` to an asset URL.
+ *  Also used by the payroll check (lib/payrollCheck/readers.ts). */
+export async function loadPdfJs() {
   const pdfjs = await import("pdfjs-dist");
   const workerUrl = (await import("pdfjs-dist/build/pdf.worker.min.mjs?url")).default;
   pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
