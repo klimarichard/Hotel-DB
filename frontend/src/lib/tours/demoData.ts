@@ -53,7 +53,6 @@ export type TourScenario =
   | "shifts-change-request"
   | "payroll"
   | "payroll-empty"
-  | "payroll-locked"
   | "protokol"
   | "protokol-empty"
   | "protokol-signed"
@@ -490,53 +489,11 @@ function buildDemoPayrollPeriod(year: number, month: number): unknown {
 }
 
 /**
- * `GET /payroll/periods/:id/check-data` mock for the Kontrola mezd modal: the
- * demo period's entries flattened to the comparison shape (always locked – the
- * button only exists on a locked period).
- */
-function buildDemoPayrollCheckData(year: number, month: number): unknown {
-  const period = buildDemoPayrollPeriod(year, month) as {
-    id: string;
-    foodVoucherRate: number;
-    entries: Array<Record<string, unknown> & { id: string; firstName: string; lastName: string; multisportActive: boolean }>;
-  };
-  return {
-    id: period.id,
-    year,
-    month,
-    locked: true,
-    foodVoucherRate: period.foodVoucherRate,
-    entries: period.entries.map((e) => ({
-      employeeId: e.id,
-      firstName: e.firstName,
-      lastName: e.lastName,
-      displayName: `${e.firstName} ${e.lastName}`,
-      contractType: e.contractType,
-      totalHours: e.totalHours,
-      reportHours: e.reportHours,
-      vacationHours: e.vacationHours,
-      nightHours: e.nightHours,
-      holidayHours: e.holidayHours,
-      weekendHours: e.weekendHours,
-      extraPay: e.extraPay,
-      foodVouchers: e.foodVouchers,
-      dppAmount: e.dppAmount,
-      sickLeaveHours: e.sickLeaveHours,
-      multisportPrice: e.multisportActive ? 400 : 0,
-      allowances: false,
-      nepodepiseProhlaseni: false,
-    })),
-  };
-}
-
-/**
  * Serve mocks for the payroll page while a payroll demo scenario is active.
  * Returns null when the path isn't a payroll path (let the caller continue).
  *  - scenario "payroll":       by-month period fetch returns the populated period.
  *  - scenario "payroll-empty": by-month returns null → the "Vytvořit mzdy ručně"
  *                              (payroll-create) empty state renders.
- *  - scenario "payroll-locked": same period with `locked: true`, so the
- *                              lock-gated Kontrola mezd button renders.
  * Every non-GET (create/recalc/lock/delete/notes) is swallowed with `{}`.
  */
 function payrollFixture(
@@ -549,17 +506,7 @@ function payrollFixture(
   const m = clean.match(/^\/payroll\/periods\/by-month\/(\d+)\/(\d+)$/);
   if (m) {
     if (scenario === "payroll-empty") return { hit: true, value: null };
-    const period = buildDemoPayrollPeriod(Number(m[1]), Number(m[2])) as Record<string, unknown>;
-    if (scenario === "payroll-locked") return { hit: true, value: { ...period, locked: true } };
-    return { hit: true, value: period };
-  }
-  // Kontrola mezd modal data (the tour never calls it, but a click on the demo
-  // button must not get a bare `{}`). Derived from the demo period entries.
-  const cd = clean.match(/^\/payroll\/periods\/([^/]+)\/check-data$/);
-  if (cd) {
-    const ym = cd[1].match(/^demo-period-(\d{4})-(\d{2})$/);
-    const { year, month } = ym ? { year: Number(ym[1]), month: Number(ym[2]) } : currentYM();
-    return { hit: true, value: buildDemoPayrollCheckData(year, month) };
+    return { hit: true, value: buildDemoPayrollPeriod(Number(m[1]), Number(m[2])) };
   }
   // Remaining-vacation badge beside each name. Keyed by the demo entry ids; the
   // generic `{}` fallthrough below has no `values` map, and the badge would then
@@ -1248,7 +1195,6 @@ function activeScenario(): TourScenario | null {
     case "/napoveda/ukazka-profil": return "self";
     case "/napoveda/ukazka-mzdy": return "payroll";
     case "/napoveda/ukazka-mzdy-prazdne": return "payroll-empty";
-    case "/napoveda/ukazka-mzdy-uzamceno": return "payroll-locked";
     case "/napoveda/ukazka-smeny": return "shifts";
     case "/napoveda/ukazka-smeny-prazdne": return "shifts-empty";
     case "/napoveda/ukazka-smeny-vytvoreny": return "shifts-created";
@@ -1361,7 +1307,6 @@ export function getDemoResponse(
     // ── Payroll demo (populated period or empty "create" state) ──
     case "payroll":
     case "payroll-empty":
-    case "payroll-locked":
       return payrollFixture(isGet, clean, scenario) ?? { hit: false };
     // ── Shifts demo (opened / empty-create / published) ──
     case "shifts":
