@@ -368,6 +368,14 @@ U **DPP** se odpracované hodiny z XLS porovnávají s **celkovými hodinami** v
 
 > 🖥️ Jen rozhraní. Zdroj: `frontend/src/lib/payrollNavic.ts:13`, `frontend/src/lib/payrollCheck/appCheck.ts:64-77`.
 
+### Zůstatek dovolené: porovnává se součet, opravuje se Letošní nárok
+
+Kontrola mezd porovná **zůstatek dovolené** na mzdovém lístku (Letošní + Loňská + Dodatková ke konci měsíce) se zůstatkem v aplikaci **ke konci téhož měsíce** – čerpání zapsané do pozdějších měsíců se nepočítá. Porovnává se jen **součet**, ne jednotlivé části: mzdový systém si čerpání mezi Loňskou a Letošní rozděluje po svém, aplikace zůstatek nedělí. Sekce se zobrazí **jen tehdy, když se někde liší**, a jen pro zaměstnance, kteří mají mzdy v aplikaci.
+
+Tlačítkem **Převzít** se u daného zaměstnance nastaví **Letošní nárok** tak, aby zůstatek v aplikaci odpovídal lístku (rozdíl se přičte k Letošnímu nároku). Nic se nezapíše samo – každou opravu potvrzujete zvlášť. Typický důvod rozdílu: u DPP a zkrácených úvazků mzdový systém nárok každý měsíc přepočítává podle odpracovaných hodin. Je-li rozdíl způsoben něčím jiným (např. špatně zapsaným čerpáním), oprava nárokem zůstatek srovná, ale příčinu neodstraní – u velkých rozdílů je dobré nejdřív zjistit důvod. Tlačítko vidí jen uživatel s oprávněním upravovat zůstatek dovolené; úprava se zapíše jako ruční.
+
+> 🔒 Server (zápis jen s `employees.vacationBalance.manage`, zůstatek ke konci měsíce `functions/src/services/vacationLedger.ts` – `remainingAsOfMonth`) + 🖥️ Jen rozhraní (porovnání a návrh `frontend/src/lib/payrollCheck/vacationCheck.ts`).
+
 ### Sleva na poplatníka se očekává u každého, kdo nemá označení „Nepodepíše prohlášení"
 
 Chybí-li sleva na lístku u zaměstnance **bez** tohoto označení (barva jména v XLS podle legendy, v aplikaci zaškrtávátko u zaměstnance), kontrola to nahlásí – stejně jako uplatněnou slevu u někoho, kdo prohlášení nepodepsal. Jiná výše slevy než **2 570 Kč** se hlásí jako neobvyklá. Částka je v kódu pevně daná; při zákonné změně ji je nutné upravit.
