@@ -9,6 +9,7 @@ import { useShiftChangeRequestsContext } from "@/context/ShiftChangeRequestsCont
 import { useEmployeeChangeRequestsContext } from "@/context/EmployeeChangeRequestsContext";
 import { useSelfDocAlertsContext } from "@/context/SelfDocAlertsContext";
 import { useVacationContext } from "@/context/VacationContext";
+import { useVacationProposals } from "@/context/VacationProposalsContext";
 import { useHandoverWarningsContext } from "@/context/HandoverWarningsContext";
 import { useScheduledJobsContext } from "@/context/ScheduledJobsContext";
 import { useTheme } from "@/context/ThemeContext";
@@ -56,10 +57,14 @@ export default function Layout() {
   const { pendingCount: pendingDataChangeCount, refresh: refreshDataChanges } = useEmployeeChangeRequestsContext();
   const { count: selfDocAlertCount, refresh: refreshSelfDocAlerts } = useSelfDocAlertsContext();
   const { pendingCount: pendingVacationCount, refresh: refreshVacation } = useVacationContext();
+  // Vacation-balance proposals from the payroll check (Kontrola mezd), awaiting
+  // Převzít / Zamítnout on /dovolena. Counted in both Upozornění and Dovolená.
+  const { pendingCount: pendingVacationProposalCount, refresh: refreshVacationProposals } = useVacationProposals();
+  const canManageVacationBalance = can("employees.vacationBalance.manage");
   const { unreadCount: handoverWarningCount, refresh: refreshHandoverWarnings } = useHandoverWarningsContext();
   const { alertCount: jobAlertCount, refresh: refreshJobs } = useScheduledJobsContext();
   // The "Upozornění" sidebar badge mirrors the Upozornění page total: it sums
-  // ALL eight queues shown there, each gated by the same permission that
+  // ALL nine queues shown there, each gated by the same permission that
   // gates that page's tab. The eighth (Úlohy) counts failing/overdue scheduled
   // jobs – not a review queue, but the same "needs a human" semantics, and a
   // silently failing job is precisely what needs to reach the sidebar. (Documents/probation are already 0 without
@@ -70,6 +75,7 @@ export default function Layout() {
     unreadCount +
     unreadProbationCount +
     (can("vacation.review") ? pendingVacationCount : 0) +
+    (canManageVacationBalance ? pendingVacationProposalCount : 0) +
     (can("shifts.override.review") ? pendingOverrideCount : 0) +
     (can("shifts.changeRequest.review") ? pendingChangeRequestCount : 0) +
     (can("changeRequests.review") ? pendingDataChangeCount : 0) +
@@ -78,7 +84,9 @@ export default function Layout() {
   const shiftsBadgeCount =
     (can("shifts.override.review") ? pendingOverrideCount : 0) +
     (can("shifts.changeRequest.review") ? pendingChangeRequestCount : 0);
-  const showVacationBadge = can("vacation.review") && pendingVacationCount > 0;
+  const vacationBadgeCount =
+    (can("vacation.review") ? pendingVacationCount : 0) +
+    (canManageVacationBalance ? pendingVacationProposalCount : 0);
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
@@ -96,6 +104,7 @@ export default function Layout() {
       refreshDataChanges();
       refreshSelfDocAlerts();
       refreshVacation();
+      void refreshVacationProposals();
       refreshHandoverWarnings();
       refreshJobs();
     }
@@ -132,7 +141,7 @@ export default function Layout() {
 
   function badgeFor(id: string): number {
     if (id === "smeny") return shiftsBadgeCount;
-    if (id === "dovolena") return showVacationBadge ? pendingVacationCount : 0;
+    if (id === "dovolena") return vacationBadgeCount;
     if (id === "upozorneni") return upozorneniBadge;
     // "Můj profil" badge = the user's own expired / soon-to-expire documents.
     if (id === "mujProfil") return selfDocAlertCount;
