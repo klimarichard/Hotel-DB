@@ -13,6 +13,8 @@
  * confirms each one; nothing is written automatically.
  */
 import { matchNames, round2, type Slip } from "./core";
+// NB the authoritative copy of this rule runs server-side at Převzít time
+// (functions/src/services – vacation proposals); this one only previews it.
 import { appEntryName, type AppCheckEntry } from "./appCheck";
 
 export interface VacationFinding {
@@ -28,13 +30,35 @@ export interface VacationFinding {
   proposedCurrentYearHours: number;
 }
 
-export function runVacationChecks(slips: Slip[], entries: AppCheckEntry[]): VacationFinding[] {
+/** App entry ↔ payslip pairs whose vacation block was readable. */
+export function vacationMatches(slips: Slip[], entries: AppCheckEntry[]): { entry: AppCheckEntry; slip: Slip }[] {
   const { pairs } = matchNames(entries.map(appEntryName), slips.map((s) => s.name));
+  return pairs
+    .map(({ left, right }) => ({ entry: entries[left], slip: slips[right] }))
+    .filter(({ slip }) => !!slip.vacation); // unreadable block – reported as a warning
+}
+
+/**
+ * The payload saved as proposals (POST /payroll/periods/:id/vacation-proposals):
+ * EVERY matched employee, equal ones included, so the server can also close
+ * proposals that no longer apply. Only the payslip side – the server
+ * recomputes the app side from the live ledger.
+ */
+export function vacationProposalItems(matches: { entry: AppCheckEntry; slip: Slip }[]) {
+  return matches.map(({ entry, slip }) => ({
+    employeeId: entry.employeeId,
+    letosni: slip.vacation!.letosni,
+    lonska: slip.vacation!.lonska,
+    dodatkova: slip.vacation!.dodatkova,
+    contract: slip.contract,
+    slipName: slip.name,
+  }));
+}
+
+export function runVacationChecks(matches: { entry: AppCheckEntry; slip: Slip }[]): VacationFinding[] {
   const out: VacationFinding[] = [];
-  for (const { left, right } of pairs) {
-    const entry = entries[left], slip = slips[right];
-    if (!slip.vacation) continue; // unreadable block – reported as a warning
-    const v = slip.vacation;
+  for (const { entry, slip } of matches) {
+    const v = slip.vacation!;
     const pdfRemaining = round2(v.letosni + v.lonska + v.dodatkova);
     const appRemaining = entry.vacation?.remainingHours ?? null;
     // With Nárok unset the balance is "–", but hours already taken still count:

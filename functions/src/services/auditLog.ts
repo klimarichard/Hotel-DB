@@ -57,6 +57,7 @@ export interface AuditFilterKeys {
 const COLLECTION_CATEGORY: Record<string, AuditCategory> = {
   shiftPlans: "smeny",
   vacationRequests: "dovolena",
+  vacationProposals: "dovolena",
   employees: "zamestnanci",
   "employees/employment": "zamestnanci",
   "employees/contact": "zamestnanci",

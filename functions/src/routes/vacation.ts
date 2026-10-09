@@ -4,7 +4,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { requireAuth, AuthRequest } from "../middleware/auth";
 import { requirePermission } from "../auth/permissions";
 import { applyVacationXsToPlans, removeVacationXsFromPlans, findShiftCollisions } from "./shifts";
-import { getManagementEmployeeIds, isNonManagementScoped } from "./employees";
+import { getManagementEmployeeIds, hiddenManagementEmployeeIds } from "./employees";
 import { projectLedger, periodsForYear } from "../services/vacationLedger";
 import { ctxFromReq, logCreate, logUpdate, logDelete } from "../services/auditLog";
 import { effectiveCompAsOf, EmploymentRowLite } from "../services/payrollCalculator";
@@ -136,9 +136,7 @@ vacationRouter.get(
     // A non-management-scoped caller (e.g. personalista) never sees management
     // records. employeesRouter does this via enforceEmpAccess; this router has no
     // such middleware, so mirror GET /employees' own filter explicitly.
-    const mgmt = isNonManagementScoped(req.permissions)
-      ? await getManagementEmployeeIds()
-      : null;
+    const mgmt = await hiddenManagementEmployeeIds(req.permissions);
     const visible = ledgers.filter((l) => !mgmt || !mgmt.has(l.employeeId));
 
     // Contract type has to be folded as of the year being VIEWED. The root's

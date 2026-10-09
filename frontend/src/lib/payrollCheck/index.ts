@@ -19,7 +19,7 @@ import {
 } from "./core";
 import { appEntryName, runAppChecks, type AppCheckData, type AppSection } from "./appCheck";
 import { readPayslipPdf, readXlsRows } from "./readers";
-import { runVacationChecks, type VacationFinding } from "./vacationCheck";
+import { runVacationChecks, vacationMatches, vacationProposalItems, type VacationFinding } from "./vacationCheck";
 
 export { CheckInputError } from "./core";
 export type { AppCheckData } from "./appCheck";
@@ -38,6 +38,8 @@ export interface CheckResult {
   appEntries: AppCheckData["entries"];
   /** Payslip remaining vacation ≠ the app's ledger (empty = all agree). */
   vacation: VacationFinding[];
+  /** What gets saved for the vacation manager (every matched employee). */
+  vacationItems: ReturnType<typeof vacationProposalItems>;
   /** Period year, for ledger writes. */
   year: number;
   /** Parser sanity warnings, shown above the findings. */
@@ -65,6 +67,7 @@ export async function runPayrollCheck(xlsFile: File, pdfFile: File, app: AppChec
     warnings.push(`Na lístcích ${noVacation.map((s) => s.name).join(", ")} se nepodařilo přečíst zůstatek dovolené – u nich se dovolená nekontroluje.`);
 
   const { pairs, unmatchedLeft, unmatchedRight } = matchNames(employees.map((e) => e.name), slips.map((s) => s.name));
+  const matches = vacationMatches(slips, app.entries);
   return {
     tag: `${app.year}-${String(app.month).padStart(2, "0")}`,
     employees,
@@ -75,7 +78,8 @@ export async function runPayrollCheck(xlsFile: File, pdfFile: File, app: AppChec
     sections: runXlsPdfChecks(employees, slips, pairs),
     app: runAppChecks(employees, app),
     appEntries: app.entries,
-    vacation: runVacationChecks(slips, app.entries),
+    vacation: runVacationChecks(matches),
+    vacationItems: vacationProposalItems(matches),
     year: app.year,
     warnings,
   };
@@ -85,18 +89,10 @@ export async function runPayrollCheck(xlsFile: File, pdfFile: File, app: AppChec
 
 export type SectionCell = string | number | null;
 
-/** A correction the user can apply from the modal (screen only, not exported). */
-export interface VacationAction {
-  employeeId: string;
-  year: number;
-  currentYearHours: number;
-}
-
 export interface SectionRow {
   cells: SectionCell[];
   /** Highlight the whole row. */
   warn?: boolean;
-  action?: VacationAction;
 }
 
 export interface Section {
@@ -187,6 +183,8 @@ export function buildSections(r: CheckResult): Section[] {
   });
 
   // Only when something disagrees (user's call) – hence hideWhenEmpty.
+  // Information only: the corrections are resolved on the Dovolená page by
+  // whoever manages vacation balances (often not the payroll checker).
   out.push({
     key: "vacation",
     title: "Dovolená (aplikace × PDF)",
@@ -202,7 +200,6 @@ export function buildSections(r: CheckResult): Section[] {
         v.proposedCurrentYearHours,
         [v.slip.vacation!.letosni, v.slip.vacation!.lonska, v.slip.vacation!.dodatkova].map(fmtNum).join(" · "),
       ],
-      action: { employeeId: v.entry.employeeId, year: r.year, currentYearHours: v.proposedCurrentYearHours },
     })),
     deltaCols: [4],
     hideWhenEmpty: true,

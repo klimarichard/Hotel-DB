@@ -370,6 +370,10 @@ export const EVENT_LABELS: Record<string, string> = {
   "vacation.reject": "Zamítnutí žádosti o dovolenou",
   "vacation.approveEdit": "Schválení úpravy dovolené",
   "vacation.rejectEdit": "Zamítnutí úpravy dovolené",
+  // Kontrola mezd → návrhy úprav nároku (vacationProposals)
+  "vacation.proposals.fromPayrollCheck": "Uložení rozdílů v dovolené z kontroly mezd",
+  "vacation.proposal.apply": "Převzetí nároku na dovolenou z kontroly mezd",
+  "vacation.proposal.dismiss": "Zamítnutí návrhu úpravy nároku na dovolenou",
   // Směny – žádosti
   "shift.unavailability.approve": "Schválení nedostupnosti",
   "shift.unavailability.reject": "Zamítnutí nedostupnosti",

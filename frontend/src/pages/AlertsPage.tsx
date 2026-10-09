@@ -3,6 +3,7 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { useAlertsContext } from "@/context/AlertsContext";
 import { useVacationContext } from "@/context/VacationContext";
+import { useVacationProposals } from "@/context/VacationProposalsContext";
 import { useShiftOverridesContext } from "@/context/ShiftOverridesContext";
 import { useShiftChangeRequestsContext } from "@/context/ShiftChangeRequestsContext";
 import { useEmployeeChangeRequestsContext } from "@/context/EmployeeChangeRequestsContext";
@@ -13,6 +14,7 @@ import ConfirmModal from "@/components/ConfirmModal";
 import DocumentExpiryTab from "./upozorneni/DocumentExpiryTab";
 import ProbationTab from "./upozorneni/ProbationTab";
 import PendingVacationTab from "./upozorneni/PendingVacationTab";
+import VacationProposalsList from "./upozorneni/VacationProposalsList";
 import PendingShiftOverridesTab from "./upozorneni/PendingShiftOverridesTab";
 import PendingShiftChangeRequestsTab from "./upozorneni/PendingShiftChangeRequestsTab";
 import EmployeeDataChangeRequestsTab from "./upozorneni/EmployeeDataChangeRequestsTab";
@@ -26,6 +28,7 @@ export default function AlertsPage() {
   const { can } = useAuth();
   const { unreadCount, unreadProbationCount, refresh } = useAlertsContext();
   const { pendingCount: vacationCount } = useVacationContext();
+  const { pendingCount: vacationProposalCount } = useVacationProposals();
   const { pendingCount: overridesCount } = useShiftOverridesContext();
   const { pendingCount: changesCount } = useShiftChangeRequestsContext();
   const { pendingCount: dataChangesCount } = useEmployeeChangeRequestsContext();
@@ -35,6 +38,12 @@ export default function AlertsPage() {
   // Per-tab visibility. "Doklady"/"Zkušební doba" ride on the route's alerts.view
   // gate; the review-queue tabs each require their own review permission.
   const canVacation = can("vacation.review");
+  // Vacation-balance proposals from Kontrola mezd share the Dovolená tab, so the
+  // tab shows for either key; each body section keeps its own gate below.
+  const canVacationProposals = can("employees.vacationBalance.manage");
+  const showVacationTab = canVacation || canVacationProposals;
+  const vacationTabCount =
+    (canVacation ? vacationCount : 0) + (canVacationProposals ? vacationProposalCount : 0);
   const canOverrides = can("shifts.override.review");
   const canChanges = can("shifts.changeRequest.review");
   const canDataChanges = can("changeRequests.review");
@@ -48,7 +57,7 @@ export default function AlertsPage() {
   const visibleTabs: Tab[] = [
     "doklady",
     "zkusebni",
-    ...(canVacation ? (["dovolena"] as Tab[]) : []),
+    ...(showVacationTab ? (["dovolena"] as Tab[]) : []),
     ...(canOverrides ? (["vyjimky"] as Tab[]) : []),
     ...(canChanges ? (["zmeny"] as Tab[]) : []),
     ...(canDataChanges ? (["uprava"] as Tab[]) : []),
@@ -132,12 +141,12 @@ export default function AlertsPage() {
         >
           {tabLabel("Zkušební doba", unreadProbationCount)}
         </button>
-        {canVacation && (
+        {showVacationTab && (
           <button
             className={tab === "dovolena" ? styles.tabActive : styles.tabBtn}
             onClick={() => setTab("dovolena")}
           >
-            {tabLabel("Dovolená", vacationCount)}
+            {tabLabel("Dovolená", vacationTabCount)}
           </button>
         )}
         {canOverrides && (
@@ -186,6 +195,7 @@ export default function AlertsPage() {
       {tab === "doklady" && <DocumentExpiryTab key={refreshKey} />}
       {tab === "zkusebni" && <ProbationTab key={refreshKey} />}
       {tab === "dovolena" && canVacation && <PendingVacationTab />}
+      {tab === "dovolena" && canVacationProposals && <VacationProposalsList spaced={canVacation} />}
       {tab === "vyjimky" && canOverrides && <PendingShiftOverridesTab />}
       {tab === "zmeny" && canChanges && <PendingShiftChangeRequestsTab />}
       {tab === "uprava" && canDataChanges && <EmployeeDataChangeRequestsTab />}

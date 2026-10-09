@@ -31,6 +31,7 @@
  */
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
+import { logUpdate, type AuditContext } from "./auditLog";
 
 export type VacationSource = "avensio-seed" | "payroll-lock" | "manual";
 
@@ -406,4 +407,60 @@ export async function setLedgerAnnual(params: {
     },
     { merge: true }
   );
+}
+
+/**
+ * One hand-made ("manual") ledger edit, audited — the single write path shared by
+ * `PATCH /employees/:id/vacation-ledger/:year` and the Kontrola-mezd proposal
+ * apply (`POST /vacation-proposals/:id/apply`). Reads the before-state, writes
+ * via upsertLedgerMonth / setLedgerAnnual, and logs one logUpdate in the
+ * `employees/vacationLedger` collection, so a figure taken over from a payslip
+ * proposal shows up in Historie změn exactly like a hand edit.
+ *
+ * Validation is the caller's job (the PATCH has its own Czech 400 messages).
+ * Returns the re-projected ledger (readLedger shape).
+ */
+export type ManualLedgerEdit =
+  | { kind: "month"; month: number; hours: number | null }
+  | {
+      kind: "annual";
+      field: "priorYearHours" | "currentYearHours" | "paidOutHours";
+      hours: number | null;
+    };
+
+export async function writeManualLedgerEdit(
+  ctx: AuditContext,
+  params: { employeeId: string; year: number; edit: ManualLedgerEdit }
+): Promise<Record<string, unknown> | null> {
+  const { employeeId, year, edit } = params;
+  const updatedBy = ctx.uid || null;
+  const beforeSnap = await ledgerRef(employeeId, year).get();
+  const before = beforeSnap.exists ? (beforeSnap.data() as Record<string, unknown>) : {};
+
+  let after: Record<string, unknown>;
+  if (edit.kind === "month") {
+    await upsertLedgerMonth({
+      employeeId,
+      year,
+      month: edit.month,
+      hours: edit.hours,
+      source: "manual",
+      updatedBy,
+    });
+    after = { [`months.${edit.month}`]: edit.hours };
+  } else {
+    await setLedgerAnnual({ employeeId, year, field: edit.field, hours: edit.hours, updatedBy });
+    after = { [edit.field]: edit.hours };
+  }
+
+  await logUpdate(ctx, {
+    collection: "employees/vacationLedger",
+    resourceId: employeeId,
+    subResourceId: String(year),
+    employeeId,
+    before,
+    after: { ...before, ...after },
+    year,
+  });
+  return readLedger(employeeId, year);
 }
