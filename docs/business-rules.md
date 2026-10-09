@@ -372,9 +372,16 @@ U **DPP** se odpracované hodiny z XLS porovnávají s **celkovými hodinami** v
 
 Kontrola mezd porovná **zůstatek dovolené** na mzdovém lístku (Letošní + Loňská + Dodatková ke konci měsíce) se zůstatkem v aplikaci **ke konci téhož měsíce** – čerpání zapsané do pozdějších měsíců se nepočítá. Porovnává se jen **součet**, ne jednotlivé části: mzdový systém si čerpání mezi Loňskou a Letošní rozděluje po svém, aplikace zůstatek nedělí. Sekce se zobrazí **jen tehdy, když se někde liší**, a jen pro zaměstnance, kteří mají mzdy v aplikaci.
 
-Tlačítkem **Převzít** se u daného zaměstnance nastaví **Letošní nárok** tak, aby zůstatek v aplikaci odpovídal lístku (rozdíl se přičte k Letošnímu nároku). Nic se nezapíše samo – každou opravu potvrzujete zvlášť. Typický důvod rozdílu: u DPP a zkrácených úvazků mzdový systém nárok každý měsíc přepočítává podle odpracovaných hodin. Je-li rozdíl způsoben něčím jiným (např. špatně zapsaným čerpáním), oprava nárokem zůstatek srovná, ale příčinu neodstraní – u velkých rozdílů je dobré nejdřív zjistit důvod. Tlačítko vidí jen uživatel s oprávněním upravovat zůstatek dovolené; úprava se zapíše jako ruční.
+Rozdíly se po provedení kontroly **uloží k vyřízení** (v okně kontroly jsou jen pro informaci) – kontrolu mezd a evidenci dovolené totiž obvykle dělají dva různí lidé. Uloží se jen čísla dovolené z lístku, nikoli soubory. Na stránce **Dovolená** se pak zobrazí panel návrhů a v Upozornění (záložka Dovolená) i v menu odznak s počtem; vidí je jen uživatel s oprávněním upravovat zůstatek dovolené.
 
-> 🔒 Server (zápis jen s `employees.vacationBalance.manage`, zůstatek ke konci měsíce `functions/src/services/vacationLedger.ts` – `remainingAsOfMonth`) + 🖥️ Jen rozhraní (porovnání a návrh `frontend/src/lib/payrollCheck/vacationCheck.ts`).
+- **Převzít** nastaví **Letošní nárok** tak, aby zůstatek v aplikaci odpovídal lístku. Hodnota se **přepočítá v okamžiku kliknutí** z aktuální evidence – mezitím provedená ruční úprava se tedy nepřepíše naslepo; pokud už zůstatky sedí, návrh se jen uzavře. Úprava se zapíše jako ruční a do Logu změn.
+- **Zamítnout** ponechá evidenci beze změny. Stejný návrh (stejný měsíc a stejné hodnoty z lístku) se už znovu neobjeví; objeví se až při jiném zůstatku.
+- **Novější měsíc nahrazuje starší:** zůstatek ke konci pozdějšího měsíce už zahrnuje vše předchozí, takže čekající návrh za starší měsíc se uzavře; opakovaná kontrola staršího měsíce vedle novějšího čekajícího návrhu nic nepřidá. Opakovaná kontrola téhož měsíce návrh přepíše, nevytvoří druhý.
+- Návrh, u kterého se zůstatky mezitím srovnaly (např. ruční úpravou), zmizí sám.
+
+Typický důvod rozdílu: u DPP a zkrácených úvazků mzdový systém nárok každý měsíc přepočítává podle odpracovaných hodin. Je-li rozdíl způsoben něčím jiným (např. špatně zapsaným čerpáním), oprava nárokem zůstatek srovná, ale příčinu neodstraní – u velkých rozdílů je dobré nejdřív zjistit důvod.
+
+> 🔒 Server (uložení jen s `payroll.check` u uzamčeného období; zobrazení, Převzít a Zamítnout jen s `employees.vacationBalance.manage`; pravidlo výpočtu jediné v `functions/src/services/vacationProposals.ts` – `evaluateProposal`, zůstatek ke konci měsíce `services/vacationLedger.ts` – `remainingAsOfMonth`; ukládání `functions/src/routes/payroll.ts` – `POST /periods/:id/vacation-proposals`; vyřízení `functions/src/routes/vacationProposals.ts`). Náhled v okně kontroly `frontend/src/lib/payrollCheck/vacationCheck.ts` je jen 🖥️ informativní.
 
 ### Sleva na poplatníka se očekává u každého, kdo nemá označení „Nepodepíše prohlášení"
 
