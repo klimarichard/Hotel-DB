@@ -93,6 +93,30 @@ export function remainingHours(
 }
 
 /**
+ * Remaining hours as at the END of `month` (1–12): Nárok − čerpáno of months
+ * 1..month − Proplaceno. Used by the payroll check (Kontrola mezd) to compare
+ * against the payslip's "Zůst.dov.", which is stated as at that month's end —
+ * a cell already filled for a later month must not count. null when Nárok unset.
+ */
+export function remainingAsOfMonth(
+  ledger: Pick<VacationLedger, "priorYearHours" | "currentYearHours" | "paidOutHours" | "months">,
+  month: number
+): number | null {
+  const ent = entitlementHours(ledger.priorYearHours, ledger.currentYearHours);
+  if (ent == null) return null;
+  return round2(ent - consumedAsOfMonth(ledger.months, month) - (ledger.paidOutHours ?? 0));
+}
+
+/** Čerpáno of months 1..month (rounded). */
+export function consumedAsOfMonth(months: Record<string, LedgerMonth> | undefined, month: number): number {
+  return round2(
+    Object.entries(months ?? {})
+      .filter(([m]) => Number(m) <= month)
+      .reduce((acc, [, m]) => acc + (Number(m?.hours) || 0), 0)
+  );
+}
+
+/**
  * One employee's ledger for one year, in the shape BOTH read endpoints return:
  * the admin `GET /employees/:id/vacation-ledger` and the self-scoped
  * `GET /me/employee/vacation-ledger`. Shared so the two can never drift — the

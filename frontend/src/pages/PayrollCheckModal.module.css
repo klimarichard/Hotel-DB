@@ -157,6 +157,16 @@
   font-weight: var(--font-weight-bold);
 }
 
+.actionCell {
+  white-space: nowrap;
+  vertical-align: middle !important;
+}
+
+.applied {
+  color: var(--color-success-text);
+  font-weight: var(--font-weight-semibold);
+}
+
 .warnRow td {
   background: var(--color-warning-bg);
 }

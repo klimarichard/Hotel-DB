@@ -6,8 +6,10 @@ import {
   CheckInputError,
   FUZZY_SCORE,
   HOUR_CHECKS,
+  fmtNum,
   matchNames,
   parsePdfLines,
+  parseVacationBlocks,
   parseXlsRows,
   runXlsPdfChecks,
   type Pair,
@@ -16,7 +18,8 @@ import {
   type XlsPdfSections,
 } from "./core";
 import { appEntryName, runAppChecks, type AppCheckData, type AppSection } from "./appCheck";
-import { readPdfLines, readXlsRows } from "./readers";
+import { readPayslipPdf, readXlsRows } from "./readers";
+import { runVacationChecks, type VacationFinding } from "./vacationCheck";
 
 export { CheckInputError } from "./core";
 export type { AppCheckData } from "./appCheck";
@@ -33,14 +36,20 @@ export interface CheckResult {
   app: AppSection;
   /** The app's entries — `app.pairs[].right` indexes into this. */
   appEntries: AppCheckData["entries"];
+  /** Payslip remaining vacation ≠ the app's ledger (empty = all agree). */
+  vacation: VacationFinding[];
+  /** Period year, for ledger writes. */
+  year: number;
   /** Parser sanity warnings, shown above the findings. */
   warnings: string[];
 }
 
 export async function runPayrollCheck(xlsFile: File, pdfFile: File, app: AppCheckData): Promise<CheckResult> {
-  const [rows, lines] = await Promise.all([readXlsRows(xlsFile), readPdfLines(pdfFile)]);
+  const [rows, pdf] = await Promise.all([readXlsRows(xlsFile), readPayslipPdf(pdfFile)]);
   const employees = parseXlsRows(rows);
-  const slips = parsePdfLines(lines);
+  const slips = parsePdfLines(pdf.lines);
+  const vacationBlocks = parseVacationBlocks(pdf.pages);
+  for (const s of slips) s.vacation = vacationBlocks.get(s.slip) ?? null;
   if (!employees.length) throw new CheckInputError("V XLS nebyl nalezen žádný zaměstnanec.");
   if (!slips.length) throw new CheckInputError("V PDF nebyl nalezen žádný mzdový lístek. Je to opravdu PDF s mzdovými lístky?");
 
@@ -51,6 +60,9 @@ export async function runPayrollCheck(xlsFile: File, pdfFile: File, app: AppChec
     warnings.push(`Na ${empty.length} z ${slips.length} mzdových lístků se nepodařilo přečíst žádnou mzdovou složku (${empty.map((s) => s.name).join(", ")}). Výsledky u nich nejsou spolehlivé.`);
   const noCredit = slips.filter((s) => s.credit === null);
   if (noCredit.length) warnings.push(`Na lístcích ${noCredit.map((s) => s.name).join(", ")} nebyla nalezena sleva na poplatníka.`);
+  const noVacation = slips.filter((s) => !s.vacation);
+  if (noVacation.length)
+    warnings.push(`Na lístcích ${noVacation.map((s) => s.name).join(", ")} se nepodařilo přečíst zůstatek dovolené – u nich se dovolená nekontroluje.`);
 
   const { pairs, unmatchedLeft, unmatchedRight } = matchNames(employees.map((e) => e.name), slips.map((s) => s.name));
   return {
@@ -63,6 +75,8 @@ export async function runPayrollCheck(xlsFile: File, pdfFile: File, app: AppChec
     sections: runXlsPdfChecks(employees, slips, pairs),
     app: runAppChecks(employees, app),
     appEntries: app.entries,
+    vacation: runVacationChecks(slips, app.entries),
+    year: app.year,
     warnings,
   };
 }
@@ -71,10 +85,18 @@ export async function runPayrollCheck(xlsFile: File, pdfFile: File, app: AppChec
 
 export type SectionCell = string | number | null;
 
+/** A correction the user can apply from the modal (screen only, not exported). */
+export interface VacationAction {
+  employeeId: string;
+  year: number;
+  currentYearHours: number;
+}
+
 export interface SectionRow {
   cells: SectionCell[];
   /** Highlight the whole row. */
   warn?: boolean;
+  action?: VacationAction;
 }
 
 export interface Section {
@@ -84,6 +106,8 @@ export interface Section {
   rows: SectionRow[];
   /** Column indexes holding signed differences (shown red + with a sign). */
   deltaCols: number[];
+  /** Drop the section entirely when it has no rows (instead of "Bez rozdílů"). */
+  hideWhenEmpty?: boolean;
 }
 
 export const HOUR_COLUMNS = HOUR_CHECKS.map(([c]) => c);
@@ -162,7 +186,29 @@ export function buildSections(r: CheckResult): Section[] {
     deltaCols: [5],
   });
 
-  return out;
+  // Only when something disagrees (user's call) – hence hideWhenEmpty.
+  out.push({
+    key: "vacation",
+    title: "Dovolená (aplikace × PDF)",
+    columns: ["Zaměstnanec", "Úvazek", "Zůstatek v aplikaci (h)", "Zůstatek na lístku (h)", "Rozdíl", "Letošní nárok (h)", "Nový Letošní nárok (h)", "Lístek: Letošní · Loňská · Dodatková"],
+    rows: r.vacation.map((v) => ({
+      cells: [
+        appEntryName(v.entry),
+        v.slip.contract,
+        v.appRemaining ?? "nárok nezadán",
+        v.pdfRemaining,
+        v.delta,
+        v.currentYearHours,
+        v.proposedCurrentYearHours,
+        [v.slip.vacation!.letosni, v.slip.vacation!.lonska, v.slip.vacation!.dodatkova].map(fmtNum).join(" · "),
+      ],
+      action: { employeeId: v.entry.employeeId, year: r.year, currentYearHours: v.proposedCurrentYearHours },
+    })),
+    deltaCols: [4],
+    hideWhenEmpty: true,
+  });
+
+  return out.filter((sec) => !(sec.hideWhenEmpty && !sec.rows.length));
 }
 
 export interface PairingRow {

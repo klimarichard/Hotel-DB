@@ -4,7 +4,7 @@
  * Payroll page bundle doesn't grow; nothing is uploaded anywhere.
  */
 import { loadPdfJs } from "@/lib/pdfCompress";
-import { CheckInputError, type Cell, type CellValue } from "./core";
+import { CheckInputError, type Cell, type CellValue, type TextItem } from "./core";
 
 /** First sheet of an .xls/.xlsx as rows of (value, solid fill RRGGBB | null). */
 export async function readXlsRows(file: File): Promise<Cell[][]> {
@@ -41,7 +41,7 @@ export async function readXlsRows(file: File): Promise<Cell[][]> {
  * the overlap rule those lines silently fail to parse). Verified to give the
  * same items as the Python script's pypdf extraction.
  */
-export async function readPdfLines(file: File): Promise<string[]> {
+export async function readPayslipPdf(file: File): Promise<{ lines: string[]; pages: TextItem[][] }> {
   const pdfjs = await loadPdfJs();
   let doc;
   try {
@@ -50,12 +50,19 @@ export async function readPdfLines(file: File): Promise<string[]> {
     throw new CheckInputError(`Soubor „${file.name}“ se nepodařilo načíst jako PDF.`);
   }
   let text = "";
+  // Positioned runs per page too, for the blocks that only parse by position
+  // (the vacation balance – see core.parseVacationBlocks).
+  const pages: TextItem[][] = [];
   try {
     for (let i = 1; i <= doc.numPages; i++) {
       const content = await (await doc.getPage(i)).getTextContent();
+      const positioned: TextItem[] = [];
+      pages.push(positioned);
       let prev: { hasEOL: boolean; transform: number[]; width: number } | null = null;
       for (const it of content.items) {
         if (!("str" in it)) continue;
+        if (it.str.trim())
+          positioned.push({ s: it.str, x: it.transform[4], y: it.transform[5], r: it.transform[4] + it.width });
         if (prev && !prev.hasEOL && it.str && !/\s$/.test(text) && !/^\s/.test(it.str)) {
           const gap = it.transform[4] - (prev.transform[4] + prev.width);
           if (Math.abs(it.transform[5] - prev.transform[5]) < 1 && (gap > 0.5 || gap < -1)) text += " ";
@@ -68,5 +75,5 @@ export async function readPdfLines(file: File): Promise<string[]> {
   } finally {
     void doc.destroy();
   }
-  return text.split(/\r?\n/);
+  return { lines: text.split(/\r?\n/), pages };
 }

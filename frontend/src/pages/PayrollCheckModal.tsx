@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState, type DragEvent, type KeyboardEvent } from "react";
 import { api } from "@/lib/api";
+import { useAuth } from "@/hooks/useAuth";
 import Button from "@/components/Button";
 import IconButton from "@/components/IconButton";
 import modalStyles from "@/components/ConfirmModal.module.css";
@@ -13,6 +14,7 @@ import {
   type AppCheckData,
   type CheckResult,
   type SectionCell,
+  type VacationAction,
 } from "@/lib/payrollCheck";
 import styles from "./PayrollCheckModal.module.css";
 
@@ -41,6 +43,24 @@ export default function PayrollCheckModal({
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<CheckResult | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const { can } = useAuth();
+  // The ledger PATCH enforces this server-side too; without it the rows still
+  // show, just with no button.
+  const canFixVacation = can("employees.vacationBalance.manage");
+  // employeeId → state of its vacation correction.
+  const [applied, setApplied] = useState<Record<string, "saving" | "done">>({});
+
+  async function applyVacation(a: VacationAction) {
+    setApplied((s) => ({ ...s, [a.employeeId]: "saving" }));
+    setError(null);
+    try {
+      await api.patch(`/employees/${a.employeeId}/vacation-ledger/${a.year}`, { currentYearHours: a.currentYearHours });
+      setApplied((s) => ({ ...s, [a.employeeId]: "done" }));
+    } catch (err) {
+      setApplied(({ [a.employeeId]: _drop, ...rest }) => rest);
+      setError(`Nárok na dovolenou se nepodařilo uložit.${err instanceof Error && err.message ? ` (${err.message})` : ""}`);
+    }
+  }
 
   const sections = useMemo(() => (result ? buildSections(result) : []), [result]);
   const fuzzy = useMemo(() => (result ? fuzzyNames(result) : []), [result]);
@@ -196,6 +216,7 @@ export default function PayrollCheckModal({
                             {s.columns.map((c) => (
                               <th key={c}>{c}</th>
                             ))}
+                            {canFixVacation && s.rows.some((r) => r.action) && <th />}
                           </tr>
                         </thead>
                         <tbody>
@@ -213,6 +234,23 @@ export default function PayrollCheckModal({
                                   </td>
                                 );
                               })}
+                              {canFixVacation && row.action && (
+                                <td className={styles.actionCell}>
+                                  {applied[row.action.employeeId] === "done" ? (
+                                    <span className={styles.applied}>Převzato ✓</span>
+                                  ) : (
+                                    <Button
+                                      size="sm"
+                                      variant="secondary"
+                                      disabled={applied[row.action.employeeId] === "saving"}
+                                      onClick={() => applyVacation(row.action!)}
+                                      title="Nastavit Letošní nárok v aplikaci tak, aby zůstatek odpovídal mzdovému lístku"
+                                    >
+                                      {applied[row.action.employeeId] === "saving" ? "Ukládám…" : "Převzít"}
+                                    </Button>
+                                  )}
+                                </td>
+                              )}
                             </tr>
                           ))}
                         </tbody>

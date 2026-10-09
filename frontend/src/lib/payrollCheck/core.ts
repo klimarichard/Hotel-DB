@@ -87,6 +87,23 @@ export interface Slip {
   contract: string;
   credit: number | null;
   items: SlipItem[];
+  /** "Zůst.dov." block, attached by slip number after parsing (see parseVacationBlocks). */
+  vacation?: PdfVacation | null;
+}
+
+/** Remaining vacation hours at the end of the payslip's month, per bucket. */
+export interface PdfVacation {
+  letosni: number;
+  lonska: number;
+  dodatkova: number;
+}
+
+/** A positioned text run: string, left x, baseline y, right edge. */
+export interface TextItem {
+  s: string;
+  x: number;
+  y: number;
+  r: number;
 }
 
 // ─── XLS ─────────────────────────────────────────────────────────────────────
@@ -186,6 +203,52 @@ export function parsePdfLines(lines: string[]): Slip[] {
     }
   });
   return slips;
+}
+
+const HOURS_RE = /^-?\d+(?:,\d+)?h$/;
+const VACATION_LABELS = { letosni: "Letošní", lonska: "Loňská", dodatkova: "Dodatková" } as const;
+
+/**
+ * The "Zůst.dov." block (remaining vacation: Letošní / Loňská / Dodatková) by
+ * POSITION, per page. Text order is useless here – the extracted lines run all
+ * labels first and all values after – so each value is bound to the label on
+ * its baseline. A block belongs to the slip header nearest above it on the page
+ * (three slips per page). Returns slip number → hours; a slip whose block is
+ * incomplete is left out, and the caller warns about it.
+ */
+export function parseVacationBlocks(pages: TextItem[][]): Map<number, PdfVacation> {
+  const out = new Map<number, PdfVacation>();
+  for (const items of pages) {
+    const headers = items
+      .map((it) => ({ it, m: /MZDOVÝ LÍSTEK číslo:\s*(\d+)?/.exec(it.s) }))
+      .filter((h) => h.m)
+      .map(({ it, m }) => {
+        // The number is either inside the run or the next run on the baseline.
+        const n = m![1] ?? items.filter((o) => Math.abs(o.y - it.y) < 1 && o.x > it.x && /^\d+$/.test(o.s.trim()))
+          .sort((a, b) => a.x - b.x)[0]?.s.trim();
+        return { y: it.y, slip: Number(n) };
+      })
+      .filter((h) => Number.isInteger(h.slip))
+      .sort((a, b) => b.y - a.y); // top of page first (PDF y grows upwards)
+    headers.forEach((h, i) => {
+      const floor = headers[i + 1]?.y ?? -Infinity;
+      const block = items.find((it) => it.s.trim() === "Zůst.dov." && it.y < h.y && it.y > floor);
+      if (!block) return;
+      const read = (label: string): number | null => {
+        const l = items.find((it) => it.s.trim() === label && it.y < block.y && it.y > block.y - 50);
+        if (!l) return null;
+        const v = items
+          .filter((it) => HOURS_RE.test(it.s.trim()) && Math.abs(it.y - l.y) < 3 && it.x > l.r)
+          .sort((a, b) => a.x - b.x)[0];
+        return v ? num(v.s.trim().slice(0, -1)) : null;
+      };
+      const letosni = read(VACATION_LABELS.letosni);
+      const lonska = read(VACATION_LABELS.lonska);
+      const dodatkova = read(VACATION_LABELS.dodatkova);
+      if (letosni !== null && lonska !== null && dodatkova !== null) out.set(h.slip, { letosni, lonska, dodatkova });
+    });
+  }
+  return out;
 }
 
 export function pdfSum(slip: Slip, codes: number[], kind: "hours" | "amount"): number {

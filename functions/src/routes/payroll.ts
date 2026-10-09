@@ -11,7 +11,10 @@ import {
   effectiveEntryVacationHours,
   ledgerRef,
   projectedRemainingHours,
+  consumedAsOfMonth,
+  remainingAsOfMonth,
   upsertLedgerMonth,
+  type VacationLedger,
 } from "../services/vacationLedger";
 import * as clock from "../services/clock";
 import { applyUvazekChange, isUvazekKind } from "../services/changeKinds";
@@ -888,12 +891,32 @@ payrollRouter.get(
     const entries = await Promise.all(
       named.map(async (e) => {
         const employeeId = (e.employeeId as string | undefined) ?? (e.id as string);
-        const benefitsSnap = await db()
-          .collection("employees")
-          .doc(employeeId)
-          .collection("benefits")
-          .limit(1)
-          .get();
+        const [benefitsSnap, ledgerSnap] = await Promise.all([
+          db().collection("employees").doc(employeeId).collection("benefits").limit(1).get(),
+          ledgerRef(employeeId, periodData.year as number).get(),
+        ]);
+        // Vacation ledger of the period's year, compared with the payslip's
+        // "Zůst.dov." — remaining is taken as at the end of the PERIOD's month.
+        const L = ledgerSnap.exists ? (ledgerSnap.data() as Record<string, unknown>) : null;
+        const ledgerParts = L
+          ? {
+              priorYearHours: (L.priorYearHours as number | null | undefined) ?? null,
+              currentYearHours: (L.currentYearHours as number | null | undefined) ?? null,
+              paidOutHours: (L.paidOutHours as number | null | undefined) ?? null,
+              months: (L.months as VacationLedger["months"] | undefined) ?? {},
+            }
+          : null;
+        // consumed/paid ride along so the client can size a correction even
+        // when Nárok is unset (remainingHours null) but čerpáno is not.
+        const vacation = ledgerParts
+          ? {
+              priorYearHours: ledgerParts.priorYearHours,
+              currentYearHours: ledgerParts.currentYearHours,
+              paidOutHours: ledgerParts.paidOutHours,
+              consumedHours: consumedAsOfMonth(ledgerParts.months, periodData.month as number),
+              remainingHours: remainingAsOfMonth(ledgerParts, periodData.month as number),
+            }
+          : null;
         // Only the two flags leave the server -- the benefits doc also holds
         // encrypted insuranceNumber / bankAccount, which must never be returned.
         const b = benefitsSnap.empty
@@ -938,6 +961,7 @@ payrollRouter.get(
           multisportPrice,
           allowances: flag(b.allowances),
           nepodepiseProhlaseni: flag(b.nepodepiseProhlaseni),
+          vacation,
         };
       })
     );
