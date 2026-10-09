@@ -45,6 +45,14 @@ Smlouva se počítá jako zahájená až v den svého začátku – budoucí sml
 
 > 🔒 Server. Zdroj: `functions/src/routes/employees.ts:219-236`; hranice „zahájené" na `:225`, budoucí úsek na `:230-235`.
 
+### Dodatek, ukončení i rodičovská se k poměru řadí podle data, ne podle tlačítka
+
+Řádek nemá vazbu na pracovní poměr, u kterého byl založen – aplikace ho zařadí **podle data platnosti** k poslednímu nástupu před ním. Překlep v roce (např. 2025 místo 2026) by tak dodatek tiše přiřadil ke staršímu, už skončenému poměru. Formulář proto u data zobrazí upozornění a **uložení odmítne**, pokud by se řádek zařadil k jinému poměru, než u kterého jste tlačítko použili (platí i při úpravě existujícího řádku). Řádek s datem shodným se začátkem poměru k tomuto poměru patří.
+
+Důsledek u souběžných smluv: dodatek ke staršímu poměru nelze datovat do období, kdy už běží později zahájený poměr – aplikace by ho přiřadila k tomu pozdějšímu.
+
+> 🖥️ Jen rozhraní (přímé volání API kontrolu nemá). Zdroj: `frontend/src/lib/employmentSessions.ts:225` (`sessionMismatch`), odmítnutí uložení `frontend/src/pages/EmployeeDetailPage.tsx:996`.
+
 ### Ukončení poměru automaticky uzavře Multisport, ale extranet je nutné vyřídit ručně
 
 Při ukončení pracovního poměru aplikace **sama uzavře Multisport** – běžícím obdobím i doprovodným kartám nastaví konec na **konec měsíce ukončení**. Období, která by začínala až po tomto měsíci, se zruší úplně.

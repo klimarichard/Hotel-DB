@@ -207,6 +207,47 @@ export function groupBySession(rows: EmploymentRow[]): EmploymentSession[] {
 }
 
 /**
+ * Would `candidate` (a Dodatek / Ukončení / Rodičovská, new or edited) be filed
+ * under the session whose Nástup is `nastupId`? Rows carry no parent link –
+ * `groupBySession` places them purely by startDate – so a mistyped year (2025
+ * for 2026) silently files a Dodatek under an earlier, finished contract.
+ *
+ * Asks `groupBySession` itself rather than re-deriving date bounds, so the check
+ * agrees with where the row is shown. One exception: a row dated the SAME DAY
+ * as a Nástup is treated as belonging to that Nástup (pre-sorted Nástup-first;
+ * groupBySession's sort is stable). Every session builder in the app breaks such
+ * ties by input / doc-id order, i.e. arbitrarily – so the check judges by intent
+ * and never blocks a legitimate Dodatek dated on its own contract's first day.
+ *
+ * Returns null when it lands in the session, else that session's start and the
+ * start of the next Nástup after it (null if none) for the message.
+ */
+export function sessionMismatch(
+  rows: EmploymentRow[],
+  candidate: EmploymentRow,
+  nastupId: string
+): { from: string; nextFrom: string | null } | null {
+  const others = rows.filter((r) => r.id !== candidate.id);
+  const nastupFirst = [...others, candidate].sort(
+    (a, b) =>
+      a.startDate.localeCompare(b.startDate) ||
+      Number(b.changeType === "nástup") - Number(a.changeType === "nástup")
+  );
+  const lands = groupBySession(nastupFirst).some(
+    (s) => s.nastup.id === nastupId && [...s.rows, ...s.rodicovska].some((r) => r.id === candidate.id)
+  );
+  if (lands) return null;
+  const target = others.find((r) => r.id === nastupId);
+  if (!target) return null; // unknown session – nothing to compare against
+  const nextFrom =
+    others
+      .filter((r) => r.changeType === "nástup" && r.id !== nastupId && r.startDate > target.startDate)
+      .map((r) => r.startDate)
+      .sort()[0] ?? null;
+  return { from: target.startDate, nextFrom };
+}
+
+/**
  * Fold Dodatek `changes[]` onto a Nástup row to derive the effective state
  * at session end. Change kinds:
  *   - mzda           → salary (or agreedReward for DPP)

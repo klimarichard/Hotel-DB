@@ -40,6 +40,7 @@ import {
   hasOpenRodicovska,
   mapContractsToRows,
   resolveStandaloneEmployment,
+  sessionMismatch,
   terminationContractType,
   uvazekToContractType,
 } from "@/lib/employmentSessions";
@@ -880,6 +881,30 @@ function AddEntryModal({
   // things and can both be true (a Sunday that is also after the start date), in
   // which case the user should see both reasons, not an arbitrary winner.
   const showSigningWeekendWarning = isWeekendOrHoliday(form.signingDate);
+
+  // A Dodatek / Ukončení / Rodičovská is filed by its DATE, not by the card it
+  // was opened from (rows have no parent link), so a mistyped year lands it in a
+  // different contract. The anchor is the clicked card's Nástup, or – on edit –
+  // the session the row sits in now. Blocks the save (see handleSubmit): unlike
+  // a weekend signing date, a row in the wrong contract is never intended.
+  const anchorNastupId =
+    parentRowId ??
+    (initialRow
+      ? groupBySession(employment).find((s) => [...s.rows, ...s.rodicovska].some((r) => r.id === initialRow.id))?.nastup.id
+      : undefined);
+  const dateMismatch =
+    form.startDate && form.changeType !== "nástup" && anchorNastupId
+      ? sessionMismatch(
+          employment,
+          { ...(initialRow ?? {}), id: initialRow?.id ?? "__new__", changeType: form.changeType, startDate: form.startDate } as EmploymentRow,
+          anchorNastupId
+        )
+      : null;
+  const dateMismatchText = dateMismatch
+    ? `Datum ${formatDateCZ(form.startDate)} nepatří do tohoto pracovního poměru (začal ${formatDateCZ(dateMismatch.from)}` +
+      (dateMismatch.nextFrom ? `, další začíná ${formatDateCZ(dateMismatch.nextFrom)}` : "") +
+      "). Řádek by se zařadil k jinému pracovnímu poměru – zkontrolujte prosím datum."
+    : null;
   const signingWeekendNote = (
     <div className={styles.modalFieldFull}>
       <div className={styles.modalWarning}>
@@ -968,6 +993,7 @@ function AddEntryModal({
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.startDate) { setError("Datum je povinné."); return; }
+    if (dateMismatchText) { setError(dateMismatchText); return; }
     if (form.changeType === "nástup" && !form.contractType) {
       setError("Vyberte typ smlouvy."); return;
     }
@@ -1112,6 +1138,11 @@ function AddEntryModal({
                 </label>
                 <input className={styles.modalInput} type="date" value={form.startDate} onChange={(e) => setField("startDate", e.target.value)} required />
               </div>
+              {dateMismatchText && (
+                <div className={styles.modalFieldFull}>
+                  <div className={styles.modalWarning}>{dateMismatchText}</div>
+                </div>
+              )}
               {form.changeType === "rodičovská" && (
                 <div className={styles.modalField}>
                   <label className={styles.modalLabel}>Konec (nepovinné)</label>
