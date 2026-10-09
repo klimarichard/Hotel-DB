@@ -331,6 +331,41 @@ U PPP určuje **týdenní úvazek** výši nároku na dovolenou – ta se počí
 
 > 🔒 Server. Zdroj: `functions/src/services/payrollCalculator.ts:274-278` a `:596` (dovolená poměrně), `:594-595` (Navíc od plné základny); komentáře v kódu `:270-272,590-593`.
 
+### Kontrolu mezd lze provést jen u uzamčeného období
+
+Tlačítko **Kontrola mezd** se zobrazí jen u uzamčeného měsíce a server data pro kontrolu u neuzamčeného období odmítne (chyba 409). Důvod: porovnává se s konečnými čísly – u odemčeného měsíce by se mzdy v aplikaci mohly ještě změnit (i nočním automatickým přepočtem).
+
+> 🔒 Server + 🖥️ Jen rozhraní (skrytí tlačítka). Zdroj: `functions/src/routes/payroll.ts:866-883`, tlačítko `frontend/src/pages/PayrollPage.tsx:1131`.
+
+### Nahrané podklady a mzdové lístky se nikam neodesílají ani neukládají
+
+XLS i PDF se zpracují **výhradně v prohlížeči**. Na server odejdou jen dotaz na mzdy uzamčeného období v aplikaci; soubory samotné (čisté mzdy, čísla účtů) aplikace neopustí. Zavřením okna kontroly se vše zahodí – další kontrola začíná s prázdným oknem. Chcete-li výsledek uchovat, použijte **Exportovat** (stáhne `MZDY-kontrola-RRRR-MM.xlsx` do vašeho počítače).
+
+> ⚙️ Automatika. Zdroj: `frontend/src/lib/payrollCheck/readers.ts` (čtení souborů v prohlížeči), `frontend/src/pages/PayrollCheckModal.tsx` (okno se zavřením odpojí i se soubory).
+
+### Kontrola porovnává dvěma směry – a jen u lidí, kteří jsou v obou zdrojích
+
+- **XLS × PDF** – pro všechny zaměstnance v XLS.
+- **Aplikace × XLS** – jen pro zaměstnance, kteří mají mzdy v aplikaci (aplikace zatím počítá jen recepci). Lidé z XLS, kteří v aplikaci nejsou, se proto **nehlásí** jako chyba; naopak zaměstnanec, který má mzdy v aplikaci, ale **v XLS chybí**, se hlásí vždy.
+
+Zaměstnanci se párují **podle jména** (bez diakritiky, s tolerancí překlepů), ne podle osobního čísla. Párování s nižší shodou kontrola vypíše k ověření – špatně spárovaná dvojice by jinak hlásila nesmyslné rozdíly.
+
+> 🖥️ Jen rozhraní. Zdroj: `frontend/src/lib/payrollCheck/appCheck.ts:122` (chybějící v XLS), prahy shody `frontend/src/lib/payrollCheck/core.ts:49-52`.
+
+### Navíc se kontroluje jen hrubou částí (nejvýše 6 000 Kč)
+
+Do XLS (sloupec Pohyblivá složka) i na mzdový lístek (složka 528) patří jen **hrubá část** Navíc, nejvýše 6 000 Kč. Čistý zbytek nad 5 000 Kč čisté částky se vyplácí mimo mzdový lístek, a proto se nikde nekontroluje.
+
+U **DPP** se odpracované hodiny z XLS porovnávají s **celkovými hodinami** v aplikaci (DPP nemá Výkaz vyrovnaný na základnu).
+
+> 🖥️ Jen rozhraní. Zdroj: `frontend/src/lib/payrollNavic.ts:13`, `frontend/src/lib/payrollCheck/appCheck.ts:64-77`.
+
+### Sleva na poplatníka se očekává u každého, kdo nemá označení „Nepodepíše prohlášení"
+
+Chybí-li sleva na lístku u zaměstnance **bez** tohoto označení (barva jména v XLS podle legendy, v aplikaci zaškrtávátko u zaměstnance), kontrola to nahlásí – stejně jako uplatněnou slevu u někoho, kdo prohlášení nepodepsal. Jiná výše slevy než **2 570 Kč** se hlásí jako neobvyklá. Částka je v kódu pevně daná; při zákonné změně ji je nutné upravit.
+
+> 🖥️ Jen rozhraní. Zdroj: `frontend/src/lib/payrollCheck/core.ts:40` (částka), `:388` (`checkCredit`).
+
 ---
 
 ## Tabulky – Směnárna + ČNB

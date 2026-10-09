@@ -116,6 +116,7 @@ export const PERMISSION_CATALOG = [
       { key: "payroll.recalculate.hard", label: "Tvrdý přepočet (zahodit úpravy)" },
       { key: "payroll.period.delete", label: "Smazat mzdové období" },
       { key: "payroll.lock", label: "Zamknout / odemknout období" },
+      { key: "payroll.check", label: "Kontrola mezd (XLS + PDF)" },
       { key: "payroll.export", label: "Export mezd (PDF/CSV)" },
       { key: "payroll.notes.manage", label: "Spravovat poznámky ke mzdám" },
     ],

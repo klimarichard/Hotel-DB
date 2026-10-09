@@ -841,6 +841,118 @@ payrollRouter.get(
   }
 );
 
+// ─── GET /payroll/periods/:id/check-data ─────────────────────────────────────
+// Kontrola mezd: the browser compares the attendance XLS + payslip PDF (parsed
+// client-side, never uploaded) against the app's FINAL figures, so this returns
+// only a locked period's effective values plus two benefit flags. Read-only and
+// returns no encrypted benefit fields, hence no audit entry.
+
+type CheckEntryDoc = Record<string, unknown> & {
+  overrides?: Record<string, number>;
+  autoOverrides?: Record<string, number>;
+};
+
+/**
+ * Effective value of an overridable entry field, in the precedence the payroll
+ * table shows and the lock feed uses (see effectiveEntryVacationHours): manual
+ * override → Nemoc auto-override → stored computed value → 0.
+ */
+function effectiveEntryNumber(e: CheckEntryDoc, field: string): number {
+  const v = e.overrides?.[field] ?? e.autoOverrides?.[field] ?? e[field];
+  return typeof v === "number" && Number.isFinite(v) ? v : 0;
+}
+
+payrollRouter.get(
+  "/periods/:id/check-data",
+  requireAuth,
+  requirePermission("payroll.check"),
+  async (req: AuthRequest, res: Response) => {
+    const periodRef = db().collection("payrollPeriods").doc(req.params.id);
+    const [periodSnap, entriesSnap] = await Promise.all([
+      periodRef.get(),
+      periodRef.collection("entries").get(),
+    ]);
+    if (!periodSnap.exists) {
+      res.status(404).json({ error: "Období nenalezeno." });
+      return;
+    }
+    const periodData = periodSnap.data() as Record<string, unknown>;
+    if (periodData.locked !== true) {
+      res.status(409).json({ error: "Kontrolu mezd lze provést jen u uzamčeného období." });
+      return;
+    }
+    const basePrice = (periodData.multisportBasePrice as number | undefined) ?? 470;
+    const rawEntries = entriesSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const named = (await hydrateNames(rawEntries)) as CheckEntryDoc[];
+
+    const entries = await Promise.all(
+      named.map(async (e) => {
+        const employeeId = (e.employeeId as string | undefined) ?? (e.id as string);
+        const benefitsSnap = await db()
+          .collection("employees")
+          .doc(employeeId)
+          .collection("benefits")
+          .limit(1)
+          .get();
+        // Only the two flags leave the server -- the benefits doc also holds
+        // encrypted insuranceNumber / bankAccount, which must never be returned.
+        const b = benefitsSnap.empty
+          ? {}
+          : (benefitsSnap.docs[0].data() as Record<string, unknown>);
+        const flag = (v: unknown): boolean | null => (typeof v === "boolean" ? v : null);
+
+        const storedDpp = e.dppAmount;
+        const dppOverride = e.overrides?.dppAmount;
+        const dppAmount =
+          typeof dppOverride === "number"
+            ? dppOverride
+            : typeof storedDpp === "number"
+              ? storedDpp
+              : null;
+
+        // Locked period: hydrateMultisport passes stored values through, so read
+        // the frozen multisportPrice, falling back to the flag × base price.
+        const multisportPrice =
+          typeof e.multisportPrice === "number"
+            ? e.multisportPrice
+            : e.multisportActive === true
+              ? basePrice
+              : 0;
+
+        return {
+          employeeId,
+          firstName: (e.firstName as string | undefined) ?? "",
+          lastName: (e.lastName as string | undefined) ?? "",
+          displayName: (e.displayName as string | null | undefined) ?? null,
+          contractType: (e.contractType as string | undefined) ?? "",
+          totalHours: effectiveEntryNumber(e, "totalHours"),
+          reportHours: effectiveEntryNumber(e, "reportHours"),
+          vacationHours: effectiveEntryNumber(e, "vacationHours"),
+          nightHours: effectiveEntryNumber(e, "nightHours"),
+          holidayHours: effectiveEntryNumber(e, "holidayHours"),
+          weekendHours: effectiveEntryNumber(e, "weekendHours"),
+          extraPay: effectiveEntryNumber(e, "extraPay"),
+          foodVouchers: effectiveEntryNumber(e, "foodVouchers"),
+          dppAmount,
+          sickLeaveHours: typeof e.sickLeaveHours === "number" ? e.sickLeaveHours : 0,
+          multisportPrice,
+          allowances: flag(b.allowances),
+          nepodepiseProhlaseni: flag(b.nepodepiseProhlaseni),
+        };
+      })
+    );
+
+    res.json({
+      id: periodSnap.id,
+      year: periodData.year as number,
+      month: periodData.month as number,
+      locked: true,
+      foodVoucherRate: (periodData.foodVoucherRate as number | undefined) ?? 0,
+      entries,
+    });
+  }
+);
+
 // ─── PATCH /payroll/periods/:id ───────────────────────────────────────────────
 // Lock/unlock a payroll period (admin only). Locked periods are read-only.
 

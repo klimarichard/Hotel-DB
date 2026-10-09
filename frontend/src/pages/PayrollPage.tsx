@@ -7,6 +7,8 @@ import PayrollNotesModal from "./PayrollNotesModal";
 import PayrollBalanceModal, { type BalanceSavePayload } from "./PayrollBalanceModal";
 import PayrollRecalcModal from "./PayrollRecalcModal";
 import PayrollLedgerConflictModal, { type LedgerConflict } from "./PayrollLedgerConflictModal";
+import PayrollCheckModal from "./PayrollCheckModal";
+import { navicGross, navicNetRemainder } from "@/lib/payrollNavic";
 import ConfirmModal from "@/components/ConfirmModal";
 import { employeeDisplayName, employeeSurnameFirst } from "@/lib/employeeName";
 import { escapeHtml } from "@/lib/escapeHtml";
@@ -131,18 +133,13 @@ const EyeOffIcon = () => (
 
 function formatNavic(extraPay: number): React.ReactNode {
   if (!extraPay || extraPay <= 0) return "–";
-  if (extraPay < 5000) {
-    const displayed = Math.ceil(extraPay / 0.85 / 100) * 100;
-    return displayed.toLocaleString("cs-CZ");
-  }
-  if (extraPay === 5000) {
-    return (6000).toLocaleString("cs-CZ");
-  }
+  const rest = navicNetRemainder(extraPay);
+  if (!rest) return navicGross(extraPay).toLocaleString("cs-CZ");
   // extraPay > 5000: two stacked lines in a column wrapper
   return (
     <span className={styles.navicStack}>
-      <span>{(6000).toLocaleString("cs-CZ")}</span>
-      <span>{(extraPay - 5000).toLocaleString("cs-CZ")}</span>
+      <span>{navicGross(extraPay).toLocaleString("cs-CZ")}</span>
+      <span>{rest.toLocaleString("cs-CZ")}</span>
     </span>
   );
 }
@@ -360,6 +357,7 @@ export default function PayrollPage() {
   // Hand-edited vacation-ledger cells the pending lock would overwrite. Set only
   // when the pre-lock check found any; null keeps the normal (frictionless) path.
   const [ledgerConflicts, setLedgerConflicts] = useState<LedgerConflict[] | null>(null);
+  const [checkOpen, setCheckOpen] = useState(false);
   const [lockSaving, setLockSaving] = useState(false);
 
   const loadPeriod = useCallback(async () => {
@@ -415,6 +413,7 @@ export default function PayrollPage() {
   // {admin,director}; lock/hard-recompute/delete are all admin-only.
   const canEdit = can("payroll.edit") && !isLocked;
   const canToggleLock = can("payroll.lock");
+  const canCheck = can("payroll.check");
   const canHardRecompute = can("payroll.recalculate.hard");
   const canDeletePeriod = can("payroll.period.delete");
   const canCreate = can("payroll.create");
@@ -596,9 +595,9 @@ export default function PayrollPage() {
       const fmt = (n: number) => (n === 0 ? "–" : n.toLocaleString("cs-CZ"));
       const navicText = (extraPay: number): string => {
         if (!extraPay || extraPay <= 0) return "–";
-        if (extraPay < 5000) return (Math.ceil(extraPay / 0.85 / 100) * 100).toLocaleString("cs-CZ");
-        if (extraPay === 5000) return (6000).toLocaleString("cs-CZ");
-        return `${(6000).toLocaleString("cs-CZ")}<br>${(extraPay - 5000).toLocaleString("cs-CZ")}`;
+        const gross = navicGross(extraPay).toLocaleString("cs-CZ");
+        const rest = navicNetRemainder(extraPay);
+        return rest ? `${gross}<br>${rest.toLocaleString("cs-CZ")}` : gross;
       };
 
       const cs = {
@@ -1129,6 +1128,17 @@ export default function PayrollPage() {
                   {exporting ? "Exportuji…" : "Exportovat PDF"}
                 </button>
               )}
+              {isLocked && canCheck && (
+                <button
+                  type="button"
+                  data-tour="payroll-check"
+                  className={styles.lockBtn}
+                  onClick={() => setCheckOpen(true)}
+                  title="Porovnat podklady (XLS) a mzdové lístky (PDF) mezi sebou a se mzdami v aplikaci"
+                >
+                  Kontrola mezd
+                </button>
+              )}
               {canToggleLock && (
                 <button
                   type="button"
@@ -1212,6 +1222,10 @@ export default function PayrollPage() {
           onClose={() => setBalanceModal(null)}
           onSave={(payload) => saveBalance(balanceModal, payload)}
         />
+      )}
+
+      {checkOpen && period && (
+        <PayrollCheckModal periodId={period.id} year={period.year} month={period.month} onClose={() => setCheckOpen(false)} />
       )}
 
       {recalcModal && period && (
