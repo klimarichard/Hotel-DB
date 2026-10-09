@@ -31,6 +31,7 @@ const DEMO_SELF = "/napoveda/ukazka-profil"; // real Můj profil page
 const DEMO_EMP = "/zamestnanci/tour-demo"; // real employee-detail page (sentinel id)
 const DEMO_PAYROLL = "/napoveda/ukazka-mzdy"; // real Mzdy page, populated period
 const DEMO_PAYROLL_EMPTY = "/napoveda/ukazka-mzdy-prazdne"; // real Mzdy page, no period → create
+const DEMO_PAYROLL_LOCKED = "/napoveda/ukazka-mzdy-uzamceno"; // real Mzdy page, LOCKED period → Kontrola mezd
 const DEMO_SHIFTS = "/napoveda/ukazka-smeny"; // real Směny page, populated "opened" plan
 const DEMO_SHIFTS_EMPTY = "/napoveda/ukazka-smeny-prazdne"; // real Směny page, no plan → create
 const DEMO_SHIFTS_CREATED = "/napoveda/ukazka-smeny-vytvoreny"; // created (not opened) plan → Smazat plán
@@ -266,6 +267,8 @@ export const APP_TOUR_STEPS: TourStep[] = [
   { permission: "payroll.recalculate", anchor: "payroll-recalc", route: DEMO_PAYROLL, title: "Přepočítání mezd", body: "Tímto tlačítkem můžete přepočítat mzdy pro tento měsíc. Všechny ruční úpravy zůstanou zachovány.", placement: "bottom" },
   { permission: "payroll.recalculate.hard", anchor: "payroll-recalc-hard", route: DEMO_PAYROLL, title: "Tvrdý přepočet", body: "Tímto tlačítkem můžete přepočítat mzdy „natvrdo“, tzn. ani ruční úpravy nezůstanou zachovány (aplikace se zeptá na potvrzení).", placement: "bottom" },
   { permission: "payroll.lock", anchor: "payroll-lock", route: DEMO_PAYROLL, title: "Uzamčení/odemčení období", body: "Daný měsíc můžete uzamknout pro úpravy. Uzamčený měsíc již není denně automaticky přepočítáván.", placement: "bottom" },
+  // Kontrola mezd renders only on a LOCKED period, so it points at the locked demo.
+  { permission: "payroll.check", addedInVersion: 22, anchor: "payroll-check", route: DEMO_PAYROLL_LOCKED, title: "Kontrola mezd", body: "U uzamčeného měsíce tlačítkem Kontrola mezd nahrajete podklady (XLS) a mzdové lístky (PDF) a aplikace je porovná mezi sebou i se mzdami v aplikaci.", placement: "bottom" },
   { permission: "payroll.period.delete", anchor: "payroll-delete", route: DEMO_PAYROLL, title: "Smazání období", body: "Tlačítkem Smazat období nevratně odstraníte celé mzdové období (aplikace se zeptá na potvrzení).", placement: "bottom" },
   { permission: "payroll.export", anchor: "payroll-export", route: DEMO_PAYROLL, title: "Export mezd", body: "Mzdy můžete exportovat do PDF.", placement: "bottom" },
 
@@ -326,7 +329,7 @@ export const appTour: TourDefinition = {
   // Highest step `addedInVersion` in the list. Bump it (and stamp the new steps'
   // `addedInVersion`) whenever you add steps for a new feature – returning users
   // then see ONLY those steps; first-time users still get the whole tour.
-  version: 21,
+  version: 22,
   label: "Prohlídka aplikace",
   steps: APP_TOUR_STEPS,
 };
