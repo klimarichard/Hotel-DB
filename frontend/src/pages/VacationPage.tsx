@@ -13,6 +13,7 @@ import VacationCollisionResolutionModal from "../components/VacationCollisionRes
 import ConfirmModal from "../components/ConfirmModal";
 import Button from "../components/Button";
 import VacationLedgerTable from "../components/VacationLedgerTable";
+import VacationProposalsPanel from "../components/VacationProposalsPanel";
 import { useIsPhone } from "../hooks/useIsPhone";
 
 function extractCollisions(e: unknown): ShiftCollision[] | null {
@@ -87,6 +88,8 @@ export default function VacationPage() {
   // Aggregate vacation-ledger table at the bottom of the page (desktop only).
   const canManageVacationBalance = can("employees.vacationBalance.manage");
   const isPhone = useIsPhone();
+  // Bumped after a Kontrola mezd proposal is applied, to remount the ledger table.
+  const [ledgerReload, setLedgerReload] = useState(0);
 
   const [requests, setRequests] = useState<VacationRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -388,6 +391,13 @@ export default function VacationPage() {
   return (
     <div>
       <h1 className={styles.title}>Dovolená</h1>
+
+      {/* Kontrola mezd corrections waiting for the vacation manager – on top,
+          because the Upozornění alert links here, and on phones too (unlike
+          the ledger table at the bottom, which it reloads after a Převzít). */}
+      {canManageVacationBalance && (
+        <VacationProposalsPanel onLedgerChanged={() => setLedgerReload((n) => n + 1)} />
+      )}
 
       {/* New request form */}
       {(canRequestSelf || canForAny) && (
@@ -809,7 +819,7 @@ export default function VacationPage() {
           grid has no readable phone form, and a card fallback would lose the
           side-by-side reconciliation that is the whole point of it. */}
       {canManageVacationBalance && !isPhone && (
-        <VacationLedgerTable canManage={canManageVacationBalance} />
+        <VacationLedgerTable key={ledgerReload} canManage={canManageVacationBalance} />
       )}
     </div>
   );

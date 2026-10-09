@@ -16,6 +16,14 @@ import {
   upsertLedgerMonth,
   type VacationLedger,
 } from "../services/vacationLedger";
+import {
+  evaluateProposal,
+  proposalId,
+  proposalsCol,
+  readPdf,
+  samePdf,
+  type PayslipVacation,
+} from "../services/vacationProposals";
 import * as clock from "../services/clock";
 import { applyUvazekChange, isUvazekKind } from "../services/changeKinds";
 
@@ -974,6 +982,208 @@ payrollRouter.get(
       foodVoucherRate: (periodData.foodVoucherRate as number | undefined) ?? 0,
       entries,
     });
+  }
+);
+
+// ─── POST /payroll/periods/:id/vacation-proposals ───────────────────────────
+// Kontrola mezd: park the payslip's remaining-vacation figures as proposals for
+// whoever manages vacation balances (Dovolená page, employees.vacationBalance.
+// manage) — the payroll checker is a different person and must not edit the
+// ledger here. The client sends EVERY employee it matched to a payslip, equal
+// ones too, so a previously parked discrepancy that is now fixed resolves.
+// Only the payslip side is stored; the app side is recomputed live by
+// evaluateProposal (services/vacationProposals.ts) wherever it is shown.
+
+payrollRouter.post(
+  "/periods/:id/vacation-proposals",
+  requireAuth,
+  requirePermission("payroll.check"),
+  async (req: AuthRequest, res: Response) => {
+    const periodRef = db().collection("payrollPeriods").doc(req.params.id);
+    const [periodSnap, entriesSnap] = await Promise.all([
+      periodRef.get(),
+      periodRef.collection("entries").get(),
+    ]);
+    if (!periodSnap.exists) {
+      res.status(404).json({ error: "Období nenalezeno." });
+      return;
+    }
+    const periodData = periodSnap.data() as Record<string, unknown>;
+    if (periodData.locked !== true) {
+      res.status(409).json({ error: "Kontrolu mezd lze provést jen u uzamčeného období." });
+      return;
+    }
+    const year = Number(periodData.year);
+    const month = Number(periodData.month);
+
+    const rawItems = (req.body as { items?: unknown } | undefined)?.items;
+    if (!Array.isArray(rawItems)) {
+      res.status(400).json({ error: "Chybí seznam položek (items)." });
+      return;
+    }
+    const fin = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+    type Item = PayslipVacation & { employeeId: string; contract: string; slipName: string };
+    const items: Item[] = [];
+    for (const raw of rawItems) {
+      const it = (raw ?? {}) as Record<string, unknown>;
+      if (
+        typeof it.employeeId !== "string" || it.employeeId === "" ||
+        !fin(it.letosni) || !fin(it.lonska) || !fin(it.dodatkova) ||
+        typeof it.contract !== "string" || typeof it.slipName !== "string"
+      ) {
+        res.status(400).json({ error: "Neplatná položka návrhu." });
+        return;
+      }
+      items.push({
+        employeeId: it.employeeId,
+        letosni: it.letosni,
+        lonska: it.lonska,
+        dodatkova: it.dodatkova,
+        contract: it.contract,
+        slipName: it.slipName,
+      });
+    }
+
+    // Only employees actually in this period — never write proposals for
+    // arbitrary ids. Last item wins on a duplicate id.
+    const inPeriod = new Set<string>();
+    for (const d of entriesSnap.docs) {
+      inPeriod.add(d.id);
+      const eid = (d.data() as Record<string, unknown>).employeeId;
+      if (typeof eid === "string" && eid) inPeriod.add(eid);
+    }
+    const byEmp = new Map<string, Item>();
+    for (const it of items) if (inPeriod.has(it.employeeId)) byEmp.set(it.employeeId, it);
+    const valid = [...byEmp.values()];
+
+    const uid = req.uid ?? "";
+    const createdByName = uid ? (await getUserName(uid)) || null : null;
+
+    // Current ledgers + existing proposals, chunked getAll (varargs).
+    const ledgerData = new Map<string, Record<string, unknown> | null>();
+    const existing = new Map<string, Record<string, unknown> | null>();
+    for (let i = 0; i < valid.length; i += 100) {
+      const chunk = valid.slice(i, i + 100);
+      const [ledgerSnaps, propSnaps] = await Promise.all([
+        db().getAll(...chunk.map((it) => ledgerRef(it.employeeId, year))),
+        db().getAll(...chunk.map((it) => proposalsCol().doc(proposalId(year, month, it.employeeId)))),
+      ]);
+      chunk.forEach((it, idx) => {
+        const l = ledgerSnaps[idx];
+        const p = propSnaps[idx];
+        ledgerData.set(it.employeeId, l.exists ? (l.data() as Record<string, unknown>) : null);
+        existing.set(it.employeeId, p.exists ? (p.data() as Record<string, unknown>) : null);
+      });
+    }
+
+    const writes: {
+      ref: admin.firestore.DocumentReference;
+      data: Record<string, unknown>;
+      merge: boolean;
+    }[] = [];
+    const pendingUpserts: {
+      ref: admin.firestore.DocumentReference;
+      employeeId: string;
+      data: Record<string, unknown>;
+    }[] = [];
+    let saved = 0;
+    let resolved = 0;
+    const now = FieldValue.serverTimestamp();
+    const resolvedFields = {
+      status: "resolved",
+      reviewedAt: now,
+      reviewedBy: null,
+      reviewedByName: null,
+      updatedAt: now,
+    };
+
+    for (const it of valid) {
+      const pdf: PayslipVacation = { letosni: it.letosni, lonska: it.lonska, dodatkova: it.dodatkova };
+      const ev = evaluateProposal(ledgerData.get(it.employeeId) ?? null, month, pdf);
+      const ref = proposalsCol().doc(proposalId(year, month, it.employeeId));
+      const prev = existing.get(it.employeeId) ?? null;
+      if (ev.discrepancy) {
+        // Never resurrect a proposal already decided for this very payslip.
+        if (
+          prev &&
+          (prev.status === "dismissed" || prev.status === "applied") &&
+          samePdf(readPdf(prev), pdf)
+        ) {
+          continue;
+        }
+        pendingUpserts.push({
+          ref,
+          employeeId: it.employeeId,
+          data: {
+            employeeId: it.employeeId,
+            year,
+            month,
+            contract: it.contract,
+            slipName: it.slipName,
+            pdf,
+            status: "pending",
+            createdAt: now,
+            createdBy: uid || null,
+            createdByName,
+            reviewedAt: null,
+            reviewedBy: null,
+            reviewedByName: null,
+            appliedCurrentYearHours: null,
+            updatedAt: now,
+          },
+        });
+      } else if (prev && prev.status === "pending") {
+        writes.push({ ref, merge: true, data: resolvedFields });
+        resolved++;
+      }
+    }
+
+    // A balance for a later month already contains everything before it. So:
+    // an older pending proposal of the same employee is moot (resolve it), and
+    // re-running an OLDER month's check while a newer proposal is pending must
+    // not add a stale one next to it (skip). Two equality filters — served by
+    // the single-field indexes, no composite.
+    const otherPending = await Promise.all(
+      pendingUpserts.map((u) =>
+        proposalsCol()
+          .where("employeeId", "==", u.employeeId)
+          .where("status", "==", "pending")
+          .get()
+      )
+    );
+    const isEarlier = (p: Record<string, unknown>) =>
+      Number(p.year) < year || (Number(p.year) === year && Number(p.month) < month);
+    pendingUpserts.forEach((u, i) => {
+      const others = otherPending[i].docs.filter((d) => d.id !== u.ref.id);
+      if (others.some((d) => !isEarlier(d.data() as Record<string, unknown>))) return; // a newer one is pending
+      writes.push({ ref: u.ref, merge: false, data: u.data });
+      saved++;
+      for (const d of others) {
+        writes.push({ ref: d.ref, merge: true, data: resolvedFields });
+        resolved++;
+      }
+    });
+
+    for (let i = 0; i < writes.length; i += 400) {
+      const batch = db().batch();
+      for (const w of writes.slice(i, i + 400)) {
+        if (w.merge) batch.set(w.ref, w.data, { merge: true });
+        else batch.set(w.ref, w.data);
+      }
+      await batch.commit();
+    }
+
+    await writeAudit(ctxFromReq(req), {
+      action: "update",
+      collection: "vacationProposals",
+      resourceId: req.params.id,
+      event: "vacation.proposals.fromPayrollCheck",
+      year,
+      month,
+      extra: { items: valid.length, saved, resolved },
+    });
+
+    res.json({ saved, resolved });
   }
 );
 
