@@ -41,10 +41,9 @@ import {
   type MultisportCompanion,
 } from "../services/multisport";
 import {
-  ledgerRef,
   readLedger,
-  upsertLedgerMonth,
-  setLedgerAnnual,
+  writeManualLedgerEdit,
+  type ManualLedgerEdit,
 } from "../services/vacationLedger";
 
 export const employeesRouter = Router();
@@ -805,6 +804,19 @@ export function isNonManagementScoped(perms: Set<string> | undefined): boolean {
     hasPermission(set, "employees.view.nonManagement") &&
     !hasPermission(set, "employees.view.all")
   );
+}
+
+/**
+ * Employee ids the caller must NOT see, for collection-level routes mounted
+ * outside employeesRouter (which therefore don't inherit enforceEmpAccess):
+ * the management-record set for a non-management-scoped caller, else null
+ * (= nothing hidden). Shared by GET /vacation/ledger-overview and the
+ * /vacation-proposals router so the two can't apply different filters.
+ */
+export async function hiddenManagementEmployeeIds(
+  perms: Set<string> | undefined
+): Promise<Set<string> | null> {
+  return isNonManagementScoped(perms) ? getManagementEmployeeIds() : null;
 }
 
 async function enforceEmpAccess(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
@@ -1625,11 +1637,7 @@ employeesRouter.patch(
       return undefined; // signals "invalid"
     };
 
-    const ref = ledgerRef(req.params.id, year);
-    const beforeSnap = await ref.get();
-    const before = beforeSnap.exists ? (beforeSnap.data() as Record<string, unknown>) : {};
-
-    let after: Record<string, unknown>;
+    let edit: ManualLedgerEdit;
     if ("month" in body) {
       const month = Number(body.month);
       if (!Number.isInteger(month) || month < 1 || month > 12) {
@@ -1641,15 +1649,7 @@ employeesRouter.patch(
         res.status(400).json({ error: "Neplatná hodnota hodin." });
         return;
       }
-      await upsertLedgerMonth({
-        employeeId: req.params.id,
-        year,
-        month,
-        hours,
-        source: "manual",
-        updatedBy: req.uid ?? null,
-      });
-      after = { [`months.${month}`]: hours };
+      edit = { kind: "month", month, hours };
     } else if (
       "priorYearHours" in body ||
       "currentYearHours" in body ||
@@ -1667,14 +1667,7 @@ employeesRouter.patch(
         res.status(400).json({ error: "Neplatná hodnota hodin." });
         return;
       }
-      await setLedgerAnnual({
-        employeeId: req.params.id,
-        year,
-        field,
-        hours,
-        updatedBy: req.uid ?? null,
-      });
-      after = { [field]: hours };
+      edit = { kind: "annual", field, hours };
     } else {
       res.status(400).json({
         error: "Chybí pole ke změně (month/priorYearHours/currentYearHours/paidOutHours).",
@@ -1682,22 +1675,20 @@ employeesRouter.patch(
       return;
     }
 
-    await logUpdate(ctxFromReq(req), {
-      collection: "employees/vacationLedger",
-      resourceId: req.params.id,
-      subResourceId: String(year),
-      employeeId: req.params.id,
-      before,
-      after: { ...before, ...after },
-      year,
-    });
+    // Write + audit through the shared path (services/vacationLedger.ts), which
+    // the Kontrola-mezd proposal apply also uses, so both log identically.
     // Return the re-projected row so the caller never has to follow up with a
     // GET. That matters beyond saving a round trip: the read endpoint above is
     // gated on employees.view.*, while this one is gated on
     // employees.vacationBalance.manage — a user holding only the manage key
     // would save successfully and then be 403'd fetching the result, so the
     // value would land in Firestore but appear not to have saved.
-    res.json({ success: true, ledger: await readLedger(req.params.id, year) });
+    const ledger = await writeManualLedgerEdit(ctxFromReq(req), {
+      employeeId: req.params.id,
+      year,
+      edit,
+    });
+    res.json({ success: true, ledger });
   }
 );
 
