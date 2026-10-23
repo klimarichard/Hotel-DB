@@ -82,6 +82,13 @@ const shiftPlans: FieldLabelMap = {
   reviewedBy: "Vyřídil",
   reviewedAt: "Vyřízeno",
   rejectionReason: "Důvod zamítnutí",
+
+  // ── Shift requests (shiftRequests) + plan request windows ─────────────────
+  shiftRequestWindows: "Okna pro žádosti o směnu",
+  reviewNote: "Poznámka k vyřízení",
+  actingPlanId: "Podáno v plánu",
+  requestedByUid: "Zažádal",
+  reviewedByUid: "Vyřídil",
 };
 
 export const SHIFT_FIELDS: Record<string, FieldLabelMap> = { shiftPlans };

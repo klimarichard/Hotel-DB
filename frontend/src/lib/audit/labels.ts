@@ -157,6 +157,7 @@ export const SUBAREA_LABELS: Record<string, string> = {
   modRow: "Řádek MOD",
   shiftChangeRequests: "Žádosti o změnu směny",
   shiftOverrideRequests: "Žádosti o výjimku",
+  shiftRequests: "Žádosti o konkrétní směnu",
   unavailabilityRequests: "Nedostupnost",
 };
 
@@ -384,6 +385,9 @@ export const EVENT_LABELS: Record<string, string> = {
   "shift.freeClaim.approve": "Schválení nároku na volnou směnu",
   "shift.freeClaim.reject": "Zamítnutí nároku na volnou směnu",
   "shift.freeClaim.autoReject": "Automatické zamítnutí nároku na volnou směnu",
+  "shift.request.approve": "Schválení žádosti o konkrétní směnu",
+  "shift.request.reject": "Zamítnutí žádosti o konkrétní směnu",
+  "shift.request.withdraw": "Stažení žádosti o konkrétní směnu",
   // Můj profil → Zaměstnanci
   "employeeChange.approve": "Schválení žádosti o úpravu profilu",
   "employeeChange.reject": "Zamítnutí žádosti o úpravu profilu",

@@ -592,6 +592,20 @@ function buildDemoShiftPlan(status: string): unknown {
     // Published plans surface the Volné směny section; mark a couple of DPA days
     // so the "pick porter shift" row has claimable cells to spotlight.
     freeShiftDpaDays: status === "published" ? [ymd(10), ymd(11)] : [],
+    // Shift-request window (header marker) + one colleague's pending request
+    // ("NA?") so the request step has something to point at.
+    shiftRequestWindows: [{ from: ymd(20), to: ymd(24) }],
+    shiftRequests: [
+      {
+        id: "demo-sr-1",
+        planId: DEMO_SHIFT_PLAN_ID,
+        employeeId: "demo-rec-2",
+        date: ymd(22),
+        code: "NA",
+        status: "pending",
+        requestedAt: null,
+      },
+    ],
     employees: [
       demoPlanEmployee("demo-ved-1", "Tomáš", "Veselý", "vedoucí", "R", null, 0),
       demoPlanEmployee("demo-rec-1", "Jana", "Dvořáková", "recepce", "D", "A", 1),
@@ -648,7 +662,8 @@ function shiftsFixture(
   // Global pending-count badges (override/change-request reviewers).
   if (
     clean === "/shifts/overrides/pending-count" ||
-    clean === "/shifts/changeRequests/pending-count"
+    clean === "/shifts/changeRequests/pending-count" ||
+    clean === "/shifts/shiftRequests/pending-count"
   ) {
     return { hit: true, value: { count: 0 } };
   }

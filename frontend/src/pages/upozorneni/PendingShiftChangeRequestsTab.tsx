@@ -20,6 +20,17 @@ interface ChangeRequest {
   requestedByEmployeeId?: string;
 }
 
+/** A "žádost o konkrétní směnu" filed inside a request window. */
+interface ShiftRequestItem {
+  id: string;
+  planId: string;
+  planYear: number | null;
+  planMonth: number | null;
+  employeeId: string;
+  date: string;
+  code: string;
+}
+
 interface EmployeeMini {
   id: string;
   firstName: string;
@@ -34,6 +45,7 @@ function fmtMonth(year: number | null, month: number | null): string {
 
 export default function PendingShiftChangeRequestsTab() {
   const [items, setItems] = useState<ChangeRequest[]>([]);
+  const [shiftRequests, setShiftRequests] = useState<ShiftRequestItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [empMap, setEmpMap] = useState<Map<string, EmployeeMini>>(new Map());
   const [error, setError] = useState<string | null>(null);
@@ -41,6 +53,8 @@ export default function PendingShiftChangeRequestsTab() {
   useEffect(() => {
     Promise.all([
       api.get<ChangeRequest[]>("/shifts/changeRequests/pending"),
+      // Shift requests share the reviewer permission and this tab.
+      api.get<ShiftRequestItem[]>("/shifts/shiftRequests/pending").catch(() => [] as ShiftRequestItem[]),
       // The employee lists only decorate rows with a name. Reviewing change
       // requests is gated on shifts.override.review, which does NOT imply
       // employees.view.* – so a 403 here must degrade to the raw employeeId
@@ -57,8 +71,9 @@ export default function PendingShiftChangeRequestsTab() {
       api.get<EmployeeMini[]>("/employees?status=before-start").catch(() => [] as EmployeeMini[]),
       api.get<EmployeeMini[]>("/employees?status=terminated").catch(() => [] as EmployeeMini[]),
     ])
-      .then(([reqs, active, beforeStart, terminated]) => {
+      .then(([reqs, shiftReqs, active, beforeStart, terminated]) => {
         setItems(reqs);
+        setShiftRequests(shiftReqs);
         const m = new Map<string, EmployeeMini>();
         [...active, ...beforeStart, ...terminated].forEach((e) => m.set(e.id, e));
         setEmpMap(m);
@@ -79,11 +94,54 @@ export default function PendingShiftChangeRequestsTab() {
       </div>
     );
   }
-  if (items.length === 0) {
+  if (items.length === 0 && shiftRequests.length === 0) {
     return <div className={styles.empty}>Žádné čekající žádosti o změnu.</div>;
   }
 
+  const nameCell = (employeeId: string) => {
+    const e = empMap.get(employeeId);
+    return e ? (
+      <Link to={`/zamestnanci/${employeeId}`} className={styles.empLink}>
+        {employeeDisplayName(e)}
+      </Link>
+    ) : (
+      employeeId
+    );
+  };
+
   return (
+    <>
+    {shiftRequests.length > 0 && (
+      <div className={styles.tableWrapper} style={{ marginBottom: items.length > 0 ? "1.5rem" : undefined }}>
+        <table className={styles.table}>
+          <thead>
+            <tr>
+              <th>Zaměstnanec</th>
+              <th>Plán</th>
+              <th>Datum</th>
+              <th>Žádost o konkrétní směnu</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {shiftRequests.map((r) => (
+              <tr key={r.id}>
+                <td>{nameCell(r.employeeId)}</td>
+                <td data-label="Plán">{fmtMonth(r.planYear, r.planMonth)}</td>
+                <td data-label="Datum">{formatDateCZ(r.date)}</td>
+                <td data-label="Žádost o konkrétní směnu"><code>{r.code}</code></td>
+                <td>
+                  <Link to="/smeny" className={styles.markReadBtn}>
+                    Otevřít plán →
+                  </Link>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )}
+    {items.length > 0 && (
     <div className={styles.tableWrapper}>
       <table className={styles.table}>
         <thead>
@@ -133,5 +191,7 @@ export default function PendingShiftChangeRequestsTab() {
         </tbody>
       </table>
     </div>
+    )}
+    </>
   );
 }

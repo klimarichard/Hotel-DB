@@ -739,6 +739,10 @@ On the Employee-detail (and Můj profil) **Historie pracovního poměru** tab, e
 - **Sidebar footer button order** — in `Layout.tsx`, the footer `userBar` renders: theme toggle → **? Nápověda** → **Odhlásit** (in that order). Previously Nápověda was after Odhlásit.
 - **Settings tab order** — the Settings page tab strip now starts with **Uživatelé** → **Uživatelské typy** (users first, then types), followed by **Seznamy** (as of v4.8.1 a single tab consolidating the former Společnosti/Oddělení/Pracovní pozice/Vzdělání tabs — see "Settings — Seznamy tab consolidation" above), then Mzdy/Menu/Úlohy. The order is driven by the render order in `SettingsPage.tsx`.
 
+## Shift planner v5.14.0 – linked 1 January, shift-request windows
+
+December plans show 1 January as a linked last column (data owned by the January plan), plans can define **shiftRequestWindows** in which employees request a specific shift for approval (new `shiftRequests`/`shiftRequestSlots` sub-collections, Upozornění tab + badge, new `COLLECTION_GROUP` index, tour version 22), and `ShiftCell` now commits once per edit session (fixes false 409 "edited by another user"). Full detail: [shifts.md](shifts.md#linked-1-january-column-on-the-december-plan-v5140).
+
 ## Kontrola mezd – payroll check (v5.13.0)
 
 A **Kontrola mezd** button on the Payroll page header (only when `period.locked === true` and the user holds **`payroll.check`**, a level-2 child of `payroll.lock` in the matrix; no default grant beyond `system.admin`) opens `frontend/src/pages/PayrollCheckModal.tsx`. The user drops in the hand-written attendance workbook (`.xls`/`.xlsx`) and the accountant's payslip PDF; findings render in sections and **Exportovat** downloads `MZDY-kontrola-YYYY-MM.xlsx`. It is a TypeScript port of the local `excels/mzdy/kontrola_mzdy.py`, verified item-for-item against it.

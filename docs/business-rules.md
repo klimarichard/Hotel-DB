@@ -252,6 +252,53 @@ Na rozdíl od běžné úpravy buňky v rozpisu směn není ruční rozdělení 
 
 > 🔒 Server. Zdroj: `functions/src/routes/shifts.ts:1779-1782` (endpoint `PUT .../splits/:date/:type`, komentář o záměrné výjimce v kódu) – handler neobsahuje žádnou kontrolu `plan.status`.
 
+### Okna pro žádosti o konkrétní směnu: co je v okně dovoleno navíc
+
+Plán může mít libovolný počet (nejvýše 10) **oken** – rozsahů dnů, ve kterých si zaměstnanec se samoobslužným zadáváním volna (`shifts.cells.editOwnX`) smí **požádat o konkrétní směnu**. Okna nastavuje držitel `shifts.plan.edit`, a to v kterémkoli stavu plánu; musí ležet uvnitř dnů, které plán zobrazuje (u prosince včetně připojeného 1. ledna). Překrývající se okna se při uložení sloučí.
+
+- **Mimo okno** se nic nemění: zaměstnanec smí do plánu zadávat jen X.
+- **V okně** smí navíc požádat o jednu směnu s hotelem – kódy **D, N, ZD, ZN, DP, NP + písmeno hotelu** (např. DA, NS, DPQ). Nelze žádat o R, HO, REZ, počet hodin, dvojitou směnu (²) ani kombinaci s „+“. X v okně funguje dál přímo jako dosud, bez schvalování.
+- Žádat lze **jen ve vlastním řádku** (zaměstnanec propojený s přihlášeným účtem) a **jen dokud je plán Otevřený**. Rozhoduje stav a okna plánu, ve kterém zaměstnanec žádá – u 1. ledna v prosincovém plánu tedy prosincový stav a prosincová okna.
+- Žádost se do buňky **nezapíše** – čeká na schválení držitelem `shifts.changeRequest.review`. Žadatel ji smí sám stáhnout, dokud není vyřízená.
+
+> 🔒 Server. Zdroj: `functions/src/routes/shifts.ts:882-1035` (model, `normalizeRequestWindows`, `callerEmployeeId`), uložení oken `:1409-1440` (`PUT .../request-windows`), podání žádosti `:3664-3815` – stav plánu `:3696`, okno `:3700`, vlastní řádek `:3706`; povolené kódy `functions/src/services/shiftParser.ts` (`parseRequestableShift`). Rozhraní jen směruje vstup (`frontend/src/pages/ShiftPlannerPage.tsx:1469-1490`); samotná buňka dál přijímá od zaměstnance jen X (`functions/src/routes/shifts.ts:1993-1997`).
+
+### O jednu směnu v jeden den může žádat jen jeden člověk
+
+Směna v daný den (např. **DA 24. 12.**) je **zabraná**, pokud:
+
+- o ni už někdo jiný požádal a jeho žádost **čeká** na vyřízení – čekající žádost směnu rezervuje, nebo
+- ji v plánu už má **někdo přidělenou** (i jako součást kombinace, např. „DA+2“, nebo jako štítek u buňky s hodinami).
+
+O zabranou směnu požádat nelze. **Zamítnutí nebo stažení** žádosti směnu znovu uvolní. Jeden zaměstnanec má na jeden den nejvýše **jednu čekající žádost** – chce-li jinou směnu, musí tu první nejdřív stáhnout. O směnu nelze žádat ani v den, kdy má zaměstnanec **X ze schválené dovolené**.
+
+> 🔒 Server, odolné proti souběžným žádostem (zámek `shiftRequestSlots/{datum}__{kód}` vytvořený v transakci). Zdroj: `functions/src/routes/shifts.ts:3741-3781` (kontroly a zámky), uvolnění zámků `:3817-3843` volané při schválení, zamítnutí i stažení (`:3933`, `:4000`).
+
+### Schválení zapíše směnu do buňky a nahradí, co tam bylo
+
+Schválením se požadovaná směna **zapíše do buňky zaměstnance** a přepíše dosavadní obsah – typicky jeho vlastní X. Zápis se eviduje v Logu změn stejně jako ruční úprava buňky.
+
+Schválení se odmítne, pokud mezitím tutéž směnu ten den **dostal přidělenou někdo jiný** (žádost pak zůstane čekat a lze ji zamítnout), nebo pokud má zaměstnanec v ten den mezitím **schválenou dovolenou** – X z dovolené schválení nepřepíše.
+
+> 🔒 Server. Zdroj: `functions/src/routes/shifts.ts:3845-3975` (`PATCH .../shiftRequests/:reqId`); kontrola dovolené `:3891`, obsazení jiným `:3896-3904`.
+
+### Čekající žádosti uzavřením plánu nepropadají
+
+Uzavření ani publikace plánu čekající žádosti **nezamítne** – zůstanou čekat a lze je schválit nebo zamítnout i později. Podat **novou** žádost ale jde jen v otevřeném plánu.
+
+> 🔒 Server. Zdroj: `functions/src/routes/shifts.ts:3845-3975` – schvalování nekontroluje stav plánu; přechod stavu `:1281-1355` žádosti nemění.
+
+### 1. leden v prosincovém plánu patří lednovému plánu
+
+Prosincový plán zobrazuje jako poslední sloupec **1. leden** následujícího roku. Data tohoto dne (směny, MOD, rozdělení hodin, volná DPA, žádosti) jsou **uložená jen v lednovém plánu** – prosincový sloupec je jen okno do něj. Proto se 1. leden nikdy nezapočítá do prosincových součtů, limitů X ani mezd.
+
+- **Zápisy z prosince se přesměrují do ledna.** Úprava buňky 1. ledna v prosincovém plánu změní lednový plán.
+- **Kdo smí 1. leden upravovat, určuje stav prosincového plánu** (zaměstnanec tedy smí zadat X na 1. ledna, dokud je otevřený prosinec, i když je leden ještě Vytvořený). **Pravidla pro X** – měsíční limit (podle smlouvy platné v lednu) i požadavek na 5 dostupných recepčních – se ale počítají **v lednovém plánu**.
+- **Lednový plán vznikne automaticky spolu s prosincovým** (ve stavu Vytvořený, bez termínů). Pokud by chyběl, vytvoří se při prvním zápisu do sloupce 1. ledna. Při prvním zápisu do 1. ledna, kdy je lednový plán ještě bez zaměstnanců, se do něj zkopíruje **celé prosincové obsazení** (bez prosincových úprav limitu X) a doplní se X ze schválených dovolených.
+- **Pravidlo „nejvýše 6 X v řadě“ přes Nový rok nepřechází.** Řada se počítá jen v rámci jednoho plánu, takže X 31. 12. a X 1. 1. se do jedné řady nesčítají.
+
+> 🔒 Server + ⚙️ Automatika. Zdroj: `functions/src/routes/shifts.ts:643-880` (směrování: `resolveDateRoute` `:817`, `materializeOwningPlan` `:843`, kopie obsazení `:857`), automatické vytvoření ledna `:685-720` volané z `:1088`; stav prosince u zápisu buňky `:1987-1990`; pravidla X v lednovém plánu (`writeShiftCell` `:2021-2274`, řada X `:2100-2110`, limit `:2121`, 5 recepčních `:2139`). Rozhraní kontroly řady a limitu u 1. ledna přenechává serveru (`frontend/src/pages/ShiftPlannerPage.tsx:1554`).
+
 ---
 
 ## Dovolená
