@@ -18,6 +18,10 @@ interface Props {
   typeTag?: string | null;
   /** #29: set/clear the tag. Undefined → tagging disabled for this cell. */
   onSaveTypeTag?: (typeTag: string | null) => Promise<void>;
+  /** Pending shift request in this cell (e.g. "DA" awaiting approval). */
+  pendingRequest?: { code: string } | null;
+  /** Withdraw the viewer's own pending request (shown only for own requests). */
+  onWithdrawRequest?: () => void;
 }
 
 export default function ShiftCell({
@@ -32,6 +36,8 @@ export default function ShiftCell({
   onDoubleClickX,
   typeTag,
   onSaveTypeTag,
+  pendingRequest,
+  onWithdrawRequest,
 }: Props) {
   const { theme } = useTheme();
   const dark = theme === "dark";
@@ -219,7 +225,10 @@ export default function ShiftCell({
 
   // Shrink the (monospace) code to fit the ~40px column so long entries like
   // "DPQ+2" never widen the column. ~4 chars fit at 0.85rem; scale down beyond that.
-  const displayText = saveError ? "!" : (rawInput || "");
+  // A pending shift request shows as its code + "?" (italic, dashed outline)
+  // until it is decided; the cell's stored value stays in the tooltip.
+  const pendingText = pendingRequest ? `${pendingRequest.code}?` : null;
+  const displayText = saveError ? "!" : (pendingText ?? rawInput ?? "");
   const fitFontSize = `${Math.max(0.5, Math.min(0.85, 3.4 / (displayText.length || 1))).toFixed(3)}rem`;
 
   // #29: a numeric "worked hours" cell can be tagged with the shift type it was
@@ -280,10 +289,26 @@ export default function ShiftCell({
         userSelect: "none",
         padding: "2px",
         fontFamily: "monospace",
-        outline: saveError ? "2px solid #dc2626" : focused ? "2px solid #3b82f6" : "none",
+        outline: saveError
+          ? "2px solid #dc2626"
+          : focused
+          ? "2px solid #3b82f6"
+          : pendingRequest
+          ? `1px dashed ${dark ? "#94a3b8" : "#475569"}`
+          : "none",
         outlineOffset: "-2px",
+        fontStyle: pendingRequest && !saveError ? "italic" : undefined,
       }}
-      title={saveError ?? (rawInput ? `${rawInput} – ${hoursComputed}h${typeTag ? ` (${typeTag})` : ""}` : undefined)}
+      title={
+        saveError ??
+        (pendingRequest
+          ? `Žádost o směnu ${pendingRequest.code} čeká na schválení${rawInput ? ` (nyní: ${rawInput})` : ""}${
+              onWithdrawRequest ? " – křížkem žádost stáhnete" : ""
+            }`
+          : rawInput
+          ? `${rawInput} – ${hoursComputed}h${typeTag ? ` (${typeTag})` : ""}`
+          : undefined)
+      }
       onClick={() => {
         if (readOnly) return;
         // On an X-toggle cell (OPEN plan) a click only focuses – double-click
@@ -304,7 +329,38 @@ export default function ShiftCell({
       onFocus={onFocus}
       onKeyDown={handleDisplayKeyDown}
     >
-      {saveError ? "!" : (rawInput || null)}
+      {saveError ? "!" : (pendingText ?? (rawInput || null))}
+      {!saveError && pendingRequest && onWithdrawRequest && (
+        // One-off micro-action (local style, like the tag badge): withdraw the
+        // viewer's own pending request. The confirmation runs in the page.
+        <button
+          type="button"
+          aria-label={`Stáhnout žádost o směnu ${pendingRequest.code}`}
+          title="Stáhnout žádost"
+          onClick={(e) => {
+            e.stopPropagation();
+            onWithdrawRequest();
+          }}
+          onDoubleClick={(e) => e.stopPropagation()}
+          style={{
+            position: "absolute",
+            top: 0,
+            right: 0,
+            border: "none",
+            padding: "0 2px",
+            margin: 0,
+            fontSize: "0.55rem",
+            lineHeight: 1,
+            fontStyle: "normal",
+            cursor: "pointer",
+            background: dark ? "rgba(15,23,42,0.72)" : "rgba(255,255,255,0.85)",
+            color: dark ? "#e2e8f0" : "#334155",
+            borderBottomLeftRadius: "3px",
+          }}
+        >
+          ✕
+        </button>
+      )}
       {!saveError && showTag && (
         // Absolutely-positioned corner badge – out of normal flow so the tag
         // never adds to the cell's content width (the 40px column stays fixed

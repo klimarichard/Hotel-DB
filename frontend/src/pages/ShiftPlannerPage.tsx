@@ -3,10 +3,10 @@ import type { CSSProperties } from "react";
 import { api, ApiError } from "../lib/api";
 import * as clock from "../lib/clock";
 import { useAuth } from "../hooks/useAuth";
-import { parseShiftExpression, getCellColor, SECTIONS, SECTION_LABELS, getCzechHolidays, sortSectionEmployees, isPureNumericExpression, cellHoursForType, type ShiftSegment } from "../lib/shiftConstants";
+import { parseShiftExpression, parseRequestableShift, getCellColor, SECTIONS, SECTION_LABELS, getCzechHolidays, sortSectionEmployees, isPureNumericExpression, cellHoursForType, type ShiftSegment } from "../lib/shiftConstants";
 import { modLettersByEmployeeId } from "../lib/modPersons";
 import { employeeDisplayName, employeeSurnameFirst } from "../lib/employeeName";
-import { MONTH_NAMES, formatIsoDatetimeCZ } from "../lib/dateFormat";
+import { MONTH_NAMES, formatIsoDatetimeCZ, formatDateCZ } from "../lib/dateFormat";
 import { escapeHtml } from "../lib/escapeHtml";
 import ShiftGrid from "../components/ShiftGrid";
 import AddEmployeeToPlanModal from "../components/AddEmployeeToPlanModal";
@@ -19,6 +19,8 @@ import MyRequestsPanel from "../components/MyRequestsPanel";
 import ShiftChangeRequestModal from "../components/ShiftChangeRequestModal";
 import FreeClaimModal from "../components/FreeClaimModal";
 import ShiftSplitModal from "../components/ShiftSplitModal";
+import ShiftRequestWindowsEditor, { type ShiftRequestWindow } from "../components/ShiftRequestWindowsEditor";
+import ShiftRequestPanel from "../components/ShiftRequestPanel";
 import Button from "../components/Button";
 import { useShiftOverridesContext } from "../context/ShiftOverridesContext";
 import { useShiftChangeRequestsContext } from "../context/ShiftChangeRequestsContext";
@@ -111,6 +113,27 @@ export interface PlanDetail {
    *  on non-December plans and on older/demo payloads. Never part of `shifts`, so
    *  no December total, X count or payroll figure includes it. */
   linkedNextDay?: LinkedNextDay | null;
+  /** Date ranges in which employees may request a specific shift in their own
+   *  row (absent on older/demo payloads = none). */
+  shiftRequestWindows?: ShiftRequestWindow[];
+  /** The plan's shift requests (withdrawn ones excluded by the server). */
+  shiftRequests?: ShiftRequest[];
+}
+
+/** A "žádost o konkrétní směnu" filed inside a request window. */
+export interface ShiftRequest {
+  id: string;
+  /** OWNING plan id – where the review / withdraw endpoints are addressed. */
+  planId: string;
+  employeeId: string;
+  date: string;
+  /** Normalised slot code, e.g. "DA". */
+  code: string;
+  status: "pending" | "approved" | "rejected" | "withdrawn";
+  actingPlanId?: string;
+  requestedByUid?: string | null;
+  requestedAt?: { seconds?: number; _seconds?: number } | null;
+  reviewNote?: string | null;
 }
 
 export interface LinkedNextDay {
@@ -125,6 +148,8 @@ export interface LinkedNextDay {
   modPersons: Record<string, string>;
   splits: ShiftSplit[];
   freeShiftDpa: boolean;
+  /** Jan 1 shift requests (stored in the January plan). */
+  shiftRequests?: ShiftRequest[];
 }
 
 /** The linked 1 January column date of a December plan, else null. */
@@ -240,6 +265,7 @@ export default function ShiftPlannerPage() {
   const [showOverrideRequests, setShowOverrideRequests] = useState(false);
   const [showChangeRequests, setShowChangeRequests] = useState(false);
   const [showMyRequests, setShowMyRequests] = useState(false);
+  const [showShiftRequests, setShowShiftRequests] = useState(false);
   const [pendingChangeRequest, setPendingChangeRequest] = useState<{
     employeeId: string; date: string; currentRawInput: string; clickedAt: string;
   } | null>(null);
@@ -1360,13 +1386,105 @@ export default function ShiftPlannerPage() {
     loadPlan(true);
   }
 
+  // ── Shift requests (žádosti o konkrétní směnu v okně) ──
+  // Inside one of the plan's request windows a self-service employee may type a
+  // single shift code (e.g. "DA") into their OWN row; it is filed as a request
+  // for approval rather than written to the cell. The server is the gate (own
+  // row, opened plan, window, one taker per slot); this only routes the input.
+
+  /** All of the plan's requests, incl. December's linked 1 January ones. */
+  const allShiftRequests: ShiftRequest[] = plan
+    ? [...(plan.shiftRequests ?? []), ...(plan.linkedNextDay?.shiftRequests ?? [])]
+    : [];
+  const pendingRequestByCell = new Map<string, ShiftRequest>();
+  for (const r of allShiftRequests) {
+    if (r.status === "pending") pendingRequestByCell.set(`${r.employeeId}_${r.date}`, r);
+  }
+  const pendingShiftRequestCount = pendingRequestByCell.size;
+
+  function inRequestWindow(date: string): boolean {
+    return (plan?.shiftRequestWindows ?? []).some((w) => w.from <= date && date <= w.to);
+  }
+
+  /** Every date covered by a window (header marker). Local-date math only. */
+  const requestWindowDates = new Set<string>();
+  for (const w of plan?.shiftRequestWindows ?? []) {
+    const [fy, fm, fd] = w.from.split("-").map(Number);
+    const [ty, tm, td] = w.to.split("-").map(Number);
+    const end = new Date(ty, tm - 1, td);
+    for (let d = new Date(fy, fm - 1, fd); d <= end; d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1)) {
+      requestWindowDates.add(
+        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+      );
+    }
+  }
+
+  function showError(message: string, title = "Chyba") {
+    setConfirmModal({
+      title,
+      message,
+      confirmLabel: "OK",
+      showCancel: false,
+      onConfirm: () => setConfirmModal(null),
+    });
+  }
+
+  async function submitShiftRequest(employeeId: string, date: string, code: string) {
+    if (!plan) return;
+    try {
+      await api.post(`/shifts/plans/${plan.id}/shiftRequests`, { employeeId, date, code });
+      setConfirmModal({
+        title: "Žádost odeslána",
+        message: `Žádost o směnu ${code} na ${formatDateCZ(date)} byla odeslána ke schválení. V buňce ji uvidíte s otazníkem, dokud nebude vyřízena.`,
+        confirmLabel: "OK",
+        showCancel: false,
+        onConfirm: () => setConfirmModal(null),
+      });
+    } catch (e) {
+      showError(e instanceof Error ? e.message : "Žádost se nepodařilo odeslat.");
+    }
+    loadPlan(true);
+  }
+
+  function confirmWithdrawShiftRequest(employeeId: string, date: string) {
+    const r = pendingRequestByCell.get(`${employeeId}_${date}`);
+    if (!r) return;
+    setConfirmModal({
+      title: "Stáhnout žádost",
+      message: `Opravdu chcete stáhnout žádost o směnu ${r.code} na ${formatDateCZ(r.date)}?`,
+      confirmLabel: "Stáhnout",
+      danger: true,
+      onConfirm: async () => {
+        setConfirmModal(null);
+        try {
+          await api.delete(`/shifts/plans/${r.planId}/shiftRequests/${r.id}`);
+        } catch (e) {
+          showError(e instanceof Error ? e.message : "Žádost se nepodařilo stáhnout.");
+        }
+        loadPlan(true);
+      },
+    });
+  }
+
   async function handleCellSave(employeeId: string, date: string, rawInput: string) {
     if (!plan) return;
 
-    // Employees may only enter X or clear a cell – silently discard anything else
+    // Employees may only enter X or clear a cell – silently discard anything else.
+    // Exception: inside a request window, a single shift code typed into their
+    // OWN row is filed as a shift request (approval required).
     if (selfServiceOnly && rawInput.trim() !== "") {
       const parsed = parseShiftExpression(rawInput);
       if (!parsed.isValid || !parsed.segments.every((s) => s.code === "X")) {
+        const slot = parseRequestableShift(rawInput);
+        if (
+          slot &&
+          plan.status === "opened" &&
+          !!currentEmployeeId &&
+          employeeId === currentEmployeeId &&
+          inRequestWindow(date)
+        ) {
+          await submitShiftRequest(employeeId, date, slot.code);
+        }
         return; // resolve without error so ShiftCell reverts to original value
       }
     }
@@ -1781,6 +1899,39 @@ export default function ShiftPlannerPage() {
               </Button>
             )}
 
+            {/* Reviewers: requests for a specific shift filed inside request windows */}
+            {plan && can("shifts.changeRequest.review") && (allShiftRequests.length > 0 || (plan.shiftRequestWindows ?? []).length > 0) && (
+              <Button
+                data-tour="shift-requests-btn"
+                variant="secondary"
+                onClick={() => setShowShiftRequests((v) => !v)}
+                style={{ position: "relative" }}
+              >
+                Žádosti o směnu
+                {pendingShiftRequestCount > 0 && (
+                  <span style={{
+                    position: "absolute",
+                    top: "-6px",
+                    right: "-8px",
+                    background: "#ef4444",
+                    color: "#fff",
+                    borderRadius: "9999px",
+                    fontSize: "0.65rem",
+                    fontWeight: 700,
+                    minWidth: "1.1rem",
+                    height: "1.1rem",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    padding: "0 3px",
+                    lineHeight: 1,
+                  }}>
+                    {pendingShiftRequestCount}
+                  </span>
+                )}
+              </Button>
+            )}
+
             {/* Non-reviewers who can submit their own requests: Moje žádosti */}
             {plan && !canPublish && canSubmitRequests && (
               <Button
@@ -1988,6 +2139,31 @@ export default function ShiftPlannerPage() {
             </div>
           )}
 
+          {/* Shift-request windows editor (shifts.plan.edit, any status) */}
+          {plan && can("shifts.plan.edit") && (
+            <ShiftRequestWindowsEditor
+              planId={plan.id}
+              year={plan.year}
+              month={plan.month}
+              windows={plan.shiftRequestWindows ?? []}
+              onSaved={(w) => setPlan((prev) => (prev ? { ...prev, shiftRequestWindows: w } : prev))}
+              onError={(m) => showError(m)}
+            />
+          )}
+
+          {/* Shift requests review panel */}
+          {plan && showShiftRequests && can("shifts.changeRequest.review") && (
+            <ShiftRequestPanel
+              requests={allShiftRequests}
+              employees={plan.employees}
+              onResolved={() => {
+                refreshChangeRequestCount();
+                loadPlan(true);
+              }}
+              onError={(m) => showError(m)}
+            />
+          )}
+
           {/* Shift override requests panel */}
           {plan && showOverrideRequests && (
             <ShiftOverridePanel
@@ -2072,6 +2248,12 @@ export default function ShiftPlannerPage() {
               readOnly={selfServiceOnly ? plan.status !== "opened" : !canEdit}
               alwaysReadOnlySections={selfServiceOnly ? ["vedoucí"] : []}
               currentEmployeeId={currentEmployeeId}
+              requestWindowDates={requestWindowDates}
+              pendingRequestFor={(employeeId, date) => {
+                const r = pendingRequestByCell.get(`${employeeId}_${date}`);
+                return r ? { code: r.code, own: !!currentEmployeeId && r.employeeId === currentEmployeeId } : null;
+              }}
+              onWithdrawRequest={can("shifts.cells.editOwnX") ? confirmWithdrawShiftRequest : undefined}
               showCounterTable={canViewCounter}
               splits={splitsByKey}
               onOpenSplitCell={

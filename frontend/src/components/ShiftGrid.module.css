@@ -710,3 +710,10 @@
   color: var(--color-text-subtle);
   white-space: nowrap;
 }
+
+/* Day header inside a shift-request window ("Lze žádat o konkrétní směnu"): a
+   thin accent bar along the bottom, so it combines with today/weekend/holiday
+   backgrounds without fighting them. */
+.requestWindowDay {
+  box-shadow: inset 0 -3px 0 var(--color-primary);
+}

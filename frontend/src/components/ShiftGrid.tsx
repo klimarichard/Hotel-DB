@@ -77,6 +77,13 @@ interface Props {
   /** Whether the viewer holds `shifts.mod.manage`. Absent = allowed (legacy callers). */
   canEditMod?: boolean;
   currentEmployeeId?: string | null;
+  /** Dates inside one of the plan's shift-request windows (header marker). */
+  requestWindowDates?: Set<string>;
+  /** Pending shift request shown in a cell, or null. `own` = the viewer's own
+   *  request (offers the withdraw action). */
+  pendingRequestFor?: (employeeId: string, date: string) => { code: string; own: boolean } | null;
+  /** Withdraw the viewer's own pending request in that cell. */
+  onWithdrawRequest?: (employeeId: string, date: string) => void;
   /** Reports whether the grid's internal scroll is at the top. Used on mobile to
    *  collapse the page chrome (month nav + plan bar) for a full-screen grid. */
   onAtTopChange?: (atTop: boolean) => void;
@@ -181,6 +188,9 @@ export default function ShiftGrid({
   alwaysReadOnlySections = [],
   canEditMod = true,
   currentEmployeeId,
+  requestWindowDates,
+  pendingRequestFor,
+  onWithdrawRequest,
   onAtTopChange,
 }: Props) {
   const { theme } = useTheme();
@@ -492,16 +502,24 @@ export default function ShiftGrid({
         <thead>
           <tr>
             <th className={styles.nameHeader}>Zaměstnanec</th>
-            {days.map((d) => (
+            {days.map((d) => {
+              const dStr = formatDate(d);
+              const inWindow = requestWindowDates?.has(dStr) ?? false;
+              const titles = [
+                dStr === linkedDateStr ? "1. ledna – propojeno s lednovým plánem" : null,
+                inWindow ? "Lze žádat o konkrétní směnu" : null,
+              ].filter(Boolean);
+              return (
               <th
-                key={formatDate(d)}
-                className={`${styles.dayHeader} ${dayClass(d)}`}
-                title={formatDate(d) === linkedDateStr ? "1. ledna – propojeno s lednovým plánem" : undefined}
+                key={dStr}
+                className={`${styles.dayHeader} ${dayClass(d)}${inWindow ? ` ${styles.requestWindowDay}` : ""}`}
+                title={titles.length > 0 ? titles.join(" · ") : undefined}
               >
                 <div>{formatDate(d) === linkedDateStr ? "1. 1." : d.getDate()}</div>
                 <div className={styles.dayName}>{DAY_NAMES[d.getDay()]}</div>
               </th>
-            ))}
+              );
+            })}
             <th className={styles.totalHeader}>Směny</th>
           </tr>
         </thead>
@@ -743,6 +761,12 @@ export default function ShiftGrid({
                             onDoubleClickX={
                               onCellDoubleClickX && !alwaysReadOnlySections.includes(emp.section)
                                 ? () => onCellDoubleClickX(emp.employeeId, dateStr)
+                                : undefined
+                            }
+                            pendingRequest={pendingRequestFor ? pendingRequestFor(emp.employeeId, dateStr) : null}
+                            onWithdrawRequest={
+                              onWithdrawRequest && pendingRequestFor?.(emp.employeeId, dateStr)?.own
+                                ? () => onWithdrawRequest(emp.employeeId, dateStr)
                                 : undefined
                             }
                           />

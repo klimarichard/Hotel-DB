@@ -6,7 +6,7 @@ import { requirePermission, isSharedTerminalType } from "../auth/permissions";
 import { HOTEL_SLUGS, hotelViewPerm } from "../services/hotels";
 import { scheduledEmployeeId } from "../services/scheduleLookup";
 import { currentReceptionShiftPrague } from "../services/recepceEmployees";
-import { parseShiftExpression, HOTEL_CODES, isPureNumericExpression, sanitizeTypeTag } from "../services/shiftParser";
+import { parseShiftExpression, parseRequestableShift, HOTEL_CODES, isPureNumericExpression, sanitizeTypeTag } from "../services/shiftParser";
 import {
   CountedTag,
   FULL_SHIFT_HOURS,
@@ -879,6 +879,161 @@ async function bumpRoutePlans(route: DateRoute): Promise<void> {
   if (route.linked) await route.actingRef.update(ts);
 }
 
+// ─── Shift-request windows (žádosti o konkrétní směnu) ───────────────────────
+//
+// A plan may carry `shiftRequestWindows: [{from, to}]` — date ranges in which a
+// self-service employee (shifts.cells.editOwnX) may REQUEST one specific shift
+// (e.g. "DA") in their own row instead of only entering X. A request needs a
+// reviewer's approval (shifts.changeRequest.review); approving writes the cell.
+//
+// Same acting-vs-owning split as the linked 1 January above: the status gate and
+// the windows are the ACTING plan's (the one the employee is looking at — for
+// December that includes its linked 1 January); the request, its slot lock and
+// the cell the approval writes live in the OWNING plan (January for Jan 1).
+//
+// One taker per slot (date, code): a slot is taken while another request for it
+// is PENDING, or once any cell on that date already holds that code + hotel.
+// Race-safety: a deterministic lock doc `shiftRequestSlots/{date}__{code}` is
+// created in the submit transaction (plus `{date}__emp__{employeeId}` for "one
+// pending request per employee per day") and deleted on every terminal
+// transition (approve / reject / withdraw). After an approval the cell itself
+// occupies the slot.
+
+const MAX_REQUEST_WINDOWS = 10;
+
+interface RequestWindow {
+  from: string;
+  to: string;
+}
+
+/** First and last date the plan DISPLAYS (December: through its linked 1 Jan). */
+function planDisplayedRange(planData: Record<string, unknown>): { first: string; last: string } | null {
+  const year = Number(planData.year);
+  const month = Number(planData.month);
+  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) return null;
+  const mm = String(month).padStart(2, "0");
+  const lastDay = new Date(year, month, 0).getDate();
+  const linked = linkedNextDayDate(planData);
+  return {
+    first: `${year}-${mm}-01`,
+    last: linked ?? `${year}-${mm}-${String(lastDay).padStart(2, "0")}`,
+  };
+}
+
+/** Real calendar date check (rejects 2026-02-30 etc.) without any UTC parsing. */
+function isRealIsoDate(s: unknown): s is string {
+  if (typeof s !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const [y, m, d] = s.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  return dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d;
+}
+
+/** The plan's stored windows, defensively read (absent / legacy → []). */
+function readRequestWindows(planData: Record<string, unknown> | undefined): RequestWindow[] {
+  const raw = planData?.shiftRequestWindows;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (w): w is RequestWindow =>
+      !!w && typeof w === "object" && isRealIsoDate((w as RequestWindow).from) && isRealIsoDate((w as RequestWindow).to)
+  );
+}
+
+function isDateInRequestWindows(windows: RequestWindow[], date: string): boolean {
+  return windows.some((w) => w.from <= date && date <= w.to);
+}
+
+/**
+ * Validate + normalise windows for a plan: from ≤ to, both inside the plan's
+ * displayed dates, at most MAX_REQUEST_WINDOWS; sorted, overlapping ranges merged.
+ */
+function normalizeRequestWindows(
+  input: unknown,
+  planData: Record<string, unknown>
+): RequestWindow[] | { error: string } {
+  if (!Array.isArray(input)) return { error: "Okna musí být seznam rozsahů." };
+  if (input.length > MAX_REQUEST_WINDOWS) {
+    return { error: `Nejvýše ${MAX_REQUEST_WINDOWS} oken pro žádosti o směnu.` };
+  }
+  const range = planDisplayedRange(planData);
+  if (!range) return { error: "Plán nemá platný měsíc." };
+  const list: RequestWindow[] = [];
+  for (const w of input) {
+    const from = (w as Record<string, unknown> | null)?.from;
+    const to = (w as Record<string, unknown> | null)?.to;
+    if (!isRealIsoDate(from) || !isRealIsoDate(to)) return { error: "Neplatné datum v okně." };
+    if (from > to) return { error: "Začátek okna musí být nejpozději v den jeho konce." };
+    if (from < range.first || to > range.last) {
+      return { error: "Okno musí ležet uvnitř zobrazených dnů plánu." };
+    }
+    list.push({ from, to });
+  }
+  list.sort((a, b) => (a.from === b.from ? a.to.localeCompare(b.to) : a.from.localeCompare(b.from)));
+  const merged: RequestWindow[] = [];
+  for (const w of list) {
+    const last = merged[merged.length - 1];
+    if (last && w.from <= last.to) {
+      if (w.to > last.to) last.to = w.to;
+    } else {
+      merged.push({ ...w });
+    }
+  }
+  return merged;
+}
+
+/** The employee record linked to the caller's user account (users/{uid}.employeeId). */
+async function callerEmployeeId(req: AuthRequest): Promise<string | null> {
+  if (!req.uid) return null;
+  const snap = await db().collection("users").doc(req.uid).get();
+  const eid = (snap.data() as Record<string, unknown> | undefined)?.employeeId;
+  return typeof eid === "string" && eid !== "" ? eid : null;
+}
+
+/** True when a stored cell already holds the shift `segCode`+`hotel` (e.g. D+A
+ *  in "DA", "DA+2" or "DA²"), or is a numeric cell tagged with that type. */
+function cellOccupiesSlot(data: Record<string, unknown> | undefined, segCode: string, hotel: string): boolean {
+  if (!data) return false;
+  const parsed = parseShiftExpression((data.rawInput as string) ?? "");
+  if (parsed.isValid && parsed.segments.some((s) => s.code === segCode && s.hotel === hotel)) return true;
+  return sanitizeTypeTag(data.typeTag) === segCode + hotel;
+}
+
+const slotLockId = (date: string, code: string) => `${date}__${code}`;
+const empLockId = (date: string, employeeId: string) => `${date}__emp__${employeeId}`;
+
+/** "2026-12-24" → "24. 12. 2026" for error messages. */
+function czDate(date: string): string {
+  const [y, m, d] = date.split("-").map(Number);
+  return `${d}. ${m}. ${y}`;
+}
+
+class RequestConflict {
+  constructor(public readonly message: string, public readonly status = 409) {}
+}
+
+/**
+ * The plan's shift requests for the GET payload. Withdrawn ones are dropped; a
+ * review note is shown only to reviewers and to the requester. `planId` is the
+ * OWNING plan (where the review / withdraw endpoints must be addressed).
+ */
+async function shiftRequestsForView(
+  req: AuthRequest,
+  planRef: admin.firestore.DocumentReference,
+  date?: string
+): Promise<Record<string, unknown>[]> {
+  const col = planRef.collection("shiftRequests");
+  const snap = await (date ? col.where("date", "==", date) : col).get();
+  const isReviewer = req.permissions?.has("shifts.changeRequest.review") ?? false;
+  return snap.docs
+    .map((d): Record<string, unknown> => ({ id: d.id, planId: planRef.id, ...(d.data() as Record<string, unknown>) }))
+    .filter((r) => r.status !== "withdrawn")
+    .map((r) => {
+      if (isReviewer || r.requestedByUid === req.uid) return r;
+      const { reviewNote: _n, ...rest } = r;
+      void _n;
+      return rest;
+    });
+}
+
 // POST /shifts/plans — create a plan
 shiftsRouter.post(
   "/plans",
@@ -1100,6 +1255,8 @@ shiftsRouter.get(
                 .map((d) => ({ date: d.date as string, type: d.type as CountedTag, entries: readSplitEntries(d.entries) }))
             : [],
           freeShiftDpa: janDpa.includes(linkedDate),
+          // Jan 1 shift requests live in the January plan, like its cells.
+          shiftRequests: await shiftRequestsForView(req, janDoc.ref, linkedDate),
         };
       }
     }
@@ -1108,10 +1265,15 @@ shiftsRouter.get(
       id: planDoc.id,
       ...planData,
       modPersons: (planData.modPersons as Record<string, string>) ?? {},
+      shiftRequestWindows: readRequestWindows(planData),
       employees,
       shifts: visibleShifts,
       modShifts: modSnap.docs.map((d) => ({ id: d.id, date: d.id, ...d.data() })),
       linkedNextDay,
+      // Everyone who can view the plan sees its requests (so a taken slot is
+      // visible to colleagues). A January plan's own list naturally includes its
+      // 1 January requests, submitted through December or through January.
+      shiftRequests: await shiftRequestsForView(req, planRef),
     });
   }
 );
@@ -1242,6 +1404,40 @@ shiftsRouter.patch(
   }
 );
 
+// PUT /shifts/plans/:planId/request-windows — replace the plan's shift-request
+// windows (any status). Body: { windows: [{ from, to }] }; [] clears them.
+shiftsRouter.put(
+  "/plans/:planId/request-windows",
+  requireAuth,
+  requirePermission("shifts.plan.edit"),
+  async (req: AuthRequest, res) => {
+    const { planId } = req.params;
+    const planRef = db().collection("shiftPlans").doc(planId);
+    const planDoc = await planRef.get();
+    if (!planDoc.exists) {
+      res.status(404).json({ error: "Plán nenalezen" });
+      return;
+    }
+    const planData = planDoc.data() as Record<string, unknown>;
+    const next = normalizeRequestWindows((req.body as Record<string, unknown>)?.windows, planData);
+    if ("error" in next) {
+      res.status(400).json({ error: next.error });
+      return;
+    }
+    const before = readRequestWindows(planData);
+    await planRef.update({ shiftRequestWindows: next, updatedAt: FieldValue.serverTimestamp() });
+    if (JSON.stringify(before) !== JSON.stringify(next)) {
+      await logUpdate(ctxFromReq(req), {
+        collection: "shiftPlans",
+        resourceId: planId,
+        before: { shiftRequestWindows: before },
+        after: { shiftRequestWindows: next },
+      });
+    }
+    res.json({ ok: true, shiftRequestWindows: next });
+  }
+);
+
 // PATCH /shifts/plans/:planId/free-dpa-day — toggle a day where the DPA free-shift
 // row appears (admin/director). DPQ/NPQ/NPA rows are automatic; DPA is opt-in per day.
 shiftsRouter.patch(
@@ -1319,7 +1515,7 @@ shiftsRouter.delete(
       return;
     }
 
-    const subCols = ["planEmployees", "shifts", "shiftsSnapshot", "modRow", "rules", "unavailabilityRequests", "shiftOverrideRequests", "shiftChangeRequests"];
+    const subCols = ["planEmployees", "shifts", "shiftsSnapshot", "modRow", "rules", "unavailabilityRequests", "shiftOverrideRequests", "shiftChangeRequests", "shiftRequests", "shiftRequestSlots"];
     for (const col of subCols) {
       await deleteCollection(planRef.collection(col));
     }
@@ -3399,6 +3595,433 @@ shiftsRouter.delete(
       subResourceId: reqId,
       employeeId: data.employeeId as string | undefined,
       summary: { date: data.date, currentRawInput: data.currentRawInput, reason: data.reason },
+    });
+    res.json({ ok: true });
+  }
+);
+
+// ─── Shift requests (žádosti o konkrétní směnu v okně) ───────────────────────
+// See the "Shift-request windows" block near the top for the model.
+
+// GET /shifts/shiftRequests/pending-count — nav badge (all plans). The
+// orderBy is REQUIRED for the (status, requestedAt) collection-group index —
+// see the note on /overrides/pending-count.
+shiftsRouter.get(
+  "/shiftRequests/pending-count",
+  requireAuth,
+  requirePermission("shifts.changeRequest.review"),
+  async (_req, res) => {
+    const snap = await db()
+      .collectionGroup("shiftRequests")
+      .where("status", "==", "pending")
+      .orderBy("requestedAt", "desc")
+      .get();
+    res.json({ count: snap.size });
+  }
+);
+
+// GET /shifts/shiftRequests/pending — full list across all plans (Upozornění),
+// denormalised with planId / planYear / planMonth.
+shiftsRouter.get(
+  "/shiftRequests/pending",
+  requireAuth,
+  requirePermission("shifts.changeRequest.review"),
+  async (_req, res) => {
+    const snap = await db()
+      .collectionGroup("shiftRequests")
+      .where("status", "==", "pending")
+      .orderBy("requestedAt", "desc")
+      .get();
+    const planMetaCache = new Map<string, { year: number; month: number } | null>();
+    async function planMeta(planId: string) {
+      if (planMetaCache.has(planId)) return planMetaCache.get(planId)!;
+      const planDoc = await db().collection("shiftPlans").doc(planId).get();
+      const meta = planDoc.exists
+        ? {
+            year: (planDoc.data() as Record<string, unknown>).year as number,
+            month: (planDoc.data() as Record<string, unknown>).month as number,
+          }
+        : null;
+      planMetaCache.set(planId, meta);
+      return meta;
+    }
+    const out = await Promise.all(
+      snap.docs.map(async (d) => {
+        const planId = d.ref.parent.parent?.id ?? "";
+        const meta = planId ? await planMeta(planId) : null;
+        return {
+          id: d.id,
+          ...d.data(),
+          planId,
+          planYear: meta?.year ?? null,
+          planMonth: meta?.month ?? null,
+        };
+      })
+    );
+    res.json(out);
+  }
+);
+
+// POST /shifts/plans/:planId/shiftRequests — employee requests a specific shift
+// in their OWN row, on a date inside one of the ACTING plan's windows, while the
+// acting plan is opened. Body: { employeeId, date, code }.
+shiftsRouter.post(
+  "/plans/:planId/shiftRequests",
+  requireAuth,
+  requirePermission("shifts.cells.editOwnX"),
+  async (req: AuthRequest, res) => {
+    const { planId } = req.params;
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const employeeId = typeof body.employeeId === "string" ? body.employeeId : "";
+    const date = typeof body.date === "string" ? body.date : "";
+    if (!employeeId || !date) {
+      res.status(400).json({ error: "employeeId a date jsou povinné" });
+      return;
+    }
+    const slot = parseRequestableShift(body.code);
+    if (!slot) {
+      res.status(400).json({
+        error: "Požádat lze jen o jednu konkrétní směnu s hotelem (např. DA, NS, DPQ).",
+      });
+      return;
+    }
+
+    // Which plan stores the date (December → January for its linked 1 January).
+    const route = await resolveDateRoute(planId, date);
+    if ("error" in route) {
+      res.status(route.status).json({ error: route.error });
+      return;
+    }
+    // Gates on the ACTING plan: its status and its windows.
+    if (route.actingData.status !== "opened") {
+      res.status(403).json({ error: "O konkrétní směnu lze žádat pouze v otevřeném plánu." });
+      return;
+    }
+    if (!isDateInRequestWindows(readRequestWindows(route.actingData), date)) {
+      res.status(403).json({ error: "Tento den neleží v okně pro žádosti o směnu." });
+      return;
+    }
+    // Own row only: the employee record linked to the caller's account.
+    const ownId = await callerEmployeeId(req);
+    if (!ownId || ownId !== employeeId) {
+      res.status(403).json({ error: "O směnu můžete žádat pouze ve svém vlastním řádku." });
+      return;
+    }
+    const onRoster = await route.actingRef
+      .collection("planEmployees")
+      .where("employeeId", "==", employeeId)
+      .limit(1)
+      .get();
+    if (onRoster.empty) {
+      res.status(403).json({ error: "Nejste zařazen/a v tomto plánu směn." });
+      return;
+    }
+
+    // Gates passed → for a linked Jan 1 create January if needed + roster.
+    const owningRef = await materializeOwningPlan(req, route, [employeeId]);
+    const reqRef = owningRef.collection("shiftRequests").doc();
+    const slotRef = owningRef.collection("shiftRequestSlots").doc(slotLockId(date, slot.code));
+    const empRef = owningRef.collection("shiftRequestSlots").doc(empLockId(date, employeeId));
+    const cellRef = owningRef.collection("shifts").doc(`${employeeId}_${date}`);
+    const docData = {
+      employeeId,
+      date,
+      code: slot.code,
+      status: "pending",
+      actingPlanId: route.actingRef.id,
+      requestedByUid: req.uid ?? null,
+      requestedAt: FieldValue.serverTimestamp(),
+      reviewedByUid: null,
+      reviewedAt: null,
+      reviewNote: null,
+    };
+
+    try {
+      await db().runTransaction(async (tx) => {
+        // All reads first. The two lock docs are the race-safety point: two
+        // concurrent submits for the same slot (or the same employee + day) both
+        // read the absent lock, and Firestore's transaction contention makes the
+        // loser retry, at which point it sees the lock and gets the 409.
+        const [slotSnap, empSnap, cellSnap, daySnap] = await Promise.all([
+          tx.get(slotRef),
+          tx.get(empRef),
+          tx.get(cellRef),
+          tx.get(owningRef.collection("shifts").where("date", "==", date)),
+        ]);
+        if (empSnap.exists) {
+          throw new RequestConflict(
+            "Na tento den už máte čekající žádost o směnu. Pokud ji chcete změnit, nejprve ji stáhněte."
+          );
+        }
+        if (slotSnap.exists) {
+          throw new RequestConflict(
+            `Směna ${slot.code} dne ${czDate(date)} je už zabraná – požádal o ni jiný zaměstnanec.`
+          );
+        }
+        const cell = cellSnap.exists ? (cellSnap.data() as Record<string, unknown>) : undefined;
+        if (cell?.source === "vacation") {
+          throw new RequestConflict("V tento den máte schválenou dovolenou, o směnu nelze žádat.");
+        }
+        if (cellOccupiesSlot(cell, slot.segCode, slot.hotel)) {
+          throw new RequestConflict(`Směnu ${slot.code} už v tento den máte.`);
+        }
+        const taken = daySnap.docs.some(
+          (d) => d.id !== cellRef.id && cellOccupiesSlot(d.data() as Record<string, unknown>, slot.segCode, slot.hotel)
+        );
+        if (taken) {
+          throw new RequestConflict(
+            `Směna ${slot.code} dne ${czDate(date)} je už zabraná – má ji přidělenou jiný zaměstnanec.`
+          );
+        }
+        const lock = { requestId: reqRef.id, employeeId, date, code: slot.code, createdAt: FieldValue.serverTimestamp() };
+        tx.create(slotRef, { ...lock, kind: "slot" });
+        tx.create(empRef, { ...lock, kind: "employee-day" });
+        tx.set(reqRef, docData);
+        tx.update(owningRef, { updatedAt: FieldValue.serverTimestamp() });
+      });
+    } catch (e) {
+      if (e instanceof RequestConflict) {
+        res.status(e.status).json({ error: e.message });
+        return;
+      }
+      // A lock created by a concurrent submit between our read and commit.
+      if ((e as { code?: number }).code === 6) {
+        res.status(409).json({ error: `Směna ${slot.code} dne ${czDate(date)} je už zabraná – požádal o ni jiný zaměstnanec.` });
+        return;
+      }
+      throw e;
+    }
+    if (route.linked) await route.actingRef.update({ updatedAt: FieldValue.serverTimestamp() });
+    await logCreate(ctxFromReq(req), {
+      collection: "shiftPlans/shiftRequests",
+      resourceId: owningRef.id,
+      subResourceId: reqRef.id,
+      employeeId,
+      year: Number(date.slice(0, 4)) || undefined,
+      month: Number(date.slice(5, 7)) || undefined,
+      summary: { date, requestedInput: slot.code, actingPlanId: route.actingRef.id },
+    });
+    res.status(201).json({
+      id: reqRef.id,
+      planId: owningRef.id,
+      employeeId,
+      date,
+      code: slot.code,
+      status: "pending",
+      actingPlanId: route.actingRef.id,
+      requestedByUid: req.uid ?? null,
+    });
+  }
+);
+
+/**
+ * Delete the lock docs of a request inside a transaction, but only those that
+ * still point at THIS request (a lock never belongs to anyone else while the
+ * request is pending; the check is a belt-and-braces guard). Reads happen in
+ * `readLocks`, writes in `deleteLocks`, so callers keep reads-before-writes.
+ */
+async function readRequestLocks(
+  tx: admin.firestore.Transaction,
+  planRef: admin.firestore.DocumentReference,
+  data: Record<string, unknown>
+): Promise<admin.firestore.DocumentSnapshot[]> {
+  const date = String(data.date ?? "");
+  const refs = [
+    planRef.collection("shiftRequestSlots").doc(slotLockId(date, String(data.code ?? ""))),
+    planRef.collection("shiftRequestSlots").doc(empLockId(date, String(data.employeeId ?? ""))),
+  ];
+  return Promise.all(refs.map((r) => tx.get(r)));
+}
+function deleteRequestLocks(
+  tx: admin.firestore.Transaction,
+  locks: admin.firestore.DocumentSnapshot[],
+  requestId: string
+): void {
+  for (const l of locks) {
+    if (l.exists && (l.data() as Record<string, unknown>).requestId === requestId) tx.delete(l.ref);
+  }
+}
+
+// PATCH /shifts/plans/:planId/shiftRequests/:reqId — approve / reject.
+// :planId is the OWNING plan (the request's parent; the GET returns it as
+// `planId`). Allowed in any plan status — pending requests survive close /
+// publish. Body: { status: "approved" | "rejected", reviewNote? }.
+shiftsRouter.patch(
+  "/plans/:planId/shiftRequests/:reqId",
+  requireAuth,
+  requirePermission("shifts.changeRequest.review"),
+  async (req: AuthRequest, res) => {
+    const { planId, reqId } = req.params;
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const status = body.status as string;
+    if (status !== "approved" && status !== "rejected") {
+      res.status(400).json({ error: "Stav musí být approved nebo rejected" });
+      return;
+    }
+    const reviewNote =
+      typeof body.reviewNote === "string" && body.reviewNote.trim() !== "" ? body.reviewNote.trim().slice(0, 500) : null;
+
+    const planRef = db().collection("shiftPlans").doc(planId);
+    const reqRef = planRef.collection("shiftRequests").doc(reqId);
+    let data: Record<string, unknown> = {};
+    let cellBeforeRaw = "";
+    let cellRawAfter = "";
+    try {
+      await db().runTransaction(async (tx) => {
+        const reqSnap = await tx.get(reqRef);
+        if (!reqSnap.exists) throw new RequestConflict("Žádost nenalezena", 404);
+        data = reqSnap.data() as Record<string, unknown>;
+        if (data.status !== "pending") throw new RequestConflict("Tato žádost už byla vyřízena.");
+        const employeeId = String(data.employeeId ?? "");
+        const date = String(data.date ?? "");
+        const locks = await readRequestLocks(tx, planRef, data);
+
+        let cellWrite: { ref: admin.firestore.DocumentReference; value: Record<string, unknown> } | null = null;
+        if (status === "approved") {
+          const slot = parseRequestableShift(data.code);
+          if (!slot || !employeeId || !date) throw new RequestConflict("Žádost obsahuje neplatnou směnu.", 400);
+          const cellRef = planRef.collection("shifts").doc(`${employeeId}_${date}`);
+          const [cellSnap, daySnap] = await Promise.all([
+            tx.get(cellRef),
+            tx.get(planRef.collection("shifts").where("date", "==", date)),
+          ]);
+          const cell = cellSnap.exists ? (cellSnap.data() as Record<string, unknown>) : undefined;
+          // A vacation approved after the request was filed must not be
+          // silently overwritten by the approval.
+          if (cell?.source === "vacation") {
+            throw new RequestConflict("Zaměstnanec má v tento den schválenou dovolenou – žádost nelze schválit.");
+          }
+          // Re-check the slot against everyone ELSE's cells: someone may have
+          // been assigned it since the request was filed.
+          const takenByOther = daySnap.docs.some(
+            (d) => d.id !== cellRef.id && cellOccupiesSlot(d.data() as Record<string, unknown>, slot.segCode, slot.hotel)
+          );
+          if (takenByOther) {
+            throw new RequestConflict(
+              `Směnu ${slot.code} dne ${czDate(date)} mezitím dostal jiný zaměstnanec. Žádost můžete zamítnout.`
+            );
+          }
+          cellBeforeRaw = ((cell?.rawInput as string) ?? "") || "";
+          const parsed = parseShiftExpression(slot.code);
+          cellRawAfter = parsed.rawInput;
+          cellWrite = {
+            ref: cellRef,
+            value: {
+              employeeId,
+              date,
+              rawInput: parsed.rawInput,
+              segments: parsed.segments,
+              hoursComputed: parsed.hoursComputed,
+              isDouble: parsed.isDouble,
+              status: "assigned",
+              typeTag: null,
+              updatedAt: FieldValue.serverTimestamp(),
+            },
+          };
+        }
+
+        // Writes.
+        if (cellWrite) tx.set(cellWrite.ref, cellWrite.value);
+        tx.update(reqRef, {
+          status,
+          reviewedByUid: req.uid ?? null,
+          reviewedAt: FieldValue.serverTimestamp(),
+          reviewNote,
+        });
+        // Terminal transition → free the locks (after an approval the cell
+        // itself occupies the slot).
+        deleteRequestLocks(tx, locks, reqId);
+        tx.update(planRef, { updatedAt: FieldValue.serverTimestamp() });
+      });
+    } catch (e) {
+      if (e instanceof RequestConflict) {
+        res.status(e.status).json({ error: e.message });
+        return;
+      }
+      throw e;
+    }
+
+    const actingPlanId = typeof data.actingPlanId === "string" ? data.actingPlanId : "";
+    if (actingPlanId && actingPlanId !== planId) {
+      // December page polls its own updatedAt — bump it after a Jan 1 decision.
+      await db().collection("shiftPlans").doc(actingPlanId).update({ updatedAt: FieldValue.serverTimestamp() }).catch(() => {});
+    }
+    const date = String(data.date ?? "");
+    const ym = { year: Number(date.slice(0, 4)) || undefined, month: Number(date.slice(5, 7)) || undefined };
+    const ctx = ctxFromReq(req);
+    if (status === "approved" && cellBeforeRaw !== cellRawAfter) {
+      await logUpdate(ctx, {
+        collection: "shiftPlans/shifts",
+        resourceId: planId,
+        subResourceId: `${data.employeeId}_${date}`,
+        employeeId: data.employeeId as string | undefined,
+        ...ym,
+        before: { rawInput: cellBeforeRaw },
+        after: { rawInput: cellRawAfter },
+      });
+    }
+    await logUpdate(ctx, {
+      collection: "shiftPlans/shiftRequests",
+      resourceId: planId,
+      subResourceId: reqId,
+      employeeId: data.employeeId as string | undefined,
+      event: status === "approved" ? "shift.request.approve" : "shift.request.reject",
+      ...ym,
+      before: { status: "pending" },
+      after: { status, ...(reviewNote ? { reviewNote } : {}) },
+    });
+    res.json({ ok: true });
+  }
+);
+
+// DELETE /shifts/plans/:planId/shiftRequests/:reqId — the requester withdraws
+// their own PENDING request (any plan status). The doc is kept with status
+// "withdrawn" (history), and its slot locks are released.
+shiftsRouter.delete(
+  "/plans/:planId/shiftRequests/:reqId",
+  requireAuth,
+  requirePermission("shifts.cells.editOwnX"),
+  async (req: AuthRequest, res) => {
+    const { planId, reqId } = req.params;
+    const planRef = db().collection("shiftPlans").doc(planId);
+    const reqRef = planRef.collection("shiftRequests").doc(reqId);
+    const ownId = await callerEmployeeId(req);
+    let data: Record<string, unknown> = {};
+    try {
+      await db().runTransaction(async (tx) => {
+        const snap = await tx.get(reqRef);
+        if (!snap.exists) throw new RequestConflict("Žádost nenalezena", 404);
+        data = snap.data() as Record<string, unknown>;
+        const mine = data.requestedByUid === req.uid || (!!ownId && data.employeeId === ownId);
+        if (!mine) throw new RequestConflict("Nemáte oprávnění tuto žádost stáhnout.", 403);
+        if (data.status !== "pending") throw new RequestConflict("Stáhnout lze pouze čekající žádost.", 400);
+        const locks = await readRequestLocks(tx, planRef, data);
+        tx.update(reqRef, { status: "withdrawn", withdrawnAt: FieldValue.serverTimestamp() });
+        deleteRequestLocks(tx, locks, reqId);
+        tx.update(planRef, { updatedAt: FieldValue.serverTimestamp() });
+      });
+    } catch (e) {
+      if (e instanceof RequestConflict) {
+        res.status(e.status).json({ error: e.message });
+        return;
+      }
+      throw e;
+    }
+    const actingPlanId = typeof data.actingPlanId === "string" ? data.actingPlanId : "";
+    if (actingPlanId && actingPlanId !== planId) {
+      await db().collection("shiftPlans").doc(actingPlanId).update({ updatedAt: FieldValue.serverTimestamp() }).catch(() => {});
+    }
+    const date = String(data.date ?? "");
+    await logUpdate(ctxFromReq(req), {
+      collection: "shiftPlans/shiftRequests",
+      resourceId: planId,
+      subResourceId: reqId,
+      employeeId: data.employeeId as string | undefined,
+      event: "shift.request.withdraw",
+      year: Number(date.slice(0, 4)) || undefined,
+      month: Number(date.slice(5, 7)) || undefined,
+      before: { status: "pending" },
+      after: { status: "withdrawn" },
     });
     res.json({ ok: true });
   }
