@@ -1,5 +1,5 @@
 import { useEffect, useRef, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 import { parseShiftExpression, getCellColor, ALL_TYPE_TAGS, typeTagToCounterKey, isPureNumericExpression } from "../lib/shiftConstants";
 import { useTheme } from "../context/ThemeContext";
 
@@ -22,6 +22,9 @@ interface Props {
   pendingRequest?: { code: string } | null;
   /** Withdraw the viewer's own pending request (shown only for own requests). */
   onWithdrawRequest?: () => void;
+  /** On an X-toggle cell, a TOUCH tap opens the editor instead of only
+   *  focusing (request-window dates: a phone has no key to start typing). */
+  tapToEdit?: boolean;
 }
 
 export default function ShiftCell({
@@ -38,6 +41,7 @@ export default function ShiftCell({
   onSaveTypeTag,
   pendingRequest,
   onWithdrawRequest,
+  tapToEdit,
 }: Props) {
   const { theme } = useTheme();
   const dark = theme === "dark";
@@ -88,6 +92,23 @@ export default function ShiftCell({
     committedRef.current = false;
     setDraft(rawInput.toUpperCase());
     setEditing(true);
+  }
+
+  // Pointer type of the last press on the display cell (click events carry no
+  // reliable pointerType in Safari).
+  const lastPointerTypeRef = useRef<string>("mouse");
+
+  /** Touch variant of startEdit. iOS raises the keyboard only when focus() runs
+   *  synchronously inside the tap handler, so render the input now (flushSync)
+   *  and focus it here instead of in the deferred editing effect. */
+  function startEditFromTap() {
+    if (readOnly || saving) return;
+    committedRef.current = false;
+    flushSync(() => {
+      setDraft(rawInput.toUpperCase());
+      setEditing(true);
+    });
+    inputRef.current?.focus();
   }
 
   function cancelEdit() {
@@ -224,6 +245,10 @@ export default function ShiftCell({
           display: "block",
         }}
         value={draft}
+        autoCapitalize="characters"
+        autoComplete="off"
+        autoCorrect="off"
+        spellCheck={false}
         onChange={(e) => setDraft(e.target.value.toUpperCase())}
         onKeyDown={handleEditKeyDown}
         onBlur={commitEdit}
@@ -333,10 +358,21 @@ export default function ShiftCell({
         // On an X-toggle cell (OPEN plan) a click only focuses – double-click
         // toggles the X, and typing still opens the editor. This keeps the
         // double-click from first entering edit mode, which would race the
-        // toggle's save.
-        if (onDoubleClickX) return;
+        // toggle's save. Exception: a touch tap on a request-window cell opens
+        // the editor, otherwise a phone user can never type a shift code
+        // (X can still be typed there).
+        if (onDoubleClickX) {
+          if (tapToEdit && lastPointerTypeRef.current === "touch") {
+            setSaveError(null);
+            startEditFromTap();
+          }
+          return;
+        }
         setSaveError(null);
         startEdit();
+      }}
+      onPointerDown={(e) => {
+        lastPointerTypeRef.current = e.pointerType;
       }}
       onDoubleClick={() => {
         if (!readOnly && onDoubleClickX) {
