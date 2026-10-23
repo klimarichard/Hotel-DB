@@ -192,6 +192,40 @@ Free-claim rows render "—" in this column (they have no `requestedChange`).
 - Employees can set/delete **X only** (enforced frontend + backend).
 - **Approval idempotency (v3.2.1).** The three approval endpoints (unavailability, shift-override, shift-change-request `PATCH`) now return **404** when the request doc is missing and **409** when its `status` is not `"pending"`. A re-approval race therefore cannot run a second `.set()` on the shift cell and clobber a later manual edit. Free-claim approval additionally re-checks `isSlotCovered` and 409s if the slot has been filled in the meantime.
 
+### Linked 1 January column on the December plan (v5.14.0)
+
+The December grid shows one extra column after 31 Dec: **1 January of the next year**. That column is **not December data**. Every Jan 1 record (cells, MOD, `shiftSplits`, the free-DPA day flag, override / change requests, shift requests) lives **only in the January plan** (single source of truth), so payroll, the 4D summary (collection group by `date`), `scheduleLookup` and `applyVacationXs` needed no change. Business rules: `docs/business-rules.md`.
+
+- **Read.** `GET /shifts/plans/:planId` of a December plan returns `linkedNextDay` (or `null` when January does not exist yet), **separate from `shifts`**: `{ planId, year, month: 1, date, status, shifts, modShift, modPersons, splits, freeShiftDpa, shiftRequests }`. Visibility mirrors January's own GET (snapshot when January is `closed` for viewers who cannot see all plans; splits only with `shifts.counterTable.view`; orphan cells filtered against **January's** roster). The frontend keeps this beside, never merged into, `plan.shifts`, so December per-row totals, X limits and payroll exclude Jan 1.
+- **Write routing** (`functions/src/routes/shifts.ts`). `linkedNextDayDate(plan)` returns `${year+1}-01-01` for month 12, else null. `resolveDateRoute(planId, date)` is side-effect free and returns `{ actingRef, actingData, owningRef, linked }` (400 for a date outside the plan's month other than the linked day; `owningRef` is null while January does not exist). `materializeOwningPlan()` runs only **after** the request's gates pass: it creates January if missing, copies December's whole roster when January's is empty, and `ensureEmployeeInLinkedPlan()` copies single employees. `bumpRoutePlans()` bumps `updatedAt` on both plans so December's change poll reloads. Routed endpoints: cell `PUT/DELETE .../shifts/:employeeId/:date` (via `writeShiftCell`), `PUT/DELETE .../splits...`, `PATCH .../free-dpa-day`, `PUT/DELETE .../mod/:date`, `POST .../shiftOverrides`, `POST .../shiftChangeRequests`, `POST .../shiftRequests`.
+- **Which plan's rules apply.** The **status gate is the acting (December) plan's**; **X rules (limits, vacation, roster) are evaluated against the owning (January) plan**.
+- **January creation.** Auto-created on December `POST /shifts/plans` (`linkedFromPlanId` = December id; its roster is copied right after December's own create), or lazily on the first Jan 1 write (`ensureLinkedJanuaryPlan`, one transaction that also touches the December doc so concurrent first writes serialize). Status `created`, no deadlines.
+- **`copy-employees` now skips employees already on the target** (audit `extra.skippedPresent`), so repeat copies and the January auto-roster never duplicate rows.
+- **Known limits.** The 6-in-a-row rule does not span New Year. Edits made directly in the January plan do **not** bump December's `updatedAt` (the December page picks them up on next load).
+
+### Shift-request windows (v5.14.0)
+
+A plan may carry `shiftRequestWindows: [{from, to}]` (max 10, sorted, overlaps merged, each inside the plan's *displayed* dates – December includes Jan 1). Inside a window a self-service employee may **request one specific shift** (e.g. `DA`, `NS`, `DPQ`) in their own row instead of only entering X; a reviewer approves, and approval writes the cell.
+
+| Endpoint | Gate | Notes |
+|---|---|---|
+| `PUT /shifts/plans/:planId/request-windows` | `shifts.plan.edit` | Body `{ windows }`; `[]` clears; any plan status; audited as a plan update. |
+| `POST /shifts/plans/:planId/shiftRequests` | `shifts.cells.editOwnX` | Body `{ employeeId, date, code }`. `:planId` is the **acting** plan; must be `opened`, date inside its windows, own row only (`users/{uid}.employeeId`), on its roster. 409 on conflicts. |
+| `PATCH /shifts/plans/:owningPlanId/shiftRequests/:reqId` | `shifts.changeRequest.review` | `{ status: approved\|rejected, reviewNote? }`; any plan status; 404/409 if missing/not pending. |
+| `DELETE /shifts/plans/:owningPlanId/shiftRequests/:reqId` | `shifts.cells.editOwnX` | Requester withdraws own **pending** request; doc kept as `withdrawn`. |
+| `GET /shifts/shiftRequests/pending`, `.../pending-count` | `shifts.changeRequest.review` | Collection group, `orderBy("requestedAt","desc")` (needed for the index). |
+
+- **Schema.** `shiftPlans/{owningPlanId}/shiftRequests/{id}`: `{ employeeId, date, code, status: pending|approved|rejected|withdrawn, actingPlanId, requestedByUid, requestedAt, reviewedByUid, reviewedAt, reviewNote }`. Request docs live in the **owning** plan (January for Jan 1). `GET` plan responses carry `shiftRequestWindows` and `shiftRequests` (visible to everyone who can view the plan, so colleagues see a taken slot).
+- **Requestable codes.** `parseRequestableShift()` in `functions/src/services/shiftParser.ts` (hand-mirrored in `frontend/src/lib/shiftConstants.ts`; the server is the gate): exactly one plain token `D|N|ZD|ZN|DP|NP` **plus a hotel letter**; no `+`, `²`, hours, R/HO/REZ/X.
+- **One taker per slot, race-safe.** Lock docs `shiftPlans/{owningPlanId}/shiftRequestSlots/{date}__{code}` (kind `slot`) and `{date}__emp__{employeeId}` (kind `employee-day`, one pending request per employee per day) are created with the request in one transaction and deleted in the same transaction as every terminal transition (approve/reject/withdraw). A slot is also taken once any cell that day holds that code + hotel. Approval re-checks vacation cells and other people's cells before writing the cell (`status: "assigned"`).
+- **Index.** New `COLLECTION_GROUP` index `shiftRequests (status ASC, requestedAt DESC)` in `firestore.indexes.json` – deploy it or both pending endpoints fail on real Firestore.
+- **Audit.** Collection `shiftPlans/shiftRequests`, events `shift.request.approve|reject|withdraw` (labels in `frontend/src/lib/audit/labels.ts`, fields in `fields.shifts.ts`). Deleting a plan also purges the two new sub-collections.
+- **Frontend.** `components/ShiftRequestWindowsEditor.tsx` (deadline-style editor, `shifts.plan.edit`), `components/ShiftRequestPanel.tsx`, pending requests render as italic `XX?` in `ShiftCell` (withdraw via the corner cross), the Upozornění tab `PendingShiftChangeRequestsTab` lists them with approve/reject, and `ShiftChangeRequestsContext` adds `shiftRequests/pending-count` to the badge. Tour step "Žádost o konkrétní směnu" (`addedInVersion: 22`, tour version 22).
+
+### ShiftCell commits once per edit session (v5.14.0 fix)
+
+`ShiftCell.tsx` guards the commit with `committedRef`: the Enter/Escape keydown commit and the following `onBlur` used to both save, the second with a stale `baseRawInput`, producing false 409 "edited by another user" dialogs. Now exactly one save is sent per edit session (the ref resets when a new edit starts).
+
 ### Shift types
 - Bare `D` and `N` are invalid — hotel code required (e.g. `DA`, `NS`). `R` and `X` are valid standalone.
 - `ZD`/`ZN` also require hotel code (e.g. `ZDA`). Hour dotation: 12h.
