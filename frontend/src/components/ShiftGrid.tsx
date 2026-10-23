@@ -769,6 +769,7 @@ export default function ShiftGrid({
                                 ? () => onWithdrawRequest(emp.employeeId, dateStr)
                                 : undefined
                             }
+                            tapToEdit={requestWindowDates?.has(dateStr) ?? false}
                           />
                         </td>
                       );
