@@ -185,6 +185,14 @@
       ]
     },
     {
+      "collectionGroup": "shiftRequests",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "requestedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "shiftPlans",
       "queryScope": "COLLECTION",
       "fields": [

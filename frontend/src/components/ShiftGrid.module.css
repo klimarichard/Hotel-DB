@@ -122,6 +122,12 @@
   background: var(--color-holiday-bg);
 }
 
+/* December's linked 1 January column (data lives in the January plan): a left
+   rule separates it from 31 Dec. Combines with weekend/holiday/today. */
+.linkedDay {
+  border-left: 2px solid var(--color-text-muted);
+}
+
 /* ── Section divider row ──────────────────────────────────────────────── */
 
 /* Both cells (label + filler) carry the bar background + divider borders so the
@@ -703,4 +709,11 @@
   font-weight: 500;
   color: var(--color-text-subtle);
   white-space: nowrap;
+}
+
+/* Day header inside a shift-request window ("Lze žádat o konkrétní směnu"): a
+   thin accent bar along the bottom, so it combines with today/weekend/holiday
+   backgrounds without fighting them. */
+.requestWindowDay {
+  box-shadow: inset 0 -3px 0 var(--color-primary);
 }

@@ -108,6 +108,7 @@ export const APP_TOUR_STEPS: TourStep[] = [
   { permission: ["shifts.view.all", "shifts.view.self"], anchor: "shift-month-nav", route: DEMO_SHIFTS, title: "Výběr měsíce", body: "Šipkami přecházíte mezi měsíci. Pokud jste v jiném než aktuálním měsíci, objeví se tlačítko DNES, kterým se vrátíte na aktuální měsíc.", placement: "bottom" },
   { permission: "shifts.view.all", anchor: "shift-rows", route: DEMO_SHIFTS, title: "Celý plán směn", body: "Tabulka zobrazuje měsíční plán směn pro recepci. Kódy (DA, NS, X…) označují typ směny nebo volno. Legenda je pod tabulkou.", placement: "bottom" },
   { permission: "shifts.cells.editOwnX", excludeIfPermission: "shifts.cells.edit", addedInVersion: 11, anchor: "shift-rows", route: DEMO_SHIFTS, title: "Zadání vlastního volna (X)", body: "Do svého řádku můžete po vytvoření plánu směn na další měsíc přímo zadat volno (X). Volno můžete zadat dvojklikem na danou buňku. Maximální počet pro zaměstnance na plný úvazek je 8 X, pro poloviční úvazek 13 X. Pokud potřebujete více dní, můžete požádat o výjimku (po zadání devátého/čtrnáctého X se vám automaticky zobrazí okno s žádostí o X navíc, kam napíšete odůvodnění). Admin poté žádost schválí, nebo zamítne (také s odůvodněním). Pokud potřebujete zadat 7 a více dní volna v kuse, požádejte o dovolenou.", placement: "bottom" },
+  { permission: "shifts.cells.editOwnX", excludeIfPermission: "shifts.cells.edit", addedInVersion: 22, anchor: "shift-rows", route: DEMO_SHIFTS, title: "Žádost o konkrétní směnu", body: "Dny, ve kterých můžete požádat o konkrétní směnu, mají v záhlaví tabulky modrou linku. V takový den napište do své buňky kód směny s hotelem (např. DA nebo NS) a potvrďte Enterem – odešle se žádost ke schválení. Čekající žádost je v buňce zobrazená kurzívou s otazníkem (např. DA?), stejně ji vidí i kolegové. Křížkem v rohu buňky svou žádost stáhnete.", placement: "bottom" },
   { permission: "shifts.cells.edit", anchor: "shift-rows", route: DEMO_SHIFTS, title: "Vyplňování plánu", body: "V tabulce směn můžete kliknutím do buňky upravovat směny všech zaměstnanců.", placement: "bottom" },
   { permission: "shifts.mod.manage", anchor: "shift-mod-row", route: DEMO_SHIFTS, title: "MOD", body: "V tomto řádku můžete přiřadit manažerům MOD pro daný den.", placement: "bottom" },
   // Spotlights the redesigned change-request modal itself. The modal is
@@ -326,7 +327,7 @@ export const appTour: TourDefinition = {
   // Highest step `addedInVersion` in the list. Bump it (and stamp the new steps'
   // `addedInVersion`) whenever you add steps for a new feature – returning users
   // then see ONLY those steps; first-time users still get the whole tour.
-  version: 21,
+  version: 22,
   label: "Prohlídka aplikace",
   steps: APP_TOUR_STEPS,
 };

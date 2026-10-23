@@ -6,7 +6,7 @@ import { requirePermission, isSharedTerminalType } from "../auth/permissions";
 import { HOTEL_SLUGS, hotelViewPerm } from "../services/hotels";
 import { scheduledEmployeeId } from "../services/scheduleLookup";
 import { currentReceptionShiftPrague } from "../services/recepceEmployees";
-import { parseShiftExpression, HOTEL_CODES, isPureNumericExpression, sanitizeTypeTag } from "../services/shiftParser";
+import { parseShiftExpression, parseRequestableShift, HOTEL_CODES, isPureNumericExpression, sanitizeTypeTag } from "../services/shiftParser";
 import {
   CountedTag,
   FULL_SHIFT_HOURS,
@@ -24,6 +24,7 @@ import {
   resolveEmployeeNameParts,
 } from "../services/employeeNames";
 import {
+  AuditContext,
   ctxFromReq,
   logCreate,
   logUpdate,
@@ -639,6 +640,400 @@ shiftsRouter.get(
   }
 );
 
+// ─── December → 1 January linked column ──────────────────────────────────────
+//
+// The December grid renders one extra column after 31 Dec: 1 January of the next
+// year. That column is NOT December data — single source of truth: every Jan 1
+// record (cells, MOD, splits, the free-DPA day flag, override / change requests)
+// lives ONLY in the January plan. Payroll, the 4D summary (collectionGroup by
+// date), scheduleLookup and applyVacationXs therefore need no change at all.
+//
+// Reads: GET of a December plan returns `linkedNextDay` (separate from `shifts`,
+// so no December counter / X limit / payroll figure ever includes Jan 1).
+// Writes: the write endpoints of the December plan accept the Jan 1 date and are
+// ROUTED to the January plan (resolveDateRoute + materializeOwningPlan). The
+// status/permission gate is evaluated against the December (acting) plan; data
+// rules (self-service X limits etc.) against the January (owning) plan.
+
+/** `${year+1}-01-01` for a December plan, null for every other month. */
+function linkedNextDayDate(planData: Record<string, unknown> | undefined): string | null {
+  const year = Number(planData?.year);
+  const month = Number(planData?.month);
+  if (month !== 12 || !Number.isInteger(year)) return null;
+  return `${year + 1}-01-01`;
+}
+
+function planQueryByMonth(year: number, month: number): admin.firestore.Query {
+  return db().collection("shiftPlans").where("year", "==", year).where("month", "==", month).limit(1);
+}
+
+/** planEmployees copy: the X-limit override is month-specific, never carried. */
+function planEmployeeCopyData(data: Record<string, unknown>): Record<string, unknown> {
+  const { xLimitOverride: _x, xAllowanceExtra: _xa, createdAt: _c, updatedAt: _u, ...rest } = data;
+  void _x; void _xa; void _c; void _u;
+  return { ...rest, createdAt: FieldValue.serverTimestamp() };
+}
+
+/**
+ * Return the January plan of `decYear + 1`, creating it (status "created", no
+ * deadlines, December's current roster copied) when it does not exist yet.
+ *
+ * Duplicate-safe: the existence check and the create run in ONE transaction that
+ * also reads + bumps the December plan doc, so two concurrent first-writes to the
+ * Jan 1 column serialize on that doc and the loser re-runs, finding the plan.
+ */
+async function ensureLinkedJanuaryPlan(
+  ctx: AuditContext,
+  decRef: admin.firestore.DocumentReference,
+  decYear: number
+): Promise<admin.firestore.DocumentReference> {
+  const janYear = decYear + 1;
+  const result = await db().runTransaction(async (tx) => {
+    await tx.get(decRef);
+    const snap = await tx.get(planQueryByMonth(janYear, 1));
+    if (!snap.empty) return { ref: snap.docs[0].ref, created: false };
+    const ref = db().collection("shiftPlans").doc();
+    tx.set(ref, {
+      month: 1,
+      year: janYear,
+      status: "created",
+      createdBy: ctx.uid && ctx.uid !== "system" ? ctx.uid : null,
+      openedAt: null,
+      closedAt: null,
+      publishedAt: null,
+      linkedFromPlanId: decRef.id,
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    tx.update(decRef, { updatedAt: FieldValue.serverTimestamp() });
+    return { ref, created: true };
+  });
+  if (!result.created) return result.ref;
+
+  const copied = await copyRosterToLinkedPlan(decRef, result.ref, janYear);
+  await logCreate(ctx, {
+    collection: "shiftPlans",
+    resourceId: result.ref.id,
+    summary: { year: janYear, month: 1, autoCreated: true, linkedFromPlanId: decRef.id, copiedEmployees: copied },
+  });
+  return result.ref;
+}
+
+/**
+ * Copy December's whole roster into January (same doc ids, like copy-employees,
+ * so a repeat or a concurrent copy overwrites the same docs instead of
+ * duplicating rows), then auto-fill approved vacation Xs for January exactly as
+ * adding an employee does. Returns the number of rows copied.
+ */
+async function copyRosterToLinkedPlan(
+  decRef: admin.firestore.DocumentReference,
+  janRef: admin.firestore.DocumentReference,
+  janYear: number
+): Promise<number> {
+  const decEmps = await decRef.collection("planEmployees").get();
+  if (decEmps.empty) return 0;
+  const batch = db().batch();
+  for (const d of decEmps.docs) {
+    batch.set(janRef.collection("planEmployees").doc(d.id), planEmployeeCopyData(d.data()));
+  }
+  await batch.commit();
+  for (const d of decEmps.docs) {
+    const empId = d.data().employeeId as string | undefined;
+    if (empId) await applyVacationXs(janRef, empId, janYear, 1);
+  }
+  return decEmps.size;
+}
+
+/**
+ * Make sure `employeeId` is on the owning (January) roster, copying their
+ * planEmployee doc from the acting (December) plan when missing. No-op when the
+ * employee is not on the December roster either (mirrors the cell PUT, which has
+ * never required roster membership).
+ */
+async function ensureEmployeeInLinkedPlan(
+  ctx: AuditContext,
+  actingRef: admin.firestore.DocumentReference,
+  owningRef: admin.firestore.DocumentReference,
+  employeeId: string
+): Promise<void> {
+  if (!employeeId) return;
+  const existing = await owningRef.collection("planEmployees").where("employeeId", "==", employeeId).limit(1).get();
+  if (!existing.empty) return;
+  const src = await actingRef.collection("planEmployees").where("employeeId", "==", employeeId).limit(1).get();
+  if (src.empty) return;
+  const srcDoc = src.docs[0];
+  const data = planEmployeeCopyData(srcDoc.data());
+  let targetRef = owningRef.collection("planEmployees").doc(srcDoc.id);
+  try {
+    await targetRef.create(data);
+  } catch (e) {
+    if ((e as { code?: number }).code !== 6) throw e; // 6 = ALREADY_EXISTS
+    const taken = await targetRef.get();
+    // A concurrent request already copied this very employee → done.
+    if ((taken.data() as Record<string, unknown> | undefined)?.employeeId === employeeId) return;
+    targetRef = await owningRef.collection("planEmployees").add(data);
+  }
+  const owningSnap = await owningRef.get();
+  const owningData = owningSnap.data() as Record<string, unknown>;
+  const section = data.section as string;
+  if (section) {
+    await renumberSection(owningRef, section, { docId: targetRef.id, newOrder: Number(data.displayOrder ?? 100) });
+  }
+  await applyVacationXs(owningRef, employeeId, Number(owningData.year), Number(owningData.month));
+  await owningRef.update({ updatedAt: FieldValue.serverTimestamp() });
+  await logCreate(ctx, {
+    collection: "shiftPlans/planEmployees",
+    resourceId: owningRef.id,
+    subResourceId: targetRef.id,
+    employeeId,
+    summary: {
+      firstName: data.firstName,
+      lastName: data.lastName,
+      section,
+      primaryShiftType: data.primaryShiftType ?? null,
+      primaryHotel: data.primaryHotel ?? null,
+      autoLinkedFromPlanId: actingRef.id,
+    },
+  });
+}
+
+interface DateRoute {
+  /** The plan the request was addressed to (status / permission gates). */
+  actingRef: admin.firestore.DocumentReference;
+  actingData: Record<string, unknown>;
+  /** The plan that stores the date. null = linked date whose January plan does
+   *  not exist yet (only before materializeOwningPlan). */
+  owningRef: admin.firestore.DocumentReference | null;
+  /** True when the date is the December plan's linked 1 January. */
+  linked: boolean;
+}
+
+/**
+ * Resolve which plan owns `date` for a write addressed to `planId`. Has no side
+ * effects. Non-December plans: the plan itself (behaviour unchanged). December:
+ * its own dates → itself; `${year+1}-01-01` → the January plan; anything else →
+ * 400 (a December plan never stores another month's date).
+ */
+async function resolveDateRoute(
+  planId: string,
+  date: string
+): Promise<DateRoute | { status: number; error: string }> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { status: 400, error: "Neplatný formát data" };
+  const actingRef = db().collection("shiftPlans").doc(planId);
+  const actingSnap = await actingRef.get();
+  if (!actingSnap.exists) return { status: 404, error: "Plán nenalezen" };
+  const actingData = actingSnap.data() as Record<string, unknown>;
+  const linkedDate = linkedNextDayDate(actingData);
+  if (linkedDate === null) return { actingRef, actingData, owningRef: actingRef, linked: false };
+  if (date === linkedDate) {
+    const janSnap = await planQueryByMonth(Number(actingData.year) + 1, 1).get();
+    return { actingRef, actingData, owningRef: janSnap.empty ? null : janSnap.docs[0].ref, linked: true };
+  }
+  if (!date.startsWith(`${Number(actingData.year)}-12-`)) {
+    return { status: 400, error: "Datum nepatří do tohoto plánu" };
+  }
+  return { actingRef, actingData, owningRef: actingRef, linked: false };
+}
+
+/**
+ * For a linked route: create the January plan when missing and copy the given
+ * employees onto its roster. Returns the owning plan ref (unchanged for a
+ * non-linked route). Call only AFTER the request's gates have passed.
+ */
+async function materializeOwningPlan(
+  req: AuthRequest,
+  route: DateRoute,
+  employeeIds: (string | null | undefined)[]
+): Promise<admin.firestore.DocumentReference> {
+  if (!route.linked) return route.owningRef!;
+  const ctx = ctxFromReq(req);
+  const owningRef = route.owningRef ?? (await ensureLinkedJanuaryPlan(ctx, route.actingRef, Number(route.actingData.year)));
+  route.owningRef = owningRef;
+  // A January auto-created together with December starts with an EMPTY roster
+  // (December's is copied in only after its own create). Fill it with December's
+  // whole roster on the first linked write, so January's rules (e.g. "5 recepce
+  // must stay available") see the real team, not just the one person writing.
+  const anyJanEmp = await owningRef.collection("planEmployees").limit(1).get();
+  if (anyJanEmp.empty) {
+    const copied = await copyRosterToLinkedPlan(route.actingRef, owningRef, Number(route.actingData.year) + 1);
+    if (copied > 0) {
+      await writeAudit(ctx, {
+        action: "create",
+        collection: "shiftPlans/planEmployees",
+        resourceId: owningRef.id,
+        extra: { kind: "copy-employees", sourcePlanId: route.actingRef.id, copied, linkedNextDay: true },
+      });
+    }
+  }
+  for (const id of new Set(employeeIds.filter((x): x is string => typeof x === "string" && x !== ""))) {
+    await ensureEmployeeInLinkedPlan(ctx, route.actingRef, owningRef, id);
+  }
+  return owningRef;
+}
+
+/** Bump updatedAt on the owning plan, and on the acting plan too when linked
+ *  (so the December page's change poll reloads after a Jan 1 write). */
+async function bumpRoutePlans(route: DateRoute): Promise<void> {
+  const ts = { updatedAt: FieldValue.serverTimestamp() };
+  if (route.owningRef) await route.owningRef.update(ts);
+  if (route.linked) await route.actingRef.update(ts);
+}
+
+// ─── Shift-request windows (žádosti o konkrétní směnu) ───────────────────────
+//
+// A plan may carry `shiftRequestWindows: [{from, to}]` — date ranges in which a
+// self-service employee (shifts.cells.editOwnX) may REQUEST one specific shift
+// (e.g. "DA") in their own row instead of only entering X. A request needs a
+// reviewer's approval (shifts.changeRequest.review); approving writes the cell.
+//
+// Same acting-vs-owning split as the linked 1 January above: the status gate and
+// the windows are the ACTING plan's (the one the employee is looking at — for
+// December that includes its linked 1 January); the request, its slot lock and
+// the cell the approval writes live in the OWNING plan (January for Jan 1).
+//
+// One taker per slot (date, code): a slot is taken while another request for it
+// is PENDING, or once any cell on that date already holds that code + hotel.
+// Race-safety: a deterministic lock doc `shiftRequestSlots/{date}__{code}` is
+// created in the submit transaction (plus `{date}__emp__{employeeId}` for "one
+// pending request per employee per day") and deleted on every terminal
+// transition (approve / reject / withdraw). After an approval the cell itself
+// occupies the slot.
+
+const MAX_REQUEST_WINDOWS = 10;
+
+interface RequestWindow {
+  from: string;
+  to: string;
+}
+
+/** First and last date the plan DISPLAYS (December: through its linked 1 Jan). */
+function planDisplayedRange(planData: Record<string, unknown>): { first: string; last: string } | null {
+  const year = Number(planData.year);
+  const month = Number(planData.month);
+  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) return null;
+  const mm = String(month).padStart(2, "0");
+  const lastDay = new Date(year, month, 0).getDate();
+  const linked = linkedNextDayDate(planData);
+  return {
+    first: `${year}-${mm}-01`,
+    last: linked ?? `${year}-${mm}-${String(lastDay).padStart(2, "0")}`,
+  };
+}
+
+/** Real calendar date check (rejects 2026-02-30 etc.) without any UTC parsing. */
+function isRealIsoDate(s: unknown): s is string {
+  if (typeof s !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const [y, m, d] = s.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  return dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d;
+}
+
+/** The plan's stored windows, defensively read (absent / legacy → []). */
+function readRequestWindows(planData: Record<string, unknown> | undefined): RequestWindow[] {
+  const raw = planData?.shiftRequestWindows;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (w): w is RequestWindow =>
+      !!w && typeof w === "object" && isRealIsoDate((w as RequestWindow).from) && isRealIsoDate((w as RequestWindow).to)
+  );
+}
+
+function isDateInRequestWindows(windows: RequestWindow[], date: string): boolean {
+  return windows.some((w) => w.from <= date && date <= w.to);
+}
+
+/**
+ * Validate + normalise windows for a plan: from ≤ to, both inside the plan's
+ * displayed dates, at most MAX_REQUEST_WINDOWS; sorted, overlapping ranges merged.
+ */
+function normalizeRequestWindows(
+  input: unknown,
+  planData: Record<string, unknown>
+): RequestWindow[] | { error: string } {
+  if (!Array.isArray(input)) return { error: "Okna musí být seznam rozsahů." };
+  if (input.length > MAX_REQUEST_WINDOWS) {
+    return { error: `Nejvýše ${MAX_REQUEST_WINDOWS} oken pro žádosti o směnu.` };
+  }
+  const range = planDisplayedRange(planData);
+  if (!range) return { error: "Plán nemá platný měsíc." };
+  const list: RequestWindow[] = [];
+  for (const w of input) {
+    const from = (w as Record<string, unknown> | null)?.from;
+    const to = (w as Record<string, unknown> | null)?.to;
+    if (!isRealIsoDate(from) || !isRealIsoDate(to)) return { error: "Neplatné datum v okně." };
+    if (from > to) return { error: "Začátek okna musí být nejpozději v den jeho konce." };
+    if (from < range.first || to > range.last) {
+      return { error: "Okno musí ležet uvnitř zobrazených dnů plánu." };
+    }
+    list.push({ from, to });
+  }
+  list.sort((a, b) => (a.from === b.from ? a.to.localeCompare(b.to) : a.from.localeCompare(b.from)));
+  const merged: RequestWindow[] = [];
+  for (const w of list) {
+    const last = merged[merged.length - 1];
+    if (last && w.from <= last.to) {
+      if (w.to > last.to) last.to = w.to;
+    } else {
+      merged.push({ ...w });
+    }
+  }
+  return merged;
+}
+
+/** The employee record linked to the caller's user account (users/{uid}.employeeId). */
+async function callerEmployeeId(req: AuthRequest): Promise<string | null> {
+  if (!req.uid) return null;
+  const snap = await db().collection("users").doc(req.uid).get();
+  const eid = (snap.data() as Record<string, unknown> | undefined)?.employeeId;
+  return typeof eid === "string" && eid !== "" ? eid : null;
+}
+
+/** True when a stored cell already holds the shift `segCode`+`hotel` (e.g. D+A
+ *  in "DA", "DA+2" or "DA²"), or is a numeric cell tagged with that type. */
+function cellOccupiesSlot(data: Record<string, unknown> | undefined, segCode: string, hotel: string): boolean {
+  if (!data) return false;
+  const parsed = parseShiftExpression((data.rawInput as string) ?? "");
+  if (parsed.isValid && parsed.segments.some((s) => s.code === segCode && s.hotel === hotel)) return true;
+  return sanitizeTypeTag(data.typeTag) === segCode + hotel;
+}
+
+const slotLockId = (date: string, code: string) => `${date}__${code}`;
+const empLockId = (date: string, employeeId: string) => `${date}__emp__${employeeId}`;
+
+/** "2026-12-24" → "24. 12. 2026" for error messages. */
+function czDate(date: string): string {
+  const [y, m, d] = date.split("-").map(Number);
+  return `${d}. ${m}. ${y}`;
+}
+
+class RequestConflict {
+  constructor(public readonly message: string, public readonly status = 409) {}
+}
+
+/**
+ * The plan's shift requests for the GET payload. Withdrawn ones are dropped; a
+ * review note is shown only to reviewers and to the requester. `planId` is the
+ * OWNING plan (where the review / withdraw endpoints must be addressed).
+ */
+async function shiftRequestsForView(
+  req: AuthRequest,
+  planRef: admin.firestore.DocumentReference,
+  date?: string
+): Promise<Record<string, unknown>[]> {
+  const col = planRef.collection("shiftRequests");
+  const snap = await (date ? col.where("date", "==", date) : col).get();
+  const isReviewer = req.permissions?.has("shifts.changeRequest.review") ?? false;
+  return snap.docs
+    .map((d): Record<string, unknown> => ({ id: d.id, planId: planRef.id, ...(d.data() as Record<string, unknown>) }))
+    .filter((r) => r.status !== "withdrawn")
+    .map((r) => {
+      if (isReviewer || r.requestedByUid === req.uid) return r;
+      const { reviewNote: _n, ...rest } = r;
+      void _n;
+      return rest;
+    });
+}
+
 // POST /shifts/plans — create a plan
 shiftsRouter.post(
   "/plans",
@@ -686,6 +1081,17 @@ shiftsRouter.post(
       resourceId: ref.id,
       summary: { year, month },
     });
+    // December renders 1 January of the next year as a linked last column whose
+    // data lives in the January plan — make sure that plan exists (no-op if it
+    // already does). A failure here must not fail the December create; the Jan 1
+    // column creates it lazily on its first write anyway.
+    if (month === 12) {
+      try {
+        await ensureLinkedJanuaryPlan(ctxFromReq(req), ref, year);
+      } catch (e) {
+        console.error("Auto-create of the linked January plan failed:", e);
+      }
+    }
     res.status(201).json({ id: ref.id });
   }
 );
@@ -805,13 +1211,69 @@ shiftsRouter.get(
         .map((d) => ({ id: d.id, ...d.data() }));
     }
 
+    // December only: 1 January of the next year, read from the January plan (its
+    // single source of truth) and kept SEPARATE from `shifts` so no December
+    // counter, X limit or export-of-counts ever includes it. Same visibility rule
+    // as above, applied to January's own status.
+    let linkedNextDay: Record<string, unknown> | null = null;
+    const linkedDate = linkedNextDayDate(planData);
+    if (linkedDate) {
+      const janSnap = await planQueryByMonth(Number(planData.year) + 1, 1).get();
+      if (!janSnap.empty) {
+        const janDoc = janSnap.docs[0];
+        const janData = janDoc.data() as Record<string, unknown>;
+        const useSnapshot = janData.status === "closed" && !seesAllPlans;
+        const canSeeSplits = req.permissions?.has("shifts.counterTable.view") ?? false;
+        const [cellsSnap, janEmpsSnap, janModDoc, janSplitsSnap] = await Promise.all([
+          janDoc.ref.collection(useSnapshot ? "shiftsSnapshot" : "shifts").where("date", "==", linkedDate).get(),
+          janDoc.ref.collection("planEmployees").get(),
+          janDoc.ref.collection("modRow").doc(linkedDate).get(),
+          canSeeSplits
+            ? janDoc.ref.collection("shiftSplits").where("date", "==", linkedDate).get()
+            : Promise.resolve(null),
+        ]);
+        // Orphan filter against JANUARY's roster, exactly as January's own GET.
+        const janRoster = new Set(janEmpsSnap.docs.map((d) => d.data().employeeId as string));
+        const janDpa = Array.isArray(janData.freeShiftDpaDays) ? (janData.freeShiftDpaDays as string[]) : [];
+        linkedNextDay = {
+          planId: janDoc.id,
+          year: Number(janData.year),
+          month: 1,
+          date: linkedDate,
+          status: janData.status ?? null,
+          shifts: cellsSnap.docs
+            .filter((d) => janRoster.has(d.data().employeeId as string))
+            .map((d) => ({ id: d.id, ...d.data() })),
+          modShift: janModDoc.exists
+            ? { id: linkedDate, date: linkedDate, ...(janModDoc.data() as Record<string, unknown>) }
+            : null,
+          modPersons: (janData.modPersons as Record<string, string>) ?? {},
+          splits: janSplitsSnap
+            ? janSplitsSnap.docs
+                .map((d) => d.data() as { date?: unknown; type?: unknown; entries?: unknown })
+                .filter((d) => typeof d.date === "string" && isCountedTag(d.type))
+                .map((d) => ({ date: d.date as string, type: d.type as CountedTag, entries: readSplitEntries(d.entries) }))
+            : [],
+          freeShiftDpa: janDpa.includes(linkedDate),
+          // Jan 1 shift requests live in the January plan, like its cells.
+          shiftRequests: await shiftRequestsForView(req, janDoc.ref, linkedDate),
+        };
+      }
+    }
+
     res.json({
       id: planDoc.id,
       ...planData,
       modPersons: (planData.modPersons as Record<string, string>) ?? {},
+      shiftRequestWindows: readRequestWindows(planData),
       employees,
       shifts: visibleShifts,
       modShifts: modSnap.docs.map((d) => ({ id: d.id, date: d.id, ...d.data() })),
+      linkedNextDay,
+      // Everyone who can view the plan sees its requests (so a taken slot is
+      // visible to colleagues). A January plan's own list naturally includes its
+      // 1 January requests, submitted through December or through January.
+      shiftRequests: await shiftRequestsForView(req, planRef),
     });
   }
 );
@@ -942,33 +1404,84 @@ shiftsRouter.patch(
   }
 );
 
-// PATCH /shifts/plans/:planId/free-dpa-day — toggle a day where the DPA free-shift
-// row appears (admin/director). DPQ/NPQ/NPA rows are automatic; DPA is opt-in per day.
-shiftsRouter.patch(
-  "/plans/:planId/free-dpa-day",
+// PUT /shifts/plans/:planId/request-windows — replace the plan's shift-request
+// windows (any status). Body: { windows: [{ from, to }] }; [] clears them.
+shiftsRouter.put(
+  "/plans/:planId/request-windows",
   requireAuth,
-  requirePermission("shifts.freeShift.manage"),
-  async (req, res) => {
+  requirePermission("shifts.plan.edit"),
+  async (req: AuthRequest, res) => {
     const { planId } = req.params;
-    const body = req.body as Record<string, unknown>;
-    const date = body.date as string;
-    const enabled = body.enabled === true;
-
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      res.status(400).json({ error: "Neplatný formát data" });
-      return;
-    }
-
     const planRef = db().collection("shiftPlans").doc(planId);
     const planDoc = await planRef.get();
     if (!planDoc.exists) {
       res.status(404).json({ error: "Plán nenalezen" });
       return;
     }
-    const cur = Array.isArray(planDoc.data()?.freeShiftDpaDays)
-      ? (planDoc.data()!.freeShiftDpaDays as string[])
+    const planData = planDoc.data() as Record<string, unknown>;
+    const next = normalizeRequestWindows((req.body as Record<string, unknown>)?.windows, planData);
+    if ("error" in next) {
+      res.status(400).json({ error: next.error });
+      return;
+    }
+    const before = readRequestWindows(planData);
+    await planRef.update({ shiftRequestWindows: next, updatedAt: FieldValue.serverTimestamp() });
+    if (JSON.stringify(before) !== JSON.stringify(next)) {
+      await logUpdate(ctxFromReq(req), {
+        collection: "shiftPlans",
+        resourceId: planId,
+        before: { shiftRequestWindows: before },
+        after: { shiftRequestWindows: next },
+      });
+    }
+    res.json({ ok: true, shiftRequestWindows: next });
+  }
+);
+
+// PATCH /shifts/plans/:planId/free-dpa-day — toggle a day where the DPA free-shift
+// row appears (admin/director). DPQ/NPQ/NPA rows are automatic; DPA is opt-in per day.
+shiftsRouter.patch(
+  "/plans/:planId/free-dpa-day",
+  requireAuth,
+  requirePermission("shifts.freeShift.manage"),
+  async (req: AuthRequest, res) => {
+    const { planId } = req.params;
+    const body = req.body as Record<string, unknown>;
+    const date = body.date as string;
+    const enabled = body.enabled === true;
+
+    const route = await resolveDateRoute(planId, typeof date === "string" ? date : "");
+    if ("error" in route) {
+      res.status(route.status).json({ error: route.error });
+      return;
+    }
+    const actingDays = Array.isArray(route.actingData.freeShiftDpaDays)
+      ? (route.actingData.freeShiftDpaDays as string[])
       : [];
-    const set = new Set(cur);
+
+    // December's linked 1 January: the flag lives in the January plan. Response
+    // keeps `freeShiftDpaDays` = the ACTING plan's (unchanged) list so a client
+    // that blindly stores it never mixes January's days into December's.
+    if (route.linked) {
+      if (!route.owningRef && !enabled) {
+        res.json({ ok: true, freeShiftDpaDays: actingDays, linked: true, enabled: false });
+        return;
+      }
+      const owningRef = await materializeOwningPlan(req, route, []);
+      const owningSnap = await owningRef.get();
+      const cur = Array.isArray(owningSnap.data()?.freeShiftDpaDays)
+        ? (owningSnap.data()!.freeShiftDpaDays as string[])
+        : [];
+      const set = new Set(cur);
+      if (enabled) set.add(date); else set.delete(date);
+      await owningRef.update({ freeShiftDpaDays: [...set].sort(), updatedAt: FieldValue.serverTimestamp() });
+      await route.actingRef.update({ updatedAt: FieldValue.serverTimestamp() });
+      res.json({ ok: true, freeShiftDpaDays: actingDays, linked: true, enabled });
+      return;
+    }
+
+    const planRef = route.actingRef;
+    const set = new Set(actingDays);
     if (enabled) set.add(date); else set.delete(date);
     const next = [...set].sort();
 
@@ -1002,7 +1515,7 @@ shiftsRouter.delete(
       return;
     }
 
-    const subCols = ["planEmployees", "shifts", "shiftsSnapshot", "modRow", "rules", "unavailabilityRequests", "shiftOverrideRequests", "shiftChangeRequests"];
+    const subCols = ["planEmployees", "shifts", "shiftsSnapshot", "modRow", "rules", "unavailabilityRequests", "shiftOverrideRequests", "shiftChangeRequests", "shiftRequests", "shiftRequestSlots"];
     for (const col of subCols) {
       await deleteCollection(planRef.collection(col));
     }
@@ -1334,8 +1847,19 @@ shiftsRouter.post(
     const targetMonth = targetPlanData.month as number;
     const targetPlanRef = db().collection("shiftPlans").doc(planId);
 
+    // Skip employees already on the target roster. A January plan auto-created
+    // for December's linked 1 January column may already hold some of them
+    // (copied on the first Jan 1 write); re-adding them under a different doc id
+    // would duplicate their row. A same-id doc is skipped too (it IS that row).
+    const targetEmpsSnap = await targetPlanRef.collection("planEmployees").get();
+    const presentEmployeeIds = new Set(targetEmpsSnap.docs.map((d) => d.data().employeeId as string));
+    const presentDocIds = new Set(targetEmpsSnap.docs.map((d) => d.id));
+    const toCopy = sourceSnap.docs.filter(
+      (d) => !presentEmployeeIds.has(d.data().employeeId as string) && !presentDocIds.has(d.id)
+    );
+
     const batch = db().batch();
-    for (const doc of sourceSnap.docs) {
+    for (const doc of toCopy) {
       const ref = targetPlanRef.collection("planEmployees").doc(doc.id);
       // The X-limit override is month-specific (tied to that month's vacation), so it
       // must not carry into a copied month. Drop it (and the legacy extra field too).
@@ -1384,7 +1908,7 @@ shiftsRouter.post(
     }
 
     // Auto-fill approved vacation days as X for each copied employee
-    for (const doc of sourceSnap.docs) {
+    for (const doc of toCopy) {
       await applyVacationXs(targetPlanRef, doc.data().employeeId as string, targetYear, targetMonth);
     }
 
@@ -1392,10 +1916,10 @@ shiftsRouter.post(
       action: "create",
       collection: "shiftPlans/planEmployees",
       resourceId: planId,
-      extra: { kind: "copy-employees", sourcePlanId, copied: sourceSnap.size, modCarried: carried },
+      extra: { kind: "copy-employees", sourcePlanId, copied: toCopy.length, skippedPresent: sourceSnap.size - toCopy.length, modCarried: carried },
     });
 
-    res.json({ ok: true, copied: sourceSnap.size, modCarried: carried });
+    res.json({ ok: true, copied: toCopy.length, modCarried: carried });
   }
 );
 
@@ -1450,15 +1974,18 @@ shiftsRouter.put(
     const selfServiceOnly =
       (req.permissions?.has("shifts.cells.editOwnX") && !req.permissions?.has("shifts.cells.edit")) ?? false;
 
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      res.status(400).json({ error: "Neplatný formát data" });
+    // Which plan stores this date. For a December plan, 1 January of the next
+    // year is routed to the January plan (see resolveDateRoute). No side effects.
+    const route = await resolveDateRoute(planId, date);
+    if ("error" in route) {
+      res.status(route.status).json({ error: route.error });
       return;
     }
 
-    // Self-service guards: X only, opened plan only
+    // Self-service guards: X only, opened plan only. The status gate is the
+    // ACTING plan's — the one the user is looking at and editing through.
     if (selfServiceOnly) {
-      const planDoc = await db().collection("shiftPlans").doc(planId).get();
-      if (planDoc.data()?.status !== "opened") {
+      if (route.actingData.status !== "opened") {
         res.status(403).json({ error: "Zaměstnanci mohou upravovat směny pouze v otevřeném plánu." });
         return;
       }
@@ -1476,247 +2003,275 @@ shiftsRouter.put(
       return;
     }
 
-    let status: "assigned" | "day_off" | "unassigned";
-    if (rawInput.trim() === "") {
-      status = "unassigned";
-    } else if (parsed.segments.every((s) => s.code === "X")) {
-      status = "day_off";
-    } else {
-      status = "assigned";
-    }
+    // Gates passed → for a linked Jan 1 date, create the January plan if missing
+    // and make sure this employee is on its roster before the write.
+    const owningRef = await materializeOwningPlan(req, route, [employeeId]);
+    await writeShiftCell(req, res, { route, owningRef, employeeId, date, body, parsed });
+  }
+);
 
-    // Self-service X entry → enforce the shift business rules server-side, inside a
-    // transaction. Bumping the plan doc in the txn serializes concurrent self-service
-    // X-writes, so a coverage check can't be raced (incl. the phantom new-cell case).
-    // Managers/admin (shifts.xAllowance.manage) bypass; approved overrides + vacation
-    // auto-fill write through other handlers, so they never reach this path.
-    const perms = req.permissions ?? new Set<string>();
-    const isAllX = parsed.segments.length > 0 && parsed.segments.every((s) => s.code === "X");
-    if (isAllX && !(perms.has("shifts.xAllowance.manage") || perms.has("system.admin"))) {
-      const xDocId = `${employeeId}_${date}`;
-      const planRef = db().collection("shiftPlans").doc(planId);
-      const shiftsCol = planRef.collection("shifts");
-      const xShiftRef = shiftsCol.doc(xDocId);
-      const base = Object.prototype.hasOwnProperty.call(body, "baseRawInput")
-        ? typeof body.baseRawInput === "string"
-          ? body.baseRawInput
-          : null
-        : undefined;
-      let auditBeforeRaw = "";
-      try {
-        await db().runTransaction(async (tx) => {
-          const cellSnap = await tx.get(xShiftRef);
-          // Read the plan doc into the transaction's READ set. Combined with the
-          // plan-doc bump at the end, this makes every concurrent self-service X-write
-          // in the plan conflict on a shared document under Firestore's optimistic
-          // model — so the coverage check can't be raced, including the phantom case
-          // where the racing X is a brand-new cell the day-query never saw.
-          // The snapshot is also what gives the rules below the plan's year/month.
-          const planSnapTx = await tx.get(planRef);
-          const beforeExists = cellSnap.exists;
-          auditBeforeRaw = beforeExists ? ((cellSnap.data() as Record<string, unknown>).rawInput as string) ?? "" : "";
-          // Optimistic concurrency (same as the non-X path).
-          if (base !== undefined) {
-            const stored = beforeExists ? auditBeforeRaw : null;
-            if (stored !== base) {
-              throw new CellConflict(beforeExists ? { id: xDocId, ...(cellSnap.data() as object) } : null);
+/**
+ * The cell upsert proper, parameterised by (acting, owning) plan. For an ordinary
+ * write both are the same plan. For December's linked 1 January the acting plan
+ * is December (its gates were already evaluated by the caller) and the owning
+ * plan is January: the cell, the self-service X rules (6 in a row, the monthly
+ * limit with January's contract type, coverage of 5) and the audit entry all use
+ * the OWNING plan.
+ */
+async function writeShiftCell(
+  req: AuthRequest,
+  res: import("express").Response,
+  args: {
+    route: DateRoute;
+    owningRef: admin.firestore.DocumentReference;
+    employeeId: string;
+    date: string;
+    body: Record<string, unknown>;
+    parsed: ReturnType<typeof parseShiftExpression>;
+  }
+): Promise<void> {
+  const { route, owningRef, employeeId, date, body, parsed } = args;
+  const owningPlanId = owningRef.id;
+  const rawInput = (body.rawInput as string) ?? "";
+
+  let status: "assigned" | "day_off" | "unassigned";
+  if (rawInput.trim() === "") {
+    status = "unassigned";
+  } else if (parsed.segments.every((s) => s.code === "X")) {
+    status = "day_off";
+  } else {
+    status = "assigned";
+  }
+
+  // Self-service X entry → enforce the shift business rules server-side, inside a
+  // transaction. Bumping the plan doc in the txn serializes concurrent self-service
+  // X-writes, so a coverage check can't be raced (incl. the phantom new-cell case).
+  // Managers/admin (shifts.xAllowance.manage) bypass; approved overrides + vacation
+  // auto-fill write through other handlers, so they never reach this path.
+  const perms = req.permissions ?? new Set<string>();
+  const isAllX = parsed.segments.length > 0 && parsed.segments.every((s) => s.code === "X");
+  if (isAllX && !(perms.has("shifts.xAllowance.manage") || perms.has("system.admin"))) {
+    const xDocId = `${employeeId}_${date}`;
+    const planRef = owningRef;
+    const shiftsCol = planRef.collection("shifts");
+    const xShiftRef = shiftsCol.doc(xDocId);
+    const base = Object.prototype.hasOwnProperty.call(body, "baseRawInput")
+      ? typeof body.baseRawInput === "string"
+        ? body.baseRawInput
+        : null
+      : undefined;
+    let auditBeforeRaw = "";
+    try {
+      await db().runTransaction(async (tx) => {
+        const cellSnap = await tx.get(xShiftRef);
+        // Read the plan doc into the transaction's READ set. Combined with the
+        // plan-doc bump at the end, this makes every concurrent self-service X-write
+        // in the plan conflict on a shared document under Firestore's optimistic
+        // model — so the coverage check can't be raced, including the phantom case
+        // where the racing X is a brand-new cell the day-query never saw.
+        // The snapshot is also what gives the rules below the plan's year/month
+        // (the OWNING plan's — January's for a linked 1 January).
+        const planSnapTx = await tx.get(planRef);
+        const beforeExists = cellSnap.exists;
+        auditBeforeRaw = beforeExists ? ((cellSnap.data() as Record<string, unknown>).rawInput as string) ?? "" : "";
+        // Optimistic concurrency (same as the non-X path).
+        if (base !== undefined) {
+          const stored = beforeExists ? auditBeforeRaw : null;
+          if (stored !== base) {
+            throw new CellConflict(beforeExists ? { id: xDocId, ...(cellSnap.data() as object) } : null);
+          }
+        }
+        const [empSnap, daySnap, planEmpsSnap, meGlobalSnap, meEmploymentSnap] = await Promise.all([
+          tx.get(shiftsCol.where("employeeId", "==", employeeId)),
+          tx.get(shiftsCol.where("date", "==", date)),
+          tx.get(planRef.collection("planEmployees")),
+          tx.get(db().collection("employees").doc(employeeId)),
+          tx.get(
+            db().collection("employees").doc(employeeId).collection("employment").orderBy("startDate", "asc")
+          ),
+        ]);
+        const meEmp = planEmpsSnap.docs
+          .map((d) => d.data() as Record<string, unknown>)
+          .find((e) => e.employeeId === employeeId);
+
+        // Voluntary-X dates AFTER this edit (exclude this cell, then add it). Also
+        // count vacation-origin Xs — a non-zero count is the only case in which the
+        // admin's X-limit override applies.
+        const voluntary = new Set<string>();
+        let vacationX = 0;
+        empSnap.docs.forEach((d) => {
+          const s = d.data() as { date?: string; status?: string; source?: string };
+          if (s.status === "day_off" && s.source === "vacation") vacationX++;
+          else if (s.status === "day_off" && s.date && s.date !== date) voluntary.add(s.date);
+        });
+        voluntary.add(date);
+
+        // Rule 1 — no more than 6 consecutive voluntary X.
+        if (consecutiveXRun(voluntary, date) > 6) {
+          throw new RuleBlock(
+            "Nelze zadat více než 6 X po sobě jdoucích dnů. Pokud potřebujete volno na delší dobu, požádejte o dovolenou."
+          );
+        }
+        // Rule 2 — monthly X limit (8 HPP / 13 PPP; admin override only with vacation).
+        if (meEmp) {
+          // Contract type as of the PLAN'S month, mirroring contractTypesForMonth
+          // on the GET: a Dodatek taking effect in the planned month must size the
+          // limit while that plan is still being filled the month before. The root's
+          // as-of-today currentContractType stays the fallback.
+          const planDataTx = planSnapTx.data() as Record<string, unknown> | undefined;
+          const effTx = effectiveCompFromRows(
+            meEmploymentSnap.docs.map((d) => d.data() as EmploymentRowLite),
+            Number(planDataTx?.year),
+            Number(planDataTx?.month)
+          );
+          const ctBase = xBaseLimit(
+            effTx?.contractType ||
+              (((meGlobalSnap.data() as Record<string, unknown> | undefined)?.currentContractType as string) ??
+                null)
+          );
+          if (ctBase !== null) {
+            const limit = vacationX > 0 && meEmp.xLimitOverride != null ? (meEmp.xLimitOverride as number) : ctBase;
+            if (voluntary.size > limit) {
+              throw new RuleBlock(`Překročen měsíční limit volných dnů (X): maximálně ${limit}.`);
             }
           }
-          const [empSnap, daySnap, planEmpsSnap, meGlobalSnap, meEmploymentSnap] = await Promise.all([
-            tx.get(shiftsCol.where("employeeId", "==", employeeId)),
-            tx.get(shiftsCol.where("date", "==", date)),
-            tx.get(planRef.collection("planEmployees")),
-            tx.get(db().collection("employees").doc(employeeId)),
-            tx.get(
-              db().collection("employees").doc(employeeId).collection("employment").orderBy("startDate", "asc")
-            ),
-          ]);
-          const meEmp = planEmpsSnap.docs
+        }
+        // Rule 3 — at least 5 recepce of this shift type remain available.
+        if (meEmp && meEmp.section === "recepce" && (meEmp.primaryShiftType === "D" || meEmp.primaryShiftType === "N")) {
+          const st = meEmp.primaryShiftType;
+          const eligible = planEmpsSnap.docs
             .map((d) => d.data() as Record<string, unknown>)
-            .find((e) => e.employeeId === employeeId);
-
-          // Voluntary-X dates AFTER this edit (exclude this cell, then add it). Also
-          // count vacation-origin Xs — a non-zero count is the only case in which the
-          // admin's X-limit override applies.
-          const voluntary = new Set<string>();
-          let vacationX = 0;
-          empSnap.docs.forEach((d) => {
-            const s = d.data() as { date?: string; status?: string; source?: string };
-            if (s.status === "day_off" && s.source === "vacation") vacationX++;
-            else if (s.status === "day_off" && s.date && s.date !== date) voluntary.add(s.date);
+            .filter((e) => e.section === "recepce" && e.primaryShiftType === st && e.active === true);
+          const dayOff = new Set<string>();
+          daySnap.docs.forEach((d) => {
+            const s = d.data() as { employeeId?: string; status?: string };
+            if (s.employeeId && s.status === "day_off") dayOff.add(s.employeeId);
           });
-          voluntary.add(date);
-
-          // Rule 1 — no more than 6 consecutive voluntary X.
-          if (consecutiveXRun(voluntary, date) > 6) {
+          const withX = eligible.filter(
+            (e) => e.employeeId === employeeId || dayOff.has(e.employeeId as string)
+          ).length;
+          if (eligible.length - withX < 5) {
             throw new RuleBlock(
-              "Nelze zadat více než 6 X po sobě jdoucích dnů. Pokud potřebujete volno na delší dobu, požádejte o dovolenou."
+              `Na směně musí zůstat alespoň 5 dostupných recepčních (${st === "D" ? "denní" : "noční"}).`
             );
           }
-          // Rule 2 — monthly X limit (8 HPP / 13 PPP; admin override only with vacation).
-          if (meEmp) {
-            // Contract type as of the PLAN'S month, mirroring contractTypesForMonth
-            // on the GET: a Dodatek taking effect in the planned month must size the
-            // limit while that plan is still being filled the month before. The root's
-            // as-of-today currentContractType stays the fallback.
-            const planDataTx = planSnapTx.data() as Record<string, unknown> | undefined;
-            const effTx = effectiveCompFromRows(
-              meEmploymentSnap.docs.map((d) => d.data() as EmploymentRowLite),
-              Number(planDataTx?.year),
-              Number(planDataTx?.month)
-            );
-            const ctBase = xBaseLimit(
-              effTx?.contractType ||
-                (((meGlobalSnap.data() as Record<string, unknown> | undefined)?.currentContractType as string) ??
-                  null)
-            );
-            if (ctBase !== null) {
-              const limit = vacationX > 0 && meEmp.xLimitOverride != null ? (meEmp.xLimitOverride as number) : ctBase;
-              if (voluntary.size > limit) {
-                throw new RuleBlock(`Překročen měsíční limit volných dnů (X): maximálně ${limit}.`);
-              }
-            }
-          }
-          // Rule 3 — at least 5 recepce of this shift type remain available.
-          if (meEmp && meEmp.section === "recepce" && (meEmp.primaryShiftType === "D" || meEmp.primaryShiftType === "N")) {
-            const st = meEmp.primaryShiftType;
-            const eligible = planEmpsSnap.docs
-              .map((d) => d.data() as Record<string, unknown>)
-              .filter((e) => e.section === "recepce" && e.primaryShiftType === st && e.active === true);
-            const dayOff = new Set<string>();
-            daySnap.docs.forEach((d) => {
-              const s = d.data() as { employeeId?: string; status?: string };
-              if (s.employeeId && s.status === "day_off") dayOff.add(s.employeeId);
-            });
-            const withX = eligible.filter(
-              (e) => e.employeeId === employeeId || dayOff.has(e.employeeId as string)
-            ).length;
-            if (eligible.length - withX < 5) {
-              throw new RuleBlock(
-                `Na směně musí zůstat alespoň 5 dostupných recepčních (${st === "D" ? "denní" : "noční"}).`
-              );
-            }
-          }
+        }
 
-          // Passed → write the X and bump the plan (the serialization point).
-          tx.set(xShiftRef, {
-            employeeId,
-            date,
-            rawInput: parsed.rawInput,
-            segments: parsed.segments,
-            hoursComputed: parsed.hoursComputed,
-            isDouble: parsed.isDouble,
-            status,
-            typeTag: null,
-            updatedAt: FieldValue.serverTimestamp(),
-          });
-          tx.update(planRef, { updatedAt: FieldValue.serverTimestamp() });
-        });
-      } catch (e) {
-        if (e instanceof CellConflict) {
-          res.status(409).json({ error: "Buňku mezitím upravil jiný uživatel.", conflict: true, current: e.current });
-          return;
-        }
-        if (e instanceof RuleBlock) {
-          res.status(403).json({ error: e.message });
-          return;
-        }
-        throw e;
-      }
-      if (auditBeforeRaw !== parsed.rawInput) {
-        await logUpdate(ctxFromReq(req), {
-          collection: "shiftPlans/shifts",
-          resourceId: planId,
-          subResourceId: xDocId,
+        // Passed → write the X and bump the plan (the serialization point).
+        tx.set(xShiftRef, {
           employeeId,
-          year: Number(String(date).slice(0, 4)) || undefined,
-          month: Number(String(date).slice(5, 7)) || undefined,
-          before: { rawInput: auditBeforeRaw },
-          after: { rawInput: parsed.rawInput },
+          date,
+          rawInput: parsed.rawInput,
+          segments: parsed.segments,
+          hoursComputed: parsed.hoursComputed,
+          isDouble: parsed.isDouble,
+          status,
+          typeTag: null,
+          updatedAt: FieldValue.serverTimestamp(),
         });
-      }
-      res.json({ ok: true, hoursComputed: parsed.hoursComputed, typeTag: null });
-      return;
-    }
-
-    const docId = `${employeeId}_${date}`;
-    const shiftRef = db()
-      .collection("shiftPlans")
-      .doc(planId)
-      .collection("shifts")
-      .doc(docId);
-    const beforeSnap = await shiftRef.get();
-    const beforeData = beforeSnap.exists ? (beforeSnap.data() as Record<string, unknown>) : {};
-    const beforeRaw = (beforeData.rawInput as string) ?? "";
-    const beforeTag = sanitizeTypeTag(beforeData.typeTag);
-
-    // Optimistic concurrency (same cell). `baseRawInput` is the value the client
-    // based this edit on (null = it saw an empty/absent cell). If the stored cell
-    // has moved since, reject with 409 instead of silently clobbering a colleague's
-    // change — the client notifies + reloads. Only enforced when the field is sent.
-    if (Object.prototype.hasOwnProperty.call(body, "baseRawInput")) {
-      const base = typeof body.baseRawInput === "string" ? body.baseRawInput : null;
-      const stored = beforeSnap.exists ? beforeRaw : null;
-      if (stored !== base) {
-        res.status(409).json({
-          error: "Buňku mezitím upravil jiný uživatel.",
-          conflict: true,
-          current: beforeSnap.exists ? { id: docId, ...beforeData } : null,
-        });
+        tx.update(planRef, { updatedAt: FieldValue.serverTimestamp() });
+      });
+    } catch (e) {
+      if (e instanceof CellConflict) {
+        res.status(409).json({ error: "Buňku mezitím upravil jiný uživatel.", conflict: true, current: e.current });
         return;
       }
+      if (e instanceof RuleBlock) {
+        res.status(403).json({ error: e.message });
+        return;
+      }
+      throw e;
     }
-
-    // Shift-type tag (#29): only meaningful on a numeric "worked hours" cell, and
-    // never alters pay. Cleared automatically when the cell isn't pure-numeric.
-    // When the request omits `typeTag` (a plain rawInput edit) the existing tag is
-    // preserved across numeric→numeric changes.
-    const tagProvided = Object.prototype.hasOwnProperty.call(body, "typeTag");
-    let typeTag: ReturnType<typeof sanitizeTypeTag>;
-    if (!isPureNumericExpression(parsed)) {
-      typeTag = null;
-    } else if (tagProvided) {
-      typeTag = sanitizeTypeTag(body.typeTag);
-    } else {
-      typeTag = beforeTag;
-    }
-
-    await shiftRef.set({
-      employeeId,
-      date,
-      rawInput: parsed.rawInput,
-      segments: parsed.segments,
-      hoursComputed: parsed.hoursComputed,
-      isDouble: parsed.isDouble,
-      status,
-      typeTag,
-      updatedAt: FieldValue.serverTimestamp(),
-    });
-    await db().collection("shiftPlans").doc(planId).update({ updatedAt: FieldValue.serverTimestamp() });
-
-    // Compact form: only log the fields that actually changed. Segments + hours
-    // are derived from rawInput so storing them would just inflate the log.
-    const rawChanged = beforeRaw !== parsed.rawInput;
-    const tagChanged = beforeTag !== typeTag;
-    if (rawChanged || tagChanged) {
-      const before: Record<string, unknown> = {};
-      const after: Record<string, unknown> = {};
-      if (rawChanged) { before.rawInput = beforeRaw; after.rawInput = parsed.rawInput; }
-      if (tagChanged) { before.typeTag = beforeTag; after.typeTag = typeTag; }
+    if (route.linked) await route.actingRef.update({ updatedAt: FieldValue.serverTimestamp() });
+    if (auditBeforeRaw !== parsed.rawInput) {
       await logUpdate(ctxFromReq(req), {
         collection: "shiftPlans/shifts",
-        resourceId: planId,
-        subResourceId: `${employeeId}_${date}`,
+        resourceId: owningPlanId,
+        subResourceId: xDocId,
         employeeId,
         year: Number(String(date).slice(0, 4)) || undefined,
         month: Number(String(date).slice(5, 7)) || undefined,
-        before,
-        after,
+        before: { rawInput: auditBeforeRaw },
+        after: { rawInput: parsed.rawInput },
       });
     }
-    res.json({ ok: true, hoursComputed: parsed.hoursComputed, typeTag });
+    res.json({ ok: true, hoursComputed: parsed.hoursComputed, typeTag: null });
+    return;
   }
-);
+
+  const docId = `${employeeId}_${date}`;
+  const shiftRef = owningRef.collection("shifts").doc(docId);
+  const beforeSnap = await shiftRef.get();
+  const beforeData = beforeSnap.exists ? (beforeSnap.data() as Record<string, unknown>) : {};
+  const beforeRaw = (beforeData.rawInput as string) ?? "";
+  const beforeTag = sanitizeTypeTag(beforeData.typeTag);
+
+  // Optimistic concurrency (same cell). `baseRawInput` is the value the client
+  // based this edit on (null = it saw an empty/absent cell). If the stored cell
+  // has moved since, reject with 409 instead of silently clobbering a colleague's
+  // change — the client notifies + reloads. Only enforced when the field is sent.
+  if (Object.prototype.hasOwnProperty.call(body, "baseRawInput")) {
+    const base = typeof body.baseRawInput === "string" ? body.baseRawInput : null;
+    const stored = beforeSnap.exists ? beforeRaw : null;
+    if (stored !== base) {
+      res.status(409).json({
+        error: "Buňku mezitím upravil jiný uživatel.",
+        conflict: true,
+        current: beforeSnap.exists ? { id: docId, ...beforeData } : null,
+      });
+      return;
+    }
+  }
+
+  // Shift-type tag (#29): only meaningful on a numeric "worked hours" cell, and
+  // never alters pay. Cleared automatically when the cell isn't pure-numeric.
+  // When the request omits `typeTag` (a plain rawInput edit) the existing tag is
+  // preserved across numeric→numeric changes.
+  const tagProvided = Object.prototype.hasOwnProperty.call(body, "typeTag");
+  let typeTag: ReturnType<typeof sanitizeTypeTag>;
+  if (!isPureNumericExpression(parsed)) {
+    typeTag = null;
+  } else if (tagProvided) {
+    typeTag = sanitizeTypeTag(body.typeTag);
+  } else {
+    typeTag = beforeTag;
+  }
+
+  await shiftRef.set({
+    employeeId,
+    date,
+    rawInput: parsed.rawInput,
+    segments: parsed.segments,
+    hoursComputed: parsed.hoursComputed,
+    isDouble: parsed.isDouble,
+    status,
+    typeTag,
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+  await bumpRoutePlans({ ...route, owningRef });
+
+  // Compact form: only log the fields that actually changed. Segments + hours
+  // are derived from rawInput so storing them would just inflate the log.
+  const rawChanged = beforeRaw !== parsed.rawInput;
+  const tagChanged = beforeTag !== typeTag;
+  if (rawChanged || tagChanged) {
+    const before: Record<string, unknown> = {};
+    const after: Record<string, unknown> = {};
+    if (rawChanged) { before.rawInput = beforeRaw; after.rawInput = parsed.rawInput; }
+    if (tagChanged) { before.typeTag = beforeTag; after.typeTag = typeTag; }
+    await logUpdate(ctxFromReq(req), {
+      collection: "shiftPlans/shifts",
+      resourceId: owningPlanId,
+      subResourceId: `${employeeId}_${date}`,
+      employeeId,
+      year: Number(String(date).slice(0, 4)) || undefined,
+      month: Number(String(date).slice(5, 7)) || undefined,
+      before,
+      after,
+    });
+  }
+  res.json({ ok: true, hoursComputed: parsed.hoursComputed, typeTag });
+}
 
 // DELETE /shifts/plans/:planId/shifts/:employeeId/:date
 shiftsRouter.delete(
@@ -1729,20 +2284,31 @@ shiftsRouter.delete(
     const selfServiceOnly =
       (req.permissions?.has("shifts.cells.editOwnX") && !req.permissions?.has("shifts.cells.edit")) ?? false;
 
+    // December's linked 1 January → January plan (see resolveDateRoute).
+    const route = await resolveDateRoute(planId, date);
+    if ("error" in route) {
+      res.status(route.status).json({ error: route.error });
+      return;
+    }
+
+    // Status gate against the ACTING plan.
     if (selfServiceOnly) {
-      const planDoc = await db().collection("shiftPlans").doc(planId).get();
-      if (planDoc.data()?.status !== "opened") {
+      if (route.actingData.status !== "opened") {
         res.status(403).json({ error: "Zaměstnanci mohou mazat směny pouze v otevřeném plánu." });
         return;
       }
     }
 
+    // Linked date whose January plan does not exist yet: nothing to delete, and
+    // a delete never creates the plan.
+    if (!route.owningRef) {
+      res.json({ ok: true });
+      return;
+    }
+    const owningRef = route.owningRef;
+
     const docId = `${employeeId}_${date}`;
-    const shiftRef = db()
-      .collection("shiftPlans")
-      .doc(planId)
-      .collection("shifts")
-      .doc(docId);
+    const shiftRef = owningRef.collection("shifts").doc(docId);
     const beforeSnap = await shiftRef.get();
     const beforeData = beforeSnap.exists ? (beforeSnap.data() as Record<string, unknown>) : {};
 
@@ -1762,11 +2328,11 @@ shiftsRouter.delete(
     }
 
     await shiftRef.delete();
-    await db().collection("shiftPlans").doc(planId).update({ updatedAt: FieldValue.serverTimestamp() });
+    await bumpRoutePlans(route);
     if (beforeSnap.exists) {
       await logDelete(ctxFromReq(req), {
         collection: "shiftPlans/shifts",
-        resourceId: planId,
+        resourceId: owningRef.id,
         subResourceId: `${employeeId}_${date}`,
         employeeId,
         year: Number(String(date).slice(0, 4)) || undefined,
@@ -1777,6 +2343,7 @@ shiftsRouter.delete(
     res.json({ ok: true });
   }
 );
+
 
 // ─── Rules ───────────────────────────────────────────────────────────────────
 
@@ -1893,20 +2460,23 @@ shiftsRouter.put(
   requirePermission("shifts.cells.edit"),
   async (req: AuthRequest, res) => {
     const { planId, date, type } = req.params;
-    const planRef = db().collection("shiftPlans").doc(planId);
-    const planDoc = await planRef.get();
+    const actingRef = db().collection("shiftPlans").doc(planId);
+    const planDoc = await actingRef.get();
     if (!planDoc.exists) {
       res.status(404).json({ error: "Plán nenalezen" });
       return;
     }
 
     // Month prefix from the plan's own year/month when present, else from the id.
+    // December's linked 1 January is the one exception: it is routed to the
+    // January plan below (its single source of truth).
     const planData = planDoc.data() as { year?: unknown; month?: unknown };
     const monthPrefix =
       typeof planData.year === "number" && typeof planData.month === "number"
         ? `${planData.year}-${String(planData.month).padStart(2, "0")}`
         : planId.slice(0, 7);
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !date.startsWith(`${monthPrefix}-`)) {
+    const isLinkedDate = date === linkedNextDayDate(planData as Record<string, unknown>);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || (!date.startsWith(`${monthPrefix}-`) && !isLinkedDate)) {
       res.status(400).json({ error: "Datum nepatří do tohoto plánu" });
       return;
     }
@@ -1947,6 +2517,25 @@ shiftsRouter.put(
     if (new Set(entries.map((e) => e.employeeId)).size !== entries.length) {
       res.status(400).json({ error: "Zaměstnanec je uveden vícekrát" });
       return;
+    }
+
+    // Linked 1 January → the January plan. Entry employees are copied onto its
+    // roster first (from December's), so the roster check below holds.
+    let planRef = actingRef;
+    let linkedRoute: DateRoute | null = null;
+    if (isLinkedDate) {
+      const route = await resolveDateRoute(planId, date);
+      if ("error" in route) {
+        res.status(route.status).json({ error: route.error });
+        return;
+      }
+      linkedRoute = route;
+      if (!route.owningRef && entries.length === 0) {
+        // Clearing a split on a January plan that does not exist: nothing to do.
+        res.json({ ok: true, entries, cellHours: 0, assignedHours: 0, remaining: FULL_SHIFT_HOURS });
+        return;
+      }
+      planRef = await materializeOwningPlan(req, route, entries.map((e) => e.employeeId));
     }
 
     const [planEmployeesSnap, dayShiftsSnap] = await Promise.all([
@@ -2001,10 +2590,12 @@ shiftsRouter.put(
       });
     }
 
+    if (linkedRoute) await actingRef.update({ updatedAt: FieldValue.serverTimestamp() });
+
     await writeAudit(ctxFromReq(req as AuthRequest), {
       action: "update",
       collection: "shiftPlans/shiftSplits",
-      resourceId: `${planId}/${date}/${type}`,
+      resourceId: `${planRef.id}/${date}/${type}`,
       extra: { date, type, entries },
     });
 
@@ -2307,12 +2898,20 @@ shiftsRouter.post(
       return;
     }
 
-    const planRef = db().collection("shiftPlans").doc(planId);
-    const requester = await resolveSharedTerminalRequester(req, planRef, body);
+    // December's linked 1 January → the request is stored on (and, once
+    // approved, writes the cell into) the January plan.
+    const route = await resolveDateRoute(planId, date);
+    if ("error" in route) {
+      res.status(route.status).json({ error: route.error });
+      return;
+    }
+    const requester = await resolveSharedTerminalRequester(req, route.actingRef, body);
     if ("error" in requester) {
       res.status(400).json({ error: requester.error });
       return;
     }
+    const planRef = await materializeOwningPlan(req, route, [employeeId]);
+    if (route.linked) await route.actingRef.update({ updatedAt: FieldValue.serverTimestamp() });
 
     const ref = await planRef.collection("shiftOverrideRequests").add({
       employeeId,
@@ -2331,7 +2930,7 @@ shiftsRouter.post(
     await planRef.update({ updatedAt: FieldValue.serverTimestamp() });
     await logCreate(ctxFromReq(req), {
       collection: "shiftPlans/shiftOverrideRequests",
-      resourceId: planId,
+      resourceId: planRef.id,
       subResourceId: ref.id,
       employeeId,
       summary: { date, requestedInput, reason, violationTypes },
@@ -2664,22 +3263,22 @@ shiftsRouter.post(
       }
     }
 
-    // Plan must exist and be published
-    const planRef = db().collection("shiftPlans").doc(planId);
-    const planDoc = await planRef.get();
-    if (!planDoc.exists) {
-      res.status(404).json({ error: "Plán nenalezen" });
+    // Plan must exist and be published. For December's linked 1 January the
+    // status gate is December's (the acting plan); the request itself is stored
+    // on the January plan, whose cells it reads and (on approval) writes.
+    const route = await resolveDateRoute(planId, date);
+    if ("error" in route) {
+      res.status(route.status).json({ error: route.error });
       return;
     }
-    const planData = planDoc.data() as Record<string, unknown>;
-    if (planData.status !== "published") {
+    if (route.actingData.status !== "published") {
       res.status(400).json({ error: "Žádosti o změnu lze podávat pouze k publikovaným plánům" });
       return;
     }
 
     // Shared terminal: the person really requesting (for a free-claim, the person
     // the shift is claimed FOR) must be picked in the dialog and validated here.
-    const requester = await resolveSharedTerminalRequester(req, planRef, body);
+    const requester = await resolveSharedTerminalRequester(req, route.actingRef, body);
     if ("error" in requester) {
       res.status(400).json({ error: requester.error });
       return;
@@ -2701,11 +3300,16 @@ shiftsRouter.post(
     };
     if (requestedChange) docData.requestedChange = requestedChange;
 
+    if (kind === "free-claim" && !isValidFreeSlot(code, hotel)) {
+      res.status(400).json({ error: "Neplatná volná směna" });
+      return;
+    }
+    const planRef = await materializeOwningPlan(req, route, [
+      employeeId,
+      requestedChange?.action === "swap" ? (requestedChange.swapWithEmployeeId as string) : null,
+    ]);
+
     if (kind === "free-claim") {
-      if (!isValidFreeSlot(code, hotel)) {
-        res.status(400).json({ error: "Neplatná volná směna" });
-        return;
-      }
       // Slot must still be free
       if (await isSlotCovered(planRef, date, code, hotel)) {
         res.status(409).json({ error: "Tato směna je již obsazená" });
@@ -2727,10 +3331,10 @@ shiftsRouter.post(
     }
 
     const ref = await planRef.collection("shiftChangeRequests").add(docData);
-    await planRef.update({ updatedAt: FieldValue.serverTimestamp() });
+    await bumpRoutePlans(route);
     await logCreate(ctxFromReq(req), {
       collection: "shiftPlans/shiftChangeRequests",
-      resourceId: planId,
+      resourceId: planRef.id,
       subResourceId: ref.id,
       employeeId,
       summary: kind === "free-claim"
@@ -2996,6 +3600,433 @@ shiftsRouter.delete(
   }
 );
 
+// ─── Shift requests (žádosti o konkrétní směnu v okně) ───────────────────────
+// See the "Shift-request windows" block near the top for the model.
+
+// GET /shifts/shiftRequests/pending-count — nav badge (all plans). The
+// orderBy is REQUIRED for the (status, requestedAt) collection-group index —
+// see the note on /overrides/pending-count.
+shiftsRouter.get(
+  "/shiftRequests/pending-count",
+  requireAuth,
+  requirePermission("shifts.changeRequest.review"),
+  async (_req, res) => {
+    const snap = await db()
+      .collectionGroup("shiftRequests")
+      .where("status", "==", "pending")
+      .orderBy("requestedAt", "desc")
+      .get();
+    res.json({ count: snap.size });
+  }
+);
+
+// GET /shifts/shiftRequests/pending — full list across all plans (Upozornění),
+// denormalised with planId / planYear / planMonth.
+shiftsRouter.get(
+  "/shiftRequests/pending",
+  requireAuth,
+  requirePermission("shifts.changeRequest.review"),
+  async (_req, res) => {
+    const snap = await db()
+      .collectionGroup("shiftRequests")
+      .where("status", "==", "pending")
+      .orderBy("requestedAt", "desc")
+      .get();
+    const planMetaCache = new Map<string, { year: number; month: number } | null>();
+    async function planMeta(planId: string) {
+      if (planMetaCache.has(planId)) return planMetaCache.get(planId)!;
+      const planDoc = await db().collection("shiftPlans").doc(planId).get();
+      const meta = planDoc.exists
+        ? {
+            year: (planDoc.data() as Record<string, unknown>).year as number,
+            month: (planDoc.data() as Record<string, unknown>).month as number,
+          }
+        : null;
+      planMetaCache.set(planId, meta);
+      return meta;
+    }
+    const out = await Promise.all(
+      snap.docs.map(async (d) => {
+        const planId = d.ref.parent.parent?.id ?? "";
+        const meta = planId ? await planMeta(planId) : null;
+        return {
+          id: d.id,
+          ...d.data(),
+          planId,
+          planYear: meta?.year ?? null,
+          planMonth: meta?.month ?? null,
+        };
+      })
+    );
+    res.json(out);
+  }
+);
+
+// POST /shifts/plans/:planId/shiftRequests — employee requests a specific shift
+// in their OWN row, on a date inside one of the ACTING plan's windows, while the
+// acting plan is opened. Body: { employeeId, date, code }.
+shiftsRouter.post(
+  "/plans/:planId/shiftRequests",
+  requireAuth,
+  requirePermission("shifts.cells.editOwnX"),
+  async (req: AuthRequest, res) => {
+    const { planId } = req.params;
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const employeeId = typeof body.employeeId === "string" ? body.employeeId : "";
+    const date = typeof body.date === "string" ? body.date : "";
+    if (!employeeId || !date) {
+      res.status(400).json({ error: "employeeId a date jsou povinné" });
+      return;
+    }
+    const slot = parseRequestableShift(body.code);
+    if (!slot) {
+      res.status(400).json({
+        error: "Požádat lze jen o jednu konkrétní směnu s hotelem (např. DA, NS, DPQ).",
+      });
+      return;
+    }
+
+    // Which plan stores the date (December → January for its linked 1 January).
+    const route = await resolveDateRoute(planId, date);
+    if ("error" in route) {
+      res.status(route.status).json({ error: route.error });
+      return;
+    }
+    // Gates on the ACTING plan: its status and its windows.
+    if (route.actingData.status !== "opened") {
+      res.status(403).json({ error: "O konkrétní směnu lze žádat pouze v otevřeném plánu." });
+      return;
+    }
+    if (!isDateInRequestWindows(readRequestWindows(route.actingData), date)) {
+      res.status(403).json({ error: "Tento den neleží v okně pro žádosti o směnu." });
+      return;
+    }
+    // Own row only: the employee record linked to the caller's account.
+    const ownId = await callerEmployeeId(req);
+    if (!ownId || ownId !== employeeId) {
+      res.status(403).json({ error: "O směnu můžete žádat pouze ve svém vlastním řádku." });
+      return;
+    }
+    const onRoster = await route.actingRef
+      .collection("planEmployees")
+      .where("employeeId", "==", employeeId)
+      .limit(1)
+      .get();
+    if (onRoster.empty) {
+      res.status(403).json({ error: "Nejste zařazen/a v tomto plánu směn." });
+      return;
+    }
+
+    // Gates passed → for a linked Jan 1 create January if needed + roster.
+    const owningRef = await materializeOwningPlan(req, route, [employeeId]);
+    const reqRef = owningRef.collection("shiftRequests").doc();
+    const slotRef = owningRef.collection("shiftRequestSlots").doc(slotLockId(date, slot.code));
+    const empRef = owningRef.collection("shiftRequestSlots").doc(empLockId(date, employeeId));
+    const cellRef = owningRef.collection("shifts").doc(`${employeeId}_${date}`);
+    const docData = {
+      employeeId,
+      date,
+      code: slot.code,
+      status: "pending",
+      actingPlanId: route.actingRef.id,
+      requestedByUid: req.uid ?? null,
+      requestedAt: FieldValue.serverTimestamp(),
+      reviewedByUid: null,
+      reviewedAt: null,
+      reviewNote: null,
+    };
+
+    try {
+      await db().runTransaction(async (tx) => {
+        // All reads first. The two lock docs are the race-safety point: two
+        // concurrent submits for the same slot (or the same employee + day) both
+        // read the absent lock, and Firestore's transaction contention makes the
+        // loser retry, at which point it sees the lock and gets the 409.
+        const [slotSnap, empSnap, cellSnap, daySnap] = await Promise.all([
+          tx.get(slotRef),
+          tx.get(empRef),
+          tx.get(cellRef),
+          tx.get(owningRef.collection("shifts").where("date", "==", date)),
+        ]);
+        if (empSnap.exists) {
+          throw new RequestConflict(
+            "Na tento den už máte čekající žádost o směnu. Pokud ji chcete změnit, nejprve ji stáhněte."
+          );
+        }
+        if (slotSnap.exists) {
+          throw new RequestConflict(
+            `Směna ${slot.code} dne ${czDate(date)} je už zabraná – požádal o ni jiný zaměstnanec.`
+          );
+        }
+        const cell = cellSnap.exists ? (cellSnap.data() as Record<string, unknown>) : undefined;
+        if (cell?.source === "vacation") {
+          throw new RequestConflict("V tento den máte schválenou dovolenou, o směnu nelze žádat.");
+        }
+        if (cellOccupiesSlot(cell, slot.segCode, slot.hotel)) {
+          throw new RequestConflict(`Směnu ${slot.code} už v tento den máte.`);
+        }
+        const taken = daySnap.docs.some(
+          (d) => d.id !== cellRef.id && cellOccupiesSlot(d.data() as Record<string, unknown>, slot.segCode, slot.hotel)
+        );
+        if (taken) {
+          throw new RequestConflict(
+            `Směna ${slot.code} dne ${czDate(date)} je už zabraná – má ji přidělenou jiný zaměstnanec.`
+          );
+        }
+        const lock = { requestId: reqRef.id, employeeId, date, code: slot.code, createdAt: FieldValue.serverTimestamp() };
+        tx.create(slotRef, { ...lock, kind: "slot" });
+        tx.create(empRef, { ...lock, kind: "employee-day" });
+        tx.set(reqRef, docData);
+        tx.update(owningRef, { updatedAt: FieldValue.serverTimestamp() });
+      });
+    } catch (e) {
+      if (e instanceof RequestConflict) {
+        res.status(e.status).json({ error: e.message });
+        return;
+      }
+      // A lock created by a concurrent submit between our read and commit.
+      if ((e as { code?: number }).code === 6) {
+        res.status(409).json({ error: `Směna ${slot.code} dne ${czDate(date)} je už zabraná – požádal o ni jiný zaměstnanec.` });
+        return;
+      }
+      throw e;
+    }
+    if (route.linked) await route.actingRef.update({ updatedAt: FieldValue.serverTimestamp() });
+    await logCreate(ctxFromReq(req), {
+      collection: "shiftPlans/shiftRequests",
+      resourceId: owningRef.id,
+      subResourceId: reqRef.id,
+      employeeId,
+      year: Number(date.slice(0, 4)) || undefined,
+      month: Number(date.slice(5, 7)) || undefined,
+      summary: { date, requestedInput: slot.code, actingPlanId: route.actingRef.id },
+    });
+    res.status(201).json({
+      id: reqRef.id,
+      planId: owningRef.id,
+      employeeId,
+      date,
+      code: slot.code,
+      status: "pending",
+      actingPlanId: route.actingRef.id,
+      requestedByUid: req.uid ?? null,
+    });
+  }
+);
+
+/**
+ * Delete the lock docs of a request inside a transaction, but only those that
+ * still point at THIS request (a lock never belongs to anyone else while the
+ * request is pending; the check is a belt-and-braces guard). Reads happen in
+ * `readLocks`, writes in `deleteLocks`, so callers keep reads-before-writes.
+ */
+async function readRequestLocks(
+  tx: admin.firestore.Transaction,
+  planRef: admin.firestore.DocumentReference,
+  data: Record<string, unknown>
+): Promise<admin.firestore.DocumentSnapshot[]> {
+  const date = String(data.date ?? "");
+  const refs = [
+    planRef.collection("shiftRequestSlots").doc(slotLockId(date, String(data.code ?? ""))),
+    planRef.collection("shiftRequestSlots").doc(empLockId(date, String(data.employeeId ?? ""))),
+  ];
+  return Promise.all(refs.map((r) => tx.get(r)));
+}
+function deleteRequestLocks(
+  tx: admin.firestore.Transaction,
+  locks: admin.firestore.DocumentSnapshot[],
+  requestId: string
+): void {
+  for (const l of locks) {
+    if (l.exists && (l.data() as Record<string, unknown>).requestId === requestId) tx.delete(l.ref);
+  }
+}
+
+// PATCH /shifts/plans/:planId/shiftRequests/:reqId — approve / reject.
+// :planId is the OWNING plan (the request's parent; the GET returns it as
+// `planId`). Allowed in any plan status — pending requests survive close /
+// publish. Body: { status: "approved" | "rejected", reviewNote? }.
+shiftsRouter.patch(
+  "/plans/:planId/shiftRequests/:reqId",
+  requireAuth,
+  requirePermission("shifts.changeRequest.review"),
+  async (req: AuthRequest, res) => {
+    const { planId, reqId } = req.params;
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const status = body.status as string;
+    if (status !== "approved" && status !== "rejected") {
+      res.status(400).json({ error: "Stav musí být approved nebo rejected" });
+      return;
+    }
+    const reviewNote =
+      typeof body.reviewNote === "string" && body.reviewNote.trim() !== "" ? body.reviewNote.trim().slice(0, 500) : null;
+
+    const planRef = db().collection("shiftPlans").doc(planId);
+    const reqRef = planRef.collection("shiftRequests").doc(reqId);
+    let data: Record<string, unknown> = {};
+    let cellBeforeRaw = "";
+    let cellRawAfter = "";
+    try {
+      await db().runTransaction(async (tx) => {
+        const reqSnap = await tx.get(reqRef);
+        if (!reqSnap.exists) throw new RequestConflict("Žádost nenalezena", 404);
+        data = reqSnap.data() as Record<string, unknown>;
+        if (data.status !== "pending") throw new RequestConflict("Tato žádost už byla vyřízena.");
+        const employeeId = String(data.employeeId ?? "");
+        const date = String(data.date ?? "");
+        const locks = await readRequestLocks(tx, planRef, data);
+
+        let cellWrite: { ref: admin.firestore.DocumentReference; value: Record<string, unknown> } | null = null;
+        if (status === "approved") {
+          const slot = parseRequestableShift(data.code);
+          if (!slot || !employeeId || !date) throw new RequestConflict("Žádost obsahuje neplatnou směnu.", 400);
+          const cellRef = planRef.collection("shifts").doc(`${employeeId}_${date}`);
+          const [cellSnap, daySnap] = await Promise.all([
+            tx.get(cellRef),
+            tx.get(planRef.collection("shifts").where("date", "==", date)),
+          ]);
+          const cell = cellSnap.exists ? (cellSnap.data() as Record<string, unknown>) : undefined;
+          // A vacation approved after the request was filed must not be
+          // silently overwritten by the approval.
+          if (cell?.source === "vacation") {
+            throw new RequestConflict("Zaměstnanec má v tento den schválenou dovolenou – žádost nelze schválit.");
+          }
+          // Re-check the slot against everyone ELSE's cells: someone may have
+          // been assigned it since the request was filed.
+          const takenByOther = daySnap.docs.some(
+            (d) => d.id !== cellRef.id && cellOccupiesSlot(d.data() as Record<string, unknown>, slot.segCode, slot.hotel)
+          );
+          if (takenByOther) {
+            throw new RequestConflict(
+              `Směnu ${slot.code} dne ${czDate(date)} mezitím dostal jiný zaměstnanec. Žádost můžete zamítnout.`
+            );
+          }
+          cellBeforeRaw = ((cell?.rawInput as string) ?? "") || "";
+          const parsed = parseShiftExpression(slot.code);
+          cellRawAfter = parsed.rawInput;
+          cellWrite = {
+            ref: cellRef,
+            value: {
+              employeeId,
+              date,
+              rawInput: parsed.rawInput,
+              segments: parsed.segments,
+              hoursComputed: parsed.hoursComputed,
+              isDouble: parsed.isDouble,
+              status: "assigned",
+              typeTag: null,
+              updatedAt: FieldValue.serverTimestamp(),
+            },
+          };
+        }
+
+        // Writes.
+        if (cellWrite) tx.set(cellWrite.ref, cellWrite.value);
+        tx.update(reqRef, {
+          status,
+          reviewedByUid: req.uid ?? null,
+          reviewedAt: FieldValue.serverTimestamp(),
+          reviewNote,
+        });
+        // Terminal transition → free the locks (after an approval the cell
+        // itself occupies the slot).
+        deleteRequestLocks(tx, locks, reqId);
+        tx.update(planRef, { updatedAt: FieldValue.serverTimestamp() });
+      });
+    } catch (e) {
+      if (e instanceof RequestConflict) {
+        res.status(e.status).json({ error: e.message });
+        return;
+      }
+      throw e;
+    }
+
+    const actingPlanId = typeof data.actingPlanId === "string" ? data.actingPlanId : "";
+    if (actingPlanId && actingPlanId !== planId) {
+      // December page polls its own updatedAt — bump it after a Jan 1 decision.
+      await db().collection("shiftPlans").doc(actingPlanId).update({ updatedAt: FieldValue.serverTimestamp() }).catch(() => {});
+    }
+    const date = String(data.date ?? "");
+    const ym = { year: Number(date.slice(0, 4)) || undefined, month: Number(date.slice(5, 7)) || undefined };
+    const ctx = ctxFromReq(req);
+    if (status === "approved" && cellBeforeRaw !== cellRawAfter) {
+      await logUpdate(ctx, {
+        collection: "shiftPlans/shifts",
+        resourceId: planId,
+        subResourceId: `${data.employeeId}_${date}`,
+        employeeId: data.employeeId as string | undefined,
+        ...ym,
+        before: { rawInput: cellBeforeRaw },
+        after: { rawInput: cellRawAfter },
+      });
+    }
+    await logUpdate(ctx, {
+      collection: "shiftPlans/shiftRequests",
+      resourceId: planId,
+      subResourceId: reqId,
+      employeeId: data.employeeId as string | undefined,
+      event: status === "approved" ? "shift.request.approve" : "shift.request.reject",
+      ...ym,
+      before: { status: "pending" },
+      after: { status, ...(reviewNote ? { reviewNote } : {}) },
+    });
+    res.json({ ok: true });
+  }
+);
+
+// DELETE /shifts/plans/:planId/shiftRequests/:reqId — the requester withdraws
+// their own PENDING request (any plan status). The doc is kept with status
+// "withdrawn" (history), and its slot locks are released.
+shiftsRouter.delete(
+  "/plans/:planId/shiftRequests/:reqId",
+  requireAuth,
+  requirePermission("shifts.cells.editOwnX"),
+  async (req: AuthRequest, res) => {
+    const { planId, reqId } = req.params;
+    const planRef = db().collection("shiftPlans").doc(planId);
+    const reqRef = planRef.collection("shiftRequests").doc(reqId);
+    const ownId = await callerEmployeeId(req);
+    let data: Record<string, unknown> = {};
+    try {
+      await db().runTransaction(async (tx) => {
+        const snap = await tx.get(reqRef);
+        if (!snap.exists) throw new RequestConflict("Žádost nenalezena", 404);
+        data = snap.data() as Record<string, unknown>;
+        const mine = data.requestedByUid === req.uid || (!!ownId && data.employeeId === ownId);
+        if (!mine) throw new RequestConflict("Nemáte oprávnění tuto žádost stáhnout.", 403);
+        if (data.status !== "pending") throw new RequestConflict("Stáhnout lze pouze čekající žádost.", 400);
+        const locks = await readRequestLocks(tx, planRef, data);
+        tx.update(reqRef, { status: "withdrawn", withdrawnAt: FieldValue.serverTimestamp() });
+        deleteRequestLocks(tx, locks, reqId);
+        tx.update(planRef, { updatedAt: FieldValue.serverTimestamp() });
+      });
+    } catch (e) {
+      if (e instanceof RequestConflict) {
+        res.status(e.status).json({ error: e.message });
+        return;
+      }
+      throw e;
+    }
+    const actingPlanId = typeof data.actingPlanId === "string" ? data.actingPlanId : "";
+    if (actingPlanId && actingPlanId !== planId) {
+      await db().collection("shiftPlans").doc(actingPlanId).update({ updatedAt: FieldValue.serverTimestamp() }).catch(() => {});
+    }
+    const date = String(data.date ?? "");
+    await logUpdate(ctxFromReq(req), {
+      collection: "shiftPlans/shiftRequests",
+      resourceId: planId,
+      subResourceId: reqId,
+      employeeId: data.employeeId as string | undefined,
+      event: "shift.request.withdraw",
+      year: Number(date.slice(0, 4)) || undefined,
+      month: Number(date.slice(5, 7)) || undefined,
+      before: { status: "pending" },
+      after: { status: "withdrawn" },
+    });
+    res.json({ ok: true });
+  }
+);
+
 // ─── MOD Row (Manager on Duty) ───────────────────────────────────────────────
 
 const VALID_MOD_CODE = /^[A-Z]$/;
@@ -3092,7 +4123,7 @@ shiftsRouter.put(
   "/plans/:planId/mod/:date",
   requireAuth,
   requirePermission("shifts.mod.manage"),
-  async (req, res) => {
+  async (req: AuthRequest, res) => {
     const { planId, date } = req.params;
     const body = req.body as Record<string, unknown>;
     const code = ((body.code as string) ?? "").toUpperCase().trim();
@@ -3106,19 +4137,43 @@ shiftsRouter.put(
       return;
     }
 
-    const modRef = db()
-      .collection("shiftPlans")
-      .doc(planId)
-      .collection("modRow")
-      .doc(date);
+    // December's linked 1 January → the January plan's modRow.
+    const route = await resolveDateRoute(planId, date);
+    if ("error" in route) {
+      res.status(route.status).json({ error: route.error });
+      return;
+    }
+    let owningRef: admin.firestore.DocumentReference;
+    if (route.linked) {
+      // MOD letters are per plan (modPersons: letter → employeeId). Carry the
+      // letter's December holder into January (roster + modPersons) when January
+      // has no holder for it yet, so the code means the same person there. A
+      // letter January already maps, or a holder who already has another letter
+      // in January, is left alone (same rule as copy-employees).
+      const actingMod = (route.actingData.modPersons as Record<string, string> | undefined) ?? {};
+      const holder = typeof actingMod[code] === "string" && actingMod[code] !== "" ? actingMod[code] : null;
+      owningRef = await materializeOwningPlan(req, route, [holder]);
+      if (holder) {
+        await db().runTransaction(async (tx) => {
+          const janSnap = await tx.get(owningRef);
+          const janMod = (janSnap.data()?.modPersons as Record<string, string> | undefined) ?? {};
+          if (janMod[code] || Object.values(janMod).includes(holder)) return;
+          tx.update(owningRef, { modPersons: { ...janMod, [code]: holder } });
+        });
+      }
+    } else {
+      owningRef = route.owningRef!;
+    }
+
+    const modRef = owningRef.collection("modRow").doc(date);
     const beforeSnap = await modRef.get();
     const beforeCode = beforeSnap.exists ? ((beforeSnap.data() as Record<string, unknown>).code as string | undefined) ?? null : null;
     await modRef.set({ code, updatedAt: FieldValue.serverTimestamp() });
-    await db().collection("shiftPlans").doc(planId).update({ updatedAt: FieldValue.serverTimestamp() });
+    await bumpRoutePlans({ ...route, owningRef });
     if (beforeCode !== code) {
-      await logUpdate(ctxFromReq(req as AuthRequest), {
+      await logUpdate(ctxFromReq(req), {
         collection: "shiftPlans/modRow",
-        resourceId: planId,
+        resourceId: owningRef.id,
         subResourceId: date,
         before: { code: beforeCode },
         after: { code },
@@ -3133,21 +4188,29 @@ shiftsRouter.delete(
   "/plans/:planId/mod/:date",
   requireAuth,
   requirePermission("shifts.mod.manage"),
-  async (req, res) => {
+  async (req: AuthRequest, res) => {
     const { planId, date } = req.params;
-    const modRef = db()
-      .collection("shiftPlans")
-      .doc(planId)
-      .collection("modRow")
-      .doc(date);
+    // December's linked 1 January → the January plan's modRow. A delete never
+    // creates the January plan.
+    const route = await resolveDateRoute(planId, date);
+    if ("error" in route) {
+      res.status(route.status).json({ error: route.error });
+      return;
+    }
+    if (!route.owningRef) {
+      res.json({ ok: true });
+      return;
+    }
+    const owningRef = route.owningRef;
+    const modRef = owningRef.collection("modRow").doc(date);
     const beforeSnap = await modRef.get();
     const beforeCode = beforeSnap.exists ? ((beforeSnap.data() as Record<string, unknown>).code as string | undefined) ?? null : null;
     await modRef.delete();
-    await db().collection("shiftPlans").doc(planId).update({ updatedAt: FieldValue.serverTimestamp() });
+    await bumpRoutePlans(route);
     if (beforeSnap.exists) {
-      await logDelete(ctxFromReq(req as AuthRequest), {
+      await logDelete(ctxFromReq(req), {
         collection: "shiftPlans/modRow",
-        resourceId: planId,
+        resourceId: owningRef.id,
         subResourceId: date,
         summary: { code: beforeCode },
       });

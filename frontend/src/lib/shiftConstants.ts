@@ -443,6 +443,27 @@ export function isPureNumericExpression(parsed: ParseResult): boolean {
   );
 }
 
+/** Shift codes an employee may REQUEST inside a shift-request window. */
+export const REQUESTABLE_SHIFT_CODES = ["D", "N", "ZD", "ZN", "DP", "NP"] as const;
+
+/**
+ * Parse a shift-request code: exactly ONE plain shift token with a hotel letter
+ * (e.g. "DA", "NS", "DPQ"). Mirror of parseRequestableShift in
+ * functions/src/services/shiftParser.ts – the server is the gate.
+ */
+export function parseRequestableShift(
+  input: unknown
+): { code: string; segCode: string; hotel: string } | null {
+  if (typeof input !== "string") return null;
+  const t = input.trim().toUpperCase();
+  if (t === "" || t.includes("+") || t.includes("²")) return null;
+  const parsed = parseShiftExpression(t);
+  if (!parsed.isValid || parsed.isDouble || parsed.segments.length !== 1) return null;
+  const seg = parsed.segments[0];
+  if (!(REQUESTABLE_SHIFT_CODES as readonly string[]).includes(seg.code) || !seg.hotel) return null;
+  return { code: seg.code + seg.hotel, segCode: seg.code, hotel: seg.hotel };
+}
+
 export function parseShiftExpression(input: string): ParseResult {
   const trimmed = input.trim();
 
