@@ -106,6 +106,47 @@ export interface PlanDetail {
   employees: PlanEmployee[];
   shifts: ShiftDoc[];
   modShifts: ModShiftDoc[];
+  /** December only: 1 January of the next year, read from the January plan (its
+   *  single source of truth). null = that January plan does not exist yet; absent
+   *  on non-December plans and on older/demo payloads. Never part of `shifts`, so
+   *  no December total, X count or payroll figure includes it. */
+  linkedNextDay?: LinkedNextDay | null;
+}
+
+export interface LinkedNextDay {
+  planId: string;
+  year: number;
+  month: number;
+  /** YYYY-01-01 */
+  date: string;
+  status: PlanStatus | null;
+  shifts: ShiftDoc[];
+  modShift: ModShiftDoc | null;
+  modPersons: Record<string, string>;
+  splits: ShiftSplit[];
+  freeShiftDpa: boolean;
+}
+
+/** The linked 1 January column date of a December plan, else null. */
+function linkedDateOf(plan: { year: number; month: number }): string | null {
+  return plan.month === 12 ? `${plan.year + 1}-01-01` : null;
+}
+
+/** Empty linked-day record used until the server's (lazily created) January
+ *  plan is fetched back. */
+function emptyLinkedDay(plan: { year: number }): LinkedNextDay {
+  return {
+    planId: "",
+    year: plan.year + 1,
+    month: 1,
+    date: `${plan.year + 1}-01-01`,
+    status: null,
+    shifts: [],
+    modShift: null,
+    modPersons: {},
+    splits: [],
+    freeShiftDpa: false,
+  };
 }
 
 interface PlanListItem {
@@ -478,16 +519,21 @@ export default function ShiftPlannerPage() {
   }, [loadSplits]);
 
   // Keyed "YYYY-MM-DD|TYPE" for the grid's per-cell lookup.
+  // The linked 1 January's splits come from the January plan via linkedNextDay.
+  const linkedSplits = plan?.linkedNextDay?.splits;
   const splitsByKey = useMemo(() => {
     const rec: Record<string, { employeeId: string; hours: number }[]> = {};
     for (const s of splits) rec[`${s.date}|${s.type}`] = s.entries ?? [];
+    for (const s of linkedSplits ?? []) rec[`${s.date}|${s.type}`] = s.entries ?? [];
     return rec;
-  }, [splits]);
+  }, [splits, linkedSplits]);
 
   // Who already covers this date+type from real shift cells, and who is still
   // assignable (the plan roster minus those contributors).
   function splitModalData(target: { date: string; type: string }) {
-    const cellContributors = (plan?.shifts ?? [])
+    const dayCells =
+      plan && target.date === linkedDateOf(plan) ? plan.linkedNextDay?.shifts ?? [] : plan?.shifts ?? [];
+    const cellContributors = dayCells
       .filter((s) => s.date === target.date && cellHoursForType(s, target.type) > 0)
       .map((s) => {
         const emp = plan?.employees.find((e) => e.employeeId === s.employeeId);
@@ -739,6 +785,17 @@ export default function ShiftPlannerPage() {
         `/shifts/plans/${plan.id}/free-dpa-day`,
         { date, enabled }
       );
+      // Linked 1 January: the flag is January's; the response's list is
+      // December's own (unchanged), so only the linked flag moves.
+      if (isLinkedDate(date)) {
+        setPlan((prev) => {
+          if (!prev) return prev;
+          const ln = prev.linkedNextDay ?? emptyLinkedDay(prev);
+          return { ...prev, freeShiftDpaDays, linkedNextDay: { ...ln, freeShiftDpa: enabled } };
+        });
+        refetchIfLinkedPlanMissing(date);
+        return;
+      }
       setPlan((prev) => (prev ? { ...prev, freeShiftDpaDays } : prev));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Chyba při úpravě volných směn");
@@ -813,6 +870,23 @@ export default function ShiftPlannerPage() {
 
   async function handleModSave(date: string, code: string) {
     if (!plan) return;
+    // Linked 1 January: the MOD cell lives in the January plan (server-routed);
+    // mirror it into `linkedNextDay`, never into December's modShifts.
+    if (isLinkedDate(date)) {
+      const cleared = code.trim() === "";
+      if (cleared) await api.delete(`/shifts/plans/${plan.id}/mod/${date}`);
+      else await api.put(`/shifts/plans/${plan.id}/mod/${date}`, { code });
+      setPlan((prev) => {
+        if (!prev) return prev;
+        const ln = prev.linkedNextDay ?? emptyLinkedDay(prev);
+        return {
+          ...prev,
+          linkedNextDay: { ...ln, modShift: cleared ? null : { id: date, date, code } },
+        };
+      });
+      refetchIfLinkedPlanMissing(date);
+      return;
+    }
     if (code.trim() === "") {
       await api.delete(`/shifts/plans/${plan.id}/mod/${date}`);
       setPlan((prev) =>
@@ -881,8 +955,13 @@ export default function ShiftPlannerPage() {
         daysInMonth.push(new Date(d));
         d.setDate(d.getDate() + 1);
       }
+      // December: the linked 1 January column (January plan's data) is exported
+      // too, but never counted in a row's monthly total.
+      const linkedDate = linkedDateOf(plan);
+      if (linkedDate) daysInMonth.push(new Date(plan.year + 1, 0, 1));
       const dayNames = ["Ne", "Po", "\u00dat", "St", "\u010ct", "P\u00e1", "So"];
-      const holidays = getCzechHolidays(plan.year);
+      const holidays = new Set(getCzechHolidays(plan.year));
+      if (linkedDate) for (const h of getCzechHolidays(plan.year + 1)) holidays.add(h);
       const pad2 = (n: number) => String(n).padStart(2, "0");
       function fmtDate(dt: Date) {
         return `${dt.getFullYear()}-${pad2(dt.getMonth() + 1)}-${pad2(dt.getDate())}`;
@@ -892,10 +971,12 @@ export default function ShiftPlannerPage() {
       // ── Shift lookup map ──
       const shiftMap = new Map<string, ShiftDoc>();
       for (const s of plan.shifts) shiftMap.set(`${s.employeeId}_${s.date}`, s);
+      for (const s of plan.linkedNextDay?.shifts ?? []) shiftMap.set(`${s.employeeId}_${s.date}`, s);
 
       // ── MOD lookup ──
       const modMap = new Map<string, string>();
       for (const m of plan.modShifts) modMap.set(m.date, m.code);
+      if (plan.linkedNextDay?.modShift) modMap.set(plan.linkedNextDay.modShift.date, plan.linkedNextDay.modShift.code);
 
       // ── Group employees by section ──
       const grouped = new Map<string, PlanEmployee[]>();
@@ -921,7 +1002,8 @@ export default function ShiftPlannerPage() {
         const wkend = isWeekend(day);
         const hol = holidays.has(fmtDate(day));
         const bg = hol ? "#fef2f2" : wkend ? "#f0f9ff" : "#f3f4f6";
-        html += `<th style="${cs.header}background:${bg};"><div>${day.getDate()}</div><div style="font-weight:400;font-size:5pt;">${dayNames[day.getDay()]}</div></th>`;
+        const isLinked = fmtDate(day) === linkedDate;
+        html += `<th style="${cs.header}background:${bg};${isLinked ? "border-left:2px solid #6b7280;" : ""}"><div>${isLinked ? "1.1." : day.getDate()}</div><div style="font-weight:400;font-size:5pt;">${dayNames[day.getDay()]}</div></th>`;
       }
       html += `<th style="${cs.header}">\u03a3</th>`;
       html += "</tr>";
@@ -956,8 +1038,8 @@ export default function ShiftPlannerPage() {
             const wkend = isWeekend(day);
             const hol = holidays.has(dateStr);
             const cellBg = bg !== "transparent" ? bg : (hol ? "#fef2f2" : wkend ? "#f0f9ff" : "#fff");
-            if (shift?.status === "assigned") shiftCount++;
-            html += `<td style="${cs.cell}background:${cellBg};color:${text};">${raw}</td>`;
+            if (shift?.status === "assigned" && dateStr !== linkedDate) shiftCount++;
+            html += `<td style="${cs.cell}background:${cellBg};color:${text};${dateStr === linkedDate ? "border-left:2px solid #6b7280;" : ""}">${raw}</td>`;
           }
           html += `<td style="${cs.cell}font-weight:700;">${shiftCount}</td>`;
           html += "</tr>";
@@ -970,7 +1052,7 @@ export default function ShiftPlannerPage() {
           for (const day of daysInMonth) {
             const dateStr = fmtDate(day);
             const code = modMap.get(dateStr) ?? "";
-            html += `<td style="${cs.modCell}">${code}</td>`;
+            html += `<td style="${cs.modCell}${dateStr === linkedDate ? "border-left:2px solid #6b7280;" : ""}">${code}</td>`;
           }
           html += `<td style="${cs.modCell}"></td>`;
           html += "</tr>";
@@ -1046,10 +1128,16 @@ export default function ShiftPlannerPage() {
       d.setDate(d.getDate() + 1);
     }
 
+    // December: the linked 1 January column is exported, never counted in totals.
+    const linkedDate = linkedDateOf(plan);
+    if (linkedDate) daysInMonth.push(new Date(plan.year + 1, 0, 1));
+
     const shiftMap = new Map<string, ShiftDoc>();
     for (const s of plan.shifts) shiftMap.set(`${s.employeeId}_${s.date}`, s);
+    for (const s of plan.linkedNextDay?.shifts ?? []) shiftMap.set(`${s.employeeId}_${s.date}`, s);
     const modMap = new Map<string, string>();
     for (const m of plan.modShifts) modMap.set(m.date, m.code);
+    if (plan.linkedNextDay?.modShift) modMap.set(plan.linkedNextDay.modShift.date, plan.linkedNextDay.modShift.code);
 
     // MOD letter per employee. Was a second, divergent copy of the grid's logic:
     // it compared surname-first against a first-name-first table (so it never
@@ -1063,7 +1151,7 @@ export default function ShiftPlannerPage() {
     // Header row
     const header = [
       "Zaměstnanec",
-      ...daysInMonth.map((dt) => pad2(dt.getDate())),
+      ...daysInMonth.map((dt) => (linkedDate && dt.getMonth() === 0 ? "01.01." : pad2(dt.getDate()))),
       "Celkem směn",
     ];
     rows.push(header.map(escape).join(";"));
@@ -1081,7 +1169,7 @@ export default function ShiftPlannerPage() {
           const dateStr = `${dt.getFullYear()}-${pad2(dt.getMonth() + 1)}-${pad2(dt.getDate())}`;
           const shift = shiftMap.get(`${emp.employeeId}_${dateStr}`);
           const raw = shift?.rawInput ?? "";
-          if (raw && raw !== "X") shiftCount++;
+          if (raw && raw !== "X" && dateStr !== linkedDate) shiftCount++;
           return escape(raw);
         });
         const modLetter = section === "vedoucí" ? (effectiveModPersons.get(emp.employeeId) ?? "") : "";
@@ -1214,11 +1302,49 @@ export default function ShiftPlannerPage() {
   // is typed. Only toggles empty ↔ X – never clobbers a real shift value.
   async function handleCellToggleX(employeeId: string, date: string) {
     if (!plan || plan.status !== "opened") return;
-    const cur = (plan.shifts.find((s) => s.id === `${employeeId}_${date}`)?.rawInput ?? "")
+    const cur = (findCell(`${employeeId}_${date}`)?.rawInput ?? "")
       .trim()
       .toUpperCase();
     if (cur !== "" && cur !== "X") return; // don't overwrite an assigned shift
     await handleCellSave(employeeId, date, cur === "X" ? "" : "X");
+  }
+
+  // ── December's linked 1 January column ──
+  // Its cells live in `plan.linkedNextDay.shifts` (the January plan's data), never
+  // in `plan.shifts`. The server routes every write for that date to January.
+
+  /** A cell of the plan OR of its linked 1 January column. */
+  function findCell(docId: string): ShiftDoc | undefined {
+    return (
+      plan?.shifts.find((s) => s.id === docId) ??
+      plan?.linkedNextDay?.shifts.find((s) => s.id === docId)
+    );
+  }
+
+  /** True when `date` is this (December) plan's linked 1 January. */
+  function isLinkedDate(date: string): boolean {
+    return !!plan && date === linkedDateOf(plan);
+  }
+
+  /** After a linked write while January did not exist yet, the server created it;
+   *  refetch so `linkedNextDay` carries the real plan. */
+  function refetchIfLinkedPlanMissing(date: string) {
+    if (plan && isLinkedDate(date) && !plan.linkedNextDay?.planId) loadPlan(true);
+  }
+
+  /** Local upsert (cell) or removal (null), routed by date. */
+  function setLocalCell(date: string, docId: string, cell: ShiftDoc | null) {
+    setPlan((prev) => {
+      if (!prev) return prev;
+      if (date === linkedDateOf(prev)) {
+        const ln = prev.linkedNextDay ?? emptyLinkedDay(prev);
+        const others = ln.shifts.filter((s) => s.id !== docId);
+        return { ...prev, linkedNextDay: { ...ln, shifts: cell ? [...others, cell] : others } };
+      }
+      const others = prev.shifts.filter((s) => s.id !== docId);
+      return { ...prev, shifts: cell ? [...others, cell] : others };
+    });
+    refetchIfLinkedPlanMissing(date);
   }
 
   /** A cell write hit a concurrency conflict (409): tell the user + refresh. */
@@ -1263,15 +1389,11 @@ export default function ShiftPlannerPage() {
             setConfirmModal(null);
             api.delete(
               `/shifts/plans/${plan.id}/shifts/${employeeId}/${date}?baseRawInput=${encodeURIComponent(
-                plan.shifts.find((s) => s.id === `${employeeId}_${date}`)?.rawInput ?? ""
+                findCell(`${employeeId}_${date}`)?.rawInput ?? ""
               )}`
             )
               .then(() => {
-                setPlan((prev) => {
-                  if (!prev) return prev;
-                  const docId = `${employeeId}_${date}`;
-                  return { ...prev, shifts: prev.shifts.filter((s) => s.id !== docId) };
-                });
+                setLocalCell(date, `${employeeId}_${date}`, null);
               })
               .catch((e) => {
                 if (e instanceof ApiError && e.status === 409) {
@@ -1286,7 +1408,7 @@ export default function ShiftPlannerPage() {
         // ShiftCell will re-display the original value since setPlan wasn't called.
         return;
       }
-      const delBase = plan.shifts.find((s) => s.id === `${employeeId}_${date}`)?.rawInput ?? "";
+      const delBase = findCell(`${employeeId}_${date}`)?.rawInput ?? "";
       try {
         await api.delete(
           `/shifts/plans/${plan.id}/shifts/${employeeId}/${date}?baseRawInput=${encodeURIComponent(delBase)}`
@@ -1298,11 +1420,7 @@ export default function ShiftPlannerPage() {
         }
         throw e;
       }
-      setPlan((prev) => {
-        if (!prev) return prev;
-        const docId = `${employeeId}_${date}`;
-        return { ...prev, shifts: prev.shifts.filter((s) => s.id !== docId) };
-      });
+      setLocalCell(date, `${employeeId}_${date}`, null);
       return;
     }
 
@@ -1310,9 +1428,16 @@ export default function ShiftPlannerPage() {
     const isAllX =
       parsed.segments.length > 0 && parsed.segments.every((s) => s.code === "X");
 
+    // The linked 1 January is a JANUARY day: its X rules (6 in a row, monthly
+    // limit) are January's, and the client holds only that one January day. So
+    // for it the 6-in-a-row and monthly-limit pre-checks are left to the server
+    // (enforced against the January plan; a breach comes back as the 403 below),
+    // while the per-day coverage check runs on the linked day's own cells.
+    const linked = isLinkedDate(date);
+    const linkedShifts = plan.linkedNextDay?.shifts ?? [];
     if (isAllX && !can("shifts.xAllowance.manage")) {
       // Hard block: no more than 6 consecutive Xs – no override allowed
-      if (consecutiveXRun(plan.shifts, employeeId, date) > 6) {
+      if (!linked && consecutiveXRun(plan.shifts, employeeId, date) > 6) {
         setConfirmModal({
           title: "Příliš mnoho X za sebou",
           message:
@@ -1329,7 +1454,7 @@ export default function ShiftPlannerPage() {
       const violations: ViolationInfo[] = [];
 
       // Per-employee X limit check (base + admin extra allowance)
-      const limit = getEffectiveXLimit(emp);
+      const limit = linked ? null : getEffectiveXLimit(emp);
       if (limit !== null) {
         const current = countXShifts(plan.shifts, employeeId);
         if (current >= limit) {
@@ -1338,7 +1463,11 @@ export default function ShiftPlannerPage() {
       }
 
       // Per-day coverage check (recepce D/N only)
-      const coverageViolation = checkCoverage(plan, employeeId, date);
+      const coverageViolation = checkCoverage(
+        linked ? { ...plan, shifts: linkedShifts } : plan,
+        employeeId,
+        date
+      );
       if (coverageViolation) {
         violations.push({
           type: coverageViolation.shiftType === "D" ? "day_coverage" : "night_coverage",
@@ -1355,7 +1484,7 @@ export default function ShiftPlannerPage() {
     const docId = `${employeeId}_${date}`;
     // Optimistic concurrency: send the value we based this edit on so the server
     // rejects (409) if the cell moved, rather than clobbering a colleague's change.
-    const baseRawInput = plan.shifts.find((s) => s.id === docId)?.rawInput ?? null;
+    const baseRawInput = findCell(docId)?.rawInput ?? null;
     try {
       await api.put(`/shifts/plans/${plan.id}/shifts/${employeeId}/${date}`, { rawInput, baseRawInput });
     } catch (e) {
@@ -1382,7 +1511,7 @@ export default function ShiftPlannerPage() {
     }
     // Preserve an existing type-tag across a numeric→numeric edit; the backend
     // keeps it too (it only clears the tag when the cell stops being numeric).
-    const existingTag = plan.shifts.find((s) => s.id === docId)?.typeTag ?? null;
+    const existingTag = findCell(docId)?.typeTag ?? null;
     const updated: ShiftDoc = {
       id: docId,
       employeeId,
@@ -1398,11 +1527,7 @@ export default function ShiftPlannerPage() {
           : "assigned",
       typeTag: isPureNumericExpression(parsed) ? existingTag : null,
     };
-    setPlan((prev) => {
-      if (!prev) return prev;
-      const others = prev.shifts.filter((s) => s.id !== docId);
-      return { ...prev, shifts: [...others, updated] };
-    });
+    setLocalCell(date, docId, updated);
   }
 
   // #29: set/clear the shift-type tag on a numeric "worked hours" cell. Reuses the
@@ -1410,7 +1535,7 @@ export default function ShiftPlannerPage() {
   async function handleCellTagSave(employeeId: string, date: string, typeTag: string | null) {
     if (!plan) return;
     const docId = `${employeeId}_${date}`;
-    const shift = plan.shifts.find((s) => s.id === docId);
+    const shift = findCell(docId);
     if (!shift) return; // can only tag an existing cell
     try {
       await api.put(`/shifts/plans/${plan.id}/shifts/${employeeId}/${date}`, {
@@ -1425,10 +1550,7 @@ export default function ShiftPlannerPage() {
       }
       throw e;
     }
-    setPlan((prev) => {
-      if (!prev) return prev;
-      return { ...prev, shifts: prev.shifts.map((s) => (s.id === docId ? { ...s, typeTag } : s)) };
-    });
+    setLocalCell(date, docId, { ...shift, typeTag });
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -2037,7 +2159,11 @@ export default function ShiftPlannerPage() {
                 (plan.status === "published" && canSeeFreeShifts) ||
                 (plan.status === "closed" && can("shifts.freeShift.manage"))
               }
-              freeShiftDpaDays={plan.freeShiftDpaDays ?? []}
+              freeShiftDpaDays={
+                plan.linkedNextDay?.freeShiftDpa
+                  ? [...(plan.freeShiftDpaDays ?? []), plan.linkedNextDay.date]
+                  : plan.freeShiftDpaDays ?? []
+              }
               onClaimFreeShift={
                 can("shifts.freeShift.claim") && plan.status === "published"
                   ? (date, code, hotel) => setPendingFreeClaim({ date, code, hotel })
@@ -2105,6 +2231,8 @@ export default function ShiftPlannerPage() {
                 );
                 setSplitTarget(null);
                 loadSplits();
+                // Linked 1 January splits arrive with the plan (linkedNextDay).
+                if (linkedDateOf(plan) === splitTarget.date) loadPlan(true);
               } catch (e) {
                 setConfirmModal({
                   title: "Chyba",

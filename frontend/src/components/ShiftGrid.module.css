@@ -122,6 +122,12 @@
   background: var(--color-holiday-bg);
 }
 
+/* December's linked 1 January column (data lives in the January plan): a left
+   rule separates it from 31 Dec. Combines with weekend/holiday/today. */
+.linkedDay {
+  border-left: 2px solid var(--color-text-muted);
+}
+
 /* ── Section divider row ──────────────────────────────────────────────── */
 
 /* Both cells (label + filler) carry the bar background + divider borders so the

@@ -185,23 +185,43 @@ export default function ShiftGrid({
 }: Props) {
   const { theme } = useTheme();
   const dark = theme === "dark";
-  const days = useMemo(() => getDaysInMonth(plan.year, plan.month), [plan.year, plan.month]);
+  // December renders 1 January of the next year as a linked last column. Its
+  // data (cells, MOD, splits, DPA flag) lives in the January plan and arrives as
+  // `plan.linkedNextDay`; it is kept OUT of every per-row monthly total below.
+  const days = useMemo(() => {
+    const own = getDaysInMonth(plan.year, plan.month);
+    return plan.month === 12 ? [...own, new Date(plan.year + 1, 0, 1)] : own;
+  }, [plan.year, plan.month]);
+  const linkedDateStr = plan.month === 12 ? `${plan.year + 1}-01-01` : null;
+  const linkedShifts = useMemo(() => plan.linkedNextDay?.shifts ?? [], [plan.linkedNextDay]);
+  // Date-keyed views (cell lookup, occupancy, free-shift coverage) see the linked
+  // day too; ids/dates never collide with December's own.
+  const dayShifts = useMemo(
+    () => (linkedShifts.length > 0 ? [...plan.shifts, ...linkedShifts] : plan.shifts),
+    [plan.shifts, linkedShifts]
+  );
 
-  const holidays = useMemo(() => getCzechHolidays(plan.year), [plan.year]);
+  const holidays = useMemo(() => {
+    const set = new Set(getCzechHolidays(plan.year));
+    if (plan.month === 12) for (const h of getCzechHolidays(plan.year + 1)) set.add(h);
+    return set;
+  }, [plan.year, plan.month]);
 
   const todayShiftDate = currentShiftDate();
 
   const shiftMap = useMemo(() => {
     const m = new Map<string, ShiftDoc>();
-    for (const s of plan.shifts) m.set(s.id, s);
+    for (const s of dayShifts) m.set(s.id, s);
     return m;
-  }, [plan.shifts]);
+  }, [dayShifts]);
 
   const modShiftMap = useMemo(() => {
     const m = new Map<string, ModShiftDoc>();
     for (const s of plan.modShifts) m.set(s.date, s);
+    const linkedMod = plan.linkedNextDay?.modShift;
+    if (linkedMod) m.set(linkedMod.date, linkedMod);
     return m;
-  }, [plan.modShifts]);
+  }, [plan.modShifts, plan.linkedNextDay]);
 
   // MOD shift counts per manager letter (admin/director only).
   // V+S = weekend OR public holiday (if both, counted once).
@@ -273,7 +293,7 @@ export default function ShiftGrid({
       if (!m[date][type]) m[date][type] = { occupancyHours: 0, cellHours: 0, splitHours: 0 };
       return m[date][type];
     };
-    for (const shift of plan.shifts) {
+    for (const shift of dayShifts) {
       const cell = shift.segments
         ? shift
         : { ...shift, segments: parseShiftExpression(shift.rawInput).segments };
@@ -299,13 +319,13 @@ export default function ShiftGrid({
       if (sum > 0) bucket(date, type).splitHours += sum;
     }
     return m;
-  }, [showCounterTable, plan.shifts, splits]);
+  }, [showCounterTable, dayShifts, splits]);
 
   // Volné směny: per-date set of "code_hotel" slots covered by some employee.
   const freeShiftCoverage = useMemo(() => {
     const m = new Map<string, Set<string>>();
     if (!showFreeShifts) return m;
-    for (const s of plan.shifts) {
+    for (const s of dayShifts) {
       const parsed = parseShiftExpression(s.rawInput);
       if (!parsed.isValid) continue;
       for (const seg of parsed.segments) {
@@ -322,7 +342,7 @@ export default function ShiftGrid({
       }
     }
     return m;
-  }, [showFreeShifts, plan.shifts]);
+  }, [showFreeShifts, dayShifts]);
 
   const dpaDaySet = useMemo(() => new Set(freeShiftDpaDays ?? []), [freeShiftDpaDays]);
 
@@ -384,6 +404,7 @@ export default function ShiftGrid({
     if (dateStr === todayShiftDate) parts.push(styles.today);
     else if (isWeekend(d)) parts.push(styles.weekend);
     else if (holidays.has(dateStr)) parts.push(styles.holiday);
+    if (dateStr === linkedDateStr) parts.push(styles.linkedDay);
     return parts.join(" ");
   }
 
@@ -462,7 +483,7 @@ export default function ShiftGrid({
           <col className={styles.nameCol} />
           {days.map((d) => (
             <col
-              key={d.getDate()}
+              key={formatDate(d)}
               className={isWeekend(d) ? styles.weekendCol : styles.dayCol}
             />
           ))}
@@ -473,10 +494,11 @@ export default function ShiftGrid({
             <th className={styles.nameHeader}>Zaměstnanec</th>
             {days.map((d) => (
               <th
-                key={d.getDate()}
+                key={formatDate(d)}
                 className={`${styles.dayHeader} ${dayClass(d)}`}
+                title={formatDate(d) === linkedDateStr ? "1. ledna – propojeno s lednovým plánem" : undefined}
               >
-                <div>{d.getDate()}</div>
+                <div>{formatDate(d) === linkedDateStr ? "1. 1." : d.getDate()}</div>
                 <div className={styles.dayName}>{DAY_NAMES[d.getDay()]}</div>
               </th>
             ))}
