@@ -226,6 +226,10 @@ A plan may carry `shiftRequestWindows: [{from, to}]` (max 10, sorted, overlaps m
 
 `ShiftCell.tsx` guards the commit with `committedRef`: the Enter/Escape keydown commit and the following `onBlur` used to both save, the second with a stale `baseRawInput`, producing false 409 "edited by another user" dialogs. Now exactly one save is sent per edit session (the ref resets when a new edit starts).
 
+### Touch tap opens the editor on request-window dates (v5.14.1 fix)
+
+In an `opened` plan every cell is an X-toggle cell (`onDoubleClickX`): a click only focuses it and a key press opens the editor, so on a phone (no key to press) a shift code could never be typed into a request window. `ShiftGrid` now passes `tapToEdit={requestWindowDates.has(date)}`; on those cells a **touch** tap (pointer type recorded in `onPointerDown`, since Safari's click events carry none) opens the editor via `startEditFromTap()`, which renders the input with `flushSync` and calls `focus()` synchronously inside the tap. iOS raises the soft keyboard only for a focus made within the user gesture; the regular `startEdit` path focuses in a deferred `setTimeout` and would leave the keyboard closed. Mouse clicks and double-click X are unchanged; on a phone, X on a request-window date is entered by typing `X`.
+
 ### Shift types
 - Bare `D` and `N` are invalid — hotel code required (e.g. `DA`, `NS`). `R` and `X` are valid standalone.
 - `ZD`/`ZN` also require hotel code (e.g. `ZDA`). Hour dotation: 12h.
