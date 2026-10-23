@@ -1432,14 +1432,8 @@ export default function ShiftPlannerPage() {
   async function submitShiftRequest(employeeId: string, date: string, code: string) {
     if (!plan) return;
     try {
+      // No success dialog: the cell itself shows the pending request ("DA?").
       await api.post(`/shifts/plans/${plan.id}/shiftRequests`, { employeeId, date, code });
-      setConfirmModal({
-        title: "Žádost odeslána",
-        message: `Žádost o směnu ${code} na ${formatDateCZ(date)} byla odeslána ke schválení. V buňce ji uvidíte s otazníkem, dokud nebude vyřízena.`,
-        confirmLabel: "OK",
-        showCancel: false,
-        onConfirm: () => setConfirmModal(null),
-      });
     } catch (e) {
       showError(e instanceof Error ? e.message : "Žádost se nepodařilo odeslat.");
     }

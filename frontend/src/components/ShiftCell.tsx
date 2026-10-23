@@ -75,25 +75,38 @@ export default function ShiftCell({
     }
   }, [editing]);
 
+  // One commit per edit session. Arrow/Tab/Enter commit from keydown, and the
+  // focus move (or the input turning `disabled` while saving) then fires onBlur,
+  // which used to commit the SAME draft a second time with the stale base value:
+  // the server answered 409 "edited by another user" for the user's own edit
+  // (and a duplicate shift request got "already pending"). A ref, not state,
+  // because the blur runs before React re-renders.
+  const committedRef = useRef(false);
+
   function startEdit() {
     if (readOnly || saving) return;
+    committedRef.current = false;
     setDraft(rawInput.toUpperCase());
     setEditing(true);
   }
 
   function cancelEdit() {
+    committedRef.current = true;
     setEditing(false);
     setDraft("");
   }
 
   async function commitEdit() {
+    if (committedRef.current) return;
     if (draftNormalized === rawInput) {
+      committedRef.current = true;
       setEditing(false);
       return;
     }
     if (draftNormalized.trim() !== "" && !draftParsed.isValid) {
       return;
     }
+    committedRef.current = true;
     setSaving(true);
     setSaveError(null);
     try {
@@ -107,6 +120,11 @@ export default function ShiftCell({
   }
 
   async function commitAndNavigate(dir: "up" | "down" | "left" | "right") {
+    if (committedRef.current) {
+      onNavigate(dir);
+      return;
+    }
+    committedRef.current = true;
     if (draftNormalized !== rawInput && (draftNormalized.trim() === "" || draftParsed.isValid)) {
       setSaving(true);
       setSaveError(null);
@@ -178,6 +196,7 @@ export default function ShiftCell({
       }).finally(() => setSaving(false));
     } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !readOnly) {
       // Start typing directly
+      committedRef.current = false;
       setDraft(e.key.toUpperCase());
       setEditing(true);
     }
