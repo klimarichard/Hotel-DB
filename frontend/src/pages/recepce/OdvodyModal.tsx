@@ -265,11 +265,17 @@ export default function OdvodyModal({
   }
 
   function requestDelete() {
+    // Row already gone from the protocol: the server drops only the record, so
+    // promising receipts and banknotes back would be untrue.
+    const lineMissing = !!ctx?.target.lineMissing;
     setConfirm({
       title: "Smazat odvod?",
-      message:
-        `Opravdu chcete smazat odvod za ${monthTitle(month)}? Zaškrtnuté účty se vrátí do protokolu, ` +
-        "bankovky se připíšou zpět do trezoru a kasy a řádek „odvod + účty“ zmizí.",
+      message: lineMissing
+        ? `Opravdu chcete smazat odvod za ${monthTitle(month)}? Řádek „odvod + účty“ už v protokolu není, ` +
+          "proto se smaže jen záznam odvodu a protokol zůstane beze změny – účty ani bankovky se do něj nevrátí. " +
+          "Před novým odvodem zkontrolujte, že trezor a účty v protokolu odpovídají skutečnosti."
+        : `Opravdu chcete smazat odvod za ${monthTitle(month)}? Zaškrtnuté účty se vrátí do protokolu, ` +
+          "bankovky se připíšou zpět do trezoru a kasy a řádek „odvod + účty“ zmizí.",
       danger: true,
       confirmLabel: "Smazat",
       onConfirm: () => void doDelete(),
@@ -615,7 +621,10 @@ export default function OdvodyModal({
               {readOnly ? "Zavřít" : "Zrušit"}
             </Button>
             {!readOnly && (
-              <Button onClick={() => void saveDraft()} disabled={saving || !ctx || !values}>
+              <Button
+                onClick={() => void saveDraft()}
+                disabled={saving || !ctx || !values || !!ctx.target.lineMissing}
+              >
                 {saving ? "Ukládám…" : "Uložit odvod"}
               </Button>
             )}
