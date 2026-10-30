@@ -19,6 +19,7 @@ import {
 } from "@/lib/handoverMerge";
 import { clearDraft, draftStamp, readDraft, saveDraft } from "@/lib/handoverDraft";
 import { tourDemo } from "@/lib/tours/demoData";
+import { isOdvodLineId } from "@/lib/odvody";
 import styles from "./HandoverTab.module.css";
 
 type ShiftType = "den" | "noc";
@@ -2138,7 +2139,10 @@ function ProtocolEditor({
                 .map(({ acc, idx }, pos, sorted) => {
                 const isEditing = editingIdx === idx;
                 const altRow = pos % 2 === 1;
-                const rowEditable = canEdit && (!acc.locked || canManage);
+                // The odvod's own row is read-only for everyone, manage included:
+                // it changes only through the odvod dialog (the server pins it too).
+                const isOdvodRow = isOdvodLineId(acc.id);
+                const rowEditable = canEdit && (!acc.locked || canManage) && !isOdvodRow;
                 // First unlocked account after a locked one: divider between groups.
                 const isGroupBoundary = !acc.locked && pos > 0 && sorted[pos - 1].acc.locked;
                 return (
@@ -2205,11 +2209,14 @@ function ProtocolEditor({
                             onClick={() => requestDeleteAccount(idx)}
                           />
                         )}
-                        {canManage && canEdit && (
+                        {canManage && canEdit && !isOdvodRow && (
                           <LockActionButton locked={acc.locked} onClick={() => setAccountLocked(idx, !acc.locked)} />
                         )}
-                        {acc.locked && !canManage && (
-                          <span className={styles.rowLockedIndicator} title="Uzamčeno">
+                        {acc.locked && (!canManage || isOdvodRow) && (
+                          <span
+                            className={styles.rowLockedIndicator}
+                            title={isOdvodRow ? "Řádek odvodu – mění se jen v okně „Připravit odvod“" : "Uzamčeno"}
+                          >
                             <LockIcon locked />
                           </span>
                         )}

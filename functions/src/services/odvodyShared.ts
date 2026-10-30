@@ -34,6 +34,21 @@ export type OdvodCurrency = "CZK" | "EUR";
 /** The name of the locked účty row an odvod writes into the protocol. */
 export const ODVOD_LINE_NAME = "odvod + účty";
 
+/**
+ * The id of a new odvod row: `<month>-<base36 timestamp>`. Ordinary účty rows
+ * carry UUIDs, so the shape alone identifies an odvod row — the protocol can
+ * recognise it without trusting its (user-visible, once editable) name.
+ */
+export function newOdvodLineId(month: string): string {
+  return `${month}-${Date.now().toString(36)}`;
+}
+
+/** The month an odvod row belongs to, or null for an ordinary účty row. */
+export function odvodLineMonth(id: string | undefined): string | null {
+  const m = /^(\d{4}-\d{2})-[0-9a-z]+$/.exec(id ?? "");
+  return m ? m[1] : null;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Registers
 // ─────────────────────────────────────────────────────────────────────────────
@@ -421,6 +436,60 @@ export interface OdvodDoc {
 
 export function odvodCol(hotel: HotelSlug): admin.firestore.CollectionReference {
   return admin.firestore().collection("hotels").doc(hotel).collection("odvody");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Protecting the odvod row inside the protocol
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Which of these účty rows are the row of an odvod that is still live (saved,
+ * not yet performed). Only those are protected: once "Provést odvod" has run,
+ * or the odvod is deleted, a leftover row with the same id is an ordinary
+ * locked row again. One read per distinct month, and none at all for a
+ * protocol without odvod-shaped ids — i.e. on almost every save.
+ */
+export async function liveOdvodLineIds(hotel: HotelSlug, rows: AccountRow[]): Promise<Set<string>> {
+  const byMonth = new Map<string, string[]>();
+  for (const r of rows) {
+    const month = odvodLineMonth(r.id);
+    if (month && r.id) byMonth.set(month, [...(byMonth.get(month) ?? []), r.id]);
+  }
+  const live = new Set<string>();
+  if (byMonth.size === 0) return live;
+  const months = [...byMonth.keys()];
+  const snaps = await admin.firestore().getAll(...months.map((m) => odvodCol(hotel).doc(m)));
+  snaps.forEach((snap, i) => {
+    if (!snap.exists) return;
+    const d = snap.data() as OdvodDoc;
+    const lineId = normalizeEffect(d.effect)?.lineId;
+    if (d.eurSettled || !lineId) return;
+    if (byMonth.get(months[i])?.includes(lineId)) live.add(lineId);
+  });
+  return live;
+}
+
+/**
+ * Keep every live odvod row of `stored` in `result` exactly as stored. The row
+ * is one half of a two-document invariant with hotels/{h}/odvody/{month}: the
+ * odvod's stored effect points at it by id, and re-saving or deleting the odvod
+ * reverses that effect only while the row is there. Removing it by hand — which
+ * protokol.manage could, as with any locked row — stranded the odvod with no way
+ * out in the UI (Ankora, October 2026). So nobody changes it through the
+ * protocol; it moves only via the odvod endpoints (save / delete / settle-eur).
+ */
+export function pinOdvodRows(stored: AccountRow[], result: AccountRow[], live: Set<string>): AccountRow[] {
+  if (live.size === 0) return result;
+  const storedById = new Map(stored.filter((s) => s.id && live.has(s.id)).map((s) => [s.id as string, s]));
+  const seen = new Set<string>();
+  const out = result.map((r) => {
+    const s = r.id ? storedById.get(r.id) : undefined;
+    if (!s) return r;
+    seen.add(s.id as string);
+    return { ...s };
+  });
+  for (const [id, s] of storedById) if (!seen.has(id)) out.push({ ...s });
+  return out;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

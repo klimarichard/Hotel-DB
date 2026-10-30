@@ -23,6 +23,16 @@ export const EUR_DENOMS = ["500", "200", "100", "50", "20", "10", "5", "2", "1"]
 /** The name of the locked účty row an odvod writes into the protocol. */
 export const ODVOD_LINE_NAME = "odvod + účty";
 
+/**
+ * Is this účty row an odvod's row? Its id is `<month>-<base36>` (ordinary rows
+ * are UUIDs) — mirror of `odvodLineMonth` in odvodyShared.ts. The protocol shows
+ * such a row read-only for everyone: it changes only through the odvod dialog,
+ * and the server pins it in place while its odvod is live.
+ */
+export function isOdvodLineId(id: string | undefined): boolean {
+  return /^\d{4}-\d{2}-[0-9a-z]+$/.test(id ?? "");
+}
+
 export interface OdvodRegister {
   key: string;
   label: string;
@@ -98,6 +108,9 @@ export interface OdvodContext {
     signed: boolean;
     /** Non-null → saving will fail; show it before the user types anything. */
     blocked: string | null;
+    /** The saved odvod's row is gone from the protocol — deleting the odvod
+     *  then removes only the record and leaves the protocol as it is. */
+    lineMissing?: boolean;
   };
   /** Účty rows available for ticking (with this odvod's effect taken back). */
   accounts: OdvodAccount[];
