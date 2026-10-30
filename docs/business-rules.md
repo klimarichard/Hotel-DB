@@ -873,7 +873,17 @@ Uložený odvod lze kdykoli přepsat nebo smazat. Aplikace k tomu **nepočítá 
 
 Vrácení je záměrně přísné: **není-li v protokolu zamčený řádek „odvod + účty", operace se odmítne**. Aplikace v takové situaci bankovky do trezoru nepřipíše, protože by dopisovala peníze do stavu, za který nikdo neručí. Protokol je pak nutné srovnat ručně.
 
-> 🔒 Server. Zdroj: `functions/src/routes/odvody.ts:179` (`reverseEffect`), uložený zásah `OdvodEffect` v `functions/src/services/odvodyShared.ts`.
+Jediná cesta ven je **smazání odvodu**: chybí-li řádek, smaže se jen záznam odvodu a protokol zůstane **beze změny** – účty ani bankovky se do něj nevrátí. V protokolu změn je takové smazání označeno příznakem `protokolUntouched`. Uložit odvod znovu v tomto stavu nelze (tlačítko je neaktivní). Po smazání je potřeba zkontrolovat trezor a účty a odvod připravit znovu.
+
+> 🔒 Server. Zdroj: `functions/src/routes/odvody.ts:181` (`reverseEffect`, příznak `lineMissing`), výjimka v `DELETE /:hotel/:month`; uložený zásah `OdvodEffect` v `functions/src/services/odvodyShared.ts`.
+
+### Řádek „odvod + účty" nelze v protokolu ručně upravit ani smazat – ani se správou protokolu
+
+Dokud odvod není provedený, je jeho řádek v Účtech **chráněný pro všechny**, včetně držitelů „Spravovat protokol", kteří jinak zamčené řádky upravovat smějí. Server ho při každém uložení protokolu, při založení další směny i při Zpět/Znovu vrátí přesně do uloženého stavu; rozhraní u něj nezobrazí tlačítka upravit, smazat ani odemknout. Mění se jen přes okno „Připravit odvod" (uložení, smazání) a tlačítkem „Provést odvod". Po provedení nebo smazání odvodu je případný zbylý řádek s tímto id opět obyčejný.
+
+Důvod: ruční smazání řádku (Ankora, říjen 2026) zablokovalo odvod tak, že nešel ani znovu uložit, ani smazat.
+
+> 🔒 Server. Zdroj: `pinOdvodRows` / `liveOdvodLineIds` v `functions/src/services/odvodyShared.ts`, použití v content PUT a `stepHandler` v `functions/src/routes/handovers.ts`; řádek se pozná podle tvaru id `RRRR-MM-…` (`odvodLineMonth`, klient `isOdvodLineId` v `frontend/src/lib/odvody.ts`).
 
 ### Změny odvodu se nezapisují do historie protokolu a nejdou vzít zpět
 

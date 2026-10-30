@@ -67,6 +67,7 @@ import {
   OdvodEffect,
   ODVOD_LINE_NAME,
   ODVOD_REGISTERS,
+  newOdvodLineId,
   DEFAULT_SPLIT_WEIGHTS,
   computeOdvodPlan,
   allocateFromDrawers,
@@ -180,7 +181,7 @@ function addPieces(drawer: Record<string, number>, delta: Record<string, number>
 function reverseEffect(
   content: ProtoContent,
   stored: OdvodEffect
-): { error: string } | { content: ProtoContent } {
+): { error: string; lineMissing?: true } | { content: ProtoContent } {
   // Upgrade the legacy shape HERE rather than trusting each caller to do it.
   // This is the only function that reads the per-drawer allocations, so owning
   // the invariant in one place is what makes it hold: a call site that forgot
@@ -190,10 +191,14 @@ function reverseEffect(
 
   const idx = content.accounts.findIndex((a) => a.id === effect.lineId);
   if (idx === -1) {
+    // `lineMissing` lets DELETE drop the odvod record without touching the
+    // protocol — the one way out once the row is gone (see the DELETE route).
     return {
+      lineMissing: true,
       error:
         `Řádek "${ODVOD_LINE_NAME}" už v protokolu není, takže předchozí odvod nelze bezpečně vrátit. ` +
-        `Zkontrolujte protokol ${effect.shiftDate} (${effect.shiftType === "noc" ? "noční" : "denní"}) ručně.`,
+        `Zkontrolujte protokol ${effect.shiftDate} (${effect.shiftType === "noc" ? "noční" : "denní"}) ručně. ` +
+        `Odvod pak můžete smazat (protokol se tím nezmění) a připravit znovu.`,
     };
   }
 
@@ -606,10 +611,13 @@ odvodyRouter.get(
     // seeded with), minus any effect this odvod already applied.
     let content = target.exists ? contentOf(target.doc) : seedContent(target.prevDoc);
     let reverseError: string | null = null;
+    let lineMissing = false;
     if (saved?.effect && !saved.eurSettled) {
       const rev = reverseEffect(content, saved.effect);
-      if ("error" in rev) reverseError = rev.error;
-      else content = rev.content;
+      if ("error" in rev) {
+        reverseError = rev.error;
+        lineMissing = !!rev.lineMissing;
+      } else content = rev.content;
     }
 
     res.json({
@@ -624,6 +632,9 @@ odvodyRouter.get(
         exists: target.exists,
         signed: target.signed,
         blocked: target.blocked ?? reverseError,
+        // The saved odvod's row is gone from the protocol: deleting the odvod
+        // will drop only the record, so the modal words its confirmation so.
+        lineMissing,
       },
       accounts: content.accounts
         .filter((a) => a.id)
@@ -714,7 +725,7 @@ odvodyRouter.put(
           content = rev.content;
         }
 
-        const lineId = existingEffect?.lineId ?? odvodRef.id + "-" + Date.now().toString(36);
+        const lineId = existingEffect?.lineId ?? newOdvodLineId(month);
         const applied = applyEffect(content, {
           shiftDate: target.shiftDate,
           shiftType: target.shiftType,
@@ -844,19 +855,29 @@ odvodyRouter.delete(
         }
 
         const existingEffect = normalizeEffect(existing.effect);
+        let lineMissing = false;
         if (existingEffect) {
           if (!protoSnap.exists) throw new Error("Protokol pro aktuální směnu neexistuje.");
           const rev = reverseEffect(contentOf(protoSnap.data() as HandoverDoc), existingEffect);
-          if ("error" in rev) throw new Error(rev.error);
-          tx.update(protoRef, {
-            accounts: rev.content.accounts,
-            cashCounts: rev.content.cashCounts,
-            updatedBy: req.uid,
-            updatedAt: FieldValue.serverTimestamp(),
-          });
+          if ("error" in rev) {
+            if (!rev.lineMissing) throw new Error(rev.error);
+            // The row was removed from the protocol outside the odvod. Whatever
+            // happened to the cash since is the protocol's business now, and
+            // crediting notes back blind is exactly what reverseEffect refuses
+            // to do — so only the record goes. Without this exit the odvod
+            // could neither be re-saved nor deleted (Ankora, October 2026).
+            lineMissing = true;
+          } else {
+            tx.update(protoRef, {
+              accounts: rev.content.accounts,
+              cashCounts: rev.content.cashCounts,
+              updatedBy: req.uid,
+              updatedAt: FieldValue.serverTimestamp(),
+            });
+          }
         }
         tx.delete(odvodRef);
-        return { existing, effect: existingEffect };
+        return { existing, effect: existingEffect, lineMissing };
       });
 
       // Record what was deleted — the same detail a save records — so a removed
@@ -872,6 +893,8 @@ odvodyRouter.delete(
           date: target.shiftDate,
           shift: target.shiftType,
           ...odvodAuditDetail(hotel, deleted.existing, deleted.effect),
+          // Flagged explicitly: the record went, the protocol was left as it was.
+          protokolUntouched: deleted.lineMissing,
         },
       });
       res.json({ ok: true });

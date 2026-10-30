@@ -64,6 +64,7 @@ const HANDOVER_FIELDS: Record<string, FieldLabelMap> = {
     weights: "Poměr rozdělení",
     protokolCreated: "Vytvořen nový protokol",
     overrodeSignature: "Upraven podepsaný protokol",
+    protokolUntouched: "Smazán jen záznam, protokol beze změny",
     czk: "Odvedeno CZK",
     eur: "Odvedeno EUR",
   },

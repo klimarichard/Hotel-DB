@@ -57,6 +57,7 @@ import {
   HistoryEntry,
 } from "../services/handoverHistory";
 import { actorCtx, resolveRecepceActor } from "../services/recepceActor";
+import { liveOdvodLineIds, pinOdvodRows } from "../services/odvodyShared";
 
 const db = () => admin.firestore();
 
@@ -767,6 +768,10 @@ handoversRouter.put(
     // it holds no matter what the client sends.
     const incomingNotes = sanitizeNotes(body.notes);
     const incomingAccounts = sanitizeAccounts(body.accounts);
+    // A live odvod's row survives every save verbatim, manage or not — on edit
+    // against the stored doc, on create against the shift it is carried from.
+    const accountsBaseline = (beforeSnap.exists ? before?.accounts : prevDoc?.accounts) ?? [];
+    const odvodLines = await liveOdvodLineIds(hotel, accountsBaseline);
     const after = {
       shiftDate: body.shiftDate,
       shiftType: body.shiftType,
@@ -777,9 +782,13 @@ handoversRouter.put(
         ? mergeLockable<NoteRow>(before?.notes ?? [], incomingNotes, isManage)
         : seedLockedFromPrevious<NoteRow>(prevDoc?.notes ?? [], incomingNotes.filter((n) => !n.done), isManage),
       cashCounts: sanitizeCashCounts(body.cashCounts),
-      accounts: beforeSnap.exists
-        ? mergeLockable<AccountRow>(before?.accounts ?? [], incomingAccounts, isManage)
-        : seedLockedFromPrevious<AccountRow>(prevDoc?.accounts ?? [], incomingAccounts, isManage),
+      accounts: pinOdvodRows(
+        accountsBaseline,
+        beforeSnap.exists
+          ? mergeLockable<AccountRow>(before?.accounts ?? [], incomingAccounts, isManage)
+          : seedLockedFromPrevious<AccountRow>(prevDoc?.accounts ?? [], incomingAccounts, isManage),
+        odvodLines
+      ),
       // sm counts flow through the normal content PUT (any protocol-edit user).
       // smTrezor + wata are NOT touched here — they move only via their dedicated
       // endpoints, so omitting them from the merge preserves the stored values.
@@ -1624,6 +1633,10 @@ function stepHandler(dir: "undo" | "redo") {
     }
 
     applyChange(content, target, dir);
+    // A history entry that predates the odvod row's protection (e.g. a manual
+    // delete of it) must not be able to remove or alter a live odvod row either.
+    const storedAccounts = before.accounts ?? [];
+    content.accounts = pinOdvodRows(storedAccounts, content.accounts, await liveOdvodLineIds(hotel, storedAccounts));
     // Reflect the step in the in-memory list so the post-step availability below is
     // computed against the new state without a re-read; `content` is now post-step.
     target.undone = dir === "undo";
