@@ -1345,7 +1345,7 @@ information, it never loses any.
 | `event` | When | `extra` |
 |---|---|---|
 | `recepce.odvod.create` / `recepce.odvod.update` | `PUT /:hotel/:month` (new vs. existing doc) | `hotel, month, date, shift, totalCZK, totalEUR` + **`odvodAuditDetail()`** + `protokolCreated, overrodeSignature` |
-| `recepce.odvod.delete` | `DELETE /:hotel/:month` | `hotel, month, date, shift` + `odvodAuditDetail()` of the **deleted** doc |
+| `recepce.odvod.delete` | `DELETE /:hotel/:month` | `hotel, month, date, shift` + `odvodAuditDetail()` of the **deleted** doc + `protokolUntouched` (v5.14.2) |
 | `recepce.odvod.settle` | `POST /:hotel/settle-eur` ("Provést odvod") | `hotel, month, date, shift, czk, eur` |
 
 `odvodAuditDetail()` records the full content: `czkFromTrezor` / `czkFromKasa` /
@@ -1360,6 +1360,56 @@ only the two totals plus a receipt **count** (`receipts: number`); the renderer
 still labels both shapes. `odvody` is deliberately **not** in the retention
 sweep's list — the entries are monthly and low-volume, and they are the only
 record of what an odvod contained.
+
+## Odvody — the protocol row is pinned (v5.14.2)
+
+The locked „odvod + účty" row is one half of a two-document invariant: the
+odvod's stored `OdvodEffect.lineId` points at it, and `reverseEffect` (re-save
+and delete both start with it) refuses outright when the row is absent, rather
+than crediting banknotes back blind. Before v5.14.2 nothing protected the row
+beyond the ordinary lock, and `protokol.manage` may edit or delete any locked
+row (`mergeLockable` returns the incoming rows verbatim for manage). On Ankora,
+October 2026, a manager deleted it by hand 80 s after saving the odvod; the
+odvod could then be neither re-saved nor deleted from the UI, and the record had
+to be repaired with a one-off script.
+
+**Recognising the row.** Every odvod row id is `<YYYY-MM>-<base36 timestamp>`
+(`newOdvodLineId`, used by the PUT); ordinary účty rows are UUIDs. The server
+reads the month back with `odvodLineMonth`, the client tests the shape with
+`isOdvodLineId` (`frontend/src/lib/odvody.ts`, hand-kept mirror). The shape only
+nominates a row: `liveOdvodLineIds(hotel, rows)` confirms it against
+`hotels/{h}/odvody/{month}` — protected only while that odvod exists, is not
+`eurSettled`, and its effect's `lineId` matches. One batched read per distinct
+month, and no read at all for a protocol without odvod-shaped ids, which is
+nearly every save.
+
+**Enforcement — `pinOdvodRows(stored, result, live)`** restores each live row
+verbatim (name, amount, `locked`), re-appending it if the incoming payload
+dropped it. Applied, for everyone including admins, in:
+
+- the content PUT (`routes/handovers.ts`) — baseline is the stored doc on edit,
+  the previous shift's doc on create, so the next shift cannot be born without
+  the row;
+- `stepHandler` (undo/redo) — history entries that predate the pin (e.g. the
+  manual delete above) must not be able to remove it either.
+
+The pin is silent, like `mergeLockable` for non-manage callers, rather than a
+4xx: rejecting the save would discard every other edit in the same autosave and
+the client's retry timer would resend the same payload. The diff for history is
+computed from the pinned result, so no phantom "Smazán účet" entry is recorded.
+The odvod endpoints themselves (PUT, DELETE, `settle-eur`) write `accounts`
+directly and are unaffected. `HandoverTab` hides edit / delete / lock on the row
+for everyone and shows a lock with a hint to use „Připravit odvod".
+
+**Escape hatch for an already-orphaned odvod.** `reverseEffect` now returns
+`lineMissing: true` with its error. `DELETE /:hotel/:month` treats exactly that
+case as "drop the record, leave the protocol alone" (audited
+`protokolUntouched: true`); any other reversal error still aborts. The GET
+exposes `target.lineMissing` so `OdvodyModal` rewords the delete confirmation
+(no receipts or banknotes come back) and disables „Uložit odvod" — a re-save in
+that state is still refused server-side, because applying a fresh effect on top
+of a protocol whose cash may or may not have been hand-corrected could take the
+notes out twice.
 
 ## Retention sweep
 
